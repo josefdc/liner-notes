@@ -72,9 +72,12 @@ for (const [name, type, seed] of modes) {
       await type(page, input, FIRST_PART, "");
       await page.waitForTimeout(PAUSES_MS[round % PAUSES_MS.length]);
       await type(page, input, PHRASE, FIRST_PART);
+      // A box whose text reaches its state late (a deferred or throttled update) drops or
+      // reorders keystrokes here.
       expect(await input.inputValue(), `round ${round + 1}, as typed`).toBe(PHRASE);
 
-      // The list ends on the whole text, and stays there once every answer is in.
+      // The list ends on the whole text, and stays there once every answer is in: an answer for
+      // older text that is shown (no abort, no check of which request it answers) fails here.
       await expect.poll(() => optionTitles(page).then(showsWholeText)).toBe(true);
       await page.waitForTimeout(JITTER_MS + 100);
       expect(showsWholeText(await optionTitles(page)), `round ${round + 1}, list`).toBe(true);

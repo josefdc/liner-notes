@@ -13,36 +13,79 @@ export type SuggestionFetcher = (
 
 /** How long typing pauses before suggestions are asked for. */
 export const SUGGEST_DELAY_MS = 300;
-/** How many suggestions are asked for. */
-export const SUGGEST_LIMIT = 5;
+/**
+ * How many suggestions are asked for: the API's most (its `limit` is 1-10), so that merging
+ * duplicates still leaves a full list.
+ */
+export const SUGGEST_LIMIT = 10;
+/** How many suggestions are shown. */
+export const SUGGESTIONS_SHOWN = 5;
 /** Shorter text gets no suggestions: the API asks for at least two characters. */
 const MIN_QUERY_LENGTH = 2;
 
+/**
+ * A suggestion as the API sends it. Besides the contract's fields it carries Spotify's release
+ * date (`releaseDate`: "2011", "2011-10" or "2011-10-18"), which the contract does not name; a
+ * recorded track has `releaseYear` instead. `isrc` is the contract's, null when Spotify gave none.
+ */
+type Suggestion = SearchCandidate & { releaseDate?: string; isrc?: string | null };
+
+// Lowercased the same way in every locale (a Turkish locale would lowercase "I" to "ı").
 const normalized = (text: string) =>
-  text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+
+const isrcOf = (suggestion: Suggestion) =>
+  typeof suggestion.isrc === 'string' && suggestion.isrc.trim()
+    ? suggestion.isrc.trim().toUpperCase()
+    : null;
+
+const dateOf = (suggestion: Suggestion) => suggestion.releaseDate || suggestion.releaseYear || null;
 
 /**
- * The suggestions with each song listed once. Two suggestions with the same title and artist
- * (case and spacing aside) are the same song for the person choosing, even when Spotify lists
- * it twice: an album track and its single, or a reissue. The first one is kept, in its place:
- * Spotify's own order ranks it as the closer match, and the suggestions carry nothing better to
- * choose by (Spotify no longer gives this app a popularity score, and the API sends no release
- * date with a suggestion). A title that differs ("Midnight City - Remix") is another song.
+ * Two suggestions are the same recording when they share an ISRC; different ISRCs are different
+ * recordings (a live take, a re-recording), never merged. Without an ISRC on either side, the
+ * same title and artist (case, spacing and Unicode forms aside) stands in for it.
+ */
+function sameRecording(a: Suggestion, b: Suggestion) {
+  if (a.id === b.id) return true;
+  const isrcA = isrcOf(a);
+  const isrcB = isrcOf(b);
+  if (isrcA && isrcB) return isrcA === isrcB;
+  return (
+    normalized(a.title) === normalized(b.title) && normalized(a.artist) === normalized(b.artist)
+  );
+}
+
+/**
+ * `date` is before `than`, compared as far as both go: a year alone is as early as any day in
+ * it. A missing date is before nothing and after nothing.
+ */
+function isEarlier(date: string | null, than: string | null) {
+  if (!date || !than) return false;
+  const length = Math.min(date.length, than.length);
+  return date.slice(0, length) < than.slice(0, length);
+}
+
+/**
+ * The suggestions with each recording listed once: Spotify often lists one recording twice
+ * (the album track and its single, a reissue, a compilation), and the rows would look the same.
+ * Of two suggestions for one recording, the one released first is kept, in the place of the one
+ * listed first; when either date is missing, Spotify's order decides.
  */
 export function mergeDuplicates(candidates: SearchCandidate[]): SearchCandidate[] {
-  const songs = new Set<string>();
-  const ids = new Set<string>();
-  return candidates.filter((candidate) => {
-    const song = `${normalized(candidate.title)}\u0000${normalized(candidate.artist)}`;
-    if (songs.has(song) || ids.has(candidate.id)) return false;
-    songs.add(song);
-    ids.add(candidate.id);
-    return true;
-  });
+  const kept: Suggestion[] = [];
+  for (const candidate of candidates as Suggestion[]) {
+    const index = kept.findIndex((suggestion) => sameRecording(suggestion, candidate));
+    if (index < 0) kept.push(candidate);
+    else if (isEarlier(dateOf(candidate), dateOf(kept[index]))) kept[index] = candidate;
+  }
+  return kept;
 }
 
 interface SuggestionState {
   suggestions: SearchCandidate[];
+  /** The text the suggestions answer. */
+  answeredFor: string | null;
   /** The list is shown. */
   open: boolean;
   /** The highlighted suggestion, or -1 for none. */
@@ -54,14 +97,16 @@ interface SuggestionState {
 
 type SuggestionAction =
   | { type: 'start' }
-  | { type: 'loaded'; suggestions: SearchCandidate[] }
+  | { type: 'loaded'; query: string; suggestions: SearchCandidate[]; open: boolean }
   | { type: 'failed' }
   | { type: 'clear' }
+  | { type: 'edited' }
   | { type: 'highlight'; index: number }
   | { type: 'show'; open: boolean };
 
 const initialState: SuggestionState = {
   suggestions: [],
+  answeredFor: null,
   open: false,
   highlighted: -1,
   isLoading: false,
@@ -75,7 +120,8 @@ function reducer(state: SuggestionState, action: SuggestionAction): SuggestionSt
     case 'loaded':
       return {
         suggestions: action.suggestions,
-        open: action.suggestions.length > 0,
+        answeredFor: action.query,
+        open: action.open && action.suggestions.length > 0,
         highlighted: -1,
         isLoading: false,
         failed: false,
@@ -84,12 +130,16 @@ function reducer(state: SuggestionState, action: SuggestionAction): SuggestionSt
       return { ...initialState, failed: true };
     case 'clear':
       return initialState;
+    case 'edited':
+      // The highlighted suggestion was for the text before the edit. Nothing to change is no
+      // new state, so no render.
+      return state.highlighted === -1 ? state : { ...state, highlighted: -1 };
     case 'highlight':
       return { ...state, highlighted: action.index };
     case 'show':
       return action.open
         ? { ...state, open: state.suggestions.length > 0 }
-        : { ...state, open: false, highlighted: -1 };
+        : { ...state, open: false, highlighted: -1, isLoading: false };
   }
 }
 
@@ -100,17 +150,27 @@ function reducer(state: SuggestionState, action: SuggestionAction): SuggestionSt
  *
  * Text the box was given rather than typed (the text at mount, a picked suggestion, a submitted
  * search: see `settle`) gets no suggestions until it is edited, so the list does not open again
- * by itself after a pick.
+ * by itself after a pick. A list the user closed (`dismiss`: Escape, or leaving the box) stays
+ * closed until the text is edited or the list is asked for again (`reopen`).
+ *
+ * `fetchSuggestions` must keep one identity (useAgent's `searchSuggest` does): a new one asks
+ * for the current text again.
  */
 export function useSuggestions(
   query: string,
   fetchSuggestions: SuggestionFetcher,
-  { delay = SUGGEST_DELAY_MS, limit = SUGGEST_LIMIT }: { delay?: number; limit?: number } = {},
+  {
+    delay = SUGGEST_DELAY_MS,
+    limit = SUGGEST_LIMIT,
+    shown = SUGGESTIONS_SHOWN,
+  }: { delay?: number; limit?: number; shown?: number } = {},
 ) {
   const [state, dispatch] = useReducer(reducer, initialState);
   // The text that needs no suggestions. The text at mount is not being typed: it is a search
   // the box comes back to (after "Search again"), and was already submitted.
   const settled = useRef<string | null>(query);
+  // The user closed the list: an answer that comes now does not open it.
+  const closed = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const request = useRef<AbortController | null>(null);
 
@@ -121,25 +181,29 @@ export function useSuggestions(
     request.current = null;
   }, []);
 
-  useEffect(() => {
-    if (query === settled.current) return;
-    settled.current = null;
-    // Any request under way is for older text: it is aborted now, not once typing pauses.
-    stop();
-    if (query.length < MIN_QUERY_LENGTH) {
-      dispatch({ type: 'clear' });
-      return;
-    }
-    timer.current = setTimeout(() => {
-      timer.current = undefined;
+  /** Asks for suggestions for `text` now. */
+  const ask = useCallback(
+    (text: string) => {
       const controller = new AbortController();
       request.current = controller;
       dispatch({ type: 'start' });
-      fetchSuggestions(query, limit, controller.signal).then(
+      let answer: Promise<SearchCandidate[]>;
+      try {
+        answer = fetchSuggestions(text, limit, controller.signal);
+      } catch (error) {
+        // A fetcher that throws instead of rejecting fails the same way.
+        answer = Promise.reject(error);
+      }
+      answer.then(
         (results) => {
           if (request.current !== controller) return;
           request.current = null;
-          dispatch({ type: 'loaded', suggestions: mergeDuplicates(results) });
+          dispatch({
+            type: 'loaded',
+            query: text,
+            suggestions: mergeDuplicates(results).slice(0, shown),
+            open: !closed.current,
+          });
         },
         () => {
           // An aborted request was replaced or dropped on purpose: it is not a failure.
@@ -148,8 +212,26 @@ export function useSuggestions(
           dispatch({ type: 'failed' });
         },
       );
+    },
+    [fetchSuggestions, limit, shown],
+  );
+
+  useEffect(() => {
+    if (query === settled.current) return;
+    settled.current = null;
+    closed.current = false;
+    // Any request under way is for older text: it is aborted now, not once typing pauses.
+    stop();
+    if (query.length < MIN_QUERY_LENGTH) {
+      dispatch({ type: 'clear' });
+      return;
+    }
+    dispatch({ type: 'edited' });
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      ask(query);
     }, delay);
-  }, [query, fetchSuggestions, limit, delay, stop]);
+  }, [query, ask, delay, stop]);
 
   useEffect(() => stop, [stop]);
 
@@ -165,9 +247,34 @@ export function useSuggestions(
     },
     [stop],
   );
-  const highlight = useCallback((index: number) => dispatch({ type: 'highlight', index }), []);
-  /** Shows the list again (when it has suggestions), or hides it. */
-  const show = useCallback((open: boolean) => dispatch({ type: 'show', open }), []);
 
-  return { ...state, settle, highlight, show };
+  /**
+   * The user closes the list (Escape, or the focus leaves the box): it stays closed, and the
+   * suggestions asked for while typing are dropped, so no answer opens it again.
+   */
+  const dismiss = useCallback(() => {
+    closed.current = true;
+    stop();
+    dispatch({ type: 'show', open: false });
+  }, [stop]);
+
+  /**
+   * The user wants the list (an arrow key, the focus back in the box). It opens at once when it
+   * holds the answer for the current text, and true is returned; otherwise the current text is
+   * asked for now (unless it is settled or too short), and the list opens with the answer.
+   */
+  const reopen = () => {
+    closed.current = false;
+    if (state.answeredFor === query && state.suggestions.length > 0) {
+      dispatch({ type: 'show', open: true });
+      return true;
+    }
+    const pending = timer.current !== undefined || request.current !== null;
+    if (!pending && query !== settled.current && query.length >= MIN_QUERY_LENGTH) ask(query);
+    return false;
+  };
+
+  const highlight = useCallback((index: number) => dispatch({ type: 'highlight', index }), []);
+
+  return { ...state, settle, dismiss, reopen, highlight };
 }

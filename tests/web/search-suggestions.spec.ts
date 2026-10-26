@@ -111,14 +111,38 @@ test("typing on aborts the request for the earlier text", async ({ page }) => {
   await expect(page.getByRole("option")).toContainText(nin.artist);
 });
 
-test("a song Spotify lists twice is suggested once", async ({ page }) => {
-  // As for "Midnight City M83": the album track, then the same song from its single.
+test("one recording Spotify lists twice is suggested once, from its earliest release", async ({
+  page,
+}) => {
+  // "Midnight City M83" as MusicBrainz records it: the album track and the single are one
+  // recording (ISRC GB55H1100002); the remix is another recording.
   const song = { artist: "M83", coverUrl: "" };
   await useMockApi(page, {
     suggestions: [
-      { ...song, id: "album", title: "Midnight City", album: "Hurry Up, We're Dreaming" },
-      { ...song, id: "remix", title: "Midnight City - Eric Prydz Private Remix", album: "Remixes" },
-      { ...song, id: "single", title: "Midnight City", album: "Midnight City" },
+      {
+        ...song,
+        id: "album",
+        title: "Midnight City",
+        album: "Hurry Up, We're Dreaming",
+        isrc: "GB55H1100002",
+        releaseDate: "2011-10-18",
+      },
+      {
+        ...song,
+        id: "remix",
+        title: "Midnight City - Eric Prydz Private Remix",
+        album: "Remixes",
+        isrc: "GB55H1200001",
+        releaseDate: "2012-04-02",
+      },
+      {
+        ...song,
+        id: "single",
+        title: "Midnight City",
+        album: "Midnight City (single)",
+        isrc: "GB55H1100002",
+        releaseDate: "2011-09-27",
+      },
     ],
     streams: {},
   });
@@ -127,8 +151,23 @@ test("a song Spotify lists twice is suggested once", async ({ page }) => {
 
   const options = page.getByRole("option");
   await expect(options).toHaveCount(2);
-  await expect(options.nth(0)).toContainText("Hurry Up, We're Dreaming");
+  await expect(options.nth(0)).toContainText("Midnight City (single)");
   await expect(options.nth(1)).toContainText("Eric Prydz");
+});
+
+test("two takes with different ISRCs both stay suggestions", async ({ page }) => {
+  const take = { title: "Hurt", artist: "Johnny Cash", coverUrl: "" };
+  await useMockApi(page, {
+    suggestions: [
+      { ...take, id: "album", album: "American IV", isrc: "USAT29900609" },
+      { ...take, id: "live", album: "Live at the Fillmore", isrc: "USAT20200001" },
+    ],
+    streams: {},
+  });
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Song title and artist" }).fill("Hurt Johnny Cash");
+
+  await expect(page.getByRole("option")).toHaveCount(2);
 });
 
 test("a typed search does not show the track an earlier suggestion picked", async ({ page }) => {
@@ -161,6 +200,8 @@ test("a typed search does not show the track an earlier suggestion picked", asyn
 
   await input.fill("Midnight City M83");
   await page.keyboard.press("Escape");
+  // Escape stops the suggestions asked for while typing: none open over the button later.
+  await page.waitForTimeout(350);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await expect(page.getByText("Searching for the track")).toBeVisible();
   await expect(page.getByText(picked.artist, { exact: true })).toHaveCount(0);

@@ -11,6 +11,13 @@ const song = (id: string, title: string, artist = 'M83', album = 'An album'): Se
   coverUrl: '',
 });
 
+/** A suggestion as the API sends it, with its ISRC and release date when Spotify gave them. */
+const record = (
+  id: string,
+  title: string,
+  extra: { isrc?: string | null; releaseDate?: string },
+): SearchCandidate => ({ ...song(id, title), ...extra }) as SearchCandidate;
+
 interface Call {
   query: string;
   signal: AbortSignal | undefined;
@@ -107,21 +114,42 @@ describe('useSuggestions', () => {
     expect(result.current.suggestions.map((s) => s.id)).toEqual(['c2']);
   });
 
-  it('lists a song Spotify returns twice once, keeping the first in its place', async () => {
+  it('lists one recording Spotify returns twice once, keeping its earliest release', async () => {
     const { calls, fetcher } = manualFetcher();
     const { result, rerender } = render(fetcher);
 
     rerender({ text: 'Midnight City M83' });
     await pause();
+    // As MusicBrainz lists them: the album track and the single are one recording (one ISRC);
+    // the remix is another.
     await act(async () =>
       calls[0].resolve([
-        song('album', 'Midnight City', 'M83', "Hurry Up, We're Dreaming"),
-        song('remix', 'Midnight City - Eric Prydz Private Remix'),
-        song('single', 'Midnight City', 'M83', 'Midnight City'),
-        song('other', 'Wait'),
+        record('album', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2011-10-18' }),
+        record('remix', 'Midnight City - Eric Prydz Private Remix', {
+          isrc: 'GB55H1200001',
+          releaseDate: '2012-04-02',
+        }),
+        record('single', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2011-09-27' }),
+        record('other', 'Wait', { isrc: 'GB55H1100004', releaseDate: '2011-10-18' }),
       ]),
     );
-    expect(result.current.suggestions.map((s) => s.id)).toEqual(['album', 'remix', 'other']);
+    // The single came out first: it takes the album track's place.
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['single', 'remix', 'other']);
+  });
+
+  it('ends loading and says suggestions failed when the fetcher throws at once', async () => {
+    const throwing = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const { result, rerender } = renderHook(({ text }) => useSuggestions(text, throwing), {
+      initialProps: { text: '' },
+    });
+    rerender({ text: 'Hurt' });
+    await pause();
+    await act(async () => {});
+    expect(throwing).toHaveBeenCalledTimes(1);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.failed).toBe(true);
   });
 
   it('says when suggestions fail, and stops saying it once they load', async () => {
@@ -202,14 +230,75 @@ describe('useSuggestions', () => {
 });
 
 describe('mergeDuplicates', () => {
-  it('treats case and spacing as the same song, and a different title or artist as another', () => {
-    const merged = mergeDuplicates([
-      song('a', 'Midnight City', 'M83'),
-      song('b', ' midnight  city ', 'm83'),
-      song('c', 'Midnight City', 'M83, Eric Prydz'),
-      song('d', 'Midnight City (Live)', 'M83'),
-    ]);
-    expect(merged.map((s) => s.id)).toEqual(['a', 'c', 'd']);
+  const ids = (list: SearchCandidate[]) => mergeDuplicates(list).map((s) => s.id);
+
+  it('merges one ISRC, and never two different ISRCs: a live take and the album take both stay', () => {
+    expect(
+      ids([
+        record('album', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2002-11-05' }),
+        record('live', 'Hurt', { isrc: 'USAT20200001', releaseDate: '2003-06-01' }),
+        record('again', 'Hurt - Remastered', { isrc: 'usat29900609', releaseDate: '2010-01-01' }),
+      ]),
+    ).toEqual(['album', 'live']);
+  });
+
+  it('without an ISRC on either side, merges the same title and artist (case and spacing aside)', () => {
+    expect(
+      ids([
+        song('a', 'Midnight City', 'M83'),
+        song('b', ' midnight  city ', 'm83'),
+        song('c', 'Midnight City', 'M83, Eric Prydz'),
+        song('d', 'Midnight City (Live)', 'M83'),
+        record('e', 'Midnight City', { isrc: 'GB55H1100002' }),
+      ]),
+    ).toEqual(['a', 'c', 'd']);
+  });
+
+  it('keeps the earliest release of a duplicate, in the place of the first one listed', () => {
+    expect(
+      ids([
+        song('first', 'Wait'),
+        record('late', 'Intro', { releaseDate: '2016-04-08' }),
+        record('early', 'intro', { releaseDate: '2011-10-18' }),
+      ]),
+    ).toEqual(['first', 'early']);
+    // A year alone is as early as any day in it: Spotify's order decides.
+    expect(
+      ids([
+        record('day', 'Intro', { releaseDate: '2011-10-18' }),
+        record('year', 'Intro', { releaseDate: '2011' }),
+      ]),
+    ).toEqual(['day']);
+    // A recorded track's year counts as its date.
+    expect(
+      ids([
+        record('later', 'Intro', { releaseDate: '2016-04-08' }),
+        { ...song('recorded', 'Intro'), releaseYear: '2011' },
+      ]),
+    ).toEqual(['recorded']);
+  });
+
+  it('keeps Spotify order when either date is missing', () => {
+    expect(
+      ids([record('undated', 'Intro', {}), record('dated', 'Intro', { releaseDate: '2011' })]),
+    ).toEqual(['undated']);
+    expect(
+      ids([record('dated', 'Intro', { releaseDate: '2016' }), record('undated', 'Intro', {})]),
+    ).toEqual(['dated']);
+    expect(ids([song('a', 'One'), song('b', 'one')])).toEqual(['a']);
+  });
+
+  it('folds case the same way in every locale', () => {
+    const original = String.prototype.toLocaleLowerCase;
+    // A Turkish default locale lowercases "I" to a dotless "ı".
+    String.prototype.toLocaleLowerCase = function (this: string) {
+      return original.call(this, 'tr');
+    } as typeof original;
+    try {
+      expect(ids([song('a', 'INTRO', 'XX'), song('b', 'intro', 'xx')])).toEqual(['a']);
+    } finally {
+      String.prototype.toLocaleLowerCase = original;
+    }
   });
 
   it('lists a track id once', () => {

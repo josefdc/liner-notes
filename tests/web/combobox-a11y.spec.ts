@@ -160,3 +160,82 @@ test("the open list is opaque over the Analyze button", async ({ page }) => {
   });
   expect(alpha).toBe(1);
 });
+
+test("Tab with nothing highlighted closes the list and moves to Analyze, in view", async ({
+  page,
+}) => {
+  // Five suggestions at a 20 px default font: the list is taller than its box and scrolls.
+  const five = [...candidates, ...candidates.slice(0, 2)].map((candidate, index) => ({
+    ...candidate,
+    id: `t${index}`,
+    title: `${candidate.title} ${index}`,
+  }));
+  await useMockApi(page, { suggestions: five, streams: {} });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      document.documentElement.style.fontSize = "20px";
+    });
+  });
+  await page.goto("/");
+  await box(page).fill("Hurt");
+  await expect(page.getByRole("option")).toHaveCount(5);
+  const scrolls = await page
+    .getByRole("listbox")
+    .evaluate((element) => element.scrollHeight > element.clientHeight);
+  expect(scrolls).toBe(true);
+
+  await page.keyboard.press("Tab");
+  const button = page.getByRole("button", { name: "Analyze", exact: true });
+  await expect(button).toBeFocused();
+  await expect(box(page)).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  const inView = await button.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return !!top && element.contains(top);
+  });
+  expect(inView).toBe(true);
+});
+
+test("a list closed with Escape stays closed when the answer for newer text comes", async ({
+  page,
+}) => {
+  await useMockApi(page, { suggestions: candidates, streams: {} });
+  await page.goto("/");
+  await box(page).fill("Hurt");
+  await expect(page.getByRole("option")).toHaveCount(candidates.length);
+  const requestsBefore = await suggestRequests(page);
+
+  await box(page).pressSequentially(" N");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await page.waitForTimeout(800);
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  expect(await suggestRequests(page)).toBe(requestsBefore);
+});
+
+test("Enter after editing searches the typed text, not the suggestion highlighted before", async ({
+  page,
+}) => {
+  await openSuggestions(page);
+  await page.keyboard.press("ArrowDown");
+  // Enter before typing pauses, while the list for "Hurt" is still up.
+  await box(page).pressSequentially(" Nine");
+  expect(await box(page).getAttribute("aria-activedescendant")).toBeNull();
+  await page.keyboard.press("Enter");
+
+  await expect
+    .poll(async () =>
+      (await apiRequests(page)).filter((entry) => entry.startsWith("stream /api/analyze/stream")),
+    )
+    .toEqual([
+      expect.stringMatching(/^stream \/api\/analyze\/stream\?query=Hurt(\+|%20)Nine(&|$)/),
+    ]);
+  const [request] = (await apiRequests(page)).filter((entry) => entry.startsWith("stream "));
+  expect(request).not.toContain("trackId");
+});
+
+test("the box's polite region says how many suggestions there are", async ({ page }) => {
+  await openSuggestions(page);
+  await expect(page.getByRole("status")).toHaveText(`${candidates.length} suggestions`);
+});

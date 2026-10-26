@@ -186,17 +186,22 @@ times are seconds from the start of the preview. Every block is `null` when it w
   -90.5 dBFS, which is above 16-bit dither): trackers keep counting through silence
   (Essentia put 23 beats in 10 s of digital silence before a band), so the grid can have
   gaps. Trackers also count through an intro or an ending that has sound but no beat (a
-  pad, a drone, hum or hiss): a run of four or more beats at either end of the grid, none on
-  an onset, whose spacing is more than 4 % off the grid next to it is left out too (Essentia
-  counted 15 and 23 beats under the pads before two bands, 6.8 and 12.8 % off). On real
-  clips this mostly removes the tracker drifting off the beat at the edges of a clip: of the
-  14 Ballroom beats it removed, 11 are 88 to 1584 ms from any annotated beat, and the beats
-  kept in those clips match the annotations. The tempo is still fitted to the tracked beats
-  on onsets, and the steadiness check and the sections still use every tracked beat. Known
-  limits: beats a tracker counts through a beatless intro at the band's own spacing are still
-  reported (a rubato piano intro, and some hum and hiss intros: 3 of 27 tried stayed within
-  4 % of the band), as are runs of one to three beats. Onsets count relative to the clip's own
-  beats, so a band on under a tenth of the window leaves its pad's beats in.
+  pad, a drone, hum or hiss): a run of four or more beats with sound under them at either end
+  of the grid, none on an onset, whose spacing is more than 4 % off the grid next to it is
+  left out too (Essentia counted 15 and 23 beats under the pads before two bands, 6.8 and
+  12.8 % off). The gain is in intros. On the evals harness's 30 s clips at seed 1 (100
+  Ballroom and 100 GiantSteps Tempo tracks, Ballroom's beat annotations aligned to each
+  clip's window), it left out 15 beats in three runs: two intros (a fade-in, and a crescendo
+  with three beats before the first annotated beat) and the end of one Ballroom clip, where
+  it removed as many beats on the annotated beat as off it. At clip ends it is about even.
+  The tempo is still fitted to the tracked beats on onsets, and the
+  steadiness check and the sections still use every tracked beat. Known limits: beats a
+  tracker counts through a beatless intro at the band's own spacing are still reported (a
+  rubato piano intro, and some hum and hiss intros: 3 of 27 tried stayed within 4 % of the
+  band), as are runs of one to three beats, and a long run out of phase with the band. One
+  onset on any beat of an intro (a click, a breath, a pickup note) ends the run there, and
+  the beats before it are reported. Onsets count relative to the clip's own beats, so a band
+  on under a tenth of the window leaves its pad's beats in.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

@@ -279,7 +279,7 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
         # happened on any probe or recording measured (a tempo needs onsets that repeat, and
         # the trackers put beats on them), so no reason is defined for it.
         # Runs counted through an intro or an ending without a beat are not reported either.
-        times = signal_features.beats_on_the_grid(signals, times)
+        times = signal_features.beats_on_the_grid(signals, times, loudness)
         times = signal_features.audible_beats(signals, times, loudness)
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]

@@ -477,10 +477,12 @@ def test_beats_over_noise_count_from_60_db_under_the_loudest_frame(noise_db, kep
     y = triad.copy()
     y[: 5 * FIXTURE_SR] = noise
     over_noise = [0.5, 1.5, 2.5, 3.5, 4.5]
-    # One grid throughout. Beats over the noise count as on onsets, beats over the held triad
-    # do not; with the triad's beats at 6, 7, 8 and 9 s (as before 2.3.3) they form a trailing
-    # run 10 % off the grid of the noise's beats and are left out (beats_on_the_grid), which is
-    # not what this test is about.
+    # One grid throughout. With the triad's beats at 6, 7, 8 and 9 s (as before 2.3.3) their
+    # fate would depend on the noise's level, which is not what this test is about: with the
+    # noise 55 dB under the triad, its beats count as on onsets and the triad's do not, so the
+    # triad's form a trailing run 10 % off the noise's grid and are left out
+    # (beats_on_the_grid); at 65 dB under, all nine count as on onsets (onset support is
+    # relative to the clip's own beats) and stay.
     over_triad = [5.5, 6.5, 7.5, 8.5, 9.5]
     reported = reported_over(y, [*over_noise, *over_triad])
     assert reported == [*(over_noise if kept else []), *over_triad]
@@ -629,11 +631,31 @@ def test_a_run_off_onsets_and_off_the_grid_at_the_end_is_left_out(off, kept):
     assert reported == [round(t, 3) for t in ([*band, *outro] if kept else band)]
 
 
+@pytest.mark.parametrize(("pad_end", "kept"), [(26.0, True), (26.5, False)])
+def test_only_beats_with_sound_count_toward_the_minimum_run(pad_end, kept):
+    """
+    Five ticks 10 % slow after the band, over a pad until `pad_end` and digital silence after
+    it. The ticks over silence are not reported and do not count toward EDGE_RUN_MIN_BEATS:
+    with three ticks over the pad the run is too short to judge and those three stay, with
+    four it is judged and left out. (The pad's entry at 24 s is an onset, so the ticks start
+    one period after it.)
+    """
+    y = pad_then_band(0.0, 6.0)
+    y[round(pad_end * FIXTURE_SR) :] = 0.0
+    band = list(np.arange(0.0, 24.0, 0.5))
+    outro = [23.5 + k * 0.55 for k in range(2, 7)]
+    audible = [t for t in outro if t + 0.05 < pad_end]
+    reported = reported_over(y, [*band, *outro])
+    assert reported == [round(float(t), 3) for t in [*band, *(audible if kept else [])]]
+
+
 def test_a_run_on_the_spacing_but_off_the_beat_is_left_out():
     """
     Six beats under the pad at the band's spacing, but 35 % of a period early against its
     first beat: the interval to that beat is part of the run's spacing (5.8 % off), so the run
-    is left out.
+    is left out. The phase is spread over the run: a run n beats long and a fraction p of a
+    period out of phase is about p / n off, so a long run out of phase stays (at 45 %, runs of
+    14 beats or more).
     """
     band = list(np.arange(6.0, 30.0, 0.5))
     intro = [6.0 - 0.5 * 1.35 - 0.5 * k for k in range(5, -1, -1)]

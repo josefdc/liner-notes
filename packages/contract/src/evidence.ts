@@ -48,7 +48,8 @@ export const Evidence = z.object({
    * release the track is on (e.g. a release-wide Discogs credit), `work/` the song, not this
    * recording (e.g. another artist's cover of it). A claim about the recording must not rest
    * on a `work/` or `release/` item alone: `scopeSupports()` says which items may support a
-   * claim of a given scope (`ClaimScope`). Web results have none (null).
+   * claim of a given scope (`ClaimScope`). The verifier is to apply it; until then it is a rule
+   * of the composer's prompt, not checked by code. Web results have none (null).
    */
   recordRef: z
     .string()
@@ -189,10 +190,14 @@ export const Claim = z.object({
     .describe("Why the numeric check gave its result; separate from the judge's reason"),
   numericComparison: NumericComparison.nullable().optional(),
   field: ClaimField.optional(),
-  scope: ClaimScope.optional().describe(
-    "What the claim states a fact about: this recording, the song (work) or a whole release; " +
-      "absent on older claims",
-  ),
+  // Tolerant: a scope this reader does not know reads as none (a claim about this recording,
+  // the narrowest), so a newer producer's value never makes the claim unreadable.
+  scope: ClaimScope.optional()
+    .catch(undefined)
+    .describe(
+      "What the claim states a fact about: this recording, the song (work) or a whole release; " +
+        "absent on older claims",
+    ),
   factoid: FactoidPresentation.optional(),
 });
 export type Claim = z.infer<typeof Claim>;

@@ -7,6 +7,7 @@ import {
   type LinkType,
   linkClaimMismatches,
   linkDisplayKind as contractLinkDisplayKind,
+  sharedClaimIds,
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
 import { sourceLabel } from '../provenance/SourceLink';
@@ -17,7 +18,8 @@ import { sourceLabel } from '../provenance/SourceLink';
  * sourced only when it says so, every evidence id it cites is in the result's evidence pack,
  * and a link that states a claim (`claimId`), whatever its origin, is sourced only when no
  * claim with that id is rejected, the claim reads sourced, cites every id the link cites and is
- * about the link's relation; a model link must state one: citing is not support). This app
+ * about the link's relation, and no other link states it (one relation claim per link, never
+ * shared); a model link must state one: citing is not support). This app
  * applies the claim rule itself too, to say why, and adds two rules of its own:
  * - a link whose claim the main view hides (rejected by the verifier, or unreadable: the one
  *   rule of `resultClaims` in provenance/claims.ts) is not shown at all;
@@ -103,6 +105,11 @@ export interface LinkContext {
   claims: ReadonlyMap<string, Claim>;
   /** The ids any claim was rejected under, whichever copy, for the contract's link rule. */
   rejectedClaimIds: ReadonlySet<string>;
+  /**
+   * The claim ids more than one of the genealogy's links states, for the contract's link rule
+   * (`readGenealogy` sets them from the links it reads; empty otherwise).
+   */
+  sharedClaimIds: ReadonlySet<string>;
   /** True for a claim id the main view shows nothing for (`ResultClaims.isHidden`). */
   isHidden: (id: string) => boolean;
   /** The analysed track's release year, for its node when the node's label names none. */
@@ -143,6 +150,7 @@ export function linkContext(
     },
     claims: new Map([...(claims?.byId ?? [])].map(([id, shown]) => [id, shown.claim])),
     rejectedClaimIds: claims?.rejectedIds ?? new Set(),
+    sharedClaimIds: new Set(),
     isHidden: (id) => claims?.isHidden(id) ?? false,
     trackYear: yearFrom(releaseYear),
   };
@@ -167,12 +175,14 @@ export function linkDisplayKind(
   evidence: ReadonlyMap<string, Evidence>,
   claims: ReadonlyMap<string, Claim> = new Map(),
   rejectedClaimIds: ReadonlySet<string> = new Set(),
+  sharedLinkClaimIds: ReadonlySet<string> = new Set(),
 ): LinkKind {
   return contractLinkDisplayKind(link, {
     evidenceIds: new Set(evidence.keys()),
     audio: null,
     claims,
     rejectedClaimIds,
+    sharedLinkClaimIds,
   });
 }
 
@@ -241,7 +251,13 @@ export function readLink(
   // through it, whoever wrote the link, and a model link without one is never sourced (citing
   // is not support). The same rule is applied here to say why, with the claim as its chip
   // reads it. The reasons are given only for a link whose evidence alone would make it sourced.
-  let kind = linkDisplayKind(link, context.evidence, context.claims, context.rejectedClaimIds);
+  let kind = linkDisplayKind(
+    link,
+    context.evidence,
+    context.claims,
+    context.rejectedClaimIds,
+    context.sharedClaimIds,
+  );
   const citesPack =
     link.kind === 'sourced' && citations.length > 0 && citations.every((c) => c.evidence !== null);
   if (citesPack && claimed) {
@@ -249,6 +265,9 @@ export function readLink(
     if (claimed.kind !== 'sourced') {
       kind = 'inferred';
       if (!claim?.verdict) reasons.push('its claim is not sourced');
+    } else if (link.claimId && context.sharedClaimIds.has(link.claimId)) {
+      kind = 'inferred';
+      reasons.push('its claim is also stated by another link');
     } else if (mismatches.length > 0) {
       kind = 'inferred';
       reasons.push(...mismatches.map((mismatch) => `its claim ${mismatch}`));
@@ -356,10 +375,17 @@ export function readGenealogy(
   context: LinkContext = linkContext(undefined, null),
 ): GenealogyReading {
   const nodes = nodesById(genealogy?.nodes, context.trackYear);
+  const values: unknown[] = Array.isArray(genealogy?.links) ? genealogy.links : [];
+  // As the contract counts them: over every link its schema reads, drawn or not.
+  const readable = values.flatMap((value) => {
+    const parsed = GenealogyLink.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const withShared = { ...context, sharedClaimIds: sharedClaimIds(readable) };
   const links: ShownLink[] = [];
   let hidden = 0;
-  for (const value of Array.isArray(genealogy?.links) ? genealogy.links : []) {
-    const read = readLink(value, context, nodes);
+  for (const value of values) {
+    const read = readLink(value, withShared, nodes);
     if (read === null) continue;
     if ('hidden' in read) {
       hidden += 1;

@@ -154,7 +154,10 @@ describe("Evidence and Claim (reader)", () => {
       expect(Claim.parse({ ...sampleClaim(), scope }).scope).toBe(scope);
     }
     expect(Claim.parse(sampleClaim()).scope).toBeUndefined();
-    expect(ok(Claim, { ...sampleClaim(), scope: "song" })).toBe(false);
+    // A scope this reader does not know (a newer producer's) reads as none: the claim stays.
+    for (const scope of ["song", null, 5]) {
+      expect(Claim.parse({ ...sampleClaim(), scope }).scope).toBeUndefined();
+    }
   });
 
   it("can be a factoid card, never with the removed lyrics type", () => {

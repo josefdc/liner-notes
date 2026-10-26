@@ -15,9 +15,11 @@ import type { MeasuredAudio } from '../measured/audio';
 // The result reaches the app as the server wrote it (only its `audio` block is read by the
 // contract on the way, hooks/agent/events.ts), so the claims and evidence are read here, as the
 // contract reads them: a list keeps the items its schema accepts and drops the others (a
-// tolerant list), and a result without them has none. The page loads no schema for this: the
-// checks below mirror the contract's `Claim` and `Evidence`, and claims.property.test.ts checks
-// them against the schemas themselves, as audio.property.test.ts does for the measurement.
+// tolerant list), and a result without them has none. No schema is run for this: the checks
+// below mirror the contract's `Claim` and `Evidence`, and claims.property.test.ts checks them
+// against the schemas themselves, as audio.property.test.ts does for the measurement. (This
+// module still imports the contract, for `claimIsRejected`, so the contract's chunk, zod with
+// it, loads with it.)
 //
 // How a claim is shown is the contract's rule (`claimDisplayKind`, checks.ts), taken here over
 // the page's reading of the measurement. A claim the verifier contradicted, or whose number the
@@ -26,7 +28,7 @@ import type { MeasuredAudio } from '../measured/audio';
 
 export { claimIsRejected };
 
-// The contract's enums, mirrored so the page loads no schema; claims.property.test.ts checks
+// The contract's enums, mirrored so the checks run no schema; claims.property.test.ts checks
 // that each equals the contract's own.
 export const SOURCE_IDS: ReadonlySet<string> = new Set([
   'spotify',
@@ -142,7 +144,7 @@ function isFactoidPresentation(value: unknown): boolean {
 /** True when the contract's `Claim` schema accepts the claim. */
 export function isClaim(value: unknown): value is Claim {
   if (!isObject(value)) return false;
-  const { numericReason, numericComparison, field, scope, factoid } = value;
+  const { numericReason, numericComparison, field, factoid } = value;
   return (
     isId(value.id) &&
     isString(value.text) &&
@@ -159,13 +161,20 @@ export function isClaim(value: unknown): value is Claim {
       numericComparison === null ||
       isNumericComparison(numericComparison)) &&
     (field === undefined || oneOf(CLAIM_FIELDS)(field)) &&
-    (scope === undefined || oneOf(CLAIM_SCOPES)(scope)) &&
     (factoid === undefined || isFactoidPresentation(factoid))
   );
 }
 
-/** The claim as the contract reads it: its factoid's unreadable entities dropped. */
-function readClaim(claim: Claim): Claim {
+/**
+ * The claim as the contract reads it: a scope it does not know as none (a claim about this
+ * recording), and its factoid's unreadable entities dropped.
+ */
+function readClaim(value: Claim): Claim {
+  let claim = value;
+  if (claim.scope !== undefined && !CLAIM_SCOPES.has(claim.scope)) {
+    const { scope: _unread, ...rest } = claim;
+    claim = rest;
+  }
   if (!claim.factoid) return claim;
   const entities = (claim.factoid.entities as unknown[]).filter(isPresentationEntity);
   return { ...claim, factoid: { ...claim.factoid, entities } as Claim['factoid'] };

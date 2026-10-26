@@ -173,8 +173,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
     [rawTrackData],
   );
-  // The link reader (and the contract's schemas it validates with) loads only when there are
-  // connected tracks to read.
+  // The link reader loads only when there are connected tracks to read. The contract's schemas
+  // it validates with are not deferred by this: the claims module imports the contract, and the
+  // app loads it at startup for the stream's event schemas.
   const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
   const cover = useAlbumCover(trackData?.coverUrl);
   const relatedCount = relatedNodes(shown).length;

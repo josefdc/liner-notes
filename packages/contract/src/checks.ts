@@ -38,14 +38,28 @@ const at = (path: string, message: string) => (path ? `${path}: ${message}` : me
 /**
  * What a claim or link is checked and shown against: the evidence pack, the measurement and
  * the result's claims (by id; the first claim with each id), with the ids any claim was
- * rejected under (`claimIsRejected`, whichever copy of the id). Without `claims`, no link that
- * states a claim, and no model link, can read as sourced.
+ * rejected under (`claimIsRejected`, whichever copy of the id) and the claim ids more than one
+ * link states. Without `claims`, no link that states a claim, and no model link, can read as
+ * sourced.
  */
 export interface ResultContext {
   evidenceIds: ReadonlySet<string>;
   audio: AudioFeatures | null | undefined;
   claims?: ReadonlyMap<string, Claim>;
   rejectedClaimIds?: ReadonlySet<string>;
+  sharedLinkClaimIds?: ReadonlySet<string>;
+}
+
+/** The claim ids more than one of `links` states (`claimId`). */
+export function sharedClaimIds(links: readonly Pick<GenealogyLink, "claimId">[]): Set<string> {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const { claimId } of links) {
+    if (claimId === undefined) continue;
+    if (seen.has(claimId)) shared.add(claimId);
+    seen.add(claimId);
+  }
+  return shared;
 }
 
 /** The context of a result, for `claimDisplayKind` and `linkDisplayKind`. */
@@ -61,6 +75,7 @@ export function resultContext(analysis: TrackAnalysis): ResultContext {
     audio: analysis.audio,
     claims,
     rejectedClaimIds,
+    sharedLinkClaimIds: sharedClaimIds(analysis.genealogy.links),
   };
 }
 
@@ -295,9 +310,13 @@ export function linkClaimMismatches(
  * Why a link that says sourced is not sourced through its claim, in words that follow "marked
  * sourced" (null when nothing stops it). A link that states a claim (`claimId`), whoever wrote
  * it, is sourced only through that claim: it is in the context, no claim with its id is rejected
- * (`claimIsRejected`), it reads as sourced (`claimDisplayKind`) and it states this link
- * (`linkClaimMismatches`). A model link must state such a claim: citing is not support, the
- * verifier's verdict is. A code-built link that states no claim rests on its evidence.
+ * (`claimIsRejected`), it reads as sourced (`claimDisplayKind`), no other link states it, and it
+ * states this link (`linkClaimMismatches`). A model link must state such a claim: citing is not
+ * support, the verifier's verdict is. A link that is not the model's and states no claim rests
+ * on its evidence.
+ *
+ * One relation claim per link, never shared: a claim names the relation and its evidence, not
+ * which two tracks it joins, so a claim two links state backs neither of them.
  */
 function linkClaimProblem(link: GenealogyLink, context: ResultContext): string | null {
   if (link.claimId === undefined) {
@@ -311,6 +330,9 @@ function linkClaimProblem(link: GenealogyLink, context: ResultContext): string |
     claimDisplayKind(claim, context) !== "sourced"
   ) {
     return "without a supported claim";
+  }
+  if (context.sharedLinkClaimIds?.has(link.claimId)) {
+    return "through a claim another link also states";
   }
   const mismatches = linkClaimMismatches(link, claim);
   return mismatches.length > 0 ? `through a claim that ${mismatches.join(" and ")}` : null;
@@ -344,7 +366,8 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
  * How a reader shows a link: sourced only when it says so, cites evidence that is all in the
  * pack, and its claim allows it. A link that states a claim (`claimId`), whatever its origin,
  * is sourced only when that claim is in the context, no claim with its id is rejected, it reads
- * as sourced and it cites every id the link cites and is about the link's relation; a model link
+ * as sourced, no other link states it, and it cites every id the link cites and is about the
+ * link's relation (`linkClaimProblem`: one relation claim per link, never shared); a model link
  * must state one (citing is not support, the verifier's verdict is). Otherwise (no kind, no
  * citation, an unknown citation, no supported claim about the link) a model inference. A sample
  * link shown as inferred is an inferred influence, not a documented sample. Where it is shown is
@@ -522,6 +545,11 @@ export function analysisIssues(analysis: TrackAnalysis): string[] {
     issues.push(...linkIssues(link, context, `genealogy.links[${i}]`));
     if (link.claimId !== undefined && !claimIds.has(link.claimId)) {
       issues.push(at(`genealogy.links[${i}].claimId`, `unknown claim "${link.claimId}"`));
+    }
+    // One relation claim per link, never shared (linkClaimProblem).
+    if (link.claimId !== undefined && context.sharedLinkClaimIds?.has(link.claimId)) {
+      const message = `claim "${link.claimId}" is stated by more than one link`;
+      issues.push(at(`genealogy.links[${i}].claimId`, message));
     }
   });
   return issues;

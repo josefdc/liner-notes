@@ -345,6 +345,7 @@ describe('readLink', () => {
     const ctx = resultContext({
       evidence: PACK.map((item) => Evidence.parse(item)),
       claims,
+      genealogy,
       audio: null,
     } as unknown as TrackAnalysis);
     expect(genealogy.links).toHaveLength(links.length);
@@ -436,6 +437,48 @@ describe('readLink', () => {
 });
 
 describe('readGenealogy', () => {
+  it('lets one claim back one link only: a claim two links state backs neither', () => {
+    const supported = claim('cl-1', {
+      kind: 'sourced',
+      verdict: 'supported',
+      evidenceIds: ['ev-mb-1'],
+    });
+    const nodes = [node('current', 1), node('a', 2), node('b', 2)];
+    const toCurrent = (source: string) =>
+      link(source, 'current', {
+        type: 'sample',
+        kind: 'sourced',
+        origin: 'model',
+        claimId: 'cl-1',
+        evidenceIds: ['ev-mb-1'],
+      });
+    const one = readGenealogy({ nodes, links: [toCurrent('a')] }, context([supported]));
+    expect(one.links.map((l) => l.kind)).toEqual(['sourced']);
+    const two = readGenealogy(
+      { nodes, links: [toCurrent('a'), toCurrent('b')] },
+      context([supported]),
+    );
+    expect(two.links.map((l) => [l.kind, l.type])).toEqual([
+      ['inferred', 'influence'],
+      ['inferred', 'influence'],
+    ]);
+    for (const shown of two.links) {
+      expect(provenanceText(shown)).toContain('its claim is also stated by another link');
+    }
+    // As the contract reads the same result.
+    const ctx = resultContext({
+      evidence: PACK.map((item) => Evidence.parse(item)),
+      claims: [supported],
+      genealogy: Genealogy.parse({ nodes, links: [toCurrent('a'), toCurrent('b')] }),
+      audio: null,
+    } as unknown as TrackAnalysis);
+    expect(
+      Genealogy.parse({ nodes, links: [toCurrent('a'), toCurrent('b')] }).links.map((value) =>
+        contractDisplayKind(value, ctx),
+      ),
+    ).toEqual(['inferred', 'inferred']);
+  });
+
   it('leaves out links to or from a node id that is not in the graph, and unreadable ones', () => {
     const genealogy = {
       nodes: [node('current', 1), node('origin1', 2)],

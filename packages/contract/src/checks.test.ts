@@ -14,7 +14,6 @@ import {
   claimIsRejected,
   claimIssues,
   evidenceIssues,
-  LINK_CLAIM_ABOUT,
   linkClaimMismatches,
   linkDisplayKind,
   linkIssues,
@@ -25,7 +24,7 @@ import {
   scopeSupports,
 } from "./checks.js";
 import { AnalyzeStreamEvent, decodeSseStream, encodeSseEvent } from "./events.js";
-import type { Claim, Evidence } from "./evidence.js";
+import { type Claim, ClaimAbout, type Evidence } from "./evidence.js";
 import {
   gatedAudio,
   sampleAnalysis,
@@ -653,9 +652,38 @@ describe("links", () => {
     expect(shown({ about: "cover" }, { type: "cover" })).toBe("sourced");
     expect(shown({ about: "sample" }, { type: undefined })).toBe("inferred");
     expect(shown({ about: "connection" }, { type: undefined })).toBe("sourced");
-    for (const type of LinkType.options) {
-      for (const about of LINK_CLAIM_ABOUT[type])
-        expect(shown({ about }, { type })).toBe("sourced");
+  });
+
+  it("takes a link's relation as stated only by the claim subjects listed for it", () => {
+    // Written out, not read from LINK_CLAIM_ABOUT: widening, narrowing or swapping an entry fails.
+    const ABOUTS = [
+      "track",
+      "credit",
+      "sample",
+      "cover",
+      "history",
+      "sound",
+      "production",
+      "connection",
+      "trivia",
+    ] as const;
+    const STATED_BY: Record<LinkType, readonly ClaimAbout[]> = {
+      sample: ["sample"],
+      interpolation: ["sample"],
+      remix: ["sample"],
+      cover: ["cover"],
+      producer: ["credit", "production"],
+      influence: ["connection", "history"],
+    };
+    expect([...ABOUTS].sort()).toEqual([...ClaimAbout.options].sort());
+    expect(Object.keys(STATED_BY).sort()).toEqual([...LinkType.options].sort());
+    const shown = (type: LinkType, about: ClaimAbout) =>
+      linkDisplayKind(link({ claimId: "cl-s", type }), withClaims(relation({ about })));
+    for (const type of Object.keys(STATED_BY) as LinkType[]) {
+      for (const about of ABOUTS) {
+        const expected = STATED_BY[type].includes(about) ? "sourced" : "inferred";
+        expect(shown(type, about), `${type} stated by a ${about} claim`).toBe(expected);
+      }
     }
   });
 
@@ -737,11 +765,52 @@ describe("links", () => {
         "genealogy.links[0].kind: model link marked sourced without a supported claim",
       ]);
     }
+    // A rejected copy with a scope this reader does not know still rejects the id.
+    const newer = { ...second, scope: "song" };
+    const withNewer = analysis({ claims: [supported, newer], genealogy });
+    expect([...(resultContext(withNewer).rejectedClaimIds ?? [])]).toEqual(["cl-s"]);
+    expect(only && linkDisplayKind(only, resultContext(withNewer))).toBe("inferred");
     // As the composer writes a model claim before any verdict: inferred, not judged.
     const unjudged = { ...supported, kind: "inferred" as const, verdict: null };
     const unsupported = analysis({ claims: [unjudged], genealogy });
     expect(analysisIssues(unsupported)).toEqual([
       "genealogy.links[0].kind: model link marked sourced without a supported claim",
+    ]);
+  });
+
+  it("lets one claim back one link only: a claim two links state backs neither", () => {
+    const supported = { ...relation(), evidenceIds: ["ev-mb-1"] };
+    const nodes = [
+      { id: "a", group: 2, label: "A", size: 1 },
+      { id: "b", group: 2, label: "B", size: 1 },
+    ];
+    const toCurrent = (source: string) =>
+      link({ source, target: "current", claimId: "cl-s", evidenceIds: ["ev-mb-1"] });
+    const one = analysis({ claims: [supported], genealogy: { nodes, links: [toCurrent("a")] } });
+    expect(resultContext(one).sharedLinkClaimIds?.size).toBe(0);
+    expect(analysisIssues(one)).toEqual([]);
+    const result = analysis({
+      claims: [supported],
+      genealogy: {
+        nodes,
+        links: [toCurrent("a"), toCurrent("b"), link({ kind: "inferred", evidenceIds: [] })],
+      },
+    });
+    const ctx = resultContext(result);
+    expect([...(ctx.sharedLinkClaimIds ?? [])]).toEqual(["cl-s"]);
+    expect(result.genealogy.links.map((l) => linkDisplayKind(l, ctx))).toEqual([
+      "inferred",
+      "inferred",
+      "inferred",
+    ]);
+    const kind = ".kind: model link marked sourced through a claim another link also states";
+    const [first] = result.genealogy.links;
+    expect(first && linkIssues(first, ctx)).toEqual([kind]);
+    expect(analysisIssues(result)).toEqual([
+      `genealogy.links[0]${kind}`,
+      'genealogy.links[0].claimId: claim "cl-s" is stated by more than one link',
+      `genealogy.links[1]${kind}`,
+      'genealogy.links[1].claimId: claim "cl-s" is stated by more than one link',
     ]);
   });
 

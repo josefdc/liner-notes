@@ -224,5 +224,5 @@
     "$.factoid.entities[]": "strip"
   },
   "refinements": [],
-  "tolerant": ["$.factoid.entities: drops unreadable items"]
+  "tolerant": ["$.factoid.entities: drops unreadable items", "$.scope: absent when unreadable"]
 }

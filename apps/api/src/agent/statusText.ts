@@ -1,7 +1,9 @@
 /**
  * Words for the status lines the run sends: what happened to a source or to a model call, in
- * plain English. Error codes and provider text stay in the server log and in the run's
- * `sourceErrors`; a status line says what the code means.
+ * plain English. A status line says what an error's code means, never the provider's text. The
+ * run's `sourceErrors` keep each message as one plain line (plainSourceError: links become
+ * "[link]"; a message with markup, a stack trace or a token parameter is left out), and the
+ * provider's own text reaches the server log only where the code that read it logs it.
  */
 
 import type { SourceError } from "@liner-notes/contract";

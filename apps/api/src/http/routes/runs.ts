@@ -128,9 +128,9 @@ router.get("/api/runs/:id", (req, res) => {
  * part), the next most recent one that can be served is served instead. Only the
  * BY_TRACK_CANDIDATES latest runs are tried, those that cannot be served included: a run older
  * than them is not reached. 404 not_found when the track has no such run, or when every one tried
- * was refused (the web then offers a fresh analysis); 500 failed when none can be served and at
- * least one of them no longer fits the contract, whether or not others were refused; 400
- * invalid_input for an id that is not a Spotify track id.
+ * was refused (nothing is broken: those results are no longer served); 500 failed when none can
+ * be served and at least one of them no longer fits the contract, whether or not others were
+ * refused; 400 invalid_input for an id that is not a Spotify track id.
  */
 router.get("/api/runs/by-track/:spotifyId", (req, res) => {
   const spotifyId = req.params.spotifyId;

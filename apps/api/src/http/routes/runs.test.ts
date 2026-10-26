@@ -762,14 +762,22 @@ describe("runs routes", () => {
   ])("does not serve a stored run that holds %s", async (_name, held, text) => {
     const { runId } = await analyze("plain query");
     storeHeld(runId, held);
+    const logs = captureLogsForTests();
 
-    const byId = await request(app).get(`/api/runs/${runId}`);
-    expect(byId.status).toBe(404);
-    expect(byId.body).toEqual(REFUSED_BODY);
-    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
-    expect(byTrack.status).toBe(404);
-    expect(byTrack.body).toMatchObject({ success: false, code: "not_found" });
-    for (const res of [byId, byTrack]) expect(res.text).not.toContain(text);
+    try {
+      const byId = await request(app).get(`/api/runs/${runId}`);
+      expect(byId.status).toBe(404);
+      expect(byId.body).toEqual(REFUSED_BODY);
+      const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+      expect(byTrack.status).toBe(404);
+      expect(byTrack.body).toMatchObject({ success: false, code: "not_found" });
+      for (const res of [byId, byTrack]) expect(res.text).not.toContain(text);
+      // The log names the run and why; no line holds the text.
+      expect(logs.lines().some((line) => line.includes(runId))).toBe(true);
+      for (const line of logs.lines()) expect(line).not.toContain(text);
+    } finally {
+      logs.restore();
+    }
   });
 
   it.each([

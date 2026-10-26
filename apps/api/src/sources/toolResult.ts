@@ -53,23 +53,25 @@ export function failureMessage(error: unknown): string {
     : describeError(error);
 }
 
+/** What an internal error's message says after its prefix when its own text is left out. */
+const LEFT_OUT = "the message was left out";
+
 /**
  * A source error as a result keeps it: its message as one line of plain text (plainMessage:
  * links become "[link]"). A message with markup, a stack trace or a signature or token
- * parameter is left out; an internal error's keeps its prefix, so its status line still says our
- * reader failed. The readers of stored results (heldTextIssue) never refuse what this returns.
+ * parameter, or with no text, is left out. An internal error always keeps its prefix, followed
+ * by its plain text or LEFT_OUT, so its status line still says our reader failed. The readers of
+ * stored results (heldTextIssue) never refuse what this returns.
  */
 export function plainSourceError<T extends { message?: string }>(error: T): T {
-  if (error.message === undefined) return error;
-  const message = plainMessage(error.message);
-  if (message === error.message) return error;
+  const raw = error.message;
+  if (raw === undefined) return error;
+  const internal = raw.startsWith(INTERNAL_ERROR_PREFIX);
+  const plain = plainMessage(internal ? raw.slice(INTERNAL_ERROR_PREFIX.length) : raw);
+  const message = internal ? `${INTERNAL_ERROR_PREFIX}${plain ?? LEFT_OUT}` : plain;
+  if (message === raw) return error;
   const { message: _left, ...rest } = error;
-  if (message !== undefined) return { ...rest, message } as T;
-  return (
-    error.message.startsWith(INTERNAL_ERROR_PREFIX)
-      ? { ...rest, message: `${INTERNAL_ERROR_PREFIX}the message was left out` }
-      : rest
-  ) as T;
+  return (message === undefined ? rest : { ...rest, message }) as T;
 }
 
 /**

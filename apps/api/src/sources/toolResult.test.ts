@@ -5,7 +5,9 @@
 
 import { SourceError as SourceErrorSchema } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { sourceErrorLine } from "../agent/statusText.js";
 import { SourceError } from "./http.js";
+import { errorRecord } from "./records.js";
 import {
   failureWith,
   keyRejected,
@@ -169,5 +171,22 @@ describe("plainSourceError", () => {
     expect(
       plainSourceError(error("internal error: Cannot read properties of Map<string>")),
     ).toEqual(error("internal error: the message was left out"));
+    expect(
+      plainSourceError(error("internal error: Failed to parse URL from https://example.org/a")),
+    ).toEqual(error("internal error: Failed to parse URL from [link]"));
+  });
+
+  it.each([
+    ["an empty message", ""],
+    ["a message of spaces", "   "],
+    ["a message of a line break", "\n"],
+  ])("keeps an internal error with %s an internal error", (_name, text) => {
+    const plain = plainSourceError(errorRecord("lastfm", new TypeError(text)));
+    expect(plain).toEqual({
+      source: "lastfm",
+      code: "unavailable",
+      message: "internal error: the message was left out",
+    });
+    expect(sourceErrorLine(plain)).toBe("Last.fm: our reader failed on its answer");
   });
 });

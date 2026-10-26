@@ -74,12 +74,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.2+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.3+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.2+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.3+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -102,7 +102,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.2+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.3+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -185,11 +185,14 @@ times are seconds from the start of the preview. Every block is `null` when it w
   its mean removed, no more than 60 dB under the loudest frame and at least 3e-5, or
   -90.5 dBFS, which is above 16-bit dither): trackers keep counting through silence
   (Essentia put 23 beats in 10 s of digital silence before a band), so the grid can have
-  gaps. The tempo is still fitted to the tracked beats on onsets, and the steadiness check
-  and the sections still use every tracked beat. Known limits: beats a tracker counts
-  through an audible intro without onsets (a pad) or over a low noise floor (hum or hiss at
-  -70 to -50 dBFS) are still reported, since a level cannot tell that sound from a quiet
-  passage.
+  gaps. Trackers also count through an intro or an ending that has sound but no beat (a
+  pad, a drone, hum or hiss): a run of four or more beats at either end of the grid, none on
+  an onset, whose spacing is more than 4 % off the grid next to it is left out too (Essentia
+  counted 15 and 23 beats under the pads before two bands, 6.8 and 12.8 % off). The tempo is
+  still fitted to the tracked beats on onsets, and the steadiness check and the sections still
+  use every tracked beat. Known limits: such a run that keeps the grid's spacing, and runs of
+  one to three beats, are still reported, since onsets and spacing cannot tell them from the
+  beats of a quiet passage.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

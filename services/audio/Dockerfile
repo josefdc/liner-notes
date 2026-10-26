@@ -7,8 +7,9 @@
 #
 # linux/amd64 only: essentia-tensorflow (the "models" extra) has no Linux aarch64 wheel, so the
 # build fails when the service cannot load Essentia. On an arm64 host, build with
-# --platform linux/amd64 (the platform is not pinned in FROM: a constant there labels an
-# amd64 image as arm64).
+# --platform linux/amd64; the production compose file sets that platform. FROM is not pinned:
+# with an explicit or multi-platform build target, a constant platform there labels the image
+# with the target while it holds amd64 binaries.
 #
 # Two stages: uv builds the virtual environment, and a slim Python image with the same
 # interpreter runs it. The runtime has no uv, ffmpeg or wget: soundfile decodes the previews
@@ -50,12 +51,16 @@ RUN venv=$(sed -n 's/^version_info = //p' /app/.venv/pyvenv.cfg) \
 COPY . /app
 
 # The service falls back to librosa when Essentia cannot be imported (a missing wheel or shared
-# library); in the image that is a build error. The estimators need RhythmExtractor2013 and
-# KeyExtractor, and the fingerprint needs the TensorFlow algorithms.
-RUN /app/.venv/bin/python -B -c "import estimators, fingerprint; \
+# library); in the image that is a build error. Essentia is imported first, so a failure names
+# its cause; then every algorithm the estimators and the fingerprint use, and the service's own
+# flags.
+RUN /app/.venv/bin/python -B -c "import essentia; \
+from essentia.standard import FrameGenerator, KeyExtractor, Resample, RhythmExtractor2013, \
+TensorflowInputMusiCNN, TensorflowPredict; \
+import estimators, fingerprint; \
 assert estimators.ESSENTIA_AVAILABLE and fingerprint.AVAILABLE, \
 'Essentia cannot be imported (the image is built for linux/amd64 only)'; \
-from essentia.standard import KeyExtractor, RhythmExtractor2013, TensorflowInputMusiCNN, TensorflowPredict"
+essentia.Pool()"
 
 # Unprivileged runtime user; only the models directory is writable by it.
 RUN useradd --system --uid 10001 --user-group --create-home --home-dir /home/app \

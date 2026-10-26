@@ -94,7 +94,7 @@ def pytest_configure(config):
         if not (estimators.ESSENTIA_AVAILABLE and main.MODELS_LOADED):
             raise pytest.UsageError(
                 "AUDIO_REQUIRE_MODELS=1 but essentia or the models are not available "
-                "(uv sync --extra models; uv run python download_models.py)"
+                "(uv sync --extra models, then download_models.py)"
             )
 
 

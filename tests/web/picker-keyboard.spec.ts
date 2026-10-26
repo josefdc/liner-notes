@@ -19,10 +19,13 @@ async function openPicker(page: Page) {
   await page.goto("/");
   await page.getByRole("combobox", { name: "Song title and artist" }).fill("Hurt");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  const picker = page.locator('div[tabindex="0"]', { hasText: "Is this the right track?" });
+  const picker = page.getByRole("listbox", { name: "Is this the right track?" });
   await expect(picker).toBeVisible();
   return picker;
 }
+
+const row = (page: Page, index: number) =>
+  page.getByRole("option", { name: new RegExp(candidates[index].artist) });
 
 test.describe("with three candidates", () => {
   test.beforeEach(async ({ page }) => {
@@ -30,8 +33,7 @@ test.describe("with three candidates", () => {
   });
 
   test("ArrowDown then Enter resumes with the highlighted candidate", async ({ page }) => {
-    const picker = await openPicker(page);
-    await picker.focus();
+    await openPicker(page);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
 
@@ -41,14 +43,15 @@ test.describe("with three candidates", () => {
     await expect(page.getByText("Is this the right track?")).toHaveCount(0);
   });
 
-  test("Tab, ArrowDown, Enter resumes with the highlighted candidate, not the focused row", async ({
+  test("the list is one Tab stop: Shift+Tab from Search again returns to the highlighted row", async ({
     page,
   }) => {
-    const picker = await openPicker(page);
-    await picker.focus();
-    // Tab moves focus onto the first row; the arrow then moves the highlight to the second.
-    await page.keyboard.press("Tab");
+    await openPicker(page);
     await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Search again" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(row(page, 1)).toBeFocused();
     await page.keyboard.press("Enter");
 
     await expect
@@ -57,8 +60,7 @@ test.describe("with three candidates", () => {
   });
 
   test("ArrowUp wraps to the last candidate and Enter selects it", async ({ page }) => {
-    const picker = await openPicker(page);
-    await picker.focus();
+    await openPicker(page);
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Enter");
 
@@ -68,8 +70,8 @@ test.describe("with three candidates", () => {
   });
 
   test("the picker takes the keyboard focus when it opens", async ({ page }) => {
-    const picker = await openPicker(page);
-    await expect(picker).toBeFocused();
+    await openPicker(page);
+    await expect(row(page, 0)).toBeFocused();
     // No click and no focus() call: the keys work right away.
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
@@ -79,67 +81,24 @@ test.describe("with three candidates", () => {
       .toEqual([resumeWith(candidates[1].id)]);
   });
 
-  test("Home and End move to the first and last row, marked as the current one", async ({
-    page,
-  }) => {
-    const picker = await openPicker(page);
-    await picker.focus();
-    const row = (index: number) =>
-      page.getByRole("button", { name: new RegExp(candidates[index].artist) });
-    await expect(row(0)).toHaveAttribute("aria-current", "true");
-
-    await page.keyboard.press("End");
-    await expect(row(2)).toHaveAttribute("aria-current", "true");
-    await expect(row(0)).not.toHaveAttribute("aria-current", "true");
-    await page.keyboard.press("Home");
-    await expect(row(0)).toHaveAttribute("aria-current", "true");
-    await page.keyboard.press("End");
-    await page.keyboard.press("Enter");
-
-    await expect
-      .poll(async () => resumes(await apiRequests(page)))
-      .toEqual([resumeWith(candidates[2].id)]);
-  });
-
-  test("Tab onto a row stops the countdown; Enter then resumes with that row", async ({ page }) => {
-    const picker = await openPicker(page);
-    await picker.focus();
-    // Container, then the three rows: focus and highlight end on the third row.
-    for (let i = 0; i < 3; i++) await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("button", { name: new RegExp(candidates[2].artist) }),
-    ).toBeFocused();
-
-    // Well past the 5 s countdown: nothing may be chosen for the user.
-    await page.waitForTimeout(6500);
-    expect(resumes(await apiRequests(page))).toEqual([]);
-    await expect(page.getByText("Is this the right track?")).toBeVisible();
-
-    await page.keyboard.press("Enter");
-    await expect
-      .poll(async () => resumes(await apiRequests(page)))
-      .toEqual([resumeWith(candidates[2].id)]);
-  });
-
-  test("the countdown picks the highlighted row and says the countdown picked it", async ({
+  test("Home and End move to the first and last row, marked as the selected one", async ({
     page,
   }) => {
     await openPicker(page);
-    // The pointer is kept off the picker, so the countdown runs to zero.
-    await page.mouse.move(0, 0);
-    await expect
-      .poll(async () => resumes(await apiRequests(page)), { timeout: 9000 })
-      .toEqual([resumeWith(candidates[0].id, "countdown")]);
-  });
+    await expect(row(page, 0)).toHaveAttribute("aria-selected", "true");
 
-  test("hovering over the picker pauses the countdown", async ({ page }) => {
-    const picker = await openPicker(page);
-    await picker.hover();
-    await expect(page.getByText("(paused)")).toBeVisible();
-    // Well past the 5 s countdown: nothing is chosen while the pointer is on the picker.
-    await page.waitForTimeout(6500);
-    expect(resumes(await apiRequests(page))).toEqual([]);
-    await expect(page.getByText("Is this the right track?")).toBeVisible();
+    await page.keyboard.press("End");
+    await expect(row(page, 2)).toHaveAttribute("aria-selected", "true");
+    await expect(row(page, 2)).toBeFocused();
+    await expect(row(page, 0)).toHaveAttribute("aria-selected", "false");
+    await page.keyboard.press("Home");
+    await expect(row(page, 0)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+
+    await expect
+      .poll(async () => resumes(await apiRequests(page)))
+      .toEqual([resumeWith(candidates[2].id)]);
   });
 });
 
@@ -165,7 +124,7 @@ test("two candidates show the picker instead of choosing one silently", async ({
   await openPicker(page);
   for (const candidate of two) {
     await expect(
-      page.getByRole("button", {
+      page.getByRole("option", {
         name: `${candidate.title} ${candidate.artist} • ${candidate.releaseYear}`,
       }),
     ).toBeVisible();

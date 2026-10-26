@@ -877,13 +877,14 @@ test("the track picker's focus rings reach 3:1 against what is beside them", asy
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  const picker = page.locator('div[tabindex="0"]', { hasText: "Is this the right track?" });
+  const picker = page.getByRole("listbox", { name: "Is this the right track?" });
   await expect(picker).toBeVisible();
-  // Held still: the picker's countdown would pick a track while the rings are measured.
-  await picker.hover();
   const rings: Array<[string, number]> = [];
-  rings.push(["the picker", await focusRingContrast(page, picker)]);
-  rings.push(["a candidate", await focusRingContrast(page, picker.getByRole("button").first())]);
+  rings.push(["a candidate", await focusRingContrast(page, picker.getByRole("option").first())]);
+  rings.push([
+    "Search again",
+    await focusRingContrast(page, page.getByRole("button", { name: "Search again" })),
+  ]);
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });
 

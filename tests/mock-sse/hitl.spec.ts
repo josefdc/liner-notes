@@ -32,7 +32,7 @@ test("an ambiguous search shows the track picker and keeps it after the stream e
   await expect(picker).toBeVisible();
   for (const candidate of candidates) {
     await expect(
-      page.getByRole("button", {
+      page.getByRole("option", {
         name: `${candidate.title} ${candidate.artist} • ${candidate.releaseYear}`,
       }),
     ).toBeVisible();
@@ -54,7 +54,7 @@ test("choosing a candidate resumes the analysis with that track", async ({ page 
 
   const second = candidates[1];
   await page
-    .getByRole("button", { name: `${second.title} ${second.artist} • ${second.releaseYear}` })
+    .getByRole("option", { name: `${second.title} ${second.artist} • ${second.releaseYear}` })
     .click();
 
   await expect

@@ -218,7 +218,7 @@ test("a recording that is not the picked track says so in its own words", async 
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Bright Lines");
   await page.getByPlaceholder(/Song title/).press("Enter");
-  await page.getByRole("button", { name: /Test Artist • 2001/ }).click();
+  await page.getByRole("option", { name: /Test Artist • 2001/ }).click();
 
   await expectErrorBlock(page, [WRONG_TRACK], "Search again");
   await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);

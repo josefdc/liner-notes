@@ -14,7 +14,8 @@
  * Recorded payloads keep only the fields the pipeline reads (the request's `scrub`); every
  * recorded value, error and text bodies included, loses secrets, media URLs, e-mail addresses
  * and phone numbers, and long text is capped, so a cassette can be committed. Error messages
- * are redacted the same way before they reach a log or a tool result.
+ * are redacted the same way before they reach a log or a tool result, and hold the status and at
+ * most a short plain-text reason, never a response body (which is logged at debug level only).
  */
 
 import { createHash } from "node:crypto";
@@ -34,9 +35,10 @@ const log = logger("sources");
 
 /** Cap for recorded data the pipeline reads: well above what any consumer reads (800). */
 const MAX_TEXT = 4000;
-/** Cap for recorded error and text bodies, which only feed error messages. */
+/** Cap for recorded error and text bodies, which only feed error handling and the debug log. */
 const MAX_ERROR_TEXT = 500;
-const MAX_DETAIL = 200;
+/** Cap for a source's own reason in an error message: a short line, never a body. */
+const MAX_DETAIL = 120;
 
 /** The source credentials, redacted whatever their length: each is sent on every request. */
 const SOURCE_CREDENTIAL_NAMES: ReadonlySet<string> = new Set(Object.values(SOURCE_CREDENTIALS));
@@ -132,7 +134,7 @@ export function scrubReadText(text: string): string {
 
 /**
  * An error or text body for a cassette: secrets, media URLs, e-mails and phone numbers removed,
- * capped. These bodies only feed error messages.
+ * capped. These bodies only feed error handling and the debug log.
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
@@ -572,6 +574,12 @@ export interface SourceRequest {
   rateLimitStatuses?: readonly number[];
   /** The fields the pipeline reads, kept when a successful answer is recorded. */
   scrub?: Shape;
+  /**
+   * What a successful JSON answer is recorded as, before `scrub`: the source's own filter, so a
+   * cassette keeps nothing the source would drop. Replaying it must give what the live answer
+   * gave.
+   */
+  recordAs?: (json: unknown) => unknown;
   /** false: never recorded or replayed (local services). */
   cassette?: boolean;
 }
@@ -587,9 +595,49 @@ function parseRetryAfter(value: string | null): number | undefined {
 
 const isJsonType = (contentType: string) => /\bjson\b/i.test(contentType);
 
-/** A short human-readable detail from an error body (Last.fm, Tavily, FastAPI, Spotify). */
+/** Markup, also escaped as entities, once or more ("&lt;", "&#60;", "&#x3c;", "&amp;lt;"). */
+export const MARKUP = /[<>]|&(?:amp;)*(?:lt|gt|#0*6[02]|#x0*3[ce]);/i;
+/**
+ * A stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)", with a path, so "at 10:30:00"
+ * is not one) or a Python traceback.
+ */
+const STACK_TRACE =
+  /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+/** A signature or token parameter, also in a link written without a scheme. */
+const SIGNED_PARAM = /(?:^|[?&;~\s])(?:sig|signature|token|hdnts|hdnea)=|X-Amz-/i;
+
+/**
+ * A source's own reason for an error, as a short line of plain text: undefined when it is not a
+ * string, is empty, or holds markup (an HTML page in a JSON field, also entity-escaped), a
+ * stack trace or a signature or token parameter (a link without a scheme can carry one); links
+ * become "[link]"; cut to MAX_DETAIL. Error
+ * messages are stored with the result and sent to the client, so a page never reaches them.
+ */
+export function plainReason(text: unknown): string | undefined {
+  if (typeof text !== "string") return undefined;
+  const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
+  if (!line || MARKUP.test(line) || STACK_TRACE.test(line) || SIGNED_PARAM.test(line)) {
+    return undefined;
+  }
+  return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
+}
+
+/** What an error status says, in words, for an answer that gave no plain-text reason. */
+function statusReason(status: number): string | undefined {
+  if (status === 401 || status === 403) return "the source refused the request";
+  if (status === 404) return "not found";
+  if (status === 400 || status === 422) return "the source rejected the request";
+  if (status >= 500) return "the source could not answer";
+  return undefined;
+}
+
+/**
+ * A short human-readable detail from a JSON error body (Last.fm, Tavily, FastAPI, Spotify), as
+ * plain text. A text body (an HTML error page, a bot challenge) gives none: it is logged at
+ * debug level only.
+ */
 function errorDetail(body: unknown): string | undefined {
-  if (typeof body === "string") return body.trim().slice(0, MAX_DETAIL) || undefined;
+  if (typeof body === "string") return plainReason(body);
   if (!body || typeof body !== "object") return undefined;
   const b = body as Record<string, unknown>;
   const nested = (v: unknown) =>
@@ -603,8 +651,7 @@ function errorDetail(body: unknown): string | undefined {
     typeof detail === "string" ? detail : nested(detail),
     detail && typeof detail === "object" ? (detail as Record<string, unknown>).error : undefined,
   ];
-  const found = candidates.find((c): c is string => typeof c === "string" && c.trim() !== "");
-  return found?.trim().slice(0, MAX_DETAIL);
+  return candidates.map(plainReason).find((reason) => reason !== undefined);
 }
 
 /** Headers that carry a credential: such a request never follows a redirect off its origin. */
@@ -735,7 +782,17 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
 function interpret<T>(req: SourceRequest, answer: Recorded): T {
   const { source } = req;
   const body = answer.json !== undefined ? answer.json : answer.text;
-  const detail = errorDetail(body);
+  const ok = answer.status >= 200 && answer.status <= 299;
+  if (answer.json === undefined && answer.text) {
+    // An answer that is not JSON is an error; its text (an error page, a bot challenge) goes to
+    // the debug log only, never into the error message.
+    log.debug(`${source} answered HTTP ${answer.status} with a body that is not JSON`, {
+      answerText: scrubText(answer.text),
+    });
+  }
+  const detail = answer.json !== undefined ? errorDetail(answer.json) : undefined;
+  const why = statusReason(answer.status);
+  const reason = detail ? ` — ${detail}` : why ? ` (${why})` : "";
   const rateLimits = req.rateLimitStatuses ?? [429];
   if (rateLimits.includes(answer.status) || answer.status === 429) {
     const after = answer.retryAfterMs;
@@ -746,19 +803,18 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
       body,
     });
   }
-  if (answer.status < 200 || answer.status > 299) {
-    throw new SourceError(source, "http", `HTTP ${answer.status}${detail ? ` — ${detail}` : ""}`, {
+  if (!ok) {
+    throw new SourceError(source, "http", `HTTP ${answer.status}${reason}`, {
       status: answer.status,
       body,
     });
   }
   if (!isJsonType(answer.contentType)) {
-    throw new SourceError(
-      source,
-      "content_type",
-      `expected JSON, got ${answer.contentType || "no content type"}`,
-      { status: answer.status, body: answer.text },
-    );
+    const got = plainReason(answer.contentType.slice(0, 80)) ?? "no content type";
+    throw new SourceError(source, "content_type", `expected JSON, got ${got}`, {
+      status: answer.status,
+      body: answer.text,
+    });
   }
   if (answer.json === undefined) {
     throw new SourceError(source, "parse", "response body is not valid JSON", {
@@ -769,14 +825,18 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
   return answer.json as T;
 }
 
-/** The answer as it is written to a cassette: picked (2xx JSON), scrubbed, capped. */
+/**
+ * The answer as it is written to a cassette: filtered by the source (`recordAs`) and picked (2xx
+ * JSON), scrubbed, capped.
+ */
 function forCassette(req: SourceRequest, answer: Recorded): Recorded {
   const entry: Recorded = { status: answer.status, contentType: answer.contentType };
   if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
   const ok = answer.status >= 200 && answer.status <= 299;
   if (answer.json !== undefined) {
+    const kept = ok && req.recordAs ? req.recordAs(answer.json) : answer.json;
     entry.json = ok
-      ? scrubReadPayload(req.scrub ? pick(answer.json, req.scrub) : answer.json)
+      ? scrubReadPayload(req.scrub ? pick(kept, req.scrub) : kept)
       : scrubPayload(answer.json);
   } else {
     entry.text = scrubText(answer.text ?? "");

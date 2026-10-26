@@ -338,6 +338,8 @@ describe("the research key and what a hit trusts", () => {
     ["of another format", (row) => withEvidence(row, { format: CACHED_EVIDENCE_FORMAT + 1 })],
     // Written before the pack named the recording's release: read again, so it can name one.
     ["of the format before releases were read", (row) => withEvidence(row, { format: 2 })],
+    // Written before web text had its handles masked: read again, so the pack holds none.
+    ["of the format before handles were masked", (row) => withEvidence(row, { format: 3 })],
     [
       "holding a timeout as lasting",
       (row) =>

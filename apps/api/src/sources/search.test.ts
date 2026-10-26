@@ -13,7 +13,8 @@ vi.hoisted(() => {
 });
 
 import * as search from "./search.js";
-import { EXCLUDED_DOMAINS, isLyricPage } from "./search.js";
+import { EXCLUDED_DOMAINS, isLyricPage, isSocialPage } from "./search.js";
+import { recordThenReplay } from "./testing/roundTrip.js";
 import { readToolResult } from "./toolResult.js";
 
 const { searchMusicInfo, searchProductionHistory, searchSamples } = search;
@@ -101,6 +102,214 @@ describe("web research searches", () => {
     );
     expect(text).not.toContain("LYRIC_TEXT_SHOULD_NOT_APPEAR");
     expect(text).not.toContain("genius.com");
+  });
+
+  it.each(searches)(
+    "%s excludes social platforms from the request and the answer",
+    async (_n, run) => {
+      const social = (url: string) => ({
+        ...WHOSAMPLED,
+        url,
+        content: "SOCIAL_TEXT_SHOULD_NOT_APPEAR",
+      });
+      const net = stubFetch((call) =>
+        call.url === TAVILY
+          ? json(
+              answer([
+                social("https://www.instagram.com/p/abc123/"),
+                social("https://www.tiktok.com/@someone/video/123"),
+                social("https://m.facebook.com/somepage/posts/1"),
+                social("https://x.com/someone/status/1"),
+                social("https://www.reddit.com/r/music/comments/abc/"),
+                WHOSAMPLED,
+              ]),
+            )
+          : undefined,
+      );
+
+      const text = String(await run());
+
+      const body = JSON.parse(net.calls[0].body ?? "{}");
+      expect(body.exclude_domains).toEqual(
+        expect.arrayContaining([
+          "instagram.com",
+          "tiktok.com",
+          "facebook.com",
+          "twitter.com",
+          "threads.net",
+          "reddit.com",
+        ]),
+      );
+      expect(body.exclude_domains).not.toContain("youtube.com");
+      // x.com is left out by the answer's filter only (see SOCIAL_SITES).
+      expect(body.exclude_domains).not.toContain("x.com");
+      expect(text).not.toContain("SOCIAL_TEXT_SHOULD_NOT_APPEAR");
+      expect(JSON.parse(text).results).toHaveLength(1);
+    },
+  );
+
+  it("drops a result whose text is profile or handle boilerplate", async () => {
+    const comments = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/1",
+      content:
+        "dj_someone's profile picture dj_someone 2w Love this track! another.person's profile picture another.person 1w so good",
+    };
+    const handles = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/2",
+      content: "@first_user @second.user @third_user @fourth_user this one",
+    };
+    stubFetch((call) =>
+      call.url === TAVILY ? json(answer([comments, handles, WHOSAMPLED])) : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+  });
+
+  it("excludes the other social platforms and short links, on any subdomain or translate proxy", async () => {
+    const pages = [
+      "https://www.threads.com/@someone/post/1",
+      "https://bsky.app/profile/someone.bsky.social/post/1",
+      "https://www.pinterest.com/pin/123/",
+      "https://instagr.am/p/abc123/",
+      "https://fb.watch/abc123/",
+      "https://redd.it/abc123",
+      "https://t.co/abc123",
+      "https://vm.tiktok.com/abc123/",
+      "https://old.reddit.com/r/music/comments/abc/",
+      "https://m.facebook.com/somepage/posts/1",
+      "https://www-threads-com.translate.goog/@someone/post/1",
+      "https://bsky-app.translate.goog/profile/someone",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    expect(JSON.parse(net.calls[0].body ?? "{}").exclude_domains).toEqual(
+      expect.arrayContaining([
+        "threads.com",
+        "bsky.app",
+        "pinterest.com",
+        "instagr.am",
+        "fb.watch",
+        "redd.it",
+        "vm.tiktok.com",
+        "threads-com.translate.goog",
+      ]),
+    );
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    expect(isSocialPage("https://www.youtube.com/watch?v=abc")).toBe(false);
+    expect(isSocialPage("https://www.toscana.com/")).toBe(false);
+  });
+
+  it("masks every @handle in a result's text and title", async () => {
+    const page = {
+      ...WHOSAMPLED,
+      title: "Interview with @vanillaice",
+      content: "Rob Van Winkle (@vanillaice) recorded it in 1989.",
+    };
+    stubFetch((call) => (call.url === TAVILY ? json(answer([page])) : undefined));
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results).toEqual([
+      {
+        title: "Interview with @…",
+        url: WHOSAMPLED.url,
+        content: "Rob Van Winkle (@…) recorded it in 1989.",
+      },
+    ]);
+  });
+
+  it("leaves out Tumblr and fb.com, and sends no short or suffix-ambiguous name in the request", async () => {
+    const pages = [
+      "https://www.tumblr.com/daftpunkfan/123",
+      "https://daftpunkfan.tumblr.com/post/1",
+      "https://fb.com/daftpunk",
+      "https://x.com/someone/status/1",
+      "https://t.co/abc123",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(expect.arrayContaining(["tumblr.com", "tumblr-com.translate.goog"]));
+    for (const name of ["x.com", "t.co", "fb.com", "x-com.translate.goog", "t-co.translate.goog"]) {
+      expect(excluded, name).not.toContain(name);
+    }
+    // Hosts that only end like a short name are not social pages.
+    for (const url of ["https://www.vox.com/a", "https://www.complex.com/b", "https://kfb.com/c"]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+  });
+
+  it("replays a result cut at 800 characters as it was live, also when the cut lands on a space", async () => {
+    const head = `${"x".repeat(10)} ${"Daft Punk recorded One More Time in Paris. ".repeat(20)}`;
+    const content = `${head.slice(0, 799)} and the rest of the page goes on for a while.`;
+    expect(content[799]).toBe(" ");
+    const page = { ...WHOSAMPLED, content };
+    const run = await recordThenReplay(
+      (call) => (call.url === TAVILY ? json(answer([page])) : undefined),
+      () => searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" }),
+    );
+
+    expect(run.replayCalls).toBe(0);
+    expect(run.replayed).toEqual(run.live);
+  });
+
+  it("records only what it keeps: no social page or handle reaches a cassette", async () => {
+    const page = {
+      ...WHOSAMPLED,
+      content: "Rob Van Winkle (@vanillaice) recorded it in 1989.",
+    };
+    const instagram = {
+      ...WHOSAMPLED,
+      url: "https://www.instagram.com/p/abc123/",
+      content: "SOCIAL_TEXT",
+    };
+    const thread = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/1",
+      content: "some_one's profile picture some_one 2w Love it",
+    };
+    const run = await recordThenReplay(
+      (call) => (call.url === TAVILY ? json(answer([instagram, thread, page])) : undefined),
+      () => searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" }),
+    );
+
+    expect(run.replayCalls).toBe(0);
+    expect(run.replayed).toEqual(run.live);
+    const cassette = run.cassettes.tavily;
+    expect(cassette).toContain("recorded it in 1989");
+    expect(cassette).not.toContain("instagram.com");
+    expect(cassette).not.toContain("profile picture");
+    expect(cassette).not.toContain("@vanillaice");
   });
 
   it("sends the key as a bearer token, never in the body", async () => {

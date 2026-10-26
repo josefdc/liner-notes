@@ -30,8 +30,10 @@
  * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
- * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
- * fails the record's schema or says less than a replay must (`runIssues`). The result's other
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), markup
+ * in a source error's message (a page a source answered with, also entity-escaped), a social
+ * platform page, a web evidence title or excerpt with a private @handle, profile boilerplate or
+ * a comment thread (webTextIssue), or that fails the record's schema or says less than a replay must (`runIssues`). The result's other
  * producer checks (`analysisIssues`) are reported as warnings: a run stored by older code may not
  * pass them all, and the record replays what was sent.
  */
@@ -43,7 +45,8 @@ import {
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { isMediaUrl } from "../sources/http.js";
+import { isMediaUrl, MARKUP } from "../sources/http.js";
+import { isSocialPage, webTextIssue } from "../sources/search.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
 import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
 import { normalizeQuery } from "./records.js";
@@ -149,6 +152,9 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
 /** A URL signed with an expiring token, on any host. */
 const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i;
 
+/** The message of a source error, wherever the record holds one (its result, its events). */
+const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
+
 /**
  * Sites a record may link to: the track's Spotify page and the sources the pipeline cites. Any
  * other URL (an image host this list does not know, a tracker, a signed link) is a refusal.
@@ -198,6 +204,26 @@ function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string
     for (const inner of Object.values(item)) webEvidencePages(inner, pages);
   }
   return pages;
+}
+
+/**
+ * The paths of the text a record's web-tier evidence stores (each item's title and excerpt), as
+ * `strings` writes them: the web tier's own check (webTextIssue) runs on these, and on no other
+ * text (model prose and primary records may name an account).
+ */
+function webEvidenceTexts(value: unknown, path = "", paths = new Set<string>()): Set<string> {
+  const at = (name: string) => (path ? `${path}.${name}` : name);
+  if (Array.isArray(value)) {
+    for (const [i, item] of value.entries()) webEvidenceTexts(item, `${path}[${i}]`, paths);
+  } else if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    if (item.sourceTier === "web") {
+      paths.add(at("title"));
+      paths.add(at("excerpt"));
+    }
+    for (const [name, inner] of Object.entries(item)) webEvidenceTexts(inner, at(name), paths);
+  }
+  return paths;
 }
 
 /**
@@ -333,6 +359,7 @@ export function leaks(
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
   const coverPaths = resultCoverPaths(record);
+  const webTexts = webEvidenceTexts(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
     // The kept cover, as the whole value of the result's cover: an allowed link there only.
@@ -353,8 +380,16 @@ export function leaks(
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
+    // A source error says what failed in words; markup is an answer's page that slipped in.
+    if (SOURCE_ERROR_MESSAGE.test(path) && MARKUP.test(text)) {
+      found.push(`${path}: markup in a source error`);
+    }
+    // A web page's stored text never holds a private handle, boilerplate or a comment thread.
+    const webIssue = webTexts.has(path) ? webTextIssue(text) : null;
+    if (webIssue) found.push(`${path}: ${webIssue}`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
+      else if (isSocialPage(url)) found.push(`${path}: a social platform page`);
       else if (allowedHere(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);

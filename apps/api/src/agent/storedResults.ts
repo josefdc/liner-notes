@@ -11,6 +11,11 @@
  * not configured, a primary-record answer of a shape its reader does not know), and the run
  * that serves it reports them again: in its source errors and a status line per source, so a
  * source that was not read is never served as one that had nothing.
+ *
+ * A result whose web evidence holds a page the web tier now leaves out (a social platform page,
+ * a handle, profile boilerplate or a comment thread: webPageIssue), or whose source errors hold
+ * markup (a page a source answered with), stored by older code, is not served: it is composed
+ * again.
  */
 
 import type { BaseStore } from "@langchain/langgraph";
@@ -21,6 +26,8 @@ import {
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { sourceErrorLine } from "./statusText.js";
+import { MARKUP } from "../sources/http.js";
+import { webPageIssue } from "../sources/search.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
 import type { TrackData } from "./schema.js";
@@ -83,14 +90,34 @@ export async function readStoredResult(
       log.warn(`Stored result for ${trackId} is about another track; ignored`);
       return null;
     }
+    if ((checked.data.evidence ?? []).some(leftOutWebPage)) {
+      log.warn("Stored result holds a web page the web tier now leaves out; composing again");
+      return null;
+    }
+    const sourceErrors = storedErrors(value.sourceErrors);
+    if (sourceErrors.some((e) => MARKUP.test(e.message ?? ""))) {
+      log.warn("Stored result's source errors hold markup; composing again");
+      return null;
+    }
     return {
       trackData: checked.data as TrackData,
-      sourceErrors: storedErrors(value.sourceErrors),
+      sourceErrors,
     };
   } catch (error) {
     log.warn("Stored result could not be read", { err: error });
     return null;
   }
+}
+
+/** A web-tier item the web tier no longer keeps, by what is stored of it (webPageIssue). */
+function leftOutWebPage(item: {
+  sourceTier: string;
+  url?: string | null;
+  title: string;
+  excerpt: string;
+}) {
+  if (item.sourceTier !== "web") return false;
+  return webPageIssue({ url: item.url, title: item.title, text: item.excerpt }) !== null;
 }
 
 /**

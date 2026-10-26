@@ -28,11 +28,11 @@ import type { QueryMatch } from "./trackMatch.js";
 // TypeScript Interfaces (matching frontend types)
 // =============================================================================
 
+/** A section of the song structure, in percent of the track. The web picks its colours. */
 export interface SongSegment {
   label: string;
   start: number; // percentage 0-100
   end: number; // percentage 0-100
-  color: string;
 }
 
 export interface FactoidEntity {
@@ -398,6 +398,25 @@ export interface LlmCallRecord {
 type PreviewMatchValue = z.infer<typeof PreviewMatch>;
 
 /**
+ * The result the composer hands the verifier: what the model wrote, as claims, factoid cards and
+ * a genealogy (nodes without artwork, links still inferred), or the fallback built from source
+ * data when the model gave nothing usable (`modelUnavailableReason`). Everything the verifier
+ * does not change (metadata, the measurement, the evidence) it takes from the state.
+ */
+export interface ComposedDraft {
+  /** null for a composed result; for the fallback, why the model gave nothing usable. */
+  modelUnavailableReason: NonNullable<TrackData["modelUnavailableReason"]> | null;
+  factoids: TrackData["factoids"];
+  claims: Claim[];
+  genealogy: TrackData["genealogy"];
+  /** The year the model gave for a node, by node id: for the artwork's release check only. */
+  nodeYears: Record<string, string>;
+  segments: TrackData["segments"];
+  segmentsSource: "template";
+  samples: TrackData["samples"];
+}
+
+/**
  * A research lead discovered during analysis
  */
 export interface ResearchLead {
@@ -422,7 +441,7 @@ export interface ResearchLead {
 /**
  * The main state that flows through the LangGraph workflow.
  *
- * Workflow: scout → [clarification?] → parallel(engineer, historian) → composer → END
+ * Workflow: scout → [clarification?] → parallel(engineer, historian) → composer → verifier → END
  */
 export const SonicAgentState = Annotation.Root({
   // Input
@@ -566,7 +585,16 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
-  // The claims of the result. Only the composer writes them; a new set replaces the old one.
+  // What the composer wrote (or its fallback), before the verifier checks it; null until the
+  // composer runs. It holds no preview URL: artwork and previews are looked up by the verifier,
+  // after its checks (and the checkpointer scrubs this channel all the same).
+  draft: Annotation<ComposedDraft | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // The claims of the result, as the verifier left them. Only the verifier writes them; a new
+  // set replaces the old one.
   claims: Annotation<Claim[]>({
     reducer: (_, next) => next,
     default: () => [],
@@ -610,19 +638,27 @@ export const SonicAgentState = Annotation.Root({
 
 export type SonicAgentStateType = typeof SonicAgentState.State;
 
-// =============================================================================
-// Default Colors for Segments
-// =============================================================================
-
-export const SEGMENT_COLORS = {
-  intro: "#374151", // gray-700
-  verse: "#1F2937", // gray-800
-  chorus: "#00F0FF", // cyber
-  bridge: "#FFB000", // analog
-  outro: "#374151", // gray-700
-  instrumental: "#6366F1", // indigo
-  breakdown: "#EC4899", // pink
-};
+/**
+ * The state with the evidence-model channels present: a state written before they existed (or
+ * a node called outside the graph) reads them as empty.
+ */
+export function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
+  return {
+    ...state,
+    evidence: state.evidence ?? [],
+    claims: state.claims ?? [],
+    draft: state.draft ?? null,
+    usage: state.usage ?? [],
+    sourceErrors: state.sourceErrors ?? [],
+    lastingSourceErrors: state.lastingSourceErrors ?? [],
+    primaryNotAsked: state.primaryNotAsked ?? [],
+    isrc: state.isrc ?? null,
+    isrcRecording: state.isrcRecording ?? null,
+    preview: state.preview ?? null,
+    previewUrl: state.previewUrl ?? null,
+    queryMatch: state.queryMatch ?? null,
+  };
+}
 
 // =============================================================================
 // Helper Functions
@@ -641,12 +677,12 @@ export function generateId(): string {
  */
 export function createDefaultSegments(_durationMs: number): SongSegment[] {
   return [
-    { label: "Intro", start: 0, end: 8, color: SEGMENT_COLORS.intro },
-    { label: "Verse 1", start: 8, end: 25, color: SEGMENT_COLORS.verse },
-    { label: "Chorus", start: 25, end: 42, color: SEGMENT_COLORS.chorus },
-    { label: "Verse 2", start: 42, end: 58, color: SEGMENT_COLORS.verse },
-    { label: "Bridge", start: 58, end: 75, color: SEGMENT_COLORS.bridge },
-    { label: "Chorus", start: 75, end: 92, color: SEGMENT_COLORS.chorus },
-    { label: "Outro", start: 92, end: 100, color: SEGMENT_COLORS.outro },
+    { label: "Intro", start: 0, end: 8 },
+    { label: "Verse 1", start: 8, end: 25 },
+    { label: "Chorus", start: 25, end: 42 },
+    { label: "Verse 2", start: 42, end: 58 },
+    { label: "Bridge", start: 58, end: 75 },
+    { label: "Chorus", start: 75, end: 92 },
+    { label: "Outro", start: 92, end: 100 },
   ];
 }

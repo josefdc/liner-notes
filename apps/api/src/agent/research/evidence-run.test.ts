@@ -163,11 +163,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The fake model: the planner stops; the composer cites the recording and the web page. */
+/**
+ * The fake model: the planner stops; the composer cites the recording and the web page; the
+ * verifier's judge gives no verdict.
+ */
 const answer = (call: StubCall) => {
   if (call.callSite === "research_planner") {
     return { nextAction: "done", query: null, reasoning: "enough for this track" };
   }
+  if (call.callSite === "verifier") return { verdicts: [] };
   return {
     claims: [
       {

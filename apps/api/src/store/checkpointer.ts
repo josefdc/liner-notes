@@ -37,6 +37,9 @@ const PREVIEW_CHANNELS = new Map<string, (value: unknown) => unknown>([
   ["candidates", scrubbed],
   ["trackData", scrubbed],
   ["audioFeatures", scrubbed],
+  // The composer's draft holds no preview (artwork is looked up after it), and is scrubbed in
+  // case a later change puts one there.
+  ["draft", scrubbed],
 ]);
 
 /**

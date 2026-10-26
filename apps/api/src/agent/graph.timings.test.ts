@@ -30,7 +30,7 @@ vi.mock("./nodes/index.js", () => {
   type Config = LangGraphRunnableConfig;
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const composer = async (state: State) => ({
-    trackData: { id: "t", title: "OUTPUT-MARKER", spotify: state.spotifyData },
+    draft: { title: "OUTPUT-MARKER", spotify: state.spotifyData },
   });
   return {
     scoutNode: async (state: State, config: Config) =>
@@ -53,6 +53,12 @@ vi.mock("./nodes/index.js", () => {
     composerNode: composer,
     createComposerNode: () => composer,
   };
+});
+vi.mock("./verifier/index.js", () => {
+  const verifier = async (state: SonicAgentStateType) => ({
+    trackData: { id: "t", title: "OUTPUT-MARKER", draft: state.draft },
+  });
+  return { verifierNode: verifier, createVerifierNode: () => verifier };
 });
 
 const INPUT = { songQuery: "INPUT-MARKER typed text" };
@@ -116,10 +122,10 @@ describe("node timings", () => {
 
     const lines = timings();
     expect(lines.map((line) => line.node).sort()).toEqual(
-      ["composer", "engineer", "historian", "scout"].sort(),
+      ["composer", "engineer", "historian", "scout", "verifier"].sort(),
     );
     expect(lines[0].node).toBe("scout");
-    expect(lines.at(-1)?.node).toBe("composer");
+    expect(lines.at(-1)?.node).toBe("verifier");
     for (const line of lines) {
       // The exact shape of a timing line.
       expect(Object.keys(line).sort()).toEqual(
@@ -157,7 +163,7 @@ describe("node timings", () => {
     );
 
     const lines = timings();
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     for (const line of lines) expect(line.runId).toBe("run-from-route");
   });
 
@@ -169,7 +175,7 @@ describe("node timings", () => {
     );
 
     const lines = timings();
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     for (const line of lines) expect(line.runId).toBe("ctx-id");
   });
 
@@ -181,7 +187,7 @@ describe("node timings", () => {
     await graph.invoke(INPUT);
 
     const lines = timings();
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     for (const line of lines) expect(line.runId).toBe("run-from-runtime");
   });
 
@@ -211,7 +217,7 @@ describe("node timings", () => {
       runId: "thread-hitl",
     });
     expect(resumed.map((line) => line.node).sort()).toEqual(
-      ["clarification", "composer", "engineer", "historian"].sort(),
+      ["clarification", "composer", "engineer", "historian", "verifier"].sort(),
     );
   });
 

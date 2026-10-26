@@ -454,7 +454,9 @@ describe("composerOutputIssues", () => {
     claims: [],
     factoids: [],
     genealogyNodes: [node("current", "current"), node("o1", "source")],
-    genealogyLinks: [{ source: "o1", target: "current", type: "sample", evidenceIds: [] }],
+    genealogyLinks: [
+      { source: "o1", target: "current", type: "sample", evidenceIds: [], scope: "recording" },
+    ],
   };
 
   it("accepts a consistent output, with exactly 8 factoids", () => {
@@ -485,9 +487,16 @@ describe("composerOutputIssues", () => {
   });
 
   it("reports a link from or to an unknown node", () => {
+    const scope = "recording" as const;
     const links = [
-      { source: "x", target: "current", type: "sample" as const, evidenceIds: [] },
-      { source: "o1", target: "y", type: "cover" as const, evidenceIds: [] },
+      { source: "x", target: "current", type: "sample" as const, evidenceIds: [], scope },
+      {
+        source: "o1",
+        target: "y",
+        type: "cover" as const,
+        evidenceIds: [],
+        scope: "work" as const,
+      },
     ];
     expect(composerOutputIssues({ ...valid, genealogyLinks: links })).toEqual([
       'genealogyLinks[0]: unknown node "x"',

@@ -18,7 +18,9 @@ import {
   describeError,
   fetchJson,
   pick,
+  plainMessage,
   plainReason,
+  reasonIssue,
   redactText,
   SourceError,
   scrubPayload,
@@ -721,5 +723,44 @@ describe("cassettes", () => {
       fetchJson({ source: "audio", url: "http://localhost:3002/health", cassette: false }),
     ).resolves.toEqual({ status: "ok" });
     expect(net.calls).toHaveLength(1);
+  });
+});
+
+describe("what an error message keeps", () => {
+  it.each([
+    ["<html>Bad gateway</html>", "markup"],
+    ["Blocked &amp;lt;script&amp;gt;", "markup"],
+    ["TypeError: x at handler (/srv/app/index.js:10:5)", "a stack trace"],
+    ['Traceback (most recent call last): File "/app/main.py", line 3', "a stack trace"],
+    ["Rejected key token=abc123", "a signature or token parameter"],
+    ["HTTP 404 — see https://api.example.com/v1/x", "a link"],
+    ["connect ECONNREFUSED //api.example.com/v1", "a link"],
+    ["musicbrainz: HTTP 503 (the source could not answer)", null],
+    ["Quota resets at 10:30:00 UTC", null],
+    ["HTTP 400 — see [link]", null],
+  ])("names what %s holds", (text, issue) => {
+    expect(reasonIssue(text)).toBe(issue);
+  });
+
+  it("writes a message as a plain line that never has an issue, or leaves it out", () => {
+    expect(plainMessage("connect ECONNREFUSED https://api.example.com/v1/x\n  retrying")).toBe(
+      "connect ECONNREFUSED [link] retrying",
+    );
+    expect(plainMessage("see https://example.org/x?token=abc123 now")).toBe("see [link] now");
+    expect(plainMessage("<b>Bad</b> request")).toBeUndefined();
+    expect(plainMessage("boom at handler (/srv/app/index.js:10:5)")).toBeUndefined();
+    expect(plainMessage("   ")).toBeUndefined();
+    const long = `musicbrainz: ${"x".repeat(300)}`;
+    // Not cut: only a source's own reason is (plainReason).
+    expect(plainMessage(long)).toBe(long);
+    for (const text of [
+      "a //b //c",
+      "http://a.example/x https://b.example/y",
+      "x http:////y",
+      "see (https://a.example/x) and <https://b.example>",
+    ]) {
+      const line = plainMessage(text);
+      if (line !== undefined) expect(reasonIssue(line), text).toBeNull();
+    }
   });
 });

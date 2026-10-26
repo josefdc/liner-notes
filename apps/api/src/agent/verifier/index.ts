@@ -61,6 +61,7 @@ import {
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { maskHandles } from "../../sources/search.js";
+import { plainSourceError } from "../../sources/toolResult.js";
 import { replayedRecording, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
@@ -606,7 +607,8 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
         unjudged: judged.unjudged,
         ...(checkFailed ? { failed: true } : {}),
       },
-      sourceErrors: [...state.sourceErrors, ...runErrors],
+      // Each message as a plain line, so the result is served again when it is read back.
+      sourceErrors: [...state.sourceErrors, ...runErrors].map(plainSourceError),
     };
     const resultDraft: ResultDraft = {
       ...baseFields(state, spotify),

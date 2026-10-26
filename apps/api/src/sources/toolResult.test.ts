@@ -11,6 +11,7 @@ import {
   keyRejected,
   NOT_ASKED_REASONS,
   notAnswered,
+  plainSourceError,
   readToolResult,
   sourceErrorCode,
   toolFailure,
@@ -139,5 +140,34 @@ describe("toolFailure", () => {
       code: "unavailable",
       error: "internal error: rel.type is undefined",
     });
+  });
+});
+
+describe("plainSourceError", () => {
+  const error = (message?: string) => ({
+    source: "musicbrainz" as const,
+    code: "unavailable" as const,
+    ...(message === undefined ? {} : { message }),
+  });
+
+  it("keeps a plain message as it is", () => {
+    const plain = error("musicbrainz: HTTP 503 (the source could not answer)");
+    expect(plainSourceError(plain)).toBe(plain);
+    expect(plainSourceError(error())).toEqual(error());
+  });
+
+  it("writes links as [link], and leaves out a message with markup, a stack trace or a token", () => {
+    expect(plainSourceError(error("connect ECONNREFUSED https://musicbrainz.org/ws/2"))).toEqual(
+      error("connect ECONNREFUSED [link]"),
+    );
+    expect(plainSourceError(error("<html>Bad gateway</html>"))).toEqual(error());
+    expect(plainSourceError(error("boom at handler (/srv/app/index.js:10:5)"))).toEqual(error());
+    expect(plainSourceError(error("Rejected key token=abc123"))).toEqual(error());
+  });
+
+  it("keeps an internal error's prefix, so its status line still says our reader failed", () => {
+    expect(
+      plainSourceError(error("internal error: Cannot read properties of Map<string>")),
+    ).toEqual(error("internal error: the message was left out"));
   });
 });

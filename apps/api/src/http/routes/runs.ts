@@ -40,10 +40,16 @@ function resultOf(record: RunRecord): unknown {
 /**
  * A stored run and its result as RunResponse, checked against the contract: "unfit" when the
  * stored result no longer fits it, "refused" when it holds text the readers of stored evidence
- * now refuse (heldTextIssue: a web page the web tier leaves out, markup in a source error), both
- * stored by an older release. A refused result is never served in part: its claims cite its
- * evidence by id, so a result without some items would show claims without their sources. The
- * answer is built from named fields only: the query the user typed is never part of it.
+ * now refuse (heldTextIssue: a web page the web tier leaves out, or a source error whose message
+ * holds markup, a stack trace, a token parameter or a link), both stored by an older release. A
+ * refused result is never served in part: its claims cite its evidence by id, so a result
+ * without some items would show claims without their sources. The answer is built from named
+ * fields only: the query the user typed is never part of it.
+ *
+ * Known limit: the check reads web evidence and source errors only, as the other readers of
+ * stored evidence do. Model prose, and claims citing ids that are not in the evidence, are not
+ * checked; a run stored before results carried their evidence pack may hold prose written from
+ * unmasked search text. Such runs age out with the run retention period.
  */
 function runResponse(record: RunRecord): RunResponse | "unfit" | "refused" {
   const run: StoredRun = {
@@ -85,9 +91,10 @@ function runResponse(record: RunRecord): RunResponse | "unfit" | "refused" {
  * nothing about one (see StoredRun).
  * 404 not_found for an unknown run (or one removed by retention), and for a run whose stored
  * result holds text the readers of stored evidence now refuse (stored by an older release: a web
- * page the web tier leaves out, such as a social platform page or a forum thread, or markup in a
- * source error; see heldTextIssue): no part of that result is served, and the detail says it is
- * no longer served. 400 invalid_input for an id that is not 1-100 letters, digits, '-' or '_';
+ * page the web tier leaves out, such as a social platform page or a forum thread, or a source
+ * error whose message holds markup, a stack trace, a token parameter or a link; see
+ * heldTextIssue): no part of that result is served, and the detail only says it is no longer
+ * served, never why. 400 invalid_input for an id that is not 1-100 letters, digits, '-' or '_';
  * 500 failed when the stored result no longer fits the contract.
  */
 router.get("/api/runs/:id", (req, res) => {
@@ -118,10 +125,12 @@ router.get("/api/runs/:id", (req, res) => {
  * result of its own, or replayed a recording that is still served unchanged (runs that sent a cached
  * result are not counted). When that run's stored result no longer fits the contract, or holds
  * text the readers of stored evidence now refuse (as on GET /api/runs/:id; never served in
- * part), the next most recent one that can be served is, among the BY_TRACK_CANDIDATES latest.
- * 404 not_found when the track has no such run, or none whose result is still served (the web
- * then offers a fresh analysis); 500 failed when one of those runs fits the contract no longer
- * and none can be served; 400 invalid_input for an id that is not a Spotify track id.
+ * part), the next most recent one that can be served is served instead. Only the
+ * BY_TRACK_CANDIDATES latest runs are tried, those that cannot be served included: a run older
+ * than them is not reached. 404 not_found when the track has no such run, or when every one tried
+ * was refused (the web then offers a fresh analysis); 500 failed when none can be served and at
+ * least one of them no longer fits the contract, whether or not others were refused; 400
+ * invalid_input for an id that is not a Spotify track id.
  */
 router.get("/api/runs/by-track/:spotifyId", (req, res) => {
   const spotifyId = req.params.spotifyId;

@@ -22,7 +22,7 @@ import {
   SourceId as SourceIdSchema,
   type SourceId,
 } from "@liner-notes/contract";
-import { describeError, isSourceError } from "./http.js";
+import { describeError, isSourceError, plainMessage } from "./http.js";
 
 export type SourceErrorCode = SourceErrorRecord["code"];
 
@@ -51,6 +51,25 @@ export function failureMessage(error: unknown): string {
   return isInternalError(error)
     ? `${INTERNAL_ERROR_PREFIX}${describeError(error)}`
     : describeError(error);
+}
+
+/**
+ * A source error as a result keeps it: its message as one line of plain text (plainMessage:
+ * links become "[link]"). A message with markup, a stack trace or a signature or token
+ * parameter is left out; an internal error's keeps its prefix, so its status line still says our
+ * reader failed. The readers of stored results (heldTextIssue) never refuse what this returns.
+ */
+export function plainSourceError<T extends { message?: string }>(error: T): T {
+  if (error.message === undefined) return error;
+  const message = plainMessage(error.message);
+  if (message === error.message) return error;
+  const { message: _left, ...rest } = error;
+  if (message !== undefined) return { ...rest, message } as T;
+  return (
+    error.message.startsWith(INTERNAL_ERROR_PREFIX)
+      ? { ...rest, message: `${INTERNAL_ERROR_PREFIX}the message was left out` }
+      : rest
+  ) as T;
 }
 
 /**

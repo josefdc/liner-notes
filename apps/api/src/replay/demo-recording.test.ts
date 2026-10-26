@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ReplayRecord } from "@liner-notes/contract";
+import { analysisIssues, ReplayRecord } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { isSocialPage, webPageIssue, webTextIssue } from "../sources/search.js";
 import { ARCHIVE_FRONT, archiveCoverOf } from "./cover.js";
@@ -55,6 +55,11 @@ describe("the demo recording (one-more-time-daft-punk)", () => {
     expect(record.analyzerVersion).not.toBeNull();
     expect(atLeast23(versionOf(record.analyzerVersion))).toBe(true);
     expect(analysis.audio?.analyzerVersion).toBe(record.analyzerVersion);
+  });
+
+  it("shows the tempo measured from the signal, and copies of measured values that match it", () => {
+    expect(analysis.audio?.tempo?.basis).toBe("signal");
+    expect(analysisIssues(analysis)).toEqual([]);
   });
 
   it("shows its measured key, or the reason the key was withheld", () => {

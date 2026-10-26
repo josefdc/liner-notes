@@ -67,7 +67,7 @@ export function createShutdown({
       return;
     }
     startedAt = now();
-    log.info(`${signal} received; shutting down`);
+    log.info(`${signal} received; shutting down`, { drainMs, timeoutMs });
 
     stopBackground();
 

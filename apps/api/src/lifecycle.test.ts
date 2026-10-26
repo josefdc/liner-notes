@@ -9,8 +9,14 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createShutdown, requestGate, type ShutdownOptions } from "./lifecycle.js";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  createShutdown,
+  requestGate,
+  SHUTDOWN_TIMEOUT_MS,
+  type ShutdownOptions,
+  STREAM_DRAIN_MS,
+} from "./lifecycle.js";
 import { runMigrations } from "./store/migrations.js";
 import { getRun, settleOpenRuns, startRun } from "./store/runs.js";
 
@@ -181,6 +187,40 @@ describe("createShutdown", () => {
     expect(at - start).toBeGreaterThanOrEqual(280);
     expect(calls).toMatchObject({ closeStore: 1, dbClosed: true });
     expect(runStatus()).toBe("cancelled");
+  });
+});
+
+describe("the drain the API uses", () => {
+  it("is 3 s, within the 8 s shutdown timeout and Docker's 10 s", () => {
+    expect(STREAM_DRAIN_MS).toBe(3_000);
+    expect(SHUTDOWN_TIMEOUT_MS).toBe(8_000);
+  });
+
+  it("closes the open connections exactly STREAM_DRAIN_MS after the signal", () => {
+    // On a fake clock that only the test moves: the drain is the timer's, not the machine's.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const closeAllConnections = vi.fn();
+    // A server with an open connection: close() never calls back until it ends.
+    const openServer = { close: vi.fn(), closeAllConnections } as unknown as http.Server;
+    const exit = vi.fn();
+    const shutdown = createShutdown({
+      server: openServer,
+      stopBackground: () => {},
+      closeStore: async () => {},
+      exit,
+      drainMs: STREAM_DRAIN_MS,
+      timeoutMs: SHUTDOWN_TIMEOUT_MS,
+    });
+
+    shutdown("SIGTERM");
+    vi.advanceTimersByTime(STREAM_DRAIN_MS - 1);
+    expect(closeAllConnections).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(closeAllConnections).toHaveBeenCalledTimes(1);
+    expect(exit).not.toHaveBeenCalled();
   });
 });
 

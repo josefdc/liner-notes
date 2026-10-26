@@ -17,6 +17,7 @@ import underPressureDetails from "./fixtures/musicbrainz-recording-details-under
   type: "json",
 };
 import iceWork from "./fixtures/musicbrainz-work-ice-ice-baby.json" with { type: "json" };
+import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 import hallelujahDetails from "./fixtures/musicbrainz-recording-details-hallelujah-live.json" with {
   type: "json",
@@ -268,28 +269,35 @@ describe("work recordings, duplicates and name normalisation", () => {
 
 describe("the shared queue and a request's signal", () => {
   it("lets an aborted request leave the queue at once, without taking a slot", async () => {
+    // On a fake clock: "at once" is with no time passing at all, however busy the machine is.
+    queueOnFakeClock(300);
     const limiter = MusicBrainzRateLimiter.getInstance();
-    const restore = limiter.setIntervalForTests(300);
-    try {
-      const net = stubFetch(() => json(birdsIsrc));
-      // Six requests ahead, 300 ms apart: about 1.5 s of waiting.
-      const ahead = Array.from({ length: 6 }, () => lookupIsrc("USUM72401994"));
-      const controller = new AbortController();
-      const started = Date.now();
-      const late = lookupIsrc("USCA29001716", controller.signal);
-      setTimeout(() => controller.abort(), 50);
-      await expect(late).rejects.toMatchObject({ kind: "aborted" });
-      expect(Date.now() - started).toBeLessThan(500);
-      expect(limiter.pending).toBeLessThanOrEqual(6);
-      await Promise.all(ahead);
-      expect(net.calls.some((c) => c.url.includes("USCA29001716"))).toBe(false);
-      // An already aborted request is never queued.
-      await expect(lookupIsrc("USCA29001716", AbortSignal.abort())).rejects.toMatchObject({
-        kind: "aborted",
-      });
-    } finally {
-      restore();
-    }
+    const net = stubFetch(() => json(birdsIsrc));
+    // Six requests ahead, 300 ms apart: 1.5 s of waiting.
+    const ahead = Array.from({ length: 6 }, () => lookupIsrc("USUM72401994"));
+    const controller = new AbortController();
+    let outcome: unknown = "still waiting";
+    lookupIsrc("USCA29001716", controller.signal).then(
+      () => {
+        outcome = "answered";
+      },
+      (error: unknown) => {
+        outcome = error;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const waiting = limiter.pending;
+    controller.abort();
+    // Settles every promise the abort settles; no timer is due, so the clock stays put.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toMatchObject({ kind: "aborted" });
+    expect(limiter.pending).toBe(waiting - 1);
+    await settleOnFakeClock(Promise.all(ahead));
+    expect(net.calls.some((c) => c.url.includes("USCA29001716"))).toBe(false);
+    // An already aborted request is never queued.
+    await expect(lookupIsrc("USCA29001716", AbortSignal.abort())).rejects.toMatchObject({
+      kind: "aborted",
+    });
   });
 
   it("reports a deadline reached in the queue as a timeout", async () => {
@@ -308,26 +316,29 @@ describe("the shared queue and a request's signal", () => {
   });
 
   it("does not retry a shed request once its signal has aborted, nor wait out the delay", async () => {
+    // On a fake clock: the time that passes is the client's waiting only, not the machine's.
+    queueOnFakeClock(0);
     const controller = new AbortController();
     const net = stubFetch(() => {
       controller.abort();
       return json({ error: "slow down" }, { status: 503, headers: { "retry-after": "2" } });
     });
     const started = Date.now();
-    await expect(lookupIsrc("USCA29001716", controller.signal)).rejects.toMatchObject({
-      kind: "rate_limited",
-    });
+    const error = await settleOnFakeClock(
+      lookupIsrc("USCA29001716", controller.signal).catch((e: unknown) => e),
+    );
+    expect(error).toMatchObject({ kind: "rate_limited" });
     expect(net.calls).toHaveLength(1);
-    expect(Date.now() - started).toBeLessThan(1000);
+    expect(Date.now() - started, "no wait for the retry").toBe(0);
 
-    // Aborted during the delay before the retry: rejects at once.
+    // Aborted 50 ms into the delay before the retry (2 s): rejects then.
     const during = new AbortController();
     const shed = stubFetch(() => json({ error: "slow down" }, { status: 503 }));
-    const pending = lookupIsrc("USCA29001716", during.signal);
-    setTimeout(() => during.abort(), 50);
     const began = Date.now();
-    await expect(pending).rejects.toMatchObject({ kind: "aborted" });
-    expect(Date.now() - began).toBeLessThan(1000);
+    const pending = lookupIsrc("USCA29001716", during.signal).catch((e: unknown) => e);
+    setTimeout(() => during.abort(), 50);
+    expect(await settleOnFakeClock(pending)).toMatchObject({ kind: "aborted" });
+    expect(Date.now() - began, "stopped at the abort").toBe(50);
     expect(shed.calls).toHaveLength(1);
   });
 

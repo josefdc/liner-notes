@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { onTestFinished } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const WORKER = join(here, "callWorker.ts");
@@ -33,6 +34,10 @@ export function runWorker(
     const child = spawn(process.execPath, ["--import", "tsx", WORKER], {
       cwd: REPO_ROOT,
       env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+    });
+    // However the test ends (its timeout included), the worker does not outlive it.
+    onTestFinished(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     });
     let stdout = "";
     let stderr = "";

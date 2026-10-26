@@ -36,6 +36,7 @@ import loveStoryWork from "./fixtures/musicbrainz-work-love-story.json" with { t
 import loveStoryWorkRecordings from "./fixtures/musicbrainz-work-recordings-love-story.json" with {
   type: "json",
 };
+import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 import { type FetchCall, type FetchRoute, json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 import {
@@ -685,33 +686,29 @@ describe("collectPrimarySources", () => {
   });
 
   it("is served ahead of MusicBrainz requests made outside it, queued first", async () => {
-    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(30);
-    try {
-      const OTHER = ["GBUM71106916", "USUM72401994"];
-      const net = stubFetch((call) =>
-        OTHER.some((isrc) => call.url.includes(`/isrc/${isrc}`))
-          ? json({ recordings: [] })
-          : withShs(call),
-      );
-      // A request just made: the next ones wait their turn.
-      await lookupIsrc(OTHER[0]);
-      net.calls.length = 0;
-      // A researcher's two requests are queued first; then the chain starts.
-      const research = Promise.all(OTHER.map((isrc) => lookupIsrc(isrc)));
-      const chain = collectPrimarySources(ICE_TRACK, { now });
-      await Promise.all([research, chain]);
+    // On a fake clock the chain's next request is queued before the queue's wait ends, as it is
+    // at the real 1.1 s spacing, however long the machine takes over each answer.
+    queueOnFakeClock(30);
+    const OTHER = ["GBUM71106916", "USUM72401994"];
+    const net = stubFetch((call) =>
+      OTHER.some((isrc) => call.url.includes(`/isrc/${isrc}`))
+        ? json({ recordings: [] })
+        : withShs(call),
+    );
+    // A request just made: the next ones wait their turn.
+    await settleOnFakeClock(lookupIsrc(OTHER[0]));
+    net.calls.length = 0;
+    // A researcher's two requests are queued first; then the chain starts.
+    const research = Promise.all(OTHER.map((isrc) => lookupIsrc(isrc)));
+    const chain = collectPrimarySources(ICE_TRACK, { now });
+    await settleOnFakeClock(Promise.all([research, chain]));
 
-      const mb = net.calls.filter((c) => c.url.startsWith(MB)).map((c) => c.url);
-      const firstOther = mb.findIndex((url) => OTHER.some((isrc) => url.includes(isrc)));
-      // Every MusicBrainz request of the chain (lookup, recording, work, dating) came first.
-      expect(firstOther).toBe(mb.length - 2);
-      expect(mb.slice(0, firstOther).every((url) => !OTHER.some((i) => url.includes(i)))).toBe(
-        true,
-      );
-      expect(firstOther).toBeGreaterThanOrEqual(4);
-    } finally {
-      restore();
-    }
+    const mb = net.calls.filter((c) => c.url.startsWith(MB)).map((c) => c.url);
+    const firstOther = mb.findIndex((url) => OTHER.some((isrc) => url.includes(isrc)));
+    // Every MusicBrainz request of the chain (lookup, recording, work, dating) came first.
+    expect(firstOther).toBe(mb.length - 2);
+    expect(mb.slice(0, firstOther).every((url) => !OTHER.some((i) => url.includes(i)))).toBe(true);
+    expect(firstOther).toBeGreaterThanOrEqual(4);
   });
 
   it("checks the Discogs release the chain reaches and omits one without the track", async () => {

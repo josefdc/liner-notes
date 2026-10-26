@@ -10,7 +10,7 @@ import {
   type LangGraphRunnableConfig,
   MemorySaver,
 } from "@langchain/langgraph";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { type CapturedLogs, captureLogsForTests, withRun } from "../logger.js";
 import { buildSonicAgentGraph } from "./graph.js";
 import { agentRuntime } from "./runtime.js";
@@ -96,6 +96,17 @@ afterEach(() => {
 
 /** The timing lines, in the order they were written. */
 const timings = () => logs.entries().filter((entry) => entry.component === "Graph");
+
+/**
+ * Waits until each of `nodes` has its timing line. A node that outlives its run (it ignores the
+ * signal, or LangGraph stops it after the run has rejected) logs after the run has settled; a
+ * test that ended before then would leave the line to the next test's capture.
+ */
+const loggedFor = (...nodes: string[]) =>
+  vi.waitFor(
+    () => expect(timings().map((line) => line.node)).toEqual(expect.arrayContaining(nodes)),
+    { timeout: 4000, interval: 5 },
+  );
 
 describe("node timings", () => {
   it("logs one line per node: component, node, runId, durationMs and outcome", async () => {
@@ -231,6 +242,13 @@ describe("node timings", () => {
 
   it("logs a node of a cancelled run as cancelled", async () => {
     const controller = new AbortController();
+    // Ignores its signal and returns once the run is cancelled, whenever that is.
+    stub.engineer = async () => {
+      await new Promise((resolve) =>
+        controller.signal.addEventListener("abort", resolve, { once: true }),
+      );
+      return {};
+    };
     stub.historian = async (_state, config) => {
       const { signal } = config as LangGraphRunnableConfig;
       await new Promise((_resolve, reject) => {
@@ -242,25 +260,40 @@ describe("node timings", () => {
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
     await expect(runAs(graph, INPUT, "thread-cancelled", controller)).rejects.toThrow();
-    expect(timings().find((line) => line.node === "historian")).toMatchObject({
-      outcome: "cancelled",
-      runId: "thread-cancelled",
-    });
+    // The engineer returns after the cancel: it is cancelled too.
+    await loggedFor("historian", "engineer");
+    for (const node of ["historian", "engineer"]) {
+      expect(timings().find((line) => line.node === node)).toMatchObject({
+        outcome: "cancelled",
+        runId: "thread-cancelled",
+      });
+    }
   });
 
   it("does not count the time the run waits for the user's choice", async () => {
+    // Durations are read on a fake clock that only the test moves: the user's minute of
+    // choosing and the 7 ms the clarification works on resume, however busy the machine is.
+    vi.useFakeTimers({ toFake: ["hrtime"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     stub.scout = async () => ({ candidates: [{ id: "a" }, { id: "b" }] });
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
     const thread = { configurable: { thread_id: "thread-picker" } };
 
     await graph.invoke(INPUT, thread);
-    await wait(150); // the user choosing
+    vi.advanceTimersByTime(60_000); // the user choosing
     stub.scout = null;
+    stub.chosen = async () => {
+      vi.advanceTimersByTime(7); // fetching the chosen track
+    };
     await graph.invoke(new Command({ resume: "a" }), thread);
 
     const clarification = timings().filter((line) => line.node === "clarification");
-    expect(clarification.map((line) => line.outcome)).toEqual(["interrupted", "ok"]);
-    for (const line of clarification) expect(line.durationMs).toBeLessThan(100);
+    expect(clarification.map((line) => [line.outcome, line.durationMs])).toEqual([
+      ["interrupted", 0],
+      ["ok", 7],
+    ]);
   });
 
   it("logs the first node of a resumed run that is cancelled as cancelled", async () => {
@@ -296,7 +329,7 @@ describe("node timings", () => {
     await expect(runAs(graph, INPUT, "thread-sibling", new AbortController())).rejects.toThrow(
       "engineer bug",
     );
-    await wait(20);
+    await loggedFor("historian");
 
     const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));
     expect(outcomes).toEqual({ scout: "ok", engineer: "error", historian: "aborted" });
@@ -304,9 +337,13 @@ describe("node timings", () => {
 
   it("logs a node that returns after its run was cancelled as cancelled, not ok", async () => {
     const controller = new AbortController();
-    // Ignores the signal and returns once the run is over.
+    // Ignores the signal and returns once the run is over (the test says when).
+    let runOver!: () => void;
+    const over = new Promise<void>((resolve) => {
+      runOver = resolve;
+    });
     stub.engineer = async () => {
-      await wait(60);
+      await over;
       return {};
     };
     stub.historian = async (_state, config) => {
@@ -316,7 +353,8 @@ describe("node timings", () => {
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
     await expect(runAs(graph, INPUT, "thread-late", controller)).rejects.toThrow();
-    await wait(120);
+    runOver();
+    await loggedFor("engineer");
 
     const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));
     expect(outcomes).toEqual({ scout: "ok", engineer: "cancelled", historian: "cancelled" });

@@ -13,7 +13,7 @@ import {
   LLM_SCHEMAS,
   toJsonSchema,
 } from "@liner-notes/contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
@@ -350,12 +350,33 @@ describe("retries", () => {
 
 describe("timeout", () => {
   it("gives up on an attempt after LLM_TIMEOUT_MS and retries once", async () => {
-    const { llm, net } = setup(hang, { LLM_TIMEOUT_MS: "1000" });
-    const started = Date.now();
-    const error = await llm.invoke("x", "fast", "hi", Schema, OPTIONS).catch((e) => e);
+    // On a fake clock that only the test moves: each attempt is still waiting 1 ms before
+    // LLM_TIMEOUT_MS and stopped at it, however long the machine took to send it.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    // Each attempt's request, once the stub has it.
+    const resolvers: Array<() => void> = [];
+    const sent = [0, 1].map(() => new Promise<void>((resolve) => resolvers.push(resolve)));
+    const { llm, net } = setup(
+      (call, index) => {
+        resolvers[index]?.();
+        return hang(call);
+      },
+      { LLM_TIMEOUT_MS: "1000" },
+    );
+    const result = llm.invoke("x", "fast", "hi", Schema, OPTIONS).catch((e) => e);
+    for (const [index, attempt] of sent.entries()) {
+      await attempt;
+      vi.advanceTimersByTime(999);
+      expect(net.calls[index].signal?.aborted, `attempt ${index + 1} at 999 ms`).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(net.calls[index].signal?.aborted, `attempt ${index + 1} at 1000 ms`).toBe(true);
+    }
+    const error = await result;
     expect(isLlmError(error, "timeout")).toBe(true);
     expect(net.calls).toHaveLength(2);
-    expect(Date.now() - started).toBeLessThan(5000);
     // Whether the provider processed the request is unknown: the worst case stays counted.
     const settles = spendLines().filter((l) => l.kind === "settle");
     expect(settles).toHaveLength(2);

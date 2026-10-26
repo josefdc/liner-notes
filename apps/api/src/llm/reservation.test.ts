@@ -60,8 +60,20 @@ describe("N=4 parallel calls at cap − ε", () => {
     const cap = 1;
     // Room for one reservation, not two.
     writeFileSync(log, spentLine(cap - 1.5 * r));
+    // The stub answers once every call was sent to it or refused, so an admitted call is still
+    // open (reserved, unsettled) while the others decide, however late the machine gets round
+    // to them. Calls that are all admitted are all answered: nothing waits for ever.
+    let decided = 0;
+    let allDecided!: () => void;
+    const everyCallDecided = new Promise<void>((resolve) => {
+      allDecided = resolve;
+    });
+    const decide = () => {
+      if (++decided === 4) allDecided();
+    };
     const net = providerFetch(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      decide();
+      await everyCallDecided;
       return Response.json(responseBody({ ok: true }, { input: 10, output: 10 }));
     });
     const llm = createLlm({
@@ -76,12 +88,17 @@ describe("N=4 parallel calls at cap − ε", () => {
     });
     const results = await Promise.allSettled(
       Array.from({ length: 4 }, (_, i) =>
-        llm.invoke("parallel", "research", "same prompt", Schema, {
-          purpose: "dev",
-          runId: `run-${i}`,
-          maxOutputTokens: MAX_OUTPUT,
-          schemaName: "T",
-        }),
+        llm
+          .invoke("parallel", "research", "same prompt", Schema, {
+            purpose: "dev",
+            runId: `run-${i}`,
+            maxOutputTokens: MAX_OUTPUT,
+            schemaName: "T",
+          })
+          .catch((error) => {
+            decide();
+            throw error;
+          }),
       ),
     );
     const admitted = results.filter((r) => r.status === "fulfilled");
@@ -101,7 +118,9 @@ describe("N=4 parallel calls at cap − ε", () => {
     const r = reservationFor("call 0");
     const cap = 1;
     writeFileSync(log, spentLine(cap - 1.5 * r));
-    const startAt = String(Date.now() + 3000);
+    // The processes line up on a shared directory, however long each took to start, and the
+    // stubs answer only once every call was sent or refused (callWorker.ts).
+    const group = mkdtempSync(join(dir, "group-"));
     const runs = await Promise.all(
       Array.from({ length: 4 }, (_, i) =>
         runWorker({
@@ -110,8 +129,8 @@ describe("N=4 parallel calls at cap − ε", () => {
           BUDGET_TOTAL_USD: String(cap),
           BUDGET_EVAL_FLOOR_USD: "0",
           WORKER_MAX_OUTPUT: String(MAX_OUTPUT),
-          WORKER_START_AT: startAt,
-          STUB_DELAY_MS: "300",
+          WORKER_GROUP_DIR: group,
+          WORKER_GROUP_SIZE: "4",
         }),
       ),
     );

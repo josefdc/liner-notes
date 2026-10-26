@@ -35,8 +35,8 @@ export const AUDIO_UNAVAILABLE_TEXT: Record<AudioUnavailableReason, string> = {
   not_run: 'The audio analysis did not run.',
   low_confidence:
     'The analysis ran, but its tempo or key was below the confidence needed to show it.',
-  preview_not_asked:
-    'The audio preview was not looked up in time, so the audio was not analysed. A later analysis looks it up again.',
+  preview_lookup_incomplete:
+    'The preview lookup on Deezer could not be finished, so the audio was not analysed. A later analysis tries again.',
 };
 
 export function audioUnavailableText(reason: string | undefined): string {
@@ -328,7 +328,7 @@ export const AUDIO_UNAVAILABLE_SHORT: Record<AudioUnavailableReason, string> = {
   not_detected: 'not detected in the preview',
   not_run: 'the analysis did not run',
   low_confidence: 'below the confidence needed to show it',
-  preview_not_asked: 'the audio preview was not looked up in time',
+  preview_lookup_incomplete: 'the preview lookup could not be finished',
 };
 
 function unavailableShort(reason: string | undefined): string | null {

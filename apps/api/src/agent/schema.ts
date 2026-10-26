@@ -265,7 +265,7 @@ export const AudioUnavailableReasonSchema = z.enum([
   "analysis_failed",
   "not_detected",
   "not_run",
-  "preview_not_asked",
+  "preview_lookup_incomplete",
 ]);
 
 // =============================================================================

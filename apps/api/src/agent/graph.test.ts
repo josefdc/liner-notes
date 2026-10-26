@@ -869,12 +869,16 @@ describe("the analysis graph's stored results", () => {
     expect(await store.search(TRACKS_NAMESPACE)).toHaveLength(1);
   });
 
-  it("does not store a result whose preview lookup Deezer's pace refused, so the next run analyses again", async () => {
+  it("does not store a result whose preview lookup could not be finished, so the next run analyses again", async () => {
     const store = new InMemoryStore();
-    // The real lookup and analysis tool: Deezer's pace has no slot for the search in time.
+    // The real lookup and analysis tool: Deezer's pace refuses the search (the track has no ISRC).
     hooks.realPreview = true;
     const audio = hooks.audio;
     if (!audio) throw new Error("the audio module was not loaded");
+    // Undone when the test finishes, whatever its outcome: no queued answer outlives it.
+    onTestFinished(() => {
+      tools.analyzeAudioPreview.invoke.mockReset();
+    });
     tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) =>
       String(
         await audio.analyzeAudioPreview.invoke(
@@ -882,28 +886,32 @@ describe("the analysis graph's stored results", () => {
         ),
       ),
     );
-    // On a whole-millisecond clock, as in the pacing tests (enricher.test.ts).
+    // A whole-millisecond clock: on a fractional one a full window can hang the pacer (#133).
     vi.useFakeTimers({ toFake: ["performance"] });
     setUnpacedForTests(false);
-    // A full window of other Deezer requests, and as many again waiting for the next one.
-    const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
-    const ahead = Array.from({ length: 2 * DEEZER_MAX_PER_WINDOW }, () =>
-      deezerPreviewByIsrc(other).catch(() => null),
-    );
-    let first: Driven;
-    try {
-      first = await drive(stubModel(["done"]), { store });
-    } finally {
-      // Lets the waiting requests go (the network is denied: they fail).
+    const others = new AbortController();
+    const ahead: Array<Promise<unknown>> = [];
+    onTestFinished(async () => {
+      // Stopped, never let go: a waiting request sends nothing after the test.
+      others.abort();
       setUnpacedForTests(true);
       await Promise.all(ahead);
       vi.useRealTimers();
+    });
+    // A full window of other Deezer requests, and as many again waiting for the next one.
+    const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
+    for (let i = 0; i < 2 * DEEZER_MAX_PER_WINDOW; i++) {
+      ahead.push(deezerPreviewByIsrc(other, others.signal).catch(() => null));
     }
+    const first = await drive(stubModel(["done"]), { store });
 
     // Not a finished analysis: nothing is stored for the track.
     expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
     const result = complete(first.events)?.data;
-    expect(result).toMatchObject({ id: TRACK_ID, audioUnavailableReason: "preview_not_asked" });
+    expect(result).toMatchObject({
+      id: TRACK_ID,
+      audioUnavailableReason: "preview_lookup_incomplete",
+    });
     expect(result?.run?.sourceErrors ?? []).toEqual([]);
 
     // The next run that finds the track analyses it again instead of serving "no clip".
@@ -914,7 +922,7 @@ describe("the analysis graph's stored results", () => {
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
     expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(2);
     expect(complete(second.events)?.data).not.toMatchObject({
-      audioUnavailableReason: "preview_not_asked",
+      audioUnavailableReason: "preview_lookup_incomplete",
     });
   });
 

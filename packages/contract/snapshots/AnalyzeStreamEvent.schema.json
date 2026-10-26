@@ -121,7 +121,7 @@
                   "not_detected",
                   "not_run",
                   "low_confidence",
-                  "preview_not_asked"
+                  "preview_lookup_incomplete"
                 ]
               },
               { "type": "null" }
@@ -304,7 +304,7 @@
                   "not_detected",
                   "not_run",
                   "low_confidence",
-                  "preview_not_asked"
+                  "preview_lookup_incomplete"
                 ]
               },
               { "type": "null" }

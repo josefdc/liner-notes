@@ -448,6 +448,23 @@ describe("the chosen track's preview clip", () => {
     ]);
   });
 
+  it("reports a lookup a Deezer error stopped as incomplete, never as no clip", async () => {
+    const net = network({
+      isrc: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } },
+    });
+
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+
+    expect(data).toMatchObject({
+      source: "unavailable",
+      reason: "preview_lookup_incomplete",
+      audio: null,
+      previewUrl: null,
+      previewSourceError: { source: "deezer", code: "rate_limited" },
+    });
+    expect(net.calls.some((call) => call.url.startsWith(SERVICE))).toBe(false);
+  });
+
   it("still uses Spotify's own clip after a Deezer error, and reports the error", async () => {
     network({ isrc: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
 

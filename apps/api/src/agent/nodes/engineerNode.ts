@@ -21,10 +21,11 @@
  * the measured clip was matched (`preview`, only when something was measured). On a cache hit a
  * fresh clip is looked up for the player, and `preview` still describes the clip the cached
  * values were measured on: both are clips of the chosen recording, not always the same entry.
- * Without a clip the player has none, never another recording's clip. When Deezer could not be
- * read, that is recorded as a source error, apart from "no clip". When Deezer was not asked in
- * time (its pace had no slot), the reason is `preview_not_asked`, never "no clip", and no source
- * error; the result is then not stored (composerNode.ts), so a later run asks again.
+ * Without a clip the player has none, never another recording's clip. "No clip" (`no_preview`) is
+ * said only when Deezer answered every request of the lookup. When the lookup could not be
+ * finished (Deezer could not be read, which is also recorded as a source error, or a request had
+ * no slot of its pace in time and was not sent), the reason is `preview_lookup_incomplete`, and
+ * the result is not stored (composerNode.ts).
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -33,7 +34,6 @@ import {
   type AudioGateReason,
   type AudioUnavailableReason as ResultUnavailableReason,
   type AudioWithheldCode,
-  type SourceId,
 } from "@liner-notes/contract";
 import {
   analyzeAudioPreview,
@@ -60,7 +60,6 @@ import { isAbortError } from "../errors.js";
 import { measuredAudioFields } from "../finalize.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import { logger } from "../../logger.js";
-import { SOURCE_NAMES } from "../prompts.js";
 
 const log = logger("Engineer");
 
@@ -99,8 +98,8 @@ const UNMEASURED_TEXT: Record<ResultUnavailableReason, string> = {
   not_detected: "not detected",
   not_run: "the analysis did not run",
   low_confidence: "the estimate was not confident enough",
-  preview_not_asked:
-    "Deezer was not asked for a preview clip in time (our own pacing of its requests left no slot); a later run asks it",
+  preview_lookup_incomplete:
+    "the preview lookup on Deezer could not be finished; a later analysis tries again",
 };
 
 /** What the service's gate means, for a block that carries no reason of its own. */
@@ -150,13 +149,8 @@ const withheldText = (reason: { code: AudioWithheldCode } | undefined) =>
  * What a measurement says, for status lines: "116 BPM, D Minor", or what is missing and why.
  * A tempo or key the service withheld is named with the reason for that field
  * (`audio.withheld`), in this app's words; "not detected" only when the block gives no reason.
- * `lookupFailed` names the source that could not be read while the clip was looked up: without
- * a clip, that is why, not "no clip was found".
  */
-function measuredSummary(
-  measurement: AudioMeasurement,
-  lookupFailed: SourceId | null = null,
-): {
+function measuredSummary(measurement: AudioMeasurement): {
   measured: boolean;
   text: string;
   complete: boolean;
@@ -187,11 +181,11 @@ function measuredSummary(
     return { measured: false, text: parts.join("; "), complete: false };
   }
   const reason = fields.audioUnavailableReason ?? "not_run";
-  const text =
-    reason === "no_preview" && lookupFailed
-      ? `${SOURCE_NAMES[lookupFailed]} could not be read to find a preview clip`
-      : UNMEASURED_TEXT[reason];
-  return { measured: false, text: `Tempo and key not measured: ${text}`, complete: false };
+  return {
+    measured: false,
+    text: `Tempo and key not measured: ${UNMEASURED_TEXT[reason]}`,
+    complete: false,
+  };
 }
 
 /**
@@ -393,8 +387,7 @@ export async function engineerNode(
     ...lookupErrors(analysis?.previewSourceError),
   };
 
-  const lookupFailed = analysis?.previewSourceError ?? fresh.sourceError;
-  const summary = measuredSummary(measurement, lookupFailed?.source ?? null);
+  const summary = measuredSummary(measurement);
   if (!summary.measured) {
     writer?.({
       type: "status",

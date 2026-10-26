@@ -7,6 +7,7 @@ import {
   AUDIO_WITHHELD_TEXT,
   audioNoticeOf,
   audioReadings,
+  audioUnavailableText,
   audioValues,
   displayableFactoids,
   fingerprintSubtitle,
@@ -165,20 +166,23 @@ describe('hasMeasuredAudioSource', () => {
     expect(hasEstimatedAudio(track)).toBe(false);
   });
 
-  it('says the preview was not looked up in time, never that there is none, when it was not asked', () => {
+  it('says the preview lookup could not be finished, never that there is no preview', () => {
     const track = copiesOnly({
       audioSource: 'unavailable',
-      audioUnavailableReason: 'preview_not_asked',
+      audioUnavailableReason: 'preview_lookup_incomplete',
     });
     expect(hasMeasuredAudioSource(track)).toBe(false);
     const signal = byField(audioReadings(track).signal);
     expect(signal.bpm).toMatchObject({
       state: 'missing',
-      reason: 'the audio preview was not looked up in time',
+      reason: 'the preview lookup could not be finished',
     });
+    expect(audioUnavailableText('preview_lookup_incomplete')).toBe(
+      'The preview lookup on Deezer could not be finished, so the audio was not analysed. A later analysis tries again.',
+    );
     expect(signal.key).toMatchObject({
       state: 'missing',
-      reason: AUDIO_UNAVAILABLE_SHORT.preview_not_asked,
+      reason: AUDIO_UNAVAILABLE_SHORT.preview_lookup_incomplete,
     });
   });
 
@@ -478,7 +482,7 @@ describe('audioReadings', () => {
         'no_preview',
         'not_detected',
         'not_run',
-        'preview_not_asked',
+        'preview_lookup_incomplete',
         'preview_rejected',
         'service_unavailable',
       ].sort(),

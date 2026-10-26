@@ -8,7 +8,7 @@
  */
 
 import type { AudioFeatures } from "@liner-notes/contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { AudioMeasurement } from "../state.js";
 import {
   ANALYZER_VERSION,
@@ -55,8 +55,16 @@ interface Stub {
   analyzeHeaders: Array<Record<string, string>>;
 }
 
-/** What Deezer answers for the ISRC lookup and the search (by default "no data" and one hit). */
-const deezer: { isrc: unknown; search: unknown[] | null } = { isrc: null, search: null };
+/**
+ * What Deezer answers for the ISRC lookup, an entry read by id and the search (by default "no
+ * data", "no data" and one hit), and a hook that sees each Deezer request before it is answered.
+ */
+const deezer: {
+  isrc: unknown;
+  byId: unknown;
+  search: unknown[] | null;
+  onRequest: null | ((url: string) => void);
+} = { isrc: null, byId: null, search: null, onRequest: null };
 
 const deezerEntry = (id: number, title: string, artist: string, preview: string) => ({
   id,
@@ -79,8 +87,12 @@ function stubNetwork(
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     stub.calls.push(url);
+    if (url.startsWith("https://api.deezer.com/")) deezer.onRequest?.(url);
     if (url.startsWith("https://api.deezer.com/track/isrc:")) {
       return Response.json(deezer.isrc ?? { error: { code: 800, message: "no data" } });
+    }
+    if (/^https:\/\/api\.deezer\.com\/track\/\d+$/.test(url)) {
+      return Response.json(deezer.byId ?? { error: { code: 800, message: "no data" } });
     }
     if (url.startsWith("https://api.deezer.com/search/track")) {
       const data =
@@ -137,6 +149,47 @@ async function run(id: string, isrc: string | null = null) {
   return { out, text: [...written, ...(out.statusMessages ?? [])].join("\n") };
 }
 
+/**
+ * Fills Deezer's pace with other requests: a full window, and as many again waiting for the next
+ * one, so every later request of the lookup is refused and not sent. With `when`, it is filled
+ * when the lookup first asks for a URL `when` matches (that request is answered). The pace, the
+ * clock and the waiting requests are undone when the test finishes, whatever its outcome.
+ */
+function fillDeezerPace(when?: (url: string) => boolean): void {
+  // A whole-millisecond clock: on a fractional one a full window can hang the pacer (#133).
+  vi.useFakeTimers({ toFake: ["performance"] });
+  setUnpacedForTests(false);
+  const others = new AbortController();
+  const ahead: Array<Promise<unknown>> = [];
+  onTestFinished(async () => {
+    // Stopped, never let go: a waiting request sends nothing once the network is restored.
+    others.abort();
+    setUnpacedForTests(true);
+    await Promise.all(ahead);
+    vi.useRealTimers();
+  });
+  const fill = () => {
+    const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
+    for (let i = 0; i < 2 * DEEZER_MAX_PER_WINDOW; i++) {
+      ahead.push(deezerPreviewByIsrc(other, others.signal).catch(() => null));
+    }
+  };
+  if (!when) {
+    fill();
+    return;
+  }
+  let filled = false;
+  deezer.onRequest = (url) => {
+    if (filled || !when(url)) return;
+    filled = true;
+    fill();
+  };
+}
+
+/** The line for a preview lookup that could not be finished, whatever stopped it. */
+const LOOKUP_INCOMPLETE =
+  "Tempo and key not measured: the preview lookup on Deezer could not be finished; a later analysis tries again";
+
 const ENV_KEYS = ["AUDIO_ANALYSIS_URL", "AUDIO_SERVICE_TOKEN"] as const;
 
 describe("engineerNode", () => {
@@ -153,7 +206,9 @@ describe("engineerNode", () => {
     cache.putAudio.mockReset();
     cache.real = null;
     deezer.isrc = null;
+    deezer.byId = null;
     deezer.search = null;
+    deezer.onRequest = null;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -629,12 +684,13 @@ describe("engineerNode", () => {
       const stub = stubNetwork("up");
       deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
       const { out, text } = await run("Q", "USSB29000129");
-      // Deezer could not be read: that is why there is no clip, not that none was found.
-      expect(text).toContain(
-        "Tempo and key not measured: Deezer could not be read to find a preview clip",
-      );
+      // Deezer could not be read: the lookup was not finished, not that no clip was found.
+      expect(text).toContain(LOOKUP_INCOMPLETE);
       expect(text).not.toContain("no preview clip of this recording was found");
-      expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
+      expect(out.audioFeatures).toMatchObject({
+        audio: null,
+        unavailableReason: "preview_lookup_incomplete",
+      });
       expect(out.sourceErrors).toEqual([
         { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
       ]);
@@ -642,41 +698,92 @@ describe("engineerNode", () => {
       expect(stub.calls.filter((url) => url.startsWith("https://api.deezer.com/"))).toHaveLength(1);
     });
 
-    it("says Deezer was not asked, never that no clip was found, when its pace has no slot for the lookup in time", async () => {
-      const stub = stubNetwork("up", null);
-      // On a whole-millisecond clock, as in the pacing tests (enricher.test.ts).
-      vi.useFakeTimers({ toFake: ["performance"] });
-      setUnpacedForTests(false);
-      // A full window of other Deezer requests, and as many again waiting for the next one.
-      const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
-      const ahead = Array.from({ length: 2 * DEEZER_MAX_PER_WINDOW }, () =>
-        deezerPreviewByIsrc(other).catch(() => null),
-      );
-      try {
-        const { out, text } = await run("PACED", "USSB29000129");
+    /** What a lookup that could not be finished leaves: no clip, no measurement, nothing cached. */
+    function expectIncomplete(out: Awaited<ReturnType<typeof run>>["out"], text: string) {
+      expect(text).toContain(LOOKUP_INCOMPLETE);
+      expect(text).not.toContain("no preview clip of this recording was found");
+      expect(text).not.toMatch(/not asked/i);
+      expect(text).not.toContain("Measuring tempo and key");
+      expect(out.audioFeatures).toMatchObject({
+        audio: null,
+        unavailableReason: "preview_lookup_incomplete",
+      });
+      expect(out.previewUrl).toBeNull();
+      expect(cache.putAudio).not.toHaveBeenCalled();
+    }
 
-        // The lookup's request was never sent: Deezer was not asked, and no clip is known missing.
-        expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
-        expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
-        expect(text).not.toContain("no preview clip of this recording was found");
-        expect(text).toContain(
-          "Tempo and key not measured: Deezer was not asked for a preview clip in time",
-        );
-        expect(out.audioFeatures).toMatchObject({
-          audio: null,
-          unavailableReason: "preview_not_asked",
-        });
-        expect(text).not.toContain("Measuring tempo and key");
-        // Not asked is no source error.
-        expect(out.sourceErrors).toBeUndefined();
-        expect(out.previewUrl).toBeNull();
-        expect(cache.putAudio).not.toHaveBeenCalled();
-      } finally {
-        // Lets the waiting requests go while the network is still stubbed.
-        setUnpacedForTests(true);
-        await Promise.all(ahead);
-        vi.useRealTimers();
-      }
+    it("says the lookup could not be finished, never that no clip was found, when Deezer's pace refuses its first request", async () => {
+      const stub = stubNetwork("up", null);
+      fillDeezerPace();
+      const { out, text } = await run("PACED", "USSB29000129");
+
+      // Nothing reached Deezer.
+      expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
+      expectIncomplete(out, text);
+      // A refused request is no source error.
+      expect(out.sourceErrors).toBeUndefined();
+    });
+
+    it("says the lookup could not be finished when Deezer answered the ISRC and its pace refused the search", async () => {
+      const stub = stubNetwork("up", null);
+      fillDeezerPace((url) => url.includes("/track/isrc:USSB29000129"));
+      const { out, text } = await run("PACED-B", "USSB29000129");
+
+      expect(stub.calls).toContain("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
+      expectIncomplete(out, text);
+      expect(out.sourceErrors).toBeUndefined();
+    });
+
+    it("says the lookup could not be finished when the ISRC entry is unreadable and the pace refused its alternative", async () => {
+      const stub = stubNetwork("up", null);
+      deezer.isrc = {
+        ...deezerEntry(7, "Ice Ice Baby", "Vanilla Ice", ""),
+        readable: false,
+        isrc: "USSB29000129",
+        alternative: { id: 8 },
+      };
+      deezer.byId = {
+        ...deezerEntry(8, "Ice Ice Baby", "Vanilla Ice", PREVIEW),
+        isrc: "USSB29000129",
+      };
+      fillDeezerPace((url) => url.includes("/track/isrc:USSB29000129"));
+      const { out, text } = await run("PACED-C", "USSB29000129");
+
+      expect(stub.calls).toContain("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls).not.toContain("https://api.deezer.com/track/8");
+      expectIncomplete(out, text);
+      expect(out.sourceErrors).toBeUndefined();
+    });
+
+    it("measures Spotify's own clip when Deezer's pace refused the ISRC request", async () => {
+      const stub = stubNetwork("up", null);
+      fillDeezerPace();
+      const spotifyClip = "https://p.scdn.co/mp3-preview/own";
+      const state = stateFor("S2", "USSB29000129");
+      state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
+      const out = await engineerNode(state, { writer: () => {} } as never);
+
+      expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
+      expect(out.audioFeatures?.audio).toEqual(SIGNAL_ONLY);
+      expect(out.audioFeatures).not.toHaveProperty("unavailableReason");
+      expect(out.previewUrl).toBe(spotifyClip);
+      expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
+    });
+
+    it("says no clip was found only when Deezer answered every request of the lookup", async () => {
+      const stub = stubNetwork("up", null);
+      const { out, text } = await run("ALL", "USSB29000129");
+
+      expect(stub.calls).toContain("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(true);
+      expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
+      expect(text).toContain(
+        "Tempo and key not measured: no preview clip of this recording was found",
+      );
+      expect(out.sourceErrors).toBeUndefined();
     });
 
     it("records no source error when Deezer only has no clip of the recording", async () => {

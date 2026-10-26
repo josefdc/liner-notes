@@ -279,6 +279,35 @@ describe("scoutNode's stored results", () => {
     expect(out.trackData).toMatchObject({ id: track.id, evidence: [kept] });
   });
 
+  it("composes again instead of serving a stored result whose source errors hold markup", async () => {
+    for (const message of [
+      'secondhandsongs: HTTP 403 — <!DOCTYPE html><html lang="en-US">',
+      "secondhandsongs: HTTP 403 — &lt;!DOCTYPE html&gt;",
+    ]) {
+      const store = new InMemoryStore();
+      await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+        ...stored,
+        sourceErrors: [{ source: "secondhandsongs", code: "invalid_response", message }],
+      });
+      const { graph } = scoutGraph(store);
+
+      const out = await graph.invoke({ songQuery: "Song A" });
+
+      expect(out.trackData ?? null, message).toBeNull();
+    }
+    // A plain message is served with the result.
+    const store = new InMemoryStore();
+    const plain = {
+      source: "secondhandsongs",
+      code: "invalid_response",
+      message: "secondhandsongs: unexpected answer: a work",
+    };
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), { ...stored, sourceErrors: [plain] });
+    const out = await scoutGraph(store).graph.invoke({ songQuery: "Song A" });
+    expect(out.trackData).toMatchObject({ id: track.id });
+    expect(out.sourceErrors).toEqual([plain]);
+  });
+
   it("serves this run's search match, never one stored with the result", async () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf(track.id), {

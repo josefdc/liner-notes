@@ -18,6 +18,7 @@ import {
   describeError,
   fetchJson,
   pick,
+  plainReason,
   redactText,
   SourceError,
   scrubPayload,
@@ -161,6 +162,26 @@ describe("fetchJson", () => {
     stubFetch(() => json({ message: `Too long ${"x".repeat(400)}` }, { status: 500 }));
     const long = await rejection(fetchJson({ source: "deezer", url: URL_A }));
     expect(long.message.length).toBeLessThan(150);
+  });
+
+  it("keeps no escaped markup, link or stack trace in a source's reason", () => {
+    expect(plainReason("&lt;!DOCTYPE html&gt;&lt;html lang=&quot;en-US&quot;&gt;")).toBeUndefined();
+    expect(plainReason("Blocked &#60;script&#62;")).toBeUndefined();
+    expect(
+      plainReason(
+        "Error: boom at handler (/srv/app/index.js:10:5) at next (/srv/app/router.js:3:1)",
+      ),
+    ).toBeUndefined();
+    expect(
+      plainReason('Traceback (most recent call last): File "main.py", line 4'),
+    ).toBeUndefined();
+    const signed = plainReason(
+      "Invalid signature for https://cdnt-preview.dzcdn.net/a/b.mp3?hdnts=exp=1~acl=/*~hmac=deadbeef",
+    );
+    expect(signed).toBe("Invalid signature for [link]");
+    expect(plainReason("Simon & Garfunkel: Track not found")).toBe(
+      "Simon & Garfunkel: Track not found",
+    );
   });
 
   it("rejects a JSON content type with a broken body as a parse error", async () => {

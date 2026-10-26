@@ -574,6 +574,12 @@ export interface SourceRequest {
   rateLimitStatuses?: readonly number[];
   /** The fields the pipeline reads, kept when a successful answer is recorded. */
   scrub?: Shape;
+  /**
+   * What a successful JSON answer is recorded as, before `scrub`: the source's own filter, so a
+   * cassette keeps nothing the source would drop. Replaying it must give what the live answer
+   * gave.
+   */
+  recordAs?: (json: unknown) => unknown;
   /** false: never recorded or replayed (local services). */
   cassette?: boolean;
 }
@@ -589,15 +595,22 @@ function parseRetryAfter(value: string | null): number | undefined {
 
 const isJsonType = (contentType: string) => /\bjson\b/i.test(contentType);
 
+/** Markup, also escaped as entities ("&lt;", "&#60;", "&#x3c;"). */
+export const MARKUP = /[<>]|&(?:lt|gt|#0*6[02]|#x0*3[ce]);/i;
+/** A stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)") or a Python traceback. */
+const STACK_TRACE =
+  /\bat\s+(?:\S+\s+\()?\S+:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+
 /**
  * A source's own reason for an error, as a short line of plain text: undefined when it is not a
- * string, is empty or holds markup (an HTML page in a JSON field), and cut to MAX_DETAIL. Error
+ * string, is empty, or holds markup (an HTML page in a JSON field, also entity-escaped) or a
+ * stack trace; links become "[link]" (a URL can carry a signature); cut to MAX_DETAIL. Error
  * messages are stored with the result and sent to the client, so a page never reaches them.
  */
 export function plainReason(text: unknown): string | undefined {
   if (typeof text !== "string") return undefined;
-  const line = text.replace(/\s+/g, " ").trim();
-  if (!line || /[<>]/.test(line)) return undefined;
+  const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
+  if (!line || MARKUP.test(line) || STACK_TRACE.test(line)) return undefined;
   return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
 }
 
@@ -804,14 +817,18 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
   return answer.json as T;
 }
 
-/** The answer as it is written to a cassette: picked (2xx JSON), scrubbed, capped. */
+/**
+ * The answer as it is written to a cassette: filtered by the source (`recordAs`) and picked (2xx
+ * JSON), scrubbed, capped.
+ */
 function forCassette(req: SourceRequest, answer: Recorded): Recorded {
   const entry: Recorded = { status: answer.status, contentType: answer.contentType };
   if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
   const ok = answer.status >= 200 && answer.status <= 299;
   if (answer.json !== undefined) {
+    const kept = ok && req.recordAs ? req.recordAs(answer.json) : answer.json;
     entry.json = ok
-      ? scrubReadPayload(req.scrub ? pick(answer.json, req.scrub) : answer.json)
+      ? scrubReadPayload(req.scrub ? pick(kept, req.scrub) : kept)
       : scrubPayload(answer.json);
   } else {
     entry.text = scrubText(answer.text ?? "");

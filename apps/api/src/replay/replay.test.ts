@@ -851,6 +851,46 @@ describe("the recorder", () => {
     ).toEqual([]);
   });
 
+  it("checks only web evidence for handles: model prose and primary records may name them", () => {
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const primary = {
+      id: "musicbrainz:track/recording/x",
+      source: "musicbrainz",
+      sourceTier: "primary-record",
+      url: "https://musicbrainz.org/recording/x",
+      title: "A record",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "MusicBrainz credits @daftpunk @thomasbangalter @guymanuel.",
+      recordRef: "track/recording/x",
+    };
+    expect(
+      leaks(
+        {
+          analysis: {
+            claims: [
+              { text: "In 2021 the band changed Daft Punk's profile picture to an hourglass." },
+            ],
+            evidence: [primary],
+          },
+          events: [{ event: { type: "status", message: "@a @b @c wrote about it" } }],
+        },
+        check,
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses escaped markup in a source error's message", () => {
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const escaped = {
+      source: "secondhandsongs",
+      code: "unavailable",
+      message: "secondhandsongs: HTTP 403 — &lt;!DOCTYPE html&gt;",
+    };
+    expect(leaks({ analysis: { run: { sourceErrors: [escaped] } } }, check)).toEqual([
+      "analysis.run.sourceErrors[0].message: markup in a source error",
+    ]);
+  });
+
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
     const runId = await liveRun("plain words");
     const { run, events } = stored(runId);

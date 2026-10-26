@@ -13,7 +13,8 @@ vi.hoisted(() => {
 });
 
 import * as search from "./search.js";
-import { EXCLUDED_DOMAINS, isLyricPage } from "./search.js";
+import { EXCLUDED_DOMAINS, isLyricPage, isSocialPage } from "./search.js";
+import { recordThenReplay } from "./testing/roundTrip.js";
 import { readToolResult } from "./toolResult.js";
 
 const { searchMusicInfo, searchProductionHistory, searchSamples } = search;
@@ -168,6 +169,102 @@ describe("web research searches", () => {
     });
 
     expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+  });
+
+  it("excludes the other social platforms and short links, on any subdomain or translate proxy", async () => {
+    const pages = [
+      "https://www.threads.com/@someone/post/1",
+      "https://bsky.app/profile/someone.bsky.social/post/1",
+      "https://www.pinterest.com/pin/123/",
+      "https://instagr.am/p/abc123/",
+      "https://fb.watch/abc123/",
+      "https://redd.it/abc123",
+      "https://t.co/abc123",
+      "https://vm.tiktok.com/abc123/",
+      "https://old.reddit.com/r/music/comments/abc/",
+      "https://m.facebook.com/somepage/posts/1",
+      "https://www-threads-com.translate.goog/@someone/post/1",
+      "https://bsky-app.translate.goog/profile/someone",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    expect(JSON.parse(net.calls[0].body ?? "{}").exclude_domains).toEqual(
+      expect.arrayContaining([
+        "threads.com",
+        "bsky.app",
+        "pinterest.com",
+        "instagr.am",
+        "fb.watch",
+        "redd.it",
+        "t.co",
+        "vm.tiktok.com",
+        "threads-com.translate.goog",
+      ]),
+    );
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    expect(isSocialPage("https://www.youtube.com/watch?v=abc")).toBe(false);
+    expect(isSocialPage("https://www.toscana.com/")).toBe(false);
+  });
+
+  it("masks every @handle in a result's text and title", async () => {
+    const page = {
+      ...WHOSAMPLED,
+      title: "Interview with @vanillaice",
+      content: "Rob Van Winkle (@vanillaice) recorded it in 1989.",
+    };
+    stubFetch((call) => (call.url === TAVILY ? json(answer([page])) : undefined));
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results).toEqual([
+      {
+        title: "Interview with @…",
+        url: WHOSAMPLED.url,
+        content: "Rob Van Winkle (@…) recorded it in 1989.",
+      },
+    ]);
+  });
+
+  it("records only what it keeps: no social page or handle reaches a cassette", async () => {
+    const page = {
+      ...WHOSAMPLED,
+      content: "Rob Van Winkle (@vanillaice) recorded it in 1989.",
+    };
+    const instagram = {
+      ...WHOSAMPLED,
+      url: "https://www.instagram.com/p/abc123/",
+      content: "SOCIAL_TEXT",
+    };
+    const thread = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/1",
+      content: "someone's profile picture someone 2w Love it",
+    };
+    const run = await recordThenReplay(
+      (call) => (call.url === TAVILY ? json(answer([instagram, thread, page])) : undefined),
+      () => searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" }),
+    );
+
+    expect(run.replayCalls).toBe(0);
+    expect(run.replayed).toEqual(run.live);
+    const cassette = run.cassettes.tavily;
+    expect(cassette).toContain("recorded it in 1989");
+    expect(cassette).not.toContain("instagram.com");
+    expect(cassette).not.toContain("profile picture");
+    expect(cassette).not.toContain("@vanillaice");
   });
 
   it("sends the key as a bearer token, never in the body", async () => {

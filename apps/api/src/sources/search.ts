@@ -11,7 +11,8 @@
  * Lyric sites are excluded from every search, so no lyric text reaches research. So are social
  * platforms, whose pages are mostly comments and the handles of the people who wrote them (a
  * video page on YouTube carries a title, channel and description, and is kept), and any result
- * whose text is profile or handle boilerplate.
+ * whose text is profile or handle boilerplate or a comment thread. Every @handle left in a
+ * result's title and text is masked ("@…").
  */
 
 import { tool } from "@langchain/core/tools";
@@ -64,17 +65,28 @@ export const LYRIC_SITES = [
 ] as const;
 
 /**
- * Social platforms: their pages are page chrome, comments and the handles of private people, and
- * weak evidence of a song's history. Excluded in the request and filtered from the answer.
+ * Social platforms and their short-link hosts: their pages are page chrome, comments and the
+ * handles of private people, and weak evidence of a song's history. Excluded in the request and
+ * filtered from the answer, on any subdomain (m.facebook.com, old.reddit.com) and through a
+ * translate proxy. YouTube is not one of them: a video page carries a title, a channel (its
+ * publisher) and a description.
  */
 export const SOCIAL_SITES = [
   "instagram.com",
+  "instagr.am",
   "tiktok.com",
+  "vm.tiktok.com",
   "facebook.com",
+  "fb.watch",
   "x.com",
   "twitter.com",
+  "t.co",
   "threads.net",
+  "threads.com",
+  "bsky.app",
   "reddit.com",
+  "redd.it",
+  "pinterest.com",
 ] as const;
 
 /** A host as Google's translate proxy writes it: "genius.com" → "genius-com.translate.goog". */
@@ -158,31 +170,79 @@ export function isSocialPage(url: string): boolean {
   return inner !== null && isSocialPage(inner);
 }
 
+/**
+ * An @handle in text: an @ not inside a word (an e-mail address is not one), then letters,
+ * digits, "_" or ".", not ending with ".". A masked handle ("@…") is not one.
+ */
+const HANDLE_IN_TEXT = /(?<![\p{L}\p{N}_.@])@[\p{L}\p{N}_](?:[\p{L}\p{N}_.]*[\p{L}\p{N}_])?/gu;
+const MASKED = "@…";
+
+/** `text` with every @handle masked as "@…": a private person's handle is never stored. */
+export function maskHandles(text: string): string {
+  return text.replace(HANDLE_IN_TEXT, MASKED);
+}
+
 /** "someone's profile picture": the alt text a social page writes beside each commenter. */
 const PROFILE_PICTURE = /['’]s profile (?:picture|photo)/i;
-const HANDLE = /^@[\w.]{2,30}[,:;.!·]*$/;
+/** A word that is a handle, masked or not, with the punctuation around it. */
+const HANDLE_WORD = /^\(?@(?:…|[\p{L}\p{N}_.]+)[),:;.!?·]*$/u;
+/** The buttons and labels of a comment thread. */
+const THREAD_LABEL =
+  /(?<![\p{L}\p{N}])(?:Reply|Replies|Like|Likes|Liked by|Follow|Following)(?![\p{L}\p{N}])/gu;
+/** A comment's age as a thread shows it: "3w", "2d", "5 h". */
+const RELATIVE_TIME =
+  /(?<![\p{L}\p{N}.,])\d{1,3} ?(?:s|m|h|d|w|y|min|hr|hrs|wk|wks|yr|yrs)(?![\p{L}\p{N}])/gu;
+/**
+ * A comment as "name: text", where the name is a user name (it has "_", "." or a digit, and a
+ * letter) or a masked handle; "Producer: …" and "Label: …" are not.
+ */
+const NAME_LINE =
+  /(?:^|[\s.!?])(?:@…|(?=[\p{L}\p{N}_.]*\p{L})[\p{L}\p{N}]*[_.\d][\p{L}\p{N}_.]*):\s/gu;
+
+const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
 
 /**
- * True for text with the profile or handle boilerplate of a comment thread: any "'s profile
- * picture" (it always stands beside a commenter's handle), or three or more @handles in a row or
- * that make up a fifth of the words. One handle in a sentence ("Thomas Bangalter
- * (@thomasbangalter)") is not.
+ * Why a web page's text (as it is stored: an excerpt or a title) is not kept, or null:
+ * - "a private @handle": a handle that was not masked (maskHandles);
+ * - "profile or handle boilerplate": any "'s profile picture" (it always stands beside a
+ *   commenter's handle), or three or more handles in a row or that make up a fifth of the words;
+ * - "a comment thread": its labels with comments' ages (two "Reply", "Like" or "Follow" and two
+ *   ages such as "3w"), or two "name: comment" lines.
+ * One handle in a sentence ("Thomas Bangalter (@…)") is kept. The web tier runs this on the
+ * text it stores, and every reader of stored evidence runs it again on the same text.
  */
-export function isProfileBoilerplate(text: string): boolean {
-  if (PROFILE_PICTURE.test(text)) return true;
+export function webTextIssue(text: string): string | null {
+  if (count(text, HANDLE_IN_TEXT) > 0) return "a private @handle";
+  if (PROFILE_PICTURE.test(text)) return "profile or handle boilerplate";
   const words = text.split(/\s+/).filter(Boolean);
   let handles = 0;
   let run = 0;
   for (const word of words) {
-    if (HANDLE.test(word)) {
+    if (HANDLE_WORD.test(word)) {
       handles++;
       run++;
-      if (run >= 3) return true;
+      if (run >= 3) return "profile or handle boilerplate";
     } else {
       run = 0;
     }
   }
-  return handles >= 3 && handles / words.length >= 0.2;
+  if (handles >= 3 && handles / words.length >= 0.2) return "profile or handle boilerplate";
+  if (count(text, THREAD_LABEL) >= 2 && count(text, RELATIVE_TIME) >= 2) return "a comment thread";
+  if (count(text, NAME_LINE) >= 2) return "a comment thread";
+  return null;
+}
+
+/**
+ * Why the web tier leaves a page out, from what is stored of it (its URL, title and text), or
+ * null: a social platform page, or a title or text with an issue (webTextIssue).
+ */
+export function webPageIssue(page: {
+  url?: string | null;
+  title?: string | null;
+  text: string;
+}): string | null {
+  if (page.url && isSocialPage(page.url)) return "a social platform page";
+  return webTextIssue(page.text) ?? (page.title ? webTextIssue(page.title) : null);
 }
 
 const RESPONSE_SHAPE: Shape = { results: [{ title: true, url: true, content: true }] };
@@ -237,6 +297,8 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<We
       exclude_domains: EXCLUDED_DOMAINS,
     }),
     scrub: RESPONSE_SHAPE,
+    // A cassette may be committed: it never keeps a social page or a handle.
+    recordAs: keptAnswer,
     signal,
   });
 
@@ -245,13 +307,31 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<We
   }
 
   return data.results.flatMap((r) => {
-    if (typeof r?.url !== "string" || typeof r.content !== "string") return [];
-    if (isLyricPage(r.url) || isSocialPage(r.url)) return [];
-    const content = r.content.replace(/\s+/g, " ").trim().slice(0, MAX_RESULT_TEXT);
-    if (!content || isProfileBoilerplate(content)) return [];
-    const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url;
-    return [{ title, url: r.url, content }];
+    const result = keptResult(r);
+    return result ? [result] : [];
   });
+}
+
+/**
+ * A result as the search keeps it, or null: no lyric or social platform page, handles masked in
+ * its title and text, and nothing whose text or title is boilerplate or a comment thread. Run on
+ * a result it made, it gives the same result, so a cassette can hold the kept results only.
+ */
+function keptResult(r: { title?: unknown; url?: unknown; content?: unknown }): WebResult | null {
+  if (typeof r?.url !== "string" || typeof r.content !== "string") return null;
+  if (isLyricPage(r.url) || isSocialPage(r.url)) return null;
+  const content = maskHandles(r.content.replace(/\s+/g, " ").trim()).slice(0, MAX_RESULT_TEXT);
+  if (!content) return null;
+  const title = maskHandles(typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url);
+  if (webPageIssue({ url: r.url, title, text: content })) return null;
+  return { title, url: r.url, content };
+}
+
+/** What a cassette keeps of an answer: only the results the search keeps, as it keeps them. */
+function keptAnswer(data: unknown): unknown {
+  const results = (data as TavilyResponse | null)?.results;
+  if (!Array.isArray(results)) return data;
+  return { ...(data as object), results: results.flatMap((r) => keptResult(r) ?? []) };
 }
 
 /** Results as one string: a "title / URL / text" block per result. */

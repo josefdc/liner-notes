@@ -4,6 +4,7 @@ import type { TrackData } from '../types';
 import Dashboard from './Dashboard';
 import { claim, link, node, PACK } from './genealogy/testing';
 import { setReaderImport } from './genealogy/useLinkReader';
+import { PLACEHOLDER_NOTE } from '../styles/placeholder';
 
 afterEach(cleanup);
 
@@ -201,6 +202,19 @@ describe('Dashboard connected tracks', () => {
     (await cards()).map((card) => card.querySelector('[data-link-kind]')?.textContent);
   const sourcedSample = (source: string, target: string, ev = 'ev-mb-1') =>
     link(source, target, { type: 'sample', kind: 'sourced', origin: 'code', evidenceIds: [ev] });
+
+  it("draws a track without art with the graph's placeholder note, in the same colour", async () => {
+    renderDashboard(connected([sourcedSample('older', 'current')]));
+    const [older] = await cards();
+    const note = older.querySelector('[data-placeholder-note]');
+    expect(note?.getAttribute('style')).toContain(`color: ${PLACEHOLDER_NOTE.color}`);
+    expect(note?.querySelector('path')?.getAttribute('d')).toBe(PLACEHOLDER_NOTE.path);
+    expect(
+      [...(note?.querySelectorAll('circle') ?? [])].map((circle) =>
+        ['cx', 'cy', 'r'].map((name) => Number(circle.getAttribute(name))),
+      ),
+    ).toEqual(PLACEHOLDER_NOTE.circles.map(({ cx, cy, r }) => [cx, cy, r]));
+  });
 
   it('names a documented relation only for a sourced link, as a sentence with both tracks', async () => {
     renderDashboard(

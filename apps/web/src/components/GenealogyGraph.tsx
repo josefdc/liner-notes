@@ -15,6 +15,7 @@ import { drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
 import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors } from '../styles/theme';
+import { placeholderImage } from '../styles/placeholder';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
 import { useAudioPreview } from './genealogy/useAudioPreview';
 import {
@@ -33,7 +34,7 @@ import {
   relationToTrack,
   type ShownLink,
 } from './genealogy/links';
-import { labelHeight, labelWidth, visibleLabels } from './genealogy/labels';
+import { labelHeight, labelWidth, placeLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
@@ -57,62 +58,34 @@ function lineLabel(link: ShownLink): string {
   return link.kind === 'sourced' ? label : `possible ${label}`;
 }
 
-/** Screen size of the line labels and track labels, whatever the zoom. */
-const LINE_LABEL_PX = 9;
-const NODE_LABEL_PX = { narrow: 9, wide: 10 };
-const SUB_LABEL_PX = 8;
+/**
+ * Screen size of the graph's text (line labels, track labels and their tags, the hover notes),
+ * whatever the zoom: zooming in does not enlarge it, so it is the chrome size (--text-chrome in
+ * tokens.css), not smaller.
+ */
+const GRAPH_TEXT_PX = 12;
+const LINE_LABEL_PX = GRAPH_TEXT_PX;
+const NODE_LABEL_PX = GRAPH_TEXT_PX;
+const SUB_LABEL_PX = GRAPH_TEXT_PX;
+/** Where along its line a line's label may go, the middle first. */
+/**
+ * Where a line's label may go, the first that fits: along the line (0 at its source, 1 at its
+ * target, the middle first), above it or just below it.
+ */
+const LINE_LABEL_PLACES = [0.5, 0.58, 0.42, 0.66, 0.34, 0.74, 0.26, 0.82, 0.18, 0.9, 0.1].flatMap(
+  (at) => [
+    { at, below: false },
+    { at, below: true },
+  ],
+);
+/** A line label's baseline from its line: 0.4 em above, or 1.1 em below. */
+const lineLabelDy = (below: boolean) => (below ? '1.1em' : '-0.4em');
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
   data: Partial<TrackData['genealogy']> | null | undefined,
 ): TrackData['genealogy']['nodes'] {
   return Array.isArray(data?.nodes) ? data.nodes : [];
-}
-
-/**
- * Generate SVG placeholder pattern for nodes without images
- */
-function generateSvgPlaceholder(label: string, group: number, size: number): string {
-  // Generate deterministic hash from label
-  let hash = 0;
-  for (let i = 0; i < label.length; i++) {
-    const char = label.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-
-  const hue = Math.abs(hash) % 360;
-
-  // Different color schemes based on group
-  const groupHueOffset: Record<number, number> = {
-    1: 180, // Current: cyan
-    2: 30, // Sampled: amber
-    3: 270, // Sampler: purple
-    4: 120, // Influence: green
-  };
-
-  const offset = groupHueOffset[group] || 0;
-  const finalHue = (hue + offset) % 360;
-
-  const color1 = `hsl(${finalHue}, 60%, 40%)`;
-  const color2 = `hsl(${(finalHue + 30) % 360}, 50%, 30%)`;
-
-  // Create SVG data URL with gradient and music icon
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size * 2}" height="${size * 2}" viewBox="0 0 100 100">
-      <defs>
-        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:${color1}"/>
-          <stop offset="100%" style="stop-color:${color2}"/>
-        </linearGradient>
-      </defs>
-      <circle cx="50" cy="50" r="50" fill="url(#grad)"/>
-      <path d="M40 30v30c-2.5-2-6-3-10-3-5.5 0-10 3.5-10 8s4.5 8 10 8 10-3.5 10-8V38l20-5v22c-2.5-2-6-3-10-3-5.5 0-10 3.5-10 8s4.5 8 10 8 10-3.5 10-8V25L40 30z"
-            fill="rgba(255,255,255,0.3)"/>
-    </svg>
-  `.trim();
-
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
@@ -366,7 +339,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .join('text')
       .text((d) => lineLabel(d.shown))
       .attr('text-anchor', 'middle')
-      .attr('dy', '-0.4em')
+      .attr('dy', lineLabelDy(false))
       .attr('fill', (d) => LINK_COLOR[d.shown.type])
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${LINE_LABEL_PX}px`)
@@ -426,10 +399,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('stroke', (d) => {
         if (d.group === 1) return genealogyColors.current;
         if (isOrigin(d)) return genealogyColors.origin;
-        return '#ffffff';
+        return colors.white;
       })
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', (d) => (d.group === 1 || isOrigin(d) ? 0.8 : 0.2))
+      // 2 px on screen whatever the zoom: zoomed out, a thinner ring fades into the page
+      .attr('vector-effect', 'non-scaling-stroke')
+      // A related track's ring is its outline (3:1 or more on the graph): its picture may be the
+      // dark placeholder
+      .attr('stroke-opacity', (d) => (d.group === 1 || isOrigin(d) ? 0.8 : 0.5))
       .style('filter', (d) => {
         if (d.group === 1) return 'url(#glow-cyan)';
         if (isOrigin(d)) return 'url(#glow-amber)';
@@ -457,9 +434,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       group.append('clipPath').attr('id', uniqueId).append('circle').attr('r', d.size);
 
       // Use provided image if valid, otherwise generate SVG placeholder
-      const imageUrl = isValidImageUrl(d.img)
-        ? d.img!
-        : generateSvgPlaceholder(d.label, d.group, d.size);
+      const imageUrl = isValidImageUrl(d.img) ? d.img! : placeholderImage(d.size);
 
       group
         .append('image')
@@ -473,37 +448,42 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     });
 
     // Node - Labels (responsive sizing)
-    const labelFontSize = isMobile ? NODE_LABEL_PX.narrow : NODE_LABEL_PX.wide;
+    const labelFontSize = NODE_LABEL_PX;
+    /** How far below its track's centre a name's first line sits (graph units). */
+    const nameOffset = (d: CustomNode) => d.size + (isMobile ? 8 : 15);
+    const nameText = (d: CustomNode) => {
+      // More aggressive truncation on mobile
+      const maxLen = isMobile ? 12 : 30;
+      return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
+    };
+    // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
+    const tagText = (d: CustomNode) =>
+      d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]';
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
       .append('g')
       .attr('class', 'node-label')
-      .attr('transform', (d) => `translate(0, ${d.size + (isMobile ? 8 : 15)})`)
+      .attr('transform', (d) => `translate(0, ${nameOffset(d)})`)
       .style('pointer-events', 'none')
       .style('opacity', (d) => (isMobile && d.group !== 1 && !isOrigin(d) ? 0.7 : 1)); // Dim non-essential labels on mobile
 
     labels
       .append('text')
-      .text((d) => {
-        // More aggressive truncation on mobile
-        const maxLen = isMobile ? 12 : 30;
-        return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
-      })
+      .text(nameText)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#fff')
+      .attr('fill', colors.white)
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${labelFontSize}px`)
       .attr('letter-spacing', '0px')
-      .style('text-shadow', '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8)');
+      .attr('class', 'text-shadow-dark');
 
     // Hide sub-labels on mobile for cleaner look
     if (!isMobile) {
       labels
         .append('text')
         .attr('class', 'sub-label')
-        // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
-        .text((d) => (d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]'))
+        .text(tagText)
         .attr('dy', '1.2em')
         .attr('text-anchor', 'middle')
         .attr('fill', (d) =>
@@ -520,7 +500,39 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // A track's own drawing is decorative for screen readers: its name says it all.
     node.selectChildren().attr('aria-hidden', 'true');
 
-    /** Keeps text the same size on screen at any zoom, and hides line labels that overlap. */
+    // Line labels are drawn above the tracks: one may sit over a name or a disc (see fitText),
+    // and its band of the page's colour keeps it readable there.
+    g.select('g.link-labels').raise();
+
+    /**
+     * Which name is shown whatever it overlaps: the track the pointer or the keyboard is on.
+     * Every name stays in the track's aria-label, the detail box and the list of links.
+     */
+    let pinnedName: string | null = null;
+    /**
+     * Which label goes first when two would overlap: the pointed or focused track's name, this
+     * track's name, the names of tracks a sourced link relates to it, the labels of sourced lines
+     * (the relation in words), the other names, the other lines; within each, the stronger link
+     * first (`rank`).
+     */
+    const namePriority = (d: CustomNode) => {
+      if (d.id === pinnedName) return Number.POSITIVE_INFINITY;
+      if (d.group === 1) return 4000;
+      const link = relations.get(d.id)?.link ?? null;
+      if (link === null) return 1000;
+      return (link.kind === 'sourced' ? 3000 : 1000) + rank(link);
+    };
+    const linePriority = (link: ShownLink) => (link.kind === 'sourced' ? 2000 : 0) + rank(link);
+    /** Where a line's label is drawn: at its place along the line (graph units). */
+    const labelX = (d: any) => d.source.x + (d.target.x - d.source.x) * (d.labelPlace?.at ?? 0.5);
+    const labelY = (d: any) => d.source.y + (d.target.y - d.source.y) * (d.labelPlace?.at ?? 0.5);
+
+    /**
+     * Keeps text the same size on screen at any zoom, and places the labels in the order
+     * namePriority and linePriority give: no name over another name, no line label over another
+     * line label or over this track's (or the pointed track's) name. A line label moves along its
+     * line to find room, and sits over a disc or another name only when no clear place is left.
+     */
     function fitText() {
       const k = transform.k || 1;
       linkLabel.attr('font-size', `${LINE_LABEL_PX / k}px`);
@@ -530,15 +542,64 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           : labelFontSize;
         return `${base / k}px`;
       });
-      const boxes = simulationLinks.map((d: any) => ({
-        x: (((d.source.x ?? 0) + (d.target.x ?? 0)) / 2) * k,
-        y: (((d.source.y ?? 0) + (d.target.y ?? 0)) / 2) * k,
-        width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
-        height: labelHeight(LINE_LABEL_PX),
-        priority: rank(d.shown),
+      g.selectAll('.preview-indicator').attr('font-size', `${GRAPH_TEXT_PX / k}px`);
+      // Boxes on screen. A line's first baseline is at its y, the box from 0.95 em above it to
+      // 0.35 em below (labelHeight); a name's tag is a second line, 1.2 em lower.
+      const names = nodes.map((d) => {
+        const tag = isMobile ? null : tagText(d);
+        const height = labelHeight(NODE_LABEL_PX) + (tag ? 1.2 * SUB_LABEL_PX : 0);
+        const top = ((d.y ?? 0) + nameOffset(d)) * k - 0.95 * NODE_LABEL_PX;
+        const box = {
+          x: (d.x ?? 0) * k,
+          y: top + height / 2,
+          width: Math.max(
+            labelWidth(nameText(d), NODE_LABEL_PX),
+            tag ? labelWidth(tag, SUB_LABEL_PX) : 0,
+          ),
+          height,
+        };
+        return {
+          candidates: [box],
+          priority: namePriority(d),
+          kind: 'name',
+          // Nothing sits over this track's name or the pointed one
+          coverable: d.group !== 1 && d.id !== pinnedName,
+        };
+      });
+      // A line's label may sit along its line, above or below it (LINE_LABEL_PLACES), clear of
+      // the other labels and the tracks' discs where it can be.
+      const lines = simulationLinks.map((d: any) => ({
+        candidates: LINE_LABEL_PLACES.map(({ at, below }) => ({
+          x: ((d.source.x ?? 0) + ((d.target.x ?? 0) - (d.source.x ?? 0)) * at) * k,
+          // The box's centre: 0.7 em above the line for a baseline 0.4 em above it, 0.775 em
+          // below for a baseline 1.1 em below
+          y:
+            ((d.source.y ?? 0) + ((d.target.y ?? 0) - (d.source.y ?? 0)) * at) * k +
+            (below ? 0.775 : -0.7) * LINE_LABEL_PX,
+          width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
+          height: labelHeight(LINE_LABEL_PX),
+        })),
+        priority: linePriority(d.shown),
+        kind: 'line',
+        // Drawn above the names, on a band of the page's colour: still readable over one
+        mayCover: ['name'],
       }));
-      const visible = visibleLabels(boxes);
-      linkLabel.attr('visibility', (d) => (visible[d.n] ? null : 'hidden'));
+      const discs = nodes.map((d) => {
+        const side = 2 * (d.size + 4) * k;
+        return { x: (d.x ?? 0) * k, y: (d.y ?? 0) * k, width: side, height: side };
+      });
+      const placed = placeLabels([...names, ...lines], discs).at;
+      const shownNames = new Set(nodes.filter((_, i) => placed[i] !== -1).map((d) => d.id));
+      labels.attr('visibility', (d) => (shownNames.has(d.id) ? null : 'hidden'));
+      for (const d of simulationLinks) {
+        const at = placed[nodes.length + d.n];
+        d.labelPlace = at === -1 ? undefined : LINE_LABEL_PLACES[at];
+      }
+      linkLabel
+        .attr('visibility', (d) => (d.labelPlace ? null : 'hidden'))
+        .attr('x', labelX)
+        .attr('y', labelY)
+        .attr('dy', (d) => lineLabelDy(d.labelPlace?.below ?? false));
     }
     fitText();
 
@@ -549,6 +610,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let focusOn: Item | null = null;
     const drawActive = () => {
       const active = pointerOn ?? focusOn;
+      const name = active?.kind === 'node' ? active.id : null;
+      if (name !== pinnedName) {
+        pinnedName = name;
+        fitText();
+      }
       const activeLink = active?.kind === 'link' ? active.index : null;
       link
         .attr('stroke-opacity', (d) =>
@@ -694,7 +760,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             (l) => (l.source as CustomNode).id === d.id || (l.target as CustomNode).id === d.id,
           )
           .style('stroke-opacity', 0.8)
-          .style('stroke', '#fff');
+          .style('stroke', colors.white);
         linkLabel
           .filter(
             (l) => (l.source as CustomNode).id === d.id || (l.target as CustomNode).id === d.id,
@@ -714,7 +780,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
-            .attr('font-size', '9px')
+            .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.cyber)
             // A preview of the node's track, whatever its relation to this one
             .text('♪ PREVIEW')
@@ -731,7 +797,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
-            .attr('font-size', '9px')
+            .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.analog)
             .text('⚡ CLICK TO EXPLORE')
             .style('opacity', 0)
@@ -766,9 +832,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .attr('x2', (d: any) => d.target.x)
           .attr('y2', (d: any) => d.target.y);
       }
-      linkLabel
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
+      linkLabel.attr('x', labelX).attr('y', labelY);
 
       node.attr('transform', (d) => `translate(${d.x},${d.y})`);
     });
@@ -815,7 +879,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     <div className="relative w-full h-full flex flex-col">
       <div
         ref={wrapperRef}
-        className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
+        className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-radial-[circle_at_center] from-surface from-0% to-transparent to-70%"
       >
         <svg
           ref={svgRef}
@@ -891,7 +955,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* No Preview Support Warning (browsers may block autoplay) */}
         {!hasPreviewSupport && (
           <div className="absolute top-4 right-4 pointer-events-none" role="status">
-            <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+            <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
               <span>AUDIO BLOCKED</span>
             </div>
@@ -901,7 +965,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
         {hasPreviewSupport && unavailableNodeId && (
           <div className="absolute top-4 right-4 pointer-events-none" role="status">
-            <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+            <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
               <span>PREVIEW UNAVAILABLE</span>
             </div>
@@ -911,11 +975,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
         {!active && (
           <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
-            <div className="flex flex-col gap-1 text-[9px] font-mono text-text-tertiary">
+            <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
               <span>SCROLL TO ZOOM</span>
               <span>DRAG TO PAN</span>
               <span className="text-cyber flex items-center gap-1">
-                <MousePointerClick size={8} />
+                <MousePointerClick size={12} />
                 CLICK NODE TO EXPLORE
               </span>
             </div>
@@ -924,7 +988,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
         {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
         <div className="absolute top-2 right-2 pointer-events-none md:hidden">
-          <div className="text-[8px] font-mono text-text-tertiary">PINCH • DRAG • TAP</div>
+          <div className="text-chrome font-mono text-text-tertiary">PINCH • DRAG • TAP</div>
         </div>
       </div>
 

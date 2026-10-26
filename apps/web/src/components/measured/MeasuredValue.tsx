@@ -72,7 +72,7 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
       className="inline-flex flex-col items-start gap-1 max-w-full"
     >
       <Badge variant={kind === 'measured' ? 'cyber' : 'gray'} size={size} icon={icon}>
-        <span className={kind === 'measured' ? 'opacity-60' : 'text-text-chip'}>{label}</span>{' '}
+        <span className={kind === 'measured' ? 'text-cyber/75' : 'text-text-chip'}>{label}</span>{' '}
         <span className={kind === 'estimate' ? 'text-analog' : ''}>{value}</span>
       </Badge>
       {!compact && <span className={LINE}>{provenance}</span>}

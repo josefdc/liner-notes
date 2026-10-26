@@ -102,7 +102,7 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
         <p className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
           No genre profile
         </p>
-        <p className="text-[10px] font-mono text-text-tertiary">
+        <p className="text-chrome font-mono text-text-tertiary">
           {modelUnavailable
             ? 'The model was unavailable, so no genre profile was written for this track.'
             : 'No genre profile was produced for this track.'}

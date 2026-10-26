@@ -65,3 +65,69 @@ for (const width of [768, 1024]) {
     });
   }
 }
+
+// A fact's card in the Player's left column: its title is read whole (it wraps rather than being
+// cut), and its type chip moves below the title rather than into the card's padding.
+for (const width of [768, 900, 1024, 1280]) {
+  test(`at ${width} px a fact's title is whole and its type chip stays inside the card`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await useMockApi(page, loadFixture("full-result"));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const headers = page.locator("#panel-context [data-factoid-header]");
+    await expect(headers.first()).toBeVisible();
+    const cards = await headers.evaluateAll((list) =>
+      list.map((header) => {
+        const card = header.parentElement as HTMLElement;
+        const style = getComputedStyle(card);
+        const box = card.getBoundingClientRect();
+        const left =
+          box.left +
+          Number.parseFloat(style.borderLeftWidth) +
+          Number.parseFloat(style.paddingLeft);
+        const right =
+          box.right -
+          Number.parseFloat(style.borderRightWidth) -
+          Number.parseFloat(style.paddingRight);
+        const textInside = (element: HTMLElement) => {
+          const own = element.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return [...range.getClientRects()].every(
+            (line) => line.left >= own.left - 0.5 && line.right <= own.right + 0.5,
+          );
+        };
+        const inside = (element: Element | null) => {
+          const rect = element?.getBoundingClientRect();
+          return (
+            rect !== undefined &&
+            rect.width > 0 &&
+            rect.left >= left - 0.5 &&
+            rect.right <= right + 0.5
+          );
+        };
+        const title = header.querySelector("[data-factoid-title]") as HTMLElement;
+        const chip = header.querySelector("[data-factoid-type]") as HTMLElement;
+        return {
+          title: title.textContent ?? "",
+          // Every line of the title's text lies within the title's box: none runs past it.
+          whole: title.scrollWidth <= title.clientWidth + 0.5 && textInside(title),
+          titleInside: inside(title),
+          chipInside: inside(chip),
+          chipWhole: chip.scrollWidth <= chip.clientWidth + 0.5,
+        };
+      }),
+    );
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect(card, card.title).toMatchObject({
+        whole: true,
+        titleInside: true,
+        chipInside: true,
+        chipWhole: true,
+      });
+    }
+  });
+}

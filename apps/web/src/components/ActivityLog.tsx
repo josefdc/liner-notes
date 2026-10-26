@@ -121,11 +121,11 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
             <Activity size={12} className="text-cyber" />
             Agent Activity Log
-            <span className="text-[10px] text-text-muted">({logs.length})</span>
+            <span className="text-chrome text-text-muted">({logs.length})</span>
           </h3>
           {/* P3:27 — Collapsed preview snippet */}
           {!isExpanded && logs.length > 0 && (
-            <span className="text-[10px] font-mono text-text-muted truncate ml-2 hidden sm:inline">
+            <span className="text-chrome font-mono text-text-muted truncate ml-2 hidden sm:inline">
               {logs[logs.length - 1]?.message}
             </span>
           )}
@@ -133,14 +133,14 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
         <div className="flex items-center gap-3">
           {!isComplete && (
             <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyber animate-pulse shadow-[0_0_6px_#00F0FF]"></span>
-              <span className="text-[10px] text-cyber font-mono tracking-wider">LIVE</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyber animate-pulse shadow-[0_0_6px_var(--color-cyber)]"></span>
+              <span className="text-chrome text-cyber font-mono tracking-wider">LIVE</span>
             </span>
           )}
           {isComplete && (
             <span className="flex items-center gap-1.5">
               <CircleCheck size={10} className="text-status-success" />
-              <span className="text-[10px] text-status-success font-mono tracking-wider">DONE</span>
+              <span className="text-chrome text-status-success font-mono tracking-wider">DONE</span>
             </span>
           )}
           <ChevronDown
@@ -167,7 +167,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             {logs.length === 0 && (
               <div className="flex flex-col items-center justify-center py-6 text-text-muted space-y-2">
                 <Wifi className="animate-pulse" size={18} />
-                <span className="text-[10px] tracking-widest font-mono">AWAITING DATA...</span>
+                <span className="text-chrome tracking-widest font-mono">AWAITING DATA...</span>
               </div>
             )}
 
@@ -185,8 +185,8 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                     absolute left-[9px] top-1 w-2 h-2 rounded-full border-2 transition-all duration-(--duration-normal) z-10 box-border
                     ${
                       isFirst && !isComplete
-                        ? 'bg-cyber border-cyber shadow-[0_0_6px_#00F0FF] animate-pulse ring-2 ring-cyber/20'
-                        : 'bg-gray-900 border-gray-600 group-hover/item:border-gray-400 group-hover/item:shadow-[0_0_4px_rgba(255,255,255,0.15)]'
+                        ? 'bg-cyber border-cyber shadow-[0_0_6px_var(--color-cyber)] animate-pulse ring-2 ring-cyber/20'
+                        : 'bg-void-lighter border-white/30 group-hover/item:border-white/55 group-hover/item:shadow-[0_0_4px_var(--color-border-hover)]'
                     }
                   `}
                   ></div>
@@ -204,11 +204,11 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                   >
                     <div className="flex justify-between items-start mb-0.5">
                       <span
-                        className={`text-[9px] font-bold font-mono ${isFirst && !isComplete ? colors.text : 'text-text-tertiary'} tracking-wider`}
+                        className={`text-chrome font-bold font-mono ${isFirst && !isComplete ? colors.text : 'text-text-tertiary'} tracking-wider`}
                       >
                         {codeLabel}
                       </span>
-                      <span className="text-[9px] text-text-muted font-mono">
+                      <span className="text-chrome text-text-muted font-mono">
                         {formatRelativeTime(log.timestamp)}
                       </span>
                     </div>
@@ -224,7 +224,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           </div>
 
           {/* Footer Status */}
-          <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-[8px] font-mono text-text-tertiary uppercase">
+          <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary uppercase">
             <span>{logs.length} EVENTS RECORDED</span>
             <span className={isComplete ? 'text-status-success' : 'text-cyber animate-pulse'}>
               {isComplete ? '● IDLE' : '◉ ACTIVE'}

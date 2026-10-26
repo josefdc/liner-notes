@@ -6,6 +6,7 @@ import {
   loadFixture,
   openPlayer,
   releaseStream,
+  streamLog,
   useMockApi,
 } from "./mock";
 
@@ -148,6 +149,10 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   const [refusal, replay] = fixture.streams["/api/analyze/stream"].opens;
   // Held right after the recorded scout step, which a live run shows as a Spotify search.
   const held = [...replay.slice(0, 3), { $wait: "rest" }, ...replay.slice(3)];
+  // The page's timers run on a clock the test holds once the replay is under way: the progress
+  // screen moves on to the Dashboard by itself 3.5 s after the run completes, and a slow machine
+  // must not let it go before the screen has been read.
+  await page.clock.install();
   await useMockApi(page, {
     ...fixture,
     streams: { ...fixture.streams, "/api/analyze/stream": { opens: [refusal, held] } },
@@ -157,21 +162,34 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await page.getByRole("button", { name: /Bright Lines/ }).click();
 
   const replaying = "Replaying a recorded analysis — nothing runs live...";
-  await expect(page.getByText(replaying, { exact: true })).toBeVisible();
+  // The status line on screen (a live region repeats it for screen readers, half a second later)
+  await expect(page.getByText(replaying, { exact: true }).filter({ visible: true })).toBeVisible();
   await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(replaying);
   await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
 
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  const sent = async () =>
+    (await streamLog(page)).filter((entry) => entry === "/api/analyze/stream done").length;
+  const before = await sent();
   await releaseStream(page, "rest");
+  // Runs the clock on, 50 ms at a time (the mock's pace), until the replay's stream has sent its
+  // last event: the result comes just before it, so the 3.5 s after the result are far off.
+  for (let step = 0; (await sent()) === before; step += 1) {
+    expect(step, "the replay's stream sends its last event").toBeLessThan(60);
+    await page.clock.runFor(50);
+  }
   const ready = page.locator("span", { hasText: "REPLAY READY // ENTERING COMMAND CENTER" });
   await expect(ready).toBeAttached();
-  // Revealed whole: the line fits the 40ch the reveal animation stops at.
-  await animationsSettled(page);
-  expect(await ready.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(page.getByText("INTEL READY", { exact: false })).toHaveCount(0);
   await expect(page.getByRole("log")).toContainText(
     "Recorded analysis replayed. Nothing was analysed live.",
   );
   await expect(page.getByRole("log")).not.toContainText("Analysis complete");
+  // Revealed whole: the line fits the 40ch the reveal animation stops at.
+  await animationsSettled(page);
+  expect(await ready.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  // Still on the progress screen: nothing moved on while it was read.
+  await expect(page.getByRole("log")).toBeVisible();
   expect(problems).toEqual([]);
 });
 

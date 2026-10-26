@@ -4,8 +4,9 @@
  * repository root). They are written by the recorder (recorder.ts) from a stored live run.
  *
  * The files are read once, at first use, and each is checked strictly: the record's schema and
- * refinements, and the run rules of a replay (`runIssues`: it says when and from which commit
- * it was recorded). A file that fails is logged and left out; it is never served in part. The
+ * refinements, the run rules of a replay (`runIssues`: it says when and from which commit it was
+ * recorded), and the text the run routes and the recorder refuse (`heldIssues`). A file that
+ * fails is logged and left out (not listed, never replayed); it is never served in part. The
  * result's other producer rules (`analysisIssues`) are logged for each record that breaks them,
  * so a recording made before a producer fix stays visible until it is recorded again.
  *
@@ -26,9 +27,14 @@ import {
   runIssues,
   type SearchCandidate,
 } from "@liner-notes/contract";
+import { heldTextIssue } from "../agent/storedResults.js";
 import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
 import { archiveCoverOf } from "./cover.js";
+import { normalizeQuery } from "./query.js";
+import { leaks } from "./recorder.js";
+
+export { normalizeQuery } from "./query.js";
 
 const log = logger("Replay");
 
@@ -40,16 +46,6 @@ export function replayDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.REPLAY_DIR?.trim();
   if (!configured) return DEFAULT_REPLAY_DIR;
   return isAbsolute(configured) ? configured : resolve(API_ROOT, configured);
-}
-
-/** Lower case, without accents, with every run of punctuation and spaces as one space. */
-export function normalizeQuery(text: string): string {
-  return text
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
 }
 
 /** The queries that name a record's track exactly, normalised. */
@@ -108,6 +104,39 @@ function suggestion(record: ReplayRecord): SearchCandidate {
   };
 }
 
+/**
+ * Where a record holds text that is not served, never the text itself:
+ * - what the run routes refuse in a stored result (heldTextIssue: a web page the web tier leaves
+ *   out, or a source error's message with markup, a stack trace, a token parameter or a link),
+ *   in the record's result and in what its events send (the complete event's result, each
+ *   evidence event's item);
+ * - what the recorder refuses (leaks), as far as the file can tell: the configured credentials,
+ *   the query the user typed and the ids of the database's runs are checked when it is recorded.
+ * A file written by the recorder passes both; one placed in the directory by hand, or written by
+ * an older recorder, may not.
+ */
+function heldIssues(record: ReplayRecord, cover: string): string[] {
+  const issues: string[] = [];
+  const held = heldTextIssue(record.analysis);
+  if (held) issues.push(`analysis.${held}`);
+  for (const [i, { event }] of record.events.entries()) {
+    const sent =
+      event.type === "complete"
+        ? heldTextIssue(event.data)
+        : event.type === "evidence"
+          ? heldTextIssue({ evidence: [event.evidence] })
+          : null;
+    if (sent) issues.push(`events[${i}].event: ${sent}`);
+  }
+  const leaked = leaks(record, {
+    secrets: [],
+    typedQuery: "",
+    publicTexts: [],
+    allowedCover: cover,
+  });
+  return [...new Set([...issues, ...leaked])];
+}
+
 /** Reads and checks every record in `dir`. A missing directory holds no records. */
 export function loadReplays(dir: string): ReplaySet {
   const records: ReplayRecord[] = [];
@@ -158,6 +187,13 @@ export function loadReplays(dir: string): ReplaySet {
       : ["analysis.run: missing"];
     if (issues.length > 0) {
       problems.push(`${file}: the recorded run information is wrong (${issues.join("; ")})`);
+      continue;
+    }
+    // Held to the run routes' and the recorder's checks again: the file may not be the
+    // recorder's. Where and why only; the text itself is not logged.
+    const held = heldIssues(record, cover);
+    if (held.length > 0) {
+      problems.push(`${file}: holds text a recording must not (${held.slice(0, 5).join("; ")})`);
       continue;
     }
     if (record.slug !== basename(file, ".json")) {

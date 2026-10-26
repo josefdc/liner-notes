@@ -39,6 +39,8 @@ import { createApp } from "../http/app.js";
 import { resolveSpendLogPath } from "../llm/budget.js";
 import { resetBudgetStateForTests } from "../llm/budgetState.js";
 import { acquireLock } from "../llm/fileLock.js";
+import { captureLogsForTests } from "../logger.js";
+import { FORUM_THREADS } from "../sources/testing/forumThreads.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
@@ -888,6 +890,43 @@ describe("the recorder", () => {
     };
     expect(leaks({ analysis: { run: { sourceErrors: [escaped] } } }, check)).toEqual([
       "analysis.run.sourceErrors[0].message: markup in a source error",
+    ]);
+  });
+
+  it("refuses a stored run whose source error holds a stack trace, a traceback or a link, as /api/runs does", async () => {
+    const runId = await liveRun("plain words");
+    const plain = "musicbrainz: HTTP 503 (the source could not answer)";
+    const refusedMessages: Array<[string, string]> = [
+      ["a stack trace", "musicbrainz: fetch failed at fetchJson (/app/src/sources/http.ts:120:11)"],
+      [
+        "a stack trace",
+        'secondhandsongs: Traceback (most recent call last): File "/srv/app.py", line 42, in get',
+      ],
+      // On an allow-listed site, so only the source-error rule refuses it.
+      ["a link", "musicbrainz: HTTP 503 from https://musicbrainz.org/ws/2/recording"],
+    ];
+    const withError = (message: string) => {
+      const { run, events } = stored(runId);
+      const analysis = run.analysis as TrackAnalysis;
+      const sourceErrors = [
+        { source: "musicbrainz" as const, code: "unavailable" as const, message },
+      ];
+      return {
+        run: { ...run, analysis: { ...analysis, run: { ...analysis.run!, sourceErrors } } },
+        events,
+      };
+    };
+    const build = ({ run, events }: ReturnType<typeof withError>) =>
+      buildRecord(run, events, { slug: "recorded-song", commit: "abc1234", secrets: [SECRET] });
+    for (const [what, message] of refusedMessages) {
+      const reasons = refusal(() => build(withError(message)));
+      expect(reasons, message).toContain(
+        `analysis.run.sourceErrors[0].message: ${what} in a source error`,
+      );
+      expect(reasons.join(" ")).not.toContain(message);
+    }
+    expect(build(withError(plain)).record.analysis.run?.sourceErrors).toEqual([
+      { source: "musicbrainz", code: "unavailable", message: plain },
     ]);
   });
 
@@ -1860,5 +1899,121 @@ describe("the replay directory", () => {
     expect(set.forQuery("Recorded Song The Recorder")).toBeNull();
     expect(set.forQuery("Recorded")).toBeNull();
     expect(normalizeQuery("  Beyoncé — HALO!! ")).toBe("beyonce halo");
+  });
+
+  it("leaves out a recording that holds text the run routes refuse: not listed, never replayed", async () => {
+    rmSync(replayDir, { recursive: true, force: true });
+    mkdirSync(replayDir);
+    const runId = await liveRun("source run");
+    const clean = record(runId).record;
+    getDb().exec("DELETE FROM runs; DELETE FROM run_events;");
+    live.scout = 0;
+    live.search = 0;
+    live.model = 0;
+    vi.stubEnv("REPLAY_MODE", "only");
+
+    // The clean recording as another track, its result and the result its complete event sends
+    // changed by `change`.
+    const variant = (
+      slug: string,
+      id: string,
+      title: string,
+      change: {
+        analysis?: (a: TrackAnalysis) => TrackAnalysis;
+        sent?: (a: TrackAnalysis) => TrackAnalysis;
+      },
+    ) => {
+      const base = { ...clean.analysis, id, title };
+      const analysis = change.analysis?.(base) ?? base;
+      const sent = change.sent?.(analysis) ?? analysis;
+      return {
+        ...clean,
+        slug,
+        request: { query: `${title} The Recorders`, selectedTrackId: null },
+        analysis,
+        events: clean.events.map((item) =>
+          item.event.type === "complete" ? { ...item, event: { ...item.event, data: sent } } : item,
+        ),
+      };
+    };
+    const [, thread] = FORUM_THREADS[0];
+    const forumPage = "https://example.org/threads/one-more-time.1234/";
+    const forumItem = {
+      id: `tavily:${forumPage}`,
+      source: "tavily" as const,
+      sourceTier: "web" as const,
+      url: forumPage,
+      title: "A thread about the song",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: thread,
+      recordRef: null,
+    };
+    const trace = "musicbrainz: fetch failed at fetchJson (/app/src/sources/http.ts:120:11)";
+    const withForum = (a: TrackAnalysis) => ({
+      ...a,
+      evidence: [...(a.evidence ?? []), forumItem],
+    });
+    const withTrace = (a: TrackAnalysis) => ({
+      ...a,
+      run: {
+        ...a.run!,
+        sourceErrors: [
+          { source: "musicbrainz" as const, code: "unavailable" as const, message: trace },
+        ],
+      },
+    });
+    const files = {
+      [clean.slug]: clean,
+      // In the result and in what its complete event sends.
+      "forum-thread": variant("forum-thread", CHOICE_A, "Forum Song", {
+        analysis: withForum,
+      }),
+      // Only in what its complete event sends.
+      "stack-trace": variant("stack-trace", CHOICE_B, "Trace Song", { sent: withTrace }),
+    };
+    for (const [slug, file] of Object.entries(files)) {
+      // Each fits the record's schema: only the text checks leave one out.
+      ReplayRecord.parse(file);
+      writeFileSync(join(replayDir, `${slug}.json`), JSON.stringify(file));
+    }
+
+    const set = loadReplays(replayDir);
+    expect(set.records.map((r) => r.slug)).toEqual([clean.slug]);
+    expect(set.problems).toEqual([
+      expect.stringMatching(
+        /^forum-thread\.json: holds text a recording must not \(analysis\.evidence\[\d+\]: a comment thread; events\[\d+\]\.event: evidence\[\d+\]: a comment thread/,
+      ),
+      expect.stringMatching(
+        /^stack-trace\.json: holds text a recording must not \(events\[\d+\]\.event: run\.sourceErrors\[0\]\.message: a stack trace/,
+      ),
+    ]);
+
+    resetReplaysForTests();
+    const logs = captureLogsForTests();
+    try {
+      const listed = await request(app).get("/api/replays");
+      expect(listed.body.replays.map((r: { id: string }) => r.id)).toEqual([TRACK_ID]);
+      for (const [query, trackId] of [
+        ["Forum Song The Recorders", CHOICE_A],
+        ["Trace Song The Recorders", CHOICE_B],
+      ]) {
+        for (const path of [streamPath(query), `${streamPath(query)}&trackId=${trackId}`]) {
+          const events = await sse(path);
+          expect(types(events), path).toEqual(["error", "done"]);
+          expect(events[0].code).toBe("live_disabled");
+        }
+      }
+      // The clean recording still replays.
+      expect(types(await sse(streamPath("Recorded Song The Recorders")))).toContain("complete");
+    } finally {
+      logs.restore();
+    }
+    noLiveCalls();
+    // The log names the file and why, never the text.
+    const logged = logs.lines().join("\n");
+    expect(logged).toMatch(/forum-thread\.json: holds text a recording must not/);
+    expect(logged).toMatch(/stack-trace\.json: holds text a recording must not/);
+    expect(logged).not.toContain("RecordFan");
+    expect(logged).not.toContain("fetchJson");
   });
 });

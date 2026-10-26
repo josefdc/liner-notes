@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { analysisIssues, ReplayRecord } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { reasonIssue } from "../sources/http.js";
 import { isSocialPage, webPageIssue, webTextIssue } from "../sources/search.js";
 import { ARCHIVE_FRONT, archiveCoverOf } from "./cover.js";
 import { leaks, publicTextsOf } from "./recorder.js";
@@ -78,9 +79,10 @@ describe("the demo recording (one-more-time-daft-punk)", () => {
     expect(analysis.coverUrl).toBe(archiveCoverOf(analysis));
   });
 
-  it("states its source errors in words, without markup", () => {
+  it("states its source errors in words, without markup, a stack trace, a token or a link", () => {
     for (const error of analysis.run?.sourceErrors ?? []) {
       expect(error.message).not.toMatch(/<\/?[a-z!][^>]*>|&lt;|&#\d+;/i);
+      expect(reasonIssue(error.message ?? ""), error.source).toBeNull();
     }
   });
 

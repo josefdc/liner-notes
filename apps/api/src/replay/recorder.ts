@@ -30,12 +30,14 @@
  * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
- * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), markup
- * in a source error's message (a page a source answered with, also entity-escaped), a social
- * platform page, a web evidence title or excerpt with a private @handle, profile boilerplate or
- * a comment thread (webTextIssue), or that fails the record's schema or says less than a replay must (`runIssues`). The result's other
- * producer checks (`analysisIssues`) are reported as warnings: a run stored by older code may not
- * pass them all, and the record replays what was sent.
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a source
+ * error's message the run routes refuse (reasonIssue: markup, also entity-escaped, a stack
+ * trace, a signature or token parameter, or a link), a social platform page, a web evidence
+ * title or excerpt with a private @handle, profile boilerplate or a comment thread
+ * (webTextIssue), or that fails the record's schema or says less than a replay must
+ * (`runIssues`). The result's other producer checks (`analysisIssues`) are reported as warnings:
+ * a run stored by older code may not pass them all, and the record replays what was sent. The
+ * loader (records.ts) runs the same checks again on every file it reads.
  */
 
 import {
@@ -45,11 +47,11 @@ import {
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { isMediaUrl, MARKUP } from "../sources/http.js";
+import { isMediaUrl, reasonIssue } from "../sources/http.js";
 import { isSocialPage, webTextIssue } from "../sources/search.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
 import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
-import { normalizeQuery } from "./records.js";
+import { normalizeQuery } from "./query.js";
 
 export { archiveCover, archiveCoverOf } from "./cover.js";
 
@@ -380,10 +382,11 @@ export function leaks(
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
-    // A source error says what failed in words; markup is an answer's page that slipped in.
-    if (SOURCE_ERROR_MESSAGE.test(path) && MARKUP.test(text)) {
-      found.push(`${path}: markup in a source error`);
-    }
+    // A source error says what failed in words, as the run routes read it (reasonIssue): markup
+    // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
+    // what an error message keeps.
+    const reason = SOURCE_ERROR_MESSAGE.test(path) ? reasonIssue(text) : null;
+    if (reason) found.push(`${path}: ${reason} in a source error`);
     // A web page's stored text never holds a private handle, boilerplate or a comment thread.
     const webIssue = webTexts.has(path) ? webTextIssue(text) : null;
     if (webIssue) found.push(`${path}: ${webIssue}`);

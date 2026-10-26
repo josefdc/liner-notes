@@ -104,6 +104,26 @@ const RISKY = [
   () => "Like",
   (n: number) => `jane_doe${n}: love it!`,
 ];
+/** Pieces of forum thread layouts (forumThread): quotes, post headers, bylines and signatures. */
+const FORUM_PIECES = [
+  (n: number) => `Fan${n} said: ↑`,
+  (n: number) => `Fan${n} said:`,
+  () => "Click to expand...",
+  (n: number) => `Feb ${(n % 28) + 1}, 2021 #${n}`,
+  (n: number) => `Joined Mar ${(n % 28) + 1}, 2010`,
+  (n: number) => `Messages: ${n}`,
+  (n: number) => `Quote: Originally Posted by Fan${n}`,
+  () => "Reply With Quote",
+  (n: number) => `Posts: ${n}`,
+  () => "share | improve this answer | follow",
+  (n: number) => `answered Feb 21, 2021 at 10:${String(n % 60).padStart(2, "0")}`,
+  (n: number) => `sure? – Fan${n} Feb 22 '21 at 16:01`,
+  (n: number) => `posted by Fan${n} at 6:47 AM on February 22, 2021`,
+  (n: number) => `[${n} favorites]`,
+];
+/** A forum piece in a kept excerpt: forumThread decided on it, and the readers must agree. */
+const FORUM_PIECE =
+  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]/;
 
 const URLS = [
   "https://www.example.org/news/one-more-time",
@@ -135,7 +155,9 @@ describe("anything the web tier writes is read back", () => {
         const n = Math.floor(next() * 1000);
         words.push(
           next() < risk
-            ? RISKY[Math.floor(next() * RISKY.length)](n)
+            ? next() < 0.5
+              ? RISKY[Math.floor(next() * RISKY.length)](n)
+              : FORUM_PIECES[Math.floor(next() * FORUM_PIECES.length)](n)
             : PROSE[Math.floor(next() * PROSE.length)],
         );
       }
@@ -149,6 +171,7 @@ describe("anything the web tier writes is read back", () => {
     // Enough kept, and enough with a masked handle, for the check to say something.
     expect(items.length).toBeGreaterThan(50);
     expect(items.filter((item) => item.excerpt.includes("@…")).length).toBeGreaterThan(10);
+    expect(items.filter((item) => FORUM_PIECE.test(item.excerpt)).length).toBeGreaterThan(10);
     for (const item of items) {
       expect(restores([item]), item.excerpt).toBe(true);
       expect(await served([item]), item.excerpt).toBe(true);
@@ -375,6 +398,15 @@ const FORUM_THREADS: Array<[string, string]> = [
     "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20",
   ],
   [
+    "a XenForo 2 thread, its user cards without colons",
+    "RecordFan Joined Mar 3, 2010 Messages 4,512 Reaction score 9,000 Feb 22, 2021 #1 The vocal is Romanthony. DiscoHead Joined Jun 1, 2012 Messages 1,203 Feb 22, 2021 #2 RIP.",
+  ],
+  [
+    "a single XenForo quote with its arrow",
+    "RecordFan said: ↑ The vocal is Romanthony, I met him in 1999. Click to expand... Yes, and the sample is More Spell on You.",
+  ],
+  ["a XenForo quote's arrow alone", "RecordFan said: ↑ The vocal is Romanthony."],
+  [
     "a MetaFilter thread",
     "Daft Punk have split. posted by member at 6:47 AM on February 22, 2021 [3 favorites] One More Time still sounds like the future. posted by MusicLover at 7:02 AM on February 22, 2021 [12 favorites]",
   ],
@@ -493,6 +525,52 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a tour's dates",
     "Alive 2007 – Bercy Jun 14, 2007 at 20:00 Alive 2007 – Wembley Jun 16, 2007 at 19:30. When asked Feb 22, 2021 about the split, the label said: no comment.",
+  ],
+  // Signed journalism and listings, which read like a Stack Exchange comment's signature.
+  [
+    "signed news with an update",
+    "Daft Punk have split after 28 years. – Jane Doe, Feb 22, 2021 at 10:00 Update: a representative confirmed the news. – John Roe, Feb 22, 2021 at 12:30",
+  ],
+  [
+    "a list with signed blurbs",
+    "47. Daft Punk: One More Time. A filter house anthem built on Eddie Johns. – Jane Doe, Oct 2, 2023 at 9:00 46. The Avalanches: Since I Left You. A record built entirely of samples. – John Roe, Oct 2, 2023 at 9:00",
+  ],
+  [
+    "a live-blog",
+    "Daft Punk have announced their split with an eight-minute video, Epilogue. – Jane Doe, Feb 22, 2021 at 15:02 Nile Rodgers tweeted his thanks. – Jane Doe, Feb 22, 2021 at 15:40 Pharrell paid tribute on Instagram. – John Roe, Feb 22, 2021 at 16:10",
+  ],
+  [
+    "a tour list with venues in brackets",
+    "Alive 2007 tour dates: Paris (Bercy) – London Wembley Arena Jun 16, 2007 at 19:30 (sold out) – Dublin The O2 Jun 18, 2007 at 20:00 (sold out) – Glasgow SECC Jun 20, 2007 at 19:00.",
+  ],
+  [
+    "a tour list with weekdays",
+    "Alive 2007 dates. Bercy, Paris. – Sat Jun 14, 2007 at 20:00 Wembley Arena, London. – Sat Jun 16, 2007 at 19:30",
+  ],
+  // Asked, answered and edited notes, which read like a Stack Exchange post's.
+  [
+    "a signed article with a correction note",
+    "Discovery is a joy. – Jane Doe, Feb 22, 2021 at 10:00 (This article was edited Feb 23, 2021 at 9:00 to add a quote.)",
+  ],
+  [
+    "a write-up of a Q&A session",
+    "Fans asked Feb 22 at 10:00 whether Romanthony would return. The duo answered Feb 22 at 10:45: 'We will always love him.' Producer Todd Edwards also answered Feb 22 at 11:30 about the cut-up vocal style.",
+  ],
+  [
+    "an advice column",
+    "Q. How did Daft Punk get the One More Time vocal? asked Feb 22, 2021 at 10:00 by a reader. A. The vocal was run through a vocoder and Auto-Tune. answered Feb 23, 2021 at 9:00 by a staff writer.",
+  ],
+  [
+    "a setlist's edit history",
+    "Daft Punk Setlist at Wembley Arena, London on June 16, 2007. Robot Rock / Oh Yeah. Last updated: Feb 22, 2021. edited Feb 22, 2021 at 10:00 by a user; edited Feb 23, 2021 at 9:15 by a user.",
+  ],
+  [
+    "a fact page with an edit note",
+    "The vocalist is Romanthony. edited Feb 22, 2021 at 10:00 by staff. This was asked Feb 21, 2021 at 9:15 by a reader: is it a sample? Yes, More Spell on You by Eddie Johns.",
+  ],
+  [
+    "a blog whose theme writes a lowercase byline",
+    "Daft Punk split: what One More Time meant. posted by admin at 9:00 AM on February 22, 2021. The Romanthony story. posted by admin at 3:15 PM on February 23, 2021. [2 comments]",
   ],
   [
     "a band's line-up",

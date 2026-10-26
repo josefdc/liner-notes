@@ -13,7 +13,7 @@ vi.hoisted(() => {
 });
 
 import * as search from "./search.js";
-import { EXCLUDED_DOMAINS, isLyricPage, isSocialPage } from "./search.js";
+import { EXCLUDED_DOMAINS, isLyricPage, isSocialPage, webTextIssue } from "./search.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 import { readToolResult } from "./toolResult.js";
 
@@ -356,6 +356,18 @@ describe("web research searches", () => {
     ]) {
       expect(isSocialPage(url), url).toBe(false);
     }
+  });
+
+  it("counts a forum quote only when its expander follows the quote closely", () => {
+    const story = " One More Time opened Discovery and topped the French chart.".repeat(7);
+    // An interview: a quote, a long story, a panel, then a quote right before another panel.
+    const article = `Bangalter said: 'We wanted it to feel like a party.'${story} Tracklist Click to expand... Pharrell said: 'we jammed.' Credits Click to expand...`;
+    // A thread: each quote right before its expander.
+    const thread = `${story} RecordFan said: The vocal. Click to expand... DiscoHead said: The drop. Click to expand...`;
+
+    expect(article.length).toBeLessThanOrEqual(800);
+    expect(webTextIssue(article)).toBeNull();
+    expect(webTextIssue(thread)).toBe("a comment thread");
   });
 
   it("excludes forums whose pages are threads, on any subdomain or translate proxy, and KVR's and Steve Hoffman's forums by path", async () => {

@@ -18,6 +18,7 @@ import {
   describeError,
   fetchJson,
   pick,
+  plainReason,
   redactText,
   SourceError,
   scrubPayload,
@@ -128,6 +129,66 @@ describe("fetchJson", () => {
 
     expect(error.kind).toBe("content_type");
     expect(error.message).toContain("text/html");
+  });
+
+  it("keeps an HTML error page out of the error message, and logs it at debug level only", async () => {
+    const page =
+      '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>' +
+      `<meta http-equiv="Content-Type" content="text/html"></head><body>${"challenge ".repeat(300)}</body></html>`;
+    stubFetch(() => html(page, 403));
+    const logs = captureLogsForTests();
+
+    let error: SourceError;
+    try {
+      error = await rejection(fetchJson({ source: "secondhandsongs", url: URL_A }));
+    } finally {
+      logs.restore();
+    }
+
+    expect(error).toMatchObject({ kind: "http", status: 403 });
+    expect(error.message).toBe("secondhandsongs: HTTP 403 (the source refused the request)");
+    expect(error.message).not.toContain("<");
+    expect(describeError(error).length).toBeLessThan(100);
+    const shown = logs.entries().filter((entry) => JSON.stringify(entry).includes("Just a moment"));
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((entry) => entry.level === "debug")).toBe(true);
+  });
+
+  it("keeps only a short plain-text reason from a JSON error body", async () => {
+    stubFetch(() => json({ message: "<html><body>Forbidden</body></html>" }, { status: 403 }));
+    const markup = await rejection(fetchJson({ source: "deezer", url: URL_A }));
+    expect(markup.message).toBe("deezer: HTTP 403 (the source refused the request)");
+
+    stubFetch(() => json({ message: `Too long ${"x".repeat(400)}` }, { status: 500 }));
+    const long = await rejection(fetchJson({ source: "deezer", url: URL_A }));
+    expect(long.message.length).toBeLessThan(150);
+  });
+
+  it("keeps no escaped markup, link or stack trace in a source's reason", () => {
+    expect(plainReason("&lt;!DOCTYPE html&gt;&lt;html lang=&quot;en-US&quot;&gt;")).toBeUndefined();
+    expect(plainReason("Blocked &#60;script&#62;")).toBeUndefined();
+    expect(
+      plainReason(
+        "Error: boom at handler (/srv/app/index.js:10:5) at next (/srv/app/router.js:3:1)",
+      ),
+    ).toBeUndefined();
+    expect(
+      plainReason('Traceback (most recent call last): File "main.py", line 4'),
+    ).toBeUndefined();
+    const signed = plainReason(
+      "Invalid signature for https://cdnt-preview.dzcdn.net/a/b.mp3?hdnts=exp=1~acl=/*~hmac=deadbeef",
+    );
+    expect(signed).toBe("Invalid signature for [link]");
+    expect(plainReason("Blocked: &amp;lt;!DOCTYPE html&amp;gt;")).toBeUndefined();
+    expect(
+      plainReason("Invalid signature for cdnt-preview.dzcdn.net/a/b.mp3?hdnts=exp=1~hmac=deadbeef"),
+    ).toBeUndefined();
+    expect(plainReason("Expired: bucket.example/x?X-Amz-Expires=60")).toBeUndefined();
+    expect(plainReason("Rejected key token=abc123")).toBeUndefined();
+    expect(plainReason("Quota resets at 10:30:00 UTC")).toBe("Quota resets at 10:30:00 UTC");
+    expect(plainReason("Simon & Garfunkel: Track not found")).toBe(
+      "Simon & Garfunkel: Track not found",
+    );
   });
 
   it("rejects a JSON content type with a broken body as a parse error", async () => {

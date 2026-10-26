@@ -311,16 +311,17 @@ export function linkClaimMismatches(
  * sourced" (null when nothing stops it). A link that states a claim (`claimId`), whoever wrote
  * it, is sourced only through that claim: it is in the context, no claim with its id is rejected
  * (`claimIsRejected`), it reads as sourced (`claimDisplayKind`), no other link states it, and it
- * states this link (`linkClaimMismatches`). A model link must state such a claim: citing is not
- * support, the verifier's verdict is. A link that is not the model's and states no claim rests
- * on its evidence.
+ * states this link (`linkClaimMismatches`). A link that is not built by code must state such a
+ * claim: citing is not support, the verifier's verdict is. A link that names no origin is read
+ * as the model's (an unknown origin is not code). Only a code-built link that states no claim
+ * rests on its evidence.
  *
  * One relation claim per link, never shared: a claim names the relation and its evidence, not
  * which two tracks it joins, so a claim two links state backs neither of them.
  */
 function linkClaimProblem(link: GenealogyLink, context: ResultContext): string | null {
   if (link.claimId === undefined) {
-    return link.origin === "model" ? "without a supported claim" : null;
+    return link.origin === "code" ? null : "without a supported claim";
   }
   const claim = context.claims?.get(link.claimId);
   if (
@@ -340,8 +341,8 @@ function linkClaimProblem(link: GenealogyLink, context: ResultContext): string |
 
 /**
  * A sourced link cites at least one evidence item, and every id a link cites is in the pack. A
- * sourced link is sourced through the claim it states, and a model link states one
- * (`linkDisplayKind`).
+ * sourced link is sourced through the claim it states, and any link not built by code (one
+ * without an origin included) states one (`linkDisplayKind`).
  */
 export function linkIssues(link: GenealogyLink, context: ResultContext, path = ""): string[] {
   const issues: string[] = [];
@@ -351,7 +352,7 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
   }
   const problem = link.kind === "sourced" ? linkClaimProblem(link, context) : null;
   if (problem !== null) {
-    const who = link.origin === "model" ? "model link" : "link";
+    const who = link.origin === "code" ? "link" : "model link";
     issues.push(at(`${path}.kind`, `${who} marked sourced ${problem}`));
   }
   for (const id of ids) {
@@ -367,8 +368,9 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
  * pack, and its claim allows it. A link that states a claim (`claimId`), whatever its origin,
  * is sourced only when that claim is in the context, no claim with its id is rejected, it reads
  * as sourced, no other link states it, and it cites every id the link cites and is about the
- * link's relation (`linkClaimProblem`: one relation claim per link, never shared); a model link
- * must state one (citing is not support, the verifier's verdict is). Otherwise (no kind, no
+ * link's relation (`linkClaimProblem`: one relation claim per link, never shared); a link that
+ * is not built by code, a link without an origin included, must state one (citing is not
+ * support, the verifier's verdict is). Otherwise (no kind, no
  * citation, an unknown citation, no supported claim about the link) a model inference. A sample
  * link shown as inferred is an inferred influence, not a documented sample. Where it is shown is
  * a separate rule: a reader leaves a link whose claim id is rejected out of the main view.

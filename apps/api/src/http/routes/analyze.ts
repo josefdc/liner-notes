@@ -242,7 +242,11 @@ class RunControl {
     return this.disconnected || this.res.destroyed || this.req.socket.destroyed;
   }
 
+  /** When the deadline passes, on the monotonic clock; set by startDeadline. */
+  deadlineAt: number | undefined;
+
   startDeadline(): void {
+    this.deadlineAt = performance.now() + runDeadlineMs;
     this.deadline = setTimeout(() => {
       this.timedOut = true;
       this.abort(`No result after ${runDeadlineMs / 1000} s`);
@@ -439,9 +443,11 @@ async function executeRun(
 ): Promise<RunOutcome> {
   control.startDeadline();
   // The run's own signal goes with the run's context, so a node stopped by it is told apart
-  // from one LangGraph stops because another node failed (agent/graph.ts).
+  // from one LangGraph stops because another node failed (agent/graph.ts); so does its
+  // deadline, so the verifier's judge can take only its share of the time left.
   let outcome = await withRun(threadId, () => runGraph(input, threadId, control.signal, emit), {
     signal: control.signal,
+    deadlineAt: control.deadlineAt,
   });
   if (outcome.kind === "cancelled" && control.timedOut)
     outcome = { kind: "failed", code: "timeout" };

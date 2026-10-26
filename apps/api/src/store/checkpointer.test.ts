@@ -95,6 +95,45 @@ describe("PreviewFreeSqliteSaver", () => {
     expect(state.values.note).toBe("kept");
   });
 
+  it("saves the composer's draft without a clip, whatever it holds", async () => {
+    const db = new Database(":memory:");
+    const Drafted = Annotation.Root({
+      draft: Annotation<Record<string, unknown> | null>({
+        reducer: (_, next) => next,
+        default: () => null,
+      }),
+    });
+    let verifierSaw: unknown = null;
+    const graph = new StateGraph(Drafted)
+      .addNode("composer", () => ({
+        draft: {
+          claims: [{ id: "c1", text: "kept text" }],
+          genealogy: { nodes: [{ id: "n", previewUrl: CLIP, label: `see ${SPOTIFY_CLIP}` }] },
+        },
+      }))
+      .addNode("verifier", (state) => {
+        verifierSaw = state.draft;
+        return {};
+      })
+      .addEdge(START, "composer")
+      .addEdge("composer", "verifier")
+      .addEdge("verifier", END)
+      .compile({ checkpointer: new PreviewFreeSqliteSaver(db) });
+
+    const config = { configurable: { thread_id: "t-draft" } };
+    await graph.invoke({}, config);
+
+    // The next node reads the draft as written; nothing saved holds a clip.
+    expect(JSON.stringify(verifierSaw)).toContain("dzcdn.net");
+    const saved = savedText(db);
+    expect(saved).toContain("kept text");
+    expect(saved).not.toContain("dzcdn.net");
+    expect(saved).not.toContain("hdnea");
+    expect(saved).not.toContain("p.scdn.co");
+    const state = await graph.getState(config);
+    expect(JSON.stringify(state.values.draft)).not.toMatch(/dzcdn|p\.scdn\.co/);
+  });
+
   it("saves no clip from the interrupt payload or inside an error text, and resumes", async () => {
     const db = new Database(":memory:");
     const Paused = Annotation.Root({

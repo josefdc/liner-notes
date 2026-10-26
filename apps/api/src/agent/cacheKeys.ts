@@ -29,6 +29,15 @@
  * model named (agent/enricher.ts). Earlier results may show the cover of the top search hit (a
  * cover version, another song, a live album) on a node: they are not served, and each track
  * searched again is composed again once.
+ * v8: results the verifier checked: model claims judged against the excerpts they cite (or left
+ * without a verdict, counted in `run.verifier`), their numbers compared with the measurement,
+ * citations outside a claim's scope dropped, and one relation claim per genealogy link, which
+ * keeps its stated type and is sourced only through that claim. Earlier results carry no
+ * verdicts: they are not served, and each track searched again is composed (and judged) again
+ * once. A result whose check did not complete (the judge failed, ran out of time or left claims
+ * out) is stored with those claims unchecked, which read as model inference, and served for an
+ * hour only (storedResults.ts UNCHECKED_RESULT_TTL_MS): repeat visits do not pay for another
+ * composition, and a run after that checks the claims again.
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its
@@ -47,7 +56,7 @@ import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v7"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v8"];
 
 /** The optional sources that are configured (have a key). */
 export interface ConfiguredSources {

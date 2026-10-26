@@ -48,9 +48,9 @@ function draftWithModelValues(): TrackData {
     album: "To the Extreme",
     coverUrl: "https://i.scdn.co/image/x",
     segments: [
-      { label: "Intro", start: 0, end: 10, color: "#374151" },
-      { label: "Main", start: 10, end: 90, color: "#1F2937" },
-      { label: "Outro", start: 90, end: 100, color: "#374151" },
+      { label: "Intro", start: 0, end: 10 },
+      { label: "Main", start: 10, end: 90 },
+      { label: "Outro", start: 90, end: 100 },
     ],
     segmentsSource: "template",
     samples: [],

@@ -221,6 +221,16 @@ describe("language model settings", () => {
     expect(readSettings({ ...AZURE, LLM_CASSETTE: "replay" })).toMatchObject({ warnings: [] });
   });
 
+  it("warns when the judge would be the model that writes the notes", () => {
+    const live = { ...AZURE, LLM_SPEND_LOG: "/var/tmp/spend.jsonl" };
+    const same = readSettings({ ...live, AZURE_OPENAI_DEPLOYMENT_JUDGE: "gpt-6-luna" });
+    const warned = same.ok ? same.warnings.join(" ") : "";
+    expect(warned).toContain("The judge and main tiers use the same deployment");
+    // Names variables only, never a deployment name.
+    expect(warned).not.toContain("gpt-6-luna");
+    expect(readSettings(live)).toMatchObject({ warnings: [] });
+  });
+
   it("overrides a tier's deployment by variable", () => {
     const { llm } = settingsOf({ ...KEYS, AZURE_OPENAI_DEPLOYMENT_JUDGE: "judge-2" });
     expect(llm.deployments).toMatchObject({ judge: "judge-2", research: "gpt-6-sol" });

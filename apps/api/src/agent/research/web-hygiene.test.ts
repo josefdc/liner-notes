@@ -223,6 +223,34 @@ describe("the text of a web page", () => {
     expect(items.map((item) => item.excerpt)).toEqual(prose);
   });
 
+  it.each([
+    "Posted on Feb 22, 2021 | next article: Daft Punk split",
+    "Released on Mar 13, 2001 | root note is D minor",
+    "Updated 3 days ago | next page of the discography",
+    "Added 5 days ago | prev album: Homework",
+    "Reissued on Nov 3, 2023 | parent label Virgin Records",
+    "Live at Wembley on Jun 6, 2007 | next date: Paris",
+    "Uploaded 2 years ago | next track: Aerodynamic",
+    "Released 10 years ago | parent album Discovery",
+    "Recorded 1 year ago | root of the sample chain",
+    "Setlist: Rollin' & Scratchin' Played on Sep 3, 2010 | prev show",
+    "Released on Mar 13, 2001 | next-gen remaster",
+  ])("keeps a dated page whose next link word reads on as prose: %s", (text) => {
+    expect(webSearchEvidence([web("https://www.example.org/page", text)])).toHaveLength(1);
+  });
+
+  it.each([
+    ["a [flagged] marker", "some_user 3 hours ago [flagged] [–] nice sample"],
+    ["a [dead] marker", "some_user 3 hours ago [dead] | parent | next [–] the drop is great"],
+    ["a flag chain", "some_user 3 hours ago | flag | favorite [–] the drop is great"],
+    ["Algolia's order", "some_user | 3 hours ago | parent | context | on: One More Time"],
+    ["a fullwidth pipe", "some_user 3 hours ago ｜ parent ｜ next [–] Romanthony sang it."],
+    // A user name need not look like a handle: many have no digit or "_".
+    ["a full month name", "listener on February 22, 2021 | parent | next [–] Love it!"],
+  ])("leaves out a forum comment byline with %s", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+  });
+
   it("refuses a forum comment byline or a Hacker News page when read back (written by older code)", async () => {
     const [item] = webSearchEvidence([
       web("https://www.example.org/news/one-more-time", "A page about the song."),

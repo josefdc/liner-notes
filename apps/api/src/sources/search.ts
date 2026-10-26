@@ -65,12 +65,12 @@ export const LYRIC_SITES = [
 ] as const;
 
 /**
- * Social platforms and their short-link hosts, and forum comment pages (Hacker News): their pages
- * are page chrome, comments and the names or handles of private people, and weak evidence of a
- * song's history. Filtered from the answer by exact host or subdomain (m.facebook.com,
+ * Social platforms and their short-link hosts, and forums (Hacker News, Quora, Gearspace): their
+ * pages are page chrome, comments and the names or handles of private people, and weak evidence
+ * of a song's history. Filtered from the answer by exact host or subdomain (m.facebook.com,
  * old.reddit.com) and through a translate proxy, and excluded in the request except for
  * SHORT_SITES. YouTube is not one of them: a video page carries a title, a channel (its
- * publisher) and a description.
+ * publisher) and a description. Discogs' forum is left out by path (FORUM_PATHS).
  */
 export const SOCIAL_SITES = [
   "instagram.com",
@@ -91,7 +91,19 @@ export const SOCIAL_SITES = [
   "pinterest.com",
   "tumblr.com",
   "news.ycombinator.com",
+  "quora.com",
+  "gearspace.com",
 ] as const;
+
+/**
+ * Forum pages on a site whose other pages are primary sources: Discogs' forum and groups
+ * (discogs.com/forum/…, /group/…, also after a language prefix such as /de/). Left out of the
+ * answer by host and path in isSocialPage, never sent in `exclude_domains`: the request's list
+ * names whole domains, and excluding discogs.com would drop its release and artist pages.
+ */
+const FORUM_PATHS: ReadonlyArray<readonly [site: string, path: RegExp]> = [
+  ["discogs.com", /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:forum|group)s?(?:\/|$)/i],
+];
 
 /**
  * Social sites never sent in the request's `exclude_domains`: names so short that a match by
@@ -169,8 +181,8 @@ export function isLyricPage(url: string): boolean {
 const onSite = (host: string, site: string) => host === site || host.endsWith(`.${site}`);
 
 /**
- * True for a page on a social platform or a forum's comment pages (SOCIAL_SITES; also through a
- * translate proxy, and with or without a scheme).
+ * True for a page on a social platform or a forum (SOCIAL_SITES, and FORUM_PATHS by path; also
+ * through a translate proxy, and with or without a scheme).
  */
 export function isSocialPage(url: string): boolean {
   const parsed = looseUrl(url);
@@ -178,6 +190,9 @@ export function isSocialPage(url: string): boolean {
   const host = hostOf(parsed);
   const named = host.endsWith(".translate.goog") ? unproxyHost(host) : host;
   if (SOCIAL_SITES.some((site) => onSite(named, site))) return true;
+  if (FORUM_PATHS.some(([site, path]) => onSite(named, site) && path.test(parsed.pathname))) {
+    return true;
+  }
   const inner = translatedPage(parsed, host);
   return inner !== null && isSocialPage(inner);
 }
@@ -233,13 +248,29 @@ const AGE = /^\d{1,3}[wdhm]$/;
 const LABEL_REACH = 3;
 /** "name: comment", where the name is a token of its own. */
 const NAME_LINE = /(?:^|[\s.!?])([^\s:]+):(?=\s)/gu;
+/** A month's name, short ("Feb", "Sept") or full ("February"). */
+const MONTH =
+  "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+/** A comment's date ("on Feb 22, 2021") or age ("3 hours ago", "a day ago"). */
+const COMMENT_WHEN = `(?:on\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago)`;
+/** A pipe, also the fullwidth one a translate proxy writes. */
+const PIPE = "[|｜]";
 /**
- * A forum comment's byline, as Hacker News writes it: a user name, the comment's date ("on Feb
- * 22, 2021") or age ("3 hours ago"), then the thread's links ("| parent", "| prev", "| next",
- * "| root"). A byline without the thread's links ("by Jane Smith on Feb 22, 2021") is not one.
+ * A thread link: "| parent", "| prev", "| next", "| root", "| context" or "| flag", followed by
+ * another pipe, the collapse button ("[–]"), its script link ("(javascript…") or the end of the
+ * text. A link word that reads on ("| next article", "| root note", "| next-gen") is not one.
  */
-const FORUM_BYLINE =
-  /(?:^|\s)[^\s|]+\s+(?:on\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}|\d{1,4}\s+(?:minute|hour|day|month|year)s?\s+ago)\s+\|\s+(?:parent|prev|next|root)\b/u;
+const THREAD_LINK = `${PIPE}\\s*(?:parent|prev|next|root|context|flag)\\s*(?=${PIPE}|\\[[–-]\\]|\\(javascript|$)`;
+/**
+ * A forum comment's byline, as Hacker News writes it: a user name (any token: many have no digit
+ * or "_"), the comment's date or age (COMMENT_WHEN; after a pipe in Algolia's "name | 3 hours
+ * ago"), then a thread link (THREAD_LINK) or a "[flagged]" or "[dead]" marker. A byline without
+ * them ("by Jane Smith on Feb 22, 2021", "Posted on Feb 22, 2021 | next article") is not one.
+ */
+const FORUM_BYLINE = new RegExp(
+  `(?:^|\\s)[^\\s|｜]+(?:\\s+|\\s*${PIPE}\\s*)${COMMENT_WHEN}\\s*(?:\\[(?:flagged|dead)\\]|${THREAD_LINK})`,
+  "u",
+);
 
 /** A token without the punctuation around it. */
 const bare = (token: string) => token.replace(/^[^\p{L}\p{N}@…]+|[^\p{L}\p{N}…]+$/gu, "");
@@ -271,10 +302,10 @@ function labelledAges(words: readonly string[]): number {
  *   more handles in a row or that make up a fifth of the words;
  * - "a comment thread": two comments' ages ("3w") each next to a thread button ("Reply",
  *   "Like", "Follow"), three "name: comment" lines whose names are user names, or a forum
- *   comment's byline ("some_user on Feb 22, 2021 | parent", "some_user 3 hours ago | next").
+ *   comment's byline (FORUM_BYLINE: "some_user on Feb 22, 2021 | parent | next [–]").
  * One handle in a sentence ("Thomas Bangalter (@…)"), "Following the success of …", "the '90s",
- * a tracklist ("A1: …"), "R.E.M.: …", a "|"-separated title and a byline without a thread's
- * links are kept. The web tier runs this on the text it stores,
+ * a tracklist ("A1: …"), "R.E.M.: …", a "|"-separated title, and a date followed by no thread
+ * link or by a link word that reads on ("Posted on Feb 22, 2021 | next article") are kept. The web tier runs this on the text it stores,
  * and every reader of stored evidence runs it again on the same text.
  */
 export function webTextIssue(text: string): string | null {

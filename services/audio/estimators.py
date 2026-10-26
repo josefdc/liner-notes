@@ -26,6 +26,7 @@ return the estimate or None.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import threading
@@ -1362,13 +1363,26 @@ class LibrosaEstimator(_Estimator):
 
 _thread_state = threading.local()
 
+# RhythmExtractor2013 is not a function of its input alone: its TempoTapDegara adds noise of up
+# to 1e-4 of the largest per-frame periodicity value to every frame, drawn from the C library's
+# rand(). That state belongs to the whole process (every thread and every instance; Essentia
+# never seeds it), so a tempo, its confidence and its beats depended on how many numbers the analyses
+# before had drawn. Each call starts from the state of a new process (srand(1)) and holds a
+# lock, so that no other worker thread draws in between. CDLL(None) finds srand where Essentia
+# finds rand: in the process's C library.
+RAND_SEED = 1
+_rand_lock = threading.Lock()
+_srand = ctypes.CDLL(None).srand
+
 
 def _essentia_algorithm(name: str, factory):
     """
-    One instance per worker thread, reset before each use. Instances are kept rather than
-    created per call: when the most recently created Essentia network is deleted, every later
-    TensorFlow predictor call logs "No network created" thousands of times. They are not shared
-    between threads: an algorithm instance is not safe to call from two threads at once.
+    One instance per worker thread, reset before each use (a reused instance gives what a new
+    one gives; the state that differs is rand()'s, see _rand_lock). Instances are kept rather
+    than created per call: creating a RhythmExtractor2013 takes about 90 ms, and when the most
+    recently created Essentia network is deleted, every later RhythmExtractor2013 and KeyExtractor
+    call logs "No network created" for every frame. They are not shared between threads: an algorithm
+    instance is not safe to call from two threads at once.
     """
     algorithms = _thread_state.__dict__.setdefault("algorithms", {})
     if name in algorithms:
@@ -1394,7 +1408,10 @@ class EssentiaEstimator(_Estimator):
                 method="multifeature", minTempo=int(MIN_BPM), maxTempo=int(MAX_BPM)
             ),
         )
-        bpm, ticks, raw, _, _ = rhythm(signals.at(ESSENTIA_RATE))
+        audio = signals.at(ESSENTIA_RATE)
+        with _rand_lock:
+            _srand(RAND_SEED)
+            bpm, ticks, raw, _, _ = rhythm(audio)
         ticks = np.asarray(ticks, dtype=float)
         if not np.isfinite(bpm):
             return NON_FINITE_TEMPO

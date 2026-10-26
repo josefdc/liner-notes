@@ -119,7 +119,7 @@ test("back on the first search after arriving keeps the running analysis", async
 
   // The run goes on and its result is shown, in a single history entry after the search.
   await releaseStream(page, "result");
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await page.goBack();
   await expect(page.getByPlaceholder(/Song title/)).toBeVisible();

@@ -36,23 +36,26 @@ import { inputVisualStyles } from './ui/Input';
 const BudgetBanner = lazy(() => import('./BudgetBanner'));
 
 // ─── Status Messages (P0:1) ────────────────────────────────────────────────
+// What the analysis is doing, in plain words. The completion line is at most 40 characters: it
+// is revealed up to 40ch (typing-reveal).
 const STATUS_MESSAGES: Record<AgentStatus, string> = {
   idle: '',
-  connecting: 'Establishing uplink to Sonic Agent...',
-  searching: 'Scanning Spotify catalog for your track...',
-  analyzing: 'Deconstructing audio DNA — BPM, key, energy...',
-  researching: 'Digging through production history and samples...',
-  composing: 'Assembling your intelligence briefing...',
+  connecting: 'Connecting to the analysis server...',
+  searching: 'Searching Spotify for your track...',
+  analyzing: 'Measuring tempo, key and energy from the preview clip...',
+  researching: 'Searching sources for samples, credits and history...',
+  composing: 'Writing the liner notes...',
+  checking: 'Checking the notes against their sources...',
   disambiguation: 'Multiple matches found — confirm your track...',
-  complete: 'INTEL READY // ENTERING COMMAND CENTER',
-  error: 'Signal lost. Check your query and try again.',
+  complete: 'Analysis complete. Opening the results',
+  error: 'The analysis failed. Check your search and try again.',
 };
 
 // While a recorded run plays, the recorded progress is not live work: these replace the
 // messages above, so neither the screen nor the screen reader describes a live analysis.
 const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs live...';
 // At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
-export const REPLAY_COMPLETE_MESSAGE = 'REPLAY READY // ENTERING COMMAND CENTER';
+export const REPLAY_COMPLETE_MESSAGE = 'Replay complete. Opening the results';
 
 /** The status line for a run, live or replayed. */
 function statusMessage(status: AgentStatus, isReplay: boolean): string {
@@ -182,6 +185,7 @@ const ANALYZING_STATUSES = new Set<AgentStatus>([
   'analyzing',
   'researching',
   'composing',
+  'checking',
   'disambiguation',
 ]);
 
@@ -572,6 +576,8 @@ const Onboarding: React.FC<OnboardingProps> = ({
         return 70;
       case 'composing':
         return 90;
+      case 'checking':
+        return 95;
       case 'complete':
         return 100;
       default:
@@ -935,7 +941,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
             aria-label="Analysis progress"
           >
             <div
-              className={`h-full transition-all duration-700 ease-out relative rounded-full ${status === 'complete' ? 'bg-status-success' : 'bg-cyber'}`}
+              className={`h-full transition-all duration-700 ease-out relative rounded-full ${status === 'complete' ? 'bg-status-success' : 'bg-text-secondary'}`}
               style={{ width: `${getProgress()}%` }}
             >
               {/* P2:16 Shimmer effect (only while loading, not on complete) */}
@@ -967,7 +973,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 {statusMessage(status, isReplay)}
               </span>
             ) : (
-              statusMessage(status, isReplay) || `Status: ${status}`
+              statusMessage(status, isReplay)
             )}
           </div>
 
@@ -981,7 +987,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 onClick={handleCompletionSkip}
                 className="animate-glow-breathe"
               >
-                PROCEED TO COMMAND CENTER
+                Open the results
               </Button>
             </div>
           )}

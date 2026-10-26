@@ -300,7 +300,7 @@ const App: React.FC = () => {
 
   // Preload lazy chunks when analysis nears completion
   useEffect(() => {
-    if (status === 'composing') {
+    if (status === 'composing' || status === 'checking') {
       import('./components/Dashboard');
       import('./components/Player');
     }

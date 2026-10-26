@@ -255,7 +255,7 @@ export function useAgent(): UseAgentReturn {
             ...prev,
             threadId: run.threadId,
           }));
-          addLog('Connected to agent', 'SYS-INIT');
+          addLog('Connected to the analysis server', 'SYS-INIT');
           break;
 
         case 'status':
@@ -265,8 +265,8 @@ export function useAgent(): UseAgentReturn {
             run.replay = true;
             setState((prev) => ({ ...prev, isReplay: true }));
           }
-          // Pass the code from the backend event
-          addLog(data.message || 'Processing...', data.code as LogCode | undefined, data.node);
+          // The server's own words, with its code; a status without words adds no line.
+          if (data.message) addLog(data.message, data.code as LogCode | undefined, data.node);
           // Update status based on node
           if (data.node === 'scout') {
             setState((prev) => ({ ...prev, status: 'searching' }));
@@ -276,6 +276,8 @@ export function useAgent(): UseAgentReturn {
             setState((prev) => ({ ...prev, status: 'researching' }));
           } else if (data.node === 'composer') {
             setState((prev) => ({ ...prev, status: 'composing' }));
+          } else if (data.node === 'verifier') {
+            setState((prev) => ({ ...prev, status: 'checking' }));
           }
           break;
 
@@ -299,7 +301,7 @@ export function useAgent(): UseAgentReturn {
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog('Awaiting user selection...', 'SYS-WARN');
+          addLog('Several tracks match: waiting for you to pick one', 'SYS-WARN');
           break;
         }
 
@@ -325,7 +327,7 @@ export function useAgent(): UseAgentReturn {
           addLog(
             replay
               ? 'Recorded analysis replayed. Nothing was analysed live.'
-              : 'Analysis complete. Ready for deployment.',
+              : 'Analysis complete.',
             'SYS-READY',
           );
           break;
@@ -449,7 +451,7 @@ export function useAgent(): UseAgentReturn {
       runRef.current = run;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
-      addLog(`🔍 Searching for "${query}"...`);
+      addLog(`Searching for "${query}"`);
       // Logged after the reset above, so it stays with the run it explains.
       if (options.note) addLog(options.note, 'SYS-WARN');
 
@@ -521,7 +523,7 @@ export function useAgent(): UseAgentReturn {
       }
 
       run.picked = candidate;
-      addLog(`🎵 Resuming with selected track...`);
+      addLog('Resuming the analysis with the track you picked');
       setState((prev) => ({
         ...prev,
         status: 'analyzing',

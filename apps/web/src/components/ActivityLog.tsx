@@ -1,85 +1,16 @@
 import type React from 'react';
 import { useState, useMemo } from 'react';
-import {
-  Database,
-  Search,
-  Activity,
-  Zap,
-  CircleCheck,
-  Cpu,
-  Wifi,
-  Music,
-  Globe,
-  Brain,
-  ChevronDown,
-} from 'lucide-react';
-import type { AgentLog, LogCode } from '../types';
+import { Activity, CircleCheck, ChevronDown, LoaderCircle } from 'lucide-react';
+import type { AgentLog } from '../types';
+import { logStyle } from './console/logCodes';
 
 interface ActivityLogProps {
   logs: AgentLog[];
   isComplete: boolean;
 }
 
-// Map log codes to icons
-function getIconForCode(code?: LogCode): React.FC<{ size: number; className?: string }> {
-  if (!code) return Zap;
-
-  const prefix = code.split('-')[0];
-  const iconMap: Record<string, React.FC<{ size: number; className?: string }>> = {
-    NET: Wifi,
-    AUDIO: Music,
-    GEMINI: Brain,
-    LLM: Brain,
-    SPOTIFY: Search,
-    RESEARCH: Globe,
-    GRAPH: Database,
-    SYS: Cpu,
-  };
-
-  return iconMap[prefix] || Activity;
-}
-
-// Map log codes to colors
-function getColorForCode(code?: LogCode): { text: string; border: string; bg: string } {
-  if (!code) return { text: 'text-cyber', border: 'border-cyber/20', bg: 'bg-cyber/5' };
-
-  const prefix = code.split('-')[0];
-  const colorMap: Record<string, { text: string; border: string; bg: string }> = {
-    NET: { text: 'text-cyber', border: 'border-cyber/20', bg: 'bg-cyber/5' },
-    AUDIO: { text: 'text-analog', border: 'border-analog/20', bg: 'bg-analog/5' },
-    // Model steps: the inferred violet, the colour of what a model writes (the code says which)
-    GEMINI: {
-      text: 'text-prov-inferred',
-      border: 'border-prov-inferred/20',
-      bg: 'bg-prov-inferred/5',
-    },
-    LLM: {
-      text: 'text-prov-inferred',
-      border: 'border-prov-inferred/20',
-      bg: 'bg-prov-inferred/5',
-    },
-    SPOTIFY: {
-      text: 'text-accent-green',
-      border: 'border-accent-green/20',
-      bg: 'bg-accent-green/5',
-    },
-    RESEARCH: { text: 'text-cyber', border: 'border-cyber/20', bg: 'bg-cyber/5' },
-    GRAPH: { text: 'text-analog', border: 'border-analog/20', bg: 'bg-analog/5' },
-    SYS: {
-      text: 'text-text-tertiary',
-      border: 'border-text-tertiary/20',
-      bg: 'bg-text-tertiary/5',
-    },
-  };
-
-  return (
-    colorMap[prefix] || {
-      text: 'text-text-tertiary',
-      border: 'border-text-tertiary/20',
-      bg: 'bg-text-tertiary/5',
-    }
-  );
-}
+// The number of latest entries the log shows.
+const SHOWN = 6;
 
 // Format relative time
 function formatRelativeTime(timestamp: string): string {
@@ -96,16 +27,13 @@ function formatRelativeTime(timestamp: string): string {
 const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Get last 6 logs for display (most recent first for visual)
-  const displayLogs = useMemo(() => [...logs].slice(-6).reverse(), [logs]);
+  // The latest entries, newest first
+  const displayLogs = useMemo(() => [...logs].slice(-SHOWN).reverse(), [logs]);
   const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
 
   return (
-    <div className="relative bg-surface border border-border rounded-md overflow-hidden group hover:border-cyber/30 transition-colors ease-out-expo">
-      {/* Glow effect on hover */}
-      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/10 to-transparent rounded-md blur opacity-0 group-hover:opacity-30 transition duration-(--duration-slow) pointer-events-none"></div>
-
-      {/* Collapsible Header - Always visible */}
+    <div className="relative bg-surface border border-border rounded-md overflow-hidden hover:border-white/20 transition-colors ease-out-expo">
+      {/* Collapsible header, always visible */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -116,12 +44,12 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             ? 'Collapse activity log'
             : `Expand activity log${lastLog ? `, last event: ${lastLog.message}` : ''}`
         }
-        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
+        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
-            <Activity size={12} className="text-cyber" />
-            Agent Activity Log
+          <h3 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
+            <Activity size={12} aria-hidden="true" className="text-text-tertiary" />
+            Activity log
             <span className="text-chrome text-text-muted">({logs.length})</span>
           </h3>
           {/* P3:27 — Collapsed preview snippet */}
@@ -133,89 +61,88 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
         </div>
         <div className="flex items-center gap-3">
           {!isComplete && (
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyber animate-pulse shadow-[0_0_6px_var(--color-cyber)]"></span>
-              <span className="text-chrome text-cyber font-mono tracking-wider">LIVE</span>
+            <span className="flex items-center gap-1.5 text-text-secondary">
+              <LoaderCircle size={10} aria-hidden="true" className="animate-spin-slow" />
+              <span className="text-chrome font-mono">Running</span>
             </span>
           )}
           {isComplete && (
             <span className="flex items-center gap-1.5">
-              <CircleCheck size={10} className="text-status-success" />
-              <span className="text-chrome text-status-success font-mono tracking-wider">DONE</span>
+              <CircleCheck size={10} aria-hidden="true" className="text-status-success" />
+              <span className="text-chrome text-status-success font-mono">Done</span>
             </span>
           )}
           <ChevronDown
             size={14}
+            aria-hidden="true"
             className={`text-text-tertiary transition-transform duration-(--duration-normal) ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
       </button>
 
-      {/* Collapsible Content */}
+      {/* Collapsible content */}
       <div
         id="activity-log-content"
         role="region"
-        aria-label="Agent activity log entries"
+        aria-label="Activity log entries"
         className={`relative z-10 overflow-hidden transition-all duration-(--duration-normal) ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
       >
         <div className="border-t border-white/5">
-          {/* Log List */}
+          {/* Log list */}
           <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain">
-            {/* Timeline Line */}
-            <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-cyber/50 via-white/10 to-transparent"></div>
+            {/* Timeline line */}
+            <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
 
-            {/* Empty State */}
+            {/* Empty state */}
             {logs.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-6 text-text-muted space-y-2">
-                <Wifi className="animate-pulse" size={18} />
-                <span className="text-chrome tracking-widest font-mono">AWAITING DATA...</span>
+              <div className="flex flex-col items-center justify-center py-6 text-text-muted">
+                <span className="text-chrome font-mono">No events yet</span>
               </div>
             )}
 
             {displayLogs.map((log, idx) => {
-              const Icon = getIconForCode(log.code);
-              const colors = getColorForCode(log.code);
-              const isFirst = idx === 0;
-              const codeLabel = log.code?.split('-')[0] || 'SYS';
+              const { label, Icon, tone } = logStyle(log.code, log.node);
+              const isLive = idx === 0 && !isComplete;
 
               return (
-                <div key={log.id} className="relative pl-7 pb-3 last:pb-0 group/item">
-                  {/* Timeline Dot */}
+                <div
+                  key={log.id}
+                  data-log-code={log.code}
+                  className="relative pl-7 pb-3 last:pb-0 group/item"
+                >
+                  {/* Timeline dot */}
                   <div
                     className={`
                     absolute left-[9px] top-1 w-2 h-2 rounded-full border-2 transition-all duration-(--duration-normal) z-10 box-border
                     ${
-                      isFirst && !isComplete
-                        ? 'bg-cyber border-cyber shadow-[0_0_6px_var(--color-cyber)] animate-pulse ring-2 ring-cyber/20'
-                        : 'bg-void-lighter border-white/30 group-hover/item:border-white/55 group-hover/item:shadow-[0_0_4px_var(--color-border-hover)]'
+                      isLive
+                        ? 'bg-text-secondary border-text-secondary animate-pulse'
+                        : 'bg-void-lighter border-white/30 group-hover/item:border-white/55'
                     }
                   `}
                   ></div>
 
-                  {/* Card Content */}
+                  {/* Entry */}
                   <div
                     className={`
                     relative p-2 rounded-md border transition-all duration-(--duration-normal)
-                    ${
-                      isFirst && !isComplete
-                        ? `${colors.bg} ${colors.border}`
-                        : 'bg-transparent border-transparent hover:bg-white/5'
-                    }
+                    ${isLive ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent hover:bg-white/5'}
                   `}
                   >
                     <div className="flex justify-between items-start mb-0.5">
                       <span
-                        className={`text-chrome font-bold font-mono ${isFirst && !isComplete ? colors.text : 'text-text-tertiary'} tracking-wider`}
+                        data-log-label
+                        className={`text-chrome font-bold font-mono inline-flex items-center gap-1 ${tone}`}
                       >
-                        {codeLabel}
+                        <Icon size={12} aria-hidden="true" className="shrink-0" />
+                        {label}
                       </span>
                       <span className="text-chrome text-text-muted font-mono">
                         {formatRelativeTime(log.timestamp)}
                       </span>
                     </div>
 
-                    <div className="flex items-start gap-1.5 text-xs text-text-secondary">
-                      {isFirst && !isComplete && <Icon size={12} className={colors.text} />}
+                    <div className="text-xs text-text-secondary">
                       <span className="leading-relaxed line-clamp-2">{log.message}</span>
                     </div>
                   </div>
@@ -224,11 +151,12 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             })}
           </div>
 
-          {/* Footer Status */}
-          <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary uppercase">
-            <span>{logs.length} EVENTS RECORDED</span>
-            <span className={isComplete ? 'text-status-success' : 'text-cyber animate-pulse'}>
-              {isComplete ? '● IDLE' : '◉ ACTIVE'}
+          {/* Footer: how much of the log is shown */}
+          <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary">
+            <span>
+              {logs.length > SHOWN
+                ? `The latest ${SHOWN} of ${logs.length} events`
+                : `${logs.length} ${logs.length === 1 ? 'event' : 'events'}`}
             </span>
           </div>
         </div>

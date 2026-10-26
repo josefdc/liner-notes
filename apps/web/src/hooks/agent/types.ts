@@ -18,6 +18,8 @@ export type AgentStatus =
   | 'analyzing'
   | 'researching'
   | 'composing'
+  // The verifier checks the composed notes against their sources.
+  | 'checking'
   | 'disambiguation'
   | 'complete'
   | 'error';

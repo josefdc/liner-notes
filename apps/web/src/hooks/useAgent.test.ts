@@ -228,6 +228,57 @@ describe('useAgent results', () => {
   });
 });
 
+describe('useAgent progress', () => {
+  it('moves to checking when the verifier reports, after composing', () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      type: 'status',
+      node: 'composer',
+      message: 'Writing the notes',
+      code: 'LLM-CONNECT',
+    });
+    expect(result.current.status).toBe('composing');
+    analysis.send({
+      type: 'status',
+      node: 'verifier',
+      message: 'Checking the notes against their sources',
+      code: 'LLM-RESPONSE',
+    });
+
+    expect(result.current.status).toBe('checking');
+    expect(result.current.logs.at(-1)).toMatchObject({
+      message: 'Checking the notes against their sources',
+      node: 'verifier',
+    });
+    analysis.send({ type: 'complete', data: track });
+    expect(result.current.status).toBe('complete');
+  });
+
+  it('logs what happened in plain words: no emoji and no prototype copy', async () => {
+    const { hook, analysis } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+    lastStream().send({ type: 'complete', data: track });
+    expect(analysis.closed).toBe(true);
+
+    const messages = hook.result.current.logs.map((log) => log.message);
+    expect(messages).toEqual([
+      'Searching for "Hurt"',
+      'Connected to the analysis server',
+      'Several tracks match: waiting for you to pick one',
+      'Resuming the analysis with the track you picked',
+      'Analysis complete.',
+    ]);
+    for (const message of messages) {
+      expect(message).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(message).not.toMatch(/Ready for deployment|Connected to agent|Processing\.\.\./);
+    }
+  });
+});
+
 describe('useAgent track picker', () => {
   it('keeps the picker when the analysis stream ends after the interrupt', () => {
     const { hook, analysis } = openPicker();
@@ -780,8 +831,8 @@ describe('useAgent typed events', () => {
 
     expect(result.current.status).not.toBe('error');
     expect(result.current.logs.map((log) => log.message)).toEqual([
-      '🔍 Searching for "Hurt"...',
-      'Connected to agent',
+      'Searching for "Hurt"',
+      'Connected to the analysis server',
     ]);
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.map(([message]) => message)).toEqual([

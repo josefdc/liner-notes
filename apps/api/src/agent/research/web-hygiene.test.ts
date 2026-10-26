@@ -104,6 +104,26 @@ const RISKY = [
   () => "Like",
   (n: number) => `jane_doe${n}: love it!`,
 ];
+/** Pieces of forum thread layouts (forumThread): quotes, post headers, bylines and signatures. */
+const FORUM_PIECES = [
+  (n: number) => `Fan${n} said: ↑`,
+  (n: number) => `Fan${n} said:`,
+  () => "Click to expand...",
+  (n: number) => `Feb ${(n % 28) + 1}, 2021 #${n}`,
+  (n: number) => `Joined Mar ${(n % 28) + 1}, 2010`,
+  (n: number) => `Messages: ${n}`,
+  (n: number) => `Quote: Originally Posted by Fan${n}`,
+  () => "Reply With Quote",
+  (n: number) => `Posts: ${n}`,
+  () => "share | improve this answer | follow",
+  (n: number) => `answered Feb 21, 2021 at 10:${String(n % 60).padStart(2, "0")}`,
+  (n: number) => `sure? – Fan${n} Feb 22 '21 at 16:01`,
+  (n: number) => `posted by Fan${n} at 6:47 AM on February 22, 2021`,
+  (n: number) => `[${n} favorites]`,
+];
+/** A forum piece in a kept excerpt: forumThread decided on it, and the readers must agree. */
+const FORUM_PIECE =
+  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]/;
 
 const URLS = [
   "https://www.example.org/news/one-more-time",
@@ -135,7 +155,9 @@ describe("anything the web tier writes is read back", () => {
         const n = Math.floor(next() * 1000);
         words.push(
           next() < risk
-            ? RISKY[Math.floor(next() * RISKY.length)](n)
+            ? next() < 0.5
+              ? RISKY[Math.floor(next() * RISKY.length)](n)
+              : FORUM_PIECES[Math.floor(next() * FORUM_PIECES.length)](n)
             : PROSE[Math.floor(next() * PROSE.length)],
         );
       }
@@ -149,6 +171,7 @@ describe("anything the web tier writes is read back", () => {
     // Enough kept, and enough with a masked handle, for the check to say something.
     expect(items.length).toBeGreaterThan(50);
     expect(items.filter((item) => item.excerpt.includes("@…")).length).toBeGreaterThan(10);
+    expect(items.filter((item) => FORUM_PIECE.test(item.excerpt)).length).toBeGreaterThan(10);
     for (const item of items) {
       expect(restores([item]), item.excerpt).toBe(true);
       expect(await served([item]), item.excerpt).toBe(true);
@@ -341,6 +364,83 @@ describe("the text of a web page", () => {
   });
 });
 
+/**
+ * Forum threads as a search returns them (each page's text on one line), one layout per forum
+ * software, with the users' names made up: plain words, as many forums show them.
+ */
+const FORUM_THREADS: Array<[string, string]> = [
+  [
+    "a XenForo thread (the Steve Hoffman forums)",
+    "Discussion in 'Music Corner' started by RecordFan, Feb 22, 2021. RecordFan Forum Resident Thread Starter Joined: Mar 3, 2010 Messages: 4,512 Daft Punk split today. Feb 22, 2021 #1 DiscoHead Forum Resident Joined: Jun 1, 2012 Messages: 1,203 RecordFan said: ↑ Daft Punk split today. Click to expand... One More Time still holds up.",
+  ],
+  [
+    "XenForo quotes",
+    "RecordFan said: ↑ The vocal is Romanthony. Click to expand... Yes, and the sample is More Spell on You. DiscoHead said: The drop is the best part. Click to expand… Agreed.",
+  ],
+  [
+    "a XenForo post header",
+    "One More Time still holds up. Feb 22, 2021 #12 DiscoHead Joined: Jun 1, 2012 The sample is More Spell on You.",
+  ],
+  [
+    "a vBulletin thread",
+    "Quote: Originally Posted by RecordFan The vocal is Romanthony. Yes, and the sample is More Spell on You. Reply With Quote 02-22-2021, 03:15 PM #3 DiscoHead Join Date: Mar 2005 Posts: 1,234 Still a classic.",
+  ],
+  [
+    "vBulletin quotes",
+    "Quote: Originally Posted by RecordFan The vocal is Romanthony. True. Quote: Originally Posted by DiscoHead The drop is great. Agreed.",
+  ],
+  [
+    "a Stack Exchange answer",
+    "It samples More Spell on You by Eddie Johns. share | improve this answer | follow edited Feb 22, 2021 at 15:00 answered Feb 21, 2021 at 10:12 Jane Q 1,234 5 12",
+  ],
+  [
+    "a Stack Exchange comment chain",
+    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20 Show 2 more comments",
+  ],
+  [
+    "a XenForo thread with day-first dates",
+    "RecordFan 22 Feb 2021 #1 The vocal is Romanthony. Joined 3 Mar 2010 Messages 4,512 DiscoHead 22 Feb 2021 #2 RIP, and the sample is More Spell on You. Joined 1 Jun 2012 Messages 1,203",
+  ],
+  [
+    "a XenForo thread with day-first dates and colons",
+    "RecordFan Joined: 3 Mar 2010 Messages: 4,512 22 Feb 2021 #1 The vocal is Romanthony. DiscoHead Joined: 1 Jun 2012 Messages: 1,203 22 Feb 2021 #2 RIP.",
+  ],
+  [
+    "a XenForo 2 thread, its user cards without colons",
+    "RecordFan Joined Mar 3, 2010 Messages 4,512 Reaction score 9,000 Feb 22, 2021 #1 The vocal is Romanthony. DiscoHead Joined Jun 1, 2012 Messages 1,203 Feb 22, 2021 #2 RIP.",
+  ],
+  [
+    "a single XenForo quote with its arrow",
+    "RecordFan said: ↑ The vocal is Romanthony, I met him in 1999. Click to expand... Yes, and the sample is More Spell on You.",
+  ],
+  ["a XenForo quote's arrow alone", "RecordFan said: ↑ The vocal is Romanthony."],
+  [
+    "a MetaFilter thread",
+    "Daft Punk have split. posted by member at 6:47 AM on February 22, 2021 [3 favorites] One More Time still sounds like the future. posted by MusicLover at 7:02 AM on February 22, 2021 [12 favorites]",
+  ],
+];
+
+describe("forum thread layouts", () => {
+  it.each(FORUM_THREADS)("leaves out %s on any site, as text or title", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+    expect(webSearchEvidence([web("https://www.example.org/thread", "A page.", text)])).toEqual([]);
+  });
+
+  it("refuses a forum thread when read back (written by older code)", async () => {
+    const [item] = webSearchEvidence([
+      web("https://www.example.org/news/one-more-time", "A page about the song."),
+    ]);
+    for (const [, text] of FORUM_THREADS) {
+      const older = { ...item, excerpt: text } as SourcedEvidence;
+      expect(restores([older]), text).toBe(false);
+      expect(await served([older]), text).toBe(false);
+      expect(recorderRefuses([older]), text).toEqual([
+        "analysis.evidence[0].excerpt: a comment thread",
+      ]);
+    }
+  });
+});
+
 /** Ordinary music writing, which reads in places like a comment thread but is not one. */
 const MUSIC_PROSE: Array<[string, string]> = [
   [
@@ -408,6 +508,123 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a K-pop song",
     "Like OOH-AHH by TWICE (2015) 4 min. Like Ooh-Ahh debut; Following in 2016 Cheer Up 3 min.",
+  ],
+  // Quoting prose: "said:", "Joined:" or a dash before a name and a date read like a forum's.
+  [
+    "an article quoting the artists",
+    "As Thomas Bangalter said: 'We wanted it to feel like a party.' Pharrell said: 'we jammed for days, and Nile Rodgers said: keep it simple.' Click to expand the full interview.",
+  ],
+  [
+    "an interview",
+    "Q: How did One More Time come together? Thomas Bangalter: We met Romanthony in Chicago. Q: And the sample? Guy-Manuel de Homem-Christo said: we never talk about samples. Interview by Jane Smith, posted by Mixmag at 9:00 AM on Feb 22, 2021.",
+  ],
+  [
+    "liner notes",
+    "Written by T. Bangalter, G-M. de Homem-Christo and A. Moore. Produced by Daft Punk. Recorded at Daft House, Paris. Vocals: Romanthony. Mastered at Translab. Messages: thanks to everyone at Virgin. Joined: Romanthony on vocals. Originally released 2000.",
+  ],
+  [
+    "a press release",
+    "PARIS, Nov 13, 2000 /PRNewswire/ -- Virgin Records today released One More Time. 'It is a celebration,' Thomas Bangalter said. Originally posted by Virgin Records. Posted by Virgin Records at 9:00 AM. Posted by Virgin Records at 4:30 PM. Share | Improve your playlist.",
+  ],
+  [
+    "a chart history",
+    "Billboard Dance Club Songs. Week of Feb 24, 2001 #1 One More Time. Week of Mar 3, 2001 #1 One More Time. Week of Mar 10, 2001 #2 One More Time.",
+  ],
+  [
+    "a tour's dates",
+    "Alive 2007 – Bercy Jun 14, 2007 at 20:00 Alive 2007 – Wembley Jun 16, 2007 at 19:30. When asked Feb 22, 2021 about the split, the label said: no comment.",
+  ],
+  // Signed journalism and listings, which read like a Stack Exchange comment's signature.
+  [
+    "signed news with an update",
+    "Daft Punk have split after 28 years. – Jane Doe, Feb 22, 2021 at 10:00 Update: a representative confirmed the news. – John Roe, Feb 22, 2021 at 12:30",
+  ],
+  [
+    "a list with signed blurbs",
+    "47. Daft Punk: One More Time. A filter house anthem built on Eddie Johns. – Jane Doe, Oct 2, 2023 at 9:00 46. The Avalanches: Since I Left You. A record built entirely of samples. – John Roe, Oct 2, 2023 at 9:00",
+  ],
+  [
+    "a live-blog",
+    "Daft Punk have announced their split with an eight-minute video, Epilogue. – Jane Doe, Feb 22, 2021 at 15:02 Nile Rodgers tweeted his thanks. – Jane Doe, Feb 22, 2021 at 15:40 Pharrell paid tribute on Instagram. – John Roe, Feb 22, 2021 at 16:10",
+  ],
+  [
+    "a tour list with venues in brackets",
+    "Alive 2007 tour dates: Paris (Bercy) – London Wembley Arena Jun 16, 2007 at 19:30 (sold out) – Dublin The O2 Jun 18, 2007 at 20:00 (sold out) – Glasgow SECC Jun 20, 2007 at 19:00.",
+  ],
+  [
+    "a tour list with weekdays",
+    "Alive 2007 dates. Bercy, Paris. – Sat Jun 14, 2007 at 20:00 Wembley Arena, London. – Sat Jun 16, 2007 at 19:30",
+  ],
+  // Asked, answered and edited notes, which read like a Stack Exchange post's.
+  [
+    "a signed article with a correction note",
+    "Discovery is a joy. – Jane Doe, Feb 22, 2021 at 10:00 (This article was edited Feb 23, 2021 at 9:00 to add a quote.)",
+  ],
+  [
+    "a write-up of a Q&A session",
+    "Fans asked Feb 22 at 10:00 whether Romanthony would return. The duo answered Feb 22 at 10:45: 'We will always love him.' Producer Todd Edwards also answered Feb 22 at 11:30 about the cut-up vocal style.",
+  ],
+  [
+    "an advice column",
+    "Q. How did Daft Punk get the One More Time vocal? asked Feb 22, 2021 at 10:00 by a reader. A. The vocal was run through a vocoder and Auto-Tune. answered Feb 23, 2021 at 9:00 by a staff writer.",
+  ],
+  [
+    "a setlist's edit history",
+    "Daft Punk Setlist at Wembley Arena, London on June 16, 2007. Robot Rock / Oh Yeah. Last updated: Feb 22, 2021. edited Feb 22, 2021 at 10:00 by a user; edited Feb 23, 2021 at 9:15 by a user.",
+  ],
+  [
+    "a fact page with an edit note",
+    "The vocalist is Romanthony. edited Feb 22, 2021 at 10:00 by staff. This was asked Feb 21, 2021 at 9:15 by a reader: is it a sample? Yes, More Spell on You by Eddie Johns.",
+  ],
+  // Dated stamps, set times and logs after a dash, which read like a Stack Exchange signature.
+  [
+    "a live-blog's update stamps",
+    "Daft Punk have split after 28 years. — Updated Feb 22, 2021 at 10:00 The duo posted an eight-minute video, Epilogue. — Updated Feb 22, 2021 at 12:30 Nile Rodgers paid tribute.",
+  ],
+  [
+    "news with its published and updated stamps",
+    "Daft Punk announce their split. – Published Feb 22, 2021 at 10:00 The duo formed in 1993. – Updated Feb 22, 2021 at 12:30",
+  ],
+  [
+    "a live-blog's key events",
+    "Key events. – Updated Feb 22 at 15:02 Nile Rodgers tweeted his thanks. – Updated Feb 22 at 15:40 Pharrell paid tribute.",
+  ],
+  [
+    "a festival's set times",
+    "Friday line-up announced. – Daft Punk Jul 14 at 22:00. – Justice Jul 14 at 23:30. – Cassius Jul 15 at 01:00.",
+  ],
+  [
+    "a festival's stages",
+    "Coachella 2006, Sahara tent. – Daft Punk Apr 29 at 21:00 The pyramid debuted here. – Depeche Mode Apr 29 at 22:30 on the main stage.",
+  ],
+  [
+    "a tour list without commas",
+    "Alive 2007 tour. – Bercy Jun 14, 2007 at 20:00 Sold out. – Wembley Jun 16, 2007 at 19:30 Sold out. – Dublin Jun 18, 2007 at 20:00",
+  ],
+  [
+    "a radio log",
+    "Most played this week. – Daft Punk Feb 22 at 10:00 One More Time. – Daft Punk Feb 22 at 14:00 Digital Love.",
+  ],
+  // A song named Messages beside a dated chart position, which reads like a XenForo post card.
+  [
+    "a chart run of a song named Messages",
+    "Orchestral Manoeuvres in the Dark – Messages 1980 single, from their debut album. UK Singles Chart: entered Oct 25, 1980 #13, its peak position.",
+  ],
+  [
+    "a discography with a song named Messages",
+    "Electricity 1979. Red Frame/White Light 1980. Messages 1980 – peaked Nov 1, 1980 #13. Enola Gay 1980.",
+  ],
+  [
+    "a chart run of Messages, day first",
+    "Messages 25 Oct 1980 – entered the UK chart; 1 Nov 1980 #13, its peak.",
+  ],
+  [
+    "a blog whose theme writes a lowercase byline",
+    "Daft Punk split: what One More Time meant. posted by admin at 9:00 AM on February 22, 2021. The Romanthony story. posted by admin at 3:15 PM on February 23, 2021. [2 comments]",
+  ],
+  [
+    "a band's line-up",
+    "Line-up. Thomas Bangalter Joined: 1993. Guy-Manuel de Homem-Christo Joined: 1993. Posts: drums, keys. Quote: 'We are robots.' Join Date: 1993.",
   ],
 ];
 

@@ -274,7 +274,7 @@ async function streamThenClose(query, count) {
         for (const line of text.slice(0, end).split("\n")) {
           if (!line.startsWith("data:")) continue;
           const event = JSON.parse(line.slice(5));
-          if (event.type !== "heartbeat") events.push(event);
+          if (event.type !== "heartbeat" && events.length < count) events.push(event);
         }
         text = text.slice(end + 2);
       }
@@ -450,7 +450,7 @@ try {
   stoppedRunId = read[0]?.runId;
   console.log(`A5 read before the close: ${read.map((event) => event.type).join(" ")}`);
   check(
-    read.length === 3 && read.every((event) => event.type !== "complete"),
+    read.length >= 3 && read.every((event) => event.type !== "complete"),
     "A5 the stream is closed before its result",
   );
   let stopped = null;

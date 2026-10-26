@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import recordingRaw from '../../../../../fixtures/replays/one-more-time-daft-punk.json?raw';
 import type { AgentLog } from '../../types';
 import { appendLog, droppedLines, LOG_LIMIT, type NewLog, writtenLines } from './runLog';
 
@@ -69,9 +70,19 @@ describe('appendLog', () => {
     expect(writtenLines(logs)).toBe(LOG_LIMIT * 3);
   });
 
-  it('keeps 100 lines: the recorded demo run whole, and no more than a log needs', () => {
-    // 20 status lines in fixtures/replays/one-more-time-daft-punk.json, and the page's own 3:
-    // about four times that. A different limit is a choice to make here, with its evidence.
+  it('keeps 100 lines: several times the recorded demo run, replayed whole', () => {
+    const record = JSON.parse(recordingRaw) as {
+      events: Array<{ event: { type: string; message?: string } }>;
+    };
+    const status = record.events.filter(
+      ({ event }) => event.type === 'status' && event.message,
+    ).length;
+    // Replayed, the page shows those lines, the replay notice, and its own three ("Searching
+    // for…", "Connected…", the line that ends the run).
+    const replayed = status + 1 + 3;
+    expect(replayed).toBeGreaterThan(10);
+    expect(LOG_LIMIT).toBeGreaterThanOrEqual(4 * replayed);
+    // A different limit is a choice to make here, with its evidence.
     expect(LOG_LIMIT).toBe(100);
   });
 

@@ -172,8 +172,10 @@ test("Stop is not offered once the run has completed, nor beside the picker", as
 
   await page.getByRole("button", { name: "Search again" }).click();
   await search(page, "One More Time");
+  // Read once, the moment the completion screen shows: the results open by themselves a few
+  // seconds later, which would take the progress screen (and any Stop on it) away.
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+  expect(await page.getByRole("button", { name: "Stop", exact: true }).count()).toBe(0);
 });
 
 test("Stop while the picked track is being analysed closes the resume stream", async ({ page }) => {

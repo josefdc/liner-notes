@@ -4,10 +4,11 @@ import type { AgentLog } from '../../types';
 // before it once.
 
 /**
- * The most lines a run's log keeps. The recorded demo run (fixtures/replays) writes 23 lines,
- * its 20 status lines and the page's own three; a live run sends a few more at most (a picker,
- * a second follow-up step, the check's lines). A run that goes far past this is repeating
- * itself, and its oldest lines are dropped.
+ * The most lines a run's log keeps: several times what a whole run writes. The recorded demo
+ * run (fixtures/replays/one-more-time-daft-punk.json: its status events, plus the page's own
+ * lines) fits in it with room to spare, and a live run adds only a few more (a picker, a second
+ * follow-up step, the check's lines). A run that goes far past this is repeating itself, and its
+ * oldest lines are dropped. Pinned in runLog.test.ts, which counts the recording's lines.
  */
 export const LOG_LIMIT = 100;
 

@@ -246,6 +246,28 @@ test("a reader at the end stays there when the window narrows and the lines wrap
   await releaseStream(page, "finish");
 });
 
+test("a reader scrolled up mid-log stays on their line when the window narrows and the lines wrap", async ({
+  page,
+}) => {
+  const log = await logAtHalf(page, 1440);
+  await log.evaluate((box) => {
+    box.style.overflowAnchor = "none";
+  });
+  await log.hover();
+  await page.mouse.wheel(0, -300);
+  await expect.poll(() => fromEnd(log)).toBeGreaterThan(200);
+  const before = await lineInView(log);
+  // No new line arrives: only the lines' own height changes.
+  const tall = await log.evaluate((box) => box.scrollHeight);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect.poll(() => log.evaluate((box) => box.scrollHeight)).toBeGreaterThan(tall + 100);
+  await expect
+    .poll(async () => Math.abs((await lineInView(log, before.text)).offset - before.offset))
+    .toBeLessThanOrEqual(1);
+  await releaseStream(page, "half");
+  await releaseStream(page, "finish");
+});
+
 test("log labels and their icons keep off the measured cyan and the sourced amber", async ({
   page,
 }) => {

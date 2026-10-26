@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentLog } from '../types';
 import { Terminal, LoaderCircle, CircleCheck } from 'lucide-react';
 import { logStyle } from './console/logCodes';
@@ -29,15 +29,23 @@ function lineById(box: HTMLElement, id: string): HTMLElement | null {
   return null;
 }
 
-/** The first line whose bottom is inside the log's view, and where it starts in it. */
+/**
+ * The reader's line: the first one that starts inside the log's view (a line that starts above
+ * it may wrap anew and change height), or the line that fills the whole view; and where it
+ * starts in the view, in pixels.
+ */
 function lineAtTop(box: HTMLElement): { id: string; offset: number } | null {
-  const top = box.getBoundingClientRect().top;
+  const view = box.getBoundingClientRect();
+  let covering: { id: string; offset: number } | null = null;
   for (const row of box.querySelectorAll<HTMLElement>('[data-log-id]')) {
-    if (row.getBoundingClientRect().bottom > top && row.dataset.logId) {
-      return { id: row.dataset.logId, offset: row.getBoundingClientRect().top - top };
-    }
+    const { top, bottom } = row.getBoundingClientRect();
+    const id = row.dataset.logId;
+    if (!id || bottom <= view.top) continue;
+    if (top >= view.top - 0.5 && top < view.bottom) return { id, offset: top - view.top };
+    if (top < view.top) covering = { id, offset: top - view.top };
+    else break;
   }
-  return null;
+  return covering;
 }
 
 // One log line: the time, the step in words (with its icon), and the message.
@@ -108,14 +116,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
     return () => clearInterval(interval);
   }, [logs.length, isComplete]);
 
-  // Keep the newest line in view by scrolling the log itself, at once: never the page or the
-  // views around it. A reader who has scrolled up to an earlier line stays on it: when older
-  // lines are dropped above it (or the note about them appears), the log is scrolled so that
-  // line is where it was. The log does this itself rather than leave it to the browser's scroll
-  // anchoring, which not every browser has (overflow-anchor is off on the log, so the two never
-  // both move it).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
-  useLayoutEffect(() => {
+  // Keeps the reader's place by scrolling the log itself, at once: never the page or the views
+  // around it. A reader at the end sees the newest line. A reader who has scrolled up to an
+  // earlier line stays on it: when the lines above it change (older ones dropped, the note
+  // about them appearing, lines wrapping anew), the log is scrolled so that line is where it
+  // was. The log does this itself rather than leave it to the browser's scroll anchoring, which
+  // not every browser has (overflow-anchor is off on the log, so the two never both move it).
+  const keepPlace = useCallback(() => {
     const box = consoleRef.current;
     if (!box) return;
     const anchor = anchorRef.current;
@@ -129,20 +136,21 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
       anchorRef.current = lineAtTop(box);
     }
     ownScrollRef.current = box.scrollTop;
-  }, [logs, isComplete]);
+  }, []);
 
-  // Lines can change height after they are drawn (a font loads, the window narrows and they
-  // wrap): a reader at the end stays there.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
+  useLayoutEffect(keepPlace, [logs, isComplete]);
+
+  // Lines can change height after they are drawn, with no line added (a font loads, the window
+  // narrows and they wrap): the reader's place is kept then too.
   useEffect(() => {
     const box = consoleRef.current;
     const lines = linesRef.current;
     if (!box || !lines || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
-      if (atEndRef.current) box.scrollTop = box.scrollHeight;
-    });
+    const observer = new ResizeObserver(keepPlace);
     observer.observe(lines);
     return () => observer.disconnect();
-  }, []);
+  }, [keepPlace]);
 
   const handleScroll = () => {
     const box = consoleRef.current;

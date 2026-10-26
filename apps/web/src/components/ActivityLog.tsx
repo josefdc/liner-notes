@@ -13,39 +13,45 @@ interface ActivityLogProps {
 // The number of latest entries the log shows.
 const SHOWN = 6;
 
-/** How often the entries' times are brought up to date while the log is open. */
-export const RELATIVE_TIME_TICK_MS = 30_000;
+/** How often the times are brought up to date while an entry is under a minute old. */
+export const FRESH_TICK_MS = 10_000;
+/** How often they are brought up to date once every entry is a minute old or more. */
+export const SETTLED_TICK_MS = 30_000;
 
 /**
- * How long before `now` an entry was logged, in words. Its steps are no finer than the clock
- * that updates it (RELATIVE_TIME_TICK_MS): under a minute is "Just now".
+ * How long before `now` an entry was logged, in words, in steps no finer than the clock that
+ * updates them: "Just now" under 10 s, then tens of seconds, minutes and hours.
  */
 export function formatRelativeTime(timestamp: string, now: number): string {
   const diff = Math.floor((now - new Date(timestamp).getTime()) / 1000);
   // A time this page cannot read, or one ahead of its clock, reads as just now too.
-  if (!Number.isFinite(diff) || diff < 60) return 'Just now';
+  if (!Number.isFinite(diff) || diff < 10) return 'Just now';
+  if (diff < 60) return `${Math.floor(diff / 10) * 10} s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   return `${Math.floor(diff / 3600)} h ago`;
 }
 
 /**
- * The time the entries are measured from: read when the log opens, then once every
- * RELATIVE_TIME_TICK_MS while it stays open. One timer for the whole log, none per entry.
+ * The time the entries are measured from: read when the log opens, then on one timer while it
+ * stays open, every FRESH_TICK_MS while the newest entry (logged at `newest`) is under a minute
+ * old and every SETTLED_TICK_MS after that. None per entry.
  */
-function useClock(running: boolean): number {
+function useClock(running: boolean, newest: number): number {
   const [now, setNow] = useState(() => Date.now());
+  const fresh = now - newest < 60_000;
   useEffect(() => {
     if (!running) return;
     setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), RELATIVE_TIME_TICK_MS);
+    const timer = setInterval(() => setNow(Date.now()), fresh ? FRESH_TICK_MS : SETTLED_TICK_MS);
     return () => clearInterval(timer);
-  }, [running]);
+  }, [running, fresh]);
   return now;
 }
 
 const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const now = useClock(isExpanded);
+  const newest = logs.length > 0 ? new Date(logs[logs.length - 1].timestamp).getTime() : 0;
+  const now = useClock(isExpanded, newest);
   // The run's lines, those the log no longer keeps included.
   const written = writtenLines(logs);
 

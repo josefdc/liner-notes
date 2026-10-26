@@ -39,7 +39,13 @@ import {
   evidenceScope,
   isPrimaryRecordEvidence,
 } from "../../sources/records.js";
-import { isLyricPage, maskHandles, type WebResult, webPageIssue } from "../../sources/search.js";
+import {
+  isLyricPage,
+  maskHandles,
+  type WebResult,
+  webPageIssue,
+  webTitle,
+} from "../../sources/search.js";
 import { isPreviewUrl } from "../../store/runs.js";
 import { isErrorPage, isPlaceholder, type SearchedTrack } from "./plan.js";
 
@@ -188,8 +194,8 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
     if (!url || isPlaceholder(text) || isErrorPage(result, track)) continue;
     if (isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) continue;
     if (seen.has(url)) continue;
-    const title = maskHandles(
-      typeof result.title === "string" && result.title.trim() ? result.title.trim() : url,
+    const title = webTitle(
+      typeof result.title === "string" && result.title.trim() ? result.title : url,
     );
     const masked = maskHandles(text);
     const item: Evidence = {

@@ -8,8 +8,16 @@
 import { InMemoryStore } from "@langchain/langgraph";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.hoisted(() => {
+  // Set before the search module loads, so a local .env does not supply a real key.
+  process.env.TAVILY_API_KEY = "tvly-test-key";
+});
+
 import { leaks } from "../../replay/recorder.js";
+import { searchSamples } from "../../sources/search.js";
+import { json, stubFetch } from "../../sources/testing/fetchStub.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { readStoredResult } from "../storedResults.js";
 import { restoredEvidence, type SourcedEvidence, webSearchEvidence } from "./evidencePack.js";
@@ -76,12 +84,20 @@ const PROSE = [
   "The sample comes from More Spell on You by Eddie Johns.",
   "Daft Punk · Official channel",
   "wow",
+  "Following the success of Homework, Daft Punk spent the late '90s making Discovery.",
+  "Like its predecessor, the album drew on '70s disco and '80s funk.",
+  "Walk Like an Egyptian topped the chart for 4 weeks.",
+  "A1: One More Time A2: Aerodynamic",
+  "R.E.M.: Losing My Religion, live.",
 ];
 /** Pieces of handles, profile boilerplate and comment threads. */
 const RISKY = [
   (n: number) => `@fan_${n}x`,
   (n: number) => `@josé.m${n}`,
   (n: number) => `(@band_${n})`,
+  (n: number) => `@john-smith-${n}`,
+  (n: number) => `聴いてる@fan_${n}`,
+  (n: number) => `RT@fan_${n}:`,
   (n: number) => `user_${n}'s profile picture`,
   (n: number) => `${(n % 5) + 1}w`,
   () => "Reply",
@@ -97,7 +113,7 @@ const URLS = [
   "https://www.threads.com/@someone/post/1",
 ];
 
-/** The two texts the reviewers found: kept when written, refused when read back. */
+/** Two shapes that once passed one check and failed the other: kept when written, refused when read back. */
 const COUNTEREXAMPLES = [
   `${Array.from({ length: 18 }, (_, i) => `@fan_${i}x wow`).join(" ")} ${"One More Time was released in 2000 on Virgin. ".repeat(12)}`.slice(
     0,
@@ -166,7 +182,15 @@ describe("the text of a web page", () => {
       ),
       web(
         "https://www.example.org/post/2",
-        "Comments jane_doe: love it! john.smith: same here! mark99: still a banger",
+        "Comments jane_doe: love it! john.smith87: same here! mark99: still a banger",
+      ),
+      web(
+        "https://www.example.org/post/3",
+        "dj_someone's profile picture Love this track! The drop at 1:20 is the best part.",
+      ),
+      web(
+        "https://www.example.org/post/4",
+        "@first_user @second.user @third_user @fourth_user wow",
       ),
       web(
         "https://www.example.org/news/one-more-time",
@@ -212,5 +236,130 @@ describe("the text of a web page", () => {
     expect(recorderRefuses([older as SourcedEvidence])).toEqual([
       "analysis.evidence[0].excerpt: a private @handle",
     ]);
+  });
+});
+
+/** Ordinary music writing, which reads in places like a comment thread but is not one. */
+const MUSIC_PROSE: Array<[string, string]> = [
+  [
+    "an album's history",
+    "Following the success of Homework, Daft Punk spent the late '90s making Discovery. Like its predecessor, the album drew on '70s disco and '80s funk, and One More Time opened it.",
+  ],
+  [
+    "a song named with Like",
+    "Smells Like Teen Spirit, the lead single from Nevermind, buried '80s hair metal and defined the '90s. Cobain said he wrote Smells Like Teen Spirit trying to write the ultimate pop song.",
+  ],
+  [
+    "Like and Following with decades",
+    "Walk Like an Egyptian was the Bangles' biggest hit of the '80s. Following its release in 1986 it topped the Billboard Hot 100 for 4 weeks; in the '90s it was briefly banned from radio.",
+  ],
+  [
+    "Like a Prayer",
+    "Like a Prayer is a song by Madonna. Following Like a Virgin, it defined the late 80s, and remained a staple in the 90s.",
+  ],
+  [
+    "a long song",
+    "Like a Rolling Stone (1965) changed rock in the 60s and 70s. Like many of Dylan's songs it runs over 6 min.",
+  ],
+  [
+    "Follow You Follow Me",
+    "Follow You Follow Me is a song by Genesis, their first UK top 10 hit, a soft rock staple of the 70s and 80s.",
+  ],
+  [
+    "record formats",
+    "The single was pressed on 7-inch 45s and 12s for clubs. Like the album version, Following its release it charted.",
+  ],
+  [
+    "durations",
+    "The album version runs 5 min 20 s; the radio edit, 3 min 55 s. Following the single, Like Da Funk returned to the charts.",
+  ],
+  [
+    "a tracklist",
+    "Discovery tracklist A1: One More Time A2: Aerodynamic B1: Digital Love B2: Harder, Better, Faster, Stronger",
+  ],
+  [
+    "a box set",
+    "CD1: Homework remastered. CD2: Live 1997, recorded in Birmingham. 01: Daftendirekt.",
+  ],
+  ["band names", "Best covers of the year. R.E.M.: Losing My Religion, live. U2: One, unplugged."],
+  [
+    "a quoted artist",
+    "In an interview will.i.am: 'We wanted it to feel like a party.' Later, will.i.am: 'It just clicked.'",
+  ],
+  [
+    "news of a band's profile picture",
+    "In 2021 the band changed Daft Punk's profile picture on Instagram to an hourglass, a day before Epilogue.",
+  ],
+  [
+    "a video description",
+    "Daft Punk - One More Time (Official Video). Follow Daft Punk: Like us on Facebook. 3:55 runtime. Released 2000.",
+  ],
+  [
+    "a label page",
+    "Virgin Records: Follow us. New releases this week. Daft Punk, One More Time, 12 inch single, 2000.",
+  ],
+  ["a review", "Rating: 5 stars. Reviewed 2y ago by staff. Likes: 120. Replies: 4."],
+  [
+    "a chart run",
+    "Released 30 Nov 2000. Peaked at No. 1 in France for 5 w. Like Da Funk, it was a hit. Follow-up Aerodynamic.",
+  ],
+  [
+    "a K-pop song",
+    "Like OOH-AHH by TWICE (2015) 4 min. Like Ooh-Ahh debut; Following in 2016 Cheer Up 3 min.",
+  ],
+];
+
+describe("ordinary music writing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(MUSIC_PROSE)("keeps %s in the evidence", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/page", text)])).toHaveLength(1);
+  });
+
+  it("keeps all of it in the search's answer", async () => {
+    const results = MUSIC_PROSE.map(([, content], i) => ({
+      title: `Page ${i}`,
+      url: `https://www.example.org/page/${i}`,
+      content,
+    }));
+    stubFetch((call) =>
+      call.url === "https://api.tavily.com/search" ? json({ results }) : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "One More Time",
+      artistName: "Daft Punk",
+    });
+
+    expect(JSON.parse(text).results).toHaveLength(MUSIC_PROSE.length);
+  });
+});
+
+describe("handles masked whole", () => {
+  it("masks hyphenated handles, handles after other scripts or RT, and keeps e-mail addresses", () => {
+    const [item] = webSearchEvidence([
+      web(
+        "https://www.example.org/news/one-more-time",
+        "One More Time was released in November 2000 on Virgin, with a video by Leiji Matsumoto. @john-smith-1987 and @jane-doe.bsky.social liked it. 今日も聴いてる@someone_jp. RT@fan_page: wow. Write to press@virgin.example.",
+      ),
+    ]);
+
+    expect(item.excerpt).toBe(
+      "One More Time was released in November 2000 on Virgin, with a video by Leiji Matsumoto. @… and @… liked it. 今日も聴いてる@…. RT@…: wow. Write to press@virgin.example.",
+    );
+  });
+
+  it("cuts a long title before it is checked or stored", () => {
+    const [item] = webSearchEvidence([
+      web(
+        "https://www.example.org/news/one-more-time",
+        "A page about the song.",
+        "t.".repeat(5000),
+      ),
+    ]);
+
+    expect(item.title.length).toBeLessThanOrEqual(300);
   });
 });

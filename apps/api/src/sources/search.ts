@@ -66,10 +66,10 @@ export const LYRIC_SITES = [
 
 /**
  * Social platforms and their short-link hosts: their pages are page chrome, comments and the
- * handles of private people, and weak evidence of a song's history. Excluded in the request and
- * filtered from the answer, on any subdomain (m.facebook.com, old.reddit.com) and through a
- * translate proxy. YouTube is not one of them: a video page carries a title, a channel (its
- * publisher) and a description.
+ * handles of private people, and weak evidence of a song's history. Filtered from the answer by
+ * exact host or subdomain (m.facebook.com, old.reddit.com) and through a translate proxy, and
+ * excluded in the request except for SHORT_SITES. YouTube is not one of them: a video page
+ * carries a title, a channel (its publisher) and a description.
  */
 export const SOCIAL_SITES = [
   "instagram.com",
@@ -77,6 +77,7 @@ export const SOCIAL_SITES = [
   "tiktok.com",
   "vm.tiktok.com",
   "facebook.com",
+  "fb.com",
   "fb.watch",
   "x.com",
   "twitter.com",
@@ -87,7 +88,16 @@ export const SOCIAL_SITES = [
   "reddit.com",
   "redd.it",
   "pinterest.com",
+  "tumblr.com",
 ] as const;
+
+/**
+ * Social sites never sent in the request's `exclude_domains`: names so short that a match by
+ * suffix would also exclude other sites (x.com would take complex.com and vox.com with it). The
+ * request's list and the answer's filter differ for that reason only: the answer's filter
+ * matches exact hosts and subdomains, so these are left out there.
+ */
+const SHORT_SITES: ReadonlySet<string> = new Set(["x.com", "t.co", "fb.com"]);
 
 /** A host as Google's translate proxy writes it: "genius.com" → "genius-com.translate.goog". */
 function translateProxyHost(host: string): string {
@@ -100,11 +110,11 @@ function unproxyHost(host: string): string {
   return label.replace(/--/g, "\0").replace(/-/g, ".").replace(/\0/g, "-");
 }
 
-const EXCLUDED_SITES = [...LYRIC_SITES, ...SOCIAL_SITES];
+const EXCLUDED_SITES = [...LYRIC_SITES, ...SOCIAL_SITES.filter((site) => !SHORT_SITES.has(site))];
 
 /**
- * Domains sent as `exclude_domains`: the lyric sites and social platforms, and their
- * translate-proxy hosts.
+ * Domains sent as `exclude_domains`: the lyric sites and social platforms (but SHORT_SITES), and
+ * their translate-proxy hosts.
  */
 export const EXCLUDED_DOMAINS = [...EXCLUDED_SITES, ...EXCLUDED_SITES.map(translateProxyHost)];
 
@@ -171,10 +181,12 @@ export function isSocialPage(url: string): boolean {
 }
 
 /**
- * An @handle in text: an @ not inside a word (an e-mail address is not one), then letters,
- * digits, "_" or ".", not ending with ".". A masked handle ("@…") is not one.
+ * An @handle in text: an @ not after an ASCII letter, digit or e-mail character (an e-mail
+ * address is not one; a handle right after another script or after "RT" is), then letters,
+ * digits, "_", "." or "-", not ending with "." or "-". A masked handle ("@…") is not one.
  */
-const HANDLE_IN_TEXT = /(?<![\p{L}\p{N}_.@])@[\p{L}\p{N}_](?:[\p{L}\p{N}_.]*[\p{L}\p{N}_])?/gu;
+const HANDLE_IN_TEXT =
+  /(?:(?<![A-Za-z0-9._%+\-@])|(?<=\bRT))@[\p{L}\p{N}_](?:[\p{L}\p{N}_.-]*[\p{L}\p{N}_])?/gu;
 const MASKED = "@…";
 
 /** `text` with every @handle masked as "@…": a private person's handle is never stored. */
@@ -182,38 +194,83 @@ export function maskHandles(text: string): string {
   return text.replace(HANDLE_IN_TEXT, MASKED);
 }
 
-/** "someone's profile picture": the alt text a social page writes beside each commenter. */
-const PROFILE_PICTURE = /['’]s profile (?:picture|photo)/i;
-/** A word that is a handle, masked or not, with the punctuation around it. */
-const HANDLE_WORD = /^\(?@(?:…|[\p{L}\p{N}_.]+)[),:;.!?·]*$/u;
-/** The buttons and labels of a comment thread. */
-const THREAD_LABEL =
-  /(?<![\p{L}\p{N}])(?:Reply|Replies|Like|Likes|Liked by|Follow|Following)(?![\p{L}\p{N}])/gu;
-/** A comment's age as a thread shows it: "3w", "2d", "5 h". */
-const RELATIVE_TIME =
-  /(?<![\p{L}\p{N}.,])\d{1,3} ?(?:s|m|h|d|w|y|min|hr|hrs|wk|wks|yr|yrs)(?![\p{L}\p{N}])/gu;
-/**
- * A comment as "name: text", where the name is a user name (it has "_", "." or a digit, and a
- * letter) or a masked handle; "Producer: …" and "Label: …" are not.
- */
-const NAME_LINE =
-  /(?:^|[\s.!?])(?:@…|(?=[\p{L}\p{N}_.]*\p{L})[\p{L}\p{N}]*[_.\d][\p{L}\p{N}_.]*):\s/gu;
+/** The longest web page title kept, cut before it is checked or stored. */
+export const MAX_WEB_TITLE = 300;
 
-const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
+/** A web page's title as it is checked and stored: cut, and its handles masked. */
+export function webTitle(title: string): string {
+  return maskHandles(title.trim().slice(0, MAX_WEB_TITLE).trimEnd());
+}
+
+/**
+ * A user name as a comment thread shows it: a lower-case token with a digit or "_" after its
+ * first letter ("jane_doe", "mark99", "some.one2"), or a masked handle. Never a tracklist
+ * position ("a1", "cd2"), a band name ("R.E.M.", "U2") or a word.
+ */
+const USER_NAME = /^(?:@…|[a-z][a-z0-9_.]*[_\d][a-z0-9_.]*)$/;
+const TRACK_POSITION = /^[a-z]{1,2}\d{1,2}$/;
+const isUserName = (token: string) =>
+  USER_NAME.test(token) && !TRACK_POSITION.test(token) && !token.endsWith(".");
+
+/** "jane_doe's profile picture": the alt text a social page writes beside each commenter. */
+const PROFILE_PICTURE = /(?:^|[\s(])(\S+?)['’]s profile (?:picture|photo)/gu;
+/** A word that is a handle, masked or not, with the punctuation around it. */
+const HANDLE_WORD = /^\(?(?:RT)?@(?:…|[\p{L}\p{N}_.-]+)[),:;.!?·]*$/u;
+/** The buttons of a comment thread. */
+const THREAD_LABELS: ReadonlySet<string> = new Set([
+  "Reply",
+  "Replies",
+  "Like",
+  "Likes",
+  "Follow",
+  "Following",
+]);
+/** A comment's age as a thread shows it, glued: "3w", "2d", "5h", "10m" (never "'90s" or "5 min"). */
+const AGE = /^\d{1,3}[wdhm]$/;
+/** How far a thread's button stands from its comment's age, in words. */
+const LABEL_REACH = 3;
+/** "name: comment", where the name is a token of its own. */
+const NAME_LINE = /(?:^|[\s.!?])([^\s:]+):(?=\s)/gu;
+
+/** A token without the punctuation around it. */
+const bare = (token: string) => token.replace(/^[^\p{L}\p{N}@…]+|[^\p{L}\p{N}…]+$/gu, "");
+
+/** How many comments' ages stand within LABEL_REACH words of their own thread button. */
+function labelledAges(words: readonly string[]): number {
+  const tokens = words.map(bare);
+  const used = new Set<number>();
+  let pairs = 0;
+  tokens.forEach((token, i) => {
+    if (!AGE.test(token)) return;
+    for (let d = 1; d <= LABEL_REACH; d++) {
+      for (const j of [i + d, i - d]) {
+        if (j >= 0 && j < tokens.length && !used.has(j) && THREAD_LABELS.has(tokens[j])) {
+          used.add(j);
+          pairs++;
+          return;
+        }
+      }
+    }
+  });
+  return pairs;
+}
 
 /**
  * Why a web page's text (as it is stored: an excerpt or a title) is not kept, or null:
  * - "a private @handle": a handle that was not masked (maskHandles);
- * - "profile or handle boilerplate": any "'s profile picture" (it always stands beside a
- *   commenter's handle), or three or more handles in a row or that make up a fifth of the words;
- * - "a comment thread": its labels with comments' ages (two "Reply", "Like" or "Follow" and two
- *   ages such as "3w"), or two "name: comment" lines.
- * One handle in a sentence ("Thomas Bangalter (@…)") is kept. The web tier runs this on the
- * text it stores, and every reader of stored evidence runs it again on the same text.
+ * - "profile or handle boilerplate": "'s profile picture" right after a user name, or three or
+ *   more handles in a row or that make up a fifth of the words;
+ * - "a comment thread": two comments' ages ("3w") each next to a thread button ("Reply",
+ *   "Like", "Follow"), or three "name: comment" lines whose names are user names.
+ * One handle in a sentence ("Thomas Bangalter (@…)"), "Following the success of …", "the '90s",
+ * a tracklist ("A1: …") and "R.E.M.: …" are kept. The web tier runs this on the text it stores,
+ * and every reader of stored evidence runs it again on the same text.
  */
 export function webTextIssue(text: string): string | null {
-  if (count(text, HANDLE_IN_TEXT) > 0) return "a private @handle";
-  if (PROFILE_PICTURE.test(text)) return "profile or handle boilerplate";
+  if ((text.match(HANDLE_IN_TEXT)?.length ?? 0) > 0) return "a private @handle";
+  for (const [, name] of text.matchAll(PROFILE_PICTURE)) {
+    if (isUserName(name)) return "profile or handle boilerplate";
+  }
   const words = text.split(/\s+/).filter(Boolean);
   let handles = 0;
   let run = 0;
@@ -227,8 +284,10 @@ export function webTextIssue(text: string): string | null {
     }
   }
   if (handles >= 3 && handles / words.length >= 0.2) return "profile or handle boilerplate";
-  if (count(text, THREAD_LABEL) >= 2 && count(text, RELATIVE_TIME) >= 2) return "a comment thread";
-  if (count(text, NAME_LINE) >= 2) return "a comment thread";
+  if (labelledAges(words) >= 2) return "a comment thread";
+  let names = 0;
+  for (const [, name] of text.matchAll(NAME_LINE)) if (isUserName(name)) names++;
+  if (names >= 3) return "a comment thread";
   return null;
 }
 
@@ -314,15 +373,20 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<We
 
 /**
  * A result as the search keeps it, or null: no lyric or social platform page, handles masked in
- * its title and text, and nothing whose text or title is boilerplate or a comment thread. Run on
- * a result it made, it gives the same result, so a cassette can hold the kept results only.
+ * its title and text, the title cut to MAX_WEB_TITLE and the text to MAX_RESULT_TEXT (without a
+ * space left at the cut), and nothing whose text or title is boilerplate or a comment thread.
+ * Run on a result it made, it gives the same result, so a cassette can hold the kept results
+ * only. A cassette therefore keeps the decisions of the rules it was recorded with: a result a
+ * later rule would keep is not in it.
  */
 function keptResult(r: { title?: unknown; url?: unknown; content?: unknown }): WebResult | null {
   if (typeof r?.url !== "string" || typeof r.content !== "string") return null;
   if (isLyricPage(r.url) || isSocialPage(r.url)) return null;
-  const content = maskHandles(r.content.replace(/\s+/g, " ").trim()).slice(0, MAX_RESULT_TEXT);
+  const content = maskHandles(r.content.replace(/\s+/g, " ").trim())
+    .slice(0, MAX_RESULT_TEXT)
+    .trimEnd();
   if (!content) return null;
-  const title = maskHandles(typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url);
+  const title = webTitle(typeof r.title === "string" && r.title.trim() ? r.title : r.url);
   if (webPageIssue({ url: r.url, title, text: content })) return null;
   return { title, url: r.url, content };
 }

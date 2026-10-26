@@ -135,13 +135,14 @@ describe("web research searches", () => {
           "instagram.com",
           "tiktok.com",
           "facebook.com",
-          "x.com",
           "twitter.com",
           "threads.net",
           "reddit.com",
         ]),
       );
       expect(body.exclude_domains).not.toContain("youtube.com");
+      // x.com is left out by the answer's filter only (see SOCIAL_SITES).
+      expect(body.exclude_domains).not.toContain("x.com");
       expect(text).not.toContain("SOCIAL_TEXT_SHOULD_NOT_APPEAR");
       expect(JSON.parse(text).results).toHaveLength(1);
     },
@@ -206,7 +207,6 @@ describe("web research searches", () => {
         "instagr.am",
         "fb.watch",
         "redd.it",
-        "t.co",
         "vm.tiktok.com",
         "threads-com.translate.goog",
       ]),
@@ -238,6 +238,51 @@ describe("web research searches", () => {
     ]);
   });
 
+  it("leaves out Tumblr and fb.com, and sends no short or suffix-ambiguous name in the request", async () => {
+    const pages = [
+      "https://www.tumblr.com/daftpunkfan/123",
+      "https://daftpunkfan.tumblr.com/post/1",
+      "https://fb.com/daftpunk",
+      "https://x.com/someone/status/1",
+      "https://t.co/abc123",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(expect.arrayContaining(["tumblr.com", "tumblr-com.translate.goog"]));
+    for (const name of ["x.com", "t.co", "fb.com", "x-com.translate.goog", "t-co.translate.goog"]) {
+      expect(excluded, name).not.toContain(name);
+    }
+    // Hosts that only end like a short name are not social pages.
+    for (const url of ["https://www.vox.com/a", "https://www.complex.com/b", "https://kfb.com/c"]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+  });
+
+  it("replays a result cut at 800 characters as it was live, also when the cut lands on a space", async () => {
+    const head = `${"x".repeat(10)} ${"Daft Punk recorded One More Time in Paris. ".repeat(20)}`;
+    const content = `${head.slice(0, 799)} and the rest of the page goes on for a while.`;
+    expect(content[799]).toBe(" ");
+    const page = { ...WHOSAMPLED, content };
+    const run = await recordThenReplay(
+      (call) => (call.url === TAVILY ? json(answer([page])) : undefined),
+      () => searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" }),
+    );
+
+    expect(run.replayCalls).toBe(0);
+    expect(run.replayed).toEqual(run.live);
+  });
+
   it("records only what it keeps: no social page or handle reaches a cassette", async () => {
     const page = {
       ...WHOSAMPLED,
@@ -251,7 +296,7 @@ describe("web research searches", () => {
     const thread = {
       ...WHOSAMPLED,
       url: "https://example.org/post/1",
-      content: "someone's profile picture someone 2w Love it",
+      content: "some_one's profile picture some_one 2w Love it",
     };
     const run = await recordThenReplay(
       (call) => (call.url === TAVILY ? json(answer([instagram, thread, page])) : undefined),

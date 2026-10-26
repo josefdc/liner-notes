@@ -224,7 +224,7 @@ describe("evidence given back by the research cache", () => {
         "an excerpt of profile boilerplate",
         {
           ...page,
-          excerpt: "someone's profile picture someone 2w Love it someone.else's profile picture",
+          excerpt: "some_one's profile picture some_one 2w Love it some.one2's profile picture",
         },
       ],
       ["an item that breaks the contract", { ...primary, url: null, recordRef: null }],

@@ -254,7 +254,7 @@ describe("scoutNode's stored results", () => {
     });
     for (const item of [
       webItem("https://www.instagram.com/p/abc123/", "A caption about the song."),
-      webItem("https://example.org/post", "someone's profile picture someone 2w Love it"),
+      webItem("https://example.org/post", "some_one's profile picture some_one 2w Love it"),
     ]) {
       const store = new InMemoryStore();
       await store.put(TRACKS_NAMESPACE, keyOf(track.id), {

@@ -834,7 +834,7 @@ describe("the recorder", () => {
           analysis: {
             evidence: [
               webItem("https://www.instagram.com/p/abc123/"),
-              webItem("https://example.org/post", "someone's profile picture someone 2w Love it"),
+              webItem("https://example.org/post", "some_one's profile picture some_one 2w Love it"),
             ],
           },
         },

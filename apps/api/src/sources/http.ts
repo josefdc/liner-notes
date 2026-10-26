@@ -595,22 +595,30 @@ function parseRetryAfter(value: string | null): number | undefined {
 
 const isJsonType = (contentType: string) => /\bjson\b/i.test(contentType);
 
-/** Markup, also escaped as entities ("&lt;", "&#60;", "&#x3c;"). */
-export const MARKUP = /[<>]|&(?:lt|gt|#0*6[02]|#x0*3[ce]);/i;
-/** A stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)") or a Python traceback. */
+/** Markup, also escaped as entities, once or more ("&lt;", "&#60;", "&#x3c;", "&amp;lt;"). */
+export const MARKUP = /[<>]|&(?:amp;)*(?:lt|gt|#0*6[02]|#x0*3[ce]);/i;
+/**
+ * A stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)", with a path, so "at 10:30:00"
+ * is not one) or a Python traceback.
+ */
 const STACK_TRACE =
-  /\bat\s+(?:\S+\s+\()?\S+:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+  /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+/** A signature or token parameter, also in a link written without a scheme. */
+const SIGNED_PARAM = /(?:^|[?&;~\s])(?:sig|signature|token|hdnts|hdnea)=|X-Amz-/i;
 
 /**
  * A source's own reason for an error, as a short line of plain text: undefined when it is not a
- * string, is empty, or holds markup (an HTML page in a JSON field, also entity-escaped) or a
- * stack trace; links become "[link]" (a URL can carry a signature); cut to MAX_DETAIL. Error
+ * string, is empty, or holds markup (an HTML page in a JSON field, also entity-escaped), a
+ * stack trace or a signature or token parameter (a link without a scheme can carry one); links
+ * become "[link]"; cut to MAX_DETAIL. Error
  * messages are stored with the result and sent to the client, so a page never reaches them.
  */
 export function plainReason(text: unknown): string | undefined {
   if (typeof text !== "string") return undefined;
   const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
-  if (!line || MARKUP.test(line) || STACK_TRACE.test(line)) return undefined;
+  if (!line || MARKUP.test(line) || STACK_TRACE.test(line) || SIGNED_PARAM.test(line)) {
+    return undefined;
+  }
   return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
 }
 

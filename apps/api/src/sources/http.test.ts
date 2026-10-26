@@ -179,6 +179,13 @@ describe("fetchJson", () => {
       "Invalid signature for https://cdnt-preview.dzcdn.net/a/b.mp3?hdnts=exp=1~acl=/*~hmac=deadbeef",
     );
     expect(signed).toBe("Invalid signature for [link]");
+    expect(plainReason("Blocked: &amp;lt;!DOCTYPE html&amp;gt;")).toBeUndefined();
+    expect(
+      plainReason("Invalid signature for cdnt-preview.dzcdn.net/a/b.mp3?hdnts=exp=1~hmac=deadbeef"),
+    ).toBeUndefined();
+    expect(plainReason("Expired: bucket.example/x?X-Amz-Expires=60")).toBeUndefined();
+    expect(plainReason("Rejected key token=abc123")).toBeUndefined();
+    expect(plainReason("Quota resets at 10:30:00 UTC")).toBe("Quota resets at 10:30:00 UTC");
     expect(plainReason("Simon & Garfunkel: Track not found")).toBe(
       "Simon & Garfunkel: Track not found",
     );

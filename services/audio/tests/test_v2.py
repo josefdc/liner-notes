@@ -477,8 +477,10 @@ def test_beats_over_noise_count_from_60_db_under_the_loudest_frame(noise_db, kep
     y = triad.copy()
     y[: 5 * FIXTURE_SR] = noise
     over_noise = [0.5, 1.5, 2.5, 3.5, 4.5]
-    # One grid throughout: the beats over the triad are off onsets, and a run of them off the
-    # grid would be left out for that (beats_on_the_grid).
+    # One grid throughout. Beats over the noise count as on onsets, beats over the held triad
+    # do not; with the triad's beats at 6, 7, 8 and 9 s (as before 2.3.3) they form a trailing
+    # run 10 % off the grid of the noise's beats and are left out (beats_on_the_grid), which is
+    # not what this test is about.
     over_triad = [5.5, 6.5, 7.5, 8.5, 9.5]
     reported = reported_over(y, [*over_noise, *over_triad])
     assert reported == [*(over_noise if kept else []), *over_triad]
@@ -592,13 +594,20 @@ def pad_then_band(intro_s: float = 6.0, outro_s: float = 0.0) -> np.ndarray:
 
 @pytest.mark.parametrize(
     ("count", "off", "kept"),
-    [(6, 0.035, True), (6, 0.045, False), (3, 0.1, True), (4, 0.1, False)],
+    [
+        (6, 0.035, True),
+        (6, 0.045, False),
+        (6, -0.035, True),
+        (6, -0.045, False),
+        (3, 0.1, True),
+        (4, 0.1, False),
+    ],
 )
 def test_a_run_off_onsets_and_off_the_grid_at_the_start_is_left_out(count, off, kept):
     """
-    A tracker's beats under a 6 s pad before a 120 BPM band, `off` from the band's spacing:
-    a run of four or more is left out when it is more than 4 % off (EDGE_RUN_TOLERANCE,
-    EDGE_RUN_MIN_BEATS); a run within 4 %, or a shorter one, stays.
+    A tracker's beats under a 6 s pad before a 120 BPM band, `off` from the band's spacing
+    (slower or faster): a run of four or more is left out when it is more than 4 % off
+    (EDGE_RUN_TOLERANCE, EDGE_RUN_MIN_BEATS); a run within 4 %, or a shorter one, stays.
     """
     band = list(np.arange(6.0, 30.0, 0.5))
     intro = [6.0 - k * 0.5 * (1 + off) for k in range(count, 0, -1)]
@@ -606,7 +615,9 @@ def test_a_run_off_onsets_and_off_the_grid_at_the_start_is_left_out(count, off, 
     assert reported == [round(t, 3) for t in ([*intro, *band] if kept else band)]
 
 
-@pytest.mark.parametrize(("off", "kept"), [(0.035, True), (0.045, False)])
+@pytest.mark.parametrize(
+    ("off", "kept"), [(0.035, True), (0.045, False), (-0.035, True), (-0.045, False)]
+)
 def test_a_run_off_onsets_and_off_the_grid_at_the_end_is_left_out(off, kept):
     """
     The same at the end: six beats under a pad after the band, `off` from its spacing. (The
@@ -638,6 +649,87 @@ def test_a_run_is_compared_with_the_grid_next_to_it():
     intro = [6.0 - 0.5 * k for k in range(6, 0, -1)]
     reported = reported_over(pad_then_band(), [*intro, *band])
     assert reported == [round(float(t), 3) for t in [*intro, *band]]
+
+
+def test_a_beat_skipped_next_to_a_run_does_not_set_its_spacing():
+    """
+    Six beats under the pad on the band's grid stay, though the tracker skipped the band's
+    second beat: the grid's spacing is the median over its first EDGE_RUN_GRID_BEATS beats on
+    onsets, not the first interval.
+    """
+    band = [6.0, *np.arange(7.0, 30.0, 0.5)]
+    intro = [6.0 - 0.5 * k for k in range(6, 0, -1)]
+    reported = reported_over(pad_then_band(), [*intro, *band])
+    assert reported == [round(float(t), 3) for t in [*intro, *band]]
+
+
+def test_a_run_is_judged_against_a_short_band():
+    """
+    A band of eight beats (6-10 s) between pads: the six beats before it, 10 % off its
+    spacing, are left out, though the grid has fewer than EDGE_RUN_GRID_BEATS + 1 beats on
+    onsets.
+    """
+    band = list(np.arange(6.0, 10.0, 0.5))
+    intro = [6.0 - k * 0.5 * 1.1 for k in range(6, 0, -1)]
+    reported = reported_over(pad_then_band(6.0, 20.0), [*intro, *band])
+    assert reported == [round(float(t), 3) for t in band]
+
+
+def test_a_tick_less_than_half_a_period_after_the_last_counts_as_a_period():
+    """
+    Six beats under the pad on the band's grid, except one late by 52 % of a period: the
+    interval after it is under half a period and counts as one, so the run is 14 % off and is
+    left out. (Counted as none, the run would come out on the grid.)
+    """
+    band = list(np.arange(6.0, 30.0, 0.5))
+    intro = [6.0 - 0.5 * k for k in range(6, 0, -1)]
+    intro[2] += 0.26
+    reported = reported_over(pad_then_band(), [*intro, *band])
+    assert reported == [round(float(t), 3) for t in band]
+
+
+def intro_then_band(intro: np.ndarray, bpm: float = 97) -> np.ndarray:
+    """`intro` for the first 10 s, then the band at `bpm`."""
+    y = signals.drum_pattern(bpm).copy()
+    y[: 10 * FIXTURE_SR] = intro[: 10 * FIXTURE_SR]
+    return y
+
+
+SECONDS_30 = np.arange(30 * FIXTURE_SR) / FIXTURE_SR
+NOISE_INTROS = {
+    "hum-50Hz-50dBFS": np.sqrt(2) * np.sin(2 * np.pi * 50 * SECONDS_30) * 10 ** (-50 / 20),
+    "hiss-60dBFS": np.random.default_rng(0).standard_normal(30 * FIXTURE_SR) * 10 ** (-60 / 20),
+}
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("intro", list(NOISE_INTROS))
+def test_no_beats_are_reported_under_hum_or_hiss_before_the_band(intro, estimator):
+    """
+    10 s of 50 Hz hum at -50 dBFS, or of white hiss at -60 dBFS, then the 97 BPM band.
+    Essentia counted 18 and 17 beats through them, 9.7 and 4.9 % off the band's spacing
+    (the hiss is close to EDGE_RUN_TOLERANCE); only the band's beats are reported.
+    """
+    y = intro_then_band(NOISE_INTROS[intro])
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
+
+
+@needs_essentia
+def test_known_limit_beats_counted_at_the_band_spacing_through_a_rubato_intro_are_reported():
+    """
+    A known limit, pinned as it is: 8 s of a rubato piano (onsets but no beat), then a 120 BPM
+    band. Essentia counts on through the piano at the band's spacing; those beats are off
+    onsets but keep the grid, so they are reported as measured. When a rule catches them,
+    this test should change.
+    """
+    y = signals.drum_pattern(120).copy()
+    y[: 8 * FIXTURE_SR] = 0.5 * signals.piano_line(8.0)[: 8 * FIXTURE_SR]
+    tracked = tracked_beats(y, "essentia")
+    _, v2 = analyse_array(y, "essentia")
+    assert v2["beats"]["times"] == tracked
+    assert sum(t < 8.0 for t in tracked) >= 12
 
 
 # Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three

@@ -134,18 +134,32 @@ BEAT_MIN_RMS = 3e-5
 # none of them on an onset (estimators.onset_beats), and its spacing is more than
 # EDGE_RUN_TOLERANCE off the grid next to it: the median interval of the EDGE_RUN_GRID_BEATS
 # beats on onsets nearest to it, against the run's mean interval over whole periods (a beat
-# the tracker skipped counts as two periods). Beats off onsets that keep the grid's spacing
-# stay: from where they are, they are where the beat is.
+# the tracker skipped counts as two periods, a tick less than half a period after the last
+# as one). Beats off onsets that keep the grid's spacing stay: from where they are, they are
+# where the beat is. Onset support is relative to the clip's own beats (at least 0.1 of the
+# 90th percentile of their onset strength), so with only a few beats on the band, under a
+# tenth of the window, the beats under the pad count as on onsets and nothing is left out.
 # Measured: the runs under the probes' pads are 13 to 23 beats long and 6.4 to 12.8 % off the
 # grid (6.8 % at 97 BPM, 12.8 % at 132, 6.4 % at 85); under hum at -50 dBFS 9.7 %, under hiss
 # at -60 dBFS 4.9 %. On the 300 real clips above (600 results), the four reported runs of four
 # beats or more that keep the grid are within 1.2 % (19 beats at 0.0 %, 12 at 1.0 %, 7 at
-# 1.2 %, 4 at 0.6 %); six are 4.2 to 9.3 % off (21 beats, left out), all Essentia's, at fades
-# and crescendos at the ends of the clips (1.6 to 44.9 dB under the loudest frame), none on an
-# onset. Runs of one to three beats are not judged: the drift of so few intervals is within the
+# 1.2 %, 4 at 0.6 %); six are 4.2 to 9.3 % off (21 beats, left out), all Essentia's, none on
+# an onset. They are mostly the tracker drifting off the beat at the edges of the clip, at
+# fades and crescendos (1.6 to 44.9 dB under the loudest frame), not intros without a beat:
+# against Ballroom's annotated beats, 11 of the 14 Ballroom beats left out are 88 to 1584 ms
+# from any annotated beat (three before the first one), three are 56 to 64 ms from one, and
+# the beats kept in those clips match the annotations (81 of 81, 46 of 46, 54 of 58 and 50 of
+# 59 within 70 ms; the fifth clip is tracked off the beat throughout). The reported grid of
+# such a clip can end a beat or two before its music does.
+# Runs of one to three beats are not judged: the drift of so few intervals is within the
 # trackers' frame grid (23 ms for librosa, 12 ms for Essentia: two frames over three intervals
 # at 140 BPM is up to 3.6 %), and on the real clips 28 such runs (39 beats, 20 of them a single
 # beat, 23 at the start) are more than 4 % off, 25 of them within 20 dB of the loudest frame.
+# Known limits: a tracker that counts through a beatless intro at the band's own spacing is
+# not caught. Essentia counts 15 beats at the band's spacing through 8 s of a rubato piano
+# before a 120 BPM band (all reported, tests/test_v2.py), and in 27 hiss and hum intros (-70
+# to -40 dBFS) before bands at 97, 120 and 132 BPM, 3 runs of 19 to 21 beats stayed within
+# 4 % of the band (0.2 to 3.9 %) and are reported; 8 more were only 5.0 to 5.9 % off.
 EDGE_RUN_MIN_BEATS = 4
 EDGE_RUN_TOLERANCE = 0.04
 EDGE_RUN_GRID_BEATS = 8

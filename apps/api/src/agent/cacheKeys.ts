@@ -38,6 +38,10 @@
  * out) is stored with those claims unchecked, which read as model inference, and served for an
  * hour only (storedResults.ts UNCHECKED_RESULT_TTL_MS): repeat visits do not pay for another
  * composition, and a run after that checks the claims again.
+ * v9: results carry the claims and genealogy links code builds from the primary records
+ * (codeClaims.ts), sourced by construction, the fallback's included, and a model link that
+ * duplicates one is folded into it. Earlier results have none: they are not served, and each
+ * track searched again is composed again once.
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its
@@ -56,7 +60,7 @@ import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v8"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v9"];
 
 /** The optional sources that are configured (have a key). */
 export interface ConfiguredSources {

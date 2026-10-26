@@ -230,6 +230,12 @@ interface Waiter {
   go: () => void;
 }
 
+/** `next`, which must be after `at`: a slot search that stops moving fails loudly, never spins. */
+function later(at: number, next: number): number {
+  if (!(next > at)) throw new Error(`pacer: the next slot ${next} is not after ${at}`);
+  return next;
+}
+
 /**
  * When a request of `lane` may start, at or after `from`, given the starts so far (in order).
  * Within a window, a slot frees when the oldest start that keeps it full leaves it.
@@ -244,13 +250,13 @@ function earliestStart(starts: readonly Start[], lane: Lane, from: number, pace:
   for (;;) {
     const inside = starts.filter((start) => start.at + pace.windowMs > at);
     if (inside.length >= pace.max) {
-      at = inside[inside.length - pace.max].at + pace.windowMs;
+      at = later(at, inside[inside.length - pace.max].at + pace.windowMs);
       continue;
     }
     if (lane === "background") {
       const background = inside.filter((start) => start.lane === "background");
       if (background.length >= pace.backgroundMax) {
-        at = background[background.length - pace.backgroundMax].at + pace.windowMs;
+        at = later(at, background[background.length - pace.backgroundMax].at + pace.windowMs);
         continue;
       }
     }

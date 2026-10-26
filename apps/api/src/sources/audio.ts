@@ -64,11 +64,14 @@ export interface PreviewLookupError {
 
 /**
  * The chosen track's preview clip, or why there is none. `sourceError` is set whenever Deezer
- * could not be read, also when Spotify's own clip was used instead.
+ * could not be read, also when Spotify's own clip was used instead. `incomplete` is set when there
+ * is no clip and the lookup could not be finished: a Deezer request was not sent (its pace had no
+ * slot in time, which is no source error) or Deezer could not be read. No clip is known to be
+ * missing then.
  */
 export type PreviewResolution = (
   | { previewUrl: string; match: PreviewSourceMatch }
-  | { previewUrl: null; match: null; detail: string }
+  | { previewUrl: null; match: null; detail: string; incomplete?: true }
 ) & { sourceError?: PreviewLookupError };
 
 /** Result of analyze_audio_preview: the service's v2 block, or why there is none. */
@@ -259,8 +262,9 @@ function rejectionSummary(results: DeezerPreviewResult[]): string {
  * readable alternative), Spotify's own clip of the chosen track, a Deezer search result that is
  * strictly the same recording. Nothing else: with none of them there is no preview. A Deezer
  * error (its quota, the network) is reported, never read as "not found". A request Deezer's pace
- * had no slot for in time was not sent: Deezer was not asked, which is said in the detail and is
- * no source error (sources/pacing.ts).
+ * had no slot for in time was not sent, and is no source error (sources/pacing.ts). After either,
+ * with no clip, the lookup could not be finished (`incomplete`): only a lookup Deezer answered at
+ * every step can say there is no clip.
  */
 export async function resolvePreview(
   request: TrackPreviewRequest,
@@ -308,14 +312,22 @@ export async function resolvePreview(
   if (bySearch.found) return { previewUrl: bySearch.previewUrl, match: bySearch.match };
 
   const failed = failure(bySearch);
+  const answered = rejectionSummary(bySearch === byIsrc ? [byIsrc] : [byIsrc, bySearch]);
+  const incomplete = failed.sourceError !== undefined || bySearch.notAsked === true;
   const detail = failed.sourceError
-    ? `Deezer could not be read and Spotify has no preview of this track: ${failed.sourceError.message}`
+    ? `The preview lookup on Deezer could not be finished, as Deezer could not be read (${failed.sourceError.message}), and Spotify has no preview of this track${answered}`
     : bySearch.notAsked
-      ? "Deezer was not asked (its pace had no slot in time) and Spotify has no preview of this track"
-      : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
+      ? `The preview lookup on Deezer could not be finished, as a request had no slot of Deezer's pace in time and was not sent, and Spotify has no preview of this track${answered}`
+      : `No preview of this recording on Deezer or Spotify${answered}`;
   if (failed.sourceError) log.warn(detail);
   else log.info(detail);
-  return { previewUrl: null, match: null, detail, ...failed };
+  return {
+    previewUrl: null,
+    match: null,
+    detail,
+    ...failed,
+    ...(incomplete ? { incomplete: true as const } : {}),
+  };
 }
 
 // =============================================================================
@@ -448,8 +460,12 @@ export const analyzeAudioPreview = tool(
     const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
     if (preview.previewUrl === null) {
       log.info("No preview of the chosen recording; audio not measured");
+      // A lookup that could not be finished is no missing clip: whether there is one is unknown.
       return JSON.stringify({
-        ...unavailable("no_preview", preview.detail),
+        ...unavailable(
+          preview.incomplete ? "preview_lookup_incomplete" : "no_preview",
+          preview.detail,
+        ),
         previewUrl: null,
         previewMatch: null,
         ...lookupError,

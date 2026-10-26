@@ -1955,7 +1955,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(report).not.toHaveBeenCalled();
     });
 
-    it("says Deezer was not asked, with no source error, when the pace has no slot for an analysed track in time", async () => {
+    it("says the preview lookup could not be finished, with no source error, when the pace has no slot for an analysed track in time", async () => {
       stub({ spotify: spotifyTrack(), byIsrc: (isrc) => entry({ isrc }) });
       const request = { title: "Under Pressure", artist: "Queen", durationMs: 248_000 };
       // A full window, and as many requests again waiting for the next one.
@@ -1965,9 +1965,11 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
       const result = await resolvePreview({ ...request, isrc: "GBUM71029601" }, undefined);
 
-      expect(result).toMatchObject({ previewUrl: null });
+      expect(result).toMatchObject({ previewUrl: null, incomplete: true });
       expect(result).not.toHaveProperty("sourceError");
-      expect(result.previewUrl === null && result.detail).toMatch(/Deezer was not asked/);
+      expect(result.previewUrl === null && result.detail).toMatch(
+        /preview lookup on Deezer could not be finished/,
+      );
       await settle(Promise.all(ahead));
     });
 

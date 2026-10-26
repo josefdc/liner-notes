@@ -810,7 +810,7 @@ describe("composerNode", () => {
       unavailableReason: reason,
     });
 
-    it.each(["service_unavailable", "analysis_failed"] as const)(
+    it.each(["service_unavailable", "analysis_failed", "preview_lookup_incomplete"] as const)(
       "does not store a result whose audio failed transiently (%s)",
       async (reason) => {
         await createComposerNode(testRuntime(succeeding()))(

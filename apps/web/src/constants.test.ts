@@ -165,6 +165,23 @@ describe('hasMeasuredAudioSource', () => {
     expect(hasEstimatedAudio(track)).toBe(false);
   });
 
+  it('says the preview was not looked up in time, never that there is none, when it was not asked', () => {
+    const track = copiesOnly({
+      audioSource: 'unavailable',
+      audioUnavailableReason: 'preview_not_asked',
+    });
+    expect(hasMeasuredAudioSource(track)).toBe(false);
+    const signal = byField(audioReadings(track).signal);
+    expect(signal.bpm).toMatchObject({
+      state: 'missing',
+      reason: 'the audio preview was not looked up in time',
+    });
+    expect(signal.key).toMatchObject({
+      state: 'missing',
+      reason: AUDIO_UNAVAILABLE_SHORT.preview_not_asked,
+    });
+  });
+
   it.each(['service_unavailable', 'analysis_failed', 'not_run', undefined] as const)(
     'measures nothing for an "unavailable" result without a measurement (%s)',
     (reason) => {
@@ -461,6 +478,7 @@ describe('audioReadings', () => {
         'no_preview',
         'not_detected',
         'not_run',
+        'preview_not_asked',
         'preview_rejected',
         'service_unavailable',
       ].sort(),

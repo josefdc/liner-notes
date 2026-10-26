@@ -22,7 +22,9 @@
  * fresh clip is looked up for the player, and `preview` still describes the clip the cached
  * values were measured on: both are clips of the chosen recording, not always the same entry.
  * Without a clip the player has none, never another recording's clip. When Deezer could not be
- * read, that is recorded as a source error, apart from "no clip".
+ * read, that is recorded as a source error, apart from "no clip". When Deezer was not asked in
+ * time (its pace had no slot), the reason is `preview_not_asked`, never "no clip", and no source
+ * error; the result is then not stored (composerNode.ts), so a later run asks again.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -97,6 +99,8 @@ const UNMEASURED_TEXT: Record<ResultUnavailableReason, string> = {
   not_detected: "not detected",
   not_run: "the analysis did not run",
   low_confidence: "the estimate was not confident enough",
+  preview_not_asked:
+    "Deezer was not asked for a preview clip in time (our own pacing of its requests left no slot); a later run asks it",
 };
 
 /** What the service's gate means, for a block that carries no reason of its own. */

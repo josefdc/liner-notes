@@ -175,7 +175,8 @@ export const GenreProfileItem = z.object({
 
 /**
  * Why measured audio values are missing. `low_confidence`: measured, but below the confidence
- * the UI requires to show a value.
+ * the UI requires to show a value. `preview_not_asked`: the preview clip was not looked up, as
+ * the request to Deezer had no slot of our own pacing in time; whether a clip exists is unknown.
  */
 export const AudioUnavailableReason = z.enum([
   "no_preview",
@@ -185,6 +186,7 @@ export const AudioUnavailableReason = z.enum([
   "not_detected",
   "not_run",
   "low_confidence",
+  "preview_not_asked",
 ]);
 export type AudioUnavailableReason = z.infer<typeof AudioUnavailableReason>;
 

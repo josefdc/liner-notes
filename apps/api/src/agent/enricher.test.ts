@@ -1932,7 +1932,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
       const result = await resolvePreview({ ...request, isrc: "GBUM71029601" }, undefined);
 
-      expect(result).toMatchObject({ previewUrl: null });
+      expect(result).toMatchObject({ previewUrl: null, notAsked: true });
       expect(result).not.toHaveProperty("sourceError");
       expect(result.previewUrl === null && result.detail).toMatch(/Deezer was not asked/);
       await settle(Promise.all(ahead));

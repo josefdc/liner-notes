@@ -58,7 +58,8 @@
           "analysis_failed",
           "not_detected",
           "not_run",
-          "low_confidence"
+          "low_confidence",
+          "preview_not_asked"
         ]
       },
       "segments": {
@@ -442,7 +443,8 @@
           "analysis_failed",
           "not_detected",
           "not_run",
-          "low_confidence"
+          "low_confidence",
+          "preview_not_asked"
         ]
       },
       "segments": {

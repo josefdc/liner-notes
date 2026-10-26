@@ -35,6 +35,8 @@ vi.mock("../../store/cache.js", async (importOriginal) => ({
 }));
 
 import Database from "better-sqlite3";
+import { DEEZER_MAX_PER_WINDOW, deezerPreviewByIsrc } from "../../sources/deezer.js";
+import { setUnpacedForTests } from "../../sources/pacing.js";
 import { SonicCache } from "../../store/cache.js";
 import { runMigrations } from "../../store/migrations.js";
 import { engineerNode } from "./engineerNode.js";
@@ -638,6 +640,43 @@ describe("engineerNode", () => {
       ]);
       // After the quota error no search is made.
       expect(stub.calls.filter((url) => url.startsWith("https://api.deezer.com/"))).toHaveLength(1);
+    });
+
+    it("says Deezer was not asked, never that no clip was found, when its pace has no slot for the lookup in time", async () => {
+      const stub = stubNetwork("up", null);
+      // On a whole-millisecond clock, as in the pacing tests (enricher.test.ts).
+      vi.useFakeTimers({ toFake: ["performance"] });
+      setUnpacedForTests(false);
+      // A full window of other Deezer requests, and as many again waiting for the next one.
+      const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
+      const ahead = Array.from({ length: 2 * DEEZER_MAX_PER_WINDOW }, () =>
+        deezerPreviewByIsrc(other).catch(() => null),
+      );
+      try {
+        const { out, text } = await run("PACED", "USSB29000129");
+
+        // The lookup's request was never sent: Deezer was not asked, and no clip is known missing.
+        expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
+        expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
+        expect(text).not.toContain("no preview clip of this recording was found");
+        expect(text).toContain(
+          "Tempo and key not measured: Deezer was not asked for a preview clip in time",
+        );
+        expect(out.audioFeatures).toMatchObject({
+          audio: null,
+          unavailableReason: "preview_not_asked",
+        });
+        expect(text).not.toContain("Measuring tempo and key");
+        // Not asked is no source error.
+        expect(out.sourceErrors).toBeUndefined();
+        expect(out.previewUrl).toBeNull();
+        expect(cache.putAudio).not.toHaveBeenCalled();
+      } finally {
+        // Lets the waiting requests go while the network is still stubbed.
+        setUnpacedForTests(true);
+        await Promise.all(ahead);
+        vi.useRealTimers();
+      }
     });
 
     it("records no source error when Deezer only has no clip of the recording", async () => {

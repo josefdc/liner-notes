@@ -64,11 +64,13 @@ export interface PreviewLookupError {
 
 /**
  * The chosen track's preview clip, or why there is none. `sourceError` is set whenever Deezer
- * could not be read, also when Spotify's own clip was used instead.
+ * could not be read, also when Spotify's own clip was used instead. `notAsked` is set when there
+ * is no clip because a Deezer request was not sent (its pace had no slot in time): no clip is
+ * known to be missing then, and it is no source error.
  */
 export type PreviewResolution = (
   | { previewUrl: string; match: PreviewSourceMatch }
-  | { previewUrl: null; match: null; detail: string }
+  | { previewUrl: null; match: null; detail: string; notAsked?: true }
 ) & { sourceError?: PreviewLookupError };
 
 /** Result of analyze_audio_preview: the service's v2 block, or why there is none. */
@@ -259,8 +261,8 @@ function rejectionSummary(results: DeezerPreviewResult[]): string {
  * readable alternative), Spotify's own clip of the chosen track, a Deezer search result that is
  * strictly the same recording. Nothing else: with none of them there is no preview. A Deezer
  * error (its quota, the network) is reported, never read as "not found". A request Deezer's pace
- * had no slot for in time was not sent: Deezer was not asked, which is said in the detail and is
- * no source error (sources/pacing.ts).
+ * had no slot for in time was not sent: Deezer was not asked, which is said in the detail and by
+ * `notAsked`, and is no source error (sources/pacing.ts).
  */
 export async function resolvePreview(
   request: TrackPreviewRequest,
@@ -315,7 +317,13 @@ export async function resolvePreview(
       : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
   if (failed.sourceError) log.warn(detail);
   else log.info(detail);
-  return { previewUrl: null, match: null, detail, ...failed };
+  return {
+    previewUrl: null,
+    match: null,
+    detail,
+    ...failed,
+    ...(bySearch.notAsked ? { notAsked: true as const } : {}),
+  };
 }
 
 // =============================================================================
@@ -447,8 +455,9 @@ export const analyzeAudioPreview = tool(
     const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
     if (preview.previewUrl === null) {
       log.info("No preview of the chosen recording; audio not measured");
+      // Deezer not asked in time is no missing clip: whether there is one is not known.
       return JSON.stringify({
-        ...unavailable("no_preview", preview.detail),
+        ...unavailable(preview.notAsked ? "preview_not_asked" : "no_preview", preview.detail),
         previewUrl: null,
         previewMatch: null,
         ...lookupError,

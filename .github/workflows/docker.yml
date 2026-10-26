@@ -7,6 +7,7 @@ on:
       - "apps/**"
       - "packages/**"
       - "services/audio/**"
+      - "fixtures/replays/**"
       - "package.json"
       - "package-lock.json"
       - ".npmrc"
@@ -19,6 +20,7 @@ on:
       - "apps/**"
       - "packages/**"
       - "services/audio/**"
+      - "fixtures/replays/**"
       - "package.json"
       - "package-lock.json"
       - ".npmrc"
@@ -72,9 +74,9 @@ jobs:
             sonic-analysis.cache-from=type=gha,scope=sonic-analysis
             sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max
       # Loads the audio image (its layers come from the build above) to check how it runs:
-      # as a non-root user, analysing a generated band offline with the Essentia estimators
-      # (RhythmExtractor2013 and KeyExtractor), and serving /health as "degraded" when the
-      # models are not downloaded.
+      # as a non-root user, without ffmpeg or wget, analysing a generated band offline (as MP3
+      # and as WAV) with the Essentia estimators (RhythmExtractor2013 and KeyExtractor), and
+      # serving /health as "degraded" when the models are not downloaded.
       - name: Load the audio image
         uses: docker/bake-action@v7
         with:
@@ -87,12 +89,23 @@ jobs:
             sonic-analysis.cache-from=type=gha,scope=sonic-analysis
       - name: Check the audio image
         run: |
+          echo "audio image size: $(docker image inspect -f '{{.Size}}' liner-notes-audio:ci | numfmt --to=iec)"
           uid=$(docker run --rm liner-notes-audio:ci id -u)
           echo "audio image runs as uid $uid"
           test "$uid" -ne 0
 
+          # The runtime stage has no ffmpeg or wget: soundfile decodes the previews, and the
+          # health check is Python.
+          for tool in ffmpeg wget; do
+            if docker run --rm --entrypoint sh liner-notes-audio:ci -c "command -v $tool"; then
+              echo "the audio image has $tool"
+              exit 1
+            fi
+          done
+
           # 30 s of kick, snare and an Am-F-C-G pad at 120 BPM, written as MP3 in the container:
-          # the default (Essentia) estimators must report its tempo and a key.
+          # the default (Essentia) estimators must report its tempo and a key. The same band as
+          # WAV must decode to the same tempo.
           docker run --rm -i --network none liner-notes-audio:ci python - <<'PY'
           import numpy as np
           import soundfile as sf
@@ -124,6 +137,9 @@ jobs:
           assert set(result) == {"v2"}, sorted(result)
           assert abs(v2["tempo"]["bpm"] - 120) <= 1, v2["tempo"]
           assert v2["key"]["method"] == "essentia.KeyExtractor", v2["key"]
+          sf.write("/tmp/band.wav", (0.8 * y / np.abs(y).max()).astype(np.float32), sr, format="WAV")
+          wav = main.analyze_audio_file("/tmp/band.wav")["v2"]
+          assert abs(wav["tempo"]["bpm"] - 120) <= 1, wav["tempo"]
           PY
 
           docker run -d --name audio-smoke -e AUDIO_FETCH_MODELS=0 -p 127.0.0.1:3102:3002 \
@@ -160,9 +176,10 @@ jobs:
           done
           cat offline-health.json
           grep -q '"status":"degraded"' offline-health.json
-      # Loads the API image to check how it runs: Node 24, as a non-root user, with the native
-      # SQLite module loading (/api/ready), the run report reading the API's database, and
-      # Docker's health check turning healthy.
+      # Loads the API image to check how it runs: Node 24, as a non-root user, without wget,
+      # with the native SQLite module loading (/api/ready), the recorded replays served
+      # (/api/replays), the run report reading the API's database, and Docker's health check
+      # (Node's fetch) turning healthy.
       - name: Load the API image
         uses: docker/bake-action@v7
         with:
@@ -175,10 +192,15 @@ jobs:
             sonic-server.cache-from=type=gha,scope=sonic-server
       - name: Check the API image
         run: |
+          echo "API image size: $(docker image inspect -f '{{.Size}}' liner-notes-api:ci | numfmt --to=iec)"
           docker run --rm liner-notes-api:ci node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
           uid=$(docker run --rm liner-notes-api:ci id -u)
           echo "API image runs as uid $uid"
           test "$uid" -ne 0
+          if docker run --rm --entrypoint sh liner-notes-api:ci -c 'command -v wget'; then
+            echo "the API image has wget"
+            exit 1
+          fi
 
           docker run -d --name api-smoke -e REPLAY_MODE=only -p 127.0.0.1:3101:3001 liner-notes-api:ci
           trap 'docker logs api-smoke; docker rm -f api-smoke' EXIT
@@ -188,6 +210,9 @@ jobs:
           done
           echo
           curl -fsS http://127.0.0.1:3101/api/ready | grep -q '"status":"ready"'
+          # The recorded replays ship in the image (REPLAY_DIR's default): the list is not empty.
+          curl -fsS http://127.0.0.1:3101/api/replays > replays.json
+          jq -e '.success and (.replays | length > 0)' replays.json
           test "$(docker exec api-smoke id -u)" -ne 0
           # The run report, as the API's user, against the database the API has open.
           # Written to a file, not piped, so the step fails when the report exits non-zero.

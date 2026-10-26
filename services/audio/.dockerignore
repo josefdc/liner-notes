@@ -43,6 +43,12 @@ wheels/
 .git
 .gitignore
 
+# Build and npm files the service does not run (pyproject.toml and uv.lock stay: the build
+# installs from them)
+Dockerfile
+.dockerignore
+package.json
+
 # Documentation
 *.md
 

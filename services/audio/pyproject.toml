@@ -19,8 +19,10 @@ dependencies = [
 [project.optional-dependencies]
 # Perceptual features (valence, danceability, acousticness, instrumentalness). Without this
 # extra the service still measures tempo, key and energy, and /health reports "degraded".
+# Wheels exist for Linux x86_64 and macOS only (none for Linux aarch64), so the image is
+# built for linux/amd64.
 models = [
-    "essentia-tensorflow==2.1b6.dev1389",
+    "essentia-tensorflow==2.1b6.dev1389; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64')",
 ]
 
 [tool.uv]

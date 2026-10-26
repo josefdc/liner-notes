@@ -1,5 +1,5 @@
 # =============================================================================
-# Sonic Agent Server - Multi-stage Production Build
+# Liner Notes API - Multi-stage Production Build
 # Node.js/LangGraph Backend
 # =============================================================================
 # Build context is the repository root (one lockfile for all workspaces).
@@ -52,13 +52,8 @@ FROM toolchain AS deps
 
 RUN npm ci -w apps/api --omit=dev && npm cache clean --force
 
-# Stage 5: production
+# Stage 5: production (no package installs: the health check below is Node)
 FROM base AS production
-
-# wget runs the health checks (here and in docker-compose.yml); the slim image has none.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget \
-    && rm -rf /var/lib/apt/lists/*
 
 # Manifests and production node_modules. The API declares @liner-notes/contract as a
 # dependency, so tsup leaves its imports external and node_modules/@liner-notes/contract links
@@ -68,16 +63,21 @@ COPY --from=deps /app ./
 COPY --from=builder /app/packages/contract/dist ./packages/contract/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
-# Create non-root user for security
+# The recorded runs (GET /api/replays, REPLAY_MODE): REPLAY_DIR's default, fixtures/replays at
+# the repository root, is /app/fixtures/replays here.
+COPY fixtures/replays ./fixtures/replays
+
+# Create non-root user for security. The uid stays 1001, so existing data volumes, whose files
+# that uid owns, stay writable.
 RUN groupadd --system --gid 1001 nodejs \
-    && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin sonic
+    && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin app
 
 # Create persistent data directory
-RUN mkdir -p /app/data && chown sonic:nodejs /app/data
+RUN mkdir -p /app/data && chown app:nodejs /app/data
 
 WORKDIR /app/apps/api
 
-USER sonic
+USER app
 
 # Environment configuration
 ENV NODE_ENV=production
@@ -87,9 +87,9 @@ ENV SQLITE_DB_PATH=/app/data/sonic-agent.db
 
 EXPOSE 3001
 
-# Health check
+# Health check: liveness (/api/health) with Node's fetch
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD wget -q --spider http://127.0.0.1:3001/api/health || exit 1
+    CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT || 3001}/api/health`, { signal: AbortSignal.timeout(5000) }).then((res) => process.exit(res.ok ? 0 : 1), () => process.exit(1))"]
 
 # Start server
 CMD ["node", "dist/index.js"]

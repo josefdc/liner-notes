@@ -5,12 +5,15 @@
 
 import { SourceError as SourceErrorSchema } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { sourceErrorLine } from "../agent/statusText.js";
 import { SourceError } from "./http.js";
+import { errorRecord } from "./records.js";
 import {
   failureWith,
   keyRejected,
   NOT_ASKED_REASONS,
   notAnswered,
+  plainSourceError,
   readToolResult,
   sourceErrorCode,
   toolFailure,
@@ -139,5 +142,51 @@ describe("toolFailure", () => {
       code: "unavailable",
       error: "internal error: rel.type is undefined",
     });
+  });
+});
+
+describe("plainSourceError", () => {
+  const error = (message?: string) => ({
+    source: "musicbrainz" as const,
+    code: "unavailable" as const,
+    ...(message === undefined ? {} : { message }),
+  });
+
+  it("keeps a plain message as it is", () => {
+    const plain = error("musicbrainz: HTTP 503 (the source could not answer)");
+    expect(plainSourceError(plain)).toBe(plain);
+    expect(plainSourceError(error())).toEqual(error());
+  });
+
+  it("writes links as [link], and leaves out a message with markup, a stack trace or a token", () => {
+    expect(plainSourceError(error("connect ECONNREFUSED https://musicbrainz.org/ws/2"))).toEqual(
+      error("connect ECONNREFUSED [link]"),
+    );
+    expect(plainSourceError(error("<html>Bad gateway</html>"))).toEqual(error());
+    expect(plainSourceError(error("boom at handler (/srv/app/index.js:10:5)"))).toEqual(error());
+    expect(plainSourceError(error("Rejected key token=abc123"))).toEqual(error());
+  });
+
+  it("keeps an internal error's prefix, so its status line still says our reader failed", () => {
+    expect(
+      plainSourceError(error("internal error: Cannot read properties of Map<string>")),
+    ).toEqual(error("internal error: the message was left out"));
+    expect(
+      plainSourceError(error("internal error: Failed to parse URL from https://example.org/a")),
+    ).toEqual(error("internal error: Failed to parse URL from [link]"));
+  });
+
+  it.each([
+    ["an empty message", ""],
+    ["a message of spaces", "   "],
+    ["a message of a line break", "\n"],
+  ])("keeps an internal error with %s an internal error", (_name, text) => {
+    const plain = plainSourceError(errorRecord("lastfm", new TypeError(text)));
+    expect(plain).toEqual({
+      source: "lastfm",
+      code: "unavailable",
+      message: "internal error: the message was left out",
+    });
+    expect(sourceErrorLine(plain)).toBe("Last.fm: our reader failed on its answer");
   });
 });

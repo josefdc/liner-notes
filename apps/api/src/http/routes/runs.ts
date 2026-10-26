@@ -6,6 +6,7 @@ import {
   type StoredRun,
 } from "@liner-notes/contract";
 import { Router } from "express";
+import { heldTextIssue } from "../../agent/storedResults.js";
 import { replayedAnalysis } from "../../replay/player.js";
 import { replays } from "../../replay/records.js";
 import { getDb } from "../../store/database.js";
@@ -37,11 +38,20 @@ function resultOf(record: RunRecord): unknown {
 }
 
 /**
- * A stored run and its result as RunResponse, checked against the contract, or null when the
- * stored result no longer fits it (stored by an older release). The answer is built from named
+ * A stored run and its result as RunResponse, checked against the contract: "unfit" when the
+ * stored result no longer fits it, "refused" when it holds text the readers of stored evidence
+ * now refuse (heldTextIssue: a web page the web tier leaves out, or a source error whose message
+ * holds markup, a stack trace, a token parameter or a link), both stored by an older release. A
+ * refused result is never served in part: its claims cite its evidence by id, so a result
+ * without some items would show claims without their sources. The answer is built from named
  * fields only: the query the user typed is never part of it.
+ *
+ * Known limit: the check reads web evidence and source errors only, as the other readers of
+ * stored evidence do. Model prose, and claims citing ids that are not in the evidence, are not
+ * checked; a run stored before results carried their evidence pack may hold prose written from
+ * unmasked search text. Such runs age out with the run retention period.
  */
-function runResponse(record: RunRecord): RunResponse | null {
+function runResponse(record: RunRecord): RunResponse | "unfit" | "refused" {
   const run: StoredRun = {
     id: record.runId,
     status: record.status,
@@ -51,11 +61,22 @@ function runResponse(record: RunRecord): RunResponse | null {
     finishedAt: record.finishedAt == null ? null : isoTime(record.finishedAt),
   };
   const checked = RunResponse.safeParse({ success: true, run, analysis: resultOf(record) });
-  if (checked.success) return checked.data;
-  log.error(`Stored run ${record.runId} fails the contract`, {
-    issues: checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
-  });
-  return null;
+  if (!checked.success) {
+    log.error(`Stored run ${record.runId} fails the contract`, {
+      issues: checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+    });
+    return "unfit";
+  }
+  const issue = checked.data.analysis ? heldTextIssue(checked.data.analysis) : null;
+  if (issue) {
+    // Where and why only: the text itself is not written to the log either.
+    log.warn(`Stored run ${record.runId} holds text the readers now refuse; not served`, {
+      runId: record.runId,
+      reason: issue,
+    });
+    return "refused";
+  }
+  return checked.data;
 }
 
 /**
@@ -68,9 +89,13 @@ function runResponse(record: RunRecord): RunResponse | null {
  * the recording it was sent, with its id, while that same recording (same content) is served
  * (else null). The mode describes the result the run sent; a live run without a result says
  * nothing about one (see StoredRun).
- * 404 not_found for an unknown run (or one removed by retention); 400 invalid_input for an id
- * that is not 1-100 letters, digits, '-' or '_'; 500 failed when the stored result no longer
- * fits the contract.
+ * 404 not_found for an unknown run (or one removed by retention), and for a run whose stored
+ * result holds text the readers of stored evidence now refuse (stored by an older release: a web
+ * page the web tier leaves out, such as a social platform page or a forum thread, or a source
+ * error whose message holds markup, a stack trace, a token parameter or a link; see
+ * heldTextIssue): no part of that result is served, and the detail only says it is no longer
+ * served, never why. 400 invalid_input for an id that is not 1-100 letters, digits, '-' or '_';
+ * 500 failed when the stored result no longer fits the contract.
  */
 router.get("/api/runs/:id", (req, res) => {
   const id = req.params.id;
@@ -84,8 +109,12 @@ router.get("/api/runs/:id", (req, res) => {
     return;
   }
   const body = runResponse(record);
-  if (body) res.json(body);
-  else sendError(res, "failed");
+  if (body === "unfit") sendError(res, "failed");
+  else if (body === "refused") {
+    sendError(res, "not_found", { detail: "The run's stored result is no longer served" });
+  } else {
+    res.json(body);
+  }
 });
 
 /**
@@ -94,10 +123,14 @@ router.get("/api/runs/:id", (req, res) => {
  * GET /api/runs/by-track/:spotifyId
  * Returns RunResponse for the run of that Spotify track that most recently finished with a
  * result of its own, or replayed a recording that is still served unchanged (runs that sent a cached
- * result are not counted). When that run's stored result no longer fits the contract, the next
- * most recent one that does is served, among the BY_TRACK_CANDIDATES latest. 404 not_found when
- * the track has no such run; 500 failed when none of those runs can be served; 400
- * invalid_input for an id that is not a Spotify track id.
+ * result are not counted). When that run's stored result no longer fits the contract, or holds
+ * text the readers of stored evidence now refuse (as on GET /api/runs/:id; never served in
+ * part), the next most recent one that can be served is served instead. Only the
+ * BY_TRACK_CANDIDATES latest runs are tried, those that cannot be served included: a run older
+ * than them is not reached. 404 not_found when the track has no such run, or when every one tried
+ * was refused (nothing is broken: those results are no longer served); 500 failed when none can
+ * be served and at least one of them no longer fits the contract, whether or not others were
+ * refused; 400 invalid_input for an id that is not a Spotify track id.
  */
 router.get("/api/runs/by-track/:spotifyId", (req, res) => {
   const spotifyId = req.params.spotifyId;
@@ -115,12 +148,16 @@ router.get("/api/runs/by-track/:spotifyId", (req, res) => {
   let broken = false;
   for (const record of records) {
     const body = runResponse(record);
-    // A replayed run whose recording is no longer served has no result to show.
-    if (body?.analysis) {
+    if (body === "unfit") {
+      broken = true;
+      continue;
+    }
+    // A refused result is no longer served; a replayed run whose recording is no longer served
+    // has no result to show.
+    if (body !== "refused" && body.analysis) {
       res.json(body);
       return;
     }
-    if (!body) broken = true;
   }
   sendError(res, broken ? "failed" : "not_found");
 });

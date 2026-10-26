@@ -87,8 +87,15 @@ const modelLine = (reason: ModelUnavailableReason, rest: string) => {
 };
 
 // Audio problems that may clear up on the next run. A result missing audio for one of these
-// reasons is not stored, so it is not served after the analysis service recovers.
-const TRANSIENT_AUDIO_REASONS = new Set(["service_unavailable", "analysis_failed", "not_run"]);
+// reasons is not stored, so it is not served after the analysis service recovers, or after a
+// preview lookup that could not be finished (`preview_lookup_incomplete`: no clip is known
+// missing).
+const TRANSIENT_AUDIO_REASONS = new Set([
+  "service_unavailable",
+  "analysis_failed",
+  "not_run",
+  "preview_lookup_incomplete",
+]);
 
 /**
  * The source errors that keep a result from being stored: any but a source that is not

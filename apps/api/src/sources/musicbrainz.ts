@@ -25,6 +25,7 @@ import {
   type Shape,
   SourceError,
 } from "./http.js";
+import { pacingClock } from "./pacing.js";
 import { type NotAskedReason, notAnswered, toolFailure } from "./toolResult.js";
 import { logger } from "../logger.js";
 
@@ -175,7 +176,8 @@ export function withMusicBrainzPriority<T>(fn: () => T): T {
 
 class MusicBrainzRateLimiter {
   private static instance: MusicBrainzRateLimiter;
-  private lastRequestTime: number = 0;
+  /** When the last request was released, on `pacingClock`. */
+  private lastRequestTime = Number.NEGATIVE_INFINITY;
   private minInterval: number = 1100; // 1.1 seconds for safety margin
   /** The primary-source chain's requests: served first. */
   private urgent: Array<() => Promise<void>> = [];
@@ -208,7 +210,7 @@ class MusicBrainzRateLimiter {
     this.urgent.length = 0;
     this.queue.length = 0;
     this.processing = false;
-    this.lastRequestTime = 0;
+    this.lastRequestTime = Number.NEGATIVE_INFINITY;
   }
 
   /**
@@ -259,9 +261,10 @@ class MusicBrainzRateLimiter {
     this.processing = true;
 
     while (this.pending > 0) {
-      const elapsed = Date.now() - this.lastRequestTime;
-
-      // A clock that went back (a step of the wall clock) does not stall the queue.
+      // On the monotonic clock: a step of the wall clock neither stalls the queue nor lets a
+      // request out early. A clock that reads earlier than the last request (a test that swaps
+      // in a fake clock) does not stall it either.
+      const elapsed = pacingClock() - this.lastRequestTime;
       if (elapsed >= 0 && elapsed < this.minInterval) {
         await this.delay(this.minInterval - elapsed);
       }
@@ -269,7 +272,7 @@ class MusicBrainzRateLimiter {
       // Chosen after the wait: a chain request that came in meanwhile goes first.
       const task = this.urgent.shift() ?? this.queue.shift();
       if (task) {
-        this.lastRequestTime = Date.now();
+        this.lastRequestTime = pacingClock();
         await task();
       }
     }

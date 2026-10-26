@@ -33,6 +33,7 @@ import { randomUUID } from "node:crypto";
 import { readlinkSync } from "node:fs";
 import { link, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
+import { pacingClock } from "../sources/pacing.js";
 
 export interface LockOptions {
   /** How long to wait for the lock before failing (default: staleMs + 5 s). */
@@ -196,7 +197,9 @@ export async function acquireLock(
   const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
   const waitMs = options.waitMs ?? staleMs + 5000;
   const token = randomUUID();
-  const deadline = Date.now() + waitMs;
+  // On the monotonic clock: a step of the wall clock neither cuts the wait short nor drags it
+  // out. A lock's age is read from its mtime, which only the wall clock can be compared with.
+  const deadline = pacingClock() + waitMs;
   for (;;) {
     if (options.signal?.aborted) throw new LockAbortedError(lockPath);
     if (await createExclusive(lockPath, JSON.stringify(ownerRecord(token)))) {
@@ -211,7 +214,7 @@ export async function acquireLock(
       continue;
     }
     if (options.signal?.aborted) throw new LockAbortedError(lockPath);
-    if (Date.now() > deadline) throw new LockTimeoutError(lockPath);
+    if (pacingClock() > deadline) throw new LockTimeoutError(lockPath);
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 }

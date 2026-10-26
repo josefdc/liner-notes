@@ -315,6 +315,30 @@ describe("Spotify client", () => {
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
   });
 
+  it("keeps a token for its lifetime on the monotonic clock, whatever the wall clock does", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    try {
+      const net = spotify((call) =>
+        call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined,
+      );
+      const tokens = () => net.calls.filter((c) => c.url === TOKEN_URL).length;
+
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(1);
+      // A step back does not keep the token past its lifetime (3600 s)...
+      vi.setSystemTime(Date.now() - 60 * 60_000);
+      vi.advanceTimersByTime(3_600_000);
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(2);
+      // ...nor does a step forward drop it before.
+      vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     [50, "10"],
     [0, "1"],

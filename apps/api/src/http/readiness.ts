@@ -56,6 +56,7 @@ import {
 import { getDb } from "../store/database.js";
 import { LATEST_SCHEMA_VERSION } from "../store/migrations.js";
 import { DEFAULT_AUDIO_SERVICE_URL } from "../sources/audio.js";
+import { pacingClock } from "../sources/pacing.js";
 
 export type { ReadyCheck };
 
@@ -269,12 +270,16 @@ async function probeAudio(url: string): Promise<ReadyCheck> {
   }
 }
 
+/** The last probe; `at` is when it started, on `pacingClock`. */
 let audioProbe: { url: string; at: number; result: Promise<ReadyCheck> } | null = null;
 
-/** The audio service's state, probed at most once per AUDIO_PROBE_TTL_MS. */
+/**
+ * The audio service's state, probed at most once per AUDIO_PROBE_TTL_MS, measured on the
+ * monotonic clock: a step of the wall clock neither keeps an answer longer nor drops it sooner.
+ */
 export function audioCheck(env: NodeJS.ProcessEnv = process.env): Promise<ReadyCheck> {
   const url = audioServiceUrl(env);
-  const now = Date.now();
+  const now = pacingClock();
   if (audioProbe && audioProbe.url === url && now - audioProbe.at < AUDIO_PROBE_TTL_MS) {
     return audioProbe.result;
   }

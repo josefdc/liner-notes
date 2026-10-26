@@ -765,6 +765,24 @@ describe("MusicBrainz client", () => {
     for (const gap of gaps) expect(gap, `gaps ${gaps}`).toBeGreaterThanOrEqual(60);
   });
 
+  it.each([
+    ["back", -60 * 60_000],
+    ["forward", 60 * 60_000],
+  ])("keeps the spacing when the wall clock steps %s between requests", async (_label, step) => {
+    queueOnFakeClock(60);
+    const starts: number[] = [];
+    stubFetch((call) => {
+      if (!call.url.startsWith(`${MB}/`)) return undefined;
+      starts.push(performance.now());
+      if (starts.length === 1) vi.setSystemTime(Date.now() + step);
+      return json({ count: 0, artists: [] });
+    });
+    await settleOnFakeClock(Promise.all([findArtist("Vanilla Ice"), findArtist("Queen")]));
+
+    expect(starts).toHaveLength(2);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(60);
+  });
+
   describe("choosing among exact matches (real search answers)", () => {
     const ICE_ICE_BABY = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
 

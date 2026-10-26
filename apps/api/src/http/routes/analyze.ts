@@ -13,6 +13,7 @@ import { logger, withRun } from "../../logger.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
 import { playRecord, replayedAnalysis } from "../../replay/player.js";
 import { replays } from "../../replay/records.js";
+import { pacingClock } from "../../sources/pacing.js";
 import { getDb } from "../../store/database.js";
 import {
   appendRunEvent,
@@ -950,7 +951,8 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
 router.post(
   "/api/analyze",
   asyncRoute(async (req: Request, res: Response) => {
-    const startTime = Date.now();
+    // On the monotonic clock, so a step of the wall clock does not change the run's duration.
+    const startTime = pacingClock();
     const query = parseQuery(req.body?.query);
     const trackId = parseTrackId(req.body?.trackId);
     if (!query || trackId === null) {
@@ -982,7 +984,10 @@ router.post(
           threadId,
           control,
         );
-        sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
+        sendJsonOutcome(res, outcome, threadId, {
+          query,
+          durationMs: Math.round(pacingClock() - startTime),
+        });
       } finally {
         control.dispose();
         activeThreads.delete(threadId);

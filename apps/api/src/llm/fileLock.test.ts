@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   acquireLock,
   LockTimeoutError,
@@ -56,6 +56,27 @@ describe("file lock", () => {
     await expect(acquireLock(target, { waitMs: 50 })).rejects.toBeInstanceOf(LockTimeoutError);
     await release();
     await (await acquireLock(target, { waitMs: 50 }))();
+  });
+
+  it("fails after waitMs though the wall clock steps back while it waits", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const release = await acquireLock(target);
+    onTestFinished(release);
+    // An hour back, 20 ms into the wait: the wait still ends 200 ms after it began.
+    setTimeout(() => vi.setSystemTime(Date.now() - 60 * 60_000), 20);
+    const gaveUp = new Promise((resolve) => setTimeout(() => resolve("still waiting"), 3_000));
+    const waited = acquireLock(target, { waitMs: 200 }).then(
+      async (got) => {
+        await got();
+        return "acquired";
+      },
+      (error: unknown) => error,
+    );
+
+    expect(await Promise.race([waited, gaveUp])).toBeInstanceOf(LockTimeoutError);
   });
 
   it("breaks a lock left by a process that died", async () => {

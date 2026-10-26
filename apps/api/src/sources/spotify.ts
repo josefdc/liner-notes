@@ -6,6 +6,7 @@
 
 import { credential, fetchJson, isSourceError, type Shape, SourceError } from "./http.js";
 import { normalizeIsrc } from "./musicbrainz.js";
+import { pacingClock } from "./pacing.js";
 import { logger } from "../logger.js";
 
 const log = logger("Spotify");
@@ -130,12 +131,14 @@ function requireSpotifyId(value: string, what: string): string {
 // =============================================================================
 
 /**
- * Caches the client-credentials token until 60 s before it expires. Concurrent callers share
- * one refresh instead of each requesting a token.
+ * Caches the client-credentials token until 60 s before it expires, measured on the monotonic
+ * clock (a step of the wall clock neither keeps a token longer nor drops it sooner). Concurrent
+ * callers share one refresh instead of each requesting a token.
  */
 class SpotifyAuthManager {
   private static instance: SpotifyAuthManager;
   private token: string | null = null;
+  /** When the token expires, on `pacingClock`. */
   private tokenExpiresAt: number = 0;
   private pending: Promise<string> | null = null;
 
@@ -150,7 +153,7 @@ class SpotifyAuthManager {
 
   /** A valid access token, refreshed when needed (Client Credentials Flow). */
   async getToken(): Promise<string> {
-    if (this.token && Date.now() < this.tokenExpiresAt - 60_000) {
+    if (this.token && pacingClock() < this.tokenExpiresAt - 60_000) {
       return this.token;
     }
     if (!this.pending) {
@@ -174,7 +177,7 @@ class SpotifyAuthManager {
     }
 
     log.info("Refreshing access token...");
-    const startedAt = Date.now();
+    const startedAt = pacingClock();
 
     const data = await fetchJson<SpotifyToken>({
       source: "spotify",

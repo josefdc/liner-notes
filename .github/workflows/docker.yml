@@ -95,10 +95,16 @@ jobs:
           test "$uid" -ne 0
 
           # The runtime stage has no ffmpeg or wget: soundfile decodes the previews, and the
-          # health check is Python.
+          # health check is Python. The same shell must first find python, so a "not found"
+          # below cannot come from a shell or a docker run that failed.
+          docker run --rm --entrypoint sh liner-notes-audio:ci -c 'command -v python'
           for tool in ffmpeg wget; do
-            if docker run --rm --entrypoint sh liner-notes-audio:ci -c "command -v $tool"; then
-              echo "the audio image has $tool"
+            # 0 only when the shell ran and found no $tool: 1 when it found one, 125-127 when
+            # docker run or the shell failed.
+            status=0
+            docker run --rm --entrypoint sh liner-notes-audio:ci -c "! command -v $tool" || status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "the audio image has $tool, or the check did not run (exit $status)"
               exit 1
             fi
           done
@@ -197,8 +203,13 @@ jobs:
           uid=$(docker run --rm liner-notes-api:ci id -u)
           echo "API image runs as uid $uid"
           test "$uid" -ne 0
-          if docker run --rm --entrypoint sh liner-notes-api:ci -c 'command -v wget'; then
-            echo "the API image has wget"
+          # No wget (the health check is Node). As in the audio check: the same shell must
+          # find node first, and only exit 0 means the shell ran and found no wget.
+          docker run --rm --entrypoint sh liner-notes-api:ci -c 'command -v node'
+          status=0
+          docker run --rm --entrypoint sh liner-notes-api:ci -c '! command -v wget' || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "the API image has wget, or the check did not run (exit $status)"
             exit 1
           fi
 

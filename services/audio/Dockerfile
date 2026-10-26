@@ -5,7 +5,10 @@
 # verifies them into /app/models (a volume) when the container starts. Without them
 # the service still measures tempo and key, and /health reports "degraded".
 #
-# linux/amd64 only: essentia-tensorflow (the "models" extra) has no Linux aarch64 wheel.
+# linux/amd64 only: essentia-tensorflow (the "models" extra) has no Linux aarch64 wheel, so the
+# build fails when the service cannot load Essentia. On an arm64 host, build with
+# --platform linux/amd64 (the platform is not pinned in FROM: a constant there labels an
+# amd64 image as arm64).
 #
 # Two stages: uv builds the virtual environment, and a slim Python image with the same
 # interpreter runs it. The runtime has no uv, ffmpeg or wget: soundfile decodes the previews
@@ -45,6 +48,14 @@ RUN venv=$(sed -n 's/^version_info = //p' /app/.venv/pyvenv.cfg) \
     fi
 
 COPY . /app
+
+# The service falls back to librosa when Essentia cannot be imported (a missing wheel or shared
+# library); in the image that is a build error. The estimators need RhythmExtractor2013 and
+# KeyExtractor, and the fingerprint needs the TensorFlow algorithms.
+RUN /app/.venv/bin/python -B -c "import estimators, fingerprint; \
+assert estimators.ESSENTIA_AVAILABLE and fingerprint.AVAILABLE, \
+'Essentia cannot be imported (the image is built for linux/amd64 only)'; \
+from essentia.standard import KeyExtractor, RhythmExtractor2013, TensorflowInputMusiCNN, TensorflowPredict"
 
 # Unprivileged runtime user; only the models directory is writable by it.
 RUN useradd --system --uid 10001 --user-group --create-home --home-dir /home/app \

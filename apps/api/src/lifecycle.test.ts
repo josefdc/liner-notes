@@ -175,6 +175,30 @@ describe("createShutdown", () => {
     expect(calls.closeStore).toBe(0);
   });
 
+  it.each([
+    ["back an hour, then 1.5 s pass", -60 * 60_000, 1_500, 1],
+    ["forward 10 s", 10_000, 0, 0],
+  ])(
+    "tells a repeated signal on the monotonic clock when the wall clock steps %s",
+    async (_label, step, passes, code) => {
+      vi.useFakeTimers({ toFake: ["Date", "performance"] });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const { shutdown, exit, exitStub } = setup();
+      await openStream();
+
+      shutdown("SIGTERM");
+      vi.setSystemTime(Date.now() + step);
+      vi.advanceTimersByTime(passes);
+      shutdown("SIGTERM");
+
+      // After more than a second it exits 1 at once; within it, it is a duplicate.
+      expect((await exit).code).toBe(code);
+      expect(exitStub).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("closes the store and exits 1 when connections outlast the timeout", async () => {
     const { shutdown, exit, calls } = setup({ drainMs: 10_000, timeoutMs: 300 });
     await openStream();

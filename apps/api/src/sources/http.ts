@@ -451,6 +451,7 @@ function readCassette(source: SourceName): Cassette {
 }
 
 const LOCK_WAIT_MS = 5000;
+let lockWaitMs = LOCK_WAIT_MS;
 const LOCK_STALE_MS = 30_000;
 let tmpCounter = 0;
 
@@ -472,7 +473,7 @@ async function acquireLock(path: string): Promise<() => Promise<void>> {
   const lock = `${path}.lock`;
   // The wait is measured on the monotonic clock, so a step of the wall clock neither cuts it
   // short nor drags it out. The lock's age is read from its mtime, so on the wall clock.
-  const deadline = pacingClock() + LOCK_WAIT_MS;
+  const deadline = pacingClock() + lockWaitMs;
   for (;;) {
     try {
       const handle = await open(lock, "wx");
@@ -500,6 +501,15 @@ async function acquireLock(path: string): Promise<() => Promise<void>> {
       await new Promise((r) => setTimeout(r, 10));
     }
   }
+}
+
+/** Tests only: shortens the wait for a held cassette lock; returns a restore function. */
+export function setCassetteLockWaitForTests(ms: number): () => void {
+  const previous = lockWaitMs;
+  lockWaitMs = ms;
+  return () => {
+    lockWaitMs = previous;
+  };
 }
 
 /** Adds one entry: under the lock, re-reads the file and replaces it atomically (temp + rename). */

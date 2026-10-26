@@ -24,6 +24,7 @@ import {
   scrubPayload,
   scrubReadPayload,
   scrubText,
+  setCassetteLockWaitForTests,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
 
@@ -491,28 +492,35 @@ describe("cassettes", () => {
     "waits for a held cassette lock on the monotonic clock when the wall clock steps %s",
     async (_label, step) => {
       process.env.SOURCE_CASSETTE = "record";
-      stubFetch(() => json({ ok: true }));
-      // Held by this process, which is alive: only the wait (5 s) ends it.
+      let answeredAt = Number.NaN;
+      stubFetch(() => {
+        // The wait for the lock starts once the answer is in: the clock steps 50 ms into it.
+        answeredAt = performance.now();
+        setTimeout(() => vi.setSystemTime(Date.now() + step), 50);
+        return json({ ok: true });
+      });
+      // Held by this process, which is alive: only the wait (500 ms here) ends it.
       writeFileSync(join(dir, "deezer.json.lock"), String(process.pid));
+      onTestFinished(setCassetteLockWaitForTests(500));
       vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
       onTestFinished(() => {
         vi.useRealTimers();
       });
-      const started = performance.now();
-      setTimeout(() => vi.setSystemTime(Date.now() + step), 20);
-      const gaveUp = new Promise((resolve) => setTimeout(() => resolve("still waiting"), 8_000));
+      let cap: ReturnType<typeof setTimeout> | undefined;
+      const gaveUp = new Promise((resolve) => {
+        cap = setTimeout(() => resolve("still waiting"), 2_000);
+      });
 
       const outcome = await Promise.race([
         fetchJson({ source: "deezer", url: "https://api.deezer.test/x/held" }),
         gaveUp,
-      ]);
+      ]).finally(() => clearTimeout(cap));
 
       // The answer is served; only its recording is lost, after the full wait.
       expect(outcome).toEqual({ ok: true });
-      expect(performance.now() - started).toBeGreaterThanOrEqual(5_000);
+      expect(performance.now() - answeredAt).toBeGreaterThanOrEqual(500);
       expect(existsSync(join(dir, "deezer.json"))).toBe(false);
     },
-    15_000,
   );
 
   it("two recorders in one process lose no entries", async () => {

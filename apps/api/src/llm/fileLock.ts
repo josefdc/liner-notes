@@ -30,9 +30,12 @@
  *
  * Remaining windows: a breaker that renames a live lock while yet another process creates a new
  * lock before the rename is undone leaves two holders. That needs a crashed holder plus three
- * processes interleaving within microseconds. And a break lock left by a crashed breaker is
- * watched only from when a waiter first finds it there: with the wall clock stepped back, it
- * can outlast that waiter's wait (the next waiter breaks it).
+ * processes interleaving within microseconds.
+ *
+ * A waiter that has found the lock stale does not give up while it tries to break it: it polls
+ * past its wait if it must. So a break lock left by a crashed breaker, which a waiter watches
+ * only from when it first finds it, keeps that waiter polling until the break lock is stale too
+ * (with the wall clock stepped back, up to `staleMs` past the wait); then it breaks both.
  */
 
 import { randomUUID } from "node:crypto";
@@ -202,21 +205,27 @@ export async function removeIfSame(path: string, seen: Seen): Promise<void> {
   await unlink(aside).catch(() => {});
 }
 
+/**
+ * Removes the stale lock under the break lock. False when another breaker holds the break lock
+ * and it is not stale: nothing was done, and the caller waits before it tries again.
+ */
 async function breakStale(
   lockPath: string,
   seen: Seen,
   staleMs: number,
   watched: (seen: Seen) => number,
-): Promise<void> {
+): Promise<boolean> {
   const breakPath = `${lockPath}.break`;
   const token = randomUUID();
   if (!(await createExclusive(breakPath, JSON.stringify(ownerRecord(token))))) {
     const staleBreak = await staleLock(breakPath, staleMs, watched);
-    if (staleBreak) await removeIfSame(breakPath, staleBreak);
-    return; // the caller starts again
+    if (!staleBreak) return false;
+    await removeIfSame(breakPath, staleBreak);
+    return true; // the caller starts again
   }
   try {
     await removeIfSame(lockPath, seen);
+    return true;
   } finally {
     const current = await readOwner(breakPath);
     if (current?.token === token) await unlink(breakPath).catch(() => {});
@@ -248,7 +257,10 @@ export async function acquireLock(
     }
     const stale = await staleLock(lockPath, staleMs, lockWatched);
     if (stale) {
-      await breakStale(lockPath, stale, staleMs, breakWatched);
+      // No deadline here (see above), but a pause while another breaker holds the break lock.
+      if (!(await breakStale(lockPath, stale, staleMs, breakWatched))) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      }
       continue;
     }
     if (options.signal?.aborted) throw new LockAbortedError(lockPath);

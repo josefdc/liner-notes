@@ -60,8 +60,8 @@ describe("file lock", () => {
 
   /**
    * Runs `wait` on a wall clock that moves with real time and steps by `step` ms 20 ms in; its
-   * outcome (what it resolved to or threw, or "still waiting" after 3 s) and how long it took,
-   * on the monotonic clock.
+   * outcome (what it resolved to or threw, or "still waiting" after 3 s), how long it took on the
+   * monotonic clock, and the CPU time the process spent meanwhile.
    */
   async function withWallClockStep<T>(step: number, wait: () => Promise<T>) {
     vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
@@ -69,10 +69,23 @@ describe("file lock", () => {
       vi.useRealTimers();
     });
     const started = performance.now();
+    const cpu = process.cpuUsage();
     setTimeout(() => vi.setSystemTime(Date.now() + step), 20);
-    const gaveUp = new Promise((resolve) => setTimeout(() => resolve("still waiting"), 3_000));
-    const outcome = await Promise.race([wait().catch((error: unknown) => error), gaveUp]);
-    return { outcome, took: performance.now() - started };
+    let cap: ReturnType<typeof setTimeout> | undefined;
+    const gaveUp = new Promise((resolve) => {
+      cap = setTimeout(() => resolve("still waiting"), 3_000);
+    });
+    try {
+      const outcome = await Promise.race([wait().catch((error: unknown) => error), gaveUp]);
+      const used = process.cpuUsage(cpu);
+      return {
+        outcome,
+        took: performance.now() - started,
+        cpuMs: (used.user + used.system) / 1000,
+      };
+    } finally {
+      clearTimeout(cap);
+    }
   }
 
   it.each([
@@ -105,7 +118,27 @@ describe("file lock", () => {
     );
 
     expect(typeof outcome).toBe("function");
-    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).pid).toBe(process.pid);
+    // The lock is this waiter's now, not the crashed one.
+    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).host).toBe(hostname());
+    await (outcome as () => Promise<void>)();
+  });
+
+  it("waits between attempts while a crashed breaker's break lock grows stale, then breaks both", async () => {
+    // A crashed holder and a crashed breaker, both on another host: only age breaks them.
+    const crashed = (token: string) =>
+      JSON.stringify({ pid: process.pid, host: "another-host", token, at: Date.now() });
+    writeFileSync(`${target}.lock`, crashed("crashed"));
+    writeFileSync(`${target}.lock.break`, crashed("crashed-breaker"));
+
+    const { outcome, cpuMs } = await withWallClockStep(-60 * 60_000, () =>
+      acquireLock(target, { staleMs: 300, waitMs: 500 }),
+    );
+
+    expect(typeof outcome).toBe("function");
+    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).host).toBe(hostname());
+    expect(existsSync(`${target}.lock.break`)).toBe(false);
+    // About 0.6 s of waiting: polled, not spun.
+    expect(cpuMs).toBeLessThan(150);
     await (outcome as () => Promise<void>)();
   });
 

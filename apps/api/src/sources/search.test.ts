@@ -358,16 +358,133 @@ describe("web research searches", () => {
     }
   });
 
+  /**
+   * The length of an adversarial text, and the time a linear check of it takes at most. A check
+   * that grows with the square of the length (main's NAME_LINE took 0.5 s at 40,000 characters)
+   * takes seconds at this length; a linear one takes a few milliseconds, so the bound leaves room
+   * for a loaded machine.
+   */
+  const LONG = 100_000;
+  const LINEAR_MS = 250;
+  /** `unit` repeated to LONG characters. */
+  const repeated = (unit: string) => unit.repeat(Math.ceil(LONG / unit.length));
+
   it.each([
-    ["spaces", `share${" ".repeat(40_000)}x`],
-    ["tabs, no-break spaces and newlines", `share${"\t\u00a0\n ".repeat(10_000)}x`],
-    ["spaces around a pipe", `share${" ".repeat(20_000)}|${" ".repeat(19_993)}x`],
-    ["spaces before cite", `share | cite${" ".repeat(40_000)}x`],
-  ])("checks a stored text of 40,000 characters of %s in linear time", (_name, text) => {
-    expect(text.length).toBeGreaterThanOrEqual(40_000);
+    ["spaces", `share${" ".repeat(LONG)}x`],
+    ["tabs, no-break spaces and newlines", `share${repeated("\t\u00a0\n ")}x`],
+    ["spaces around a pipe", `share${" ".repeat(LONG / 2)}|${" ".repeat(LONG / 2)}x`],
+    ["spaces before cite", `share | cite${" ".repeat(LONG)}x`],
+  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(LONG);
     const start = performance.now();
     expect(webTextIssue(text)).toBeNull();
-    expect(performance.now() - start).toBeLessThan(50);
+    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
+  });
+
+  it.each([
+    ["ages without a Reply", repeated("1 year ago x ")],
+    ["glued ages", repeated("3y ")],
+    ["glued ages with ago", repeated("3y ago x ")],
+    ["an age, a long comment, then a Reply", `3 years ago ${repeated("a ")} 12 Reply`],
+    ["dotted digits", repeated("1.")],
+    ["dotted capitals", repeated("A.")],
+    ["digits and commas", repeated("1,")],
+    ["bylines without a date", repeated("by x ")],
+    ["bylines with an arrow", repeated("by x » ")],
+    ["a byline's long name", `by ${"x".repeat(LONG)}`],
+    ["names from places", repeated("Jane from ")],
+    ["a place's long name", `Jane from ${"x".repeat(LONG)}`],
+    ["bullets", repeated("• ")],
+    ["bullets before numbers", repeated("· 3 ")],
+    ["minuses before numbers", repeated("− 3 ")],
+    ["post numbers before ordinal days", repeated("#1 22nd ")],
+    ["named Gearspace headers", repeated("#1 22nd February 2021 RecordFan ")],
+    ["named XenForo headers", repeated("RecordFan Feb 22, 2021 #1 ")],
+    ["a long token before a header", `${"x".repeat(LONG)} Feb 22, 2021 #1`],
+    ["lowercase bylines", repeated("posted by a ")],
+    ["a topic's created", repeated("created ")],
+    ["comment depths", repeated("level 1 ")],
+    ["Replies", repeated("Reply · ")],
+    ["votes", repeated("Upvote 1 ")],
+    ["quotes before an arrow", `Originally Posted by ${"x".repeat(LONG)}`],
+    ["thread starters", repeated("Thread starter x ")],
+    ["points", repeated("1 points ")],
+    ["weekdays", repeated("Sunday at ")],
+    ["post subjects", repeated("Posted: Mon ")],
+    ["comment headings", repeated("Comments: 1 ")],
+    ["reviews with flags", repeated("Reviewed in the United States 🇺🇸 ")],
+    ["Discourse headers", repeated("x (y) February 22, 2021, 3:15pm 1 ")],
+    ["open brackets after names", repeated("x (")],
+    ["dateline words", repeated("Live from ")],
+    ["commenters from places", repeated("Jane from Ohio Oct 2, 2009: ")],
+  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(LONG);
+    const start = performance.now();
+    webTextIssue(text);
+    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
+  });
+
+  it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {
+    const pages = [
+      "https://www.talkbass.com/threads/daft-punk-bass-lines.1234567/",
+      "https://talkbass-com.translate.goog/threads/daft-punk.1234567/",
+      "https://forums.watmm.com/topic/12345-daft-punk-discovery/",
+      "https://rateyourmusic.com/release/album/daft-punk/discovery/reviews/1/",
+      "https://disqus.com/home/discussion/channel-music/daft_punk_one_more_time/",
+      "https://web.archive.org/web/20200101000000/https://www.gearslutz.com/board/123-daft-punk.html",
+      "https://web.archive.org/web/2020id_/http://forums.stevehoffman.tv/threads/daft-punk.123/",
+      "https://web.archive.org/web/2019/http:/www.reddit.com/r/DaftPunk/comments/abc/",
+      "https://web.archive.org/web/*/news.ycombinator.com/item?id=26214151",
+      "https://web.archive.org/web/https://www.kvraudio.com/forum/viewtopic.php?t=12345",
+      "https://web.archive.org/web/2021/https://www.talkbass.com/threads/x.1/",
+      "https://wayback.archive.org/web/2012/http://old.reddit.com/r/Music/comments/abc/",
+    ];
+    const ARCHIVED = {
+      ...WHOSAMPLED,
+      url: "https://web.archive.org/web/2020/https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby/",
+    };
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), ARCHIVED, WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([
+      ARCHIVED.url,
+      WHOSAMPLED.url,
+    ]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(
+      expect.arrayContaining([
+        "talkbass.com",
+        "forums.watmm.com",
+        "rateyourmusic.com",
+        "disqus.com",
+        "talkbass-com.translate.goog",
+        "rateyourmusic-com.translate.goog",
+      ]),
+    );
+    // Copies of other pages are kept: the archive is judged by the page it holds, not its host.
+    expect(excluded).not.toContain("web.archive.org");
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    for (const url of [
+      "https://watmm.com/news/daft-punk",
+      "https://www.songfacts.com/facts/daft-punk/one-more-time",
+      "https://web.archive.org/web/2020/https://www.discogs.com/release/1289-Daft-Punk",
+      "https://web.archive.org/web/2020/",
+      "https://archive.org/details/daft-punk-discovery",
+      "https://www.example.org/web/2020/https://www.reddit.com/r/music",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+    expect(
+      isLyricPage("https://web.archive.org/web/2019/https://genius.com/Daft-punk-one-more-time"),
+    ).toBe(true);
   });
 
   it("counts a forum quote only when its expander follows the quote closely", () => {

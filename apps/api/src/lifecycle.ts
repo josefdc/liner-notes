@@ -5,6 +5,7 @@
 
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { logger, scrub } from "./logger.js";
+import { pacingClock } from "./sources/pacing.js";
 
 const log = logger("Server");
 
@@ -21,6 +22,7 @@ export interface ShutdownOptions {
   timeoutMs: number;
   /** A further signal within this time of the first is a duplicate and is ignored. */
   repeatWindowMs?: number;
+  /** The clock the repeat window is measured on, in ms (the monotonic one by default). */
   now?: () => number;
 }
 
@@ -47,7 +49,7 @@ export function createShutdown({
   drainMs,
   timeoutMs,
   repeatWindowMs = REPEAT_SIGNAL_WINDOW_MS,
-  now = Date.now,
+  now = pacingClock,
 }: ShutdownOptions): (signal: string) => void {
   let startedAt: number | null = null;
   let closing: Promise<void> | undefined;
@@ -58,7 +60,10 @@ export function createShutdown({
 
   return (signal) => {
     if (startedAt !== null) {
-      if (now() - startedAt < repeatWindowMs) {
+      // On the monotonic clock, so a step of the wall clock does not change what is a repeat. An
+      // age below 0 (a clock that reads earlier than the first signal) is not a repeat.
+      const since = now() - startedAt;
+      if (since >= 0 && since < repeatWindowMs) {
         log.info(`${signal} again while shutting down; ignored as a duplicate`);
         return;
       }

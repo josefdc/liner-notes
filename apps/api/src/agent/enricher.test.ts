@@ -1757,6 +1757,39 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(report).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ["back", -60_000],
+      ["forward", 60_000],
+    ])(
+      "keeps the previews' budget when the wall clock steps %s during a lookup",
+      async (_label, step) => {
+        const { nodes, spotify, isrcEntry } = strictNodes(10);
+        let stepped = false;
+        // Each answer takes 1.5 s: the first batch of five spends 4.5 s of the budget, and the
+        // second has 3.5 s, enough for four lookups. The wall clock steps by a minute during
+        // the first lookup.
+        const net = stub({
+          spotify,
+          byIsrc: (isrc, call) => {
+            if (!stepped) {
+              stepped = true;
+              vi.setSystemTime(Date.now() + step);
+            }
+            return slowly(call, 1_500, isrcEntry(isrc));
+          },
+        });
+        const report = vi.fn();
+
+        const { out, run } = await timed(nodes, report);
+
+        expect(stepped).toBe(true);
+        expect(run.aborted).toBe(false);
+        expect(previews(out)).toBe(9);
+        expect(deezerCalls(net)).toHaveLength(10);
+        expect(report).not.toHaveBeenCalled();
+      },
+    );
+
     it("does not count the Spotify searches against the previews' budget", async () => {
       const { nodes, spotify, isrcEntry } = strictNodes(15);
       // Each batch of Spotify searches takes 4.5 s; Deezer answers at once.

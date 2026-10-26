@@ -18,6 +18,9 @@
  * An answer about the budget is kept for BUDGET_STATE_TTL_MS: the spend log is read under its
  * lock, and a page of suggestions should not take that lock once per keystroke. An unverifiable
  * answer is not kept, so a lock that was busy for a moment does not pause anything afterwards.
+ * The TTLs are measured on the monotonic clock (`pacingClock`), so a step of the wall clock
+ * neither keeps an answer longer nor drops it sooner. An age below 0 (a clock that reads earlier
+ * than the entry) counts as expired.
  */
 
 import {
@@ -27,6 +30,7 @@ import {
   type LlmSettings,
   readLlmSettings,
 } from "../config/settings.js";
+import { pacingClock } from "../sources/pacing.js";
 import { capViolation, SpendGuard } from "./budget.js";
 import { isLlmError } from "./errors.js";
 import { FALLBACK_PRICE } from "./prices.js";
@@ -88,6 +92,7 @@ export async function readBudgetState(
 
 interface CachedState {
   key: string;
+  /** When the read started, on `pacingClock`. */
   at: number;
   state: Promise<BudgetState>;
   /** A spent budget of this read has been logged. */
@@ -95,6 +100,7 @@ interface CachedState {
 }
 
 let cached: CachedState | null = null;
+/** When an unusable log was last warned about, on `pacingClock`. */
 let lastUnverifiableWarning = Number.NEGATIVE_INFINITY;
 
 /** Logs what a read found: a spent budget once per read, an unusable log at most once per TTL. */
@@ -104,8 +110,9 @@ function warnAbout(entry: CachedState, read: BudgetState): void {
     log.warn(`Live analysis paused: ${read.reason}`);
   }
   if (read.state === "unverifiable") {
-    const at = Date.now();
-    if (at - lastUnverifiableWarning >= BUDGET_STATE_TTL_MS) {
+    const at = pacingClock();
+    const since = at - lastUnverifiableWarning;
+    if (since < 0 || since >= BUDGET_STATE_TTL_MS) {
       lastUnverifiableWarning = at;
       log.warn(`Live analysis off (the budget cannot be checked): ${read.reason}`);
     }
@@ -134,9 +141,10 @@ export function liveBudgetState(
     settings.budget,
     purpose,
   ]);
-  const now = Date.now();
+  const now = pacingClock();
   let entry = cached;
-  if (!entry || entry.key !== key || now - entry.at >= BUDGET_STATE_TTL_MS) {
+  const age = entry ? now - entry.at : Number.POSITIVE_INFINITY;
+  if (!entry || entry.key !== key || age < 0 || age >= BUDGET_STATE_TTL_MS) {
     const created: CachedState = {
       key,
       at: now,

@@ -28,6 +28,7 @@ import { readLlmSettings } from "../../config/settings.js";
 import { initializeDatabase } from "../../store/database.js";
 import { isLlmError } from "../errors.js";
 import { createLlm } from "../invoke.js";
+import { pacingClock } from "../../sources/pacing.js";
 import { FAKE_API_KEY, FAKE_BASE_URL, providerFetch, responseBody } from "./providerStub.js";
 import { z } from "zod";
 
@@ -60,13 +61,13 @@ const mark = (name: string) => {
  * never starts or never decides, the others exit 2 with a message, so the test shows every
  * process's exit code and output instead of timing out.
  */
-const groupDeadline = Date.now() + 20_000;
+const groupDeadline = pacingClock() + 20_000;
 
 /** Waits until the group's directory holds `groupSize` marks starting with `prefix`. */
 async function untilGroup(prefix: string): Promise<void> {
   if (!groupDir) return;
   while (readdirSync(groupDir).filter((name) => name.startsWith(prefix)).length < groupSize) {
-    if (Date.now() > groupDeadline) {
+    if (pacingClock() > groupDeadline) {
       process.stderr.write(`callWorker: the group did not reach ${groupSize} "${prefix}" marks\n`);
       process.exit(2);
     }

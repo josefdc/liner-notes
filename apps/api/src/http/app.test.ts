@@ -5,7 +5,7 @@
 
 import { Router } from "express";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   DEFAULT_RATE_LIMIT,
   DEFAULT_SEARCH_RATE_LIMIT,
@@ -751,6 +751,30 @@ describe("requests other sites make a browser send", () => {
     clock = 61_000;
     await request(guarded).get("/api/search/suggest").set("Origin", "https://evil.example");
     expect(warnings()).toBe(3);
+  });
+
+  it("measures the refusal log's minute on the monotonic clock, whatever the wall clock does", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const guarded = express();
+    guarded.use(listedOriginsOnly([LISTED]));
+    const warnings = () => logsAt("warn").length;
+    const refused = () =>
+      request(guarded).get("/api/search/suggest").set("Origin", "https://evil.example");
+
+    await refused();
+    expect(warnings()).toBe(1);
+    // A step back does not mute the next refusal past its minute...
+    vi.setSystemTime(Date.now() - 60 * 60_000);
+    vi.advanceTimersByTime(61_000);
+    await refused();
+    expect(warnings()).toBe(2);
+    // ...nor does a step forward log it sooner.
+    vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+    await refused();
+    expect(warnings()).toBe(2);
   });
 
   it("refuses a cross-site request with no Origin (an <img> or a no-cors GET)", async () => {

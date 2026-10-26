@@ -111,7 +111,7 @@ describe("Spotify client", () => {
       preview_url: "https://p.scdn.co/mp3-preview/abc",
     });
 
-    it("a search keeps the ISRC and the preview Spotify gave", async () => {
+    it("a search keeps the ISRC, the release date and the preview Spotify gave", async () => {
       spotify((call) =>
         call.url.startsWith(`${API}/search?`) ? json(searchAnswer([withIdentity()])) : undefined,
       );
@@ -121,6 +121,7 @@ describe("Spotify client", () => {
       expect(result).toMatchObject({
         id: TRACK_ID,
         isrc: "USAT29900609",
+        releaseDate: "1990",
         previewUrl: "https://p.scdn.co/mp3-preview/abc",
       });
     });

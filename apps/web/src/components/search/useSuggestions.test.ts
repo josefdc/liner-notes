@@ -1,6 +1,6 @@
+import { SearchSuggestResponse, type SearchCandidate } from '@liner-notes/contract';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SearchCandidate } from '../../hooks/agent/types';
 import { mergeDuplicates, SUGGEST_DELAY_MS, useSuggestions } from './useSuggestions';
 
 const song = (id: string, title: string, artist = 'M83', album = 'An album'): SearchCandidate => ({
@@ -11,12 +11,15 @@ const song = (id: string, title: string, artist = 'M83', album = 'An album'): Se
   coverUrl: '',
 });
 
-/** A suggestion as the API sends it, with its ISRC and release date when Spotify gave them. */
+/**
+ * A suggestion as the API sends it, with its ISRC and release date when Spotify gave them: both
+ * are fields of the contract's SearchCandidate.
+ */
 const record = (
   id: string,
   title: string,
-  extra: { isrc?: string | null; releaseDate?: string },
-): SearchCandidate => ({ ...song(id, title), ...extra }) as SearchCandidate;
+  extra: Pick<SearchCandidate, 'isrc' | 'releaseDate'>,
+): SearchCandidate => ({ ...song(id, title), ...extra });
 
 interface Call {
   query: string;
@@ -302,7 +305,7 @@ describe('mergeDuplicates', () => {
     // Each kept row stands for its group: its recording, or the title of an ISRC-less row.
     const groups = (list: SearchCandidate[]) =>
       mergeDuplicates(list)
-        .map((row) => (row as { isrc?: string | null }).isrc?.toUpperCase() ?? `title:${row.title}`)
+        .map((row) => row.isrc?.toUpperCase() ?? `title:${row.title}`)
         .sort();
     const expected = groups(rows);
     expect(expected).toEqual(['GB55H1100002', 'GB55H1200001', 'title:Wait', 'title:midnight city']);
@@ -333,6 +336,17 @@ describe('mergeDuplicates', () => {
         { ...song('recorded', 'Intro'), releaseYear: '2011' },
       ]),
     ).toEqual(['recorded']);
+  });
+
+  it("keeps the earliest release of an answer read through the contract's SearchSuggestResponse", () => {
+    const answer = SearchSuggestResponse.parse({
+      success: true,
+      suggestions: [
+        record('single', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2011-10-18' }),
+        record('album', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2011-08-16' }),
+      ],
+    });
+    expect(ids(answer.suggestions)).toEqual(['album']);
   });
 
   it("takes a release date of 0000, Spotify's unknown date, as missing", () => {

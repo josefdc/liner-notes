@@ -510,26 +510,32 @@ describe("accounting", () => {
   });
 
   it("answers within the default concurrency of two calls at a time", async () => {
-    // A call holds until a second one is in flight, so a slow start on a busy machine cannot hide the
-    // pair; after 2 s without one (a limit of one) the calls go on and the peak check fails. Each call
-    // then holds a little longer, so a third concurrent call would be seen too.
+    // A call holds until a second one is in flight, so a slow start on a busy machine cannot hide
+    // the pair; with none 2 s into the test (a limit of one) the calls go on and the peak check
+    // fails. The pair then holds for up to 250 ms, ending as soon as a third call starts, so a limit
+    // of three is seen however slowly that call arrives.
     let active = 0;
     let peak = 0;
-    let pairInFlight = () => {};
+    let pairInFlight!: () => void;
     const pair = new Promise<void>((resolve) => {
       pairInFlight = resolve;
     });
     const noPair = setTimeout(() => pairInFlight(), 2000);
+    onTestFinished(() => clearTimeout(noPair));
+    let thirdInFlight!: () => void;
+    const third = new Promise<void>((resolve) => {
+      thirdInFlight = resolve;
+    });
     const { llm } = setup(async () => {
       active += 1;
       peak = Math.max(peak, active);
       if (active === 2) pairInFlight();
+      if (active === 3) thirdInFlight();
       await pair;
-      await new Promise((r) => setTimeout(r, 30));
+      await Promise.race([third, new Promise((r) => setTimeout(r, 250))]);
       active -= 1;
       return ok();
     });
-    onTestFinished(() => clearTimeout(noPair));
     await Promise.all(
       Array.from({ length: 5 }, (_, i) =>
         llm.invoke("x", "fast", "hi", Schema, { ...OPTIONS, runId: `r${i}` }),

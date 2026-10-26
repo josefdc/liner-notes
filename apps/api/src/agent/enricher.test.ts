@@ -1,10 +1,11 @@
 /**
  * Artwork enricher: it searches through the Spotify source (timeouts, typed errors), its
  * requests carry the run's signal, a run cancelled while an answer arrives caches no artwork,
- * no preview URL is cached or logged, and a node gets a preview only for a track that strictly
- * matches the title and artist the model named: Spotify's own clip, else the Deezer entry for
- * the track's ISRC when it passes the same checks as the analysed track's. The network (Spotify
- * and Deezer) and the cache are stubbed.
+ * no preview URL is cached or logged, and a node gets a cover, a Spotify id and a preview only
+ * for a track that strictly matches the title and artist the model named: the preview is
+ * Spotify's own clip, else the Deezer entry for the track's ISRC when it passes the same checks
+ * as the analysed track's. The answer holds one entry per node id and no links. The network
+ * (Spotify and Deezer) and the cache are stubbed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,7 +48,14 @@ const COVER = "https://i.scdn.co/image/x";
 const genealogy = {
   nodes: [
     { id: "current", group: 1, label: "Song", size: 40 },
-    { id: "n1", group: 4, label: "Other - Artist", size: 22 },
+    {
+      id: "n1",
+      group: 4,
+      label: "Other - Artist",
+      size: 22,
+      trackTitle: "Other",
+      trackArtist: "Artist",
+    },
   ],
   links: [],
 };
@@ -182,7 +190,7 @@ describe("enrichGenealogyWithArtwork's Spotify searches", () => {
     const node = await enrichOne(underPressure);
 
     expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
-    expect(node).toMatchObject({ id: "n1", label: "Under Pressure - Queen" });
+    expect(node).toEqual({ id: "n1" });
     expect(node.img).toBeUndefined();
     expect(cache.putArtwork).not.toHaveBeenCalled();
   }, 2000);
@@ -194,6 +202,219 @@ describe("enrichGenealogyWithArtwork's Spotify searches", () => {
 
     expect(node.img).toBeUndefined();
     expect(cache.putArtwork).not.toHaveBeenCalled();
+  });
+});
+
+describe("enrichGenealogyWithArtwork's covers", () => {
+  it.each([
+    ["the same title by another artist", "Under Pressure", ["My Chemical Romance"], {}],
+    ["another song by the named artist", "Another One Bites the Dust", ["Queen"], {}],
+    ["a remix of the named recording", "Under Pressure (Rah Mix)", ["Queen"], {}],
+    ["a node that names no artist", "Under Pressure", ["Queen"], { trackArtist: "" }],
+  ])("gives no cover, Spotify id or preview for %s", async (_label, title, artists, named) => {
+    spotifyAnswers(() => json(found(title, artists, PREVIEW)));
+
+    const node = await enrichOne({ ...underPressure, ...named });
+
+    expect(node.id).toBe("n1");
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(node.previewUrl).toBeUndefined();
+  });
+
+  it.each([
+    ["accents", "Deja Vu", "Beyonce", "Déjà Vu", ["Beyoncé"]],
+    ["case", "crazy in love", "BEYONCÉ", "Crazy In Love", ["Beyoncé", "JAY-Z"]],
+    ["featured artist", "Crazy in Love (feat. Jay-Z)", "Beyoncé", "Crazy In Love", ["Beyoncé"]],
+    ["credit", "Crazy In Love", "Beyoncé feat. JAY-Z", "Crazy In Love", ["Beyoncé", "JAY-Z"]],
+  ])(
+    "gives the cover of the named recording whatever its %s",
+    async (_label, trackTitle, trackArtist, title, artists) => {
+      spotifyAnswers(() => json(found(title, artists)));
+
+      const node = await enrichOne({ id: "n1", group: 4, label: "x", trackTitle, trackArtist });
+
+      expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    },
+  );
+
+  it("searches nothing for a node that names no title or artist: no cover could be checked", async () => {
+    const net = spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const node = await enrichOne({ id: "n1", group: 4, label: "Under Pressure - Queen" });
+
+    expect(node.img).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+    expect(cache.getArtwork).not.toHaveBeenCalled();
+  });
+
+  it("gives the analysed track's node its cover and returns no other fields", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(
+      {
+        nodes: [
+          { id: "current", group: 1, label: "Song", size: 40 },
+          { size: 22, ...underPressure },
+        ],
+      },
+      "https://i.scdn.co/image/c",
+    );
+
+    expect(out.nodes).toEqual([
+      { id: "current", img: "https://i.scdn.co/image/c" },
+      { id: "n1", img: COVER, spotifyId: "x" },
+    ]);
+  });
+});
+
+describe("enrichGenealogyWithArtwork's cache key", () => {
+  const row = (artist: string) => ({
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    spotifyId: "x",
+    trackTitle: "Under Pressure",
+    trackArtist: artist,
+    trackArtists: [artist],
+    trackDetails: NO_ISRC_DETAILS,
+  });
+
+  it("keys the search by the node's label, title and artist", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    await enrichOne(underPressure);
+    await enrichOne({ ...underPressure, trackArtist: "David Bowie" });
+
+    const keys = cache.putArtwork.mock.calls.map(([key]) => key);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) {
+      expect(key).toContain("under pressure");
+      expect(key).not.toBe("under pressure - queen");
+    }
+    expect(keys[0]).toContain("queen");
+    expect(keys[1]).toContain("david bowie");
+    expect(cache.getArtwork.mock.calls.map(([key]) => key)).toEqual(keys);
+  });
+
+  it("normalises the key: accents, case and spacing make no other row", async () => {
+    spotifyAnswers(() => json(found("Déjà Vu", ["Beyoncé"])));
+
+    await enrichOne({
+      id: "n1",
+      group: 4,
+      label: "Déjà Vu - Beyoncé",
+      trackTitle: "Déjà Vu",
+      trackArtist: "Beyoncé",
+    });
+    await enrichOne({
+      id: "n1",
+      group: 4,
+      label: " deja vu -  BEYONCE",
+      trackTitle: "DEJA VU",
+      trackArtist: "beyonce ",
+    });
+
+    const [[first], [second]] = cache.putArtwork.mock.calls;
+    expect(first).toBe(second);
+  });
+
+  it("never serves a row older code keyed by the label alone", async () => {
+    // Older code keyed the row by the label only, so a node of another artist could read it.
+    const net = spotifyAnswers(() => json({ tracks: { items: [], total: 0 } }));
+    cache.getArtwork.mockImplementation((key: string) =>
+      key === "under pressure - queen" ? row("Queen") : null,
+    );
+
+    const node = await enrichOne({ ...underPressure, trackArtist: "My Chemical Romance" });
+
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(cache.getArtwork).not.toHaveBeenCalledWith("under pressure - queen");
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
+  });
+
+  it("gives no cover from a cached row whose track is another artist's", async () => {
+    const net = spotifyAnswers(() => json(hit));
+    cache.getArtwork.mockReturnValue(row("My Chemical Romance"));
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+});
+
+describe("enrichGenealogyWithArtwork's answer", () => {
+  /** The analysed track, two nodes with one id, two without an id, and a link to no node. */
+  const messy = {
+    nodes: [
+      { id: "current", group: 1, label: "Song", size: 40 },
+      { size: 22, ...underPressure },
+      { size: 22, ...underPressure, label: "Under Pressure - Queen (again)" },
+      { id: "", group: 4, label: "No id A", size: 20 },
+      { id: "", group: 4, label: "No id B", size: 20 },
+    ],
+    links: [
+      { source: "n1", target: "current", value: 3 },
+      { source: "ghost", target: "current", value: 2 },
+    ],
+  } as Partial<Genealogy>;
+
+  it("returns one entry per node id, never an invented or repeated id", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(messy, "https://i.scdn.co/image/c");
+
+    const ids = out.nodes.map((node) => node.id);
+    expect(ids).toEqual(["current", "n1"]);
+  });
+
+  it("returns no links, so none can point to a node that is not there", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(messy, "https://i.scdn.co/image/c");
+
+    expect(out).not.toHaveProperty("links");
+  });
+
+  it("returns nothing for no nodes, never a node of its own", async () => {
+    const net = spotifyAnswers(() => json(hit));
+
+    for (const input of [undefined, {}, { nodes: [] }]) {
+      const out = await enrichGenealogyWithArtwork(
+        input as Partial<Genealogy> | undefined,
+        "https://i.scdn.co/image/c",
+      );
+      expect(out.nodes).toEqual([]);
+    }
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("keeps every other node's artwork when one node's lookup fails unexpectedly", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+    const logs = captureLogsForTests();
+
+    const out = await enrichGenealogyWithArtwork(
+      {
+        nodes: [
+          { id: "current", group: 1, label: "Song", size: 40 },
+          // Malformed, as an untyped caller could send it: its lookup throws.
+          { id: "bad", group: 4, label: "Bad", size: 22, trackTitle: 42, trackArtist: "Queen" },
+          { size: 22, ...underPressure },
+        ],
+      } as unknown as Partial<Genealogy>,
+      "https://i.scdn.co/image/c",
+    ).finally(() => logs.restore());
+
+    expect(out.nodes.map((node) => node.id)).toEqual(["current", "bad", "n1"]);
+    expect(out.nodes.find((node) => node.id === "bad")?.img).toBeUndefined();
+    expect(out.nodes.find((node) => node.id === "n1")).toMatchObject({
+      img: COVER,
+      spotifyId: "x",
+    });
+    expect(JSON.stringify(out)).not.toContain("Current Track");
   });
 });
 
@@ -209,42 +430,37 @@ describe("enrichGenealogyWithArtwork's previews", () => {
   it.each([
     ["the model named no title or artist", { trackTitle: undefined, trackArtist: undefined }],
     ["another artist's track (a cover)", { trackArtist: "David Bowie" }],
-  ])("keeps the cover but gives no Spotify id or preview when %s", async (_label, named) => {
+  ])("gives no cover, Spotify id or preview when %s", async (_label, named) => {
     spotifyAnswers(() => json(found("Under Pressure", ["My Chemical Romance"], PREVIEW)));
 
     const node = await enrichOne({ ...underPressure, ...named });
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
-    // The search's answer is still cached, so the next run does not search again.
-    expect(cache.putArtwork).toHaveBeenCalledTimes(1);
   });
 
   it.each([
     ["a strict match", "Under Pressure", "Queen", true],
     ["another artist's track", "Under Pressure", "My Chemical Romance", false],
     ["another version", "Under Pressure (Rah Mix)", "Queen", false],
-  ])(
-    "takes the cached cover always, its Spotify id only for %s",
-    async (_label, title, artist, strict) => {
-      const net = spotifyAnswers(() => json(hit));
-      cache.getArtwork.mockReturnValue({
-        coverUrl: COVER,
-        spotifyUrl: "https://open.spotify.com/track/x",
-        spotifyId: "x",
-        trackTitle: title,
-        trackArtist: artist,
-        trackDetails: NO_ISRC_DETAILS,
-      });
+  ])("takes the cached cover and Spotify id only for %s", async (_label, title, artist, strict) => {
+    const net = spotifyAnswers(() => json(hit));
+    cache.getArtwork.mockReturnValue({
+      coverUrl: COVER,
+      spotifyUrl: "https://open.spotify.com/track/x",
+      spotifyId: "x",
+      trackTitle: title,
+      trackArtist: artist,
+      trackDetails: NO_ISRC_DETAILS,
+    });
 
-      const node = await enrichOne(underPressure);
+    const node = await enrichOne(underPressure);
 
-      expect(node.img).toBe(COVER);
-      expect(node.spotifyId).toBe(strict ? "x" : undefined);
-      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
-    },
-  );
+    expect(node.img).toBe(strict ? COVER : undefined);
+    expect(node.spotifyId).toBe(strict ? "x" : undefined);
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+  });
 
   it("judges a cached answer on the track's whole credit, as a fresh search does", async () => {
     const collaboration = { ...underPressure, trackArtist: "Queen, David Bowie" };
@@ -471,7 +687,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(node).toMatchObject({ img: COVER, spotifyId: "x", previewUrl: deezerClip(7) });
     expect(cache.putArtwork).toHaveBeenCalledTimes(1);
     const [key, rewritten] = cache.putArtwork.mock.calls[0];
-    expect(key).toBe("under pressure - queen");
+    expect(key).toBe(cache.getArtwork.mock.calls[0][0]);
     expect(rewritten).toMatchObject({
       spotifyId: "x",
       trackDetails: {
@@ -484,7 +700,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(JSON.stringify(rewritten)).not.toMatch(/dzcdn|hdnea|previewUrl|mp3-preview/);
   });
 
-  it("serves a row older code cached without a Spotify id (the cover only), with no search", async () => {
+  it("serves a row cached without a Spotify id as no cover, with no search", async () => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue({
       coverUrl: COVER,
@@ -496,7 +712,8 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    // A row without the track's identity cannot be checked against the node.
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
@@ -516,7 +733,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     ["fails", () => json({ error: { status: 503 } }, { status: 503 })],
     ["finds nothing", () => json({ tracks: { items: [], total: 0 } })],
   ])(
-    "keeps the cover of a row older code cached, without its id, when the search again %s",
+    "gives no cover from a row older code cached when the search again %s",
     async (_label, answer) => {
       const net = spotifyAnswers(answer);
       cache.getArtwork.mockReturnValue(oldRow);
@@ -524,7 +741,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       const node = await enrichOne(underPressure);
 
       expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
-      expect(node.img).toBe(COVER);
+      expect(node.img).toBeUndefined();
       expect(node.spotifyId).toBeUndefined();
       expect(node.previewUrl).toBeUndefined();
       // The row is kept as it is, not overwritten with nothing.
@@ -602,25 +819,25 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     ["a live album", { album: "Live at Wembley '86", releaseDate: "1992-05-26" }],
     ["a karaoke album", { album: "Karaoke Hits", releaseDate: "2010" }],
     ["a re-recorded album", { album: "Greatest Hits (Re-Recorded Versions)", releaseDate: "2004" }],
-  ])("serves a row cached for a plain title on %s with the cover only", async (_label, details) => {
+  ])("gives no cover from a row cached for a plain title on %s", async (_label, details) => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue(cachedRow(details));
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
   });
 
-  it("serves a row whose details keep no album with the cover only (its release cannot be checked)", async () => {
+  it("gives no cover from a row whose details keep no album (its release cannot be checked)", async () => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue(cachedRow({ album: null }));
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
@@ -694,7 +911,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       ["Rock the Boat", "The Hues Corporation", "Karaoke Hits", "2010"],
     ],
   ])(
-    "gives no Spotify id or preview for a plain title on %s, and keeps the cover",
+    "gives no cover, Spotify id or preview for a plain title on %s",
     async (_label, label, release) => {
       const [title, artist, album, released] = release;
       const net = stub({
@@ -710,7 +927,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
         trackArtist: artist,
       });
 
-      expect(node.img).toBe(COVER);
+      expect(node.img).toBeUndefined();
       expect(node.spotifyId).toBeUndefined();
       expect(node.previewUrl).toBeUndefined();
       expect(deezerCalls(net)).toHaveLength(0);
@@ -835,7 +1052,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     report?: (error: SourceError) => void,
   ) =>
     enrichGenealogyWithArtwork(
-      { nodes: nodes as Genealogy["nodes"], links: [] },
+      { nodes: nodes as Genealogy["nodes"] },
       "https://i.scdn.co/image/c",
       signal,
       report,
@@ -851,7 +1068,8 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       });
     });
 
-  const previews = (out: Genealogy) => out.nodes.filter((node) => node.previewUrl).length;
+  const previews = (out: { nodes: Array<{ previewUrl?: string }> }) =>
+    out.nodes.filter((node) => node.previewUrl).length;
 
   it("makes one lookup per node, at most two at once", async () => {
     const { nodes, spotify, isrcEntry } = strictNodes(7);

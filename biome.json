@@ -91,7 +91,7 @@
       }
     },
     {
-      "includes": ["apps/api/src/agent/enricher.ts", "apps/web/src/components/GenealogyGraph.tsx"],
+      "includes": ["apps/web/src/components/GenealogyGraph.tsx"],
       "linter": {
         "rules": {
           "suspicious": {

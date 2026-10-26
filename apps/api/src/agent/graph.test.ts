@@ -71,16 +71,21 @@ vi.mock("../sources/spotify.js", async (importOriginal) => ({
   searchTracks: async (query: string, limit: number, signal?: AbortSignal) =>
     JSON.parse(await tools.spotifySearch.invoke({ query, limit }, { signal })),
 }));
-vi.mock("../sources/audio.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../sources/audio.js")>()),
-  // The engineer's own preview lookup and health probe (the analysis itself is stubbed).
-  resolvePreview: async () => {
-    hooks.onPreview?.();
-    return { previewUrl: null, match: null, detail: "No preview in this test" };
-  },
-  audioServiceHealth: async () => null,
-  analyzeAudioPreview: tools.analyzeAudioPreview,
-}));
+vi.mock("../sources/audio.js", async (importOriginal) => {
+  const audio = await importOriginal<typeof import("../sources/audio.js")>();
+  hooks.audio = audio;
+  return {
+    ...audio,
+    // The engineer's own preview lookup and health probe (the analysis itself is stubbed).
+    resolvePreview: async (...args: Parameters<typeof audio.resolvePreview>) => {
+      hooks.onPreview?.();
+      if (hooks.realPreview) return audio.resolvePreview(...args);
+      return { previewUrl: null, match: null, detail: "No preview in this test" };
+    },
+    audioServiceHealth: async () => null,
+    analyzeAudioPreview: tools.analyzeAudioPreview,
+  };
+});
 vi.mock("../sources/lastfm.js", () => ({
   lastfmConfigured: () => true,
   getLastfmTrackTags: tools.getLastfmTrackTags,
@@ -118,6 +123,10 @@ const hooks = vi.hoisted(() => ({
   putResearch: vi.fn(),
   /** Called when the engineer looks up the track's preview. */
   onPreview: null as null | (() => void),
+  /** When set, the engineer's preview lookup is the real one (Deezer through its pacer). */
+  realPreview: false,
+  /** The real audio module, for the tests that run its lookup and analysis tool. */
+  audio: null as null | typeof import("../sources/audio.js"),
 }));
 vi.mock("../store/cache.js", () => ({
   getCache: () => ({
@@ -158,7 +167,9 @@ import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
 import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
+import { DEEZER_MAX_PER_WINDOW, deezerPreviewByIsrc } from "../sources/deezer.js";
 import { SourceError } from "../sources/http.js";
+import { setUnpacedForTests } from "../sources/pacing.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { ANALYZER_VERSION, audioV2, keyWithheldV2 } from "./testing/measuredAudio.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
@@ -173,6 +184,7 @@ beforeEach(() => {
   for (const tool of Object.values(tools)) tool.invoke.mockClear();
   hooks.enrich = null;
   hooks.onPreview = null;
+  hooks.realPreview = false;
   hooks.putAudio.mockClear();
   hooks.putResearch.mockClear();
   // Every source is stubbed: any other request is a mistake, and fails.
@@ -855,6 +867,63 @@ describe("the analysis graph's stored results", () => {
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
     expect(complete(later.events)?.data.run?.sourceErrors ?? []).toEqual([]);
     expect(await store.search(TRACKS_NAMESPACE)).toHaveLength(1);
+  });
+
+  it("does not store a result whose preview lookup could not be finished, so the next run analyses again", async () => {
+    const store = new InMemoryStore();
+    // The real lookup and analysis tool: Deezer's pace refuses the search (the track has no ISRC).
+    hooks.realPreview = true;
+    const audio = hooks.audio;
+    if (!audio) throw new Error("the audio module was not loaded");
+    // Undone when the test finishes, whatever its outcome: no queued answer outlives it.
+    onTestFinished(() => {
+      tools.analyzeAudioPreview.invoke.mockReset();
+    });
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) =>
+      String(
+        await audio.analyzeAudioPreview.invoke(
+          ...(args as Parameters<typeof audio.analyzeAudioPreview.invoke>),
+        ),
+      ),
+    );
+    setUnpacedForTests(false);
+    const others = new AbortController();
+    const paced = new AbortController();
+    const ahead: Array<Promise<unknown>> = [];
+    onTestFinished(async () => {
+      // Stopped, never let go: the real network is back by now (afterEach runs first), and
+      // undoing the pace lets every waiting request go, the run's own among them.
+      paced.abort();
+      others.abort();
+      setUnpacedForTests(true);
+      await Promise.all(ahead);
+    });
+    // A full window of other Deezer requests, and as many again waiting for the next one.
+    const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
+    for (let i = 0; i < 2 * DEEZER_MAX_PER_WINDOW; i++) {
+      ahead.push(deezerPreviewByIsrc(other, others.signal).catch(() => null));
+    }
+    const first = await drive(stubModel(["done"]), { store, signal: paced.signal });
+
+    // Not a finished analysis: nothing is stored for the track.
+    expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
+    const result = complete(first.events)?.data;
+    expect(result).toMatchObject({
+      id: TRACK_ID,
+      audioUnavailableReason: "preview_lookup_incomplete",
+    });
+    expect(result?.run?.sourceErrors ?? []).toEqual([]);
+
+    // The next run that finds the track analyses it again instead of serving "no clip".
+    hooks.realPreview = false;
+    const llm = stubModel(["done"]);
+    const second = await drive(llm, { store, query: "vanilla ice - ice ice baby" });
+    expect(second.threw).toBeNull();
+    expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+    expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(2);
+    expect(complete(second.events)?.data).not.toMatchObject({
+      audioUnavailableReason: "preview_lookup_incomplete",
+    });
   });
 
   it("does not serve a result stored for another track", async () => {

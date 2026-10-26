@@ -136,6 +136,10 @@ export interface KeyMoment {
  * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio), or its
  *   gate measured nothing (silence, noise, too short: the block says which)
  * - not_run: audio analysis did not run for this track
+ * - preview_lookup_incomplete: Spotify has no clip of the track and the lookup on Deezer could
+ *   not be finished: a request was not sent (its pace had no slot in time, sources/pacing.ts) or
+ *   Deezer could not be read. Whether a clip exists is unknown, so this is never "no_preview"
+ *   (every request answered, no clip), and the result is not stored
  */
 export type AudioUnavailableReason =
   | "no_preview"
@@ -143,7 +147,8 @@ export type AudioUnavailableReason =
   | "service_unavailable"
   | "analysis_failed"
   | "not_detected"
-  | "not_run";
+  | "not_run"
+  | "preview_lookup_incomplete";
 
 /**
  * What the engineer leaves for the composer: the audio service's measurement of the preview

@@ -116,7 +116,8 @@ export interface GenreProfileItem {
 
 /**
  * Why measured audio values are missing (sent with audioSource "unavailable"). "low_confidence":
- * measured, but below the confidence needed to show a value.
+ * measured, but below the confidence needed to show a value. "preview_lookup_incomplete": the
+ * preview lookup could not be finished, so whether there is a preview is not known.
  */
 export type AudioUnavailableReason =
   | 'service_unavailable'
@@ -125,7 +126,8 @@ export type AudioUnavailableReason =
   | 'analysis_failed'
   | 'not_detected'
   | 'not_run'
-  | 'low_confidence';
+  | 'low_confidence'
+  | 'preview_lookup_incomplete';
 
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
 /**

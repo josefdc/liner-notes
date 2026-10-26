@@ -41,6 +41,10 @@ const TEXT: Record<TrackLinkState, string> = {
     "The analysis server did not send it. The problem may be on your side or on the server's. Try again in a moment.",
 };
 
+/** A secondary action, set as an underlined line of text. */
+const TEXT_BUTTON =
+  'text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none';
+
 export function TrackLinkScreen({
   state,
   trackId,
@@ -95,6 +99,15 @@ export function TrackLinkScreen({
           </div>
         </dl>
 
+        {/* While the API takes its time (up to the request's deadline), the search stays one
+            step away */}
+        {state === 'loading' && (
+          <div className="flex justify-center">
+            <button type="button" onClick={onSearch} className={TEXT_BUTTON}>
+              Search for a song
+            </button>
+          </div>
+        )}
         {state !== 'loading' && (
           <div className="flex flex-col items-center gap-3">
             {state === 'missing' && (
@@ -117,11 +130,7 @@ export function TrackLinkScreen({
                 Search for a song
               </Button>
             ) : (
-              <button
-                type="button"
-                onClick={onSearch}
-                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
-              >
+              <button type="button" onClick={onSearch} className={TEXT_BUTTON}>
                 or search for a song
               </button>
             )}

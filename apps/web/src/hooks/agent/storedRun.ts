@@ -4,7 +4,7 @@
  */
 
 import type { TrackData } from '../../types';
-import { loadEventSchemas, withContractAudio } from './events';
+import { loadEventSchemas, readContractAudio, withContractAudio } from './events';
 import { API_BASE_URL } from './types';
 
 export type StoredRunResult =
@@ -28,19 +28,36 @@ async function bodyOf(response: Response): Promise<unknown> {
   }
 }
 
+/** How long the API is waited for before the stored result counts as not loaded. */
+export const STORED_RUN_TIMEOUT_MS = 15_000;
+
 /**
  * Loads the latest stored result of a track. Rejects only with an AbortError, when `signal`
- * aborts; every other failure is a `failed` result.
+ * aborts; every other failure is a `failed` result, an answer that takes longer than
+ * `timeoutMs` included.
  */
 export async function fetchStoredRun(
   trackId: string,
   signal?: AbortSignal,
+  timeoutMs = STORED_RUN_TIMEOUT_MS,
 ): Promise<StoredRunResult> {
+  // One signal for the request and the reading of its body: the caller's, or the deadline's.
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    abort();
+  }, timeoutMs);
   try {
     const response = await fetch(`${API_BASE_URL}/runs/by-track/${encodeURIComponent(trackId)}`, {
-      signal,
+      signal: controller.signal,
     });
     const body = await bodyOf(response);
+    if (signal?.aborted) throw abortError();
+    if (timedOut) return failed();
     // Only the API's own answers count: a 404 from anything in between (a proxy without the
     // API behind it) says nothing about the track.
     const code = isObject(body) ? body.code : undefined;
@@ -54,17 +71,22 @@ export async function fetchStoredRun(
     if (!isObject(analysis) || analysis.id !== trackId) return failed();
     // The measurement is read only as the contract reads it, as for a streamed result.
     await loadEventSchemas();
-    const { AudioFeatures } = await import('./eventSchemas');
-    const track = withContractAudio(analysis, (audio) => {
-      const parsed = AudioFeatures.safeParse(audio);
-      return parsed.success ? parsed.data : null;
-    });
-    return { kind: 'found', track };
+    return { kind: 'found', track: withContractAudio(analysis, readContractAudio) };
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    console.warn('[storedRun] The stored result could not be loaded:', error);
+    if (signal?.aborted) throw abortError();
+    console.warn(
+      '[storedRun] The stored result could not be loaded:',
+      timedOut ? `no answer within ${timeoutMs} ms` : error,
+    );
     return failed();
+  } finally {
+    clearTimeout(deadline);
+    signal?.removeEventListener('abort', abort);
   }
+}
+
+function abortError(): DOMException {
+  return new DOMException('The request was aborted.', 'AbortError');
 }
 
 function failed(): StoredRunResult {

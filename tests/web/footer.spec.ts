@@ -16,9 +16,13 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await useMockApi(page, loadFixture("full-result"));
     await page.goto("/");
-    const source = page.getByRole("contentinfo").getByRole("link", { name: "Source" });
+    const source = page.getByRole("contentinfo").getByRole("link", { name: /^Source/ });
     await expect(source).toBeInViewport({ ratio: 1 });
     await expect(source).toHaveAttribute("href", REPOSITORY);
+    // In a new tab, which it says: following it never unloads a run under way.
+    await expect(source).toHaveAttribute("target", "_blank");
+    await expect(source).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(source).toHaveAccessibleName("Source (opens in a new tab)");
 
     await analyzeAndOpenDashboard(page, "Bright Lines", { reload: false });
     await expect(source).toBeInViewport({ ratio: 1 });
@@ -37,7 +41,7 @@ test("the Player keeps the bottom of a phone's screen for its tab bar, and links
   await useMockApi(page, loadFixture("full-result"));
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
-  const source = page.getByRole("contentinfo").getByRole("link", { name: "Source" });
+  const source = page.getByRole("contentinfo").getByRole("link", { name: /^Source/ });
   await expect(source).toBeInViewport({ ratio: 1 });
   await expect(source).toHaveAttribute("href", REPOSITORY);
 

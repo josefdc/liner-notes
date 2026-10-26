@@ -33,7 +33,9 @@ describe('fetchStoredRun', () => {
   it("reads the track's stored result from GET /api/runs/by-track/:id", async () => {
     const fetchMock = answer(200, { success: true, run, analysis });
     const result = await fetchStoredRun(ID);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/runs/by-track/${ID}`, { signal: undefined });
+    expect(fetchMock).toHaveBeenCalledWith(`/api/runs/by-track/${ID}`, {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual({ kind: 'found', track: analysis });
   });
 
@@ -76,6 +78,31 @@ describe('fetchStoredRun', () => {
       }),
     );
     expect(await fetchStoredRun(ID)).toEqual({ kind: 'failed' });
+  });
+
+  it('is missing for a run of the track without a result of its own', async () => {
+    answer(200, { success: true, run, analysis: null });
+    expect(await fetchStoredRun(ID)).toEqual({ kind: 'missing' });
+  });
+
+  it('fails when the API does not answer in time, and stops waiting for it', async () => {
+    let seen: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise<Response>((_resolve, reject) => {
+            seen = init?.signal;
+            // A request that hangs until it is aborted, as fetch does.
+            seen?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await fetchStoredRun(ID, undefined, 50)).toEqual({ kind: 'failed' });
+    expect(seen?.aborted).toBe(true);
   });
 
   it('rejects when its signal aborts', async () => {

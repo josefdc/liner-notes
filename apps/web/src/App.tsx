@@ -94,6 +94,17 @@ const loadingView = () => document.querySelector<HTMLElement>('[data-loading-vie
 /** The API's limit on the length of an analysis query (the contract's MAX_QUERY_LENGTH). */
 const MAX_QUERY_LENGTH = 200;
 
+/**
+ * `text` cut to the API's limit, counted in UTF-16 code units as the API counts it, never inside
+ * a character: a character the cut would split (an emoji) is left out whole, since half of one
+ * cannot be sent in an address.
+ */
+function withinQueryLimit(text: string): string {
+  const cut = text.slice(0, MAX_QUERY_LENGTH);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
 /** A link to a track (`/t/<spotifyId>`) whose result is not on screen yet. */
 interface TrackLink {
   trackId: string;
@@ -126,7 +137,9 @@ interface HistoryEntry {
  */
 function addressOf(phase: AppPhase, track: TrackData | null, link: TrackLink | null): string {
   if (link) return routeUrl({ kind: 'track', trackId: link.trackId, query: link.query });
-  if (phase === AppPhase.ONBOARDING || !track?.id) return '/';
+  // Only a Spotify track id makes a link that loads again: a result under any other id (a
+  // recording's placeholder) keeps the search's address rather than one the page calls invalid.
+  if (phase === AppPhase.ONBOARDING || !isSpotifyTrackId(track?.id)) return '/';
   const query = `${track.title ?? ''} ${track.artist ?? ''}`.trim() || null;
   return routeUrl({ kind: 'track', trackId: track.id, query });
 }
@@ -211,7 +224,8 @@ const App: React.FC = () => {
   const effectiveTrackData = overrideTrackData || trackData;
 
   // Every result shown on this page, by track id: Back and Forward to a result show it again
-  // without a request.
+  // without a request. One per track: an older entry of a track analysed twice on this page
+  // shows the track's newest result (the same track, never another's).
   const shownResults = useRef(new Map<string, TrackData>());
   useEffect(() => {
     if (effectiveTrackData?.id) shownResults.current.set(effectiveTrackData.id, effectiveTrackData);
@@ -429,7 +443,7 @@ const App: React.FC = () => {
   // becomes the search's, so Back from the result leads to the search, not to this screen.
   const handleAnalyzeLink = useCallback(() => {
     if (!link) return;
-    const query = (link.query ?? link.trackId).slice(0, MAX_QUERY_LENGTH);
+    const query = withinQueryLimit(link.query ?? link.trackId);
     writeHistory(
       { phase: AppPhase.ONBOARDING, index: entryRef.current.index, url: '/' },
       'replace',

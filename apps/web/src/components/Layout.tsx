@@ -30,11 +30,14 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false }) => {
       <footer
         className={`shrink-0 ${footerFromMd ? 'hidden md:flex' : 'flex'} justify-end border-t border-border px-(--space-md)`}
       >
+        {/* In a new tab: following it never unloads the page, and a run under way with it */}
         <a
           href={SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center min-h-6 px-(--space-xs) text-chrome font-mono text-text-tertiary hover:text-text-secondary hover:underline underline-offset-4 rounded-sm transition-colors focus-visible:text-text-secondary focus-visible:underline focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:outline-none"
         >
-          Source
+          Source<span className="sr-only"> (opens in a new tab)</span>
         </a>
       </footer>
     </div>

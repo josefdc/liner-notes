@@ -114,6 +114,56 @@ export function fullResultData() {
   return events.find((event) => event.type === "complete")?.data;
 }
 
+/**
+ * The recorded demo run (fixtures/replays/one-more-time-daft-punk.json) as the API replays it
+ * (apps/api/src/replay/player.ts): its events without their run id and `seq` and without the
+ * recorded `done`, the replay notice right after `connected`, and the result as a replay of run
+ * `runId`, with the recording's date and commit. Returns the analysis stream's events, ending
+ * with `complete` and `done`.
+ */
+export function replayedRecording(runId = "replay-run") {
+  const record = JSON.parse(
+    readFileSync(
+      join(mockDir, "..", "..", "fixtures", "replays", "one-more-time-daft-punk.json"),
+      "utf8",
+    ),
+  );
+  const { queryMatch: _match, ...analysis } = record.analysis;
+  const result = {
+    ...analysis,
+    run: {
+      ...analysis.run,
+      id: runId,
+      mode: "replay",
+      replayed: "run",
+      recordedAt: record.recordedAt,
+      commit: record.commit,
+      analyzerVersion: record.analyzerVersion,
+      usage: { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 },
+    },
+  };
+  const notice = {
+    type: "status",
+    message: `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); nothing below runs live.`,
+    code: "SYS-INIT",
+    node: "replay",
+  };
+  const events: Array<Record<string, unknown>> = [];
+  for (const { event } of record.events as Array<{ event: Record<string, unknown> }>) {
+    const { runId: _run, seq: _seq, ...body } = event;
+    if (body.type === "done") continue;
+    if (body.type === "connected") {
+      events.push({ ...body, threadId: runId }, notice);
+    } else if (body.type === "complete") {
+      events.push({ ...body, data: result });
+    } else {
+      events.push(body);
+    }
+  }
+  events.push({ type: "done" });
+  return { events, recordedAt: record.recordedAt as string };
+}
+
 /** Collects console errors and warnings, and uncaught page errors. */
 export function collectProblems(page: Page) {
   const problems: string[] = [];

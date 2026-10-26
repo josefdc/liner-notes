@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
+import { scrollBehavior } from '../../utils/motion';
 
 /** The picker's question: its heading and the name of its list. */
 const PICKER_QUESTION = 'Is this the right track?';
@@ -77,13 +78,13 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
   // When a list appears, the picker is brought into view and its first row takes the focus, so
   // the keys work at once. Scrolled no further than it takes to show it whole; when it is taller
   // than the area it scrolls in (a phone on its side), its top, the question, is aligned with
-  // the area's top, never scrolled past.
+  // the area's top, never scrolled past. Smoothly, unless the reader asked for reduced motion.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new list is the trigger
   useEffect(() => {
     const picker = pickerRef.current;
     if (picker) {
       const fits = picker.getBoundingClientRect().height <= scrollAreaHeight(picker);
-      picker.scrollIntoView?.({ behavior: 'smooth', block: fits ? 'nearest' : 'start' });
+      picker.scrollIntoView?.({ behavior: scrollBehavior(), block: fits ? 'nearest' : 'start' });
     }
     rowRefs.current[0]?.focus({ preventScroll: true });
   }, [rows]);

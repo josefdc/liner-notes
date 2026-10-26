@@ -340,6 +340,8 @@ describe("the research key and what a hit trusts", () => {
     ["of the format before releases were read", (row) => withEvidence(row, { format: 2 })],
     // Written before web text had its handles masked: read again, so the pack holds none.
     ["of the format before handles were masked", (row) => withEvidence(row, { format: 3 })],
+    // Written before forum threads were left out: read again, so its research text read none.
+    ["of the format before forum threads were left out", (row) => withEvidence(row, { format: 4 })],
     [
       "holding a timeout as lasting",
       (row) =>

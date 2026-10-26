@@ -325,9 +325,10 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * The version of `CachedEvidence` this code writes; a row of another is a miss. 3: the pack
  * names the release that stands for the recording (a row of 2 never read it). 4: web text has
  * its @handles masked and leaves out social platform pages and comment threads (a row of 3 may
- * hold them, also in the research text the composer reads).
+ * hold them, also in the research text the composer reads). 5: web text leaves out forum pages
+ * and forum comment bylines (a row of 4 may hold them, or research text written from them).
  */
-export const CACHED_EVIDENCE_FORMAT = 4;
+export const CACHED_EVIDENCE_FORMAT = 5;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the

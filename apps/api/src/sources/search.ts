@@ -65,11 +65,13 @@ export const LYRIC_SITES = [
 ] as const;
 
 /**
- * Social platforms and their short-link hosts: their pages are page chrome, comments and the
+ * Social platforms and their short-link hosts, and forums (Hacker News and its search, Quora,
+ * Gearspace under both its names): their pages are page chrome, comments and the names or
  * handles of private people, and weak evidence of a song's history. Filtered from the answer by
  * exact host or subdomain (m.facebook.com, old.reddit.com) and through a translate proxy, and
  * excluded in the request except for SHORT_SITES. YouTube is not one of them: a video page
- * carries a title, a channel (its publisher) and a description.
+ * carries a title, a channel (its publisher) and a description. Discogs' forum is left out by
+ * path (FORUM_PATHS).
  */
 export const SOCIAL_SITES = [
   "instagram.com",
@@ -89,7 +91,23 @@ export const SOCIAL_SITES = [
   "redd.it",
   "pinterest.com",
   "tumblr.com",
+  "news.ycombinator.com",
+  "quora.com",
+  "gearspace.com",
+  "gearslutz.com",
+  "hn.algolia.com",
 ] as const;
+
+/**
+ * Forum pages on a site whose other pages are primary sources: Discogs' forum and groups
+ * (discogs.com/forum/…, /group/…, also after a doubled slash or a language prefix such as /de/,
+ * /pt-BR/ or /pt_BR/). Left out of the
+ * answer by host and path in isSocialPage, never sent in `exclude_domains`: the request's list
+ * names whole domains, and excluding discogs.com would drop its release and artist pages.
+ */
+const FORUM_PATHS: ReadonlyArray<readonly [site: string, path: RegExp]> = [
+  ["discogs.com", /^\/+(?:[a-z]{2}(?:[-_][a-z]{2})?\/+)?(?:forum|group)s?(?:\/|$)/i],
+];
 
 /**
  * Social sites never sent in the request's `exclude_domains`: names so short that a match by
@@ -113,8 +131,8 @@ function unproxyHost(host: string): string {
 const EXCLUDED_SITES = [...LYRIC_SITES, ...SOCIAL_SITES.filter((site) => !SHORT_SITES.has(site))];
 
 /**
- * Domains sent as `exclude_domains`: the lyric sites and social platforms (but SHORT_SITES), and
- * their translate-proxy hosts.
+ * Domains sent as `exclude_domains`: the lyric sites, social platforms and forum comment pages
+ * (but SHORT_SITES), and their translate-proxy hosts.
  */
 export const EXCLUDED_DOMAINS = [...EXCLUDED_SITES, ...EXCLUDED_SITES.map(translateProxyHost)];
 
@@ -167,8 +185,8 @@ export function isLyricPage(url: string): boolean {
 const onSite = (host: string, site: string) => host === site || host.endsWith(`.${site}`);
 
 /**
- * True for a page on a social platform (also through a translate proxy, and with or without a
- * scheme).
+ * True for a page on a social platform or a forum (SOCIAL_SITES, and FORUM_PATHS by path; also
+ * through a translate proxy, and with or without a scheme).
  */
 export function isSocialPage(url: string): boolean {
   const parsed = looseUrl(url);
@@ -176,6 +194,9 @@ export function isSocialPage(url: string): boolean {
   const host = hostOf(parsed);
   const named = host.endsWith(".translate.goog") ? unproxyHost(host) : host;
   if (SOCIAL_SITES.some((site) => onSite(named, site))) return true;
+  if (FORUM_PATHS.some(([site, path]) => onSite(named, site) && path.test(parsed.pathname))) {
+    return true;
+  }
   const inner = translatedPage(parsed, host);
   return inner !== null && isSocialPage(inner);
 }
@@ -231,6 +252,39 @@ const AGE = /^\d{1,3}[wdhm]$/;
 const LABEL_REACH = 3;
 /** "name: comment", where the name is a token of its own. */
 const NAME_LINE = /(?:^|[\s.!?])([^\s:]+):(?=\s)/gu;
+/** A month's name, short ("Feb", "Sept") or full ("February"). */
+const MONTH =
+  "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+/** A comment's date ("on Feb 22, 2021") or age ("3 hours ago", "a day ago"). */
+const COMMENT_WHEN = `(?:on\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago)`;
+/** A pipe, also the fullwidth one a translate proxy writes. */
+const PIPE = "[|｜]";
+/** One of a comment's links: "| parent", "| next", "| flag" … */
+const LINK = `${PIPE}\\s*(?:parent|prev|next|root|context|flag|favorite|unvote)\\s*`;
+/** Where a comment's links end on Hacker News: the collapse button ("[–]") or its script link. */
+const LINKS_END = "(?=\\[[–-]\\]|\\(javascript)";
+/**
+ * A comment's thread links, one of:
+ * - links up to "| parent", then another pipe, LINKS_END or the end of the text;
+ * - links that end in LINKS_END ("| prev | next [–]", "| next (javascript:void(0))");
+ * - links at the end of the text that are not all prev and next ("| context | flag").
+ * A blog's bare "| prev | next" is not one, nor a link word that reads on ("| next article",
+ * "| parent label", "| next-gen", "| context | share").
+ */
+const THREAD_LINKS =
+  `(?:(?:${LINK})*${PIPE}\\s*parent\\s*(?=${PIPE}|\\[[–-]\\]|\\(javascript|$)` +
+  `|(?:${LINK})+${LINKS_END}` +
+  `|(?:${LINK})*${PIPE}\\s*(?:root|context|flag|favorite|unvote)\\s*(?:${LINK})*$)`;
+/**
+ * A forum comment's byline, as Hacker News writes it: a user name (any token: many have no digit
+ * or "_"), the comment's date or age (COMMENT_WHEN; after a pipe in Algolia's "name | 3 hours
+ * ago"), then its thread links (THREAD_LINKS) or a "[flagged]" or "[dead]" marker. A byline without
+ * them ("by Jane Smith on Feb 22, 2021", "Posted on Feb 22, 2021 | next article") is not one.
+ */
+const FORUM_BYLINE = new RegExp(
+  `(?:^|\\s)[^\\s|｜]+(?:\\s+|\\s*${PIPE}\\s*)${COMMENT_WHEN}\\s*(?:\\[(?:flagged|dead)\\]|${THREAD_LINKS})`,
+  "u",
+);
 
 /** A token without the punctuation around it. */
 const bare = (token: string) => token.replace(/^[^\p{L}\p{N}@…]+|[^\p{L}\p{N}…]+$/gu, "");
@@ -261,10 +315,13 @@ function labelledAges(words: readonly string[]): number {
  * - "profile or handle boilerplate": "'s profile picture" right after a user name, or three or
  *   more handles in a row or that make up a fifth of the words;
  * - "a comment thread": two comments' ages ("3w") each next to a thread button ("Reply",
- *   "Like", "Follow"), or three "name: comment" lines whose names are user names.
+ *   "Like", "Follow"), three "name: comment" lines whose names are user names, or a forum
+ *   comment's byline (FORUM_BYLINE: "some_user on Feb 22, 2021 | parent | next [–]").
  * One handle in a sentence ("Thomas Bangalter (@…)"), "Following the success of …", "the '90s",
- * a tracklist ("A1: …") and "R.E.M.: …" are kept. The web tier runs this on the text it stores,
- * and every reader of stored evidence runs it again on the same text.
+ * a tracklist ("A1: …"), "R.E.M.: …", a "|"-separated title, and a date followed by no thread
+ * links, by a blog's "| prev | next" or by a link word that reads on ("Posted on Feb 22, 2021 |
+ * next article") are kept. The web tier runs this on the text it stores, and every reader of
+ * stored evidence runs it again on the same text.
  */
 export function webTextIssue(text: string): string | null {
   if ((text.match(HANDLE_IN_TEXT)?.length ?? 0) > 0) return "a private @handle";
@@ -288,6 +345,7 @@ export function webTextIssue(text: string): string | null {
   let names = 0;
   for (const [, name] of text.matchAll(NAME_LINE)) if (isUserName(name)) names++;
   if (names >= 3) return "a comment thread";
+  if (FORUM_BYLINE.test(text)) return "a comment thread";
   return null;
 }
 

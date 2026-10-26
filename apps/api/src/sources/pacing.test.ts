@@ -1,6 +1,6 @@
 /**
- * Client-side pacing of Discogs and SecondHandSongs (sources/pacing.ts, `pacedFetchJson`), with
- * fake timers and a stubbed network: requests start at most at the source's pace and budgets; a
+ * Client-side pacing of Discogs, SecondHandSongs and Deezer (sources/pacing.ts, `pacedFetchJson`),
+ * mostly with fake timers and a stubbed network: requests start at most at the source's pace and budgets; a
  * request whose slot is too far away, or after the caller's deadline, is refused without being
  * sent (the source is "not asked", never a timeout); a 429 holds the source for its Retry-After
  * (bounded) and is retried once, then reported as a typed `rate_limited` error; and pacing is
@@ -268,6 +268,42 @@ describe("a lane pacer", () => {
     expect(priority.out).toEqual([5000, 5000]);
     expect(background.out).toEqual(["refused"]);
   });
+
+  it("starts a waiting request when its window frees, on a fake clock at a time where the window's edge rounds", async () => {
+    const windowMs = lanePace().windowMs;
+    const rounds = (t: number) => t + windowMs - windowMs < t;
+    let step = 0.1;
+    while (!rounds(pacingClock() + step)) step += 0.1;
+    vi.advanceTimersByTime(step);
+    expect(rounds(pacingClock())).toBe(true);
+    const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
+    const begun = elapsed();
+    const first = starts(pacer, 1, "priority");
+    const second = starts(pacer, 1, "priority");
+    await vi.advanceTimersByTimeAsync(windowMs + 1);
+    await Promise.all([first.all, second.all]);
+
+    expect(first.out).toEqual([begun]);
+    expect(second.out).toHaveLength(1);
+    expect(Number(second.out[0]) - begun).toBeGreaterThanOrEqual(windowMs);
+  });
+
+  // For each time t, (t + 5000) - 5000 < t in floating point: compared that way, the first start
+  // would never leave its window and finding the next slot would never end.
+  it.each([1000.2, 4321.3, 126072.00101004688])(
+    "gives a full window's next slot at the fractional clock time %d, where the window's edge rounds",
+    async (now) => {
+      expect(now + 5000 - 5000).toBeLessThan(now);
+      vi.useRealTimers();
+      vi.spyOn(performance, "now").mockReturnValue(now);
+      const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
+      await pacer.slot();
+      const next = pacer.slot().then(() => "started");
+      expect(pacer.waiting).toBe(1);
+      pacer.clear();
+      await expect(next).resolves.toBe("started");
+    },
+  );
 
   it("lets a waiting request leave at once when its signal aborts, taking no slot", async () => {
     const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));

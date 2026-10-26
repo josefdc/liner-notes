@@ -1,4 +1,11 @@
-import type { Claim, ClaimKind, Evidence, SourceId, SourceTier } from '@liner-notes/contract';
+import {
+  type Claim,
+  type ClaimKind,
+  claimIsRejected,
+  type Evidence,
+  type SourceId,
+  type SourceTier,
+} from '@liner-notes/contract';
 import { measuredAudioOf } from '../../constants';
 import type { TrackData } from '../../types';
 import type { MeasuredAudio } from '../measured/audio';
@@ -8,16 +15,20 @@ import type { MeasuredAudio } from '../measured/audio';
 // The result reaches the app as the server wrote it (only its `audio` block is read by the
 // contract on the way, hooks/agent/events.ts), so the claims and evidence are read here, as the
 // contract reads them: a list keeps the items its schema accepts and drops the others (a
-// tolerant list), and a result without them has none. The page loads no schema for this: the
-// checks below mirror the contract's `Claim` and `Evidence`, and claims.property.test.ts checks
-// them against the schemas themselves, as audio.property.test.ts does for the measurement.
+// tolerant list), and a result without them has none. No schema is run for this: the checks
+// below mirror the contract's `Claim` and `Evidence`, and claims.property.test.ts checks them
+// against the schemas themselves, as audio.property.test.ts does for the measurement. (This
+// module still imports the contract, for `claimIsRejected`, so the contract's chunk, zod with
+// it, loads with it.)
 //
 // How a claim is shown is the contract's rule (`claimDisplayKind`, checks.ts), taken here over
 // the page's reading of the measurement. A claim the verifier contradicted, or whose number the
 // measurement contradicts, leaves the main view whatever its kind: it is listed with the
-// rejected claims only (`claimIsRejected`).
+// rejected claims only (the contract's `claimIsRejected`, re-exported here).
 
-// The contract's enums, mirrored so the page loads no schema; claims.property.test.ts checks
+export { claimIsRejected };
+
+// The contract's enums, mirrored so the checks run no schema; claims.property.test.ts checks
 // that each equals the contract's own.
 export const SOURCE_IDS: ReadonlySet<string> = new Set([
   'spotify',
@@ -57,6 +68,7 @@ export const NUMERIC_CHECKS: ReadonlySet<string> = new Set([
 ]);
 export const CLAIM_ORIGINS: ReadonlySet<string> = new Set(['code', 'model']);
 export const CLAIM_FIELDS: ReadonlySet<string> = new Set(['tempo', 'key']);
+export const CLAIM_SCOPES: ReadonlySet<string> = new Set(['recording', 'work', 'release']);
 export const FACTOID_TYPES: ReadonlySet<string> = new Set([
   'production',
   'trivia',
@@ -153,8 +165,16 @@ export function isClaim(value: unknown): value is Claim {
   );
 }
 
-/** The claim as the contract reads it: its factoid's unreadable entities dropped. */
-function readClaim(claim: Claim): Claim {
+/**
+ * The claim as the contract reads it: a scope it does not know as none (a claim about this
+ * recording), and its factoid's unreadable entities dropped.
+ */
+function readClaim(value: Claim): Claim {
+  let claim = value;
+  if (claim.scope !== undefined && !CLAIM_SCOPES.has(claim.scope)) {
+    const { scope: _unread, ...rest } = claim;
+    claim = rest;
+  }
   if (!claim.factoid) return claim;
   const entities = (claim.factoid.entities as unknown[]).filter(isPresentationEntity);
   return { ...claim, factoid: { ...claim.factoid, entities } as Claim['factoid'] };
@@ -205,16 +225,6 @@ export function claimDisplayKind(claim: Claim, context: ClaimContext): ClaimKind
   const judged =
     claim.origin === 'code' || claim.verdict === 'supported' || claim.verdict === 'partial';
   return citesOnlyKnown(claim.evidenceIds, context) && judged ? 'sourced' : 'inferred';
-}
-
-/**
- * A claim rejected by the verifier: its judge found it contradicted by its cited excerpts, or
- * the numeric check found its number contradicted by the measurement. Whatever its kind, it is
- * shown only in the rejected claims, with why. It takes any item, read or not, so a claim this
- * page cannot read is still kept out of the main view when it was rejected.
- */
-export function claimIsRejected(claim: { verdict?: unknown; numericCheck?: unknown }): boolean {
-  return claim.verdict === 'contradicted' || claim.numericCheck === 'contradicted';
 }
 
 // =============================================================================
@@ -381,6 +391,8 @@ export interface ResultClaims {
   isUnreadable: (id: unknown) => boolean;
   /** True for an id any claim with it was rejected under, read or not. */
   isRejected: (id: unknown) => boolean;
+  /** The ids any claim was rejected under, read or not (as `isRejected`). */
+  rejectedIds: ReadonlySet<string>;
   /** The page's reading of the measurement, for the conflict lines. */
   audio: MeasuredAudio | null;
 }
@@ -447,6 +459,7 @@ export function resultClaims(track: TrackData): ResultClaims {
     isHidden,
     isUnreadable,
     isRejected,
+    rejectedIds,
     audio: context.audio,
   };
 }

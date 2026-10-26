@@ -13,7 +13,14 @@
 
 import { z } from "zod";
 import { AudioFeatures } from "./audio.js";
-import { ClaimAbout, ClaimField, FactoidEntityType, FactoidType, Verdict } from "./evidence.js";
+import {
+  ClaimAbout,
+  ClaimField,
+  ClaimScope,
+  FactoidEntityType,
+  FactoidType,
+  Verdict,
+} from "./evidence.js";
 import { FACTOID_LIMITS, LinkType } from "./track.js";
 
 /**
@@ -60,6 +67,13 @@ const evidenceIds = () =>
     .array(z.string())
     .describe("Ids of evidence items from the evidence pack that support this; [] when none");
 
+const scope = () =>
+  ClaimScope.describe(
+    "What the statement is about: 'recording' this recording of the track, 'work' the song " +
+      "whatever the recording (its writers, other artists' versions), 'release' a whole " +
+      "release the track is on (an album credit, the album it appears on)",
+  );
+
 // =============================================================================
 // Composer
 // =============================================================================
@@ -71,6 +85,7 @@ export const ComposerClaim = z.strictObject({
   field: ClaimField.nullable().describe(
     "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null",
   ),
+  scope: scope(),
 });
 export type ComposerClaim = z.infer<typeof ComposerClaim>;
 
@@ -82,6 +97,7 @@ export const ComposerFactoid = z.strictObject({
     .array(z.strictObject({ text: z.string(), type: FactoidEntityType }))
     .describe("Names in the text worth exploring (people, instruments, records, years)"),
   evidenceIds: evidenceIds(),
+  scope: scope(),
 });
 export type ComposerFactoid = z.infer<typeof ComposerFactoid>;
 
@@ -99,9 +115,20 @@ export const ComposerNode = z.strictObject({
 });
 export type ComposerNode = z.infer<typeof ComposerNode>;
 
+/**
+ * A relation between two nodes, from the earlier work (`source`) to the later one (`target`),
+ * as `GenealogyLink` states it; a `producer` link has no direction.
+ */
 export const ComposerLink = z.strictObject({
-  source: z.string().describe("Node id"),
-  target: z.string().describe("Node id"),
+  source: z
+    .string()
+    .describe(
+      "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed " +
+        "or that influenced the target",
+    ),
+  target: z
+    .string()
+    .describe("Node id of the later work: the record that uses or follows the source"),
   type: LinkType,
   evidenceIds: evidenceIds(),
 });

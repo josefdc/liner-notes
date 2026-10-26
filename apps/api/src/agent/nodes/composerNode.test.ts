@@ -96,8 +96,15 @@ const output: ComposerOutput = {
       about: "sample",
       evidenceIds: ["ev-mb-1", "ev-made-up"],
       field: null,
+      scope: "recording",
     },
-    { text: "It runs at 116 BPM.", about: "sound", evidenceIds: [], field: "tempo" },
+    {
+      text: "It runs at 116 BPM.",
+      about: "sound",
+      evidenceIds: [],
+      field: "tempo",
+      scope: "recording",
+    },
   ],
   factoids: [
     {
@@ -106,6 +113,7 @@ const output: ComposerOutput = {
       type: "sample",
       entities: [{ text: "Queen", type: "artist" }],
       evidenceIds: ["ev-mb-1"],
+      scope: "recording",
     },
   ],
   genealogyNodes: [
@@ -316,6 +324,23 @@ describe("composerNode", () => {
     });
     expect(claims.find((c) => c.id === factoid.claimId)?.factoid?.title).toBe("Borrowed bass");
     expect(out.claims).toEqual(claims);
+  });
+
+  it("keeps the scope the model gave each claim and factoid on its claim", async () => {
+    const llm = stubLlm(() => ({
+      ...output,
+      claims: [{ ...output.claims[0], scope: "work" }, output.claims[1]],
+      factoids: [{ ...output.factoids[0], scope: "release" }],
+    }));
+    const out = await createComposerNode(testRuntime(llm))(stateWith(measured), config());
+
+    const claims = out.trackData?.claims ?? [];
+    expect(claims.map((claim) => claim.scope)).toEqual(["work", "recording", "release"]);
+    expect(TrackAnalysis.parse(out.trackData).claims?.map((claim) => claim.scope)).toEqual([
+      "work",
+      "recording",
+      "release",
+    ]);
   });
 
   it("keeps a citation only of an item the prompt showed", async () => {

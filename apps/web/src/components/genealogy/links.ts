@@ -5,26 +5,30 @@ import {
   GenealogyLink,
   type LinkKind,
   type LinkType,
+  linkClaimMismatches,
   linkDisplayKind as contractLinkDisplayKind,
+  sharedClaimIds,
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
 import { sourceLabel } from '../provenance/SourceLink';
 
 /**
  * How the web app reads and names genealogy links. Each link is read with the contract's link
- * schema and shown by the contract's rule (`linkDisplayKind`: sourced only when it says so and
- * every evidence id it cites is in the result's evidence pack), with three stricter rules of
- * this app's own:
- * - a link the model proposed is sourced only when its claim (`claimId`) carries a supported or
- *   partial verdict: citing is not support;
+ * schema and shown by the contract's rule (`linkDisplayKind`, given the result's claims:
+ * sourced only when it says so, every evidence id it cites is in the result's evidence pack,
+ * and a link that states a claim (`claimId`), whatever its origin, is sourced only when no
+ * claim with that id is rejected, the claim reads sourced, cites every id the link cites and is
+ * about the link's relation, and no other link states it (one relation claim per link, never
+ * shared); a model link must state one: citing is not support). This app
+ * applies the claim rule itself too, to say why, and adds two rules of its own:
  * - a link whose claim the main view hides (rejected by the verifier, or unreadable: the one
  *   rule of `resultClaims` in provenance/claims.ts) is not shown at all;
  * - a link whose direction contradicts the release years is "related (direction unknown)".
  *
- * Direction: `source` is the earlier record, the one that is sampled, interpolated, covered,
- * remixed or that influenced; `target` is the record that uses it. The contract does not state
- * this yet, so every relation is written out as a sentence naming both tracks with their years,
- * and a link whose years say otherwise is not given a direction.
+ * Direction, as the contract states it (`GenealogyLink`): `source` is the earlier record, the
+ * one that is sampled, interpolated, covered, remixed or that influenced; `target` is the
+ * record that uses it. Every relation is written out as a sentence naming both tracks with
+ * their years, and a link whose years say otherwise is not given a direction.
  */
 
 /** Every relation a link may state, in the order the legend lists them. */
@@ -97,6 +101,15 @@ export interface LinkContext {
   hasPack: boolean;
   /** The readable claim with this id and how its chip shows it, or null. */
   claimOf: (id: string) => { claim: Claim; kind: ClaimKind } | null;
+  /** The readable claims by id (the first with each id), for the contract's link rule. */
+  claims: ReadonlyMap<string, Claim>;
+  /** The ids any claim was rejected under, whichever copy, for the contract's link rule. */
+  rejectedClaimIds: ReadonlySet<string>;
+  /**
+   * The claim ids more than one of the genealogy's links states, for the contract's link rule
+   * (`readGenealogy` sets them from the links it reads; empty otherwise).
+   */
+  sharedClaimIds: ReadonlySet<string>;
   /** True for a claim id the main view shows nothing for (`ResultClaims.isHidden`). */
   isHidden: (id: string) => boolean;
   /** The analysed track's release year, for its node when the node's label names none. */
@@ -135,6 +148,9 @@ export function linkContext(
       const shown = claims?.byId.get(id);
       return shown ? { claim: shown.claim, kind: shown.kind } : null;
     },
+    claims: new Map([...(claims?.byId ?? [])].map(([id, shown]) => [id, shown.claim])),
+    rejectedClaimIds: claims?.rejectedIds ?? new Set(),
+    sharedClaimIds: new Set(),
     isHidden: (id) => claims?.isHidden(id) ?? false,
     trackYear: yearFrom(releaseYear),
   };
@@ -149,12 +165,25 @@ export function yearFrom(value: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** The kind of a link by the contract's `linkDisplayKind`, against the pack's ids. */
+/**
+ * The kind of a link by the contract's `linkDisplayKind`, against the pack's ids, the result's
+ * claims and the ids any claim was rejected under (without claims, no link that states one and
+ * no model link reads as sourced).
+ */
 export function linkDisplayKind(
   link: GenealogyLink,
   evidence: ReadonlyMap<string, Evidence>,
+  claims: ReadonlyMap<string, Claim> = new Map(),
+  rejectedClaimIds: ReadonlySet<string> = new Set(),
+  sharedLinkClaimIds: ReadonlySet<string> = new Set(),
 ): LinkKind {
-  return contractLinkDisplayKind(link, { evidenceIds: new Set(evidence.keys()), audio: null });
+  return contractLinkDisplayKind(link, {
+    evidenceIds: new Set(evidence.keys()),
+    audio: null,
+    claims,
+    rejectedClaimIds,
+    sharedLinkClaimIds,
+  });
 }
 
 /** The release year at the end of a node's label ("Title - Artist (1984)"), or null. */
@@ -218,15 +247,32 @@ export function readLink(
     reasons.push(`the years (${fromYear} and ${toYear}) do not fit this direction`);
   }
 
-  // A link that states a claim is sourced only when that claim's chip says sourced, whoever
-  // wrote the link; a model link without a claim is never sourced (citing is not support).
-  let kind = linkDisplayKind(link, context.evidence);
-  if (kind === 'sourced' && claimed) {
+  // The contract's rule, given the result's claims: a link that states a claim is sourced only
+  // through it, whoever wrote the link, and a model link without one is never sourced (citing
+  // is not support). The same rule is applied here to say why, with the claim as its chip
+  // reads it. The reasons are given only for a link whose evidence alone would make it sourced.
+  let kind = linkDisplayKind(
+    link,
+    context.evidence,
+    context.claims,
+    context.rejectedClaimIds,
+    context.sharedClaimIds,
+  );
+  const citesPack =
+    link.kind === 'sourced' && citations.length > 0 && citations.every((c) => c.evidence !== null);
+  if (citesPack && claimed) {
+    const mismatches = linkClaimMismatches(link, claimed.claim);
     if (claimed.kind !== 'sourced') {
       kind = 'inferred';
       if (!claim?.verdict) reasons.push('its claim is not sourced');
+    } else if (link.claimId && context.sharedClaimIds.has(link.claimId)) {
+      kind = 'inferred';
+      reasons.push('its claim is also stated by another link');
+    } else if (mismatches.length > 0) {
+      kind = 'inferred';
+      reasons.push(...mismatches.map((mismatch) => `its claim ${mismatch}`));
     }
-  } else if (kind === 'sourced' && origin === 'model') {
+  } else if (citesPack && origin === 'model') {
     kind = 'inferred';
     reasons.push('proposed by the model; no verifier verdict supports it');
   }
@@ -329,10 +375,17 @@ export function readGenealogy(
   context: LinkContext = linkContext(undefined, null),
 ): GenealogyReading {
   const nodes = nodesById(genealogy?.nodes, context.trackYear);
+  const values: unknown[] = Array.isArray(genealogy?.links) ? genealogy.links : [];
+  // As the contract counts them: over every link its schema reads, drawn or not.
+  const readable = values.flatMap((value) => {
+    const parsed = GenealogyLink.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const withShared = { ...context, sharedClaimIds: sharedClaimIds(readable) };
   const links: ShownLink[] = [];
   let hidden = 0;
-  for (const value of Array.isArray(genealogy?.links) ? genealogy.links : []) {
-    const read = readLink(value, context, nodes);
+  for (const value of values) {
+    const read = readLink(value, withShared, nodes);
     if (read === null) continue;
     if ('hidden' in read) {
       hidden += 1;

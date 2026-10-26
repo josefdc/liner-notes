@@ -55,12 +55,14 @@ const claimItem = (region: Locator, text: string) =>
 test("the mock result is a result the API may send, with only the faults planted in it", () => {
   const data = resultOf(provenance);
   // Each planted fault is one the reader must show for what it is: a web search result as a
-  // web page, claims as inference, and cards whose claim cannot be read not at all.
+  // web page, claims as inference, two claims sharing an id (the rejected copy hides the id),
+  // and cards whose claim cannot be read not at all.
   expect(analysisIssues(TrackAnalysis.parse(data))).toEqual([
     "evidence[4].sourceTier: a web search result is not a primary record",
     "claims[1].field: key was not measured",
     'claims[6].evidenceIds: cites "ev-gone", which is not in the evidence pack',
     "claims[7].verdict: a model claim is sourced only when supported or partial",
+    'claims[19].id: duplicate id "c-dup"',
     'factoids[3].claimId: unknown claim "c-future-rejected"',
     'factoids[5].claimId: unknown claim "c-future"',
   ]);

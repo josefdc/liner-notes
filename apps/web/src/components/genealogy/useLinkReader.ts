@@ -15,8 +15,9 @@ export function setReaderImport(load: () => Promise<Reader>): void {
 }
 
 /**
- * Loads the link reader, which validates links with the contract's schemas (and so brings zod):
- * a view that does not draw the graph loads it only when it has links to read.
+ * Loads the link reader, which validates links with the contract's schemas: a view that does
+ * not draw the graph loads it only when it has links to read. Only the reader's own code waits;
+ * the contract (and zod) is already loaded with the claims module.
  */
 export function loadLinkReader(): Promise<Reader> {
   loading ??= importReader().then(

@@ -72,7 +72,14 @@ const logsAt = (level: string) => logs.entries().filter((entry) => entry.level =
 
 /** Makes the stubbed model answer, so paid requests succeed (200). */
 function modelAnswers() {
-  const factoid = { title: "t", text: "c", type: "production", entities: [], evidenceIds: [] };
+  const factoid = {
+    title: "t",
+    text: "c",
+    type: "production",
+    entities: [],
+    evidenceIds: [],
+    scope: "recording",
+  };
   vi.mocked(llm.invoke).mockImplementation(async (_site, tier, _input, schema) => ({
     output: schema.parse({ factoids: [factoid, factoid, factoid] }),
     callId: "stub",

@@ -5,6 +5,7 @@ import {
   ClaimField,
   ClaimKind,
   ClaimOrigin,
+  ClaimScope,
   claimDisplayKind as contractDisplayKind,
   Evidence,
   FactoidEntityType,
@@ -23,6 +24,7 @@ import {
   CLAIM_FIELDS,
   CLAIM_KINDS,
   CLAIM_ORIGINS,
+  CLAIM_SCOPES,
   claimDisplayKind,
   FACTOID_ENTITY_TYPES,
   FACTOID_TYPES,
@@ -112,6 +114,7 @@ function validClaim(seed: number): Record<string, Json> {
     ]);
   }
   if (r() < 0.7) claim.field = cycle(ClaimField.options, 4);
+  if (r() < 0.5) claim.scope = cycle(ClaimScope.options, 7);
   if (r() < 0.4) {
     claim.factoid = {
       title: 'A card',
@@ -183,6 +186,7 @@ describe("the page's copy of the contract's enums", () => {
     same(NUMERIC_CHECKS, NumericCheck.options);
     same(CLAIM_ORIGINS, ClaimOrigin.options);
     same(CLAIM_FIELDS, ClaimField.options);
+    same(CLAIM_SCOPES, ClaimScope.options);
     same(FACTOID_TYPES, FactoidType.options);
     same(FACTOID_ENTITY_TYPES, FactoidEntityType.options);
   });

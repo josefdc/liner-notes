@@ -32,9 +32,14 @@
             "field": {
               "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }],
               "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["text", "about", "evidenceIds", "field"],
+          "required": ["text", "about", "evidenceIds", "field", "scope"],
           "additionalProperties": false
         }
       },
@@ -69,9 +74,14 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Ids of evidence items from the evidence pack that support this; [] when none"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "required": ["title", "text", "type", "entities", "evidenceIds", "scope"],
           "additionalProperties": false
         },
         "description": "At most 8"
@@ -100,8 +110,14 @@
         "items": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "description": "Node id" },
-            "target": { "type": "string", "description": "Node id" },
+            "source": {
+              "type": "string",
+              "description": "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed or that influenced the target"
+            },
+            "target": {
+              "type": "string",
+              "description": "Node id of the later work: the record that uses or follows the source"
+            },
             "type": {
               "type": "string",
               "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
@@ -153,9 +169,14 @@
             "field": {
               "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }],
               "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["text", "about", "evidenceIds", "field"],
+          "required": ["text", "about", "evidenceIds", "field", "scope"],
           "additionalProperties": false
         }
       },
@@ -190,9 +211,14 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Ids of evidence items from the evidence pack that support this; [] when none"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "required": ["title", "text", "type", "entities", "evidenceIds", "scope"],
           "additionalProperties": false
         },
         "description": "At most 8"
@@ -221,8 +247,14 @@
         "items": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "description": "Node id" },
-            "target": { "type": "string", "description": "Node id" },
+            "source": {
+              "type": "string",
+              "description": "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed or that influenced the target"
+            },
+            "target": {
+              "type": "string",
+              "description": "Node id of the later work: the record that uses or follows the source"
+            },
             "type": {
               "type": "string",
               "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]

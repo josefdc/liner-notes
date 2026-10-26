@@ -137,11 +137,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.1+librosa"
-    assert main.analyzer_version("essentia") == "2.3.1+essentia"
+    assert main.analyzer_version("librosa") == "2.3.2+librosa"
+    assert main.analyzer_version("essentia") == "2.3.2+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.1+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.2+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -153,7 +153,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.1+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.2+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -354,6 +354,189 @@ def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["tempo"]["bpm"] == pytest.approx(bpm, abs=1.0)
     assert round(v2["tempo"]["bpm"]) == bpm
+
+
+def sound_within(y: np.ndarray, t: float, reach: float) -> bool:
+    """Whether any sample of `y` within `reach` seconds of `t` is not zero."""
+    lo = max(0, round((t - reach) * FIXTURE_SR))
+    return bool(np.any(y[lo : max(lo, round((t + reach) * FIXTURE_SR) + 1)]))
+
+
+def tracked_beats(y: np.ndarray, estimator: str) -> list[float]:
+    """Every beat the estimator tracked, in the window and rounded as the service reports them."""
+    found = estimators.select_estimator(estimator).measure_tempo(estimators.Signals(y, FIXTURE_SR))
+    assert isinstance(found, estimators.TempoEstimate)
+    beats = np.sort(np.clip(np.asarray(found.beats, dtype=float), 0.0, y.size / FIXTURE_SR))
+    return [round(float(t), 3) for t in beats]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_beats_are_reported_in_digital_silence(estimator):
+    """
+    The band enters at 10 s, after digital silence. Essentia's tracker counts through the
+    silence (23 of its 55 beats, the first at 0.348 s); only the beats on the band are
+    reported, and the tempo, fitted to the beats on onsets, stays 97 BPM.
+    """
+    y = PROBES["band-97-after-10s-silence"]
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    reported = v2["beats"]["times"]
+    # The rule, with 1 ms either way for the rounding of the reported times: a beat with no
+    # sample of the band within 51 ms is left out, one with the band within 49 ms is kept.
+    reach = 0.05
+    assert all(sound_within(y, t, reach + 0.001) for t in reported)
+    assert [t for t in tracked if sound_within(y, t, reach - 0.001)] == [
+        t for t in reported if sound_within(y, t, reach - 0.001)
+    ]
+    assert len(reported) >= 30
+    assert round(v2["tempo"]["bpm"]) == 97
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("probe", ["band-97", "brown-noise-with-kick", "drums-crash-jitter-25ms"])
+def test_every_beat_is_reported_without_silence(probe, estimator):
+    """
+    With sound throughout, the reported grid is every beat tracked, as before. (Brown noise
+    with a kick 6 dB under it holds the quietest beats of the probes, 26 dB under the loudest
+    frame.)
+    """
+    tracked = tracked_beats(PROBES[probe], estimator)
+    _, v2 = analyse_array(PROBES[probe], estimator)
+    assert v2["beats"]["times"] == tracked
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_beats_in_a_silent_gap_are_left_out(estimator):
+    """
+    2.5 s of digital silence inside a band (12-14.5 s): both trackers keep counting through it
+    (four beats); only those are left out, and the tempo is still reported.
+    """
+    y = signals.drum_pattern(97).copy()
+    y[12 * FIXTURE_SR : int(14.5 * FIXTURE_SR)] = 0
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    in_gap = [t for t in tracked if 12.0 < t < 14.5]
+    assert len(in_gap) == 4
+    assert v2["beats"]["times"] == [t for t in tracked if t not in in_gap]
+    assert round(v2["tempo"]["bpm"]) == 97
+
+
+def test_beats_over_silence_or_a_dc_offset_are_left_out_for_any_tracker():
+    """
+    The rule is the service's, not an estimator's: whatever tracked the beats, those over 2 s
+    of digital silence or of a DC offset are not reported. The beats at the edges of those
+    stretches still have sound within BEAT_LEVEL_WINDOW_S and are kept.
+    """
+    y = a_major_triad()
+    y[3 * FIXTURE_SR : 5 * FIXTURE_SR] = 0.0
+    y[6 * FIXTURE_SR : 8 * FIXTURE_SR] = 0.5
+    beats = np.arange(0.0, 10.0, 0.5)
+    estimate = estimators.TempoEstimate(120.0, 0.9, None, beats, "fake", steady=True)
+    result = main.analyze_signals(estimators.Signals(y, FIXTURE_SR), FakeEstimator(tempo=estimate))
+    v2 = check_result(result)
+    left_out = [3.5, 4.0, 4.5, 6.5, 7.0, 7.5]
+    assert v2["beats"]["times"] == [float(b) for b in beats if b not in left_out]
+    assert v2["tempo"]["bpm"] == 120.0
+
+
+def reported_over(y: np.ndarray, beats) -> list[float]:
+    """The beat grid the service reports when a tracker gives `beats` over `y`."""
+    beats = np.asarray(beats, dtype=float)
+    estimate = estimators.TempoEstimate(120.0, 0.9, None, beats, "fake", steady=True)
+    result = main.analyze_signals(estimators.Signals(y, FIXTURE_SR), FakeEstimator(tempo=estimate))
+    return check_result(result)["beats"]["times"]
+
+
+def to_16_bit(y: np.ndarray, seed: int = 3) -> np.ndarray:
+    """
+    `y` with TPDF dither (two uniform draws of half a bit each), rounded to 16 bits, as a
+    16-bit master holds it. Where `y` is 0 the dither rounds to 0 or one bit: 1.53e-5 RMS
+    (-96.3 dBFS), 1.43e-5 to 1.62e-5 in the beat windows of 30 s of it.
+    """
+    rng = np.random.default_rng(seed)
+    dither = rng.uniform(-0.5, 0.5, y.size) + rng.uniform(-0.5, 0.5, y.size)
+    return np.round(y * 32768 + dither) / 32768
+
+
+@pytest.mark.parametrize(("noise_db", "kept"), [(-55.0, True), (-65.0, False)])
+def test_beats_over_noise_count_from_60_db_under_the_loudest_frame(noise_db, kept):
+    """
+    5 s of white noise, then a triad: the beats over the noise are reported when it is 55 dB
+    under the triad's frames and left out when it is 65 dB under (BEAT_BELOW_PEAK_DB is 60;
+    both noises are far above the absolute floor).
+    """
+    triad = a_major_triad()
+    peak = float(signal_features.levels(estimators.Signals(triad, FIXTURE_SR)).frames.max())
+    noise = np.random.default_rng(5).standard_normal(5 * FIXTURE_SR)
+    noise *= peak * 10 ** (noise_db / 20) / np.sqrt(np.mean(noise**2))
+    assert peak * 10 ** (noise_db / 20) > 1e-4
+    y = triad.copy()
+    y[: 5 * FIXTURE_SR] = noise
+    over_noise = [0.5, 1.5, 2.5, 3.5, 4.5]
+    reported = reported_over(y, [*over_noise, 6.0, 7.0, 8.0, 9.0])
+    assert reported == [*(over_noise if kept else []), 6.0, 7.0, 8.0, 9.0]
+
+
+def test_the_beat_window_reaches_50_ms_on_each_side():
+    """
+    A triad with 3 s of digital silence (3-6 s): a beat 35 ms into the silence still has sound
+    within 50 ms and is kept, ones 60 and 100 ms into it are not. (A window of 30 ms would drop
+    the first, one of more than 60 ms keep the second.)
+    """
+    y = a_major_triad()
+    y[3 * FIXTURE_SR : 6 * FIXTURE_SR] = 0.0
+    beats = [1.0, 2.0, 3.035, 3.06, 3.1, 4.5, 5.9, 5.94, 5.965, 7.0, 8.0]
+    assert reported_over(y, beats) == [1.0, 2.0, 3.035, 5.965, 7.0, 8.0]
+
+
+def test_beats_over_dither_are_left_out_of_a_quiet_clip():
+    """
+    A triad peaking at -36 dBFS, with 16-bit dither throughout and nothing else from 3 to 6 s.
+    Its loudest frame is -43.6 dBFS, so 60 dB under it is below the dither: the absolute
+    floor (BEAT_MIN_RMS) leaves the beats over the dither out.
+    """
+    y = a_major_triad()
+    y = y / np.max(np.abs(y)) * 10 ** (-36 / 20)
+    y[3 * FIXTURE_SR : 6 * FIXTURE_SR] = 0.0
+    y = to_16_bit(y)
+    beats = np.arange(0.5, 10.0, 0.5)
+    assert reported_over(y, beats) == [float(b) for b in beats if not 3.0 < b < 6.0]
+
+
+def test_a_quiet_beat_over_sound_is_kept_on_a_quiet_clip():
+    """
+    A triad at 7e-5 RMS (-83 dBFS) for 5 s, then at -40 dBFS: 60 dB under the loudest frame
+    is 1e-5, so the absolute floor decides, and the quiet triad is 7 dB over it. The quietest
+    beat kept on the real clips measured is 5.8e-4 (-64.8 dBFS); a floor of 1e-4 or more would
+    drop this one.
+    """
+    triad = a_major_triad()
+    triad = triad / float(
+        signal_features.levels(estimators.Signals(triad, FIXTURE_SR)).frames.max()
+    )
+    y = 1e-2 * triad
+    y[: 5 * FIXTURE_SR] *= 7e-5 / 1e-2
+    quiet = [0.5, 1.5, 2.5, 3.5, 4.5]
+    reach = round(0.05 * FIXTURE_SR)
+    levels = [np.sqrt(np.mean(y[round(t * FIXTURE_SR) - reach :][: 2 * reach] ** 2)) for t in quiet]
+    assert all(6e-5 < level < 8e-5 for level in levels), levels
+    assert reported_over(y, [*quiet, 6.0, 7.0, 8.0, 9.0]) == [*quiet, 6.0, 7.0, 8.0, 9.0]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_beats_over_dithered_silence_before_a_quiet_band(estimator):
+    """
+    The band enters at 10 s after silence, the clip peaks at -36 dBFS (loudest frame -45.5
+    dBFS) and is rounded to 16 bits with dither. Essentia counted every beat over the dither
+    (48 of 48 with float dither 53 dB under the loudest frame) before the absolute floor.
+    """
+    y = signals.drum_pattern(97).copy()
+    y[: 10 * FIXTURE_SR] = 0.0
+    y = to_16_bit(y / np.max(np.abs(y)) * 10 ** (-36 / 20))
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    assert min(v2["beats"]["times"]) >= 10.0
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
 
 
 # Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three
@@ -2282,7 +2465,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.1+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.2+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

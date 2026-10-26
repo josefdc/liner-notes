@@ -356,9 +356,11 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * hold them, also in the research text the composer reads). 5: web text leaves out forum pages
  * and forum comment bylines (a row of 4 may hold them, or research text written from them).
  * 6: the relations the primary records state are kept beside the items (`relations`), for the
- * result's code-built claims and links (a row of 5 has none).
+ * result's code-built claims and links (a row of 5 has none). 7: web text leaves out more forum
+ * sites and the thread layouts of XenForo, vBulletin, Stack Exchange and MetaFilter (a row of 6
+ * may hold them, or research text written from them).
  */
-export const CACHED_EVIDENCE_FORMAT = 6;
+export const CACHED_EVIDENCE_FORMAT = 7;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the

@@ -4,7 +4,9 @@
  * Single responsibility: graceful degradation when the LLM composer fails.
  * Builds TrackData from measured values and primary records only (Spotify metadata, MusicBrainz
  * relations and collaborators, the audio measurement), without a model call. Web search hits
- * are not shown. Values that are not known are left out or null; nothing is filled in.
+ * are not shown. Values that are not known are left out or null; nothing is filled in. The
+ * composer adds the claims and genealogy links code builds from the primary records
+ * (codeClaims.ts), so the fallback is evidence-backed too.
  */
 
 import { loudnessDbfs, type MeasuredAudioFields, measuredAudioFields } from "./finalize.js";

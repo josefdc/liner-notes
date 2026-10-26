@@ -9,7 +9,7 @@
  *      does not match the claim's (`scopeSupports`: a release-wide credit or a record about the
  *      song never supports a claim about this recording). A link cites what its claim still
  *      cites. A claim left citing nothing cannot be sourced; why is kept in `verdictReason`;
- *    - every claim that is not a link's relation claim gets the numeric check (numeric.ts):
+ *    - every model claim that is not a link's relation claim gets the numeric check (numeric.ts):
  *      the tempo and key it states, unless said of another record, against the measured ones,
  *      in `numericCheck`, apart from the judge's verdict. Only a claim that points at the field
  *      itself (its `field`, or an uncited model claim restating the track's value) can be
@@ -17,7 +17,8 @@
  *      dropped: one that restates a measured value is kept and marked by the check (consistent:
  *      the web shows that it agrees with the measurement, beside the measured value; conflict:
  *      both values; contradicted: the rejected panel), so nothing the model wrote is lost and
- *      nothing reads as its own measurement.
+ *      nothing reads as its own measurement. A code-built claim (codeClaims.ts) restates a
+ *      source record, which names records, never this track's tempo or key: it is not checked.
  * 2. Model-written genealogy text (node labels, titles, artists) has its @handles masked.
  * 3. One judge call (judge.ts) on the model claims that still cite evidence: the links' claims
  *    first, then the others in result order, at most JUDGE_BATCH_MAX; the rest get no verdict.
@@ -31,11 +32,14 @@
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
  *    inferred otherwise. A link's claim states one relation, whole or not at all: only
  *    `supported` sources it (a `partial` one usually means a weaker or another relation). A
+ *    code-built claim is sourced by construction and gets no verdict; one left citing nothing
+ *    by the deterministic step reads as not sourced (inferred), and so does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
  *    influence that keeps its stated type.
- * 5. Model-written claims and factoid cards have their @handles masked.
+ * 5. Claims (the model's and the code-built ones, as their node labels are) and factoid cards
+ *    have their @handles masked.
  * 6. The result: the measurement written in by finalize.ts, the contract's checks, then
  *    `complete` and, when nothing a later run may do better is missing, the long-term store. A
  *    result whose check did not complete is stored too, served for a shorter time
@@ -141,20 +145,31 @@ export interface CheckedDraft {
 /**
  * The deterministic step (see the module comment): citations checked against the pack and the
  * claim's scope, and the numeric check against the measurement (`audio`, the block the result
- * carries) of what each claim states about the track titled `title`. Pure.
+ * carries) of what each claim states about the track titled `title`, credited to `artist` (by
+ * default the current node's artist). Pure.
  */
 export function checkClaims(
   draft: Pick<ComposedDraft, "claims" | "genealogy">,
   evidence: readonly Evidence[],
   audio: AudioFeatures | null,
   title?: string,
+  artist?: string,
 ): CheckedDraft {
   const pack = new Map(evidence.map((item) => [item.id, item]));
   const stated = linkClaimIds(draft.genealogy);
-  // The other records the result names, so a number said of one is not taken for this track's.
-  const nodeTitles = draft.genealogy.nodes
+  const ownArtist =
+    artist ?? draft.genealogy.nodes.find((node) => node.id === "current")?.trackArtist;
+  // The other records the result names, so a number said of one is not taken for this track's:
+  // each title, with its artist credit.
+  const nodeRecords = draft.genealogy.nodes
     .filter((node) => node.id !== "current")
-    .flatMap((node) => [node.trackTitle ?? node.label.split(" - ")[0]].filter(Boolean));
+    .flatMap((node) => {
+      const [labelTitle, ...rest] = node.label.split(" - ");
+      const recordTitle = node.trackTitle ?? labelTitle;
+      const recordArtist =
+        node.trackArtist ?? (rest.join(" - ").replace(/\s*\(\d{4}\)\s*$/, "") || null);
+      return recordTitle ? [{ title: recordTitle, artist: recordArtist }] : [];
+    });
   const claims: Claim[] = [];
   for (const claim of draft.claims) {
     const inPack = claim.evidenceIds.filter((id) => pack.has(id));
@@ -172,13 +187,14 @@ export function checkClaims(
           }
         : {}),
     };
-    if (!stated.has(claim.id)) {
+    if (!stated.has(claim.id) && claim.origin === "model") {
       const cardRecords = (claim.factoid?.entities ?? [])
         .filter((entity) => entity.type === "sample" || entity.type === "album")
         .map((entity) => entity.text.split(" - ")[0]);
       const numbers = checkNumbers(claim, audio, {
         title,
-        others: [...nodeTitles, ...cardRecords],
+        ...(ownArtist ? { artist: ownArtist } : {}),
+        others: [...nodeRecords, ...cardRecords],
         // A claim of the model's own that cites nothing and is no card restates what it states
         // of the track as its own finding: that may be contradicted, as with its own `field`.
         restatement:
@@ -234,7 +250,12 @@ export function applyVerdicts(
 ): { claims: Claim[]; genealogy: Genealogy } {
   const stated = linkClaimIds(checked.genealogy);
   const claims = checked.claims.map((claim): Claim => {
-    if (claim.origin !== "model") return claim;
+    // A code claim is sourced by construction, while it still cites the item that states it.
+    if (claim.origin !== "model") {
+      return claim.kind === "sourced" && claim.evidenceIds.length === 0
+        ? { ...claim, kind: "inferred" }
+        : claim;
+    }
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link.
@@ -291,7 +312,10 @@ export function maskedNodes(genealogy: Genealogy): Genealogy {
   return { nodes, links: genealogy.links };
 }
 
-/** Model-written text with its @handles masked: claims and factoid cards. */
+/**
+ * Claim and factoid card text with its @handles masked: the model's, and a code-built claim's
+ * (record text, masked as the node labels made from the same records are).
+ */
 function maskedText(
   claims: Claim[],
   factoids: Factoid[],
@@ -299,7 +323,7 @@ function maskedText(
   return {
     claims: claims.map((claim) =>
       claim.origin !== "model"
-        ? claim
+        ? { ...claim, text: maskHandles(claim.text) }
         : {
             ...claim,
             text: maskHandles(claim.text),
@@ -379,13 +403,18 @@ async function withArtwork(
   coverUrl: string,
   signal: AbortSignal | undefined,
   nodeYears: Readonly<Record<string, string>> = {},
+  noArtwork: readonly string[] = [],
 ): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[]; complete: boolean }> {
   const sourceErrors: SourceError[] = [];
+  const skipped = new Set(noArtwork);
   try {
-    const dated = genealogy.nodes.map((node) => {
-      const year = Object.hasOwn(nodeYears, node.id) ? nodeYears[node.id] : undefined;
-      return year ? { ...node, year } : node;
-    });
+    // A node made from a record past the first few of its kind is not searched for.
+    const dated = genealogy.nodes
+      .filter((node) => !skipped.has(node.id))
+      .map((node) => {
+        const year = Object.hasOwn(nodeYears, node.id) ? nodeYears[node.id] : undefined;
+        return year ? { ...node, year } : node;
+      });
     const enriched = await enrichGenealogyWithArtwork({ nodes: dated }, coverUrl, signal, (error) =>
       sourceErrors.push(error),
     );
@@ -501,7 +530,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const audio = emittableAudio(state.audioFeatures);
 
     // 1. The deterministic step, and 2. masked node text.
-    const checked = checkClaims(draft, state.evidence, audio, spotify.title);
+    const checked = checkClaims(draft, state.evidence, audio, spotify.title, spotify.artist);
     const genealogy = maskedNodes(checked.genealogy);
 
     // 3. The judge, in its share of the run's time, with the artwork lookup meanwhile.
@@ -517,7 +546,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
         signal,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       }),
-      withArtwork(genealogy, spotify.coverUrl, signal, draft.nodeYears),
+      withArtwork(genealogy, spotify.coverUrl, signal, draft.nodeYears, draft.noArtwork),
     ]);
     const statusMessages: string[] = [];
     const checkFailed = judged.failure !== null || judged.omitted > 0;

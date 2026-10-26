@@ -127,15 +127,39 @@ describe("liveBudgetState", () => {
   });
 
   it("reuses a state for a few seconds, then reads the log again", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
     writeFileSync(log, line(1));
     expect((await liveBudgetState(env(), "dev")).state).toBe("available");
     writeFileSync(log, line(30));
     expect((await liveBudgetState(env(), "dev")).state).toBe("available");
-    vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS - 10);
+    vi.advanceTimersByTime(BUDGET_STATE_TTL_MS - 10);
     expect((await liveBudgetState(env(), "dev")).state).toBe("available");
     // Same settings, same purpose: only the time has passed.
-    vi.setSystemTime(Date.now() + 20);
+    vi.advanceTimersByTime(20);
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+  });
+
+  it("keeps a state for its TTL on the monotonic clock, whatever the wall clock does", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    writeFileSync(log, line(1));
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
+    writeFileSync(log, line(30));
+    // A step back does not keep the state past its TTL...
+    vi.setSystemTime(Date.now() - 60 * 60_000);
+    vi.advanceTimersByTime(BUDGET_STATE_TTL_MS);
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+    // ...nor does a step forward drop it before.
+    writeFileSync(log, line(1));
+    vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+  });
+
+  it("reads the log again when the clock reads earlier than when the state was read", async () => {
+    writeFileSync(log, line(1));
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
+    writeFileSync(log, line(30));
+    // A fake monotonic clock starts near 0: earlier than the read just made.
+    vi.useFakeTimers({ toFake: ["performance"] });
     expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
   });
 
@@ -150,7 +174,7 @@ describe("liveBudgetState", () => {
   });
 
   it("warns about an unusable log at most once per TTL, though it reads it on every request", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
     const logs = captureLogsForTests();
     onTestFinished(() => logs.restore());
     for (let i = 0; i < 3; i++) {
@@ -159,7 +183,24 @@ describe("liveBudgetState", () => {
     expect(logs.messages("warn")).toHaveLength(1);
     expect(logs.entries()[0]).toMatchObject({ level: "warn", component: "Budget" });
     expect(logs.messages("warn")[0]).toMatch(/^Live analysis off/);
-    vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS);
+    vi.advanceTimersByTime(BUDGET_STATE_TTL_MS);
+    await liveBudgetState(env(), "dev");
+    expect(logs.messages("warn")).toHaveLength(2);
+  });
+
+  it("measures the warning's TTL on the monotonic clock, whatever the wall clock does", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
+    await liveBudgetState(env(), "dev");
+    expect(logs.messages("warn")).toHaveLength(1);
+    // A step back does not put the next warning off...
+    vi.setSystemTime(Date.now() - 60 * 60_000);
+    vi.advanceTimersByTime(BUDGET_STATE_TTL_MS);
+    await liveBudgetState(env(), "dev");
+    expect(logs.messages("warn")).toHaveLength(2);
+    // ...nor does a step forward bring it sooner.
+    vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
     await liveBudgetState(env(), "dev");
     expect(logs.messages("warn")).toHaveLength(2);
   });

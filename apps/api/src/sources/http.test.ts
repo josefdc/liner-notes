@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 import {
   cassetteKey,
@@ -24,6 +24,7 @@ import {
   scrubPayload,
   scrubReadPayload,
   scrubText,
+  setCassetteLockWaitForTests,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
 
@@ -483,6 +484,44 @@ describe("cassettes", () => {
     expect(file).not.toContain("BQabc123secret");
     expect(file).not.toContain("scdn.co");
   });
+
+  it.each([
+    ["back an hour", -60 * 60_000],
+    ["forward 10 s", 10_000],
+  ])(
+    "waits for a held cassette lock on the monotonic clock when the wall clock steps %s",
+    async (_label, step) => {
+      process.env.SOURCE_CASSETTE = "record";
+      let answeredAt = Number.NaN;
+      stubFetch(() => {
+        // The wait for the lock starts once the answer is in: the clock steps 50 ms into it.
+        answeredAt = performance.now();
+        setTimeout(() => vi.setSystemTime(Date.now() + step), 50);
+        return json({ ok: true });
+      });
+      // Held by this process, which is alive: only the wait (500 ms here) ends it.
+      writeFileSync(join(dir, "deezer.json.lock"), String(process.pid));
+      onTestFinished(setCassetteLockWaitForTests(500));
+      vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      let cap: ReturnType<typeof setTimeout> | undefined;
+      const gaveUp = new Promise((resolve) => {
+        cap = setTimeout(() => resolve("still waiting"), 2_000);
+      });
+
+      const outcome = await Promise.race([
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/x/held" }),
+        gaveUp,
+      ]).finally(() => clearTimeout(cap));
+
+      // The answer is served; only its recording is lost, after the full wait.
+      expect(outcome).toEqual({ ok: true });
+      expect(performance.now() - answeredAt).toBeGreaterThanOrEqual(500);
+      expect(existsSync(join(dir, "deezer.json"))).toBe(false);
+    },
+  );
 
   it("two recorders in one process lose no entries", async () => {
     process.env.SOURCE_CASSETTE = "record";

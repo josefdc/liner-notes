@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   acquireLock,
   LockTimeoutError,
@@ -56,6 +56,90 @@ describe("file lock", () => {
     await expect(acquireLock(target, { waitMs: 50 })).rejects.toBeInstanceOf(LockTimeoutError);
     await release();
     await (await acquireLock(target, { waitMs: 50 }))();
+  });
+
+  /**
+   * Runs `wait` on a wall clock that moves with real time and steps by `step` ms 20 ms in; its
+   * outcome (what it resolved to or threw, or "still waiting" after 3 s), how long it took on the
+   * monotonic clock, and the CPU time the process spent meanwhile.
+   */
+  async function withWallClockStep<T>(step: number, wait: () => Promise<T>) {
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const started = performance.now();
+    const cpu = process.cpuUsage();
+    setTimeout(() => vi.setSystemTime(Date.now() + step), 20);
+    let cap: ReturnType<typeof setTimeout> | undefined;
+    const gaveUp = new Promise((resolve) => {
+      cap = setTimeout(() => resolve("still waiting"), 3_000);
+    });
+    try {
+      const outcome = await Promise.race([wait().catch((error: unknown) => error), gaveUp]);
+      const used = process.cpuUsage(cpu);
+      return {
+        outcome,
+        took: performance.now() - started,
+        cpuMs: (used.user + used.system) / 1000,
+      };
+    } finally {
+      clearTimeout(cap);
+    }
+  }
+
+  it.each([
+    ["back an hour", -60 * 60_000],
+    ["forward 10 s", 10_000],
+  ])(
+    "waits waitMs on the monotonic clock when the wall clock steps %s during the wait",
+    async (_label, step) => {
+      const release = await acquireLock(target);
+      onTestFinished(release);
+
+      const { outcome, took } = await withWallClockStep(step, () =>
+        acquireLock(target, { waitMs: 200 }),
+      );
+
+      expect(outcome).toBeInstanceOf(LockTimeoutError);
+      expect(took).toBeGreaterThanOrEqual(200);
+    },
+  );
+
+  it("breaks a lock left by a crash elsewhere before giving up, though the wall clock steps back", async () => {
+    // Only its age can show this lock is stale: its owner runs on another host.
+    writeFileSync(
+      `${target}.lock`,
+      JSON.stringify({ pid: process.pid, host: "another-host", token: "crashed", at: Date.now() }),
+    );
+
+    const { outcome } = await withWallClockStep(-60 * 60_000, () =>
+      acquireLock(target, { staleMs: 300, waitMs: 1_000 }),
+    );
+
+    expect(typeof outcome).toBe("function");
+    // The lock is this waiter's now, not the crashed one.
+    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).host).toBe(hostname());
+    await (outcome as () => Promise<void>)();
+  });
+
+  it("waits between attempts while a crashed breaker's break lock grows stale, then breaks both", async () => {
+    // A crashed holder and a crashed breaker, both on another host: only age breaks them.
+    const crashed = (token: string) =>
+      JSON.stringify({ pid: process.pid, host: "another-host", token, at: Date.now() });
+    writeFileSync(`${target}.lock`, crashed("crashed"));
+    writeFileSync(`${target}.lock.break`, crashed("crashed-breaker"));
+
+    const { outcome, cpuMs } = await withWallClockStep(-60 * 60_000, () =>
+      acquireLock(target, { staleMs: 300, waitMs: 500 }),
+    );
+
+    expect(typeof outcome).toBe("function");
+    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).host).toBe(hostname());
+    expect(existsSync(`${target}.lock.break`)).toBe(false);
+    // About 0.6 s of waiting: polled, not spun.
+    expect(cpuMs).toBeLessThan(150);
+    await (outcome as () => Promise<void>)();
   });
 
   it("breaks a lock left by a process that died", async () => {

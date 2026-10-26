@@ -20,7 +20,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { packageDir, repoDir } from "./testing/samples.js";
 
 // The script runs on the built package, which it finds at ../dist from its own location. The
@@ -109,14 +109,53 @@ beforeAll(() => {
   script = join(build, "scripts", "contract-check.mjs");
   mkdirSync(dirname(script));
   copyFileSync(join(packageDir, "scripts", "contract-check.mjs"), script);
-  repo = mkdtempSync(join(tmpdir(), "contract-check-"));
-  git("init", "-q");
 }, 60_000);
 
 afterAll(() => {
-  if (repo) rmSync(repo, { recursive: true, force: true });
   if (build) rmSync(build, { recursive: true, force: true });
 });
+
+// Every test gets a repository of its own, so no test reads what another wrote or committed.
+beforeEach(() => {
+  repo = mkdtempSync(join(tmpdir(), "contract-check-"));
+  git("init", "-q");
+  commit("initial");
+});
+
+afterEach(() => {
+  rmSync(repo, { recursive: true, force: true });
+});
+
+/** Copies the code's own snapshots into the working tree of the repository. */
+function seedSnapshots() {
+  mkdirSync(snapshotsDir(), { recursive: true });
+  cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
+}
+
+/**
+ * Commits a base whose TrackAnalysis snapshot had a field the code no longer has, and leaves
+ * the working tree with the snapshots that match the code.
+ */
+function baseWithExtraField(): string {
+  seedSnapshots();
+  withExtraField();
+  const base = commit("base with an extra field");
+  seedSnapshots();
+  return base;
+}
+
+/** The breaking lines the code reports against a base with the extra field. */
+function breakingLines(base: string): string[] {
+  return [...check(base).out.matchAll(/^\[contract\] breaking: (.*)$/gm)].map((m) => m[1]);
+}
+
+/** A base that has the extra field in its snapshots and already acknowledges every line. */
+function acknowledgedBase(): string {
+  const lines = breakingLines(baseWithExtraField());
+  writeFileSync(ackFile(), `# Acknowledged breaking changes\n${lines.join("\n")}\n`);
+  withExtraField();
+  return commit("acknowledged at the base");
+}
 
 // Each test spawns node and git several times: allow well beyond the 5 s default.
 describe("contract-check", { timeout: 30_000 }, () => {
@@ -132,8 +171,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("passes when the code matches the base snapshots", () => {
-    mkdirSync(join(repo, "packages", "contract"), { recursive: true });
-    cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
+    seedSnapshots();
     const base = commit("snapshots");
     const result = check(base);
     expect(result.out).toContain("0 breaking, 0 acknowledged, 0 additive");
@@ -141,8 +179,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("fails when the code removed a field the base had", () => {
-    withExtraField();
-    const base = commit("base with an extra field");
+    const base = baseWithExtraField();
     const result = check(base);
     expect(result.status).toBe(1);
     expect(result.out).toContain("[contract] breaking: TrackAnalysis input $.legacyField: removed");
@@ -152,7 +189,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("still fails when the change deletes or rewrites its snapshots", () => {
-    const base = git("rev-parse", "HEAD");
+    const base = baseWithExtraField();
     rmSync(snapshotsDir(), { recursive: true });
     expect(check(base).status).toBe(1);
     cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
@@ -160,9 +197,9 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("passes when the change acknowledges each breaking line, and only then", () => {
-    const base = git("rev-parse", "HEAD");
+    const base = baseWithExtraField();
     // The field is reported wherever TrackAnalysis is used (events, responses, replays).
-    const lines = [...check(base).out.matchAll(/^\[contract\] breaking: (.*)$/gm)].map((m) => m[1]);
+    const lines = breakingLines(base);
     expect(lines).toContain("RunResponse output $.analysis.legacyField: removed");
     writeFileSync(ackFile(), `# Acknowledged breaking changes\n${lines.slice(1).join("\n")}\n`);
     expect(check(base).out).toContain(`[contract] breaking: ${lines[0]}`);
@@ -174,14 +211,13 @@ describe("contract-check", { timeout: 30_000 }, () => {
 
   it("does not let acknowledgements from the base excuse a later change", () => {
     // The acknowledgement is committed, and the base snapshot still has the field.
-    withExtraField();
-    const base = commit("acknowledged at the base");
+    const base = acknowledgedBase();
     expect(git("show", `${base}:packages/contract/BREAKING-CHANGES`)).toContain("legacyField");
     expect(check(base).status).toBe(1);
   });
 
   it("lets a later change acknowledge the same line again by adding it once more", () => {
-    const base = git("rev-parse", "HEAD");
+    const base = acknowledgedBase();
     const acknowledged = readFileSync(ackFile(), "utf8");
     const lines = acknowledged.split("\n").filter((line) => line.includes("legacyField"));
     writeFileSync(ackFile(), `${acknowledged}${lines.join("\n")}\n`);
@@ -190,7 +226,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
 
   it("needs an engine-change line when the comparison code or its CI step changed", () => {
     // A base whose snapshots match the code, carrying the comparison code and the CI step.
-    cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
+    seedSnapshots();
     mkdirSync(join(repo, "packages", "contract", "src"), { recursive: true });
     mkdirSync(join(repo, ".github", "workflows"), { recursive: true });
     const compat = join(repo, "packages", "contract", "src", "compat.ts");
@@ -220,6 +256,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("needs an engine-change line when the zod the contract resolves changed", () => {
+    seedSnapshots();
     const lock = join(repo, "package-lock.json");
     const lockWith = (packages: Record<string, { version: string }>) =>
       writeFileSync(lock, JSON.stringify({ lockfileVersion: 3, packages }));

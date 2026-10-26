@@ -131,15 +131,19 @@ function requireSpotifyId(value: string, what: string): string {
 // =============================================================================
 
 /**
- * Caches the client-credentials token until 60 s before it expires, measured on the monotonic
- * clock (a step of the wall clock neither keeps a token longer nor drops it sooner). Concurrent
- * callers share one refresh instead of each requesting a token.
+ * Caches the client-credentials token until 60 s before it expires. Its age is measured on both
+ * clocks, and it expires when either says so: the monotonic clock, so a step back of the wall
+ * clock does not keep it longer, and the wall clock, as the monotonic one stops while the
+ * machine is suspended and Spotify's does not. Concurrent callers share one refresh instead of
+ * each requesting a token.
  */
 class SpotifyAuthManager {
   private static instance: SpotifyAuthManager;
   private token: string | null = null;
-  /** When the token expires, on `pacingClock`. */
-  private tokenExpiresAt: number = 0;
+  /** When the token was requested, on `pacingClock` and on the wall clock. */
+  private requestedAt = { monotonic: 0, wall: 0 };
+  /** How long Spotify said the token lasts, in ms. */
+  private lifetimeMs = 0;
   private pending: Promise<string> | null = null;
 
   private constructor() {}
@@ -153,15 +157,23 @@ class SpotifyAuthManager {
 
   /** A valid access token, refreshed when needed (Client Credentials Flow). */
   async getToken(): Promise<string> {
-    if (this.token && pacingClock() < this.tokenExpiresAt - 60_000) {
-      return this.token;
-    }
+    if (this.token && this.fresh()) return this.token;
     if (!this.pending) {
       this.pending = this.refresh().finally(() => {
         this.pending = null;
       });
     }
     return this.pending;
+  }
+
+  /**
+   * The token has more than a minute left by both clocks. An age below 0 (a clock that reads
+   * earlier than when the token was requested) reads as expired.
+   */
+  private fresh(): boolean {
+    const usable = this.lifetimeMs - 60_000;
+    const ages = [pacingClock() - this.requestedAt.monotonic, Date.now() - this.requestedAt.wall];
+    return ages.every((age) => age >= 0 && age < usable);
   }
 
   private async refresh(): Promise<string> {
@@ -177,7 +189,7 @@ class SpotifyAuthManager {
     }
 
     log.info("Refreshing access token...");
-    const startedAt = pacingClock();
+    const requestedAt = { monotonic: pacingClock(), wall: Date.now() };
 
     const data = await fetchJson<SpotifyToken>({
       source: "spotify",
@@ -195,7 +207,8 @@ class SpotifyAuthManager {
       throw new SourceError("spotify", "parse", "token response has no access_token");
     }
     this.token = data.access_token;
-    this.tokenExpiresAt = startedAt + data.expires_in * 1000;
+    this.requestedAt = requestedAt;
+    this.lifetimeMs = data.expires_in * 1000;
 
     log.info(`Token refreshed, expires in ${data.expires_in} seconds`);
     return this.token;
@@ -204,7 +217,7 @@ class SpotifyAuthManager {
   /** Clears the cached token (forced refresh, tests). */
   clearToken(): void {
     this.token = null;
-    this.tokenExpiresAt = 0;
+    this.lifetimeMs = 0;
   }
 
   /**

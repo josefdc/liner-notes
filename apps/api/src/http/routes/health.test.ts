@@ -315,6 +315,21 @@ describe("GET /api/ready", () => {
     expect(audio.requests()).toBe(2);
   });
 
+  it("probes the audio service again when the clock reads earlier than the last probe", async () => {
+    const audio = await audioStub(healthy);
+    const env = { AUDIO_ANALYSIS_URL: audio.url };
+    await audioCheck(env);
+    // A fake monotonic clock starts near 0: earlier than the probe just made.
+    vi.useFakeTimers({ toFake: ["performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+
+    await audioCheck(env);
+
+    expect(audio.requests()).toBe(2);
+  });
+
   it("answers 503 when no model provider is configured, naming the variables in the log only", async () => {
     openDatabase();
     process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;

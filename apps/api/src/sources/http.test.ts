@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 import {
   cassetteKey,
@@ -483,6 +483,37 @@ describe("cassettes", () => {
     expect(file).not.toContain("BQabc123secret");
     expect(file).not.toContain("scdn.co");
   });
+
+  it.each([
+    ["back an hour", -60 * 60_000],
+    ["forward 10 s", 10_000],
+  ])(
+    "waits for a held cassette lock on the monotonic clock when the wall clock steps %s",
+    async (_label, step) => {
+      process.env.SOURCE_CASSETTE = "record";
+      stubFetch(() => json({ ok: true }));
+      // Held by this process, which is alive: only the wait (5 s) ends it.
+      writeFileSync(join(dir, "deezer.json.lock"), String(process.pid));
+      vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const started = performance.now();
+      setTimeout(() => vi.setSystemTime(Date.now() + step), 20);
+      const gaveUp = new Promise((resolve) => setTimeout(() => resolve("still waiting"), 8_000));
+
+      const outcome = await Promise.race([
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/x/held" }),
+        gaveUp,
+      ]);
+
+      // The answer is served; only its recording is lost, after the full wait.
+      expect(outcome).toEqual({ ok: true });
+      expect(performance.now() - started).toBeGreaterThanOrEqual(5_000);
+      expect(existsSync(join(dir, "deezer.json"))).toBe(false);
+    },
+    15_000,
+  );
 
   it("two recorders in one process lose no entries", async () => {
     process.env.SOURCE_CASSETTE = "record";

@@ -154,6 +154,15 @@ describe("liveBudgetState", () => {
     expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
   });
 
+  it("reads the log again when the clock reads earlier than when the state was read", async () => {
+    writeFileSync(log, line(1));
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
+    writeFileSync(log, line(30));
+    // A fake monotonic clock starts near 0: earlier than the read just made.
+    vi.useFakeTimers({ toFake: ["performance"] });
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+  });
+
   it("reads again when the settings or the purpose change", async () => {
     writeFileSync(log, line(4.6));
     expect((await liveBudgetState(env(), "eval")).state).toBe("available");

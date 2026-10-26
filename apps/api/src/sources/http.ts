@@ -470,7 +470,9 @@ function processAlive(pid: number): boolean {
  */
 async function acquireLock(path: string): Promise<() => Promise<void>> {
   const lock = `${path}.lock`;
-  const deadline = Date.now() + LOCK_WAIT_MS;
+  // The wait is measured on the monotonic clock, so a step of the wall clock neither cuts it
+  // short nor drags it out. The lock's age is read from its mtime, so on the wall clock.
+  const deadline = pacingClock() + LOCK_WAIT_MS;
   for (;;) {
     try {
       const handle = await open(lock, "wx");
@@ -494,7 +496,7 @@ async function acquireLock(path: string): Promise<() => Promise<void>> {
         if (again === owner) await unlink(lock).catch(() => {});
         continue;
       }
-      if (Date.now() > deadline) throw new Error(`cassette lock ${lock} is held`);
+      if (pacingClock() > deadline) throw new Error(`cassette lock ${lock} is held`);
       await new Promise((r) => setTimeout(r, 10));
     }
   }

@@ -280,7 +280,9 @@ let audioProbe: { url: string; at: number; result: Promise<ReadyCheck> } | null 
 export function audioCheck(env: NodeJS.ProcessEnv = process.env): Promise<ReadyCheck> {
   const url = audioServiceUrl(env);
   const now = pacingClock();
-  if (audioProbe && audioProbe.url === url && now - audioProbe.at < AUDIO_PROBE_TTL_MS) {
+  // An age below 0 (a clock that reads earlier than the probe) counts as expired.
+  const age = audioProbe ? now - audioProbe.at : Number.NEGATIVE_INFINITY;
+  if (audioProbe && audioProbe.url === url && age >= 0 && age < AUDIO_PROBE_TTL_MS) {
     return audioProbe.result;
   }
   const result = probeAudio(url);

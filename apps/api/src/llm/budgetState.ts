@@ -19,7 +19,8 @@
  * lock, and a page of suggestions should not take that lock once per keystroke. An unverifiable
  * answer is not kept, so a lock that was busy for a moment does not pause anything afterwards.
  * The TTLs are measured on the monotonic clock (`pacingClock`), so a step of the wall clock
- * neither keeps an answer longer nor drops it sooner.
+ * neither keeps an answer longer nor drops it sooner. An age below 0 (a clock that reads earlier
+ * than the entry) counts as expired.
  */
 
 import {
@@ -110,7 +111,8 @@ function warnAbout(entry: CachedState, read: BudgetState): void {
   }
   if (read.state === "unverifiable") {
     const at = pacingClock();
-    if (at - lastUnverifiableWarning >= BUDGET_STATE_TTL_MS) {
+    const since = at - lastUnverifiableWarning;
+    if (since < 0 || since >= BUDGET_STATE_TTL_MS) {
       lastUnverifiableWarning = at;
       log.warn(`Live analysis off (the budget cannot be checked): ${read.reason}`);
     }
@@ -141,7 +143,8 @@ export function liveBudgetState(
   ]);
   const now = pacingClock();
   let entry = cached;
-  if (!entry || entry.key !== key || now - entry.at >= BUDGET_STATE_TTL_MS) {
+  const age = entry ? now - entry.at : Number.POSITIVE_INFINITY;
+  if (!entry || entry.key !== key || age < 0 || age >= BUDGET_STATE_TTL_MS) {
     const created: CachedState = {
       key,
       at: now,

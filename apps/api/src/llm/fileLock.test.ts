@@ -58,25 +58,55 @@ describe("file lock", () => {
     await (await acquireLock(target, { waitMs: 50 }))();
   });
 
-  it("fails after waitMs though the wall clock steps back while it waits", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+  /**
+   * Runs `wait` on a wall clock that moves with real time and steps by `step` ms 20 ms in; its
+   * outcome (what it resolved to or threw, or "still waiting" after 3 s) and how long it took,
+   * on the monotonic clock.
+   */
+  async function withWallClockStep<T>(step: number, wait: () => Promise<T>) {
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     onTestFinished(() => {
       vi.useRealTimers();
     });
-    const release = await acquireLock(target);
-    onTestFinished(release);
-    // An hour back, 20 ms into the wait: the wait still ends 200 ms after it began.
-    setTimeout(() => vi.setSystemTime(Date.now() - 60 * 60_000), 20);
+    const started = performance.now();
+    setTimeout(() => vi.setSystemTime(Date.now() + step), 20);
     const gaveUp = new Promise((resolve) => setTimeout(() => resolve("still waiting"), 3_000));
-    const waited = acquireLock(target, { waitMs: 200 }).then(
-      async (got) => {
-        await got();
-        return "acquired";
-      },
-      (error: unknown) => error,
+    const outcome = await Promise.race([wait().catch((error: unknown) => error), gaveUp]);
+    return { outcome, took: performance.now() - started };
+  }
+
+  it.each([
+    ["back an hour", -60 * 60_000],
+    ["forward 10 s", 10_000],
+  ])(
+    "waits waitMs on the monotonic clock when the wall clock steps %s during the wait",
+    async (_label, step) => {
+      const release = await acquireLock(target);
+      onTestFinished(release);
+
+      const { outcome, took } = await withWallClockStep(step, () =>
+        acquireLock(target, { waitMs: 200 }),
+      );
+
+      expect(outcome).toBeInstanceOf(LockTimeoutError);
+      expect(took).toBeGreaterThanOrEqual(200);
+    },
+  );
+
+  it("breaks a lock left by a crash elsewhere before giving up, though the wall clock steps back", async () => {
+    // Only its age can show this lock is stale: its owner runs on another host.
+    writeFileSync(
+      `${target}.lock`,
+      JSON.stringify({ pid: process.pid, host: "another-host", token: "crashed", at: Date.now() }),
     );
 
-    expect(await Promise.race([waited, gaveUp])).toBeInstanceOf(LockTimeoutError);
+    const { outcome } = await withWallClockStep(-60 * 60_000, () =>
+      acquireLock(target, { staleMs: 300, waitMs: 1_000 }),
+    );
+
+    expect(typeof outcome).toBe("function");
+    expect(JSON.parse(readFileSync(`${target}.lock`, "utf8")).pid).toBe(process.pid);
+    await (outcome as () => Promise<void>)();
   });
 
   it("breaks a lock left by a process that died", async () => {

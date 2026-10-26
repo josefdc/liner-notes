@@ -10,9 +10,13 @@
  * A lock is broken only when it is provably stale:
  *   - its owner runs on this host, in this PID namespace, and no longer exists (a crash); or
  *   - it is older than `staleMs` (an owner elsewhere, a reused pid, a lock left empty by a crash
- *     between create and write). An empty or unreadable lock younger than that is held.
- * By default a waiter waits longer than `staleMs`, so a lock left by a crash is always broken
- * before a waiter gives up. The guarded sections are short (read a file, append a line).
+ *     between create and write): its mtime is that old by the wall clock, or the waiter has seen
+ *     it unchanged (same inode, mtime and size) for that long on the monotonic clock. An empty
+ *     or unreadable lock younger than that is held.
+ * By default a waiter waits longer than `staleMs`, on the monotonic clock, so a lock left by a
+ * crash is always broken before a waiter gives up, even when the wall clock steps back and
+ * makes the lock's mtime look younger than it is. The guarded sections are short (read a file,
+ * append a line).
  *
  * Breaking: holding the break lock, the breaker renames the stale lock to a unique name and
  * checks that what it renamed is the lock it judged stale (same inode, mtime, size and token).
@@ -24,9 +28,11 @@
  * The guarded file must be reached through one inode: symlinks are resolved by the caller, hard
  * links to the spend log are not supported (each name would get its own lock).
  *
- * Remaining window: a breaker that renames a live lock while yet another process creates a new
+ * Remaining windows: a breaker that renames a live lock while yet another process creates a new
  * lock before the rename is undone leaves two holders. That needs a crashed holder plus three
- * processes interleaving within microseconds.
+ * processes interleaving within microseconds. And a break lock left by a crashed breaker is
+ * watched only from when a waiter first finds it there: with the wall clock stepped back, it
+ * can outlast that waiter's wait (the next waiter breaks it).
  */
 
 import { randomUUID } from "node:crypto";
@@ -130,8 +136,31 @@ export interface Seen {
   size: number;
 }
 
-/** The lock as seen now when it is provably stale; null when it is held (or gone). */
-async function staleLock(path: string, staleMs: number): Promise<Seen | null> {
+/**
+ * How long one waiter has seen a lock file unchanged (same inode, mtime and size), on the
+ * monotonic clock: an age of the lock that a step of the wall clock cannot hold back. Called on
+ * each look at the file; a changed file starts again from 0.
+ */
+function unchangedFor(): (seen: Seen) => number {
+  let first: { ino: number; mtimeMs: number; size: number; at: number } | null = null;
+  return (seen) => {
+    const now = pacingClock();
+    if (first?.ino !== seen.ino || first.mtimeMs !== seen.mtimeMs || first.size !== seen.size) {
+      first = { ino: seen.ino, mtimeMs: seen.mtimeMs, size: seen.size, at: now };
+    }
+    return now - first.at;
+  };
+}
+
+/**
+ * The lock as seen now when it is provably stale; null when it is held (or gone). `watched`
+ * is the waiter's view of how long the file has stayed unchanged.
+ */
+async function staleLock(
+  path: string,
+  staleMs: number,
+  watched: (seen: Seen) => number,
+): Promise<Seen | null> {
   let info: Awaited<ReturnType<typeof stat>>;
   try {
     info = await stat(path);
@@ -140,7 +169,8 @@ async function staleLock(path: string, staleMs: number): Promise<Seen | null> {
   }
   const owner = await readOwner(path);
   const seen = { owner, ino: info.ino, mtimeMs: info.mtimeMs, size: info.size };
-  if (Date.now() - info.mtimeMs > staleMs) return seen;
+  const seenFor = watched(seen);
+  if (Date.now() - info.mtimeMs > staleMs || seenFor > staleMs) return seen;
   // Being written, or a crash leftover not yet old enough: held.
   if (owner === null) return null;
   const sameNamespace = owner.host === hostname() && (owner.pidns ?? null) === PID_NAMESPACE;
@@ -172,11 +202,16 @@ export async function removeIfSame(path: string, seen: Seen): Promise<void> {
   await unlink(aside).catch(() => {});
 }
 
-async function breakStale(lockPath: string, seen: Seen, staleMs: number): Promise<void> {
+async function breakStale(
+  lockPath: string,
+  seen: Seen,
+  staleMs: number,
+  watched: (seen: Seen) => number,
+): Promise<void> {
   const breakPath = `${lockPath}.break`;
   const token = randomUUID();
   if (!(await createExclusive(breakPath, JSON.stringify(ownerRecord(token))))) {
-    const staleBreak = await staleLock(breakPath, staleMs);
+    const staleBreak = await staleLock(breakPath, staleMs, watched);
     if (staleBreak) await removeIfSame(breakPath, staleBreak);
     return; // the caller starts again
   }
@@ -198,8 +233,11 @@ export async function acquireLock(
   const waitMs = options.waitMs ?? staleMs + 5000;
   const token = randomUUID();
   // On the monotonic clock: a step of the wall clock neither cuts the wait short nor drags it
-  // out. A lock's age is read from its mtime, which only the wall clock can be compared with.
+  // out. A lock's mtime can only be compared with the wall clock; how long this waiter has seen
+  // it unchanged is measured on the monotonic one (see staleLock).
   const deadline = pacingClock() + waitMs;
+  const lockWatched = unchangedFor();
+  const breakWatched = unchangedFor();
   for (;;) {
     if (options.signal?.aborted) throw new LockAbortedError(lockPath);
     if (await createExclusive(lockPath, JSON.stringify(ownerRecord(token)))) {
@@ -208,9 +246,9 @@ export async function acquireLock(
         if (current?.token === token) await unlink(lockPath).catch(() => {});
       };
     }
-    const stale = await staleLock(lockPath, staleMs);
+    const stale = await staleLock(lockPath, staleMs, lockWatched);
     if (stale) {
-      await breakStale(lockPath, stale, staleMs);
+      await breakStale(lockPath, stale, staleMs, breakWatched);
       continue;
     }
     if (options.signal?.aborted) throw new LockAbortedError(lockPath);

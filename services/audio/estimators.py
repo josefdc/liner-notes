@@ -1364,9 +1364,9 @@ class LibrosaEstimator(_Estimator):
 _thread_state = threading.local()
 
 # RhythmExtractor2013 is not a function of its input alone: its TempoTapDegara adds noise of up
-# to 1e-4 of the largest per-frame periodicity value to every frame, drawn from the C library's rand(). That
-# state belongs to the whole process (every thread and every instance; Essentia never seeds
-# it), so a tempo, its confidence and its beats depended on how many numbers the analyses
+# to 1e-4 of the largest per-frame periodicity value to every frame, drawn from the C library's
+# rand(). That state belongs to the whole process (every thread and every instance; Essentia
+# never seeds it), so a tempo, its confidence and its beats depended on how many numbers the analyses
 # before had drawn. Each call starts from the state of a new process (srand(1)) and holds a
 # lock, so that no other worker thread draws in between. CDLL(None) finds srand where Essentia
 # finds rand: in the process's C library.
@@ -1380,8 +1380,8 @@ def _essentia_algorithm(name: str, factory):
     One instance per worker thread, reset before each use (a reused instance gives what a new
     one gives; the state that differs is rand()'s, see _rand_lock). Instances are kept rather
     than created per call: creating a RhythmExtractor2013 takes about 90 ms, and when the most
-    recently created Essentia network is deleted, every later TensorFlow predictor call logs
-    "No network created" thousands of times. They are not shared between threads: an algorithm
+    recently created Essentia network is deleted, every later RhythmExtractor2013 and KeyExtractor
+    call logs "No network created" for every frame. They are not shared between threads: an algorithm
     instance is not safe to call from two threads at once.
     """
     algorithms = _thread_state.__dict__.setdefault("algorithms", {})

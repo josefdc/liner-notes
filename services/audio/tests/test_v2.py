@@ -16,7 +16,6 @@ import re
 import subprocess
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import librosa
@@ -402,8 +401,9 @@ def test_an_analysis_does_not_depend_on_what_the_process_analysed_before(estimat
     _, after = analyse_array(PROBES[HISTORY_PROBE], estimator)
     assert after == first
     probes = [*EARLIER_PROBES, HISTORY_PROBE] * 2
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        blocks = list(pool.map(lambda p: analyse_array(PROBES[p], estimator)[1], probes))
+    # The service's own workers: their threads never end, so no Essentia network is deleted
+    # (see test_models_after_essentia_estimators_do_not_flood_the_log).
+    blocks = list(main.executor.map(lambda p: analyse_array(PROBES[p], estimator)[1], probes))
     for probe, block in zip(probes, blocks, strict=True):
         if probe == HISTORY_PROBE:
             assert block == first, "analysed while other threads analysed"

@@ -27,6 +27,7 @@ vi.mock(
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
+import { UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import { testRuntime } from "../testing/stubLlm.js";
 import { createVerifierNode } from "./index.js";
 import { draftOf, judging, modelClaim, sentStatements, stateFor, trackRecord } from "./testing.js";
@@ -83,7 +84,43 @@ describe("the judge batch", () => {
     expect(store.put).toHaveBeenCalledTimes(1);
   });
 
-  it("counts a claim the judge left out as unjudged, and sends nothing when nothing cites", async () => {
+  it("sends the genealogy links' claims first, so a long list of claims never leaves them unjudged", async () => {
+    const evidence = [trackRecord("ev-1")];
+    const claims = Array.from({ length: 22 }, (_, i) =>
+      modelClaim(`cl-${i + 1}`, { evidenceIds: ["ev-1"] }),
+    );
+    const relation = modelClaim("rel", {
+      text: "A samples B.",
+      about: "sample",
+      evidenceIds: ["ev-1"],
+    });
+    const link = {
+      source: "up",
+      target: "current",
+      value: 1,
+      type: "sample" as const,
+      kind: "inferred" as const,
+      origin: "model" as const,
+      claimId: "rel",
+      evidenceIds: ["ev-1"],
+    };
+    const llm = judging((sent) =>
+      sent.map(({ claimId }) => ({ claimId, verdict: "supported", reason: "Stated." })),
+    );
+
+    const out = await createVerifierNode(testRuntime(llm))(
+      stateFor(draftOf([...claims, relation], [link]), evidence),
+      config,
+    );
+
+    const sent = sentStatements(llm.calls[0]);
+    expect(sent).toHaveLength(20);
+    expect(sent[0].text).toBe("A samples B.");
+    expect(out.trackData?.genealogy.links[0]).toMatchObject({ kind: "sourced", type: "sample" });
+    expect(out.trackData?.run?.verifier).toEqual({ judged: 20, unjudged: 3 });
+  });
+
+  it("counts a claim the judge left out as unjudged, marks the check incomplete, and sends nothing when nothing cites", async () => {
     const evidence = [trackRecord("ev-1")];
     const claims = [
       modelClaim("cl-1", { evidenceIds: ["ev-1"] }),
@@ -103,8 +140,15 @@ describe("the judge batch", () => {
       ["cl-2", "unsupported"],
       ["cl-3", null],
     ]);
-    // cl-3 cites nothing: there is nothing to judge it against, so it is not counted.
-    expect(out.trackData?.run?.verifier).toEqual({ judged: 1, unjudged: 1 });
+    // cl-3 cites nothing: there is nothing to judge it against, so it is not counted. The
+    // answer left cl-1 out: the check did not complete, and the run says so.
+    expect(out.trackData?.run?.verifier).toEqual({ judged: 1, unjudged: 1, failed: true });
+    expect(out.statusMessages?.[0]).toBe(
+      "The check of the notes against their sources was incomplete: 1 statement got no verdict; " +
+        "they are shown as model inference, not checked against their sources",
+    );
+    // Stored for the shorter time, so a later run checks it again.
+    expect(store.put.mock.calls[0][2]).toMatchObject({ ttlMs: UNCHECKED_RESULT_TTL_MS });
 
     const none = judging(() => []);
     const quiet = await createVerifierNode(testRuntime(none))(

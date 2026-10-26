@@ -11,9 +11,11 @@
  * The engineer and the historian run in parallel and meet at the composer through one
  * list-form edge, so the composer runs once, after both, however many steps either branch
  * takes. The composer hands its draft (or the fallback) to the verifier, which checks every
- * claim, then sends and stores the result: the composer sends none. No node has a retry policy: every node handles its own failures (the scout and the
- * searches retry once or twice themselves, model calls are retried inside the provider layer),
- * so retries never stack and a model call is never repeated by a node retry.
+ * claim, then sends and stores the result: the composer sends none.
+ *
+ * No node has a retry policy: every node handles its own failures (the scout and the searches
+ * retry once or twice themselves, model calls are retried inside the provider layer), so
+ * retries never stack and a model call is never repeated by a node retry.
  *
  * The scout, the first node of every run, sets the run id once (the thread id, or a new id
  * from the runtime without a thread): every model call of the run counts under it.

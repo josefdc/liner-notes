@@ -34,7 +34,10 @@
  * citations outside a claim's scope dropped, and one relation claim per genealogy link, which
  * keeps its stated type and is sourced only through that claim. Earlier results carry no
  * verdicts: they are not served, and each track searched again is composed (and judged) again
- * once.
+ * once. A result whose check did not complete (the judge failed, ran out of time or left claims
+ * out) is stored with those claims unchecked, which read as model inference, and served for an
+ * hour only (storedResults.ts UNCHECKED_RESULT_TTL_MS): repeat visits do not pay for another
+ * composition, and a run after that checks the claims again.
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its

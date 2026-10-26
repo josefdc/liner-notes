@@ -10,27 +10,34 @@
  *      song never supports a claim about this recording). A link cites what its claim still
  *      cites. A claim left citing nothing cannot be sourced; why is kept in `verdictReason`;
  *    - every claim that is not a link's relation claim gets the numeric check (numeric.ts):
- *      the tempo and key its text states against the measured ones, in `numericCheck`, apart
- *      from the judge's verdict;
- *    - a model claim that gives the track's tempo or key (its `field`), cites nothing and agrees
- *      with the measurement is dropped: it only restates a measured value, which the result
- *      shows as measured, and keeping it would show a measurement as the model's own finding.
- *      One that disagrees is kept with its check (conflict: both values shown; contradicted:
- *      the rejected panel). A factoid card's claim and a link's claim are never dropped.
- * 2. One judge call (judge.ts) on the model claims that still cite evidence, the first
- *    JUDGE_BATCH_MAX in result order; the rest get no verdict. `run.verifier` counts the judged
- *    claims and those left without a verdict. A judge failure leaves every verdict null and is
- *    recorded as a failed call; the result is still served, not the fallback.
- * 3. Kinds (`applyVerdicts`, pure): a model claim is sourced when the judge found its cited
+ *      the tempo and key it states about this track against the measured ones, in
+ *      `numericCheck`, apart from the judge's verdict. No claim is dropped: one that restates a
+ *      measured value is kept and marked by the check (consistent: the web shows that it agrees
+ *      with the measurement, beside the measured value; conflict: both values; contradicted: the
+ *      rejected panel), so nothing the model wrote is lost and nothing reads as its own
+ *      measurement.
+ * 2. Model-written genealogy text (node labels, titles, artists) has its @handles masked.
+ * 3. One judge call (judge.ts) on the model claims that still cite evidence: the links' claims
+ *    first, then the others in result order, at most JUDGE_BATCH_MAX; the rest get no verdict.
+ *    The call gets its share of the run's time: what is left before the run's deadline, less
+ *    JUDGE_FINISH_MARGIN_MS for the rest of this node. The artwork lookup runs meanwhile.
+ *    `run.verifier` counts the judged claims and those left without a verdict, and says when the
+ *    check did not complete (`failed`: the call failed, ran out of time or left claims out). A
+ *    judge failure leaves every verdict null and is recorded as a failed call; the result is
+ *    still served, not the fallback.
+ * 4. Kinds (`applyVerdicts`, pure): a model claim is sourced when the judge found its cited
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
- *    inferred otherwise. A contradicted claim (verdict or numeric check) stays in the claims, and
- *    readers show it in the rejected panel. A link is sourced only through its own claim
- *    (`linkClaimProblem`'s rules): a link whose claim is not sourced, or is rejected, is drawn as
- *    an inferred influence that keeps its stated type.
- * 4. Model-written text (claims, factoid cards) has its @handles masked.
- * 5. The result: artwork for the genealogy nodes, the measurement written in by finalize.ts, the
- *    contract's checks, then `complete` and, when nothing a later run may do better is missing,
- *    the long-term store.
+ *    inferred otherwise. A link's claim states one relation, whole or not at all: only
+ *    `supported` sources it (a `partial` one usually means a weaker or another relation). A
+ *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
+ *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
+ *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
+ *    influence that keeps its stated type.
+ * 5. Model-written claims and factoid cards have their @handles masked.
+ * 6. The result: the measurement written in by finalize.ts, the contract's checks, then
+ *    `complete` and, when nothing a later run may do better is missing, the long-term store. A
+ *    result whose check did not complete is stored too, served for a shorter time
+ *    (UNCHECKED_RESULT_TTL_MS): its claims read as not checked, which is honest.
  */
 
 import { getStore, type LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -55,25 +62,57 @@ import { emittableAudio, finalizeResult, type ResultDraft } from "../finalize.js
 import { promptTrack } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import type { Factoid, Genealogy, TrackData } from "../schema.js";
-import { MODEL_FAILURE_TEXT, modelErrorCategory } from "../statusText.js";
+import { modelErrorCategory, type ModelUnavailableReason } from "../statusText.js";
 import {
   type ComposedDraft,
   type SonicAgentStateType,
   type SpotifyData,
   withChannelDefaults,
 } from "../state.js";
-import { shownQueryMatch, storeResult } from "../storedResults.js";
+import { shownQueryMatch, storeResult, UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import { judgeClaims } from "./judge.js";
 import { linkValue } from "./links.js";
 import { checkNumbers } from "./numeric.js";
-import { logger } from "../../logger.js";
+import { currentRunTimeLeft, logger } from "../../logger.js";
 
 const log = logger("Verifier");
 
 export { INFERRED_LINK_VALUE, LINK_VALUE, linkValue } from "./links.js";
 
-/** How the notes are shown when the judge gave no verdicts, for its status line. */
-const UNCHECKED_SHOWN = "the notes are shown as model inference, not checked against their sources";
+/** The time the rest of the node needs after the judge (finalize, the checks, the store). */
+export const JUDGE_FINISH_MARGIN_MS = 10_000;
+/** Less time than this for the judge, and it is not asked: it could not answer in time. */
+export const JUDGE_MIN_TIME_MS = 2000;
+let judgeTiming = { marginMs: JUDGE_FINISH_MARGIN_MS, minMs: JUDGE_MIN_TIME_MS };
+
+/** For tests: sets the judge's margin and minimum time. Returns a function that restores them. */
+export function setJudgeTimingForTests(timing: { marginMs: number; minMs: number }): () => void {
+  const previous = judgeTiming;
+  judgeTiming = timing;
+  return () => {
+    judgeTiming = previous;
+  };
+}
+
+/** The judge's share of the run's time: what is left, less the margin; 0 below the minimum. */
+function judgeTimeout(timeLeft: number | undefined): number | undefined {
+  if (timeLeft === undefined) return undefined;
+  const share = timeLeft - judgeTiming.marginMs;
+  return share < judgeTiming.minMs ? 0 : share;
+}
+
+/** Why the check of the notes could not run, by the judge call's failure category. */
+const CHECK_FAILURE_TEXT: Record<ModelUnavailableReason, string> = {
+  no_output: "the checking model's answer could not be used",
+  rate_limited: "the checking model is limiting requests",
+  timeout: "it did not finish in the time the run had left",
+  auth: "no working key is configured for the checking model",
+  error: "the request to the checking model failed",
+  budget_exhausted: "the model budget is used up",
+};
+
+/** How the notes are shown when the check did not run or did not complete. */
+const UNCHECKED_SHOWN = "they are shown as model inference, not checked against their sources";
 
 // =============================================================================
 // The deterministic step
@@ -95,23 +134,21 @@ function droppedCitationsReason(outOfScope: number): string {
 export interface CheckedDraft {
   claims: Claim[];
   genealogy: Genealogy;
-  /** Model claims dropped as restatements of a measured value. */
-  dropped: Claim[];
 }
 
 /**
  * The deterministic step (see the module comment): citations checked against the pack and the
- * claim's scope, the numeric check against the measurement (`audio`, the block the result
- * carries), and restated measured values dropped. Pure.
+ * claim's scope, and the numeric check against the measurement (`audio`, the block the result
+ * carries) of what each claim states about the track titled `title`. Pure.
  */
 export function checkClaims(
   draft: Pick<ComposedDraft, "claims" | "genealogy">,
   evidence: readonly Evidence[],
   audio: AudioFeatures | null,
+  title?: string,
 ): CheckedDraft {
   const pack = new Map(evidence.map((item) => [item.id, item]));
   const stated = linkClaimIds(draft.genealogy);
-  const dropped: Claim[] = [];
   const claims: Claim[] = [];
   for (const claim of draft.claims) {
     const inPack = claim.evidenceIds.filter((id) => pack.has(id));
@@ -130,24 +167,15 @@ export function checkClaims(
         : {}),
     };
     if (!stated.has(claim.id)) {
-      const numbers = checkNumbers(claim, audio);
+      const numbers = checkNumbers(claim, audio, title);
       checked = {
         ...checked,
         numericCheck: numbers.numericCheck,
         numericReason: numbers.numericReason,
         numericComparison: numbers.numericComparison,
+        // The measured value the claim's own statement is compared with, for the reader.
         ...(checked.field === undefined && numbers.field ? { field: numbers.field } : {}),
       };
-      const restated =
-        claim.origin === "model" &&
-        claim.factoid === undefined &&
-        claim.field !== undefined &&
-        supporting.length === 0 &&
-        numbers.numericCheck === "consistent";
-      if (restated) {
-        dropped.push(checked);
-        continue;
-      }
     }
     claims.push(checked);
   }
@@ -157,12 +185,20 @@ export function checkClaims(
     const claim = link.claimId ? byId.get(link.claimId) : undefined;
     return claim ? { ...link, evidenceIds: [...claim.evidenceIds] } : link;
   });
-  return { claims, genealogy: { nodes: draft.genealogy.nodes, links }, dropped };
+  return { claims, genealogy: { nodes: draft.genealogy.nodes, links } };
 }
 
-/** The model claims the judge is asked about: those that still cite evidence, in order. */
-export const judgeable = (claims: readonly Claim[]) =>
-  claims.filter((claim) => claim.origin === "model" && claim.evidenceIds.length > 0);
+/**
+ * The model claims the judge is asked about, in the order they are sent: those that still cite
+ * evidence, the genealogy links' claims first (in link order), so a long list of other claims
+ * never leaves the links unjudged, then the others in result order.
+ */
+export function judgeable(claims: readonly Claim[], genealogy: Genealogy): Claim[] {
+  const cited = claims.filter((claim) => claim.origin === "model" && claim.evidenceIds.length > 0);
+  const linkIds = genealogy.links.flatMap((link) => (link.claimId ? [link.claimId] : []));
+  const links = linkIds.flatMap((id) => cited.filter((claim) => claim.id === id));
+  return [...new Set([...links, ...cited])];
+}
 
 // =============================================================================
 // Kinds
@@ -180,11 +216,13 @@ export function applyVerdicts(
   checked: Pick<CheckedDraft, "claims" | "genealogy">,
   verdicts: ReadonlyMap<string, { verdict: Claim["verdict"]; reason: string }>,
 ): { claims: Claim[]; genealogy: Genealogy } {
+  const stated = linkClaimIds(checked.genealogy);
   const claims = checked.claims.map((claim): Claim => {
     if (claim.origin !== "model") return claim;
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
-    const supported = verdict === "supported" || verdict === "partial";
+    // A relation is stated whole: a partly supported link claim does not source its link.
+    const supported = verdict === "supported" || (verdict === "partial" && !stated.has(claim.id));
     return {
       ...claim,
       verdict,
@@ -217,6 +255,24 @@ export function applyVerdicts(
     node.id !== "current" && groups.has(node.id) ? { ...node, group: groups.get(node.id)! } : node,
   );
   return { claims, genealogy: { nodes, links } };
+}
+
+/**
+ * The genealogy with the model-written text of its nodes masked: labels, titles and artists of
+ * every node but the analysed track (whose names come from Spotify). Pure.
+ */
+export function maskedNodes(genealogy: Genealogy): Genealogy {
+  const nodes = genealogy.nodes.map((node) =>
+    node.id === "current"
+      ? node
+      : {
+          ...node,
+          label: maskHandles(node.label),
+          ...(node.trackTitle !== undefined ? { trackTitle: maskHandles(node.trackTitle) } : {}),
+          ...(node.trackArtist !== undefined ? { trackArtist: maskHandles(node.trackArtist) } : {}),
+        },
+  );
+  return { nodes, links: genealogy.links };
 }
 
 /** Model-written text with its @handles masked: claims and factoid cards. */
@@ -428,46 +484,61 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const fallback = draft.modelUnavailableReason !== null;
     const audio = emittableAudio(state.audioFeatures);
 
-    // 1. The deterministic step.
-    const checked = checkClaims(draft, state.evidence, audio);
-    if (checked.dropped.length > 0) {
-      log.info(
-        `Run ${runId}: dropped ${checked.dropped.length} claim(s) that only restate a measured value`,
-      );
-    }
+    // 1. The deterministic step, and 2. masked node text.
+    const checked = checkClaims(draft, state.evidence, audio, spotify.title);
+    const genealogy = maskedNodes(checked.genealogy);
 
-    // 2. The judge.
-    const toJudge = judgeable(checked.claims);
-    if (toJudge.length > 0)
+    // 3. The judge, in its share of the run's time, with the artwork lookup meanwhile.
+    const toJudge = judgeable(checked.claims, genealogy);
+    const timeoutMs = judgeTimeout(currentRunTimeLeft());
+    if (toJudge.length > 0) {
       status("LLM-CONNECT", "Checking the written notes against their sources");
-    const judged = await judgeClaims(toJudge, state.evidence, promptTrack(spotify), runtime, {
-      runId,
-      signal,
-    });
+    }
+    status("GRAPH-ENRICH", "Looking up cover art on Spotify for the genealogy");
+    const [judged, enriched] = await Promise.all([
+      judgeClaims(toJudge, state.evidence, promptTrack(spotify), runtime, {
+        runId,
+        signal,
+        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      }),
+      withArtwork(genealogy, spotify.coverUrl, signal, draft.nodeYears),
+    ]);
     const statusMessages: string[] = [];
+    const checkFailed = judged.failure !== null || judged.omitted > 0;
     if (judged.failure !== null) {
-      const text = MODEL_FAILURE_TEXT[modelErrorCategory(judged.failure)];
-      const line = `${text[0].toUpperCase()}${text.slice(1)}; ${UNCHECKED_SHOWN}`;
+      const why = CHECK_FAILURE_TEXT[modelErrorCategory(judged.failure)];
+      const line = `The notes could not be checked against their sources: ${why}; ${UNCHECKED_SHOWN}`;
       log.warn(
-        `Run ${runId}: the judge gave no verdicts (${judged.call?.status}): ${judged.failure instanceof Error ? judged.failure.message : String(judged.failure)}`,
+        `Run ${runId}: the judge gave no verdicts (${judged.call?.status ?? "not asked"}): ${judged.failure instanceof Error ? judged.failure.message : String(judged.failure)}`,
       );
+      status("LLM-ERROR", line);
+      statusMessages.push(line);
+    } else if (judged.omitted > 0) {
+      const line =
+        `The check of the notes against their sources was incomplete: ${judged.omitted} ` +
+        `statement${judged.omitted === 1 ? "" : "s"} got no verdict; ${UNCHECKED_SHOWN}`;
+      log.warn(`Run ${runId}: the judge left ${judged.omitted} claim(s) without a verdict`);
       status("LLM-ERROR", line);
       statusMessages.push(line);
     }
     const calls = judged.call ? [judged.call] : [];
 
-    // 3. Kinds, then 4. masked text.
-    const verified = applyVerdicts(checked, judged.verdicts);
-    const { claims, factoids } = maskedText(verified.claims, draft.factoids);
-
-    // 5. The result.
-    status("GRAPH-ENRICH", "Looking up cover art on Spotify for the genealogy");
-    const enriched = await withArtwork(
-      verified.genealogy,
-      spotify.coverUrl,
-      signal,
-      draft.nodeYears,
+    // 4. Kinds, then 5. masked text.
+    const verified = applyVerdicts(
+      { claims: checked.claims, genealogy: enriched.genealogy },
+      judged.verdicts,
     );
+    const tooLong = new Set(judged.tooLong);
+    const { claims, factoids } = maskedText(
+      verified.claims.map((claim) =>
+        tooLong.has(claim.id)
+          ? { ...claim, verdictReason: "Not judged: longer than the judge reads whole." }
+          : claim,
+      ),
+      draft.factoids,
+    );
+
+    // 6. The result.
     const runErrors = enriched.sourceErrors;
     const records = [...state.usage, ...calls];
     // A run whose model answers came from cassettes is a replay of those answers, not a live
@@ -483,7 +554,11 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
       analyzerVersion: null,
       fallback,
       usage: runUsage(records, runtime.llm.callsForRun(runId)),
-      verifier: { judged: judged.judged, unjudged: judged.unjudged },
+      verifier: {
+        judged: judged.judged,
+        unjudged: judged.unjudged,
+        ...(checkFailed ? { failed: true } : {}),
+      },
       sourceErrors: [...state.sourceErrors, ...runErrors],
     };
     const resultDraft: ResultDraft = {
@@ -492,7 +567,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
       segmentsSource: draft.segmentsSource,
       samples: draft.samples,
       factoids,
-      genealogy: enriched.genealogy,
+      genealogy: verified.genealogy,
       claims,
       ...(draft.modelUnavailableReason !== null
         ? { modelUnavailable: true, modelUnavailableReason: draft.modelUnavailableReason }
@@ -527,9 +602,11 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     // Cache the result in long-term memory under its track (storedResults.ts), unless a later
     // run may do better: the result is the fallback, the audio may be measurable later, a source
-    // failed for a passing reason (an outage, a timeout, a rate limit, a rejected key), a model
-    // call failed (a research planner's, or the judge's: its claims would be served unjudged),
-    // or the genealogy's artwork pass was cut short (enriched.complete). A source that is only
+    // failed for a passing reason (an outage, a timeout, a rate limit, a rejected key), a
+    // research planner call failed, or the genealogy's artwork pass was cut short
+    // (enriched.complete). A judge that failed, ran out of time or left claims out does not keep
+    // the result from the store: its claims read as not checked, which is honest, and it is
+    // served for UNCHECKED_RESULT_TTL_MS only, so a later run checks them. A source that is only
     // not configured does not block it: the key names the configured sources. Nor does a source
     // read only for the genealogy previews (enriched.sourceErrors): a stored result never
     // carries a preview. Nor does a lasting error of the evidence pack (state.lastingSourceErrors:
@@ -546,7 +623,8 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const runSourceErrors = state.sourceErrors;
     const transientSources =
       blockingSourceErrors(runSourceErrors, state.lastingSourceErrors).length > 0;
-    const modelFailed = records.some((u) => u.status !== "ok");
+    // The run's model calls before the verifier (the judge's own is handled above).
+    const modelFailed = state.usage.some((u) => u.status !== "ok");
     // Built without the track's Spotify details (the picked candidate's fields only, see the
     // clarification node), whatever the reason, even a key that is not configured: a run that
     // reads them does better.
@@ -570,7 +648,13 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     ) {
       try {
         signal?.throwIfAborted();
-        await storeResult(store, trackData, runtime.now(), runSourceErrors);
+        await storeResult(
+          store,
+          trackData,
+          runtime.now(),
+          runSourceErrors,
+          checkFailed ? UNCHECKED_RESULT_TTL_MS : undefined,
+        );
       } catch (e) {
         if (signal?.aborted) throw e;
         log.warn("Store write error", { err: e });

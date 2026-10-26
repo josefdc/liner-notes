@@ -9,7 +9,7 @@
  * only, and measured values from the audio measurement: `ComposerOutput` has no field for any
  * of them. The model reads the measured values as context. Every model statement is a claim of
  * kind `inferred`, and every link the model proposes states one claim of its own (its stated
- * type, its two ends, its evidence and its scope), until the verifier judges it.
+ * type, its two ends, its evidence and a scope set by code), until the verifier judges it.
  *
  * On any failure of the model call (budget refused, per-run call cap, rate limit, timeout,
  * network, an incomplete, refused or invalid answer) the draft is the fallback built from
@@ -22,6 +22,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   type Claim,
   type ClaimAbout,
+  type ClaimScope,
   type ComposerOutput as ComposerOutputType,
   ComposerOutput,
   composerOutputIssues,
@@ -53,6 +54,7 @@ import {
   type SpotifyData,
   withChannelDefaults,
 } from "../state.js";
+import { maskHandles } from "../../sources/search.js";
 import { INFERRED_LINK_VALUE } from "../verifier/links.js";
 import { logger } from "../../logger.js";
 
@@ -151,6 +153,23 @@ export function directedEnds(
   return [source, target];
 }
 
+/**
+ * What a link's claim states a fact about. A relation with the analysed track is about this
+ * recording (it samples, interpolates or remixes a record, a record samples it, a producer or an
+ * influence it shares), except a cover, which is about the song: the model's scope is not taken
+ * there, so a release-wide or song-level item can never source a sample of this recording. A
+ * link between two other records keeps the scope the model gave it.
+ */
+export function relationScope(
+  type: LinkType,
+  source: string,
+  target: string,
+  stated: ClaimScope,
+): ClaimScope {
+  if (source !== "current" && target !== "current") return stated;
+  return type === "cover" ? "work" : "recording";
+}
+
 interface Composed {
   factoids: Factoid[];
   claims: Claim[];
@@ -165,7 +184,7 @@ interface Composed {
  * link is `inferred` until the verifier judges it, and every node it proposes is drawn as a
  * related influence. Each link states one relation claim of its own (`claimId`, never shared):
  * about its stated type (`LINK_CLAIM_ABOUT`'s first entry), citing exactly the link's evidence,
- * with the scope the model gave the link. The link keeps the type the model stated; it is drawn
+ * with the scope `relationScope` gives it. The link keeps the type the model stated; it is drawn
  * as an influence until the verifier supports its claim.
  */
 export function composeFromOutput(
@@ -234,7 +253,8 @@ export function composeFromOutput(
       idOf.set(node.id, "current");
       continue;
     }
-    let id = node.id;
+    // An id that holds an @handle is model text that would be stored: it is replaced.
+    let id = maskHandles(node.id) === node.id ? node.id : "node";
     while (used.has(id)) id = `${id}-related`;
     used.add(id);
     idOf.set(node.id, id);
@@ -277,7 +297,7 @@ export function composeFromOutput(
       text: RELATION_TEXT[link.type](named(source), named(target)),
       about: LINK_CLAIM_ABOUT[link.type][0],
       evidenceIds,
-      scope: link.scope,
+      scope: relationScope(link.type, source, target, link.scope),
     });
     claims.push(claim);
     return [

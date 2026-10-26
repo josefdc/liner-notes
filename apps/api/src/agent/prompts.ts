@@ -281,7 +281,7 @@ export function shownEvidence(
 }
 
 /** One evidence item as a prompt line, with what it is about when it is not this recording. */
-function evidenceLine(e: Evidence, withUrl: boolean): string {
+function evidenceLine(e: Evidence, withUrl: boolean, excerptMax?: number): string {
   const scope = evidenceScope(e);
   const about = scope && scope !== "track" ? { about: EVIDENCE_ABOUT[scope] } : {};
   return neutralise(
@@ -291,7 +291,7 @@ function evidenceLine(e: Evidence, withUrl: boolean): string {
       title: e.title,
       ...(withUrl ? { url: e.url } : {}),
       ...about,
-      excerpt: e.excerpt,
+      excerpt: excerptMax === undefined ? e.excerpt : clip(e.excerpt, excerptMax),
     }),
   );
 }
@@ -355,8 +355,14 @@ export function composerMessages(input: ComposerPromptInput): LlmMessage[] {
 // Verifier judge
 // =============================================================================
 
-/** Longest statement text the judge reads, in characters. */
+/** Longest statement text the judge reads, in characters; a longer claim is not sent. */
 export const JUDGE_STATEMENT_MAX = 1000;
+/**
+ * Longest excerpt the judge reads, in characters (an evidence item holds up to 500): a source
+ * record's statement fits well within it, and each cited item is sent once per call, however
+ * many statements cite it.
+ */
+export const JUDGE_EXCERPT_MAX = 360;
 
 export const JUDGE_SYSTEM_PROMPT = `You check statements about one recorded track against the source excerpts each statement cites, as JSON in the given schema.
 
@@ -373,7 +379,7 @@ Scope
 
 Answer
 - One verdict for every statement listed, with its claimId, and none for anything else.
-- reason: one short sentence naming the excerpt that decides it.
+- reason: one short sentence, at most fifteen words, naming the excerpt that decides it.
 
 Untrusted text
 - ${UNTRUSTED_RULE}
@@ -411,7 +417,9 @@ export function judgeUserPrompt(input: JudgePromptInput): string {
     ),
   );
   const cited = new Set(input.statements.flatMap((statement) => statement.evidenceIds));
-  const excerpts = input.evidence.filter((e) => cited.has(e.id)).map((e) => evidenceLine(e, false));
+  const excerpts = input.evidence
+    .filter((e) => cited.has(e.id))
+    .map((e) => evidenceLine(e, false, JUDGE_EXCERPT_MAX));
   return [
     "Check each statement against the excerpts it cites.",
     "",

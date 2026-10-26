@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type LlmErrorKind } from "../../llm/errors.js";
 
 const store = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
-const enrich = vi.hoisted(() => ({ during: null as null | (() => void) }));
+const enrich = vi.hoisted(() => ({ during: null as null | (() => void), called: 0 }));
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@langchain/langgraph")>()),
   getStore: () => store,
@@ -27,17 +27,20 @@ vi.mock(
   () =>
     ({
       enrichGenealogyWithArtwork: async (genealogy) => {
+        enrich.called++;
         enrich.during?.();
         return { nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })), complete: true };
       },
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
-import { JUDGE_SYSTEM_PROMPT } from "../prompts.js";
+import { JUDGE_STATEMENT_MAX, JUDGE_SYSTEM_PROMPT } from "../prompts.js";
+import { UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import type { GenealogyLink } from "../schema.js";
 import type { SonicAgentStateType } from "../state.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
-import { applyVerdicts, checkClaims, createVerifierNode } from "./index.js";
+import { withRun } from "../../logger.js";
+import { applyVerdicts, checkClaims, createVerifierNode, setJudgeTimingForTests } from "./index.js";
 import { draftOf, judging, modelClaim, sentStatements, stateFor, trackRecord } from "./testing.js";
 import { audioV2 } from "../testing/measuredAudio.js";
 
@@ -107,6 +110,7 @@ async function verify(
 beforeEach(() => {
   store.put.mockReset();
   enrich.during = null;
+  enrich.called = 0;
   for (const method of ["log", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation(() => {});
   }
@@ -259,6 +263,20 @@ describe("kinds after the verifier", () => {
     expect(analysisIssues(result)).toEqual([]);
   });
 
+  it("does not source a link on a partly supported claim: a relation is stated whole", async () => {
+    const claim = modelClaim("rel", { about: "sample", evidenceIds: ["ev-track"] });
+    const plain = modelClaim("plain", { evidenceIds: ["ev-track"] });
+    const { result } = await verify([plain, claim], [linkTo("rel", ["ev-track"])], () => "partial");
+
+    expect(result.claims?.map((c) => [c.id, c.verdict, c.kind])).toEqual([
+      ["plain", "partial", "sourced"],
+      ["rel", "partial", "inferred"],
+    ]);
+    expect(result.genealogy.links[0]).toMatchObject({ kind: "inferred", value: 1 });
+    expect(result.genealogy.nodes.find((node) => node.id === "up")?.group).toBe(4);
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
   it("draws a link whose claim the verifier rejects as an inferred influence, with clean link checks", async () => {
     for (const verdict of ["contradicted", "unsupported"] as const) {
       const claim = modelClaim("rel", { about: "sample", evidenceIds: ["ev-track"] });
@@ -304,7 +322,7 @@ describe("kinds after the verifier", () => {
 });
 
 describe("the numeric check in the verifier", () => {
-  it("drops a model claim that only restates the measured tempo, and keeps one that conflicts", async () => {
+  it("keeps a claim that restates a measured value, marked by the check, with its content", async () => {
     // The measurement: 115.8 BPM, D minor.
     const { result, llm } = await verify([
       modelClaim("same", {
@@ -312,29 +330,64 @@ describe("the numeric check in the verifier", () => {
         about: "sound",
         field: "tempo",
       }),
+      // As the prompt asks, the model gives no field: the check finds the track's tempo.
+      modelClaim("bare", { text: "The track runs at 116 BPM.", about: "sound" }),
+      modelClaim("credit", {
+        text: "The 115.8 BPM beat was programmed by Mario Johnson on an SP-1200.",
+        about: "production",
+        field: "tempo",
+      }),
       modelClaim("octave", { text: "It runs at 232 BPM.", about: "sound", field: "tempo" }),
       modelClaim("wrong", { text: "It is in F# major.", about: "sound", field: "key" }),
-      // Without the model's field, or with evidence, a matching number is kept and marked.
-      modelClaim("aside", { text: "Its 116 BPM groove came from a drum machine." }),
     ]);
 
     expect(llm.calls).toHaveLength(0);
-    expect(result.claims?.map((c) => [c.id, c.numericCheck])).toEqual([
-      ["octave", "conflict"],
-      ["wrong", "contradicted"],
-      ["aside", "consistent"],
+    expect(result.claims?.map((c) => [c.id, c.numericCheck, c.field, c.kind])).toEqual([
+      ["same", "consistent", "tempo", "inferred"],
+      ["bare", "consistent", "tempo", "inferred"],
+      ["credit", "consistent", "tempo", "inferred"],
+      ["octave", "conflict", "tempo", "inferred"],
+      ["wrong", "contradicted", "key", "inferred"],
     ]);
-    const octave = result.claims![0];
+    // Nothing the model wrote is lost.
+    expect(result.claims?.[2].text).toBe(
+      "The 115.8 BPM beat was programmed by Mario Johnson on an SP-1200.",
+    );
+    expect(result.claims?.[1].numericReason).toMatch(/they agree/);
+    const octave = result.claims![3];
     expect(octave.numericComparison).toEqual({
       claimed: 232,
       measured: 115.8,
       method: "essentia.RhythmExtractor2013",
     });
     expect(octave.numericReason).toMatch(/twice the measured tempo/);
-    expect(octave.kind).toBe("inferred");
-    // The code fills in the field a mention points at, for the measured value beside it.
-    expect(result.claims![2].field).toBe("tempo");
-    expect(claimIsRejected(result.claims![1])).toBe(true);
+    expect(claimIsRejected(result.claims![4])).toBe(true);
+  });
+
+  it("never rejects a sample-history card over another record's tempo or key", async () => {
+    const card = (id: string, text: string) =>
+      modelClaim(id, {
+        text,
+        about: "sample",
+        evidenceIds: ["ev-track"],
+        factoid: { title: "Sample", type: "sample", entities: [] },
+      });
+    const { result } = await verify([
+      card("break", "The Funky Drummer break, originally about 100 BPM, is sped up here."),
+      card("both", "The 1972 break ran at 90 BPM; the track runs at 115.8 BPM."),
+      card("other", "Under Pressure is in D major; this track is in D minor."),
+      card("moved", "The sample was in G minor, transposed down to D minor."),
+    ]);
+
+    expect(result.claims?.map((c) => [c.id, c.numericCheck, c.kind])).toEqual([
+      ["break", "n/a", "sourced"],
+      ["both", "consistent", "sourced"],
+      ["other", "consistent", "sourced"],
+      ["moved", "n/a", "sourced"],
+    ]);
+    expect(result.claims?.some(claimIsRejected)).toBe(false);
+    // No field is written on a claim whose numbers are another record's.
+    expect(result.claims?.[0].field).toBeUndefined();
   });
 
   it("keeps a factoid card's claim and checks its text, and never parses a link's claim", async () => {
@@ -358,7 +411,7 @@ describe("the numeric check in the verifier", () => {
 
   it("never lets the numeric check change the judge's verdict", async () => {
     const { result } = await verify(
-      [modelClaim("a", { text: "Recorded at 232 BPM.", evidenceIds: ["ev-track"] })],
+      [modelClaim("a", { text: "The track runs at 232 BPM.", evidenceIds: ["ev-track"] })],
       [],
       () => "supported",
     );
@@ -402,12 +455,16 @@ describe("a judge failure", () => {
       expect(result.modelUnavailable).toBeUndefined();
       expect(out.usage).toEqual([expect.objectContaining({ callSite: "verifier", status })]);
       expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
+      expect(result.run?.verifier?.failed).toBe(true);
       expect(out.statusMessages?.[0]).toMatch(
-        /; the notes are shown as model inference, not checked against their sources$/,
+        /^The notes could not be checked against their sources: .+; they are shown as model inference, not checked against their sources$/,
       );
+      // Only the check failed: nothing says the model that wrote the notes is unavailable.
+      expect(out.statusMessages?.[0]).not.toMatch(/model is unavailable|model request failed/);
       expect(out.statusMessages?.at(-1)).toBe("Analysis complete");
-      // Its claims would be served unjudged: a later run judges them.
-      expect(store.put).not.toHaveBeenCalled();
+      // Stored with its claims unchecked, for a shorter time, so a later run checks them.
+      expect(store.put).toHaveBeenCalledTimes(1);
+      expect(store.put.mock.calls[0][2]).toMatchObject({ ttlMs: UNCHECKED_RESULT_TTL_MS });
       expect(analysisIssues(result)).toEqual([]);
     },
   );
@@ -427,6 +484,86 @@ describe("a judge failure", () => {
     ).rejects.toMatchObject({ kind: "aborted" });
     expect(writer.mock.calls.map(([event]) => event.type)).not.toContain("complete");
     expect(store.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("a slow judge", () => {
+  const cited = [modelClaim("a", { evidenceIds: ["ev-track"] })];
+  /** A judge that answers only when its signal stops it, as a provider that never answers. */
+  const hanging = () =>
+    stubLlm(
+      (call) =>
+        new Promise((_resolve, reject) => {
+          call.options.signal?.addEventListener("abort", () =>
+            reject(new LlmError("aborted", "verifier: aborted by the caller")),
+          );
+        }),
+    );
+  /** Runs the verifier inside a run whose deadline is `deadlineMs` away. */
+  const inRun = (llm: ReturnType<typeof stubLlm>, deadlineMs: number, writer = vi.fn()) => {
+    const run = new AbortController();
+    return withRun(
+      "run-1",
+      () =>
+        createVerifierNode(testRuntime(llm))(
+          stateFor(draftOf(cited), PACK),
+          config({ writer, signal: run.signal }),
+        ),
+      { signal: run.signal, deadlineAt: performance.now() + deadlineMs },
+    );
+  };
+
+  it("loses its verdicts, never the result, when it outlasts its share of the run's time", async () => {
+    const restore = setJudgeTimingForTests({ marginMs: 100, minMs: 50 });
+    try {
+      const llm = hanging();
+      const writer = vi.fn();
+      const started = performance.now();
+      const out = await inRun(llm, 400, writer);
+
+      // Stopped at its share (400 ms less the 100 ms margin), well before the run's deadline.
+      expect(performance.now() - started).toBeLessThan(400);
+      expect(llm.calls).toHaveLength(1);
+      expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
+      const result = TrackAnalysis.parse(out.trackData);
+      expect(result.claims?.[0]).toMatchObject({ verdict: null, kind: "inferred" });
+      expect(result.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
+      expect(out.usage).toEqual([
+        expect.objectContaining({ callSite: "verifier", status: "timeout" }),
+      ]);
+      expect(out.statusMessages?.[0]).toMatch(/did not finish in the time the run had left/);
+    } finally {
+      restore();
+    }
+  });
+
+  it("is not asked when the run has too little time left, and the result is still sent", async () => {
+    const llm = hanging();
+    const writer = vi.fn();
+    const out = await inRun(llm, 5_000, writer);
+
+    // 5 s left, less the 10 s margin: no time for the judge.
+    expect(llm.calls).toHaveLength(0);
+    expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
+    expect(out.trackData?.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
+    expect(out.usage).toEqual([]);
+  });
+
+  it("looks up the artwork while the judge works", async () => {
+    let artworkWhileJudging = false;
+    const llm = stubLlm(async (call) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      artworkWhileJudging = enrich.called > 0;
+      return {
+        verdicts: sentStatements(call).map(({ claimId }) => ({
+          claimId,
+          verdict: "supported",
+          reason: "r",
+        })),
+      };
+    });
+    await createVerifierNode(testRuntime(llm))(stateFor(draftOf(cited), PACK), config());
+    expect(artworkWhileJudging).toBe(true);
   });
 });
 
@@ -459,6 +596,45 @@ describe("the result", () => {
     });
     expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
     expect(store.put).not.toHaveBeenCalled();
+  });
+
+  it("masks @handles in model-written genealogy labels, titles and artists", async () => {
+    const draft = draftOf([], [linkTo("rel", [])]);
+    draft.genealogy.nodes = draft.genealogy.nodes.map((node) =>
+      node.id === "up"
+        ? {
+            ...node,
+            label: "Mix by @jane_doe99",
+            trackTitle: "Mix @jane_doe99",
+            trackArtist: "@jane_doe99",
+          }
+        : node,
+    );
+    const out = await createVerifierNode(testRuntime(judging(() => [])))(
+      stateFor(draft, PACK),
+      config(),
+    );
+
+    const node = out.trackData?.genealogy.nodes.find((n) => n.id === "up");
+    expect(node).toMatchObject({ label: "Mix by @…", trackTitle: "Mix @…", trackArtist: "@…" });
+    expect(store.put).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(store.put.mock.calls[0][2])).not.toContain("jane_doe99");
+  });
+
+  it("leaves unjudged a claim longer than the judge reads whole", async () => {
+    const long = `${"word ".repeat(JUDGE_STATEMENT_MAX / 5)}produced by Prince.`;
+    const { result, llm } = await verify([
+      modelClaim("long", { text: long, evidenceIds: ["ev-track"] }),
+      modelClaim("short", { text: "Samples Under Pressure.", evidenceIds: ["ev-track"] }),
+    ]);
+
+    expect(sentStatements(llm.calls[0]).map((s) => s.text)).toEqual(["Samples Under Pressure."]);
+    expect(result.claims?.[0]).toMatchObject({
+      verdict: null,
+      kind: "inferred",
+      verdictReason: "Not judged: longer than the judge reads whole.",
+    });
+    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 1 });
   });
 
   it("masks @handles in model-written claims, cards and verdict reasons", async () => {

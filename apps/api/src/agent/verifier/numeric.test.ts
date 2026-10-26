@@ -36,8 +36,10 @@ const keyAt = (
   return audioV2({ key: { ...base.key!, tonic, mode, strength } });
 };
 
-const check = (text: string, audio: AudioFeatures | null, field?: Claim["field"]) =>
-  checkNumbers({ text, field }, audio);
+const check = (text: string, audio: AudioFeatures | null, field?: Claim["field"], title?: string) =>
+  checkNumbers({ text, field }, audio, title);
+/** A sentence that gives this track's tempo. */
+const runsAt = (bpm: number | string) => `The track runs at ${bpm} BPM.`;
 
 describe("reading tempos", () => {
   it("reads a number written with its unit", () => {
@@ -54,6 +56,18 @@ describe("reading tempos", () => {
     expect(tempoMentions("Released in 1990, it sold 120 copies")).toEqual([]);
     expect(tempoMentions("a 1990 BPM record")).toEqual([]);
     expect(tempoMentions("a 5 BPM drone")).toEqual([]);
+  });
+
+  it("reads the unit before its number, a hyphenated unit and a fast tempo", () => {
+    expect(tempoMentions("BPM: 246.")).toEqual([{ field: "tempo", bpm: 246 }]);
+    expect(tempoMentions("a BPM of 98")).toEqual([{ field: "tempo", bpm: 98 }]);
+    expect(tempoMentions("Clocks 246 beats-per-minute.")).toEqual([{ field: "tempo", bpm: 246 }]);
+    expect(tempoMentions("It runs at 480 BPM.")).toEqual([{ field: "tempo", bpm: 480 }]);
+  });
+
+  it('reads "tempo of" only when the claim points at the tempo', () => {
+    expect(tempoMentions("Runs at a tempo of 246.", true)).toEqual([{ field: "tempo", bpm: 246 }]);
+    expect(tempoMentions("Runs at a tempo of 246.")).toEqual([]);
   });
 });
 
@@ -84,7 +98,33 @@ describe("reading keys", () => {
     ]);
   });
 
+  it("reads shorthand minor keys, abbreviated modes and a mode with no other cue", () => {
+    expect(keyMentions("The track is in Dm.")).toEqual([
+      { field: "key", tonic: "D", mode: "minor" },
+    ]);
+    expect(keyMentions("Written in Am.", true)).toEqual([
+      { field: "key", tonic: "A", mode: "minor" },
+    ]);
+    expect(keyMentions("A F#m riff")).toEqual([{ field: "key", tonic: "F#", mode: "minor" }]);
+    expect(keyMentions("Built on an E minor vamp.")).toEqual([
+      { field: "key", tonic: "E", mode: "minor" },
+    ]);
+    expect(keyMentions("A G minor groove drives it.")).toEqual([
+      { field: "key", tonic: "G", mode: "minor" },
+    ]);
+    expect(keyMentions("Eb maj, then C min")).toEqual([
+      { field: "key", tonic: "D#", mode: "major" },
+      { field: "key", tonic: "C", mode: "minor" },
+    ]);
+    expect(keyMentions("The key of a minor.")).toEqual([
+      { field: "key", tonic: "A", mode: "minor" },
+    ]);
+    // A lower-case tonic needs its mode: this is not a key.
+    expect(keyMentions("the key of a song is its centre")).toEqual([]);
+  });
+
   it("does not read ordinary English as a key", () => {
+    expect(keyMentions("I Am the one, said the singer.")).toEqual([]);
     expect(keyMentions("A minor hit in the UK, it was a major success.")).toEqual([]);
     expect(keyMentions("A major label signed them.")).toEqual([]);
     // The same words read as a key where the claim is about the key.
@@ -105,14 +145,14 @@ describe("the tempo check", () => {
   });
 
   it("agrees within max(2 BPM, 2 %) of the measurement, and no further", () => {
-    expect(check("62 BPM", tempoAt(60)).numericCheck).toBe("consistent");
-    expect(check("62.1 BPM", tempoAt(60)).numericCheck).not.toBe("consistent");
-    expect(check("204 BPM", tempoAt(200)).numericCheck).toBe("consistent");
-    expect(check("204.1 BPM", tempoAt(200)).numericCheck).not.toBe("consistent");
+    expect(check(runsAt(62), tempoAt(60)).numericCheck).toBe("consistent");
+    expect(check(runsAt(62.1), tempoAt(60)).numericCheck).not.toBe("consistent");
+    expect(check(runsAt(204), tempoAt(200)).numericCheck).toBe("consistent");
+    expect(check(runsAt(204.1), tempoAt(200)).numericCheck).not.toBe("consistent");
   });
 
   it("120 against a measured 117 is a conflict: outside the band, within 4 %", () => {
-    const result = check("120 BPM", tempoAt(117));
+    const result = check(runsAt(120), tempoAt(117));
     expect(result.numericCheck).toBe("conflict");
     expect(result.numericReason).toMatch(/less than 4 %/);
   });
@@ -126,14 +166,14 @@ describe("the tempo check", () => {
   ])(
     "%d against a measured %d is a conflict, however confident (%s)",
     (claimed, measured, words) => {
-      const result = check(`${claimed} BPM`, tempoAt(measured, 1));
+      const result = check(runsAt(claimed), tempoAt(measured, 1));
       expect(result.numericCheck).toBe("conflict");
       expect(result.numericReason).toContain(words);
     },
   );
 
   it("95 against a confident 120 is contradicted", () => {
-    const result = check("95 BPM", tempoAt(120, 0.71));
+    const result = check(runsAt(95), tempoAt(120, 0.71));
     expect(result.numericCheck).toBe("contradicted");
     expect(result.numericComparison).toEqual({
       claimed: 95,
@@ -144,11 +184,11 @@ describe("the tempo check", () => {
 
   it("never contradicts with a low-confidence or confidence-less measurement", () => {
     for (const confidence of [null, 0, ESSENTIA_MIN_TEMPO_CONFIDENCE - 0.01]) {
-      const result = check("95 BPM", tempoAt(120, confidence));
+      const result = check(runsAt(95), tempoAt(120, confidence));
       expect(result.numericCheck, String(confidence)).toBe("conflict");
       expect(result.numericReason).toMatch(/confidence is too low/);
     }
-    expect(check("95 BPM", tempoAt(120, ESSENTIA_MIN_TEMPO_CONFIDENCE)).numericCheck).toBe(
+    expect(check(runsAt(95), tempoAt(120, ESSENTIA_MIN_TEMPO_CONFIDENCE)).numericCheck).toBe(
       "contradicted",
     );
   });
@@ -161,18 +201,18 @@ describe("the tempo check", () => {
     );
     expect(tempoConfidenceFloor("other")).toBe(LIBROSA_MIN_TEMPO_CONFIDENCE);
     // 0.29 is above Essentia's floor (0.282) and below librosa's (0.3).
-    expect(check("95 BPM", tempoAt(120, 0.29)).numericCheck).toBe("contradicted");
-    expect(check("95 BPM", tempoAt(120, 0.29, librosa)).numericCheck).toBe("conflict");
-    expect(check("95 BPM", tempoAt(120, 0.29, "other")).numericCheck).toBe("conflict");
+    expect(check(runsAt(95), tempoAt(120, 0.29)).numericCheck).toBe("contradicted");
+    expect(check(runsAt(95), tempoAt(120, 0.29, librosa)).numericCheck).toBe("conflict");
+    expect(check(runsAt(95), tempoAt(120, 0.29, "other")).numericCheck).toBe("conflict");
   });
 });
 
 describe("the key check", () => {
   it("the same key is consistent; so is the same tonic when no mode is stated", () => {
     expect(check("It is in D minor.", keyAt("D", "minor")).numericCheck).toBe("consistent");
-    expect(check("in the key of D", keyAt("D", "minor")).numericCheck).toBe("consistent");
+    expect(check("It is in the key of D", keyAt("D", "minor")).numericCheck).toBe("consistent");
     // Enharmonics: B-flat is the measured A#.
-    expect(check("in B-flat minor", keyAt("A#", "minor")).numericCheck).toBe("consistent");
+    expect(check("It is in B-flat minor", keyAt("A#", "minor")).numericCheck).toBe("consistent");
   });
 
   it.each([
@@ -201,14 +241,62 @@ describe("the key check", () => {
   });
 });
 
+describe("whose tempo or key", () => {
+  // The measurement: 115.8 BPM (confident), D minor (strong).
+  const measured = audioV2();
+
+  it.each([
+    "The Funky Drummer break, originally about 100 BPM, is sped up here.",
+    "The sample was in G minor, transposed down to D minor.",
+    "The track samples a 1972 break that ran at 90 BPM.",
+    "Under Pressure is in A major.",
+  ])("does not compare a tempo or key of another record: %s", (text) => {
+    const result = check(text, measured);
+    expect(result.numericCheck).toBe("n/a");
+    expect(result.numericReason).toMatch(/another record's, not this track's/);
+  });
+
+  it("compares only the clause about this track", () => {
+    expect(
+      check("The 1972 break ran at 90 BPM; the track runs at 115.8 BPM.", measured),
+    ).toMatchObject({ numericCheck: "consistent", numericComparison: { claimed: 115.8 } });
+    expect(
+      check("Under Pressure is in D major; this track is in D minor.", measured),
+    ).toMatchObject({ numericCheck: "consistent", numericComparison: { claimed: "D minor" } });
+    expect(
+      check("The break ran at 90 BPM, while this song runs at 140 BPM.", measured).numericCheck,
+    ).toBe("contradicted");
+  });
+
+  it("takes the track's title as its subject", () => {
+    const text = "Ice Ice Baby runs at 95 BPM.";
+    expect(check(text, measured, undefined, "Ice Ice Baby").numericCheck).toBe("contradicted");
+    expect(check(text, measured).numericCheck).toBe("n/a");
+  });
+
+  it("takes the claim's field as saying the claim is about this track", () => {
+    expect(check("Runs at a tempo of 246.", tempoAt(123), "tempo").numericCheck).toBe("conflict");
+    expect(check("Clocked at 95 BPM.", measured, "tempo").numericCheck).toBe("contradicted");
+    expect(check("Clocked at 95 BPM.", measured).numericCheck).toBe("n/a");
+  });
+
+  it("compares the newly read spellings", () => {
+    expect(check("The track is in Dm.", measured).numericCheck).toBe("consistent");
+    expect(check("It runs at 480 BPM.", tempoAt(120)).numericReason).toMatch(
+      /four times the measured tempo/,
+    );
+    expect(check("It runs at 480 BPM.", tempoAt(120)).numericCheck).toBe("conflict");
+  });
+});
+
 describe("the check of a claim", () => {
   it("reads a factoid card's text, which has no field", () => {
-    const text = "Producers built the loop at 246 BPM, a breakneck pace for the time.";
+    const text = "The track's loop runs at 246 BPM, a breakneck pace for the time.";
     expect(check(text, tempoAt(123)).numericCheck).toBe("conflict");
   });
 
   it("takes the worst result of several mentions", () => {
-    const text = "At 116 BPM, in F# major.";
+    const text = "The track runs at 116 BPM, in F# major.";
     const result = check(text, audioV2());
     expect(result.numericCheck).toBe("contradicted");
     expect(result.field).toBe("key");
@@ -238,7 +326,11 @@ describe("the check of a claim", () => {
       keyMoments: [],
       fingerprint: null,
     });
-    for (const text of ["It runs at 116 BPM.", "It is in D minor.", "95 BPM in F# major"]) {
+    for (const text of [
+      "It runs at 116 BPM.",
+      "It is in D minor.",
+      "It runs at 95 BPM in F# major",
+    ]) {
       expect(check(text, bare)).toEqual(check(text, audio));
     }
   });

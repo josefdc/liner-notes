@@ -1263,7 +1263,13 @@ describe("composerNode", () => {
     it("keeps the type the model stated for a link on the link's own claim", async () => {
       const { draft } = await draftOf(
         linked([
-          { source: "n1", target: "me", type: "sample", evidenceIds: ["ev-mb-1"], scope: "work" },
+          {
+            source: "n1",
+            target: "me",
+            type: "sample",
+            evidenceIds: ["ev-mb-1"],
+            scope: "recording",
+          },
         ]),
       );
 
@@ -1282,10 +1288,78 @@ describe("composerNode", () => {
         kind: "inferred",
         origin: "model",
         evidenceIds: ["ev-mb-1"],
-        scope: "work",
+        scope: "recording",
         verdict: null,
         text: '"Ice Ice Baby - Vanilla Ice" samples "Under Pressure - Queen".',
       });
+    });
+
+    it("sets the scope of a link's claim with this track by code, never the model's", async () => {
+      const node = (id: string) => ({
+        id,
+        role: "influence" as const,
+        label: `${id} - X`,
+        trackTitle: null,
+        trackArtist: null,
+        year: null,
+      });
+      const types = ["sample", "interpolation", "remix", "cover", "producer", "influence"] as const;
+      const { draft } = await draftOf(
+        linked(
+          [
+            ...types.map((type) => ({
+              source: "n1",
+              target: "me",
+              type,
+              evidenceIds: ["ev-mb-1"],
+              scope: "release" as const,
+            })),
+            // Between two other records, the model's scope stands.
+            {
+              source: "o1",
+              target: "o2",
+              type: "sample" as const,
+              evidenceIds: [],
+              scope: "release" as const,
+            },
+          ],
+          [...output.genealogyNodes, node("o1"), node("o2")],
+        ),
+      );
+
+      const scopes = draft.genealogy.links.map(
+        (link) => draft.claims.find((c) => c.id === link.claimId)?.scope,
+      );
+      expect(scopes).toEqual([
+        "recording",
+        "recording",
+        "recording",
+        "work",
+        "recording",
+        "recording",
+        "release",
+      ]);
+    });
+
+    it("replaces a node id that holds an @handle", async () => {
+      const nodes = [output.genealogyNodes[0], { ...output.genealogyNodes[1], id: "@jane_doe99" }];
+      const { draft } = await draftOf(
+        linked(
+          [
+            {
+              source: "@jane_doe99",
+              target: "me",
+              type: "influence",
+              evidenceIds: [],
+              scope: "recording",
+            },
+          ],
+          nodes,
+        ),
+      );
+      expect(draft.genealogy.nodes.map((n) => n.id)).toEqual(["current", "node"]);
+      expect(draft.genealogy.links[0]).toMatchObject({ source: "node", target: "current" });
+      expect(JSON.stringify(draft.genealogy)).not.toContain("jane_doe99");
     });
 
     it("writes each link's claim about the first subject the contract lists for its type", async () => {

@@ -35,7 +35,7 @@ interface ClaimListProps {
   emptyText?: string;
   /** How many claims of the section are shown on the fact cards instead (not listed again). */
   onCards?: number;
-  /** Drawn relations no claim of the section states, listed after its claims. */
+  /** Relations no claim of the section states (drawn links, undrawn samples), after its claims. */
   links?: readonly RelationLinkNote[];
   readings?: readonly Reading[];
   audio?: MeasuredAudio | null;
@@ -114,7 +114,7 @@ export const ClaimList: React.FC<ClaimListProps> = ({
                 </span>
                 {link.text}
               </p>
-              <p className={LINE}>Drawn in Connections · {link.detail}</p>
+              <p className={LINE}>{link.detail}</p>
             </li>
           ))}
         </ul>

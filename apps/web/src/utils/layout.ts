@@ -36,3 +36,21 @@ function subscribe(onChange: () => void): () => void {
 export function usePlayerLayout(): PlayerLayout {
   return useSyncExternalStore(subscribe, playerLayout, () => 'tabs');
 }
+
+const NO_HOVER = '(hover: none)';
+
+/** True when the main pointer cannot hover: a touch screen. */
+export function noHover(): boolean {
+  return list(NO_HOVER)?.matches ?? false;
+}
+
+function subscribeHover(onChange: () => void): () => void {
+  const item = list(NO_HOVER);
+  item?.addEventListener('change', onChange);
+  return () => item?.removeEventListener('change', onChange);
+}
+
+/** True when the main pointer cannot hover (a touch screen), following the setting. */
+export function useNoHover(): boolean {
+  return useSyncExternalStore(subscribeHover, noHover, () => false);
+}

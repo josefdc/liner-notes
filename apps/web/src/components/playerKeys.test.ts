@@ -31,6 +31,12 @@ function page() {
   };
 }
 
+/** Puts an element's box `top` px down the window (40 px tall, full width). */
+function at(element: Element, top: number) {
+  element.getBoundingClientRect = () =>
+    ({ top, bottom: top + 40, left: 0, right: 300, width: 300, height: 40 }) as DOMRect;
+}
+
 const escapeKey = (target: EventTarget | null, init: Partial<KeyboardEvent> = {}) => ({
   key: 'Escape',
   defaultPrevented: false,
@@ -59,6 +65,8 @@ describe('escapeAction', () => {
 
   it('closes first when a disclosure is open', () => {
     const { root, toggle, details, el } = page();
+    at(toggle, 100);
+    at(details, 300);
     toggle.setAttribute('aria-expanded', 'true');
     expect(escapeAction(escapeKey(el('inside')), root)).toBe('close');
     toggle.setAttribute('aria-expanded', 'false');
@@ -96,21 +104,41 @@ describe('closeOpen', () => {
     expect(closeOpen(root, document.activeElement)).toBe(false);
   });
 
-  it('closes every open one when the focus is in none of them, and brings the first one’s toggle into view with the focus', () => {
+  it('with the focus in none of them, closes those on screen and leaves the focus where it is', () => {
     const { root, toggle, details, el } = page();
     toggle.setAttribute('aria-expanded', 'true');
     details.open = true;
-    const scrolled: Element[] = [];
-    toggle.scrollIntoView = function (this: Element) {
-      scrolled.push(this);
-    };
+    at(toggle, 100);
+    at(details, 300);
     el('box').focus();
     expect(openDisclosures(root)).toHaveLength(2);
+    expect(escapeAction(escapeKey(el('box')), root)).toBe('close');
     expect(closeOpen(root, document.activeElement)).toBe(true);
     expect(openDisclosures(root)).toHaveLength(0);
-    // What closed may be scrolled out of view: its toggle is shown, and has the focus.
-    expect(document.activeElement).toBe(toggle);
-    expect(scrolled).toEqual([toggle]);
+    expect(document.activeElement).toBe(el('box'));
+  });
+
+  it('leaves open what is scrolled out of view, and goes back as when nothing is open', () => {
+    const { root, toggle, details, el } = page();
+    toggle.setAttribute('aria-expanded', 'true');
+    details.open = true;
+    // One on screen, one far below it (about 2000 px down).
+    at(toggle, 100);
+    at(details, 2000);
+    expect(closeOpen(root, el('box'))).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(details.open).toBe(true);
+    // Only the one out of view is left: Escape goes back, and nothing scrolls to it.
+    let scrolled = false;
+    details.scrollIntoView = () => {
+      scrolled = true;
+    };
+    expect(escapeAction(escapeKey(el('box')), root)).toBe('back');
+    expect(closeOpen(root, el('box'))).toBe(false);
+    expect(details.open).toBe(true);
+    expect(scrolled).toBe(false);
+    // With the focus inside it, it is closed wherever it is.
+    expect(escapeAction(escapeKey(el('item')), root)).toBe('close');
   });
 
   it('leaves alone what is open in a panel that is not shown', () => {

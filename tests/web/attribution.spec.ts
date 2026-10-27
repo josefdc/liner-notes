@@ -193,11 +193,42 @@ test("Deezer is credited for the preview the page plays, and not without one", a
   await expect(deezer.getByRole("link")).toHaveAttribute("href", "https://www.deezer.com");
 });
 
-test("no preview and no measurement: Deezer is not credited", async ({ page }) => {
+test("no preview and no measurement: no preview is credited", async ({ page }) => {
+  // The full result with its analysis not run (no clip found): nothing was measured.
+  const fixture = loadFixture("full-result");
+  Object.assign(completeOf(fixture), {
+    audioSource: "unavailable",
+    audioUnavailableReason: "no_preview",
+    bpm: null,
+    key: null,
+    energy: null,
+    valence: null,
+    danceability: null,
+    acousticness: null,
+    keyMoments: [],
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  await expect(page.getByText("Preview unavailable")).toBeVisible();
+  await expect(page.getByTestId("player-audio-line")).toHaveText("BPM not measured");
+  await expect(page.locator('[data-provider="deezer"]')).toHaveCount(0);
+  await expect(page.locator('[data-provider="preview"]')).toHaveCount(0);
+});
+
+// A result from before the measurement block (no `audio`, audioSource "analyzed") shows its BPM
+// and key as measured: the clip they were measured on is credited, its provider not guessed.
+test("a result from before the measurement block credits the preview its values were measured on", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await useMockApi(page, loadFixture("full-result"));
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
-  await expect(page.getByText("Preview unavailable")).toBeVisible();
+  await expect(page.getByTestId("player-audio-line")).toContainText("105 BPM");
+  await expect(page.locator('[data-provider="preview"]')).toHaveText(
+    "A preview clip (the audio was measured on it; this result does not name its provider)",
+  );
   await expect(page.locator('[data-provider="deezer"]')).toHaveCount(0);
 });

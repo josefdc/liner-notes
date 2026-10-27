@@ -2,7 +2,8 @@
 // tabs (the WAI-ARIA tabs pattern).
 //
 // Escape first closes what is open in the Player (a disclosure such as a claim's sources or the
-// rejected claims, a list over the graph), and leaves for the summary only when nothing is open.
+// rejected claims, a list over the graph) around the focus or on screen, and leaves for the
+// summary only when nothing open is there to close.
 // It does nothing while the focus is in a text field (Escape belongs to the field there), nor
 // when the focus is outside the Player (the page footer, another part of the page), nor when
 // something inside handled it already (`defaultPrevented`: the graph hiding its detail box).
@@ -69,43 +70,53 @@ function close(disclosure: HTMLElement, active: Element | null) {
   disclosure.click();
 }
 
-/** A disclosure's toggle: the `<summary>` of a `<details>`, or the button itself. */
-function toggleOf(disclosure: HTMLElement): HTMLElement | null {
-  return disclosure instanceof HTMLDetailsElement
-    ? disclosure.querySelector<HTMLElement>(':scope > summary')
-    : disclosure;
+/** Whether an element is at least partly inside the window (it has a box, and it is on screen). */
+function inView(element: Element): boolean {
+  const box = element.getBoundingClientRect();
+  if (box.width === 0 && box.height === 0) return false;
+  const view = element.ownerDocument.defaultView;
+  const height = view?.innerHeight ?? 0;
+  const width = view?.innerWidth ?? 0;
+  return box.bottom > 0 && box.top < height && box.right > 0 && box.left < width;
+}
+
+/** Whether a disclosure can be seen: its toggle, or what it shows, is at least partly on screen. */
+function disclosureInView(disclosure: HTMLElement): boolean {
+  if (inView(disclosure)) return true;
+  const panel = controlled(disclosure);
+  return panel !== null && inView(panel);
 }
 
 /**
- * Closes what is open in `root`: the innermost disclosure that holds the focus, else every one
- * shown. In that second case what closed may be out of view (scrolled away): the focus goes to
- * the first one's toggle, brought into view, so the key's effect is seen and the reader is where
- * it happened. Returns false when nothing was open.
+ * What Escape closes in `root`: the innermost open disclosure that holds the focus; else every
+ * open one at least partly on screen. One scrolled out of view is left open: closing it would
+ * show nothing, and bringing it into view would jump the page away from where the reader is.
  */
-export function closeOpen(root: Element, active: Element | null): boolean {
+function closable(root: Element, active: Element | null): HTMLElement[] {
   const open = openDisclosures(root);
-  if (open.length === 0) return false;
   const around = open.filter((disclosure) => holdsFocus(disclosure, active));
   // In the page's order an inner disclosure comes after the one it is in.
-  if (around.length > 0) {
-    close(around[around.length - 1], active);
-    return true;
-  }
-  for (const disclosure of open) close(disclosure, active);
-  const toggle = toggleOf(open[0]);
-  if (toggle) {
-    toggle.focus({ preventScroll: true });
-    toggle.scrollIntoView?.({ block: 'nearest' });
-  }
-  return true;
+  if (around.length > 0) return [around[around.length - 1]];
+  return open.filter(disclosureInView);
+}
+
+/**
+ * Closes what Escape closes in `root` (see `closable`); the focus, when it was in what closed,
+ * goes to its toggle. Returns false when there was nothing to close.
+ */
+export function closeOpen(root: Element, active: Element | null): boolean {
+  const targets = closable(root, active);
+  for (const disclosure of targets) close(disclosure, active);
+  return targets.length > 0;
 }
 
 export type EscapeAction = 'none' | 'close' | 'back';
 
 /**
  * What Escape does in the Player, for a keydown whose target is `target`: nothing in a text
- * field or outside the Player (`root`); close what is open; else go back to the summary. With the
- * focus on no element (the page's body) the key is the Player's: it fills the page.
+ * field or outside the Player (`root`); close what is open around the focus or on screen; else
+ * go back to the summary, as when nothing is open. With the focus on no element (the page's body)
+ * the key is the Player's: it fills the page.
  */
 export function escapeAction(
   event: Pick<KeyboardEvent, 'key' | 'defaultPrevented' | 'isComposing' | 'target'>,
@@ -117,7 +128,9 @@ export function escapeAction(
   const doc = root.ownerDocument;
   const onPage = target === doc.body || target === doc.documentElement || target === doc;
   if (!onPage && !(target instanceof Node && root.contains(target))) return 'none';
-  return openDisclosures(root).length > 0 ? 'close' : 'back';
+  // The focus is on the key's target: the body when no element has it.
+  const active = target instanceof Element ? target : null;
+  return closable(root, active).length > 0 ? 'close' : 'back';
 }
 
 /**

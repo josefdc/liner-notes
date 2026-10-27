@@ -234,3 +234,26 @@ test("a sample only the timeline marks is said, not denied", async ({ page }) =>
   );
   await expect(samples.getByRole("listitem")).toHaveCount(0);
 });
+
+// A sample time the timeline cannot draw (past the song's end) is not counted as marked: it is
+// listed in the section with its description, its time said as the model's and not drawn.
+test("a sample the timeline cannot draw is listed, not counted as marked", async ({ page }) => {
+  const fixture = loadFixture("full-result");
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  complete.data.genealogy.links = [];
+  complete.data.samples = [{ time: 9999, description: "A horn stab from an old record" }];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const samples = page.getByRole("region", { name: "Samples and covers" });
+  expect(await listed(page, "Samples and covers")).toEqual([
+    "Possible sampleA horn stab from an old record.",
+  ]);
+  await expect(samples).toContainText(
+    "Time inferred by the model: 166:39 · outside the song, not drawn",
+  );
+  await expect(samples).not.toContainText("The timeline marks");
+});

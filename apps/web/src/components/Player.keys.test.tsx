@@ -199,9 +199,13 @@ describe('the panels and the graph by width', () => {
     expect(graph.wheelZoom).toBe('plain');
   });
 
-  it.each([820, 1024, 1440])(
-    'at %i px, with the tabs hidden, no panel claims to be a tab panel, and the wheel scrolls the page',
-    (width) => {
+  it.each([
+    [820, 'modifier'],
+    [1024, 'modifier'],
+    [1440, 'plain'],
+  ])(
+    'at %i px, with the tabs hidden, no panel claims to be a tab panel; the graph takes the wheel: %s',
+    (width, wheelZoom) => {
       windowWidth(width);
       render(<Player trackData={track()} onBack={() => {}} />);
       expect(panels()).toEqual([
@@ -209,7 +213,8 @@ describe('the panels and the graph by width', () => {
         [null, null],
         [null, null],
       ]);
-      expect(graph.wheelZoom).toBe('modifier');
+      // Up to xl the page scrolls past the graph and keeps the wheel; from xl nothing does.
+      expect(graph.wheelZoom).toBe(wheelZoom);
     },
   );
 });

@@ -18,6 +18,7 @@ import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors } from '../styles/theme';
 import { placeholderImage } from '../styles/placeholder';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
+import { previewTracksOf } from './genealogy/previewTracks';
 import { useAudioPreview } from './genealogy/useAudioPreview';
 import {
   describeLink,
@@ -43,6 +44,7 @@ import { LinkList } from './genealogy/LinkList';
 import { PreviewList } from './genealogy/PreviewList';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
+import { useNoHover } from '../utils/layout';
 import type { TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -250,13 +252,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
-      // The wheel zooms only when nothing around the graph scrolls, or with Ctrl or ⌘ held:
-      // otherwise it is left to the page, which scrolls past the graph. A drag pans and a touch
-      // pinch zooms as before (d3's own rule: no Ctrl-drag, primary button only).
+      // Where the page scrolls past the graph ('modifier'), the graph takes no gesture the page
+      // needs: the wheel zooms only with Ctrl or ⌘ held, and on a touch screen one finger
+      // scrolls the page while two pinch and pan the graph (the svg's touch-action lets the
+      // browser have the one-finger vertical pan). Elsewhere the wheel zooms, one finger pans,
+      // and a drag pans and a touch pinch zooms as before (d3's own rule: no Ctrl-drag, primary
+      // button only).
       .filter((event: Event) => {
+        const modifier = wheelZoomRef.current === 'modifier';
         if (event.type === 'wheel') {
           const wheel = event as WheelEvent;
-          return wheelZoomRef.current === 'plain' || wheel.ctrlKey || wheel.metaKey;
+          return !modifier || wheel.ctrlKey || wheel.metaKey;
+        }
+        if (event.type === 'touchstart' && modifier) {
+          return (event as TouchEvent).touches.length >= 2;
         }
         const pointer = event as MouseEvent;
         return !pointer.ctrlKey && !pointer.button;
@@ -997,6 +1006,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
   const nodeList = graphNodes(data);
   const related = nodeList.filter((node) => node.group !== 1);
+  // The gestures, in words, as the graph takes them here (see the zoom's filter).
+  const touch = useNoHover();
+  const hints =
+    wheelZoom === 'modifier'
+      ? touch
+        ? [
+            'Pinch with two fingers to zoom',
+            'Drag with two fingers to pan',
+            'Tap a track to analyze it',
+          ]
+        : ['Ctrl or ⌘ + scroll to zoom', 'Drag to pan', 'Click a track to analyze it']
+      : touch
+        ? ['Pinch to zoom', 'Drag to pan', 'Tap a track to analyze it']
+        : ['Scroll to zoom', 'Drag to pan', 'Click a track to analyze it'];
   const pointed = hovered ?? focused;
   const active = sameItem(pointed, dismissed) ? null : pointed;
   useEffect(() => {
@@ -1013,11 +1036,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
   // Every drawn related track with a clip, whether or not a shown link names it: each has its
   // preview button (PreviewList).
-  const previewTracks = nodeList.flatMap((node) =>
-    node.group !== 1 && typeof node.previewUrl === 'string' && node.previewUrl
-      ? [{ id: node.id, url: node.previewUrl }]
-      : [],
-  );
+  const previewTracks = previewTracksOf(data);
 
   return (
     <div className="relative w-full h-full flex flex-col">
@@ -1028,6 +1047,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <svg
           ref={svgRef}
           className="w-full h-full overflow-visible"
+          // One finger scrolls the page (vertically) and two pinch the graph, where the page
+          // scrolls past it
+          style={wheelZoom === 'modifier' ? { touchAction: 'pan-y pinch-zoom' } : undefined}
           aria-label="Connections graph"
         ></svg>
 
@@ -1127,18 +1149,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           </div>
         )}
 
-        {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
+        {/* The gestures, in words, from md up: not on a short screen (a landscape phone),
+            where three lines would cover the drawing and the panel's heading */}
         {!active && (
-          <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
+          <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block [@media(max-height:32rem)]:hidden">
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
-              <span>
-                {wheelZoom === 'modifier' ? 'Ctrl or ⌘ + scroll to zoom' : 'Scroll to zoom'}
-              </span>
-              <span>Drag to pan</span>
-              <span className="flex items-center gap-1">
-                <MousePointerClick size={12} />
-                Click a track to analyze it
-              </span>
+              {hints.map((hint, index) => (
+                <span key={hint} className={index === 2 ? 'flex items-center gap-1' : undefined}>
+                  {index === 2 && <MousePointerClick size={12} />}
+                  {hint}
+                </span>
+              ))}
             </div>
           </div>
         )}
@@ -1152,8 +1173,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
       {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
       {(links.length > 0 || hidden > 0 || previewTracks.length > 0) && (
-        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
-        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Its
+        // extra space below is the xl column's only: in the md-to-xl row, on a short landscape
+        // screen, every pixel of the row's height goes to the drawing.
+        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 xl:pb-14 bg-void">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}

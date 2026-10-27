@@ -117,7 +117,7 @@ export function relationLinkNotes(
         key: `link-${index}`,
         label,
         text: `${text}.`,
-        detail: provenanceText(link),
+        detail: `Drawn in Connections · ${provenanceText(link)}`,
         kind: linkProvenanceKind(link),
       },
     ];

@@ -2,7 +2,7 @@ import type { SourceId } from '@liner-notes/contract';
 import { ExternalLink } from 'lucide-react';
 import type React from 'react';
 import { useId } from 'react';
-import { measuredAudioOf } from '../../constants';
+import { showsMeasuredAudio } from '../../constants';
 import type { Factoid, TrackData } from '../../types';
 import { archiveReleaseOf, archiveReleasePage, isValidImageUrl } from '../../utils/image';
 import { isSpotifyTrackId } from '../../utils/spotify';
@@ -93,7 +93,7 @@ export function previewHost(url: unknown): 'deezer' | 'spotify' | null {
  * preview is used.
  */
 export function previewProvider(track: TrackData): 'deezer' | 'spotify' | 'unknown' | null {
-  const used = Boolean(track.previewUrl) || measuredAudioOf(track) !== null;
+  const used = Boolean(track.previewUrl) || showsMeasuredAudio(track);
   if (!used) return null;
   const match = (track as { preview?: unknown }).preview;
   if (typeof match === 'object' && match !== null) {
@@ -130,8 +130,8 @@ export interface ShownData {
   claims: Pick<ResultClaims, 'shown' | 'rejected'>;
   /** The links the graph draws. */
   links?: readonly ShownLink[];
-  /** The tracks the graph draws (the related tracks whose preview it can play). */
-  nodes?: readonly unknown[];
+  /** The clips of the related tracks the graph offers a preview of (`previewTracksOf`). */
+  nodePreviews?: readonly string[];
   /** The cover the page shows (null when there is none, or it failed to load). */
   coverSrc?: string | null;
   /** The fact cards shown (their titles name a fallback card's records). */
@@ -143,7 +143,7 @@ export function shownProviders({
   track,
   claims,
   links = [],
-  nodes = Array.isArray(track.genealogy?.nodes) ? track.genealogy.nodes : [],
+  nodePreviews = [],
   coverSrc = null,
   factoids = [],
 }: ShownData): ShownProvider[] {
@@ -180,11 +180,11 @@ export function shownProviders({
   const preview = previewProvider(track);
   if (preview === 'unknown') {
     if (track.previewUrl) credit('preview', 'played here');
-    if (measuredAudioOf(track) !== null) credit('preview', 'the audio was measured on it');
+    if (showsMeasuredAudio(track)) credit('preview', 'the audio was measured on it');
   } else if (preview) credit(preview, 'preview');
   // A related track's preview the graph can play (a clip of another host is not credited).
-  for (const node of nodes) {
-    const host = previewHost((node as { previewUrl?: unknown } | null)?.previewUrl);
+  for (const url of nodePreviews) {
+    const host = previewHost(url);
     if (host) credit(host, 'preview');
   }
 

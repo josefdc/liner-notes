@@ -287,6 +287,21 @@ export function measuredKeyMoments(track: TrackData): KeyMoment[] {
 }
 
 /**
+ * True when the page shows something measured on the preview: a measurement block it can read
+ * (its window, beats and values, or why a value was withheld), or, for a result from before the
+ * block, measured values or key moments its analysis left (`legacyMeasured`). The attribution
+ * credits the preview whenever this holds, by the same rule the values are shown by.
+ */
+export function showsMeasuredAudio(track: TrackData): boolean {
+  if (audioStateOf(track).kind === 'measured') return true;
+  if (!legacyMeasured(track)) return false;
+  return (
+    Object.values(audioValues(track)).some((value) => value !== null) ||
+    measuredKeyMoments(track).length > 0
+  );
+}
+
+/**
  * Why a result has no key moments to show, or null when its analysis ran on the preview (so
  * none were detected).
  */

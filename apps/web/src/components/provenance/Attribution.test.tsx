@@ -5,6 +5,8 @@ import type { ShownLink } from '../genealogy/links';
 import { Attribution, previewHost, previewProvider, shownProviders } from './Attribution';
 import { resultClaims } from './claims';
 import { claim, evidence, provenanceTrack } from './testing';
+import { showsMeasuredAudio } from '../../constants';
+import { previewTracksOf } from '../genealogy/previewTracks';
 
 afterEach(cleanup);
 
@@ -96,19 +98,34 @@ describe('shownProviders', () => {
     expect(providersOf(unused)).toEqual([]);
   });
 
-  it("credits the provider of a related track's preview the graph can play", () => {
-    const result = track({
-      genealogy: {
-        nodes: [
-          { id: 'current', group: 1, label: 'Song', size: 40 },
-          { id: 'n', group: 4, label: 'Other', size: 22, previewUrl: DEEZER_CLIP },
-        ],
-        links: [],
-      },
-    });
-    expect(providersOf(result)).toEqual([['deezer', 'https://www.deezer.com', 'preview']]);
-    // A node the graph does not draw (its relation hidden) plays nothing.
-    expect(providersOf(result, [], { nodes: [] })).toEqual([]);
+  it("credits the provider of a related track's preview the graph offers, and no other node's", () => {
+    const genealogy = {
+      nodes: [
+        // The analysed track's own node: the graph offers no preview of it.
+        { id: 'current', group: 1, label: 'Song', size: 40, previewUrl: SPOTIFY_CLIP },
+        { id: 'n', group: 4, label: 'Other', size: 22, previewUrl: DEEZER_CLIP },
+      ],
+      links: [],
+    };
+    const result = track({ genealogy });
+    const offered = previewTracksOf(genealogy).map((clip) => clip.url);
+    expect(offered).toEqual([DEEZER_CLIP]);
+    expect(providersOf(result, [], { nodePreviews: offered })).toEqual([
+      ['deezer', 'https://www.deezer.com', 'preview'],
+    ]);
+    // A node the graph does not draw (its relation hidden) offers nothing: nothing is credited.
+    expect(providersOf(result)).toEqual([]);
+  });
+
+  it('credits a preview clip for a result from before the measurement block that shows measured values', () => {
+    // No `audio` block, but its analysis ran: the page shows its BPM and key as measured.
+    const legacy = track({ audioSource: 'analyzed', bpm: 105, key: 'A Minor' });
+    expect(showsMeasuredAudio(legacy)).toBe(true);
+    expect(providersOf(legacy)).toEqual([
+      ['preview', null, 'the audio was measured on it; this result does not name its provider'],
+    ]);
+    // Values it says were estimated are not measurements: no preview is credited.
+    expect(providersOf(track({ audioSource: 'estimated', bpm: 105, key: 'A Minor' }))).toEqual([]);
   });
 
   it('says the audio was measured on a preview clip whose provider the result does not name', () => {

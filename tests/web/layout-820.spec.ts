@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { clippedLines } from "./clipping";
 import {
   analyzeAndOpenDashboard,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   replayedRecording,
@@ -57,7 +58,8 @@ function overflow(page: Page) {
     };
     const wide = [
       ...document.querySelectorAll<HTMLElement>(
-        "#player-header, [data-player-columns], [role=tabpanel], [role=tablist]",
+        // By id: from md up the panels are columns, not tab panels.
+        "#player-header, [data-player-columns], #panel-context, #panel-player, #panel-genealogy, [role=tablist]",
       ),
     ]
       .filter(
@@ -351,7 +353,7 @@ async function pointAtGraph(page: Page) {
 
 // From md up to xl the connections are a full-width row in a scrolling area: the wheel over the
 // graph scrolls the area (it would otherwise be stuck there, zooming), and Ctrl with the wheel
-// zooms the graph.
+// zooms the graph. (Touch: below.)
 for (const [width, height] of [
   [1024, 600],
   [820, 1180],
@@ -389,25 +391,18 @@ for (const [width, height] of [
   });
 }
 
-// From xl the graph is a column of its own and nothing scrolls behind it: the same rule holds,
-// so the gesture does not change at 1280 px (the wheel leaves the graph as it is, Ctrl zooms).
-// On a phone's Connections tab nothing scrolls either, and a mouse wheel zooms the graph.
-test("at 1440 px Ctrl with the wheel zooms the graph, the wheel alone does not", async ({
-  page,
-}) => {
+// From xl the graph is a column of its own and nothing scrolls behind it (nor on a phone's
+// Connections tab): there the wheel zooms the graph, and the hint says so.
+test("at 1440 px the wheel over the graph zooms it", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRecording(page);
   await pointAtGraph(page);
   const scale = await graphScale(page);
-  await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(100);
-  expect(await graphScale(page)).toBe(scale);
-  await page.keyboard.down("Control");
   await page.mouse.wheel(0, -100);
-  await page.keyboard.up("Control");
   await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
   await page.mouse.move(1, 1);
-  await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toBeVisible();
+  await expect(page.getByText("Scroll to zoom", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toHaveCount(0);
 });
 
 test("on a phone's Connections tab the wheel zooms the graph", async ({ page }) => {
@@ -418,4 +413,147 @@ test("on a phone's Connections tab the wheel zooms the graph", async ({ page }) 
   const scale = await graphScale(page);
   await page.mouse.wheel(0, -100);
   await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
+});
+
+// On a phone the Player tab never scrolls sideways: a timeline tooltip, hidden at rest, reaches a
+// few pixels past it, and a sideways swipe or wheel must not move the tab.
+for (const width of [320, 390]) {
+  test(`on a ${width} px phone the Player tab does not scroll sideways`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await openRecording(page);
+    const panel = page.locator("#panel-player");
+    const box = await panel.boundingBox();
+    if (!box) throw new Error("the Player tab is not shown");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(300, 0);
+    await page.waitForTimeout(200);
+    expect(await panel.evaluate((element) => element.scrollLeft)).toBe(0);
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+  });
+}
+
+/** A one-finger swipe from (x, y), moving the finger by `dy` px (down when positive). */
+async function swipe(page: Page, x: number, y: number, dy: number) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  for (let step = 1; step <= 12; step++) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x, y: y + (dy * step) / 12 }],
+    });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.waitForTimeout(400);
+  await cdp.detach();
+}
+
+/** How far the graph's drawing is panned down (d3's zoom state on the svg). */
+function graphPan(page: Page) {
+  return page
+    .locator('#panel-genealogy svg[aria-label="Connections graph"]')
+    .evaluate((svg) =>
+      Math.round((svg as SVGSVGElement & { __zoom?: { y: number } }).__zoom?.y ?? 0),
+    );
+}
+
+test.describe("on a touch screen", () => {
+  test.use({ hasTouch: true });
+
+  // From md up to xl one finger over the graph scrolls the panels' area, as anywhere else on the
+  // page (it would otherwise pan the graph, and on a landscape phone the graph fills the view),
+  // and the graph's row leaves part of the area beside it to grab. Two fingers pinch the graph.
+  for (const [width, height] of [
+    [844, 390],
+    [820, 1180],
+    [1024, 768],
+  ] as const) {
+    test(`at ${width}×${height} one finger over the graph scrolls the panels`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await openRecording(page);
+      const area = page.locator("[data-player-columns]");
+      const row = await page.locator("#panel-genealogy").boundingBox();
+      const shown = await area.evaluate((element) => element.clientHeight);
+      expect(row?.height ?? 0).toBeLessThan(shown);
+      // At the bottom of the area, the graph in view; a finger drawn down over the graph.
+      await area.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      const graph = await page
+        .locator('#panel-genealogy svg[aria-label="Connections graph"]')
+        .boundingBox();
+      const areaBox = await area.boundingBox();
+      if (!graph || !areaBox) throw new Error("the graph is not drawn");
+      // The finger lands on the drawing itself, not on the legend under it.
+      expect(graph.height).toBeGreaterThan(20);
+      const top = Math.max(graph.y, areaBox.y);
+      const bottom = Math.min(graph.y + graph.height, areaBox.y + areaBox.height);
+      const before = await areaScroll(page);
+      const pan = await graphPan(page);
+      await swipe(page, graph.x + graph.width / 2, top + 10, Math.max(40, bottom - top - 20));
+      expect((await areaScroll(page)).top).toBeLessThan(before.top);
+      expect(await graphPan(page)).toBe(pan);
+      // The hint names the touch gestures; on a short screen it is left out, so as not to cover
+      // the drawing.
+      const hint = page.getByText("Pinch with two fingers to zoom");
+      await expect(hint).toBeAttached();
+      if (height > 512) await expect(hint).toBeVisible();
+      else await expect(hint).toBeHidden();
+      await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toHaveCount(0);
+    });
+  }
+
+  // On a phone's Connections tab nothing scrolls behind the graph: one finger pans it.
+  test("on a phone's Connections tab one finger pans the graph", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openRecording(page);
+    await page.getByRole("tab", { name: "Connections" }).click();
+    const graph = await page
+      .locator('#panel-genealogy svg[aria-label="Connections graph"]')
+      .boundingBox();
+    if (!graph) throw new Error("the graph is not drawn");
+    const pan = await graphPan(page);
+    // From an empty corner of the drawing (a track there would be dragged instead).
+    await swipe(page, graph.x + 20, graph.y + 40, 120);
+    expect(await graphPan(page)).toBeGreaterThan(pan);
+  });
+});
+
+// Escape closes what is open where the reader is; something open far out of view (the links list
+// at the bottom, the reader at the top) is left open, and Escape goes back to the summary, as
+// when nothing is open: it never jumps the page to a toggle about 2000 px away.
+test("Escape with an open list out of view goes back, and does not jump the page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openRecording(page);
+  const area = page.locator("[data-player-columns]");
+  await area.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await page.locator("#panel-genealogy summary", { hasText: "Links as a list" }).click();
+  await area.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Escape");
+  await expect(dashboardHeading(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Back to summary/ })).toHaveCount(0);
+});
+
+test("Escape with an open list in view closes it and stays", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openRecording(page);
+  const area = page.locator("[data-player-columns]");
+  await area.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const list = page.locator("#panel-genealogy details", { hasText: "Links as a list" });
+  await list.locator("summary").click();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const top = await area.evaluate((element) => element.scrollTop);
+  await page.keyboard.press("Escape");
+  await expect(list).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("button", { name: /Back to summary/ })).toBeVisible();
+  expect(await area.evaluate((element) => element.scrollTop)).toBe(top);
 });

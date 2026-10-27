@@ -38,6 +38,7 @@ import {
   yearFrom,
 } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
+import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
   AudioStats,
@@ -53,6 +54,8 @@ import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provena
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { linerNotes, relationLinkNotes } from './provenance/notes';
+import { notPlacedNote, placeSamples } from './provenance/timelineSamples';
+import { isRelationSubject } from './genealogy/relationWords';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { Attribution, shownProviders } from './provenance/Attribution';
 import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
@@ -305,11 +308,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         track,
         claims,
         links: graphLinks,
-        nodes: genealogy.nodes,
+        // The graph is drawn only with a related track; its preview buttons are these clips'.
+        nodePreviews:
+          genealogy.nodes.length > 1 ? previewTracksOf(genealogy).map((clip) => clip.url) : [],
         coverSrc: cover.src,
         factoids: resultFactoids,
       }),
-    [track, claims, graphLinks, genealogy.nodes, cover.src, resultFactoids],
+    [track, claims, graphLinks, genealogy, cover.src, resultFactoids],
   );
   // The samples, covers, remixes and interpolations the graph draws that no claim about a sample
   // or cover states: listed with the claims, in the graph's words.
@@ -317,6 +322,23 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     const nodes = nodesById(genealogy.nodes, yearFrom(track.releaseYear));
     return relationLinkNotes(graphLinks, (id) => nodeName(nodes.get(id), id));
   }, [graphLinks, genealogy.nodes, track.releaseYear]);
+  // The timeline's samples no shown sample or cover claim states: those it draws are counted
+  // when the section has nothing else to say; those it cannot draw (a time outside the song, an
+  // unknown duration, no time) are listed, so a sample is never left out of view.
+  const timelineSamples = useMemo(() => {
+    const stated = (id: unknown) => {
+      const shown = typeof id === 'string' ? claims.byId.get(id) : undefined;
+      return shown !== undefined && !claims.isHidden(id) && isRelationSubject(shown.claim.about);
+    };
+    return placeSamples(
+      samples.filter((sample) => !stated(sample.claimId)),
+      track.durationSeconds,
+    );
+  }, [samples, claims, track.durationSeconds]);
+  const relationNotes = useMemo(
+    () => [...relationLinks, ...timelineSamples.notPlaced.map(notPlacedNote)],
+    [relationLinks, timelineSamples],
+  );
   // The Player's layout at this width: the panels are tab panels only while the tabs show.
   const layout = usePlayerLayout();
   const tabbed = layout === 'tabs';
@@ -380,8 +402,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       const action = escapeAction(event, root);
       if (action === 'none') return;
       event.preventDefault();
-      if (action === 'close') closeOpen(root, document.activeElement);
-      else onBack();
+      // The key's target is where the focus is (the body when no element has it).
+      if (action === 'close') {
+        closeOpen(root, event.target instanceof Element ? event.target : document.activeElement);
+      } else onBack();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -796,11 +820,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               title="Samples and covers"
               claims={notes.relations.claims}
               onCards={notes.relations.onCards}
-              links={relationLinks}
+              links={relationNotes}
               // "None" only when no claim, no drawn link and no timeline marker names one
               emptyText={
-                samples.length > 0
-                  ? `The timeline marks ${samples.length === 1 ? '1 possible sample' : `${samples.length} possible samples`}; no claim or connection in this result states ${samples.length === 1 ? 'it' : 'them'}.`
+                timelineSamples.drawn.length > 0
+                  ? `The timeline marks ${timelineSamples.drawn.length === 1 ? '1 possible sample' : `${timelineSamples.drawn.length} possible samples`}; no claim or connection in this result states ${timelineSamples.drawn.length === 1 ? 'it' : 'them'}.`
                   : rejectedAbout(['sample', 'cover'])
                     ? 'The samples and covers found were rejected by the verifier (listed below).'
                     : 'No samples or covers were found in this result.'
@@ -843,7 +867,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           id="panel-player"
           {...panelRole('player')}
           className={`
-            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
             ${activeTab === 'player' ? 'block max-md:h-full' : 'hidden md:flex'}
         `}
         >
@@ -945,13 +969,15 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
 
         {/* Panel C: the connections (xl: the right column; md up to xl: a full-width row below
-            the columns, of a fixed height for the graph; phones: the Connections tab, covering
-            the panels' area, absolute, so it has that area's height for the graph) */}
+            the columns, 14rem shorter than the window (the nav, the header and the footer take
+            about 12rem), so a strip of the scrolling area always shows beside it to grab, even
+            on a landscape phone; phones: the Connections tab, covering the panels' area,
+            absolute, so it has that area's height for the graph) */}
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
           className={`
-            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(22rem,75dvh,40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
+            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
             ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
         `}
         >
@@ -995,8 +1021,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 releaseYear={track.releaseYear}
                 hiddenLinks={hiddenLinks}
                 onNodeClick={handleNodeClick}
-                // From md up the wheel scrolls the page; Ctrl or ⌘ with it zooms the graph
-                wheelZoom={tabbed ? 'plain' : 'modifier'}
+                // From md up to xl the page scrolls past the graph: the wheel and one finger
+                // scroll it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones
+                // and at xl nothing scrolls behind the graph, and it takes them all.
+                wheelZoom={layout === 'columns' ? 'modifier' : 'plain'}
               />
             </ErrorBoundary>
           ) : (

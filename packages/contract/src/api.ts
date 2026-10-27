@@ -277,7 +277,9 @@ type ReplayRecordShape = z.infer<typeof ReplayRecordShape>;
  * - every `complete` event's result says `mode: "replay"` too, with the same recording date,
  *   commit and analyzer version, so a replay is never shown as live or misdated;
  * - events hold no heartbeats (the replayer sends its own) and are numbered 0, 1, 2, ... in
- *   order, with non-decreasing times, so replaying does not depend on the recording's timing.
+ *   order, with non-decreasing times, so replaying does not depend on the recording's timing;
+ *   the times since the run started (`elapsedMs`) of the events that carry one never go back
+ *   either, so a replay never shows a step before the one it followed.
  * Recordings are scrubbed before they are written: no preview or image URLs, capped text.
  */
 export const ReplayRecord = refineNamed(
@@ -343,6 +345,7 @@ export const ReplayRecord = refineNamed(
   "replay.event-order",
   (record: ReplayRecordShape, ctx) => {
     let atMs = 0;
+    let elapsedMs = 0;
     record.events.forEach(({ event, atMs: at }, index) => {
       if (event.type === "heartbeat") {
         ctx.addIssue({ code: "custom", path: ["events", index], message: "no heartbeats" });
@@ -359,6 +362,17 @@ export const ReplayRecord = refineNamed(
         ctx.addIssue({ code: "custom", path: ["events", index, "atMs"], message: "goes back" });
       }
       atMs = at;
+      // The time since the run started, among the events that carry one.
+      if (event.elapsedMs !== undefined) {
+        if (event.elapsedMs < elapsedMs) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["events", index, "event", "elapsedMs"],
+            message: "goes back",
+          });
+        }
+        elapsedMs = event.elapsedMs;
+      }
     });
   },
 );

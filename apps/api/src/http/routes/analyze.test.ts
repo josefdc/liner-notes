@@ -39,7 +39,7 @@ import { captureLogsForTests } from "../../logger.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
-import { getRun, runDurationSql } from "../../store/runs.js";
+import { getRun, listRunEvents, runDurationSql } from "../../store/runs.js";
 import { createTestApp } from "../testApp.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "./analyze.js";
 
@@ -65,6 +65,7 @@ const stub = vi.hoisted(() => ({
     composer: 0,
     details: 0,
   } as Record<string, number>,
+  scoutStep: null as Hook,
   engineerStep: null as Hook,
   composerAfterComplete: null as Hook,
   detailsStep: null as null | (() => Promise<void>),
@@ -130,6 +131,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
       stub.seen.requestedTrackId.push(state.requestedTrackId);
       stub.seen.requestPickedBy.push(state.pickedBy);
       status(config, "scout", "searching");
+      await stub.scoutStep?.(config.signal);
       const query = state.songQuery;
       if (query.startsWith("cached")) {
         const trackData = stub.track("cached");
@@ -331,6 +333,7 @@ describe("analyze routes", () => {
   });
   beforeEach(() => {
     for (const key of Object.keys(stub.calls)) stub.calls[key] = 0;
+    stub.scoutStep = null;
     stub.engineerStep = null;
     stub.composerAfterComplete = null;
     stub.detailsStep = null;
@@ -1121,6 +1124,71 @@ describe("analyze routes", () => {
         expect(res.events[0]).toMatchObject({ code: "invalid_input", error: expect.any(String) });
       }
       expect(stub.calls.scout).toBe(0);
+    });
+  });
+
+  describe("time since the run started", () => {
+    /** The times since the run started of a stream's events, in the order they were sent. */
+    const elapsed = (events: Event[]) => events.map((event) => event.elapsedMs);
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    it("stamps every event of a live run with the time since it started, rising", async () => {
+      stub.scoutStep = () => wait(40);
+      const { events } = await sse(streamPath("timed run"));
+
+      expect(types(events)).toEqual(["connected", "status", "status", "complete", "done"]);
+      const times = elapsed(events);
+      expect(times.every((ms) => Number.isInteger(ms) && (ms as number) >= 0)).toBe(true);
+      expect(times).toEqual([...(times as number[])].sort((a, b) => a - b));
+      // The engineer's line comes after the scout's step: its time is later by that step.
+      const [searching, measuring] = ofType(events, "status").map((e) => e.elapsedMs as number);
+      expect(measuring - searching).toBeGreaterThanOrEqual(35);
+      expect(times[0]).toBeLessThan(searching + 1);
+    });
+
+    it("goes on from the paused stream's time on a resume, leaving out the wait for the choice", async () => {
+      // The paused stream takes a while itself, so its time counted twice, or not at all, shows.
+      stub.scoutStep = () => wait(150);
+      const paused = await sse(streamPath("ambiguous timed"));
+      stub.scoutStep = null;
+      const pausedAt = paused.events.at(-1)?.elapsedMs as number;
+      expect(paused.events.at(-1)?.type).toBe("done");
+      expect(Number.isInteger(pausedAt)).toBe(true);
+      expect(pausedAt).toBeGreaterThanOrEqual(145);
+      const threadId = ofType(paused.events, "interrupt")[0].threadId as string;
+      // Stored with each event, as it was sent: the resume goes on from there.
+      const stored = listRunEvents(getDb(), threadId).map((item) => item.event as Event);
+      expect(elapsed(stored)).toEqual(elapsed(paused.events));
+
+      // The visitor takes a while to choose.
+      await wait(500);
+      const resumed = await sse(resumePath(threadId, "track-a"));
+
+      expect(types(resumed.events)[0]).toBe("resuming");
+      const times = elapsed(resumed.events) as number[];
+      expect(times.every((ms) => Number.isInteger(ms))).toBe(true);
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+      // Right where the paused stream ended: the resume's own checks take a few ms, never the
+      // wait for the choice (500 ms) nor the paused stream's time again (150 ms or more).
+      expect(times[0]).toBeGreaterThanOrEqual(pausedAt);
+      expect(times[0]).toBeLessThan(pausedAt + 100);
+    });
+
+    it("sends no time on a resume when the run's earlier stream left none to go on from", async () => {
+      // Paused by POST /api/analyze, which stores no stream.
+      const posted = await request(app).post("/api/analyze").send({ query: "ambiguous untimed" });
+      expect(posted.body.status).toBe("interrupted");
+
+      const resumed = await sse(resumePath(posted.body.threadId, "track-a"));
+
+      expect(ofType(resumed.events, "complete")).toHaveLength(1);
+      expect(resumed.events.filter((event) => "elapsedMs" in event)).toEqual([]);
+    });
+
+    it("sends no time on a stream refused before any run started", async () => {
+      const { events } = await sse("/api/analyze/stream?query=");
+      expect(types(events)).toEqual(["error", "done"]);
+      expect(events.filter((event) => "elapsedMs" in event)).toEqual([]);
     });
   });
 

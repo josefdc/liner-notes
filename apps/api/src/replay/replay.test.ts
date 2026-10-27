@@ -494,6 +494,44 @@ describe("the recorder", () => {
     expect(text).not.toMatch(/dzcdn|hdnea|i\.scdn/);
   });
 
+  it("keeps the time since the run started that each event was sent with, and records events without one", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const { run, events } = fixtureAsLiveRun(fixture, "One More Time Daft Punk");
+    // Every event but the first two was sent with its time since the run started.
+    const timed = events.map((item, i) =>
+      i < 2 ? item : { ...item, event: { ...item.event, elapsedMs: item.sentAt - 1_000 } },
+    );
+
+    const { record: built } = buildRecord(run, timed, {
+      slug: fixture.slug,
+      commit: fixture.commit,
+      secrets: [],
+    });
+
+    const times = built.events.map(({ event }) => (event as Event).elapsedMs);
+    expect(times.slice(0, 2)).toEqual([undefined, undefined]);
+    expect(times.slice(2)).toEqual(built.events.slice(2).map(({ atMs }) => atMs));
+    expect(times.slice(2).some((ms) => (ms as number) > 10_000)).toBe(true);
+  });
+
+  it("records the times a live run's stream sent, rising, without the wait at the picker", async () => {
+    const plain = await liveRun("timed run");
+    const sent = stored(plain).events.map(({ event }) => (event as Event).elapsedMs);
+    expect(sent.every((ms) => Number.isInteger(ms))).toBe(true);
+    expect(record(plain).record.events.map(({ event }) => (event as Event).elapsedMs)).toEqual(
+      sent,
+    );
+
+    const paused = await liveRun("ambiguous timed");
+    // The visitor takes a second to choose.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await sse(`/api/analyze/stream/resume?threadId=${paused}&selectedTrackId=${CHOICE_A}`);
+    const times = record(paused).record.events.map(({ event }) => (event as Event).elapsedMs);
+    expect(times.every((ms) => Number.isInteger(ms))).toBe(true);
+    expect(times).toEqual([...(times as number[])].sort((a, b) => a - b));
+    expect((times.at(-1) as number) - (times[0] as number)).toBeLessThan(1_000);
+  });
+
   it("never rewrites content that holds the typed query when it is the track's own text", async () => {
     for (const typed of ["Recorded Song", "the recorders", "RECORDED SONG by The Recorders"]) {
       const runId = await liveRun(typed);
@@ -1847,6 +1885,126 @@ describe("REPLAY_MODE", () => {
     expect(times.length).toBeGreaterThan(2);
     expect(times.every((time) => time >= before)).toBe(true);
     expect([...times].sort()).toEqual(times);
+  });
+
+  it("only: sends each event's recorded time since the run started, and none of its own", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    const recorded = fixture.events.map(({ event }) => event as Event);
+    expect(recorded.every((event) => Number.isInteger(event.elapsedMs))).toBe(true);
+
+    const events = await sse(streamPath("Recorded Song The Recorders"));
+
+    // The notice and the stream's own `done` are this replay's: they carry no recorded time.
+    const notice = events.find((event) => event.node === "replay");
+    expect(notice).toBeDefined();
+    expect(notice).not.toHaveProperty("elapsedMs");
+    expect(events.at(-1)?.type).toBe("done");
+    expect(events.at(-1)).not.toHaveProperty("elapsedMs");
+    const replayed = events.filter((event) => event !== notice && event.type !== "done");
+    expect(replayed.map((event) => event.elapsedMs)).toEqual(
+      recorded.filter((event) => event.type !== "done").map((event) => event.elapsedMs),
+    );
+  });
+
+  it("loads and replays a recording made before events carried the time since the run started, at its recorded atMs", async () => {
+    // A committed recording as written before events carried one, whatever it holds now.
+    const [file] = readdirSync(DEFAULT_REPLAY_DIR).filter((name) => name.endsWith(".json"));
+    const raw = JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, file), "utf8")) as {
+      events: Array<{ event: Record<string, unknown> }>;
+    };
+    for (const { event } of raw.events) delete event.elapsedMs;
+    const older = join(dir, "untimed-replays");
+    mkdirSync(older, { recursive: true });
+    writeFileSync(join(older, file), JSON.stringify(raw));
+
+    const set = loadReplays(older);
+    expect(set.problems).toEqual([]);
+    expect(set.records).toHaveLength(1);
+    const [untimed] = set.records;
+    const sent: Array<Record<string, unknown>> = [];
+    await playRecord(
+      untimed,
+      "some-run",
+      (body) => {
+        sent.push(body);
+        return true;
+      },
+      new AbortController().signal,
+      { speed: 1, maxGapMs: 0 },
+    );
+
+    // Each recorded event is sent at the time the recording measured for it (`atMs`, since
+    // the recorded stream opened, without the wait at the picker); the notice is this replay's.
+    const recorded = untimed.events.filter(({ event }) => event.type !== "done");
+    const replayed = sent.filter((body) => body.node !== "replay");
+    expect(replayed.map((body) => body.type)).toEqual(recorded.map(({ event }) => event.type));
+    expect(replayed.map((body) => body.elapsedMs)).toEqual(recorded.map(({ atMs }) => atMs));
+    expect(sent.find((body) => body.node === "replay")).not.toHaveProperty("elapsedMs");
+  });
+
+  it("leaves out a recording whose time since the run started goes back, and loads the committed ones", () => {
+    expect(loadReplays(DEFAULT_REPLAY_DIR).problems).toEqual([]);
+    const [file] = readdirSync(DEFAULT_REPLAY_DIR).filter((name) => name.endsWith(".json"));
+    const raw = JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, file), "utf8")) as {
+      events: Array<{ event: Record<string, unknown> }>;
+    };
+    // Hand-edited: times that fall from one event to the next.
+    raw.events.forEach(({ event }, i) => {
+      event.elapsedMs = (raw.events.length - i) * 1_000;
+    });
+    const edited = join(dir, "falling-replays");
+    mkdirSync(edited, { recursive: true });
+    writeFileSync(join(edited, file), JSON.stringify(raw));
+
+    const set = loadReplays(edited);
+    expect(set.records).toEqual([]);
+    expect(set.problems).toEqual([expect.stringContaining("events.1.event.elapsedMs: goes back")]);
+  });
+
+  it("sends a recorded event's own time since the run started over its atMs", async () => {
+    const dev = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    // Times that differ from the stream's: the event's own is what the run measured.
+    for (const item of dev.events) {
+      (item.event as Record<string, unknown>).elapsedMs = item.atMs + 5_000;
+    }
+    const sent: Array<Record<string, unknown>> = [];
+    await playRecord(
+      dev,
+      "some-run",
+      (body) => {
+        sent.push(body);
+        return true;
+      },
+      new AbortController().signal,
+      { speed: 1, maxGapMs: 0 },
+    );
+    const statuses = sent.filter((body) => body.type === "status" && body.node !== "replay");
+    expect(statuses.length).toBeGreaterThan(10);
+    const expected = dev.events
+      .filter(({ event }) => event.type === "status")
+      .map(({ atMs }) => atMs + 5_000);
+    expect(statuses.map((body) => body.elapsedMs)).toEqual(expected);
+  });
+
+  it("only: the committed recordings replay with each status at its recorded time since the run started", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    vi.stubEnv("REPLAY_DIR", DEFAULT_REPLAY_DIR);
+    resetReplaysForTests();
+    for (const record of loadReplays(DEFAULT_REPLAY_DIR).records) {
+      const events = await sse(streamPath(`${record.analysis.title} ${record.analysis.artist}`));
+      const statuses = events.filter((event) => event.type === "status" && event.node !== "replay");
+      const recorded = record.events.filter(({ event }) => event.type === "status");
+      expect(
+        statuses.map((event) => event.message),
+        record.slug,
+      ).toEqual(recorded.map(({ event }) => (event as Event).message));
+      expect(
+        statuses.map((event) => event.elapsedMs),
+        record.slug,
+      ).toEqual(recorded.map(({ atMs, event }) => (event as Event).elapsedMs ?? atMs));
+      expect(statuses.every((event) => Number.isInteger(event.elapsedMs))).toBe(true);
+    }
+    resetReplaysForTests();
   });
 
   it("by-track: replays of a recording since changed do not hide an older live run", async () => {

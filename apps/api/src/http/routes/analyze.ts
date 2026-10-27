@@ -20,6 +20,7 @@ import {
   deleteRunEvents,
   getRun,
   clearRunCommitUnless,
+  lastStreamElapsedMs,
   nextEventStream,
   type RunStatus,
   runExists,
@@ -160,6 +161,16 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
     write(getDb());
   } catch (err) {
     logger("Runs").error(`Could not ${action}`, { err });
+  }
+}
+
+/** Reads from the runs store; a failure is logged and reads as null. */
+function readRun<T>(action: string, read: (db: ReturnType<typeof getDb>) => T): T | null {
+  try {
+    return read(getDb());
+  } catch (err) {
+    logger("Runs").error(`Could not ${action}`, { err });
+    return null;
   }
 }
 
@@ -651,10 +662,17 @@ export function unstoredStreamCount(): number {
  * its events from 0. The events of a request that was refused before it claimed the run are not
  * stored. When an event cannot be stored, the stream stops storing: what is stored is always the
  * stream as it was sent up to some point, never a stream with an event missing.
+ *
+ * Once `startClock` is called (when the run starts, or a resume goes on from its paused stream),
+ * every event it sends carries the time since the run started (`elapsedMs`); before that, and on
+ * a stream refused before any run, none does. A replay's stream (`replay`) has no clock of its
+ * own: it sends the times its recording holds (replay/player.ts).
  */
-function openEventStream(res: Response, runId?: string) {
+function openEventStream(res: Response, runId?: string, { replay = false } = {}) {
   let storedAs: number | null = null;
+  let clock: (() => number) | null = null;
   const stream = openAnalysisStream(res, runId, {
+    ...(replay ? {} : { elapsedMs: () => clock?.() }),
     onSent: (event) => {
       const streamNumber = storedAs;
       if (!runId || streamNumber === null) return;
@@ -673,6 +691,15 @@ function openEventStream(res: Response, runId?: string) {
   });
   return {
     stream,
+    /**
+     * Starts the run's clock: from now on every event carries the time since the run started,
+     * `offsetMs` (the run's time before this stream) plus the time since this call, in whole
+     * milliseconds on the monotonic clock.
+     */
+    startClock(offsetMs = 0): void {
+      const start = pacingClock();
+      clock = () => offsetMs + Math.floor(pacingClock() - start);
+    },
     /** Stores no more of this stream's events. */
     stopStoringEvents(): void {
       storedAs = null;
@@ -857,7 +884,7 @@ async function replayStream(
   record: ReplayRecord,
 ): Promise<void> {
   startReplay(runId, query, record);
-  const stream = openEventStream(res, runId);
+  const stream = openEventStream(res, runId, { replay: true });
   logRunStart(runId, "Streaming a replay", query);
   log.info(`Replaying the recorded run ${record.slug}`, { runId, replay: record.slug });
   await guardStream(stream, async () => {
@@ -1058,6 +1085,7 @@ router.get(
     await asRun(res, threadId, async () => {
       startAnalysis(threadId, query);
       const stream = openEventStream(res, threadId);
+      stream.startClock();
       stream.storeEvents();
       logRunStart(threadId, "Streaming analysis", query);
       const control = new RunControl(req, res, threadId);
@@ -1155,6 +1183,13 @@ router.get(
             stream.done();
           },
           started: () => {
+            // The run's time goes on from where its paused stream ended: the wait for the choice
+            // is left out, as it is from the run's duration (store/runs.ts). When that time is
+            // not known, the events carry none.
+            const pausedAt = readRun("read the run's time", (db) =>
+              lastStreamElapsedMs(db, threadId),
+            );
+            if (pausedAt != null) stream.startClock(pausedAt);
             stream.storeEvents();
             stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() });
           },

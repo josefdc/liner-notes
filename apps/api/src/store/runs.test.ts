@@ -11,6 +11,7 @@ import {
   appendRunEvent,
   EVENT_BUSY_TIMEOUT_MS,
   getRun,
+  lastStreamElapsedMs,
   latestRunsForTrack,
   runDurationSql,
   settleOpenRuns,
@@ -551,5 +552,38 @@ describe("appendRunEvent", () => {
       file.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("lastStreamElapsedMs", () => {
+  const event = (seq: number, type: string, elapsedMs?: number) =>
+    ({ seq, type, runId: "r", ...(elapsedMs !== undefined && { elapsedMs }) }) as { seq: number };
+
+  it("reads the time the run's last stored stream ended with, from its done", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "q" });
+    appendRunEvent(db, "r", 0, event(0, "connected", 0));
+    appendRunEvent(db, "r", 0, event(1, "interrupt", 140));
+    appendRunEvent(db, "r", 0, event(2, "done", 152));
+    expect(lastStreamElapsedMs(db, "r")).toBe(152);
+
+    // A later stream's done, not the first stream's.
+    appendRunEvent(db, "r", 1, event(0, "resuming", 152));
+    appendRunEvent(db, "r", 1, event(1, "done", 900));
+    expect(lastStreamElapsedMs(db, "r")).toBe(900);
+  });
+
+  it("knows no time when the last stored event is not a done, has none, or there is none", () => {
+    expect(lastStreamElapsedMs(db, "none")).toBeNull();
+
+    // A stream stored in part: its last stored event is not the done that ended it.
+    appendRunEvent(db, "cut", 0, event(0, "connected", 0));
+    appendRunEvent(db, "cut", 0, event(1, "interrupt", 140));
+    expect(lastStreamElapsedMs(db, "cut")).toBeNull();
+
+    // A stream sent without times, or with a time that is not one.
+    appendRunEvent(db, "untimed", 0, event(0, "done"));
+    expect(lastStreamElapsedMs(db, "untimed")).toBeNull();
+    appendRunEvent(db, "odd", 0, event(0, "done", -5));
+    expect(lastStreamElapsedMs(db, "odd")).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import {
   analyzeAndOpenDashboard,
   collectProblems,
   loadFixture,
+  releaseStream,
   replayedRecording,
   useMockApi,
 } from "./mock";
@@ -86,7 +87,7 @@ test("the committed recording replays with each line at the time its recording m
   expect(problems).toEqual([]);
 });
 
-test("the progress log shows a replayed line's recorded time, and its arrival time without one", async ({
+test("the progress log shows a replayed line's recorded time, and no time without one", async ({
   page,
 }) => {
   await page.route("https://coverartarchive.org/**", (route) =>
@@ -111,6 +112,43 @@ test("the progress log shows a replayed line's recorded time, and its arrival ti
     log.locator("[data-log-id]", { hasText: message }).locator("[data-log-time]");
   await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+19.6 s");
   await expect(timeOf("Reading the track from Spotify")).toHaveText("+0.0 s");
-  // The page's own line has no recorded time: it shows when it came, on the viewer's clock.
-  await expect(timeOf("Searching for")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  // The page's own line has no recorded time: it shows none, never the viewer's clock.
+  await expect(log.locator("[data-log-id]", { hasText: "Searching for" })).toBeVisible();
+  await expect(timeOf("Searching for")).toHaveCount(0);
+  const times = await log.locator("[data-log-time]").allTextContents();
+  expect(times.length).toBeGreaterThan(5);
+  expect(times.filter((time) => !/^\+\d/.test(time))).toEqual([]);
+});
+
+test("the progress log keeps its labels in one column on a phone, a minute into a recorded run", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fixture = loadFixture("recorded-timings");
+  const events = fixture.streams["/api/analyze/stream"];
+  // Held before the result, so the progress screen stays.
+  events.splice(
+    events.findIndex((event: { type: string }) => event.type === "complete"),
+    0,
+    { $wait: "finish" },
+  );
+  await useMockApi(page, fixture);
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Bright Lines");
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+
+  const log = page.getByRole("log");
+  await expect(
+    log.locator("[data-log-id]", { hasText: "Looking up cover art" }).locator("[data-log-time]"),
+  ).toHaveText("+1 min 15 s");
+  // Where each line's label starts, once the newest line has slid in.
+  const starts = () =>
+    log
+      .locator("[data-log-label]")
+      .evaluateAll((labels) =>
+        labels.map((label) => Math.round(label.getBoundingClientRect().left)),
+      );
+  expect((await starts()).length).toBeGreaterThan(5);
+  await expect.poll(async () => new Set(await starts()).size).toBe(1);
+  await releaseStream(page, "finish");
 });

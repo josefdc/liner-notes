@@ -251,7 +251,7 @@ export interface AgentLog {
   code?: LogCode;
   node?: string;
   /**
-   * The time since the run started that the server sent the line with (a status event's
+   * The time since the run started that the server sent the line with (the server event's
    * `elapsedMs`), in milliseconds; absent for the page's own lines and for a server or a
    * recording that gave none.
    */

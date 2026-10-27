@@ -51,16 +51,19 @@ function lineAtTop(box: HTMLElement): { id: string; offset: number } | null {
 
 /**
  * One log line: the time, the step in words (with its icon), and the message. The time of a
- * line of a replay (`recorded`) is when the recorded run sent it, since that run started, when
- * the line has one; any other line's is when it came, on this page's clock.
+ * line of a replay (`recorded`) is when the recorded run sent it, since that run started, or
+ * none when the line has none (as in the activity log): this page's clock says nothing about
+ * the recorded run. A live run's lines show when they came, on this page's clock. The time
+ * column has one width in a log, wide enough for its longest time, so the labels line up.
  */
 const LogLine: React.FC<{ log: AgentLog; isLatest: boolean; recorded: boolean }> = React.memo(
   ({ log, isLatest, recorded }) => {
     const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
-    const time =
-      recorded && log.elapsedMs !== undefined
-        ? formatElapsed(log.elapsedMs)
-        : new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
+    const time = recorded
+      ? log.elapsedMs === undefined
+        ? null
+        : formatElapsed(log.elapsedMs)
+      : new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
 
     return (
       <div
@@ -69,10 +72,10 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean; recorded: boolean }>
         className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
       >
         <span
-          data-log-time
-          className="text-text-tertiary mr-3 shrink-0 min-w-16 whitespace-nowrap tabular-nums"
+          className={`text-text-tertiary mr-3 shrink-0 whitespace-nowrap tabular-nums ${recorded ? 'w-24' : 'w-16'}`}
         >
-          {time}
+          {time !== null && <span data-log-time>{time}</span>}
+          {recorded && time !== null && <span className="sr-only"> into the recorded run</span>}
         </span>
         <span
           data-log-label

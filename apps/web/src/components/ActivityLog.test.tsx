@@ -188,6 +188,10 @@ describe('ActivityLog', () => {
       expect(timeOf(container, 'SPOTIFY-FOUND')).toBe('+0.3 s');
       expect(timeOf(container, 'AUDIO-ERROR')).toBe('+12.4 s');
       expect(timeOf(container, 'GRAPH-ENRICH')).toBe('+1 min 15 s');
+      // Said to a screen reader as a time into the recorded run, not a time of day.
+      expect(container.querySelector('[data-log-code="AUDIO-ERROR"]')?.textContent).toContain(
+        '+12.4 s into the recorded run',
+      );
       // Recorded without a time: none is shown, neither "Just now" nor a made-up one.
       expect(container.querySelector('[data-log-code="SYS-INIT"]')).not.toBeNull();
       expect(timeOf(container, 'SYS-INIT')).toBeNull();

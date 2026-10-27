@@ -401,6 +401,14 @@ describe('useAgent progress', () => {
     errored.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     errored.send({ type: 'error', code: 'timeout', error: 'Took too long.', elapsedMs: 90_000 });
     expect(timeOf(failed.result.current.logs, 'Error: ')).toBe(90_000);
+
+    const ended = startAnalysis();
+    const cut = lastStream();
+    cut.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    cut.send({ type: 'done', elapsedMs: 4_250 });
+    expect(timeOf(ended.result.current.logs, 'Error: The analysis ended without a result')).toBe(
+      4_250,
+    );
   });
 
   it('logs a neutral picker line when the server sends no words', () => {

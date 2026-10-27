@@ -184,8 +184,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
                         {label}
                       </span>
                       {time !== null && (
-                        <span data-log-time className="text-chrome text-text-muted font-mono">
-                          {time}
+                        <span className="text-chrome text-text-muted font-mono">
+                          <span data-log-time>{time}</span>
+                          {recorded && <span className="sr-only"> into the recorded run</span>}
                         </span>
                       )}
                     </div>

@@ -34,7 +34,13 @@ import { isWholeRecording } from '../utils/recording';
 import { isSpotifyTrackId } from '../utils/spotify';
 import { pickerQuestion, pickerRows } from '../components/search/pickerRows';
 import { API_BASE_URL } from './agent/types';
-import { fetchReplays, fetchSuggestions, type RunToken, RunTokenError } from './agent/apiClient';
+import {
+  boundedWait,
+  fetchReplays,
+  fetchSuggestions,
+  type RunToken,
+  RunTokenError,
+} from './agent/apiClient';
 import {
   type AnalysisEvent,
   eventSchemasLoaded,
@@ -54,7 +60,8 @@ import {
   withFailure,
 } from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
-import { isUsable, newRunToken, withRunToken } from './agent/runToken';
+import { checksVisitor, isUsable, newRunToken, withRunToken } from './agent/runToken';
+import { TURNSTILE_ERROR_CODES } from './agent/turnstile';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
@@ -95,8 +102,11 @@ export const CLIENT_ERROR_CODES = {
   // The server answered the stream's request with an error status (an EventSource cannot read
   // which): a run token it refused, most often. A retry asks for a new one.
   streamRefused: 'stream_refused',
-  // This build has a Turnstile site key but cannot show the check yet: no request can start.
-  verificationUnavailable: 'verification_unavailable',
+  // The Turnstile check gave no token (agent/turnstile.ts): its script could not be loaded, the
+  // widget reported an error, or no answer came in time. A retry runs a new check.
+  verificationUnavailable: TURNSTILE_ERROR_CODES.unavailable,
+  verificationFailed: TURNSTILE_ERROR_CODES.failed,
+  verificationTimeout: TURNSTILE_ERROR_CODES.timeout,
 } as const;
 
 /**
@@ -138,6 +148,7 @@ const INITIAL_STATE: AgentState = {
   isReplay: false,
   statusNote: null,
   moreFacts: null,
+  retryAt: null,
 };
 
 // The order of a run's steps. A step reported after a later one does not move the run back.
@@ -238,6 +249,9 @@ function stepOf(
 // What the progress line says right after a pick, while the server reads the chosen track.
 const RESUME_NOTE = 'Reading the track you selected...';
 
+// What the progress line says while the Turnstile check runs, before the analysis is asked for.
+export const CHECK_NOTE = 'Checking that you are a person...';
+
 // The picker line when the server sends no words of its own.
 const PICK_FALLBACK = 'Pick the track to analyze';
 
@@ -294,18 +308,38 @@ function newRun(query: string): Run {
 }
 
 /**
- * Why a run token could not be had, as an error the run ends with: the API's refusal (its code
- * and message), an answer this page cannot read (`unreadableCode`), or no answer at all (the
- * connection failed).
+ * Why a run token could not be had, as an error the run ends with: the API's refusal (its code,
+ * message and Retry-After), a Turnstile check that gave no token, an answer this page cannot read
+ * (`unreadableCode`), or no answer at all (the connection failed).
  */
-function tokenFailure(error: unknown, unreadableCode: string): { message: string; code: string } {
+function tokenFailure(
+  error: unknown,
+  unreadableCode: string,
+): { message: string; code: string; retryAfterMs?: number } {
   if (error instanceof RunTokenError) {
-    return { message: error.message, code: error.code ?? unreadableCode };
+    return {
+      message: error.message,
+      code: error.code ?? unreadableCode,
+      ...(error.retryAfterMs !== null && { retryAfterMs: error.retryAfterMs }),
+    };
   }
   return {
     message: error instanceof Error ? error.message : 'Connection failed',
     code: CLIENT_ERROR_CODES.connectionLost,
   };
+}
+
+/**
+ * A refusal that said how long to wait (a rate limit: the stream's `retryAfterMs`, or the
+ * Retry-After of POST /api/runs): until when, and what it said. No analysis or factoid request
+ * is sent before then. The analysis and factoid routes count against the same limits; POST
+ * /api/runs has a limit of its own, but its wait holds both back too (a factoid request with a
+ * token still good might have gone through): one wait, on the safe side.
+ */
+interface Wait {
+  until: number;
+  message: string;
+  code: string | null;
 }
 
 function sameCandidates(a: SearchCandidate[] | null, b: SearchCandidate[]): boolean {
@@ -366,6 +400,22 @@ export function useAgent(): UseAgentReturn {
   const dropToken = useCallback((token: RunToken | null) => {
     if (token && tokenRef.current === token) tokenRef.current = null;
   }, []);
+  // The latest refusal that said how long to wait (Wait); null or past once requests may go.
+  const waitRef = useRef<Wait | null>(null);
+  /** Keeps a refusal's wait, unless a later one is kept already. Returns until when. */
+  const holdOff = useCallback((retryAfterMs: number, message: string, code: string | null) => {
+    // At most MAX_RETRY_WAIT_MS, whatever the refusal said.
+    const until = Date.now() + boundedWait(retryAfterMs);
+    if (!waitRef.current || waitRef.current.until < until) {
+      waitRef.current = { until, message, code };
+    }
+    return waitRef.current.until;
+  }, []);
+  /** The wait still under way, if any. */
+  const waiting = useCallback((): Wait | null => {
+    const wait = waitRef.current;
+    return wait && wait.until > Date.now() ? wait : null;
+  }, []);
 
   const setMoreFacts = useCallback((moreFacts: MoreFacts | null) => {
     moreFactsRef.current = moreFacts;
@@ -412,11 +462,17 @@ export function useAgent(): UseAgentReturn {
   /**
    * Ends the run with an error the user can retry. `elapsedMs`: the time since the run started
    * that the server's event the error comes from was sent with, when it sent one.
+   * `retryAfterMs`: how long the refusal said to wait; no request is sent before then
+   * (`retryAt`).
    */
   const fail = useCallback(
-    (run: Run, message: string, code?: string, elapsedMs?: number) => {
+    (run: Run, message: string, code?: string, elapsedMs?: number, retryAfterMs?: number) => {
       if (runRef.current !== run || run.phase === 'failed') return;
       run.phase = 'failed';
+      const retryAt =
+        retryAfterMs !== undefined && retryAfterMs > 0
+          ? holdOff(retryAfterMs, message, code ?? null)
+          : null;
       setState((prev) => ({
         ...prev,
         status: 'error',
@@ -425,10 +481,11 @@ export function useAgent(): UseAgentReturn {
         errorCode: code ?? null,
         candidates: null,
         isLoading: false,
+        retryAt,
       }));
       addLog(`Error: ${message}`, 'SYS-ERROR', undefined, elapsedMs);
     },
-    [addLog],
+    [addLog, holdOff],
   );
 
   /**
@@ -580,7 +637,13 @@ export function useAgent(): UseAgentReturn {
               });
             break;
           }
-          fail(run, data.error || 'The analysis failed.', data.code, data.elapsedMs);
+          fail(
+            run,
+            data.error || 'The analysis failed.',
+            data.code,
+            data.elapsedMs,
+            data.retryAfterMs,
+          );
           break;
         }
 
@@ -687,6 +750,15 @@ export function useAgent(): UseAgentReturn {
       runRef.current = run;
       moreFactsRef.current = null;
 
+      // A refusal said how long to wait, and that time is not over: nothing is sent (it would be
+      // refused again), and the run ends with that refusal and the time left.
+      const wait = waiting();
+      if (wait) {
+        setState(INITIAL_STATE);
+        fail(run, wait.message, wait.code ?? undefined, undefined, wait.until - Date.now());
+        return;
+      }
+
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`Searching for "${query}"`);
       // Logged after the reset above, so it stays with the run it explains.
@@ -706,17 +778,23 @@ export function useAgent(): UseAgentReturn {
         if (runRef.current !== run) return;
       }
 
-      // Every analysis starts with a token of its own (agent/runToken.ts).
+      // Every analysis starts with a token of its own (agent/runToken.ts), after a Turnstile check
+      // when the build has a site key: the progress line says so while it runs.
+      if (checksVisitor()) setState((prev) => ({ ...prev, statusNote: CHECK_NOTE }));
       try {
         run.token = await newRunToken(run.controller.signal);
       } catch (error) {
         if (runRef.current !== run) return;
-        const { message, code } = tokenFailure(error, CLIENT_ERROR_CODES.streamOpenFailed);
-        fail(run, message, code);
+        const { message, code, retryAfterMs } = tokenFailure(
+          error,
+          CLIENT_ERROR_CODES.streamOpenFailed,
+        );
+        fail(run, message, code, undefined, retryAfterMs);
         return;
       }
       if (runRef.current !== run) return;
       tokenRef.current = run.token;
+      setState((prev) => (prev.statusNote === CHECK_NOTE ? { ...prev, statusNote: null } : prev));
 
       try {
         // With a track id (a clicked suggestion) the API analyses that very track.
@@ -741,7 +819,7 @@ export function useAgent(): UseAgentReturn {
         );
       }
     },
-    [addLog, fail, openRunStream],
+    [addLog, fail, openRunStream, waiting],
   );
 
   useEffect(() => {
@@ -853,6 +931,12 @@ export function useAgent(): UseAgentReturn {
           resolve([]);
           return;
         }
+        // A refusal said how long to wait (Wait), and that time is not over: no request is sent.
+        if (waiting()) {
+          onUnavailable?.('rate_limited');
+          resolve([]);
+          return;
+        }
 
         const open = (token: RunToken) => {
           // What this result already has; another result's facts are let go.
@@ -937,6 +1021,10 @@ export function useAgent(): UseAgentReturn {
                   answer.failed++;
                   update((moreFacts) => withFailure(moreFacts, failure));
                 }
+                // A refusal that says how long to wait: nothing is sent before then.
+                if (data.retryAfterMs !== undefined && data.retryAfterMs > 0) {
+                  holdOff(data.retryAfterMs, data.error, data.code);
+                }
                 if (
                   data.code === 'rate_limited' ||
                   data.code === 'budget_exhausted' ||
@@ -972,13 +1060,17 @@ export function useAgent(): UseAgentReturn {
         let tokenFailed = false;
         const token = isUsable(held)
           ? held
-          : newRunToken(eitherSignal(runSignal, signal)).then(
+          : newRunToken(eitherSignal(runSignal, signal), 'facts').then(
               (fresh) => {
                 tokenRef.current = fresh;
                 return fresh;
               },
               (error: unknown) => {
                 tokenFailed = true;
+                // A refusal that says how long to wait: nothing is sent before then.
+                if (error instanceof RunTokenError && error.retryAfterMs) {
+                  holdOff(error.retryAfterMs, error.message, error.code);
+                }
                 throw error;
               },
             );
@@ -1008,7 +1100,7 @@ export function useAgent(): UseAgentReturn {
         );
       });
     },
-    [dropToken, setMoreFacts],
+    [dropToken, holdOff, setMoreFacts, waiting],
   );
 
   /**

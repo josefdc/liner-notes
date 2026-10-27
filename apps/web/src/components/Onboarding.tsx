@@ -25,6 +25,7 @@ import type { SuggestionFetcher } from './search/useSuggestions';
 import { TrackPicker } from './search/TrackPicker';
 import { ANALYZING_STATUSES } from './console/progress';
 import { ProgressScreen, type ShownTrack } from './ProgressScreen';
+import { spokenWait, useTimeLeft, waitText } from '../hooks/useTimeLeft';
 
 // Loaded only when live analysis turns out to be unavailable.
 const BudgetBanner = lazy(() => import('./BudgetBanner'));
@@ -113,12 +114,26 @@ function BannerLoading({ code }: { code: LiveUnavailableCode }) {
   );
 }
 
+/** The code of a Turnstile check whose script could not be loaded (agent/turnstile.ts). */
+const VERIFICATION_UNAVAILABLE = 'verification_unavailable';
+
+/** The steps a run reaches only once it has passed the Turnstile check. */
+const PAST_THE_CHECK = new Set<AgentStatus>([
+  'searching',
+  'analyzing',
+  'measuring',
+  'researching',
+  'composing',
+  'checking',
+  'disambiguation',
+  'complete',
+]);
+
 /** The heading of the error block. */
 const ERROR_TITLE = 'The analysis did not finish';
 
 /** The error block's primary button: the step that can help after this failure. */
-// `none`: nothing on this page can help (this build cannot start an analysis at all).
-type ErrorAction = 'retry' | 'search' | 'reload' | 'none';
+type ErrorAction = 'retry' | 'search' | 'reload';
 
 interface ErrorView {
   /** What happened and what to do next. */
@@ -166,11 +181,18 @@ const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
   stream_stalled: view(`The analysis server stopped answering. ${EITHER_SIDE}`, 'retry'),
   connection_lost: view(CONNECTION_LOST, 'retry'),
   stream_open_failed: view('The analysis could not be started. Try again in a moment.', 'retry'),
-  // A build with a Turnstile site key but no widget yet: no request can be verified, so a
-  // retry or another song would fail the same way.
+  // The Turnstile check that comes before every analysis gave no token (agent/turnstile.ts).
   verification_unavailable: view(
-    'This version of the page cannot verify requests, so it cannot start an analysis. The site needs an update before it can be used.',
-    'none',
+    'The check that protects the analysis could not be loaded. A content blocker or the network may be stopping it. Try again in a moment.',
+    'retry',
+  ),
+  verification_failed: view(
+    'The check that protects the analysis did not pass. Try again to run it again.',
+    'retry',
+  ),
+  verification_timeout: view(
+    'The check that protects the analysis did not finish in time. Try again to run it again.',
+    'retry',
   ),
   stream_refused: view(
     'The analysis server did not accept the request. Try again to send it with a new check.',
@@ -211,7 +233,7 @@ function errorView(error: string | null, code: string | null): ErrorView {
   return view(GENERIC_ERROR, 'retry');
 }
 
-const ERROR_ACTION_LABEL: Record<Exclude<ErrorAction, 'none'>, string> = {
+const ERROR_ACTION_LABEL: Record<ErrorAction, string> = {
   retry: 'Try again',
   search: 'Search again',
   reload: 'Reload the page',
@@ -237,6 +259,11 @@ interface OnboardingProps {
   selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
   /** Runs the failed analysis again. */
   retry: () => void;
+  /**
+   * When the refusal said how long to wait (useAgent's `retryAt`): "Try again" stays disabled
+   * until then and says how long is left.
+   */
+  retryAt?: number | null;
   searchSuggest: SuggestionFetcher;
   onComplete: (trackData: TrackData) => void;
   // UX: Focus management
@@ -260,6 +287,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   analyze,
   selectCandidate,
   retry,
+  retryAt = null,
   searchSuggest,
   onComplete,
   searchInputRef,
@@ -378,6 +406,32 @@ const Onboarding: React.FC<OnboardingProps> = ({
     if (showsErrorBlock) errorHeadingRef.current?.focus();
   }, [showsErrorBlock, failureId]);
   const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
+  // "Try again" waits for the time the refusal named: a request before then is refused again.
+  const retryWait = useTimeLeft(shownError?.action === 'retry' ? retryAt : null);
+  // The wait is over: said once, through a polite live region (the time left is not announced
+  // as it counts down; the heading's description says it when the block takes the focus).
+  const retryReady = shownError?.action === 'retry' && retryAt !== null && retryWait === 0;
+
+  // Failures in a row in which the Turnstile check could not be loaded, counted once per failure
+  // (failureId) during render, so the block shows its buttons in the commit that shows it. A run
+  // that got past the check (any step after connecting) starts the count again.
+  const [unavailable, setUnavailable] = useState<{ last: string | null; count: number }>({
+    last: null,
+    count: 0,
+  });
+  if (failureId !== null && failureId !== unavailable.last) {
+    setUnavailable({
+      last: failureId,
+      count: errorCode === VERIFICATION_UNAVAILABLE ? unavailable.count + 1 : 0,
+    });
+  } else if (unavailable.count > 0 && PAST_THE_CHECK.has(status)) {
+    setUnavailable({ last: unavailable.last, count: 0 });
+  }
+  // The check failed to load twice in a row: reloading the page loads it afresh.
+  const offerReload =
+    shownError?.action === 'retry' &&
+    errorCode === VERIFICATION_UNAVAILABLE &&
+    unavailable.count >= 2;
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
@@ -537,9 +591,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <h2
                 ref={errorHeadingRef}
                 tabIndex={-1}
-                aria-describedby={shownError.lines
-                  .map((_, index) => `error-line-${index}`)
-                  .join(' ')}
+                aria-describedby={[
+                  ...shownError.lines.map((_, index) => `error-line-${index}`),
+                  ...(retryWait > 0 ? ['error-wait'] : []),
+                ].join(' ')}
                 className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus:outline-none"
               >
                 <CircleAlert size={16} aria-hidden="true" className="shrink-0" />
@@ -556,8 +611,19 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   {line}
                 </p>
               ))}
-              {shownError.action !== 'none' && (
-                <div className="flex flex-col items-center gap-3">
+              {/* Not a live region: read with the heading's description, never as it counts down.
+                  Screen readers get the units in words ("42 seconds"). */}
+              {retryWait > 0 && (
+                <p id="error-wait" className="text-xs font-mono text-center text-text-tertiary">
+                  <span aria-hidden="true">{`You can try again in ${waitText(retryWait)}.`}</span>
+                  <span className="sr-only">{`You can try again in ${spokenWait(retryWait)}.`}</span>
+                </p>
+              )}
+              <div id="error-retry-ready" role="status" className="sr-only">
+                {retryReady ? 'You can try again now.' : ''}
+              </div>
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex flex-wrap justify-center gap-3">
                   <Button
                     variant="cyber"
                     size="md"
@@ -568,6 +634,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                         <RotateCcw size={14} />
                       )
                     }
+                    disabled={retryWait > 0}
                     onClick={
                       shownError.action === 'retry'
                         ? handleRetry
@@ -578,18 +645,28 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   >
                     {ERROR_ACTION_LABEL[shownError.action]}
                   </Button>
-                  {/* "Search again" already leads to a different song: no second link beside it */}
-                  {shownError.action !== 'search' && (
-                    <button
-                      type="button"
-                      onClick={handleReset}
-                      className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  {offerReload && (
+                    <Button
+                      variant="neutral"
+                      size="md"
+                      leftIcon={<RotateCcw size={14} />}
+                      onClick={() => window.location.reload()}
                     >
-                      or try a different song
-                    </button>
+                      {ERROR_ACTION_LABEL.reload}
+                    </Button>
                   )}
                 </div>
-              )}
+                {/* "Search again" already leads to a different song: no second link beside it */}
+                {shownError.action !== 'search' && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  >
+                    or try a different song
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

@@ -353,6 +353,61 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
+  it('asks about one track when only one of the candidates sent can be read', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      ...interrupt(),
+      candidates: [candidates[0], { title: 'Hurt', artist: 'Leona Lewis' }],
+      message: '2 possible tracks from Spotify; choose one',
+    });
+
+    const question = 'One possible track from Spotify; confirm it or search again';
+    expect(hook.result.current.statusNote).toBe(question);
+    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
+  });
+
+  it('counts the rows shown when the page cannot read one of the candidates sent', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      ...interrupt(),
+      // The third has no id: it cannot be shown or picked.
+      candidates: [...candidates, { title: 'Hurt', artist: 'Leona Lewis' }],
+      message: '3 possible tracks from Spotify; choose one',
+    });
+
+    const question = '2 possible tracks from Spotify; choose one';
+    expect(hook.result.current.candidates).toHaveLength(2);
+    expect(hook.result.current.statusNote).toBe(question);
+    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
+  });
+
+  it("keeps the server's question for every row it sends, rows sharing an ISRC too", () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    // Words that are not the picker's own count: kept only if the page did not rewrite them.
+    const message = 'Pick one of these';
+    const cash = {
+      ...candidates[0],
+      isrc: 'USUM70207211',
+      releaseDate: '2002-11-05',
+      explicit: false,
+      durationMs: 218_000,
+    };
+    analysis.send({
+      ...interrupt(),
+      candidates: [cash, { ...cash, id: 'c3', album: 'C', releaseDate: '2008' }],
+      message,
+    });
+
+    expect(hook.result.current.statusNote).toBe(message);
+    expect(hook.result.current.candidates).toHaveLength(2);
+  });
+
   // The API's order, from the recorded demo run: the historian reports before any await, the
   // engineer only after its health probe and preview lookup (research at 328 ms, AUDIO-INIT at
   // 753 ms, the engineer's result at 10 877 ms).

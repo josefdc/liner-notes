@@ -305,6 +305,27 @@ describe('SearchBox: options and announcements', () => {
     expect(idOf(/Nine Inch Nails/)).toBe(before);
   });
 
+  it('tells a clean and an explicit version under one ISRC apart, by name and length', async () => {
+    const { calls } = await withSuggestions();
+    // One song on one album, as Spotify lists both editions: only the version differs.
+    const clean = {
+      ...song('clean', 'Hurt'),
+      isrc: 'USUM70207211',
+      explicit: false,
+      durationMs: 218_000,
+    };
+    const explicit = { ...clean, id: 'explicit', explicit: true, durationMs: 219_400 };
+    type('Hurt J');
+    await pause();
+    await act(async () => calls[1].resolve([clean, explicit]));
+
+    const [first, second] = screen.getAllByRole('option');
+    expect(screen.getByRole('option', { name: /3:38/ })).toBe(first);
+    expect(screen.getByRole('option', { name: /3:39/ })).toBe(second);
+    expect(screen.queryAllByRole('option', { name: /Explicit/ })).toEqual([second]);
+    expect(first.textContent).not.toMatch(/Explicit/);
+  });
+
   it('gives option ids that are valid for any track id', async () => {
     const { calls } = await withSuggestions();
     type('Odd');

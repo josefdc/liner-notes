@@ -20,6 +20,7 @@ import {
   type ResearchData,
   type SpotifyData,
 } from "./state.js";
+import { releaseYearOf } from "../sources/musicbrainz.js";
 import { logger } from "../logger.js";
 
 const log = logger("Fallback");
@@ -87,7 +88,7 @@ function describeMeasuredAudio(audio: MeasuredAudioFields): string | null {
 
 /** A release sentence built only from the Spotify fields that are present. */
 function describeRelease(spotify: SpotifyData): string | null {
-  const year = spotify.releaseDate?.split("-")[0];
+  const year = releaseYearOf(spotify.releaseDate);
   const parts: string[] = [];
   if (year && spotify.album) parts.push(`Released in ${year} on "${spotify.album}".`);
   else if (year) parts.push(`Released in ${year}.`);
@@ -116,8 +117,8 @@ export async function createFallbackTrackData(
   // The measured copies and the block, as the result carries them (finalize.ts).
   const audio = measuredAudioFields(state.audioFeatures);
 
-  // Extract release year from releaseDate
-  const releaseYear = spotify.releaseDate?.split("-")[0] || undefined;
+  // The year of a known release date; none for a date Spotify does not know ("0000").
+  const releaseYear = releaseYearOf(spotify.releaseDate);
 
   const factoids: Factoid[] = [];
   const research: ResearchData = state.researchData || emptyResearch();

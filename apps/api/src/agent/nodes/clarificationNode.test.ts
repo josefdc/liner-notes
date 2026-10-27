@@ -48,7 +48,11 @@ const candidates = ["a", "b"].map((id) => ({
  * The clarification node alone in a graph, paused at its choice. `onStatus` runs when the node
  * reports the user's choice (before it writes the memory).
  */
-async function pausedAtChoice(onStatus: (event?: unknown) => void, store = new InMemoryStore()) {
+async function pausedAtChoice(
+  onStatus: (event?: unknown) => void,
+  store = new InMemoryStore(),
+  offered: SonicAgentStateType["candidates"] = candidates,
+) {
   const node = { settled: "pending", update: null as unknown };
   const graph = new StateGraph(SonicAgentState)
     .addNode(
@@ -68,7 +72,7 @@ async function pausedAtChoice(onStatus: (event?: unknown) => void, store = new I
     .addEdge("clarification", END)
     .compile({ checkpointer: new MemorySaver(), store });
   const thread = { configurable: { thread_id: "t" } };
-  await graph.invoke({ songQuery: "song", candidates }, thread);
+  await graph.invoke({ songQuery: "song", candidates: offered }, thread);
   return { graph, store, node, thread };
 }
 
@@ -203,6 +207,21 @@ describe("clarificationNode's chosen track", () => {
     expect(update.spotifyData).not.toHaveProperty("popularity");
     expect(update.spotifyData?.isrc ?? null).toBeNull();
     expect(update.isrc ?? null).toBeNull();
+  });
+  it("keeps the ISRC and release date Spotify's search gave the candidate it falls back to", async () => {
+    const dated = candidates.map((candidate) =>
+      candidate.id === "track-b"
+        ? { ...candidate, isrc: "USSM17400001", releaseDate: "1974-11", releaseYear: "1974" }
+        : candidate,
+    );
+    const { graph, node, thread } = await pausedAtChoice(() => {}, new InMemoryStore(), dated);
+    spotify.details.mockRejectedValue(UNAVAILABLE);
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.spotifyData).toMatchObject({ isrc: "USSM17400001", releaseDate: "1974-11" });
+    expect(update.isrc).toBe("USSM17400001");
   });
 });
 

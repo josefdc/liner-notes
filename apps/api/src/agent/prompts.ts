@@ -18,6 +18,7 @@ import type {
   SourceId,
 } from "@liner-notes/contract";
 import type { LlmMessage } from "../llm/invoke.js";
+import { releaseYearOf } from "../sources/musicbrainz.js";
 import { type EvidenceScope, evidenceScope } from "../sources/records.js";
 import { followUpChoices, type RanStep } from "./research/plan.js";
 import { loudnessDbfs, measuredAudioFields, moodScore } from "./finalize.js";
@@ -176,7 +177,7 @@ export function promptTrack(spotify: SpotifyData): PromptTrack {
     title: spotify.title,
     artist: spotify.artist,
     album: spotify.album || null,
-    year: spotify.releaseDate?.split("-")[0] || null,
+    year: releaseYearOf(spotify.releaseDate) ?? null,
   };
 }
 

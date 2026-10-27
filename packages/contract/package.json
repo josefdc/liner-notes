@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./picker": {
+      "types": "./dist/picker.d.ts",
+      "default": "./dist/picker.js"
+    },
     "./audio-features.schema.json": "./schemas/audio-features.schema.json"
   },
   "files": [

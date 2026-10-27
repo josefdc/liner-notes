@@ -21,6 +21,16 @@
             "releaseDate": {
               "description": "Spotify's album release date as sent: a year (\"2011\"), a month (\"2011-10\") or a day (\"2011-10-18\"); \"0000\" means unknown. Null or absent when not known",
               "type": ["string", "null"]
+            },
+            "explicit": {
+              "description": "Whether Spotify marks the track explicit. Null or absent when not known",
+              "type": ["boolean", "null"]
+            },
+            "durationMs": {
+              "description": "The track's length in milliseconds as Spotify gave it. Absent when not known",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "required": ["id", "title", "artist", "album", "coverUrl"]
@@ -64,6 +74,16 @@
             "releaseDate": {
               "description": "Spotify's album release date as sent: a year (\"2011\"), a month (\"2011-10\") or a day (\"2011-10-18\"); \"0000\" means unknown. Null or absent when not known",
               "type": ["string", "null"]
+            },
+            "explicit": {
+              "description": "Whether Spotify marks the track explicit. Null or absent when not known",
+              "type": ["boolean", "null"]
+            },
+            "durationMs": {
+              "description": "The track's length in milliseconds as Spotify gave it. Absent when not known",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "required": ["id", "title", "artist", "album", "coverUrl"],

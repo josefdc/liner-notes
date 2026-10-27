@@ -15,6 +15,7 @@ export * from "./events.js";
 export * from "./evidence.js";
 export * from "./jsonSchema.js";
 export * from "./llm.js";
+export * from "./picker.js";
 export * from "./refinements.js";
 export * from "./schemas.js";
 export * from "./tolerant.js";

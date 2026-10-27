@@ -14,6 +14,10 @@ type Candidate = {
   album: string;
   coverUrl: string;
   releaseYear: string;
+  isrc?: string | null;
+  releaseDate?: string | null;
+  explicit?: boolean | null;
+  durationMs?: number;
 };
 
 const hitl = loadFixture("hitl");
@@ -28,6 +32,8 @@ const five: Candidate[] = [
     album: "Hurt: The EP",
     coverUrl: "",
     releaseYear: "2011",
+    explicit: true,
+    durationMs: 238_000,
   },
   {
     id: "c5",
@@ -36,6 +42,7 @@ const five: Candidate[] = [
     album: "Phenomenon",
     coverUrl: "",
     releaseYear: "2003",
+    durationMs: 4_013_000,
   },
 ];
 
@@ -44,7 +51,7 @@ const question = (count: number) =>
   count === 1
     ? "One possible track from Spotify; confirm it or search again"
     : `${count} possible tracks from Spotify; choose one`;
-// The candidates as the API sends them in `interrupt`: no ISRC (scoutNode.ts).
+// The candidates as the API sends them in `interrupt` (scoutNode.ts), counted by its question.
 const pickerStream = (candidates: Candidate[]) => [
   { type: "connected", threadId: "thread-hitl" },
   { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
@@ -357,6 +364,60 @@ test("every track the server counts gets a row: a studio and a live take with on
   await page.keyboard.press("Enter");
   await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-live")]);
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1440, height: 900 },
+]) {
+  test(`at ${viewport.width}x${viewport.height} a clean and an explicit version of one song are two rows that say which is which`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    // The server keeps the versions apart (one ISRC, two explicit values) and counts both.
+    const clean = {
+      id: "h-clean",
+      title: "Hurt",
+      artist: "Johnny Cash",
+      album: "American IV: The Man Comes Around",
+      coverUrl: "",
+      releaseYear: "2002",
+      isrc: "USUM70207211",
+      releaseDate: "2002-11-05",
+      explicit: false,
+      durationMs: 218_000,
+    };
+    const explicit = { ...clean, id: "h-explicit", explicit: true, durationMs: 219_400 };
+    await useMockApi(page, {
+      suggestions: [],
+      streams: {
+        [ANALYZE]: pickerStream([clean, explicit]),
+        [RESUME]: held,
+      },
+    });
+    await openPicker(page);
+
+    const rows = picker(page).getByRole("option");
+    await expect(rows).toHaveCount(2);
+    // Two rows with one title, artist and year, told apart by their names.
+    await expect(rows.nth(0)).toHaveAccessibleName(/Hurt Johnny Cash • 2002 • 3:38$/);
+    await expect(rows.nth(1)).toHaveAccessibleName(/Hurt Johnny Cash • 2002 • 3:39 Explicit$/);
+    await expect(picker(page).getByText("E", { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => clippedRows(page)).toEqual([]);
+    // The marker takes no more height than the line it sits in: both rows are one height.
+    const [cleanBox, explicitBox] = [
+      await rows.nth(0).boundingBox(),
+      await rows.nth(1).boundingBox(),
+    ];
+    expect(explicitBox?.height ?? 0).toBeCloseTo(cleanBox?.height ?? 0, 1);
+    // The server's question, which counts the two rows shown.
+    await expect(progressStatus(page)).toHaveText(question(2));
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(async () => resumes(await apiRequests(page)))
+      .toEqual([resumeWith("h-explicit")]);
+  });
+}
 
 test("the question names the list alone, so it is read once", async ({ page }) => {
   await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(three) } });

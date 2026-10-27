@@ -34,7 +34,13 @@ import { isWholeRecording } from '../utils/recording';
 import { isSpotifyTrackId } from '../utils/spotify';
 import { pickerQuestion, pickerRows } from '../components/search/pickerRows';
 import { API_BASE_URL } from './agent/types';
-import { fetchReplays, fetchSuggestions, type RunToken, RunTokenError } from './agent/apiClient';
+import {
+  boundedWait,
+  fetchReplays,
+  fetchSuggestions,
+  type RunToken,
+  RunTokenError,
+} from './agent/apiClient';
 import {
   type AnalysisEvent,
   eventSchemasLoaded,
@@ -54,7 +60,7 @@ import {
   withFailure,
 } from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
-import { isUsable, newRunToken, withRunToken } from './agent/runToken';
+import { checksVisitor, isUsable, newRunToken, withRunToken } from './agent/runToken';
 import { TURNSTILE_ERROR_CODES } from './agent/turnstile';
 
 // Re-export types for consumers that import from this file
@@ -243,6 +249,9 @@ function stepOf(
 // What the progress line says right after a pick, while the server reads the chosen track.
 const RESUME_NOTE = 'Reading the track you selected...';
 
+// What the progress line says while the Turnstile check runs, before the analysis is asked for.
+export const CHECK_NOTE = 'Checking that you are a person...';
+
 // The picker line when the server sends no words of its own.
 const PICK_FALLBACK = 'Pick the track to analyze';
 
@@ -322,8 +331,10 @@ function tokenFailure(
 
 /**
  * A refusal that said how long to wait (a rate limit: the stream's `retryAfterMs`, or the
- * Retry-After of POST /api/runs): until when, and what it said. The limits count analysis and
- * factoid requests together, so none of them is sent before then.
+ * Retry-After of POST /api/runs): until when, and what it said. No analysis or factoid request
+ * is sent before then. The analysis and factoid routes count against the same limits; POST
+ * /api/runs has a limit of its own, but its wait holds both back too (a factoid request with a
+ * token still good might have gone through): one wait, on the safe side.
  */
 interface Wait {
   until: number;
@@ -393,11 +404,12 @@ export function useAgent(): UseAgentReturn {
   const waitRef = useRef<Wait | null>(null);
   /** Keeps a refusal's wait, unless a later one is kept already. Returns until when. */
   const holdOff = useCallback((retryAfterMs: number, message: string, code: string | null) => {
-    const until = Date.now() + retryAfterMs;
+    // At most MAX_RETRY_WAIT_MS, whatever the refusal said.
+    const until = Date.now() + boundedWait(retryAfterMs);
     if (!waitRef.current || waitRef.current.until < until) {
       waitRef.current = { until, message, code };
     }
-    return until;
+    return waitRef.current.until;
   }, []);
   /** The wait still under way, if any. */
   const waiting = useCallback((): Wait | null => {
@@ -766,7 +778,9 @@ export function useAgent(): UseAgentReturn {
         if (runRef.current !== run) return;
       }
 
-      // Every analysis starts with a token of its own (agent/runToken.ts).
+      // Every analysis starts with a token of its own (agent/runToken.ts), after a Turnstile check
+      // when the build has a site key: the progress line says so while it runs.
+      if (checksVisitor()) setState((prev) => ({ ...prev, statusNote: CHECK_NOTE }));
       try {
         run.token = await newRunToken(run.controller.signal);
       } catch (error) {
@@ -780,6 +794,7 @@ export function useAgent(): UseAgentReturn {
       }
       if (runRef.current !== run) return;
       tokenRef.current = run.token;
+      setState((prev) => (prev.statusNote === CHECK_NOTE ? { ...prev, statusNote: null } : prev));
 
       try {
         // With a track id (a clicked suggestion) the API analyses that very track.
@@ -916,7 +931,7 @@ export function useAgent(): UseAgentReturn {
           resolve([]);
           return;
         }
-        // A rate limit said how long to wait, and that time is not over: no request is sent.
+        // A refusal said how long to wait (Wait), and that time is not over: no request is sent.
         if (waiting()) {
           onUnavailable?.('rate_limited');
           resolve([]);
@@ -1045,7 +1060,7 @@ export function useAgent(): UseAgentReturn {
         let tokenFailed = false;
         const token = isUsable(held)
           ? held
-          : newRunToken(eitherSignal(runSignal, signal)).then(
+          : newRunToken(eitherSignal(runSignal, signal), 'facts').then(
               (fresh) => {
                 tokenRef.current = fresh;
                 return fresh;

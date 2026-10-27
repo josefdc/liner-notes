@@ -119,6 +119,8 @@ test("the check shows only while Cloudflare asks the visitor for an interaction"
 
   const caption = page.getByText("Confirm that you are a person to start the analysis.");
   await expect(caption).toBeVisible();
+  // The progress line says what is under way, instead of "Connecting...".
+  await expect(page.getByText("Checking that you are a person...").first()).toBeVisible();
   expect(await postsToRuns(page)).toBe(0);
   await page.getByRole("button", { name: "I am a person" }).click();
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
@@ -235,17 +237,27 @@ test("a rate-limited refusal keeps the retry disabled, with the time left, until
   await page.goto("/");
   await search(page, "Bright Lines");
   await expect(page.getByText("Too many requests. Please try again later.")).toBeVisible();
-  const waiting = page.getByRole("button", { name: /^Try again in [1-3] s$/ });
-  await expect(waiting).toBeDisabled();
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  const timeLeft = page.getByText(/^You can try again in [1-3] s\.$/);
+  await expect(retry).toBeDisabled();
+  await expect(timeLeft).toBeVisible();
+  // The heading that takes the focus is described by the time left too.
+  await expect(
+    page.getByRole("heading", { name: "The analysis did not finish" }),
+  ).toHaveAccessibleDescription(
+    /Too many requests\. Please try again later\. You can try again in [1-3] s\./,
+  );
   expect(await postsToRuns(page)).toBe(1);
 
   // Another search before then sends nothing either: the same refusal, the same wait.
   await search(page, "Something else");
-  await expect(waiting).toBeDisabled();
+  await expect(retry).toBeDisabled();
+  await expect(timeLeft).toBeVisible();
   expect(await postsToRuns(page)).toBe(1);
 
-  const retry = page.getByRole("button", { name: "Try again", exact: true });
   await expect(retry).toBeEnabled({ timeout: 5_000 });
+  await expect(timeLeft).toHaveCount(0);
+  await expect(page.locator("#error-retry-ready")).toHaveText("You can try again now.");
   expect(await postsToRuns(page)).toBe(1);
   await retry.click();
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
@@ -278,8 +290,9 @@ test("a rate limit refused inside the stream waits for its retryAfterMs", async 
   });
   await page.goto("/");
   await search(page, "Bright Lines");
-  await expect(page.getByRole("button", { name: /^Try again in [12] s$/ })).toBeDisabled();
   const retry = page.getByRole("button", { name: "Try again", exact: true });
+  await expect(retry).toBeDisabled();
+  await expect(page.getByText(/^You can try again in [12] s\.$/)).toBeVisible();
   await expect(retry).toBeEnabled({ timeout: 5_000 });
   await retry.click();
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();

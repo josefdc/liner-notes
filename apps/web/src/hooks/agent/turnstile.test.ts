@@ -42,6 +42,8 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  // A script a test left loading would be waited for by the next test's checks.
+  for (const script of scripts) script.dispatchEvent(new Event('error'));
   vi.useRealTimers();
   vi.restoreAllMocks();
   delete window.turnstile;
@@ -81,7 +83,7 @@ describe('the Turnstile check', () => {
     expect(scripts.map((script) => script.src)).toEqual([TURNSTILE_SCRIPT_URL]);
     expect(TURNSTILE_SCRIPT_URL).toContain('render=explicit');
     window.turnstile = api;
-    scripts[0].onload?.(new Event('load'));
+    scripts[0].dispatchEvent(new Event('load'));
     await settle();
     expect(api.render).toHaveBeenCalledTimes(2);
     last().options.callback('tt-2');
@@ -94,7 +96,7 @@ describe('the Turnstile check', () => {
     const pending = turnstileToken('k');
     pending.catch(() => {});
     await settle();
-    scripts[0].onerror?.(new Event('error'));
+    scripts[0].dispatchEvent(new Event('error'));
     await expect(pending).rejects.toBeInstanceOf(RunTokenError);
     await expect(pending).rejects.toMatchObject({ code: 'verification_unavailable' });
     // Nothing more is asked for, however long the page waits.
@@ -106,7 +108,7 @@ describe('the Turnstile check', () => {
     next.catch(() => {});
     await settle();
     expect(scripts).toHaveLength(2);
-    scripts[1].onerror?.(new Event('error'));
+    scripts[1].dispatchEvent(new Event('error'));
     await expect(next).rejects.toMatchObject({ code: 'verification_unavailable' });
   });
 
@@ -126,6 +128,26 @@ describe('the Turnstile check', () => {
     expect(done).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await expect(pending).rejects.toMatchObject({ code: 'verification_unavailable' });
+    expect(scripts).toHaveLength(1);
+  });
+
+  it('waits for a script that loads after a timeout instead of adding a second copy', async () => {
+    vi.useFakeTimers();
+    const { api, last } = fakeTurnstile();
+    const late = turnstileToken('k');
+    late.catch(() => {});
+    await vi.advanceTimersByTimeAsync(TURNSTILE_TIMEOUTS.scriptMs);
+    await expect(late).rejects.toMatchObject({ code: 'verification_unavailable' });
+
+    // The next check (the user's next action) waits for the same script, which then arrives.
+    const next = turnstileToken('k');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(scripts).toHaveLength(1);
+    window.turnstile = api;
+    scripts[0].dispatchEvent(new Event('load'));
+    await settle();
+    last().options.callback('tt-late');
+    await expect(next).resolves.toBe('tt-late');
     expect(scripts).toHaveLength(1);
   });
 
@@ -182,9 +204,8 @@ describe('the Turnstile check', () => {
     const asked = turnstileToken('k');
     asked.catch(() => {});
     await settle();
-    expect(caption().hidden).toBe(true);
+    expect(caption().textContent).toBe('');
     last().options['before-interactive-callback']();
-    expect(caption().hidden).toBe(false);
     expect(caption().textContent).toBe('Confirm that you are a person to start the analysis.');
     await vi.advanceTimersByTimeAsync(TURNSTILE_TIMEOUTS.checkMs);
     let done = false;
@@ -200,7 +221,23 @@ describe('the Turnstile check', () => {
       TURNSTILE_TIMEOUTS.interactionMs - TURNSTILE_TIMEOUTS.checkMs,
     );
     await expect(asked).rejects.toMatchObject({ code: 'verification_timeout' });
-    expect(caption().hidden).toBe(true);
+    expect(caption().textContent).toBe('');
+  });
+
+  it('says what the check is for in a polite live region, once Cloudflare asks', async () => {
+    const { api, last } = fakeTurnstile();
+    window.turnstile = api;
+    const facts = turnstileToken('k', undefined, 'facts');
+    await settle();
+    expect(caption().getAttribute('role')).toBe('status');
+    expect(caption().getAttribute('aria-live')).toBe('polite');
+    expect(caption().hidden).toBe(false);
+    expect(caption().textContent).toBe('');
+    last().options['before-interactive-callback']();
+    expect(caption().textContent).toBe('Confirm that you are a person to get more facts.');
+    last().options.callback('tt-facts');
+    await expect(facts).resolves.toBe('tt-facts');
+    expect(caption().textContent).toBe('');
   });
 
   it('hides the caption once the interaction is over, and stops when its signal aborts', async () => {
@@ -211,7 +248,7 @@ describe('the Turnstile check', () => {
     await settle();
     last().options['before-interactive-callback']();
     last().options['after-interactive-callback']();
-    expect(caption().hidden).toBe(true);
+    expect(caption().textContent).toBe('');
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(last().removed).toBe(true);

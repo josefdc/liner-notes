@@ -96,41 +96,73 @@ const timedOut = () =>
 const abortError = () => new DOMException('The check was aborted', 'AbortError');
 
 let loading: Promise<TurnstileApi> | null = null;
+/**
+ * The script element still loading, if any: kept past a check's timeout (the browser may still
+ * fetch and run it), so a later check waits for it instead of adding a second copy.
+ */
+let pending: HTMLScriptElement | null = null;
+
+/** The script element to wait for: the one still loading, or a new one added to the page. */
+function scriptElement(): HTMLScriptElement {
+  if (pending) return pending;
+  const script = document.createElement('script');
+  const settled = () => {
+    if (pending === script) pending = null;
+  };
+  script.addEventListener('load', settled, { once: true });
+  script.addEventListener(
+    'error',
+    () => {
+      settled();
+      script.remove();
+    },
+    { once: true },
+  );
+  script.src = TURNSTILE_SCRIPT_URL;
+  script.async = true;
+  pending = script;
+  document.head.appendChild(script);
+  return script;
+}
 
 /**
  * Cloudflare's script, loaded once (it sets window.turnstile); checks that start while it loads
- * wait for the same load. Rejects with `verification_unavailable` when it cannot be loaded
- * within `timeoutMs`; only the next call then asks for it again.
+ * wait for the same load. Rejects with `verification_unavailable` when it cannot be loaded, or
+ * is not loaded within `timeoutMs`. Nothing asks for it again by itself: the next call waits
+ * for a script still loading, or asks for a new one once the last one failed.
  */
 export function loadTurnstile(
   timeoutMs: number = TURNSTILE_TIMEOUTS.scriptMs,
 ): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   loading ??= new Promise<TurnstileApi>((resolve, reject) => {
-    const script = document.createElement('script');
+    const script = scriptElement();
     const end = (api: TurnstileApi | undefined) => {
       clearTimeout(timer);
-      script.onload = null;
-      script.onerror = null;
-      if (api) {
-        resolve(api);
-      } else {
-        script.remove();
-        reject(unavailable());
-      }
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+      if (api) resolve(api);
+      else reject(unavailable());
     };
-    const timer = setTimeout(() => end(undefined), timeoutMs);
-    script.onload = () => end(window.turnstile);
-    script.onerror = () => end(undefined);
-    script.src = TURNSTILE_SCRIPT_URL;
-    script.async = true;
-    document.head.appendChild(script);
+    const onLoad = () => end(window.turnstile);
+    const onError = () => end(undefined);
+    const timer = setTimeout(onError, timeoutMs);
+    script.addEventListener('load', onLoad);
+    script.addEventListener('error', onError);
   }).finally(() => {
     // Loaded, it is window.turnstile from now on; not loaded, the next check asks again.
     loading = null;
   });
   return loading;
 }
+
+/** What a check is for: the caption asks the visitor for it in these words. */
+export type CheckPurpose = 'analysis' | 'facts';
+
+const CAPTIONS: Record<CheckPurpose, string> = {
+  analysis: 'Confirm that you are a person to start the analysis.',
+  facts: 'Confirm that you are a person to get more facts.',
+};
 
 const CONTAINER_ID = 'turnstile-check';
 // The panel's look while Cloudflare asks for an interaction; without one it shows nothing.
@@ -143,8 +175,8 @@ const PANEL_SHOWN = [
   'shadow-lg',
 ];
 
-/** Checks that Cloudflare is asking an interaction of, by their slot. */
-const interactive = new Set<HTMLElement>();
+/** Checks that Cloudflare is asking an interaction of: their slot, and what each is for. */
+const interactive = new Map<HTMLElement, CheckPurpose>();
 
 /** The container the widgets are rendered in, added to the page on the first check. */
 function container(): { panel: HTMLElement; caption: HTMLElement; slots: HTMLElement } {
@@ -154,14 +186,15 @@ function container(): { panel: HTMLElement; caption: HTMLElement; slots: HTMLEle
     root.id = CONTAINER_ID;
     root.className =
       'fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-(--space-lg) pointer-events-none';
-    const panel = document.createElement('section');
-    panel.setAttribute('aria-labelledby', `${CONTAINER_ID}-caption`);
+    const panel = document.createElement('div');
     panel.className = 'pointer-events-auto flex flex-col items-center gap-3 text-center';
+    // A polite live region, in the page from the first check on: its words are read once, when
+    // Cloudflare asks for an interaction. Empty (and of no size) otherwise.
     const caption = document.createElement('p');
     caption.id = `${CONTAINER_ID}-caption`;
     caption.className = 'text-text-secondary text-xs font-mono';
-    caption.textContent = 'Confirm that you are a person to start the analysis.';
-    caption.hidden = true;
+    caption.setAttribute('role', 'status');
+    caption.setAttribute('aria-live', 'polite');
     const slots = document.createElement('div');
     panel.append(caption, slots);
     root.append(panel);
@@ -175,25 +208,31 @@ function container(): { panel: HTMLElement; caption: HTMLElement; slots: HTMLEle
   };
 }
 
-/** Shows the panel's caption and frame while any check waits for the visitor. */
-function showInteraction(slot: HTMLElement, asking: boolean) {
-  if (asking) interactive.add(slot);
+/**
+ * Shows the panel's caption and frame while any check waits for the visitor; the caption names
+ * what the latest of them is for.
+ */
+function showInteraction(slot: HTMLElement, purpose: CheckPurpose | null) {
+  if (purpose) interactive.set(slot, purpose);
   else interactive.delete(slot);
   const { panel, caption } = container();
-  const shown = interactive.size > 0;
-  caption.hidden = !shown;
-  for (const name of PANEL_SHOWN) panel.classList.toggle(name, shown);
+  const latest = [...interactive.values()].pop();
+  const text = latest ? CAPTIONS[latest] : '';
+  if (caption.textContent !== text) caption.textContent = text;
+  for (const name of PANEL_SHOWN) panel.classList.toggle(name, latest !== undefined);
 }
 
 /**
  * A Turnstile token for `siteKey`: renders a widget, waits for its token, then removes it.
  * Rejects with a RunTokenError carrying one of TURNSTILE_ERROR_CODES when the script cannot be
  * loaded, the widget reports an error, or no token comes in time; with an AbortError when
- * `signal` aborts. A token is good for one POST /api/runs.
+ * `signal` aborts. `purpose` words the caption shown if Cloudflare asks for an interaction. A
+ * token is good for one POST /api/runs.
  */
 export function turnstileToken(
   siteKey: string,
   signal?: AbortSignal,
+  purpose: CheckPurpose = 'analysis',
   timeouts: TurnstileTimeouts = TURNSTILE_TIMEOUTS,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -220,7 +259,7 @@ export function turnstileToken(
         }
       }
       if (slot) {
-        showInteraction(slot, false);
+        showInteraction(slot, null);
         slot.remove();
       }
       if (error) reject(error);
@@ -262,11 +301,11 @@ export function turnstileToken(
             'timeout-callback': () => end(timedOut()),
             'before-interactive-callback': () => {
               if (settled) return;
-              showInteraction(own, true);
+              showInteraction(own, purpose);
               wait(timeouts.interactionMs);
             },
             'after-interactive-callback': () => {
-              if (!settled) showInteraction(own, false);
+              if (!settled) showInteraction(own, null);
             },
           });
           // The check ended while the widget was being rendered (an error reported at once).

@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TrackData } from '../../types';
-import { RunTokenError, requestRunToken, retryAfterMs } from './apiClient';
+import {
+  boundedWait,
+  MAX_RETRY_WAIT_MS,
+  RunTokenError,
+  requestRunToken,
+  retryAfterMs,
+} from './apiClient';
 import { moreFactsUrl, newMoreFacts } from './moreFacts';
 import {
   DEV_BYPASS_TOKEN,
@@ -76,6 +82,25 @@ describe('requestRunToken', () => {
     for (const unreadable of [null, '', 'soon', '-5', '1.5']) {
       expect(retryAfterMs(unreadable, now)).toBeNull();
     }
+  });
+
+  it('keeps no wait longer than an hour, however long the header says', () => {
+    const now = Date.parse('2026-10-27T12:00:00.000Z');
+    expect(MAX_RETRY_WAIT_MS).toBe(60 * 60_000);
+    // One day, a huge number, one too large to read as a number, and a date far ahead.
+    for (const long of [
+      '86400',
+      '99999999999999999999',
+      '9'.repeat(400),
+      'Fri, 31 Dec 9999 23:59:59 GMT',
+    ]) {
+      expect(retryAfterMs(long, now)).toBe(MAX_RETRY_WAIT_MS);
+    }
+    expect(retryAfterMs('3600', now)).toBe(MAX_RETRY_WAIT_MS);
+    expect(retryAfterMs('3599', now)).toBe(3_599_000);
+    expect(boundedWait(Number.POSITIVE_INFINITY)).toBe(MAX_RETRY_WAIT_MS);
+    expect(boundedWait(Number.NaN)).toBe(MAX_RETRY_WAIT_MS);
+    expect(boundedWait(-1)).toBe(0);
   });
 
   it('rejects an answer it cannot read, or one without a token or an expiry', async () => {

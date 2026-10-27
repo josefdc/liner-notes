@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Onboarding from './Onboarding';
+import { waitText } from '../hooks/useTimeLeft';
 
 afterEach(() => {
   cleanup();
@@ -48,6 +49,21 @@ describe('Onboarding errors', () => {
     }
   });
 
+  /** The wait line, the live region, the heading's description and the retry button. */
+  const waitView = () => {
+    const heading = screen.getByRole('heading', { name: 'The analysis did not finish' });
+    const described = (heading.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent)
+      .join(' ');
+    return {
+      line: document.getElementById('error-wait')?.textContent ?? null,
+      described,
+      status: document.getElementById('error-retry-ready')?.textContent,
+      button: screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement,
+    };
+  };
+
   it('keeps "Try again" disabled, saying how long is left, until the wait is over', () => {
     vi.useFakeTimers();
     const now = Date.parse('2026-10-27T12:00:00.000Z');
@@ -57,28 +73,41 @@ describe('Onboarding errors', () => {
       retryAt: now + 42_000,
       retry,
     });
-    expect(screen.getByText('Too many requests. Please try again later.')).toBeTruthy();
-    const button = () => screen.getByRole('button', { name: /^Try again/ }) as HTMLButtonElement;
-    expect(button().textContent).toBe('Try again in 42 s');
-    expect(button().disabled).toBe(true);
-    fireEvent.click(button());
+    // The heading takes the focus, described by the refusal and the time left.
+    expect(document.activeElement?.textContent).toBe('The analysis did not finish');
+    expect(waitView()).toMatchObject({
+      line: 'You can try again in 42 s.',
+      described: 'Too many requests. Please try again later. You can try again in 42 s.',
+      status: '',
+    });
+    expect(waitView().button.disabled).toBe(true);
+    fireEvent.click(waitView().button);
     expect(retry).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(41_000);
     });
-    expect(button().textContent).toBe('Try again in 1 s');
-    expect(button().disabled).toBe(true);
+    // Counted down where it is seen, never announced while it runs.
+    expect(waitView()).toMatchObject({ line: 'You can try again in 1 s.', status: '' });
+    expect(waitView().button.disabled).toBe(true);
     act(() => {
       vi.advanceTimersByTime(999);
     });
-    expect(button().disabled).toBe(true);
+    expect(waitView().button.disabled).toBe(true);
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(button().textContent).toBe('Try again');
-    expect(button().disabled).toBe(false);
-    fireEvent.click(button());
+    // Over: said once, through the polite live region.
+    expect(waitView()).toMatchObject({
+      line: null,
+      described: 'Too many requests. Please try again later.',
+      status: 'You can try again now.',
+    });
+    const live = document.getElementById('error-retry-ready');
+    expect(live?.getAttribute('role')).toBe('status');
+    expect(live?.getAttribute('class')).toContain('sr-only');
+    expect(waitView().button.disabled).toBe(false);
+    fireEvent.click(waitView().button);
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
@@ -87,20 +116,34 @@ describe('Onboarding errors', () => {
     const now = Date.parse('2026-10-27T12:00:00.000Z');
     vi.setSystemTime(now);
     failedWith('rate_limited', 'Too many requests.', { retryAt: now + 125_000 });
-    const button = () => screen.getByRole('button', { name: /^Try again/ }) as HTMLButtonElement;
-    expect(button().textContent).toBe('Try again in 2 min 5 s');
+    expect(waitView().line).toBe('You can try again in 2 min 5 s.');
 
     // A tab in the background: the clock moves on while its timers are held back.
     vi.setSystemTime(now + 120_000);
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(button().textContent).toBe('Try again in 5 s');
+    expect(waitView().line).toBe('You can try again in 5 s.');
     vi.setSystemTime(now + 200_000);
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(button().disabled).toBe(false);
+    expect(waitView().button.disabled).toBe(false);
+    expect(waitView().status).toBe('You can try again now.');
+  });
+
+  it('says a wait of an hour or more in hours and minutes', () => {
+    vi.useFakeTimers();
+    const now = Date.parse('2026-10-27T12:00:00.000Z');
+    vi.setSystemTime(now);
+    failedWith('rate_limited', 'Too many requests.', { retryAt: now + 65 * 60_000 });
+    expect(waitView().line).toBe('You can try again in 1 h 5 min.');
+    expect(waitText(60 * 60_000)).toBe('1 h');
+    expect(waitText(60 * 60_000 + 1)).toBe('1 h 1 min');
+    expect(waitText(86_400_000)).toBe('24 h');
+    expect(waitText(59 * 60_000 + 59_500)).toBe('1 h');
+    expect(waitText(Number.POSITIVE_INFINITY)).toBe('a while');
+    expect(waitText(1e23)).not.toMatch(/e\+|Infinity|NaN/);
   });
 
   it('offers the retry at once when the refusal named no wait, or the wait is over', () => {
@@ -108,6 +151,7 @@ describe('Onboarding errors', () => {
     expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(
       false,
     );
+    expect(document.getElementById('error-wait')).toBeNull();
   });
 
   it('offers a retry when the analysis could not be started', () => {

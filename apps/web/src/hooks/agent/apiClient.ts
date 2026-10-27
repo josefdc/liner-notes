@@ -93,16 +93,29 @@ export class RunTokenError extends Error {
 }
 
 /**
+ * The longest wait this page keeps from a refusal: a longer one (a proxy's or a misconfigured
+ * server's Retry-After, or one too large to read) is taken as this, so the page never locks
+ * itself until a reload. The API's own limits reset within minutes.
+ */
+export const MAX_RETRY_WAIT_MS = 60 * 60_000;
+
+/** `ms` as a wait this page keeps: at most MAX_RETRY_WAIT_MS, which a non-finite value is too. */
+export function boundedWait(ms: number): number {
+  return Number.isFinite(ms) ? Math.min(Math.max(0, ms), MAX_RETRY_WAIT_MS) : MAX_RETRY_WAIT_MS;
+}
+
+/**
  * A Retry-After header's wait in milliseconds: a number of seconds, or an HTTP date (the time
- * left until then). Null without a header or for one this page cannot read.
+ * left until then), at most MAX_RETRY_WAIT_MS. Null without a header or for one this page
+ * cannot read.
  */
 export function retryAfterMs(header: string | null, now: number = Date.now()): number | null {
   const value = header?.trim() ?? '';
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  if (/^\d+$/.test(value)) return boundedWait(Number(value) * 1000);
   // An HTTP date names its day and month ("Tue, 27 Oct 2026 12:00:00 GMT"); Date.parse would
   // also read "-5" or "1.5" as dates.
   const at = /[a-z]/i.test(value) ? Date.parse(value) : Number.NaN;
-  return Number.isNaN(at) ? null : Math.max(0, at - now);
+  return Number.isNaN(at) ? null : boundedWait(at - now);
 }
 
 /**

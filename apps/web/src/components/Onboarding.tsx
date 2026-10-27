@@ -393,6 +393,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
   // "Try again" waits for the time the refusal named: a request before then is refused again.
   const retryWait = useTimeLeft(shownError?.action === 'retry' ? retryAt : null);
+  // The wait is over: said once, through a polite live region (the time left is not announced
+  // as it counts down; the heading's description says it when the block takes the focus).
+  const retryReady = shownError?.action === 'retry' && retryAt !== null && retryWait === 0;
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
@@ -552,9 +555,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <h2
                 ref={errorHeadingRef}
                 tabIndex={-1}
-                aria-describedby={shownError.lines
-                  .map((_, index) => `error-line-${index}`)
-                  .join(' ')}
+                aria-describedby={[
+                  ...shownError.lines.map((_, index) => `error-line-${index}`),
+                  ...(retryWait > 0 ? ['error-wait'] : []),
+                ].join(' ')}
                 className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus:outline-none"
               >
                 <CircleAlert size={16} aria-hidden="true" className="shrink-0" />
@@ -571,6 +575,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   {line}
                 </p>
               ))}
+              {retryWait > 0 && (
+                <p id="error-wait" className="text-xs font-mono text-center text-text-tertiary">
+                  {`You can try again in ${waitText(retryWait)}.`}
+                </p>
+              )}
+              <div id="error-retry-ready" role="status" className="sr-only">
+                {retryReady ? 'You can try again now.' : ''}
+              </div>
               <div className="flex flex-col items-center gap-3">
                 <Button
                   variant="cyber"
@@ -587,9 +599,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                         : () => window.location.reload()
                   }
                 >
-                  {retryWait > 0
-                    ? `${ERROR_ACTION_LABEL.retry} in ${waitText(retryWait)}`
-                    : ERROR_ACTION_LABEL[shownError.action]}
+                  {ERROR_ACTION_LABEL[shownError.action]}
                 </Button>
                 {/* "Search again" already leads to a different song: no second link beside it */}
                 {shownError.action !== 'search' && (

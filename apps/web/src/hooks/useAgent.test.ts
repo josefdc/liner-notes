@@ -1,10 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RunTokenError, requestRunToken } from './agent/apiClient';
+import { MAX_RETRY_WAIT_MS, RunTokenError, requestRunToken } from './agent/apiClient';
 import { loadEventSchemas, resetSkippedReports } from './agent/events';
 import { LOG_LIMIT } from './agent/runLog';
 import type { TrackData } from '../types';
 import {
+  CHECK_NOTE,
   eitherSignal,
   OUTDATED_ERROR,
   STREAM_INACTIVITY_TIMEOUT_MS,
@@ -126,7 +127,9 @@ beforeAll(() => loadEventSchemas());
 
 beforeEach(() => {
   tokensIssued = 0;
-  vi.mocked(requestRunToken).mockClear();
+  // Reset, not only cleared: an answer a test queued and left unused (a ...Once that a failing
+  // test never reached) would otherwise answer the next test's request.
+  vi.mocked(requestRunToken).mockReset();
   FakeEventSource.instances = [];
   resetSkippedReports();
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -2000,6 +2003,48 @@ describe('useAgent run tokens', () => {
       delete window.turnstile;
     });
 
+    it('says the check is running on the progress line, and only while it runs', async () => {
+      let answer!: () => void;
+      window.turnstile = {
+        render: (_container, options) => {
+          answer = () => options.callback('widget-token-1');
+          return 'widget-1';
+        },
+        remove: () => {},
+      };
+      const hook = renderHook(() => useAgent());
+      act(() => {
+        void hook.result.current.analyze('Hurt');
+      });
+      await tokenSettled();
+      expect(hook.result.current.status).toBe('connecting');
+      expect(hook.result.current.statusNote).toBe(CHECK_NOTE);
+      act(() => answer());
+      await tokenSettled();
+      expect(hook.result.current.statusNote).toBeNull();
+      expect(tokenOf(lastStream())).toBe('token-1');
+    });
+
+    it('asks for more facts in its own words when the check needs the visitor', async () => {
+      window.turnstile = {
+        render: (_container, options) => {
+          queueMicrotask(() => options['before-interactive-callback']());
+          return 'widget-1';
+        },
+        remove: () => {},
+      };
+      const { result } = renderHook(() => useAgent());
+      await askMore(result);
+      expect(document.getElementById('turnstile-check-caption')?.textContent).toBe(
+        'Confirm that you are a person to get more facts.',
+      );
+      expect(streams()).toHaveLength(0);
+      // Leaving ends the check.
+      act(() => result.current.reset());
+      await tokenSettled();
+      expect(document.getElementById('turnstile-check-caption')?.textContent).toBe('');
+    });
+
     it("asks for the run token with the widget's token", async () => {
       const rendered = fakeWidget();
       await startAnalysis('Hurt');
@@ -2131,6 +2176,23 @@ describe('useAgent run tokens', () => {
       expect(result.current.retryAt).toBeNull();
     });
 
+    it('keeps no wait longer than an hour, whatever the refusal says', async () => {
+      const { result } = await startAnalysis('Hurt');
+      lastStream().send({
+        type: 'error',
+        code: 'rate_limited',
+        error: 'Too many requests.',
+        retryAfterMs: 86_400_000_000,
+      });
+      expect(result.current.retryAt).toBe(NOW + MAX_RETRY_WAIT_MS);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MAX_RETRY_WAIT_MS);
+      });
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(streams()).toHaveLength(2);
+    });
+
     it("reads POST /api/runs' Retry-After", async () => {
       vi.mocked(requestRunToken).mockRejectedValueOnce(
         new RunTokenError('Too many requests. Please try again later.', 'rate_limited', 90_000),
@@ -2244,5 +2306,20 @@ describe('useAgent before the stream reader is loaded', () => {
     expect(streams()).toHaveLength(0);
     expect(result.current.status).toBe('error');
     expect(result.current.errorCode).toBe('outdated_client');
+  });
+});
+
+describe('useAgent test isolation', () => {
+  // A token answer queued by one test and never used must not answer the next test.
+  it('leaves an answer queued and unused', () => {
+    vi.mocked(requestRunToken).mockResolvedValueOnce({
+      runToken: 'left-over',
+      expiresAt: Date.now() + 60_000,
+    });
+  });
+
+  it('gets the default answer in the next test', async () => {
+    await startAnalysis('Hurt');
+    expect(new URL(lastStream().url, 'http://x').searchParams.get('runToken')).toBe('token-1');
   });
 });

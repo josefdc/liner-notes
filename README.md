@@ -231,8 +231,9 @@ so setting it there has no effect.
 The analysis, resume and factoid requests carry a run token (the `runToken` query parameter),
 which `POST /api/runs` issues once a visitor has passed Cloudflare Turnstile. The web app runs the
 Turnstile widget before each analysis when it is built with `VITE_TURNSTILE_SITE_KEY` (see
-`apps/web/.env.example`); the widget shows only when Cloudflare asks for an interaction. Without a
-site key it sends the development bypass's token instead. The API image runs
+`apps/web/.env.example`; the web image takes it as a build argument,
+`--build-arg VITE_TURNSTILE_SITE_KEY=...`); the widget shows only when Cloudflare asks for an
+interaction. Without a site key it sends the development bypass's token instead. The API image runs
 with `NODE_ENV=production` and does not start without `RUN_TOKEN_SECRET` (32 bytes or more, for
 example `openssl rand -base64 48`) and `TURNSTILE_SECRET_KEY` in `apps/api/.env`;
 `TURNSTILE_EXPECTED_HOSTNAME` limits the check to the site's hostname. Only in development

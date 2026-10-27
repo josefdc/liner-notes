@@ -10,7 +10,7 @@
  */
 
 import { type RunToken, RunTokenError, requestRunToken } from './apiClient';
-import { turnstileToken } from './turnstile';
+import { type CheckPurpose, turnstileToken } from './turnstile';
 
 /** The query parameter the API reads a run token from. */
 export const RUN_TOKEN_PARAM = 'runToken';
@@ -26,20 +26,29 @@ function siteKey(): string {
   return import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
 }
 
+/** True when a new run token needs a Turnstile check first: the build has a site key. */
+export function checksVisitor(): boolean {
+  return siteKey() !== '';
+}
+
 /**
  * A new run token from the API, asked for with the token of a Turnstile check (or, in a build
  * without a site key, the bypass's). When the API refuses Turnstile's token (a 401
  * `auth_expired`: spent, expired, or not passed), one new check is run and the token asked for
  * once more; a second refusal rejects. Rejects as requestRunToken and turnstileToken do.
+ * `purpose` words the check's caption, should Cloudflare ask the visitor for an interaction.
  */
-export async function newRunToken(signal?: AbortSignal): Promise<RunToken> {
+export async function newRunToken(
+  signal?: AbortSignal,
+  purpose: CheckPurpose = 'analysis',
+): Promise<RunToken> {
   const key = siteKey();
   if (!key) return requestRunToken(DEV_BYPASS_TOKEN, signal);
   try {
-    return await requestRunToken(await turnstileToken(key, signal), signal);
+    return await requestRunToken(await turnstileToken(key, signal, purpose), signal);
   } catch (error) {
     if (!(error instanceof RunTokenError && error.code === 'auth_expired')) throw error;
-    return requestRunToken(await turnstileToken(key, signal), signal);
+    return requestRunToken(await turnstileToken(key, signal, purpose), signal);
   }
 }
 

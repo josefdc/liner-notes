@@ -97,6 +97,29 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Runs the graph run that `start` begins on a fake clock (setTimeout and Date.now), moving it
+ * 100 ms a step until the run settles. Its waits take no real time and their lengths are exact,
+ * however busy the machine is: the clock moves only between steps. Returns what the run resolved
+ * to and how far the clock moved.
+ */
+async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapsed: number }> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const started = Date.now();
+    let settled = false;
+    const run = start().finally(() => {
+      settled = true;
+    });
+    run.catch(() => {});
+    for (let step = 0; step < 2000 && !settled; step++) await vi.advanceTimersByTimeAsync(100);
+    expect(settled, "the run settles within 200 s on the clock").toBe(true);
+    return { out: await run, elapsed: Date.now() - started };
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 describe("scoutNode when the run is cancelled", () => {
   it("cuts its retry wait short and sends no second search", async () => {
     // The first search is rate limited: the scout waits about 1 s before trying again.
@@ -106,15 +129,24 @@ describe("scoutNode when the run is cancelled", () => {
     };
     const { graph, node } = scoutGraph();
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
 
-    const started = Date.now();
-    await expect(graph.invoke({ songQuery: "x" }, { signal: controller.signal })).rejects.toThrow();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const { out } = await onFakeClock(async () => {
+      setTimeout(() => controller.abort(), 50);
+      const run = graph.invoke({ songQuery: "x" }, { signal: controller.signal });
+      const rejected = await run.then(
+        () => false,
+        () => true,
+      );
+      // How the node itself settled 100 ms after the cancel, well inside its 1 s backoff.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const settled = node.settled;
+      // Past the end of the backoff (1 s and up to a tenth more), had the wait not been cut.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return { rejected, settled };
+    });
 
-    expect(node.settled).toMatch(/^rejected/);
-    expect(Date.now() - started).toBeLessThan(800);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(out.rejected).toBe(true);
+    expect(out.settled).toMatch(/^rejected/);
     expect(spotify.calls).toBe(1);
   });
 
@@ -510,13 +542,11 @@ describe("scoutNode's Spotify failures", () => {
     };
     const { graph } = scoutGraph();
 
-    const out = await graph.invoke({ songQuery: "Song A" });
+    const { out } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
 
     expect(spotify.calls).toBe(2);
-    const waited = spotify.startedAt[1] - spotify.startedAt[0];
-    // The 250 ms asked for, not the 1 s backoff used when the source says nothing.
-    expect(waited).toBeGreaterThanOrEqual(240);
-    expect(waited).toBeLessThan(900);
+    // The 250 ms asked for, no less and not the 1 s backoff used when the source says nothing.
+    expect(spotify.startedAt[1] - spotify.startedAt[0]).toBe(250);
     expect(out.spotifyData).toMatchObject({ id: "t1" });
   });
 
@@ -526,10 +556,10 @@ describe("scoutNode's Spotify failures", () => {
     };
     const { graph } = scoutGraph();
 
-    const started = Date.now();
-    const out = await graph.invoke({ songQuery: "Song A" });
+    const { out, elapsed } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
 
-    expect(Date.now() - started).toBeLessThan(500);
+    // Gives up at once: well under the 1 s backoff, let alone the 60 s asked for.
+    expect(elapsed).toBeLessThan(1000);
     expect(spotify.calls).toBe(1);
     expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 60_000 });
   });
@@ -541,18 +571,26 @@ describe("scoutNode's Spotify failures", () => {
     const statuses: string[] = [];
     const { graph } = scoutGraph();
 
-    const out = await graph.invoke({ songQuery: "Song A" }, {
-      streamMode: "values",
-      // The writer the scout reports progress through.
-      writer: (event: { type?: string; message?: string }) => {
-        if (event.type === "status" && event.message) statuses.push(event.message);
-      },
-    } as never);
+    const { out } = await onFakeClock(() =>
+      graph.invoke({ songQuery: "Song A" }, {
+        streamMode: "values",
+        // The writer the scout reports progress through.
+        writer: (event: { type?: string; message?: string }) => {
+          if (event.type === "status" && event.message) statuses.push(event.message);
+        },
+      } as never),
+    );
 
     expect(spotify.calls).toBe(3);
+    // The 1 s, then 2 s backoff, each with up to a tenth more at random.
+    const waits = [1, 2].map((i) => spotify.startedAt[i] - spotify.startedAt[i - 1]);
+    expect(waits[0]).toBeGreaterThanOrEqual(1000);
+    expect(waits[0]).toBeLessThanOrEqual(1100);
+    expect(waits[1]).toBeGreaterThanOrEqual(2000);
+    expect(waits[1]).toBeLessThanOrEqual(2200);
     expect(out.scoutFailure).toEqual({ kind: "upstream_unavailable" });
     expect(statuses.filter((m) => m.startsWith("Spotify did not answer"))).toHaveLength(2);
-  }, 10_000);
+  });
 
   it("says each rate-limit wait in a status line", async () => {
     spotify.answer = async () => {
@@ -564,11 +602,13 @@ describe("scoutNode's Spotify failures", () => {
     const statuses: string[] = [];
     const { graph } = scoutGraph();
 
-    await graph.invoke({ songQuery: "Song A" }, {
-      writer: (event: { type?: string; message?: string }) => {
-        if (event.type === "status" && event.message) statuses.push(event.message);
-      },
-    } as never);
+    await onFakeClock(() =>
+      graph.invoke({ songQuery: "Song A" }, {
+        writer: (event: { type?: string; message?: string }) => {
+          if (event.type === "status" && event.message) statuses.push(event.message);
+        },
+      } as never),
+    );
 
     expect(statuses).toContain("Spotify is limiting requests; trying again in 1 s");
   });

@@ -87,8 +87,9 @@ jobs:
             api.cache-to=type=gha,scope=api,mode=max
             audio.cache-from=type=gha,scope=audio
             audio.cache-to=type=gha,scope=audio,mode=max
-      # Loads the three images (their layers come from the build above), under the names compose
-      # gives them in the project "liner-notes", for the checks below and the stack's.
+      # Loads the three images (their layers come from the build above) under their names in
+      # deploy/compose.prod.yml (liner-notes-<service>:latest), for the checks below and the
+      # stacks'.
       - name: Load the images
         uses: docker/bake-action@v7
         with:
@@ -100,9 +101,6 @@ jobs:
             api.context=.
             audio.context=services/audio
             audio.platform=linux/amd64
-            web.tags=liner-notes-web:latest
-            api.tags=liner-notes-api:latest
-            audio.tags=liner-notes-audio:latest
             web.cache-from=type=gha,scope=web
             api.cache-from=type=gha,scope=api
             audio.cache-from=type=gha,scope=audio
@@ -286,7 +284,8 @@ jobs:
       # same way on a development machine): every service healthy, no published port but Caddy's,
       # a stream without a run token refused, the security headers and the policy on a page, a
       # hashed asset, an API answer and an error, the cache rules, /apifoo not proxied, forged
-      # CF-Connecting-IP and X-Forwarded-For ignored, and the run token kept out of Caddy's log.
+      # CF-Connecting-IP and X-Forwarded-For ignored and CF-Connecting-IP used from a trusted
+      # peer, and the run token and what a visitor looked up kept out of Caddy's log.
       # The audio service skips its model download here (it serves "degraded", and is healthy).
       - name: Check the production stack
         env:
@@ -295,15 +294,20 @@ jobs:
           trap 'docker compose -f deploy/compose.prod.yml logs --no-color --tail 50' EXIT
           docker compose -f deploy/compose.prod.yml up -d --no-build --wait --wait-timeout 300
           deploy/check-stack.sh
-      # A replayed stream held 130 s (SSE_HOLD_MS) passes through Caddy and ends with "done". The
-      # API runs in development for this (deploy/compose.dev.yml): it accepts the hold setting
-      # and issues run tokens without Turnstile.
-      - name: Check a 130 s stream through Caddy
+      # The development stack (deploy/compose.dev.yml), a project of its own next to the one
+      # above, whose API issues run tokens without Turnstile and holds replayed streams 130 s
+      # (SSE_HOLD_MS): a stream the visitor leaves puts no token, query or full address in
+      # Caddy's log, and a held stream passes through Caddy and ends with "done". The production
+      # project's API must be the same container afterwards.
+      - name: Check a cut and a 130 s stream through Caddy
         env:
           AUDIO_FETCH_MODELS: "0"
           SSE_HOLD_MS: "130000"
         run: |
-          trap 'docker compose -f deploy/compose.prod.yml down -v' EXIT
+          trap 'docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml down -v; docker compose -f deploy/compose.prod.yml down -v' EXIT
+          api=$(docker compose -f deploy/compose.prod.yml ps -q api)
           docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d --no-build \
-            --wait --wait-timeout 300 api
+            --wait --wait-timeout 300
           deploy/check-stack.sh long-stream
+          test "$(docker compose -f deploy/compose.prod.yml ps -q api)" = "$api"
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$api" | grep -qx NODE_ENV=production

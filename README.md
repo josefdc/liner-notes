@@ -190,11 +190,21 @@ docker compose -f deploy/compose.prod.yml up -d --build
 docker compose -f deploy/compose.prod.yml ps                  # every service turns healthy
 ```
 
-`deploy/.env` documents every setting. Compose stops, naming the variable, while
-`RUN_TOKEN_SECRET`, `TURNSTILE_SECRET_KEY` or `AUDIO_SERVICE_TOKEN` is empty. By default the
-site is plain HTTP on http://127.0.0.1:3180. On a server, set `SITE_ADDRESS` to the site's
-hostname (Caddy then obtains a certificate and serves HTTPS) and publish the standard ports with
-`PROXY_BIND=0.0.0.0`, `PROXY_PORT=80` and `PROXY_TLS_PORT=443`.
+`deploy/.env.example` lists every setting the containers receive. Compose stops, naming the
+variable, while `RUN_TOKEN_SECRET`, `TURNSTILE_SECRET_KEY` or `AUDIO_SERVICE_TOKEN` is empty. By
+default the site is plain HTTP on http://127.0.0.1:3180. On a server, set `SITE_ADDRESS` to the
+site's hostname (Caddy then serves HTTPS on 443 and redirects port 80 to it) and publish the
+standard ports with `PROXY_BIND=0.0.0.0`, `PROXY_PORT=80` and `PROXY_TLS_PORT=443`. The images
+are named `liner-notes-web`, `-api` and `-audio`, tagged `IMAGE_TAG` (default `latest`): a tag
+per release lets a deploy go back to the previous images.
+
+**Certificates.** Caddy obtains a certificate for `SITE_ADDRESS` by itself only when the
+certificate authority can reach the server directly. Behind Cloudflare's proxy that check does
+not get through (Cloudflare answers port 80 and ends TLS itself), so the server needs a
+Cloudflare Origin CA certificate or a DNS challenge instead: see the runbook (#37). Caddy serves
+HTTP/1.1 and HTTP/2 only: behind Cloudflare a visitor's HTTP/3 ends at Cloudflare's edge, which
+reaches the server over TCP. Strict-Transport-Security is not sent here; it is set at Cloudflare
+(runbook, #37).
 
 | Service | Reached at | Notes |
 |---------|------------|-------|
@@ -202,10 +212,18 @@ hostname (Caddy then obtains a certificate and serves HTTPS) and publish the sta
 | `api`   | `/api/*` through Caddy only | `NODE_ENV=production`, `TRUST_PROXY=1`, `REPLAY_MODE=fallback` by default; database on the `sonic-data` volume (`/app/data/sonic-agent.db`), spend log on `llm-spend` |
 | `audio` | the API only | `linux/amd64`; models on the `audio-models` volume, fetched at the first start (up to 90 s) |
 
-The volume `sonic-data` and the file `sonic-agent.db` keep the names they had under the earlier
-root `docker-compose.yml`, so an existing database carries over when the project name is the
-same (`liner-notes`; compose prefixes volume names with it). Live model calls need the spend log,
-which is never created by itself; create it once:
+The database file keeps its name, `sonic-agent.db`, on the volume `liner-notes_sonic-data` (compose
+prefixes the volume `sonic-data` with the project name, `liner-notes`). The earlier root
+`docker-compose.yml` named its volume after the checkout's directory (`<directory>_sonic-data`),
+so a database from it carries over by itself only from a checkout named `liner-notes`; otherwise
+copy it once, with both stacks stopped:
+
+```bash
+docker run --rm -v <directory>_sonic-data:/from:ro -v liner-notes_sonic-data:/to \
+  node:24-slim cp -a /from/. /to/
+```
+
+Live model calls need the spend log, which is never created by itself; create it once:
 
 ```bash
 docker compose -f deploy/compose.prod.yml exec api node -e "require('fs').closeSync(require('fs').openSync('/app/spend/llm-spend.jsonl', 'wx'))"
@@ -215,25 +233,36 @@ docker compose -f deploy/compose.prod.yml exec api node -e "require('fs').closeS
 (`VITE_TURNSTILE_SITE_KEY` in `deploy/.env`, public); the API takes its secret key
 (`TURNSTILE_SECRET_KEY`) and the site's hostname (`TURNSTILE_EXPECTED_HOSTNAME`). Cloudflare's
 test keys (site key `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`)
-always pass, which is how to try the production stack with a real check.
+always pass, which is how to try the production stack with a real check; leave
+`TURNSTILE_EXPECTED_HOSTNAME` empty with them (Cloudflare reports their checks for
+`example.com`).
 
-**Without Cloudflare.** `deploy/compose.dev.yml` runs the same images with the API in
-development: built without a site key, the page sends the development bypass, which that API
-accepts, and only recorded runs are served by default. `deploy/check-stack.sh` checks a running
-stack through Caddy, as CI does (`.github/workflows/docker.yml`):
+**Without Cloudflare.** `deploy/compose.dev.yml` runs the same images as a project of its own,
+`liner-notes-dev`, with its own containers, volumes and database, on http://127.0.0.1:3182
+(`DEV_PROXY_PORT`): starting it never touches the `liner-notes` project (do not rename it with
+`-p`). Its API runs in development: built without a site key, the page sends the development
+bypass, which that API accepts, and only recorded runs are served by default
+(`DEV_REPLAY_MODE`). `deploy/check-stack.sh` checks a running stack through Caddy, as CI does
+(`.github/workflows/docker.yml`); its address checks need `LOG_IP_SALT`, set here for the run:
 
 ```bash
-docker compose -f deploy/compose.prod.yml up -d --build && deploy/check-stack.sh
-SSE_HOLD_MS=130000 docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d api \
-  && deploy/check-stack.sh long-stream   # a stream held 130 s through Caddy
+LOG_IP_SALT=check-stack docker compose -f deploy/compose.prod.yml up -d --build
+deploy/check-stack.sh
+LOG_IP_SALT=check-stack SSE_HOLD_MS=130000 \
+  docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d
+deploy/check-stack.sh long-stream   # a cut stream, then a stream held 130 s, through Caddy
+docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml down -v
 ```
 
 **Client addresses.** Caddy takes the visitor's address from `CF-Connecting-IP` only when the
 request comes from one of Cloudflare's ranges, listed in `apps/web/Caddyfile` (`trusted_proxies`);
 from any other peer the header is ignored. It sends the API that one address in
 `X-Forwarded-For`, which the API trusts from one proxy (`TRUST_PROXY=1`) for its rate limits and
-its hashed log addresses. Caddy's own access log leaves out the run token, the typed query and the
-request headers, and shortens addresses to their network.
+its hashed log addresses. Caddy's logs leave out what a visitor looked up and the run token: the
+access log writes the query's `runToken` nowhere and `query`, `q`, `trackId`, `selectedTrackId`,
+`trackTitle` and `trackArtist` as `REDACTED` (the thread id stays), the track in `/t/<id>` and
+`/api/runs/by-track/<id>` as `…`; Caddy's other lines (such as a stream the visitor left) keep only
+the path. No request headers are written, and addresses are shortened to their network.
 
 **Cloudflare's addresses.** Cloudflare publishes its ranges at https://www.cloudflare.com/ips-v4
 and https://www.cloudflare.com/ips-v6. Before each deploy, compare them with the list in

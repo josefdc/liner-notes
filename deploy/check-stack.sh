@@ -5,24 +5,37 @@
 #   deploy/check-stack.sh              the production stack: every service healthy, no port but
 #                                      Caddy's, the API refusing a stream without a run token,
 #                                      the security headers and cache rules, /api/* only going to
-#                                      the API, forged client addresses ignored, the run token
-#                                      kept out of Caddy's log
-#   deploy/check-stack.sh long-stream  a replayed stream held 130 s (SSE_HOLD_MS=130000) passes
-#                                      through Caddy and ends with "done". Needs the API in
-#                                      development (deploy/compose.dev.yml), which issues run
-#                                      tokens without Turnstile.
+#                                      the API, forged client addresses ignored and Cloudflare's
+#                                      used from a trusted peer, what a visitor looked up and the
+#                                      run token kept out of Caddy's access log
+#   deploy/check-stack.sh long-stream  the development stack (deploy/compose.dev.yml, whose API
+#                                      issues run tokens without Turnstile and holds replayed
+#                                      streams for SSE_HOLD_MS=130000): a stream the visitor
+#                                      leaves leaves no token, query or full address in any of
+#                                      Caddy's log lines, and a stream held 130 s passes through
+#                                      Caddy and ends with "done"
 #
-# COMPOSE is the compose command of the stack (default: docker compose -f deploy/compose.prod.yml)
-# and PROXY_PORT the port Caddy is published on (default 3180).
+# COMPOSE is the compose command of the stack, default "docker compose -f deploy/compose.prod.yml"
+# (long-stream: with "-f deploy/compose.dev.yml" added). The API must have LOG_IP_SALT set, so
+# the address hashes in its log can be checked. The address checks start a second Caddy from the
+# web image for a few seconds (compose run, no published port); the running services are not
+# restarted.
 set -euo pipefail
 
-read -r -a compose <<<"${COMPOSE:-docker compose -f deploy/compose.prod.yml}"
-base="http://127.0.0.1:${PROXY_PORT:-3180}"
+mode=${1:-production}
+default_compose="docker compose -f deploy/compose.prod.yml"
+[ "$mode" = long-stream ] && default_compose="$default_compose -f deploy/compose.dev.yml"
+read -r -a compose <<<"${COMPOSE:-$default_compose}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
 }
+
+# Where Caddy's port 80 is published.
+published=$("${compose[@]}" port web 80 || true)
+[ -n "$published" ] && [ "${published##*:}" != 0 ] || fail "web publishes no port (is the stack up?)"
+base="http://$published"
 
 # The response headers of a GET, lower-cased names.
 headers() {
@@ -34,16 +47,63 @@ header() {
   sed -n "s/^$1: //p"
 }
 
-# The address hash of the last API request line for `path` (the API logs no query string).
-last_hash() {
-  "${compose[@]}" logs --no-color --no-log-prefix --since 60s api |
-    grep "\"path\":\"$1\"" | tail -1 | sed -n 's/.*"ipHash":"\([0-9a-f]*\)".*/\1/p' || true
+# The API's request lines for /api/replays (the API logs the path, never the query).
+replay_lines() {
+  local logs
+  logs=$("${compose[@]}" logs --no-color --no-log-prefix api)
+  grep '"path":"/api/replays"' <<<"$logs" || true
 }
 
-if [ "${1:-}" = "long-stream" ]; then
+# Runs `request` (a command that asks for /api/replays once), waits for its line in the API's
+# log, and prints the address hash on it.
+hash_of() {
+  local before after
+  before=$(replay_lines | wc -l)
+  "$@" >/dev/null
+  for _ in $(seq 1 50); do
+    after=$(replay_lines | wc -l)
+    [ "$after" -gt "$before" ] && break
+    sleep 0.2
+  done
+  [ "$after" -gt "$before" ] || fail "no API log line for the request"
+  replay_lines | tail -1 | sed -n 's/.*"ipHash":"\([0-9a-f]*\)".*/\1/p'
+}
+
+# The hash the API's log gives an address, with the API's own LOG_IP_SALT.
+expected_hash() {
+  "${compose[@]}" exec -T api node -e \
+    'const salt = process.env.LOG_IP_SALT; if (!salt) process.exit(2); console.log(require("node:crypto").createHmac("sha256", salt).update(process.argv[1]).digest("hex").slice(0, 16))' \
+    "$1" || fail "the API has no LOG_IP_SALT; set it for these checks"
+}
+
+# A run token from the development API (POST /api/runs with the development bypass).
+mint() {
+  local token
   token=$(curl -sS -X POST -H 'content-type: application/json' \
     -d '{"turnstileToken":"dev-bypass"}' "$base/api/runs" | jq -r .runToken)
   [ -n "$token" ] && [ "$token" != null ] || fail "POST /api/runs gave no run token"
+  echo "$token"
+}
+
+if [ "$mode" = long-stream ]; then
+  # A visitor leaves a held stream: Caddy logs the cut response (a warning with the request), and
+  # that line must hold no more than the access line does.
+  token=$(mint)
+  curl -sN --max-time 4 "$base/api/analyze/stream?query=One%20More%20Time%20Daft%20Punk&runToken=$token" \
+    >/dev/null || true
+  sleep 2
+  web=$("${compose[@]}" ps -q web)
+  gateway=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' "$web")
+  logs=$("${compose[@]}" logs --no-color --no-log-prefix web)
+  grep -q 'incomplete response' <<<"$logs" || fail "Caddy logged no cut stream (is SSE_HOLD_MS set?)"
+  for secret in "$token" "Daft" "\"$gateway\""; do
+    if grep -qF -- "$secret" <<<"$logs"; then
+      fail "Caddy's log holds ${secret:0:12}… after a stream was cut"
+    fi
+  done
+  echo "ok: a cut stream leaves no run token, query or full address in Caddy's log"
+
+  token=$(mint)
   out=$(mktemp)
   trap 'rm -f "$out"' EXIT
   start=$(date +%s)
@@ -98,12 +158,18 @@ for path in / "$asset" /api/health /assets/missing.js; do
 done
 echo "ok: security headers on /, $asset, /api/health and a 404"
 
-# Cache rules: hashed assets for a year, the page revalidated, an error never cached.
+# Cache rules: hashed assets for a year, public/ files for a day, the page revalidated, and a
+# missing static file a 404 that is never cached (never the app's page).
 [ "$(headers "$base$asset" | header cache-control)" = "public, max-age=31536000, immutable" ] ||
   fail "$asset is not cached as immutable"
+[ "$(headers "$base/fonts/OFL.txt" | header cache-control)" = "public, max-age=86400" ] ||
+  fail "/fonts/OFL.txt is not cached for a day"
 [ "$(headers "$base/" | header cache-control)" = no-cache ] || fail "/ is not revalidated"
-[ "$(headers "$base/assets/missing.js" | header cache-control)" = no-store ] ||
-  fail "a missing asset may be cached"
+for path in /assets/missing.js /fonts/missing.woff2; do
+  got=$(headers "$base$path")
+  [ "$(head -1 <<<"$got" | cut -d' ' -f2)" = 404 ] || fail "$path: $(head -1 <<<"$got")"
+  [ "$(header cache-control <<<"$got")" = no-store ] || fail "$path: a 404 that may be cached"
+done
 echo "ok: cache rules"
 
 # Only /api/... goes to the API: /apifoo and /api are the app's page.
@@ -114,31 +180,53 @@ for path in /apifoo /api; do
 done
 echo "ok: /apifoo and /api are not proxied"
 
-# Forged client addresses are ignored: from a peer outside Cloudflare's ranges, CF-Connecting-IP
-# (and any X-Forwarded-For) leaves the address the API sees, and logs as a hash, unchanged.
-curl -s -o /dev/null "$base/api/replays"
-plain=$(last_hash /api/replays)
-curl -s -o /dev/null -H 'CF-Connecting-IP: 203.0.113.7' "$base/api/replays"
-cf=$(last_hash /api/replays)
-curl -s -o /dev/null -H 'X-Forwarded-For: 198.51.100.9' "$base/api/replays"
-xff=$(last_hash /api/replays)
-forged=$("${compose[@]}" exec -T api node -e \
-  'const salt = process.env.LOG_IP_SALT; if (!salt) process.exit(2); console.log(require("node:crypto").createHmac("sha256", salt).update("203.0.113.7").digest("hex").slice(0, 16))') ||
-  fail "set LOG_IP_SALT for this check"
-echo "address hashes: plain $plain, forged CF-Connecting-IP $cf, forged X-Forwarded-For $xff (203.0.113.7 would be $forged)"
+# Client addresses. From a peer outside Cloudflare's ranges (this machine, through the published
+# port), CF-Connecting-IP and X-Forwarded-For leave the address the API sees, and logs as a hash,
+# unchanged.
+plain=$(hash_of curl -s "$base/api/replays")
+cf=$(hash_of curl -s -H 'CF-Connecting-IP: 203.0.113.7' "$base/api/replays")
+xff=$(hash_of curl -s -H 'X-Forwarded-For: 198.51.100.9' "$base/api/replays")
+forged=$(expected_hash 203.0.113.7)
+echo "untrusted peer: plain $plain, CF-Connecting-IP $cf, X-Forwarded-For $xff (203.0.113.7: $forged)"
 [ -n "$plain" ] && [ "$plain" = "$cf" ] && [ "$plain" = "$xff" ] && [ "$cf" != "$forged" ] ||
   fail "a forged client address reached the API"
 echo "ok: forged client addresses ignored"
 
-# The run token never reaches Caddy's log.
-curl -s -o /dev/null "$base/api/analyze/stream?query=x&runToken=check-stack-token-value"
+# From a trusted peer (a second Caddy from the web image that trusts its own loopback, asked
+# from inside its container), CF-Connecting-IP is the address the API sees; X-Forwarded-For
+# still is not.
+probe=$("${compose[@]}" run -d --rm --no-deps -e SITE_ADDRESS=:80 -e TRUSTED_PROXIES=127.0.0.1/32 web)
+trap 'docker rm -f "$probe" >/dev/null 2>&1 || true' EXIT
+for _ in $(seq 1 25); do
+  docker exec "$probe" wget -q -O /dev/null http://127.0.0.1:2020/health 2>/dev/null && break
+  sleep 0.2
+done
+via_probe() {
+  docker exec "$probe" wget -q -O /dev/null "$@" http://127.0.0.1:80/api/replays
+}
+trusted=$(hash_of via_probe --header 'CF-Connecting-IP: 203.0.113.7')
+trusted_xff=$(hash_of via_probe --header 'X-Forwarded-For: 198.51.100.9')
+loopback=$(expected_hash 127.0.0.1)
+docker rm -f "$probe" >/dev/null
+echo "trusted peer: CF-Connecting-IP $trusted (203.0.113.7: $forged), X-Forwarded-For $trusted_xff (the peer 127.0.0.1: $loopback)"
+[ "$trusted" = "$forged" ] || fail "CF-Connecting-IP from a trusted peer was not used"
+[ "$trusted_xff" = "$loopback" ] || fail "X-Forwarded-For from a trusted peer was used"
+echo "ok: CF-Connecting-IP used from a trusted peer only"
+
+# What a visitor looked up, and the run token, stay out of Caddy's access log.
+curl -s -o /dev/null "$base/api/analyze/stream?query=check-stack-typed&runToken=check-stack-token&threadId=check-stack-thread"
+curl -s -o /dev/null "$base/t/check-stack-track?q=check-stack-typed"
+curl -s -o /dev/null "$base/api/factoids?trackTitle=check-stack-typed&trackArtist=check-stack-typed&trackId=check-stack-track"
 sleep 1
 access=$("${compose[@]}" logs --no-color --no-log-prefix web)
-if grep -q check-stack-token-value <<<"$access"; then
-  fail "the run token is in Caddy's log"
-fi
-grep -q '"uri":"/api/analyze/stream?query=REDACTED"' <<<"$access" ||
-  fail "no access log line for the stream request"
-echo "ok: the run token is kept out of Caddy's log"
+for secret in check-stack-token check-stack-typed check-stack-track; do
+  if grep -q "$secret" <<<"$access"; then
+    fail "Caddy's log holds $secret"
+  fi
+done
+grep -q '"uri":"/api/analyze/stream?query=REDACTED&threadId=check-stack-thread"' <<<"$access" ||
+  fail "no access line for the stream request (or the thread id is gone)"
+grep -q '"uri":"/t/…"' <<<"$access" || fail "no access line for the /t/ page"
+echo "ok: the run token and what a visitor looked up are kept out of Caddy's log"
 
 echo "all checks passed"

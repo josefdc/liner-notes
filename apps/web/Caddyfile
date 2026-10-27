@@ -3,15 +3,34 @@
 #
 # Settings from the environment (deploy/compose.prod.yml passes the first two):
 #   SITE_ADDRESS     the site's address. Default ":80", plain HTTP on port 80 (local use). A
-#                    hostname such as "liner-notes.example" makes Caddy serve HTTPS on 443 with
-#                    a certificate it obtains, and redirect port 80 to it.
+#                    hostname such as "liner-notes.example" makes Caddy serve HTTPS on 443 and
+#                    redirect port 80 to it (README, "Certificates", for the certificate).
 #   TRUSTED_PROXIES  more proxy ranges to trust besides Cloudflare's (default: none).
 #   API_UPSTREAM     the API's address on the compose network (default api:3001).
 {
 	# The configuration is baked into the image: nothing needs Caddy's admin endpoint.
 	admin off
 
+	# Caddy's own log lines (warnings and errors, such as a stream the visitor left before the
+	# API ended it) carry the request too: only its path is kept, with the track in /t/<id> and
+	# /api/runs/by-track/<id> left out, and no query, no headers, and addresses shortened to
+	# their network. Each request's access line is written by the site's own loggers below.
+	log default {
+		output stderr
+		format filter {
+			request>uri regexp "(?i)^([^?]*?/(?:t|by-track)/).*$|\?.*$" "${1}…"
+			request>headers delete
+			request>remote_ip ip_mask 16 32
+			request>client_ip ip_mask 16 32
+		}
+	}
+
 	servers {
+		# HTTP/1.1 and HTTP/2 only. Behind Cloudflare the visitor's HTTP/3 ends at Cloudflare's
+		# edge, which reaches this server over TCP, so HTTP/3 here (UDP 443, which compose does
+		# not publish) would only advertise a port nothing answers on.
+		protocols h1 h2
+
 		# The visitor's address (client_ip, which the API's rate limits and logs key on) comes
 		# from CF-Connecting-IP only when the request arrives from one of these ranges; from any
 		# other peer the header is ignored and the peer's own address is used.
@@ -47,22 +66,43 @@ http://:2020 {
 }
 
 {$SITE_ADDRESS::80} {
-	# Access log, one JSON line per request on stdout. The run token is a credential and the
-	# query is what a visitor typed, so neither is written; addresses are shortened to their
-	# network, and request headers (cookies, CF-Connecting-IP) are left out.
-	log {
+	# Access log, one JSON line per request on stdout. Nothing that names what a visitor looked
+	# up or holds a credential is written: the run token is left out; the typed query and the
+	# track's id, title and artist read REDACTED (the thread id stays, to follow one run); the
+	# track in /t/<id> and /api/runs/by-track/<id> reads "…" (their own logger; every other
+	# request goes to "access", defined last, which is the one Caddy falls back to);
+	# addresses are shortened to their network, and request headers (cookies, CF-Connecting-IP)
+	# are left out.
+	log tracks {
+		output stdout
+		format filter {
+			request>uri regexp "(?i)^([^?]*?/(?:t|by-track)/).*$|\?.*$" "${1}…"
+			request>headers delete
+			request>remote_ip ip_mask 16 32
+			request>client_ip ip_mask 16 32
+		}
+	}
+	log access {
 		output stdout
 		format filter {
 			request>uri query {
 				delete runToken
 				replace query REDACTED
 				replace q REDACTED
+				replace trackId REDACTED
+				replace selectedTrackId REDACTED
+				replace trackTitle REDACTED
+				replace trackArtist REDACTED
 			}
 			request>headers delete
 			request>remote_ip ip_mask 16 32
 			request>client_ip ip_mask 16 32
 		}
 	}
+	@track path /t/* /api/runs/by-track/*
+	log_name @track tracks
+	@untracked not path /t/* /api/runs/by-track/*
+	log_name @untracked access
 
 	import security_headers
 
@@ -86,23 +126,24 @@ http://:2020 {
 		file_server
 	}
 
-	# Everything else is the app: a file from public/ when one exists, else index.html, which
-	# routes in the browser.
-	handle {
+	# Files copied from public/ keep their names from one release to the next: cached for a
+	# day, then revalidated. A missing one is a 404 too. OFL.txt is UTF-8 (IBM's notice has a ©).
+	@public path /fonts/* /favicon.svg
+	handle @public {
 		root * /srv
-		encode zstd gzip
-
-		# Files copied from public/ keep their names from one release to the next: cached for a
-		# day, then revalidated. OFL.txt is UTF-8 (IBM's notice has a ©).
-		@fixed path /fonts/* /favicon.svg
-		header @fixed Cache-Control "public, max-age=86400"
+		header Cache-Control "public, max-age=86400"
 		@notice path /fonts/OFL.txt
 		header @notice Content-Type "text/plain; charset=utf-8"
+		encode zstd gzip
+		file_server
+	}
 
-		# index.html, under any path: revalidated every time, so a release shows at once.
-		@page not path /fonts/* /favicon.svg
-		header @page Cache-Control "no-cache"
-
+	# Everything else is the app: index.html, which routes in the browser, revalidated every time
+	# so a release shows at once.
+	handle {
+		root * /srv
+		header Cache-Control "no-cache"
+		encode zstd gzip
 		try_files {path} /index.html
 		file_server
 	}

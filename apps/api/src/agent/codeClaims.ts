@@ -62,7 +62,13 @@ import {
   LINK_CLAIM_ABOUT,
   type LinkType,
 } from "@liner-notes/contract";
-import { normalizeArtist, normalizeTitle, quoted, titlesMatch } from "../sources/records.js";
+import {
+  DISAMBIGUATION_NUMBER,
+  normalizeArtist,
+  normalizeTitle,
+  quoted,
+  titlesMatch,
+} from "../sources/records.js";
 import type { CreditRelation, PrimaryRelation, RecordingRelation } from "./research/relations.js";
 import type { Genealogy, GenealogyLink, GenealogyNode } from "./schema.js";
 import type { ComposedDraft } from "./state.js";
@@ -148,11 +154,7 @@ function partialCoverText(relation: RecordingRelation, item: Evidence): string |
 
 /** A Discogs name without its disambiguation number or variation mark: "Nirvana (2)*". */
 const creditedName = (name: string) =>
-  name
-    .trim()
-    .replace(/\*+$/, "")
-    .replace(/\s+\(\d+\)$/, "")
-    .trim();
+  name.trim().replace(/\*+$/, "").replace(DISAMBIGUATION_NUMBER, "").trim();
 
 /** A credit claim's text: the excerpt, naming the artist without Discogs' disambiguation. */
 function creditText(credit: CreditRelation, item: Evidence): string {
@@ -170,8 +172,12 @@ function creditText(credit: CreditRelation, item: Evidence): string {
 // Artist credits
 // =============================================================================
 
-/** Joins between the artists of one credit; a word inside a name ("X Ambassadors") never is. */
-const SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
+/**
+ * Joins between the artists of one credit; a word inside a name ("X Ambassadors") never is.
+ * Whitespace before a join is read from the start of its run only, so a long run of spaces is
+ * read once (the same splits as with `\s*` in front).
+ */
+export const SEPARATOR = /(?:(?<!\s)\s+)?(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
 
 /** A credit's artists, normalised, in credit order, each a whole name. */
 const creditArtists = (credit: string) =>

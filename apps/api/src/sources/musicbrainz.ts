@@ -345,30 +345,99 @@ export function normalizeName(text: string): string {
   );
 }
 
+const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+/** The characters `.` does not match. */
+const isLineBreak = (char: string | undefined) =>
+  char === "\n" || char === "\r" || char === "\u2028" || char === "\u2029";
+
+/** The index of the first of `chars` in `text` at or after `from`, or -1. */
+function indexOfAny(text: string, chars: string, from: number): number {
+  for (let i = from; i < text.length; i++) if (chars.includes(text.charAt(i))) return i;
+  return -1;
+}
+
+/**
+ * Replaces each bracketed note that opens with `opening` (a sticky expression, after any
+ * whitespace), with the whitespace before it: what /\s*[([]\s*OPENING[^)\]]*[)\]]/gi replaced,
+ * in linear time. A note ends at the first ")" or "]" after its bracket; `replace` gets the whole
+ * note and its text after `opening`.
+ */
+function replaceNotes(
+  text: string,
+  opening: RegExp,
+  replace: (note: string, rest: string) => string,
+): string {
+  let out = "";
+  let kept = 0;
+  let close = -1;
+  for (let open = indexOfAny(text, "([", 0); open !== -1; open = indexOfAny(text, "([", open + 1)) {
+    if (close < open) close = indexOfAny(text, ")]", open + 1);
+    if (close === -1) break;
+    let at = open + 1;
+    while (isSpace(text[at])) at++;
+    opening.lastIndex = at;
+    const word = opening.exec(text);
+    if (!word) continue;
+    let start = open;
+    while (start > kept && isSpace(text[start - 1])) start--;
+    out += text.slice(kept, start);
+    out += replace(text.slice(start, close + 1), text.slice(at + word[0].length, close));
+    kept = close + 1;
+    open = close;
+  }
+  return out + text.slice(kept);
+}
+
+/**
+ * The text before the first match of `start` (a global expression that follows whitespace) and
+ * the whitespace before it, when nothing after the match crosses a line break and `drop`
+ * accepts what follows it; else the text unchanged. What /\s+START(.*)$/i replaced, in linear
+ * time: that expression read to the end of the text again from every match.
+ */
+function withoutTail(text: string, start: RegExp, drop: (rest: string) => boolean): string {
+  let lastBreak = -1;
+  for (let i = 0; i < text.length; i++) if (isLineBreak(text[i])) lastBreak = i;
+  start.lastIndex = 0;
+  for (let match = start.exec(text); match; match = start.exec(text)) {
+    const rest = match.index + match[0].length;
+    if (rest <= lastBreak) continue;
+    let from = match.index;
+    while (from > 0 && isSpace(text[from - 1])) from--;
+    return drop(text.slice(rest)) ? text.slice(0, from) : text;
+  }
+  return text;
+}
+
+/** A featured-artist word and the whitespace after it, at one position (set lastIndex). */
+const FEATURING_AT = /(?:feat\.?|ft\.?|featuring)\s/iy;
+const WITH_AT = /with\s/iy;
+/** " - feat. " and " feat. ", each where a featured-artist tail starts. */
+const DASH_FEATURING = /(?<=\s)-\s+(?:feat\.?|ft\.?|featuring)\s/gi;
+const FEATURING = /(?<=\s)(?:feat\.?|ft\.?|featuring)\s/gi;
+/**
+ * The joins between credited names. Whitespace before a join is read from the start of its run
+ * only, so a long run of spaces is read once: the same splits as with `\s*` in front.
+ */
+export const NAME_JOIN = /(?:(?<!\s)\s+)?(?:,|&|\band\b|\/)\s*/i;
+
 /**
  * A title without a featured-artist note: "Song (feat. X)", "Song [ft. X]", "Song - feat. X"
  * always; "Song (with X)" and "Song feat. X" only when X is among `artists`, so "Stay (With
- * Me)" and "Welcome to Ft. Lauderdale" keep their titles.
+ * Me)" and "Welcome to Ft. Lauderdale" keep their titles. Titles come from upstream catalogues,
+ * so each step runs in linear time.
  */
 export function withoutFeatured(title: string, artists: readonly string[] = []): string {
   const credited = new Set(artists.map(normalizeName).filter(Boolean));
   const namesCredited = (text: string) => {
-    const parts = text
-      .split(/\s*(?:,|&|\band\b|\/)\s*/i)
-      .map(normalizeName)
-      .filter(Boolean);
+    const parts = text.split(NAME_JOIN).map(normalizeName).filter(Boolean);
     return parts.length > 0 && parts.every((p) => credited.has(p));
   };
-  return title
-    .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring)\s[^)\]]*[)\]]/gi, "")
-    .replace(/\s*[([]\s*with\s([^)\]]*)[)\]]/gi, (all, who: string) =>
-      namesCredited(who) ? "" : all,
-    )
-    .replace(/\s+-\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, "")
-    .replace(/\s+(?:feat\.?|ft\.?|featuring)\s(.*)$/i, (all, who: string) =>
-      namesCredited(who) ? "" : all,
-    )
-    .trim();
+  const featured = replaceNotes(title, FEATURING_AT, () => "");
+  const withNotes = replaceNotes(featured, WITH_AT, (note, who) =>
+    namesCredited(who) ? "" : note,
+  );
+  const dashed = withoutTail(withNotes, DASH_FEATURING, () => true);
+  return withoutTail(dashed, FEATURING, namesCredited).trim();
 }
 
 /**
@@ -378,8 +447,16 @@ export function withoutFeatured(title: string, artists: readonly string[] = []):
  * "Acoustic", "Extended Mix", "Demo") is not one of them and stays in the title.
  */
 const RELEASE_LABEL = String.raw`(?:(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?|radio\s+edit|single\s+(?:version|edit)|album\s+version|(?:mono|stereo)(?:\s+version)?)`;
-const RELEASE_LABEL_DASHED = new RegExp(String.raw`\s+-\s+${RELEASE_LABEL}\s*$`, "i");
-const RELEASE_LABEL_BRACKETED = new RegExp(String.raw`\s*[([]\s*${RELEASE_LABEL}\s*[)\]]`, "gi");
+/**
+ * A release label after " - " or in brackets, with the whitespace before it. That whitespace is
+ * read from the start of its run only, so a long run of it is read once: the same matches as
+ * with `\s+` (dashed) or `\s*` (bracketed) in front.
+ */
+export const RELEASE_LABEL_DASHED = new RegExp(String.raw`(?<!\s)\s+-\s+${RELEASE_LABEL}\s*$`, "i");
+export const RELEASE_LABEL_BRACKETED = new RegExp(
+  String.raw`(?:(?<!\s)\s+)?[([]\s*${RELEASE_LABEL}\s*[)\]]`,
+  "gi",
+);
 
 /**
  * A Spotify track title as MusicBrainz files the recording: without a featured-artist note (see
@@ -505,15 +582,68 @@ function onOriginalRelease(recording: MBRecording): boolean {
   });
 }
 
-/** An album title without an edition suffix: "X (Remastered 2009)", "X - Deluxe Edition". */
-function withoutEdition(album: string): string {
-  return album
-    .replace(
-      /\s*[([][^)\]]*(?:remaster|deluxe|edition|expanded|anniversary|version)[^)\]]*[)\]]/gi,
-      "",
-    )
-    .replace(/\s+-\s+[^-]*(?:remaster|deluxe|edition|expanded|anniversary|version).*$/i, "")
-    .trim();
+const EDITION_WORD = /remaster|deluxe|edition|expanded|anniversary|version/i;
+/** EDITION_WORD at one position (set lastIndex). */
+const EDITION_WORD_AT = /remaster|deluxe|edition|expanded|anniversary|version/iy;
+
+/**
+ * Without each bracketed part that names an edition, and the whitespace before it: what
+ * /\s*[([][^)\]]*(?:remaster|deluxe|edition|expanded|anniversary|version)[^)\]]*[)\]]/gi
+ * removes, in one pass. A part runs from "(" or "[" to the first ")" or "]" after it, so an
+ * opening bracket inside a part without an edition word cannot start one either.
+ */
+function withoutEditionParts(album: string): string {
+  let out = "";
+  let kept = 0;
+  let from = 0;
+  for (;;) {
+    const open = indexOfAny(album, "([", from);
+    const close = open === -1 ? -1 : indexOfAny(album, ")]", open + 1);
+    if (close === -1) return out + album.slice(kept);
+    if (EDITION_WORD.test(album.slice(open + 1, close))) {
+      let start = open;
+      while (start > kept && isSpace(album[start - 1])) start--;
+      out += album.slice(kept, start);
+      kept = close + 1;
+    }
+    from = close + 1;
+  }
+}
+
+/**
+ * Without an edition suffix after " - ": what
+ * /\s+-\s+[^-]*(?:remaster|deluxe|edition|expanded|anniversary|version).*$/i removes, in one
+ * pass. The suffix starts at the first dash with whitespace on both sides that is followed,
+ * before the next dash, by an edition word with no line break after it.
+ */
+function withoutEditionSuffix(album: string): string {
+  let lastBreak = -1;
+  for (let i = 0; i < album.length; i++) if (isLineBreak(album[i])) lastBreak = i;
+  for (let dash = album.indexOf("-"); dash !== -1; ) {
+    const next = album.indexOf("-", dash + 1);
+    if (isSpace(album[dash - 1]) && isSpace(album[dash + 1])) {
+      const end = next === -1 ? album.length : next;
+      for (let at = dash + 2; at < end; at++) {
+        EDITION_WORD_AT.lastIndex = at;
+        const word = EDITION_WORD_AT.exec(album);
+        if (word && at + word[0].length > lastBreak) {
+          let start = dash - 1;
+          while (start > 0 && isSpace(album[start - 1])) start--;
+          return album.slice(0, start);
+        }
+      }
+    }
+    dash = next;
+  }
+  return album;
+}
+
+/**
+ * An album title without an edition suffix: "X (Remastered 2009)", "X - Deluxe Edition". Album
+ * titles come from upstream catalogues, so both steps run in linear time.
+ */
+export function withoutEdition(album: string): string {
+  return withoutEditionSuffix(withoutEditionParts(album)).trim();
 }
 
 type RecordingSearch =

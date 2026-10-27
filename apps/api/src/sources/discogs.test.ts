@@ -16,6 +16,7 @@ vi.hoisted(() => {
 import rickRoll from "./fixtures/discogs-release-249504.json" with { type: "json" };
 import {
   creditCovers,
+  creditRange,
   type DiscogsRelease,
   discogsReleaseId,
   discogsTrackCredits,
@@ -26,6 +27,7 @@ import {
 import { evidenceScope, type TrackRef } from "./records.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
+import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
 
 const TOKEN = "discogs-test-token-0123456789";
 const now = () => new Date("2026-10-20T12:00:00.000Z");
@@ -475,5 +477,102 @@ describe("matched counts and evidence scope", () => {
     const persuader = { ...TRACK, artists: ["The Persuader"] };
     expect(findTrack(named("Persuader, The*"), persuader).ok).toBe(true);
     expect(findTrack(named("Rick Astley (2)*"), TRACK).ok).toBe(true);
+  });
+});
+
+describe("creditRange", { timeout: 30_000 }, () => {
+  // The expression before #194: polynomial time on runs of whitespace and "to".
+  const POLYNOMIAL = /^\s*(.+?)\s+to\s+(.+?)\s*$/i;
+  const old = (part: string) => {
+    const range = part.match(POLYNOMIAL);
+    return range ? [range[1], range[2]] : null;
+  };
+
+  it("reads exactly the ranges the earlier expression read", () => {
+    const realistic = [
+      "A1 to A3",
+      " B1 to B4 ",
+      "1 to 3",
+      "CD1-1 to CD1-12",
+      "A1 TO A3",
+      "A1 To B2",
+      "A1 to B2\u2028x",
+      "A1 to B2\u2029x",
+      "A1 to B2\rx",
+      "A1\u2028to A3",
+      "A\u20291 to A3",
+      "  \u2028 to A3",
+      "A1 to \u2028",
+      "Side A to Side B",
+      "1-1 to 1-5",
+      "A1to A3",
+      "A1 toA3",
+      "A1 to",
+      "to A3",
+      "A1 to A3 to B1",
+      "A1\tto\tA3",
+      "A1\nto\nA3",
+      "A1\n to A3",
+      "A1 to A3\n",
+      "A\n1 to A3",
+      "A1 to A\n3",
+      "   to A3",
+      " \n to A3",
+      "A1 to    ",
+      "A1 to \n",
+      "A1 to \n\n ",
+      "A1 to x\u2028",
+      "A1\u00a0to\u00a0A3",
+      "",
+      " ",
+    ];
+    const symbols = [" ", "\t", "\n", "\u2028", "\u00a0", "t", "T", "o", "O", "A1"];
+    const parts = [
+      " ",
+      "  ",
+      "\t",
+      "\n",
+      "\r\n",
+      "to",
+      "TO",
+      "To",
+      "t",
+      "o",
+      "A1",
+      "B2",
+      "Side",
+      " to ",
+    ];
+    const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000, 14)];
+
+    expect(disagreements(cases, creditRange, old)).toEqual([]);
+    // Both kinds of answer are exercised.
+    expect(cases.filter((part) => old(part) !== null).length).toBeGreaterThan(1000);
+    expect(cases.filter((part) => old(part) === null).length).toBeGreaterThan(1000);
+  });
+
+  it("answers quickly on a field built to make the earlier expression backtrack", () => {
+    // About 4 s with the earlier expression.
+    const run = "\t".repeat(80);
+    const tracks = `${run}T${run}\nTO\t${run}\t\tTO${run}\nT`;
+    const { ms, result } = timed(() => creditCovers(tracks, "A1", ["A1", "A2"]));
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(false);
+  });
+
+  it("answers quickly on 800 kB of ranges before a line break", () => {
+    // About 20 ms here; seconds for a rewrite that looked for a line break after every "to" again.
+    const tracks = `A1${" to x".repeat(160_000)}\nZ`;
+    const { ms, result } = timed(() => creditCovers(tracks, "A1", ["A1", "A2"]));
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(false);
+  });
+
+  it("reads every whitespace character as the earlier expression did", () => {
+    const parts = Array.from({ length: 0x10000 }, (_, code) => {
+      const char = String.fromCharCode(code);
+      return `A1${char}to${char}A3`;
+    });
+    expect(disagreements(parts, creditRange, old)).toEqual([]);
   });
 });

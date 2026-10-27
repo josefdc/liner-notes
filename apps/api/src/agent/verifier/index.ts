@@ -33,8 +33,9 @@
  *    inferred otherwise. A link's claim states one relation, whole or not at all: only
  *    `supported` sources it (a `partial` one usually means a weaker or another relation). So
  *    does every other claim about a relation between two records (RELATION_ABOUT: a sample or a
- *    cover), such as a fact card, which no link states: a partly supported one reads as
- *    inferred, on this path as on more facts (factoids/service.ts). A code-built claim is
+ *    cover) that no link states: sample fact cards and any claim about a cover. A partly
+ *    supported one reads as inferred, on this path as on more facts (factoids/service.ts). A
+ *    code-built claim is
  *    sourced by construction and gets no verdict; one left citing nothing by the deterministic
  *    step reads as not sourced (inferred), and so does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
@@ -264,9 +265,9 @@ export const LINK_IS_RELATION: Readonly<Record<LinkType, boolean>> = {
 };
 
 /**
- * What a claim states as a relation between two records, whether a link states it or not (a
- * fact card): the subjects LINK_CLAIM_ABOUT gives the claims of the link types that state one
- * (LINK_IS_RELATION). Those claims are stated whole; any other claim is judged as before.
+ * What a claim states as a relation between two records, whether a link states it or not: the
+ * subjects LINK_CLAIM_ABOUT gives the claims of the link types that state one (LINK_IS_RELATION).
+ * Those claims are stated whole; any other claim is judged as before.
  */
 export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
   (Object.keys(LINK_IS_RELATION) as LinkType[])
@@ -277,16 +278,14 @@ export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
 /**
  * The claims with the judge's verdicts and their kinds, and the genealogy with each link's kind
  * from its own claim (see the module comment). A claim a link states is a relation, stated whole;
- * so is one about a subject in `relations` (RELATION_ABOUT unless a caller says otherwise), which
- * no link need state. The verifier node and more facts both rely on that default. Pure.
+ * so is one about a subject in RELATION_ABOUT, which no link need state. Pure.
  */
 export function applyVerdicts(
   checked: Pick<CheckedDraft, "claims" | "genealogy">,
   verdicts: ReadonlyMap<string, { verdict: Claim["verdict"]; reason: string }>,
-  { relations = RELATION_ABOUT }: { relations?: ReadonlySet<ClaimAbout> } = {},
 ): { claims: Claim[]; genealogy: Genealogy } {
   const stated = linkClaimIds(checked.genealogy);
-  const isRelation = (claim: Claim) => stated.has(claim.id) || relations.has(claim.about);
+  const isRelation = (claim: Claim) => stated.has(claim.id) || RELATION_ABOUT.has(claim.about);
   const claims = checked.claims.map((claim): Claim => {
     // A code claim is sourced by construction, while it still cites the item that states it.
     if (claim.origin !== "model") {
@@ -297,7 +296,7 @@ export function applyVerdicts(
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link, and a
-    // partly supported claim about a relation in `relations` is not sourced either.
+    // partly supported claim about a relation in RELATION_ABOUT is not sourced either.
     const supported = verdict === "supported" || (verdict === "partial" && !isRelation(claim));
     return {
       ...claim,
@@ -609,8 +608,8 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
     const calls = judged.call ? [judged.call] : [];
 
-    // 4. Kinds, then 5. masked text. A card about a sample or a cover is stated whole, as a
-    // link's claim is (applyVerdicts' default relations, RELATION_ABOUT).
+    // 4. Kinds, then 5. masked text. Sample fact cards and any claim about a cover are stated
+    // whole, as a link's claim is (applyVerdicts, RELATION_ABOUT).
     const verified = applyVerdicts(
       { claims: checked.claims, genealogy: enriched.genealogy },
       judged.verdicts,

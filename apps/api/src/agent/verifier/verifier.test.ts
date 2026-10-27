@@ -122,6 +122,12 @@ async function verify(
   return { out, llm, writer, result: TrackAnalysis.parse(out.trackData) };
 }
 
+/** The kind and verdict of claim `id` in `claims`. */
+const provenance = (claims: Claim[] | undefined, id: string) => {
+  const claim = claims?.find((each) => each.id === id);
+  return { kind: claim?.kind, verdict: claim?.verdict };
+};
+
 beforeEach(() => {
   store.put.mockReset();
   enrich.during = null;
@@ -294,6 +300,28 @@ describe("kinds after the verifier", () => {
     expect(analysisIssues(result)).toEqual([]);
   });
 
+  // Their subjects are not RELATION_ABOUT's: only the link states these claims as relations.
+  it.each([
+    ["producer", "credit"],
+    ["producer", "production"],
+    ["influence", "connection"],
+    ["influence", "history"],
+  ] as const)(
+    "does not source the %s link of a partly supported %s claim either",
+    async (type, about) => {
+      const claim = modelClaim("rel", { about, evidenceIds: ["ev-track"] });
+      const { result } = await verify(
+        [claim],
+        [linkTo("rel", ["ev-track"], { type })],
+        () => "partial",
+      );
+
+      expect(provenance(result.claims, "rel")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(result.genealogy.links[0].kind).toBe("inferred");
+      expect(analysisIssues(result)).toEqual([]);
+    },
+  );
+
   it("draws a link whose claim the verifier rejects as an inferred influence, with clean link checks", async () => {
     for (const verdict of ["contradicted", "unsupported"] as const) {
       const claim = modelClaim("rel", { about: "sample", evidenceIds: ["ev-track"] });
@@ -352,11 +380,6 @@ describe("a claim about a relation is stated whole, with or without a link", () 
       factoid: { title: `About ${id}`, type, entities: [] },
     });
 
-  const provenance = (claims: Claim[] | undefined, id: string) => {
-    const claim = claims?.find((each) => each.id === id);
-    return { kind: claim?.kind, verdict: claim?.verdict };
-  };
-
   // More facts gives a card the same kind and verdict for each of these (factoids/verified.test).
   it("reads a partly supported sample card as inferred", async () => {
     const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "partial");
@@ -397,7 +420,7 @@ describe("a claim about a relation is stated whole, with or without a link", () 
     expect([...RELATION_ABOUT].sort()).toEqual(["cover", "sample"]);
   });
 
-  it("demotes a partly supported claim by default only when it is about a sample or a cover", () => {
+  it("demotes a partly supported claim no link states only when it is about a sample or a cover", () => {
     // Written out, not derived: whether a claim about each subject states a relation.
     const isRelation: Record<ClaimAbout, boolean> = {
       track: false,
@@ -414,7 +437,6 @@ describe("a claim about a relation is stated whole, with or without a link", () 
     for (const about of ClaimAbout.options) {
       const claim = modelClaim("c", { about, evidenceIds: ["ev-track"] });
       const verdicts = new Map([["c", { verdict: "partial" as const, reason: "" }]]);
-      // No `relations` option: what a caller that names none gets.
       const [judged] = applyVerdicts(draftOf([claim]), verdicts).claims;
       expect(judged.kind, about).toBe(isRelation[about] ? "inferred" : "sourced");
     }

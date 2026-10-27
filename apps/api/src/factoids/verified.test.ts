@@ -253,7 +253,7 @@ describe("a relation from more facts is stated whole, as the analysis states it"
     } as GenealogyLink;
     const checked = checkClaims(draftOf([claim], linked ? [link] : []), PACK, null);
     const verdicts = new Map([["cl-a", { verdict, reason: "The cited excerpt decides it." }]]);
-    // The verifier node's call (agent/verifier/index.ts, step 4): no `relations` option.
+    // The verifier node's call (agent/verifier/index.ts, step 4).
     const [judged] = applyVerdicts(checked, verdicts).claims;
     return { kind: judged.kind, verdict: judged.verdict };
   }

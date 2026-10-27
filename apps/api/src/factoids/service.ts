@@ -27,10 +27,10 @@
  *    claims then go through the verifier's own steps: checkClaims (citations against the pack and
  *    the claim's scope, the numeric check against the measured audio), one judge call on those
  *    that still cite evidence (in focus order), and applyVerdicts. A fact is sourced only when
- *    the judge found its cited excerpts supporting it; never measured. A fact about a relation
- *    (RELATION_ABOUT: a sample or a cover) is stated whole, as the analysis states its own cards
- *    and links' claims: only a supported one is sourced, a partly supported one reads as
- *    inferred. When the judge fails or the budget refuses it, the facts are kept with no
+ *    the judge found its cited excerpts supporting it; never measured. A sample fact (a claim
+ *    about a sample, RELATION_ABOUT) is stated whole, as the analysis states its sample fact
+ *    cards, any claim about a cover and its links' claims: only a supported one is sourced, a
+ *    partly supported one reads as inferred. No fact is about a cover: no card type maps to one. When the judge fails or the budget refuses it, the facts are kept with no
  *    verdict, read as inferred, and say they were not checked.
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
  *    names, the focus and the normalised text, never a count, and it is never one the client or
@@ -576,8 +576,8 @@ export async function writeFactoids(
     if (judged.failure !== null) {
       log.warn(`The facts could not be checked against their sources (${failure(judged.failure)})`);
     }
-    // A fact about a sample or a cover is stated whole, as the analysis's are (applyVerdicts'
-    // default relations, RELATION_ABOUT).
+    // Sample fact cards are stated whole, as the analysis's sample fact cards and any claim about
+    // a cover are (applyVerdicts, RELATION_ABOUT).
     const verified = applyVerdicts({ claims: checked.claims, genealogy: noGraph }, judged.verdicts);
     const sent = new Set(toJudge.map((claim) => claim.id));
     const tooLong = new Set(judged.tooLong);

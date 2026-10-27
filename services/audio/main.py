@@ -90,11 +90,11 @@ for _client_logger in ("httpx", "httpcore"):
 # 2.3.3: so are runs of beats counted through an intro or an ending without a beat
 # (signal_features.beats_on_the_grid); tempo, confidence and sections are unchanged.
 # 2.3.4: the measured grid starts where the band's onsets start, so in the tests one onset (a
-# click, a breath) under a beat of an intro no longer keeps the intro's beats (known limits in
-# signal_features.py), and a run on the grid's spacing but off its phase is left out too. A run
-# off the grid, or whose part from its first onset is off it, is left out as a whole, so a
-# band's sparse first or last beats in such a run are missing with it; tempo, confidence and
-# sections are unchanged.
+# click, a breath) under a beat of an intro of a band with such a start no longer keeps the
+# intro's beats (known limits in signal_features.py), and a run on the grid's spacing but off
+# its phase is left out too. A run off the grid, or whose part from its first onset is off it,
+# is left out as a whole, so a band's sparse or drifting first or last beats in such a run are
+# missing with it; tempo, confidence and sections are unchanged.
 ANALYZER_VERSION = "2.3.4"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2

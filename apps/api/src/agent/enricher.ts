@@ -46,7 +46,7 @@ import { searchTracks, type SpotifyTrackSummary } from "../sources/spotify.js";
 import { type CachedTrackDetails, getCache, type SpotifySearchResult } from "../store/cache.js";
 import { isAbortError } from "./errors.js";
 import type { GenealogyNode } from "./schema.js";
-import { recordingTitleDifference, sameArtistName, words } from "./trackMatch.js";
+import { bracketParts, recordingTitleDifference, sameArtistName, words } from "./trackMatch.js";
 import { logger } from "../logger.js";
 
 const log = logger("Enricher");
@@ -381,10 +381,17 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
   return { lookUp, done: () => budget.clear() };
 }
 
+/**
+ * The joins between the artists of a credit. Whitespace before a join is read from the start of
+ * its run only, so a long run of spaces is read once: the same splits as with `\s*` in front.
+ */
+export const CREDIT_JOIN =
+  /(?:(?<!\s)\s+)?(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i;
+
 /** The artists a credit names: "Queen & David Bowie", "Daft Punk feat. Pharrell Williams". */
 function creditParts(credit: string): string[] {
   return credit
-    .split(/\s*(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i)
+    .split(CREDIT_JOIN)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -403,13 +410,88 @@ function sameCredit(nodeArtist: string, lead: string, credited: readonly string[
   return parts.every((part) => credited.some((name) => sameArtistName(part, name)));
 }
 
+const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+
+/** The index of the first of `chars` in `text` at or after `from`, or -1. */
+function indexOfAny(text: string, chars: string, from: number): number {
+  for (let i = from; i < text.length; i++) if (chars.includes(text.charAt(i))) return i;
+  return -1;
+}
+
+/**
+ * Where the names start after a featured-artist word and the whitespace after it (`word` ends
+ * with one whitespace character, at most `end`), or -1: what `\s+([^…]+)` left to the capture.
+ * The capture starts after the whole run, or is the run's last character when only whitespace
+ * comes before `end`.
+ */
+function namesAfter(text: string, word: { index: number; 0: string }, end: number): number {
+  const space = word.index + word[0].length - 1;
+  let after = space;
+  while (after < end && isSpace(text[after])) after++;
+  if (after < end) return after;
+  return after - space >= 2 ? end - 1 : -1;
+}
+
+/** A featured-artist word in a note and the whitespace after it, at one position. */
+const NOTE_WORD = /(?:feat\.?|ft\.?|featuring|with)\s/iy;
+/** A featured-artist word ending a title and the whitespace after it, at one position. */
+const TAIL_WORD = /(?:feat\.|ft\.|featuring)\s/iy;
+
+/**
+ * The names in each bracketed featured-artist note ("(feat. X)", "[with Y]"): what
+ * /[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+)[)\]]/gi captured, in linear time: a note
+ * ends at the first ")" or "]" after its bracket, found once for every bracket before it.
+ */
+export function featuredNotes(title: string): string[] {
+  const names: string[] = [];
+  let close = -1;
+  for (
+    let open = indexOfAny(title, "([", 0);
+    open !== -1;
+    open = indexOfAny(title, "([", open + 1)
+  ) {
+    if (close < open) close = indexOfAny(title, ")]", open + 1);
+    if (close === -1) break;
+    let at = open + 1;
+    while (isSpace(title[at])) at++;
+    NOTE_WORD.lastIndex = at;
+    const word = NOTE_WORD.exec(title);
+    const from = word ? namesAfter(title, word, close) : -1;
+    if (from === -1) continue;
+    names.push(title.slice(from, close));
+    open = close;
+  }
+  return names;
+}
+
+/**
+ * The names after a featured-artist word that ends a title ("Song feat. X"), when no bracket
+ * follows: what /(?:^|\s)(?:feat\.|ft\.|featuring)\s+([^()[\]]+)$/gi captured, in linear time
+ * (the earlier expression read to the end again from every such word).
+ */
+export function featuredTail(title: string): string | null {
+  const lastBracket = Math.max(
+    title.lastIndexOf("("),
+    title.lastIndexOf(")"),
+    title.lastIndexOf("["),
+    title.lastIndexOf("]"),
+  );
+  for (let at = 0; at < title.length; at++) {
+    if (at > 0 && !isSpace(title[at - 1])) continue;
+    TAIL_WORD.lastIndex = at;
+    const word = TAIL_WORD.exec(title);
+    if (!word) continue;
+    const from = namesAfter(title, word, title.length);
+    if (from !== -1 && from > lastBracket) return title.slice(from);
+  }
+  return null;
+}
+
 /** The artists a title's featured-artist note names: "Stay With Me (feat. Mary J. Blige)". */
 function featuredIn(title: string): string[] {
-  const notes = [
-    ...title.matchAll(/[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+)[)\]]/gi),
-    ...title.matchAll(/(?:^|\s)(?:feat\.|ft\.|featuring)\s+([^()[\]]+)$/gi),
-  ];
-  return notes.flatMap((note) => creditParts(note[1] ?? ""));
+  const tail = featuredTail(title);
+  const notes = [...featuredNotes(title), ...(tail === null ? [] : [tail])];
+  return notes.flatMap((note) => creditParts(note));
 }
 
 /**
@@ -450,11 +532,8 @@ const EDIT_LABEL = /\b(?:radio|single)\s+(?:edit|version|mix)\b|\bstereo\s+mix\b
 
 /** The edit labels (EDIT_LABEL) of a title's bracketed and " - " parts, normalised. */
 function editLabels(title: string): Set<string> {
-  const brackets = [...title.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map((m) => m[1] ?? m[2] ?? "");
-  const dashed = title
-    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
-    .split(/\s[-–—]\s/)
-    .slice(1);
+  const { parts: brackets, rest } = bracketParts(title);
+  const dashed = rest.split(/\s[-–—]\s/).slice(1);
   const labels = [...brackets, ...dashed].flatMap((part) =>
     [...part.matchAll(EDIT_LABEL)].map((m) => m[0].toLowerCase().replace(/\s+/g, " ")),
   );
@@ -561,9 +640,8 @@ function withoutPhrase(text: readonly string[], phrase: readonly string[]): stri
 
 /** A title or album name without its bracketed and " - " parts, lower case. */
 const nameProper = (text: string) =>
-  text
-    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
-    .split(/\s[-–—]\s/)[0]
+  bracketParts(text)
+    .rest.split(/\s[-–—]\s/)[0]
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();

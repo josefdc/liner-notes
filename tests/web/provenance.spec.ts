@@ -156,7 +156,7 @@ test.describe("a result with claims", () => {
     await expect(
       page.locator("#panel-context .group").filter({ hasText: "Studio Intel" }),
     ).toContainText("Model inference");
-    await expect(page.locator("#panel-context h3 + span")).toHaveCount(0);
+    await expect(page.locator("#panel-context h2 + span")).toHaveCount(0);
 
     // A source address that is not http or https is named, never linked.
     const film = claimItem(more, "It was used in a 2012 short film.");

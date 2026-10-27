@@ -3,6 +3,7 @@ import { hoverCard } from "./hover";
 import {
   analyzeAndOpenDashboard,
   animationsSettled,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   useMockApi,
@@ -26,7 +27,7 @@ test("buttons transition colour, glow, lift and press, the focus ring fastest", 
 }) => {
   await useMockApi(page, loadFixture("full-result"));
   await analyzeAndOpenDashboard(page, "Bright Lines");
-  const button = page.getByRole("button", { name: "VIEW FULL ANALYSIS" });
+  const button = page.getByRole("button", { name: "View full analysis" });
   const transition = await button.evaluate((element) => {
     const style = getComputedStyle(element);
     return { property: style.transitionProperty, duration: style.transitionDuration };
@@ -58,7 +59,7 @@ test.describe("the connected-track card", () => {
       x: box.x + box.width / 2,
       y: box.y + box.height - 2,
     }));
-    await expect(card.getByText("CLICK TO ANALYZE", { exact: true })).toBeVisible();
+    await expect(card.getByText("Analyze this track", { exact: true })).toBeVisible();
     // The lift (4 px) must not move the card out from under the pointer: nudge the pointer
     // sideways, as a resting hand does, and check the hover each time.
     const samples: boolean[] = [];
@@ -98,7 +99,7 @@ test("small badges have one height wherever they sit", async ({ page }) => {
   await useMockApi(page, explicitResult());
   await analyzeAndOpenDashboard(page, "Bright Lines");
   const badges = await smallBadges(page);
-  expect(badges.map((badge) => badge.text)).toContain("EXPLICIT");
+  expect(badges.map((badge) => badge.text)).toContain("Explicit");
   // 16 px of chrome text (12 px type), 4 px padding above and below, a 1 px border.
   for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 26 });
 });
@@ -445,17 +446,15 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   // Measured only while the module is held: a pattern that no longer matches the chunk's name
   // fails here instead of measuring whatever else is on screen.
   await expect.poll(() => holding).toBe(true);
-  const skeleton = page.locator("div.animate-progress-shimmer").first().locator("xpath=../../..");
+  const skeleton = page.locator("[data-loading-view]");
   await expect(skeleton).toBeVisible();
   const spacing = await skeleton.evaluate((element) => {
     const style = getComputedStyle(element);
     return { padding: style.padding, gap: style.rowGap };
   });
   release();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
-  const dashboard = page
-    .getByRole("heading", { name: "Command Center" })
-    .locator("xpath=ancestor::header[1]/..");
+  await expect(dashboardHeading(page)).toBeVisible();
+  const dashboard = dashboardHeading(page).locator("xpath=ancestor::section[1]/..");
   const loaded = await dashboard.evaluate((element) => {
     const style = getComputedStyle(element);
     return { left: style.paddingLeft, top: style.paddingTop, gap: style.rowGap };
@@ -598,7 +597,7 @@ const CLAIM_TEXT = [
   "[data-claim-kind] > p",
   "#panel-context section li > p",
   "#panel-context section > p.text-chrome",
-  "#panel-context section > h4",
+  "#panel-context section > h2",
   "#panel-context > p.text-chrome",
   'section[aria-label="Rejected claims"] p',
   'section[aria-label="Rejected claims"] button',
@@ -839,12 +838,12 @@ test("the Dashboard's focus rings reach 3:1 against what is beside them", async 
     await focusRingContrast(page, page.getByRole("button", { name: /^Measured.*: how BPM/ })),
   ]);
   rings.push([
-    "VIEW FULL ANALYSIS",
-    await focusRingContrast(page, page.getByRole("button", { name: "VIEW FULL ANALYSIS" })),
+    "View full analysis",
+    await focusRingContrast(page, page.getByRole("button", { name: "View full analysis" })),
   ]);
   rings.push([
     "the hero's Spotify link",
-    await focusRingContrast(page, page.getByRole("link", { name: "SPOTIFY" })),
+    await focusRingContrast(page, page.getByRole("link", { name: "Spotify" })),
   ]);
   rings.push([
     "a connected track",
@@ -865,8 +864,11 @@ test("the Player's focus rings reach 3:1 against what is beside them", async ({ 
   await analyzeAndOpenDashboard(page, "Track");
   await openPlayer(page);
   rings.push([
-    "DECRYPT MORE",
-    await focusRingContrast(page, page.getByRole("button", { name: /DECRYPT MORE/ })),
+    "Find more facts",
+    await focusRingContrast(
+      page,
+      page.getByRole("button", { name: "Find more facts", exact: true }),
+    ),
   ]);
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });

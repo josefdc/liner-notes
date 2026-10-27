@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentLog, TrackData } from '../types';
 import Dashboard from './Dashboard';
+import TargetScanOverlay from './TargetScanOverlay';
 import { claim, link, node, PACK } from './genealogy/testing';
 import { setReaderImport } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE } from '../styles/placeholder';
@@ -195,8 +196,10 @@ describe('Dashboard connected tracks', () => {
 
   /** The cards, once the link reader has loaded. */
   const cards = async () => {
-    await screen.findAllByText(/LOGIC:/);
-    return screen.getAllByRole('button').filter((button) => button.textContent?.includes('LOGIC:'));
+    await screen.findAllByText(/Relation:/);
+    return screen
+      .getAllByRole('button')
+      .filter((button) => button.textContent?.includes('Relation:'));
   };
   const badges = async () =>
     (await cards()).map((card) => card.querySelector('[data-link-kind]')?.textContent);
@@ -226,10 +229,10 @@ describe('Dashboard connected tracks', () => {
     );
     // Sourced relations first; a track with no link to this one says so.
     expect(await badges()).toEqual([
-      'LOGIC: Sample',
-      'LOGIC: Sample',
-      'LOGIC: Possible influence',
-      'LOGIC: No direct link to this track',
+      'Relation: Sample',
+      'Relation: Sample',
+      'Relation: Possible influence',
+      'Relation: No direct link to this track',
     ]);
     const [older, later, guess, lonely] = await cards();
     expect(older.querySelector('[data-link-relation]')?.textContent).toBe(
@@ -268,7 +271,7 @@ describe('Dashboard connected tracks', () => {
 
   it('labels every relation as inferred when the result has no evidence pack', async () => {
     renderDashboard(connected([sourcedSample('older', 'current')], { withPack: false }));
-    expect((await badges())[0]).toBe('LOGIC: Possible influence');
+    expect((await badges())[0]).toBe('Relation: Possible influence');
     expect((await cards())[0].textContent).toContain(
       'cites ev-mb-1; this result has no evidence pack',
     );
@@ -292,7 +295,7 @@ describe('Dashboard connected tracks', () => {
     const shown = await cards();
     const byTitle = (title: string) => shown.find((card) => card.textContent?.includes(title));
     expect(byTitle('Older Record')?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: Possible influence',
+      'Relation: Possible influence',
     );
     expect(byTitle('Older Record')?.textContent).toContain('no verifier verdict supports it');
     // The rejected link is not used at all, and the track only it related is left out.
@@ -304,7 +307,7 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(connected([sourcedSample('later', 'current')]));
     const later = (await cards()).find((card) => card.textContent?.includes('Later Track'));
     expect(later?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: Related, direction unknown',
+      'Relation: Related, direction unknown',
     );
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) and Quiet Signal (2011) are related (direction unknown)',
@@ -317,14 +320,32 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(track);
     const shown = await cards();
     const later = shown.find((card) => card.textContent?.includes('Later Track'));
-    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('LOGIC: Sample');
+    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('Relation: Sample');
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) samples Older Record - Someone (1984)',
     );
     const lonely = shown.find((card) => card.textContent?.includes('Lonely Node'));
     expect(lonely?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: No link to another track',
+      'Relation: No link to another track',
     );
+  });
+
+  it('says there are no connections to show, not that none were found, when every relation was rejected', () => {
+    renderDashboard({
+      ...missingTrack,
+      modelUnavailable: false,
+      evidence: PACK,
+      claims: [claim('cl-bad', { verdict: 'contradicted' })],
+      genealogy: {
+        nodes: [
+          node('current', 1, 'Quiet Signal - Test Artist (2011)'),
+          node('older', 2, 'Older Record - Someone (1984)'),
+        ],
+        links: [{ ...sourcedSample('older', 'current'), claimId: 'cl-bad' }],
+      },
+    } as unknown as TrackData);
+    expect(screen.getByText('No connections to show.')).toBeTruthy();
+    expect(screen.queryByText('No connected tracks found for this song.')).toBeNull();
   });
 
   it('counts the related tracks it shows, in the singular for one', async () => {
@@ -332,13 +353,13 @@ describe('Dashboard connected tracks', () => {
     one.genealogy.nodes = one.genealogy.nodes.filter((n) => ['current', 'older'].includes(n.id));
     const { unmount } = renderDashboard(one);
     await cards();
-    expect(screen.getByText('1 RELATED TRACK')).toBeTruthy();
+    expect(screen.getByText('1 related track')).toBeTruthy();
     unmount();
 
     // Four related tracks, all shown.
     const four = renderDashboard(connected([]));
     await cards();
-    expect(screen.getByText('4 RELATED TRACKS')).toBeTruthy();
+    expect(screen.getByText('4 related tracks')).toBeTruthy();
     four.unmount();
 
     // Five related, four cards: the count says so.
@@ -346,7 +367,7 @@ describe('Dashboard connected tracks', () => {
     five.genealogy.nodes = [...five.genealogy.nodes, node('fifth', 4, 'Fifth - Someone (2000)')];
     renderDashboard(five);
     expect(await cards()).toHaveLength(4);
-    expect(screen.getByText('4 OF 5 RELATED TRACKS')).toBeTruthy();
+    expect(screen.getByText('4 of 5 related tracks')).toBeTruthy();
   });
 
   it('says when the link reader cannot be loaded, and tries again when asked', async () => {
@@ -356,15 +377,15 @@ describe('Dashboard connected tracks', () => {
     try {
       renderDashboard(connected([sourcedSample('older', 'current')]));
       const alert = await screen.findByRole('alert');
-      expect(alert.textContent).toBe('Connected tracks could not be loaded.TRY AGAIN');
-      expect(screen.queryByText(/LOGIC:/)).toBeNull();
+      expect(alert.textContent).toBe('Connected tracks could not be loaded.Try again');
+      expect(screen.queryByText(/Relation:/)).toBeNull();
       // Not busy for ever: the row says it is done (with nothing).
       expect(document.querySelector('[aria-busy="true"]')).toBeNull();
       fail = false;
       await act(async () => {
-        fireEvent.click(within(alert).getByRole('button', { name: 'TRY AGAIN' }));
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
       });
-      expect(await badges()).toContain('LOGIC: Sample');
+      expect(await badges()).toContain('Relation: Sample');
       expect(screen.queryByRole('alert')).toBeNull();
     } finally {
       setReaderImport(real);
@@ -373,7 +394,7 @@ describe('Dashboard connected tracks', () => {
 
   it('never takes a relation from the node group', async () => {
     renderDashboard(connected([]));
-    expect(await badges()).toEqual(Array(4).fill('LOGIC: No direct link to this track'));
+    expect(await badges()).toEqual(Array(4).fill('Relation: No direct link to this track'));
     expect(screen.queryByText(/samples/)).toBeNull();
   });
 
@@ -416,5 +437,96 @@ describe('Dashboard connected tracks', () => {
       expect(entries.queryByText('+12.4 s')).toBeNull();
       expect(entries.getAllByText(/ago|Just now/).length).toBe(2);
     });
+  });
+});
+
+describe('the Dashboard headings', () => {
+  const logs: AgentLog[] = [
+    { id: 'l1', message: 'Found the track on Spotify', timestamp: '2026-01-01T00:00:00.000Z' },
+  ];
+  const headings = () =>
+    [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((heading) => ({
+      level: Number(heading.tagName.slice(1)),
+      text: heading.textContent?.trim() ?? '',
+    }));
+
+  it("has one h1, the analysed track's title, first, and gives it to the focus code", () => {
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(
+      <Dashboard
+        trackData={missingTrack}
+        onNavigate={() => {}}
+        logs={logs}
+        isComplete
+        headingRef={ref}
+      />,
+    );
+    const all = headings();
+    expect(all.filter((heading) => heading.level === 1)).toEqual([
+      { level: 1, text: 'Quiet Signal' },
+    ]);
+    expect(all[0]).toEqual({ level: 1, text: 'Quiet Signal' });
+    expect(ref.current?.textContent).toBe('Quiet Signal');
+    // No heading skips a level: each sits under the section it belongs to.
+    all.slice(1).forEach((heading, index) => {
+      expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
+    });
+  });
+
+  it('names each section with an h2: the fingerprint, the connections and the activity log', () => {
+    render(<Dashboard trackData={missingTrack} onNavigate={() => {}} logs={logs} isComplete />);
+    const all = headings();
+    expect(all.find((heading) => heading.text === 'Sonic Fingerprint')?.level).toBe(2);
+    expect(all.find((heading) => heading.text === 'Connections')?.level).toBe(2);
+    expect(all.find((heading) => heading.text.startsWith('Activity log'))?.level).toBe(2);
+  });
+
+  it("puts the result's notices after its h1, so reading on from the focused title reaches them", () => {
+    const replay = {
+      ...missingTrack,
+      run: {
+        id: 'r1',
+        mode: 'replay',
+        replayed: 'run',
+        recordedAt: '2026-10-24T10:00:00.000Z',
+        commit: 'abc1234',
+      },
+    } as unknown as TrackData;
+    renderDashboard(replay);
+    const title = screen.getByRole('heading', { level: 1 });
+    for (const name of ['Recorded run', 'Missing data']) {
+      const notice = screen.getByRole('region', { name });
+      expect(
+        title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+        name,
+      ).toBeTruthy();
+    }
+  });
+
+  it('says what it shows in sentence case, and keeps the measured hue off its labels', () => {
+    const track = {
+      ...missingTrack,
+      explicit: true,
+      spotifyUrl: 'https://open.spotify.com/track/abc',
+    } as unknown as TrackData;
+    renderDashboard(track);
+    expect(screen.getByRole('link', { name: 'Spotify' }).textContent).toBe('Spotify');
+    expect(screen.getByText('Explicit')).toBeTruthy();
+    const label = screen.getByText('Analyzed track');
+    expect(`${label.className} ${label.nextElementSibling?.className ?? ''}`).not.toMatch(/cyber/);
+  });
+
+  it('labels the hover overlay of a connected track in a neutral hue', () => {
+    render(<TargetScanOverlay isHovered />);
+    expect(screen.getByText('Analyze this track').className).not.toMatch(/cyber/);
+  });
+
+  it('says no analysis is loaded, as its h1, when there is no result', () => {
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(<Dashboard trackData={null} onNavigate={() => {}} isRestoredSession headingRef={ref} />);
+    expect(headings().filter((heading) => heading.level === 1)).toEqual([
+      { level: 1, text: 'No analysis loaded' },
+    ]);
+    expect(ref.current?.textContent).toBe('No analysis loaded');
   });
 });

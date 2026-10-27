@@ -52,17 +52,17 @@ const panelLabel = () =>
 describe('the genealogy panel label', () => {
   it('says model inference when no shown link is sourced', () => {
     render(<Player trackData={withLinks([inferred])} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkModel inference');
+    expect(panelLabel()).toBe('ConnectionsModel inference');
   });
 
   it('says the panel holds sourced and not sourced links when both are shown', () => {
     render(<Player trackData={withLinks([sourced, inferred])} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkSourced and not sourced links');
+    expect(panelLabel()).toBe('ConnectionsSourced and not sourced links');
   });
 
   it('says sourced links when every shown link is sourced, with the sourced chip', () => {
     render(<Player trackData={withLinks([sourced])} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkSourced links');
+    expect(panelLabel()).toBe('ConnectionsSourced links');
     expect(
       document
         .querySelector('[data-testid="genealogy-kinds"] [data-provenance]')
@@ -94,7 +94,7 @@ describe('the genealogy panel label', () => {
     const track = withLinks([]);
     track.genealogy.links = [{ ...sourced, evidenceIds: ['ev-not-in-pack'] }];
     render(<Player trackData={track} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkNot sourced');
+    expect(panelLabel()).toBe('ConnectionsNot sourced');
   });
 
   it('does not count entries that are not links as links with a hidden claim', () => {

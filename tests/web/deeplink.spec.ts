@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   apiRequests,
   collectProblems,
+  dashboardHeading,
   fullResultData,
   loadFixture,
   releaseStream,
@@ -20,7 +21,7 @@ const STORED_ID = "4cOdK2wGLETKBW3PvgPWqT";
 const MISSING_ID = "7ouMYWpwJ422jRcDASZB7P";
 
 const MISSING_TITLE = "No stored analysis for this track yet";
-const resultHeading = (page: Page) => page.getByRole("heading", { name: "Command Center" });
+const resultHeading = (page: Page) => dashboardHeading(page);
 const searchBox = (page: Page) => page.getByRole("combobox", { name: "Song title and artist" });
 const streams = (log: string[]) => log.filter((entry) => entry.startsWith("stream "));
 const byTrack = (id: string) => `fetch /api/runs/by-track/${id}`;
@@ -64,8 +65,8 @@ test("a stored run opens at its address with no analysis, and a reload keeps it"
 test("a reload of the Player keeps the Player", async ({ page }) => {
   await useMockApi(page, stored);
   await page.goto(`/t/${STORED_ID}`);
-  await page.getByRole("button", { name: "VIEW FULL ANALYSIS" }).click();
-  const back = page.getByRole("button", { name: /BACK TO BASE/ });
+  await page.getByRole("button", { name: "View full analysis" }).click();
+  const back = page.getByRole("button", { name: /Back to summary/ });
   await expect(back).toBeVisible();
 
   await page.reload();
@@ -221,7 +222,7 @@ test("Back past another track's result to a link's result shows that link's trac
   });
   await page.goto(`/t/${STORED_ID}`);
   await expect(resultHeading(page)).toBeFocused();
-  await page.getByRole("button", { name: "NEW SEARCH" }).click();
+  await page.getByRole("button", { name: "New search" }).click();
   await searchBox(page).fill("Other Song");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await page.getByRole("button", { name: "Open the results" }).click();
@@ -379,7 +380,7 @@ test("from a link's result, a new search and Back show the result again", async 
   await useMockApi(page, stored);
   await page.goto(`/t/${STORED_ID}`);
   await expect(resultHeading(page)).toBeFocused();
-  await page.getByRole("button", { name: "NEW SEARCH" }).click();
+  await page.getByRole("button", { name: "New search" }).click();
   await expect(searchBox(page)).toBeFocused();
   await expect(page).toHaveURL("/");
   const requests = await apiRequests(page);

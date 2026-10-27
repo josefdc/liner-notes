@@ -3,6 +3,7 @@ import {
   analyzeAndOpenDashboard,
   animationsSettled,
   collectProblems,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   useMockApi,
@@ -116,7 +117,7 @@ test("a recorded cover the archive does not hold (404) is not available, with no
   await expect.poll(() => archiveImages(page), quick).toEqual([]);
   await expect.poll(() => brokenImages(page), quick).toEqual([]);
   await expect(proceed).toBeVisible({ timeout: 1 });
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible({
+  await expect(dashboardHeading(page)).toBeVisible({
     timeout: 10_000,
   });
   await animationsSettled(page);

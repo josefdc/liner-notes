@@ -103,6 +103,6 @@ describe('GenealogyGraph hover on a node with a clip', () => {
 
     expect(view.getByRole('status')).toBe(region);
     expect(region.textContent).toBe('Preview of Under Pressure - Queen (1981) is unavailable.');
-    expect(view.getByText('PREVIEW UNAVAILABLE')).toBeTruthy();
+    expect(view.getByText('Preview unavailable')).toBeTruthy();
   });
 });

@@ -34,8 +34,8 @@ const TargetScanOverlay: React.FC<TargetScanOverlayProps> = ({ isHovered }) => {
       </div>
 
       {/* Target label */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/80 border border-cyber/30 rounded-sm font-mono text-chrome text-cyber/80 uppercase tracking-widest whitespace-nowrap">
-        CLICK TO ANALYZE
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/80 border border-white/20 rounded-sm font-mono text-chrome text-text-secondary uppercase tracking-widest whitespace-nowrap">
+        Analyze this track
       </div>
 
       {/* Glow overlay */}

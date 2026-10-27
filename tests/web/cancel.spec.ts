@@ -9,6 +9,13 @@ import {
   streamLog,
   useMockApi,
 } from "./mock";
+import { offline } from "./offline";
+
+// The recorded run's cover, and any other outside address, are answered on the page: nothing
+// leaves the machine.
+test.beforeEach(async ({ page }) => {
+  await offline(page);
+});
 
 // Stop on the progress screen closes the run's stream (the API aborts a run whose client has
 // gone: RunControl in apps/api/src/http/routes/analyze.ts), brings the search back with the

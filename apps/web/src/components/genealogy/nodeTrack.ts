@@ -37,3 +37,19 @@ export function nodeTrack(
     UNTITLED_TRACK;
   return { title, artist: text(node.trackArtist) || null };
 }
+
+/**
+ * The text a related track is searched by when it is analysed: the node's own title, else its
+ * label whole (the part of a label after " - " is never split off as an artist), else the title
+ * `nodeTrack` reads; then the node's own artist when it names one. Empty when the node names
+ * nothing to search by.
+ */
+export function nodeQuery(
+  node: Partial<Pick<GenealogyNode, 'id' | 'label' | 'trackTitle' | 'trackArtist'>>,
+): string {
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+  const { title, artist } = nodeTrack(node);
+  const named =
+    text(node.trackTitle) || text(node.label) || (title === UNTITLED_TRACK ? '' : title);
+  return named ? [named, artist].filter(Boolean).join(' ') : '';
+}

@@ -190,7 +190,7 @@ describe('Player', () => {
     let timeline = screen.getByRole('group', { name: 'Song structure' });
     expect(within(timeline).queryAllByRole('listitem')).toHaveLength(0);
     expect(timeline.textContent).not.toContain('Main');
-    expect(timeline.textContent).toContain('Sections not analyzed');
+    expect(timeline.textContent).toContain('Song sections not analyzed');
     cleanup();
     render(
       <Player trackData={{ ...missingTrack, segmentsSource: 'inferred' }} onBack={() => {}} />,
@@ -199,7 +199,7 @@ describe('Player', () => {
     const [section] = within(timeline).getAllByRole('listitem');
     expect(section.getAttribute('aria-label')).toBe('Main, 100% of track');
     expect(section.dataset.segmentTint).toBe('inferred');
-    expect(timeline.textContent).not.toContain('Sections not analyzed');
+    expect(timeline.textContent).not.toContain('not analyzed');
   });
 
   it('marks BPM, key and energy as not measured', () => {

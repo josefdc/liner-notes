@@ -70,13 +70,17 @@ test("the Player shows not-measured and template states instead of numbers", asy
 
   const timeline = page.getByRole("group", { name: "Song structure" });
   // The result's structure is a template: no section of it is drawn or named.
-  await expect(timeline).toContainText("Sections not analyzed");
+  await expect(timeline.locator('[data-structure="not-analyzed"]')).toHaveText(
+    "Song sections not analyzed",
+  );
   await expect(timeline.getByRole("list")).toHaveCount(0);
   await expect(timeline.getByRole("listitem")).toHaveCount(0);
   await expect(timeline.locator("[data-segment-tint]")).toHaveCount(0);
   await expect(timeline).not.toContainText(/Intro|Main|Outro|Template/);
-  await expect(timeline).toContainText("Duration unknown");
-  await expect(timeline).not.toContainText("3:45");
+  // Nothing is placed on the song's time, so no axis is drawn for it: its length is said in
+  // words, and it is unknown here (no default length).
+  await expect(timeline.locator("[data-song-length]")).toHaveText("Song length unknown");
+  await expect(timeline).not.toContainText(/0:00|Duration unknown|3:45/);
   // No fake marker: nothing was detected, so nothing is drawn on the timeline.
   await expect(timeline.getByRole("img")).toHaveCount(0);
   await expect(timeline).toContainText("No key moments");

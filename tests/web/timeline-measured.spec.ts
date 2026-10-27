@@ -117,9 +117,12 @@ for (const width of [390, 1440]) {
     // list in the timeline is the measured sections of the preview.
     await expect(timeline.getByRole("list")).toHaveCount(1);
     await expect(timeline.locator("[data-segment-tint]")).toHaveCount(0);
+    // The line is about the whole song, and says the preview's sections below are measured.
     await expect(timeline.locator('[data-structure="not-analyzed"]')).toHaveText(
-      "Sections not analyzed",
+      "Song sections not analyzed(the preview's sections below are measured)",
     );
+    // No song axis is drawn (nothing is placed on it): the song's length is said in words.
+    await expect(timeline.locator("[data-song-length]")).toHaveText("Song length 5:20");
     await expect(timeline).not.toContainText(/Intro|Verse|Chorus|Bridge|Outro|Template/);
 
     // Nothing is cut off: every layer inside the lane, the lane inside the window, no

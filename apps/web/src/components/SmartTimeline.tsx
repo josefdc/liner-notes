@@ -412,6 +412,8 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
     const latest = markers.inside.reduce((max, m) => Math.max(max, m.time), 0);
     return { momentMarkers: markers, previewLength: Math.max(PREVIEW_SECONDS, latest) };
   }, [keyMoments, measuredPreview]);
+  // The song's time axis is drawn only over what is placed on it: sections or sample times.
+  const songAxis = sections.length > 0 || sampleMarkers.inside.length > 0;
   const previewLabel =
     measuredPreview !== null
       ? `Preview window (${formatSeconds(measuredPreview)} s, measured)`
@@ -426,14 +428,42 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         {sections.length > 0 && <InferenceLabel />}
       </div>
 
-      {/* Time labels: the end label only when the duration is known */}
-      <div className="flex justify-between mb-2 text-xs font-mono text-text-tertiary uppercase tracking-widest">
-        <span>0:00</span>
-        <span>{duration !== null ? formatTime(duration) : 'Duration unknown'}</span>
-      </div>
+      {/* No song sections to draw: a line says so, for the whole song. The preview's own
+          sections, when measured, are drawn in its lane below, and the line says so too. With
+          no axis drawn, the song's length is said beside it in words. */}
+      {sections.length === 0 && (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 ${songAxis ? 'mb-3' : ''}`}
+        >
+          <div
+            data-structure="not-analyzed"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 text-chrome font-mono text-text-chip"
+          >
+            <ProvenanceChip kind="missing">Song sections not analyzed</ProvenanceChip>
+            {layers.sections && <span>(the preview's sections below are measured)</span>}
+          </div>
+          {!songAxis && (
+            <span
+              data-song-length
+              className="text-xs font-mono text-text-tertiary uppercase tracking-widest"
+            >
+              {duration !== null ? `Song length ${formatTime(duration)}` : 'Song length unknown'}
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Structure Bar: the model's sections, or a line saying there are none to draw */}
-      {sections.length > 0 ? (
+      {/* Time labels, only over something drawn on the song's time: the end label only when
+          the duration is known */}
+      {songAxis && (
+        <div className="flex justify-between mb-2 text-xs font-mono text-text-tertiary uppercase tracking-widest">
+          <span>0:00</span>
+          <span>{duration !== null ? formatTime(duration) : 'Duration unknown'}</span>
+        </div>
+      )}
+
+      {/* Structure Bar: the model's sections */}
+      {sections.length > 0 && (
         <div className="h-3 w-full flex gap-px rounded-xs overflow-hidden relative" role="list">
           {sections.map((seg, index) => (
             <div
@@ -452,10 +482,6 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               </div>
             </div>
           ))}
-        </div>
-      ) : (
-        <div data-structure="not-analyzed" className="flex">
-          <ProvenanceChip kind="missing">Sections not analyzed</ProvenanceChip>
         </div>
       )}
 

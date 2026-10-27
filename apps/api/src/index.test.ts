@@ -75,15 +75,6 @@ afterAll(async () => {
   }
 });
 
-async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  await new Promise((resolve) => server.close(resolve));
-  if (typeof address !== "object" || !address) throw new Error("no port");
-  return address.port;
-}
-
 const dirs: string[] = [];
 afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
@@ -252,22 +243,55 @@ async function openRequest(port: number): Promise<{ socket: Socket; received: ()
   return { socket, received: () => received };
 }
 
-/** Starts the API on a free port with a scratch database and waits until it answers. */
+/** The port in the API's own "listening" log line, once the child has written it. */
+function listeningPort(output: string): number | undefined {
+  const entry = logEntries(output).find(
+    (entry) =>
+      entry.component === "Server" &&
+      String(entry.msg).startsWith("Liner Notes API listening on port") &&
+      typeof entry.port === "number",
+  );
+  return entry?.port as number | undefined;
+}
+
+const START_MS = 15_000;
+
+/**
+ * Starts the API with a scratch database and waits until it answers. The child binds a port of
+ * the system's choosing (PORT=0) and the test reads it from the child's own "listening" log
+ * line: a port picked here and released could be taken, before the child binds it, by a
+ * short-lived server of another test file, which would answer the health probe and then go away.
+ * Then /api/health is polled on that port every 50 ms (requests wait while startup settles the
+ * runs). Fails with the child's output if it exits, or is not answering within 15 s.
+ */
 async function startApi(): Promise<{ api: Child; port: number; dbPath: string }> {
   const { dir, dbPath } = scratch();
-  const port = await freePort();
-  const api = start(ENTRY, dir, apiEnv(port, dbPath));
-  const deadline = Date.now() + 30_000;
+  const api = start(ENTRY, dir, apiEnv(0, dbPath));
+  const deadline = Date.now() + START_MS;
+  try {
+    await untilOutput(api, (output) => listeningPort(output) !== undefined, START_MS);
+  } catch (error) {
+    throw new Error(`the API did not report that it listens: ${(error as Error).message}`);
+  }
+  const port = listeningPort(api.output()) as number;
   for (;;) {
-    if (api.process.exitCode !== null) throw new Error(`exited at startup:\n${api.output()}`);
+    if (api.process.exitCode !== null || api.process.signalCode !== null) {
+      throw new Error(`the API exited at startup:\n${api.output()}`);
+    }
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+      });
       if (res.ok) return { api, port, dbPath };
     } catch {
-      // not listening yet
+      // not answering yet
     }
-    if (Date.now() > deadline) throw new Error(`did not start:\n${api.output()}`);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `the API listens on port ${port} but did not answer /api/health within ${START_MS} ms:\n${api.output()}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -401,12 +425,11 @@ describe("an API process whose log reader has gone", () => {
     withDatabase(dbPath, (db) =>
       startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
     );
-    // The launcher passes its environment (the same pinned settings) on to the API.
-    const port = await freePort();
-    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, apiEnv(port, dbPath), [
+    // The launcher passes its environment (the same pinned settings) on to the API, which binds
+    // a port of the system's choosing; the launcher reads it from the API's log.
+    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, apiEnv(0, dbPath), [
       TSX_LOADER,
       ENTRY,
-      String(port),
       dbPath,
     ]);
     const exitCode = await launcher.exit;
@@ -430,9 +453,13 @@ describe("an API process that cannot listen", () => {
 
   it("exits 1 and leaves the runs alone when the port is taken", async () => {
     const { dir, dbPath } = scratch();
-    const port = await freePort();
+    // The blocker holds a port of the system's choosing from the start, so no other server can
+    // take it first.
     blocker = createServer();
-    await new Promise<void>((resolve) => blocker?.listen(port, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => blocker?.listen(0, "127.0.0.1", resolve));
+    const address = blocker.address();
+    if (typeof address !== "object" || !address) throw new Error("no port");
+    const { port } = address;
 
     const api = start(ENTRY, dir, apiEnv(port, dbPath));
     expect(await api.exit).toBe(1);
@@ -453,7 +480,7 @@ describe("an API process with invalid configuration", () => {
     async (_label, extra, key) => {
       const { dir, dbPath } = scratch();
 
-      const api = start(ENTRY, dir, apiEnv(await freePort(), dbPath, extra));
+      const api = start(ENTRY, dir, apiEnv(0, dbPath, extra));
       expect(await api.exit).toBe(1);
 
       expect(logged(api.output(), "config", key)).toBe(true);

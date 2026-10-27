@@ -1,19 +1,44 @@
-// Spawned by src/index.test.ts with the API's settings in its environment. Starts the API
-// (argv: loader URL, entry, port, database path) with that environment, its stdout and stderr
-// in a pipe whose only reader is this process, keeps one request open, stops reading (closes
-// the pipe) and sends SIGTERM. Prints one JSON line: { code, signal, ms, afterContinue } of the
+// Spawned by src/index.test.ts with the API's settings in its environment (PORT=0: the API binds
+// a port of the system's choosing). Starts the API (argv: loader URL, entry, database path) with
+// that environment, its stdout and stderr in a pipe whose only reader is this process, reads the
+// port from the API's "listening" log line, keeps one request open, stops reading (closes the
+// pipe) and sends SIGTERM. Prints one JSON line: { code, signal, ms, afterContinue } of the
 // API's exit, or { error }.
 
 import { spawn } from "node:child_process";
 import { connect } from "node:net";
 
-const [loader, entry, port, dbPath] = process.argv.slice(2);
+const [loader, entry, dbPath] = process.argv.slice(2);
 const api = spawn(process.execPath, ["--import", loader, entry], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, PORT: port, SQLITE_DB_PATH: dbPath },
+  env: { ...process.env, SQLITE_DB_PATH: dbPath },
 });
-api.stdout.resume();
-api.stderr.resume();
+let output = "";
+api.stdout.on("data", (chunk) => {
+  output += chunk;
+});
+api.stderr.on("data", (chunk) => {
+  output += chunk;
+});
+
+/** The port in the API's own "listening" log line, once it has written it. */
+function listeningPort() {
+  for (const line of output.split("\n")) {
+    try {
+      const entry = JSON.parse(line);
+      if (
+        entry?.component === "Server" &&
+        String(entry.msg).startsWith("Liner Notes API listening on port") &&
+        typeof entry.port === "number"
+      ) {
+        return entry.port;
+      }
+    } catch {
+      // not a whole JSON line
+    }
+  }
+  return undefined;
+}
 
 /** Stops the API and reports why the run could not be measured. */
 function fail(error) {
@@ -23,15 +48,30 @@ function fail(error) {
 }
 const killTimer = setTimeout(() => fail("the API did not exit within 30 s of its start"), 30_000);
 
-const deadline = Date.now() + 20_000;
+// Waits for the API's own "listening" line, then for it to answer on that port, within 15 s.
+const deadline = Date.now() + 15_000;
+let port;
 for (;;) {
-  try {
-    if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break;
-  } catch {
-    // not listening yet
+  if (api.exitCode !== null || api.signalCode !== null) {
+    fail(`the API exited at startup:\n${output}`);
   }
-  if (Date.now() > deadline) fail("the API did not start");
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  port ??= listeningPort();
+  if (port !== undefined) {
+    try {
+      const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+      if ((await fetch(`http://127.0.0.1:${port}/api/health`, { signal })).ok) break;
+    } catch {
+      // not answering yet
+    }
+  }
+  if (Date.now() >= deadline) {
+    fail(
+      port === undefined
+        ? `the API did not report that it listens within 15 s:\n${output}`
+        : `the API listens on port ${port} but did not answer /api/health within 15 s:\n${output}`,
+    );
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 // A request whose body never completes. The signal is sent only once the API has read the
@@ -40,7 +80,7 @@ for (;;) {
 // would have nothing to drain. Anything the API sends after the 100 (an early answer, such as a
 // 429) means the request was not held, and is reported.
 const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
-const socket = connect(Number(port), "127.0.0.1");
+const socket = connect(port, "127.0.0.1");
 const connected = await new Promise((resolve) => {
   socket.once("connect", () => resolve(true));
   socket.once("error", () => resolve(false));

@@ -3,7 +3,7 @@
  *
  *   npm run report -w apps/api -- [--days N] [--json]     in a checkout (tsx)
  *   node dist/report.js [--days N] [--json]                in the API image, e.g.
- *     docker compose exec sonic-server node dist/report.js
+ *     docker compose -f deploy/compose.prod.yml exec api node dist/report.js
  *
  * The database is SQLITE_DB_PATH, and the retention RUN_RETENTION_DAYS, read as the API reads
  * them: from the environment when set there (a blank value means the default, as for the API),

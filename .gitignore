@@ -88,3 +88,7 @@ test-results/
 
 # Web app build the browser tests serve
 apps/web/dist-e2e*/
+
+# Deployment settings and certificates for Caddy (deploy/site.d/*.example are the templates)
+deploy/site.d/*
+!deploy/site.d/*.example

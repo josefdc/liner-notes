@@ -47,6 +47,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 import fingerprint  # noqa: E402
 import signal_features  # noqa: E402
+import sniff  # noqa: E402
 from estimators import (  # noqa: E402
     NO_KEY_ESTIMATE,
     STEADY_TEMPO_PARTS,
@@ -184,10 +185,10 @@ class InvalidAudioError(ValueError):
     output) and is returned with the 422."""
 
 
-# Why an MP4 (M4A) or AAC preview is refused, whether the host declared it as such or it is
-# recognised by its first bytes. Never the generic decode failure, and never a decode: under an
-# .mp3 name, libsndfile's MP3 decoder can find spurious frames in an ADTS stream (a tenth of a
-# second of the 1 s test fixture, which the gate then calls too short).
+# Why an MP4 (M4A) or AAC preview is refused, whether the host declared it as such or its first
+# bytes show it (sniff.py). Never the generic decode failure, and never a decode: under an .mp3
+# name, libsndfile's MP3 decoder can find spurious frames in an ADTS stream (a tenth of a second
+# of the 1 s test fixture, which the gate then calls too short).
 UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does not decode"
 
 
@@ -353,35 +354,18 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     return {"v2": v2}
 
 
-def _is_mp4_or_aac(file_path: str) -> bool:
-    """
-    Whether the file starts like an MP4 (M4A) file (an ISO BMFF `ftyp` box) or an ADTS AAC
-    stream (a 12-bit sync word with layer 0, which MPEG audio leaves reserved). No format the
-    service decodes starts like either: MP3 starts with an ID3 tag or a frame of layer 1-3, WAV
-    with RIFF, FLAC with fLaC, Ogg with OggS.
-    """
-    try:
-        with open(file_path, "rb") as f:
-            head = f.read(8)
-    except OSError:
-        return False
-    if head[4:8] == b"ftyp":
-        return True
-    return len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xF6) == 0xF0
-
-
 def decode(file_path: str) -> Signals:
     """
     Decode a file once (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own
     rate; the analysis resamples it once per rate it needs. Previews are 30 s; never decode
     more than MAX_DECODE_SECONDS, whatever the file claims.
 
-    Raises InvalidAudioError (a 422) for an MP4 (M4A) or AAC file (UNSUPPORTED_FORMAT, before
-    any decoding), when the file cannot be decoded, or when it holds non-finite or absurd sample
+    Raises InvalidAudioError (a 422) for a file sniff.py recognises as MP4 (M4A) or AAC
+    (UNSUPPORTED_FORMAT, before any decoding), when the file cannot be decoded, or when it holds non-finite or absurd sample
     values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the downmix (antiphase
     stereo), the loudest channel is analysed instead.
     """
-    if _is_mp4_or_aac(file_path):
+    if sniff.is_mp4_or_aac(file_path):
         raise InvalidAudioError(UNSUPPORTED_FORMAT)
     try:
         with sf.SoundFile(file_path) as f:

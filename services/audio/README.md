@@ -294,13 +294,30 @@ drum loop as of a dense mix whose key a listener would name. The codes (the cont
 | any | `estimate_failed` | the estimator raised (logged), or gave a non-finite tempo |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
-times full scale, is refused with `422`. An MP4 (M4A) or AAC preview is refused with `422` and
-its own reason, `it is an MP4 (M4A) or AAC file, a format the service does not decode`, whether
-the host declares it (`audio/mp4`, `audio/aac` and their aliases, refused before the body is
-read) or its first bytes show it: the service decodes only through `libsndfile`, which does not
-read these formats.
+times full scale, is refused with `422`.
 
-Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
+The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
+refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
+does not decode`, in these cases only:
+
+- the host declares one of these types: `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/aac`,
+  `audio/aacp`, `audio/x-aac`, `audio/x-hx-aac-adts`, `audio/vnd.dlna.adts`, `audio/mp4a-latm`,
+  `audio/mpeg4-generic`, `audio/3gpp`, `audio/3gpp2` or `video/mp4`. The preview is refused
+  before its body is read.
+- the first bytes show the format (`sniff.py`), after any ID3v2 tags:
+  - an MP4 file: a `ftyp` box naming an MP4, QuickTime or 3GPP brand, either first or behind
+    `free`, `skip` or `wide` boxes. HEIC and AVIF images do not count.
+  - an ADIF stream (the `ADIF` magic).
+  - an ADTS or LOAS stream: frame headers starting within the first 4 kB, each next header
+    where the frame length puts it.
+
+A file that starts with an MP3 frame, `RIFF`, `RF64`, `FORM`, `fLaC` or `OggS` is never
+refused this way. Any other file that cannot be decoded gets the generic reason.
+
+The API has no reason code for this refusal yet. The user still sees "the audio analysis
+failed", and the precise reason is only in the API's error detail.
+
+Errors carry only a fixed `detail` (no measurements and no `analyzer_version`); the cause is
 only written to the service log.
 
 | Status | Meaning |
@@ -414,7 +431,8 @@ suite that way.
 - **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
   needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
   platform without a bundled library and an old system `libsndfile`. AAC and M4A are not
-  decoded at all: the service decodes only through `libsndfile`, which does not read them, so it
-  refuses them with their own `422` reason (the preview hosts the service accepts serve MP3).
+  decoded at all: the service decodes only through `libsndfile`, which does not read them. It
+  refuses the forms it recognises with their own `422` reason (see the error statuses above);
+  the preview hosts the service accepts serve MP3.
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

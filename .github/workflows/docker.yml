@@ -149,9 +149,9 @@ jobs:
           assert abs(wav["tempo"]["bpm"] - 120) <= 1, wav["tempo"]
           PY
 
-          # The image's libsndfile reads no M4A or AAC, so the service refuses the test fixtures
-          # with that reason, not the generic decode failure. If it ever reads them, the
-          # refusal is out of date.
+          # The image's libsndfile reads no M4A or AAC (ADTS or LOAS), so the service refuses the
+          # test fixtures with that reason, not the generic decode failure. If it ever reads
+          # them, the refusal is out of date.
           docker run --rm -i --network none \
             -v "$GITHUB_WORKSPACE/services/audio/tests/fixtures:/fixtures:ro" \
             liner-notes-audio:ci python - <<'PY'
@@ -159,7 +159,7 @@ jobs:
 
           import main
 
-          for name in ("tone.m4a", "tone.aac"):
+          for name in ("tone.m4a", "tone.aac", "tone.latm"):
               path = f"/fixtures/{name}"
               try:
                   sf.info(path)

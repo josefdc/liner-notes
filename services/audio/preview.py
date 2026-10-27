@@ -121,9 +121,9 @@ _SUFFIXES = {
     "audio/ogg": ".ogg",
 }
 
-# Audio types the decoder (libsndfile) cannot read. The preview hosts serve MP3; a preview
-# declared as one of these is refused before its body is read, as a format, not a download,
-# failure.
+# MP4 (M4A) and AAC types, which the decoder (libsndfile) cannot read. The preview hosts serve
+# MP3; a preview declared as one of these is refused before its body is read, as a format, not
+# a download, failure.
 UNSUPPORTED_TYPES = frozenset(
     {
         "audio/mp4",
@@ -132,7 +132,13 @@ UNSUPPORTED_TYPES = frozenset(
         "audio/aac",
         "audio/aacp",
         "audio/x-aac",
+        "audio/x-hx-aac-adts",
+        "audio/vnd.dlna.adts",
         "audio/mp4a-latm",
+        "audio/mpeg4-generic",
+        "audio/3gpp",
+        "audio/3gpp2",
+        "video/mp4",
     }
 )
 

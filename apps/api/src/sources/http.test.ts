@@ -19,6 +19,7 @@ import {
   fetchJson,
   hasStackTrace,
   isMediaUrl,
+  isSecretKey,
   pick,
   plainMessage,
   plainReason,
@@ -334,9 +335,12 @@ describe("scrubbing", () => {
     "x-api-key",
     "access_token",
     "refresh_token",
+    "id_token",
+    "auth_token",
     "api_key",
     "apikey",
     "client_secret",
+    "private_key",
     "password",
     "token",
     "secret",
@@ -355,6 +359,30 @@ describe("scrubbing", () => {
     }
   });
 
+  it("reads a secret key in any case, with or without _ and -, in a parsed body and in text", () => {
+    const spellings = [
+      "accessToken",
+      "clientSecret",
+      "refreshToken",
+      "api-key",
+      "X_API_KEY",
+      "idToken",
+      "AuthToken",
+      "privateKey",
+      "Client-Secret",
+    ];
+    for (const key of spellings) {
+      expect(isSecretKey(key), key).toBe(true);
+      expect(scrubPayload({ [key]: "plain-value-1" }), key).toEqual({ [key]: "[redacted]" });
+      expect(scrubReadPayload({ [key]: "plain-value-1" }), key).toEqual({ [key]: "[redacted]" });
+      expect(scrubText(`{"${key}":"plain-value-1"}`), key).toBe(`{"${key}":"[redacted]"}`);
+    }
+    const kept = { tokenType: "bearer", tokens: 3, my_token: "a", secretSanta: "b", keyId: "c" };
+    for (const key of Object.keys(kept)) expect(isSecretKey(key), key).toBe(false);
+    expect(scrubPayload(kept)).toEqual(kept);
+    expect(scrubText(JSON.stringify(kept))).toBe(JSON.stringify(kept));
+  });
+
   it("reads a quoted value to its closing quote, escapes included, and leaves other keys alone", () => {
     const cases: Array<[string, string]> = [
       ['{"password":"a\\"b\\\\c d"}', '{"password":"[redacted]"}'],
@@ -365,6 +393,13 @@ describe("scrubbing", () => {
         '{"error":"{\\"client_secret\\":\\"in \\\\\\"side\\",\\"next\\":\\"kept\\"}"}',
         '{"error":"{\\"client_secret\\":\\"[redacted]\\",\\"next\\":\\"kept\\"}"}',
       ],
+      // The inner value ends in an escaped backslash, then an escaped quote of its own.
+      [
+        '"{\\"token\\":\\"a\\\\\\\\\\\\\\"b\\",\\"next\\":\\"kept\\"}"',
+        '"{\\"token\\":\\"[redacted]\\",\\"next\\":\\"kept\\"}"',
+      ],
+      // A secret value that holds another quoted secret key is read past, whole.
+      [`{"token":"a 'secret': 'b' tail-1"}`, '{"token":"[redacted]"}'],
       // A body cut off inside the value: the rest of it goes.
       ['<p>{"password":"hunter2 and the rest', '<p>{"password":"[redacted]'],
       // Not a secret key, or not a value to read here: left as it is.
@@ -377,6 +412,22 @@ describe("scrubbing", () => {
     }
     // Read before the `key=` rule, which would end the value at its escaped quote.
     expect(scrubText('{"password":"key=abc\\" def"}')).toBe('{"password":"[redacted]"}');
+  });
+
+  it("reads quoted secret keys before the header rule, which does not read escapes", () => {
+    for (const text of [
+      '{"error":"bad header","body":"{\\"password\\":\\"pw-h1\\"}"}',
+      '{"error":"missing Authorization header","password":"ab\\"pw-h1"}',
+      '<html><header>x</header><pre>{"client_secret":"x\\"pw-h1"}</pre></html>',
+    ]) {
+      expect(redactText(text), text).not.toContain("pw-h1");
+      expect(scrubText(text), text).not.toContain("pw-h1");
+    }
+    // Whether the text mentions a header is asked of the text as it came, so "header" inside a
+    // redacted value still has every quoted value removed, as before.
+    expect(redactText('"token" : "header", "kept":"other quoted"')).toBe(
+      '"[redacted]" : "[redacted]", "[redacted]":"[redacted]"',
+    );
   });
 
   it.each([
@@ -681,6 +732,7 @@ describe("cassettes", () => {
       "ak-value-1",
       "tk-value-1",
       "single-quoted-value-1",
+      "esc-value-1",
       "hdnea",
       "hmac",
       "dzcdn",
@@ -703,6 +755,12 @@ describe("cassettes", () => {
         `<html><body><pre>{${pairs}, "preview":"${links}"}</pre></body></html>`,
       ],
       ["an invalid-JSON", "application/json", `{"error":6,${pairs},"preview":"${links}"`],
+      [
+        "a text/html (with a <header>)",
+        "text/html",
+        '<html><header>Sign in</header><script>var d="{\\"access_token\\":\\"esc-value-1\\"}";' +
+          `</script><pre>{${pairs}, "preview":"${links}"}</pre></html>`,
+      ],
     ])(
       "keeps no secret or signed link of %s 400 body, live, recorded or replayed",
       async (_name, contentType, body) => {
@@ -732,7 +790,8 @@ describe("cassettes", () => {
             expect(logged, `${mode}: log`).not.toContain(leak);
           }
           expect(error.body).toContain("[redacted]");
-          expect(error.body).toContain("[media]");
+          // In a text that mentions a header, every quoted value goes, links included.
+          expect(error.body).toContain(/header/i.test(body) ? '"[redacted]"' : "[media]");
           errors[mode] = error;
         }
 
@@ -1216,6 +1275,16 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
         ],
         [`${size} characters of near keys`, () => scrubText(fill('\\"authorizatio')).length, 500],
         [
+          `${size} characters of key-like runs longer than a key`,
+          () => redactQuotedSecrets(fill(`"${"a_".repeat(40)}`)).length,
+          size,
+        ],
+        [
+          `${size} characters of keys that are not secret`,
+          () => redactQuotedSecrets(fill('"a": "b", ')).length,
+          size,
+        ],
+        [
           `${size} characters of backslashes in an unterminated value`,
           () => scrubText(`"token":"${fill("\\")}`),
           '"token":"[redacted]',
@@ -1301,6 +1370,10 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     '"authorization"',
     '"my_token"',
     '"tokens"',
+    '"accessToken"',
+    '"api-key"',
+    '"id_token"',
+    "<header>",
     ":",
     " : ",
     '"',
@@ -1348,7 +1421,7 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     ...randomStrings(["a", "b.c", "@", ".", "+", "-", "_", " ", "x@y.z", "é", "\n"], 5_000, 14),
     ...randomStrings(["a", "A", "0", "_", "-", " ", "aB3dE6gH9jK2mN5pQ8sT1v", "="], 5_000, 24),
   ];
-  const quotedKeyOrEscapedSlash = /\\\/|(?:api[-_]?key|token|secret|password|authorization)["']/i;
+  const quotedKeyOrEscapedSlash = /\\\/|(?:key|token|secret|password|authorization)\\?["']/i;
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
     const plain = corpus.filter((text) => !quotedKeyOrEscapedSlash.test(text));

@@ -103,29 +103,40 @@ function redactSecrets(text: string): string {
   return redactTokenRuns(out);
 }
 
-/** Keys whose value is redacted whatever it holds: in a parsed body, and quoted in text. */
-const SECRET_KEYS: ReadonlySet<string> = new Set([
-  "x-api-key",
-  "access_token",
-  "refresh_token",
-  "api_key",
-  "apikey",
-  "client_secret",
-  "password",
-  "token",
-  "secret",
-  "authorization",
-]);
+/** A key as it is compared: lower case, without "_" or "-" (`accessToken` is `access_token`). */
+const keyForm = (key: string) => key.toLowerCase().replace(/[-_]/g, "");
 
 /**
- * A quoted secret key (SECRET_KEYS, in any case; each a plain word) and its colon: `"password":`,
- * `'token' :`, or `\"api_key\":` inside a JSON string. Group 1 is the backslash before each
- * quote, if any.
+ * Keys whose value is redacted whatever it holds, in a parsed body and quoted in text: compared
+ * in any case and with or without "_" and "-" (isSecretKey), so `clientSecret`, `CLIENT-SECRET`
+ * and `client_secret` are one key.
  */
-const QUOTED_SECRET_KEY = new RegExp(
-  `(\\\\?)(["'])(?:${[...SECRET_KEYS].join("|")})\\1\\2\\s*:\\s*`,
-  "gi",
+const SECRET_KEYS: ReadonlySet<string> = new Set(
+  [
+    "x-api-key",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "auth_token",
+    "api_key",
+    "client_secret",
+    "private_key",
+    "password",
+    "token",
+    "secret",
+    "authorization",
+  ].map(keyForm),
 );
+
+/** True for a key whose value is a secret (SECRET_KEYS); the parsed path and text use this. */
+export const isSecretKey = (key: string) => SECRET_KEYS.has(keyForm(key));
+
+/**
+ * A quoted key and its colon: `"password":`, `'token' :`, or `\"api_key\":` inside a JSON string.
+ * Group 1 is the backslash before each quote, if any; group 3 the key, which isSecretKey judges.
+ * A key is at most 64 characters, so each quote is read on for at most that many.
+ */
+const QUOTED_KEY = /(\\?)(["'])([A-Za-z0-9_-]{1,64})\1\2\s*:\s*/g;
 
 /**
  * Where a quoted value whose content starts at `start` ends (the index of its closing quote, or
@@ -157,14 +168,18 @@ function quotedValueEnd(text: string, start: number, quote: string, escaped: boo
  * Each quoted value of a quoted secret key in text that was not parsed (an HTML page, a JSON body
  * that does not parse, a message) as "[redacted]", as the parsed path redacts it by key
  * (`"client_secret": "…"` → `"client_secret": "[redacted]"`): in either quote, escapes included,
- * up to its closing quote or the end of the text. A value without quotes (a number, an object) is
- * left to the other rules: where it ends is not plain from the text. Reads the text once.
+ * up to its closing quote or the end of the text. Reads the text once.
+ *
+ * Known limits: a value that is not a quoted string (a number, an object, a list) is left to the
+ * other rules, since where it ends is not plain from the text; so are quotes written as HTML
+ * entities (`&quot;`) and keys escaped more than once (`\\\"password\\\":`).
  */
 export function redactQuotedSecrets(text: string): string {
   let out = "";
   let kept = 0;
-  QUOTED_SECRET_KEY.lastIndex = 0;
-  for (let key = QUOTED_SECRET_KEY.exec(text); key; key = QUOTED_SECRET_KEY.exec(text)) {
+  QUOTED_KEY.lastIndex = 0;
+  for (let key = QUOTED_KEY.exec(text); key; key = QUOTED_KEY.exec(text)) {
+    if (!isSecretKey(key[3] ?? "")) continue;
     const at = key.index + key[0].length;
     const backslash = key[1] ?? "";
     const quote = text.charAt(at + backslash.length);
@@ -174,20 +189,22 @@ export function redactQuotedSecrets(text: string): string {
     if (end === start) continue;
     out += `${text.slice(kept, start)}[redacted]`;
     kept = end;
-    QUOTED_SECRET_KEY.lastIndex = Math.max(end, QUOTED_SECRET_KEY.lastIndex);
+    QUOTED_KEY.lastIndex = Math.max(end, QUOTED_KEY.lastIndex);
   }
   return out + text.slice(kept);
 }
 
 /**
- * Removes credentials from an error message or log line. Besides `redactSecrets`, a quoted value
- * in a message about a header is removed: fetch echoes an invalid header value, which is the
- * credential; and so is the quoted value of a quoted secret key (redactQuotedSecrets), before the
- * other rules can cut it at an escaped quote.
+ * Removes credentials from an error message or log line. The quoted value of a quoted secret key
+ * goes first (redactQuotedSecrets), before a rule that does not read escapes can cut it at an
+ * escaped quote. Then, in a text that mentions a header, every quoted value: fetch echoes an
+ * invalid header value, which is the credential. Then `redactSecrets`.
  */
 export function redactText(text: string): string {
-  const out = /header/i.test(text) ? text.replace(/"[^"]*"/g, '"[redacted]"') : text;
-  return redactSecrets(redactQuotedSecrets(out));
+  const quoted = redactQuotedSecrets(text);
+  // Asked of the text as it came: "header" inside a redacted value still counts.
+  const out = /header/i.test(text) ? quoted.replace(/"[^"]*"/g, '"[redacted]"') : quoted;
+  return redactSecrets(out);
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
@@ -501,7 +518,7 @@ function scrubWith(text: (value: string) => string) {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
       if (MEDIA_KEY.test(key)) continue;
-      out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "[redacted]" : scrub(inner);
+      out[key] = isSecretKey(key) ? "[redacted]" : scrub(inner);
     }
     return out;
   };

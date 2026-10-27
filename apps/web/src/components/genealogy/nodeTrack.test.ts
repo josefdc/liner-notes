@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeTrack, UNTITLED_TRACK } from './nodeTrack';
+import { nodeQuery, nodeTrack, UNTITLED_TRACK } from './nodeTrack';
 
 // How a related track's card names it: never an artist the node does not give, never its id.
 describe('nodeTrack', () => {
@@ -52,5 +52,22 @@ describe('nodeTrack', () => {
       title: 'Named',
       artist: null,
     });
+  });
+});
+
+// The text a related track is searched by, on the Dashboard and in the Player alike.
+describe('nodeQuery', () => {
+  it.each([
+    // Its own title and artist.
+    [{ label: 'Other - Label (1990)', trackTitle: 'Real', trackArtist: 'Band' }, 'Real Band'],
+    [{ label: 'Other - Label (1990)', trackTitle: 'Real' }, 'Real'],
+    // No title of its own: the label whole, never split into a title and an artist.
+    [{ label: 'Older Record - Someone (1984)' }, 'Older Record - Someone (1984)'],
+    [{ label: 'Song - Live at Wembley', trackArtist: 'Queen' }, 'Song - Live at Wembley Queen'],
+    // Nothing to search by.
+    [{ label: '   ' }, ''],
+    [{ label: '', trackArtist: 'Queen' }, ''],
+  ])('searches %j by %j', (node, query) => {
+    expect(nodeQuery({ id: 'n', ...node })).toBe(query);
   });
 });

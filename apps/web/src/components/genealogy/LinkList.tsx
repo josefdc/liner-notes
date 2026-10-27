@@ -35,6 +35,8 @@ export const LinkList: React.FC<{
             data-link-index={index}
             data-link-kind={link.kind}
             data-link-type={link.type}
+            // A record id has no spaces: it breaks anywhere rather than run past the list.
+            className="wrap-anywhere"
           >
             <span className="text-text-secondary">{relationSentence(link, nameOf)}.</span>{' '}
             {provenanceText(link)}.

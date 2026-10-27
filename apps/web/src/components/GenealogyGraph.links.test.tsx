@@ -287,6 +287,70 @@ describe('GenealogyGraph links', () => {
     expect(screen.queryByTestId('link-detail')).toBeNull();
   });
 
+  it('closes the focused item’s detail with Escape, and leaves the next Escape to the page', async () => {
+    const { container } = render(<Graph />);
+    const items = focusables(container);
+    await act(async () => items[1].focus());
+    expect(screen.getByTestId('link-detail')).toBeTruthy();
+    // The first Escape is the graph's: the box closes, and the page is told it was handled.
+    const first = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      items[1].dispatchEvent(first);
+    });
+    expect(first.defaultPrevented).toBe(true);
+    expect(screen.queryByTestId('link-detail')).toBeNull();
+    expect(document.activeElement).toBe(items[1]);
+    // Nothing is open now: the next one goes on to the page (the Player goes back).
+    const second = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      items[1].dispatchEvent(second);
+    });
+    expect(second.defaultPrevented).toBe(false);
+    // Another item shows its detail again, and so does the first once the focus comes back.
+    await act(async () => {
+      fireEvent.keyDown(items[1], { key: 'ArrowRight' });
+    });
+    expect(screen.getByTestId('link-detail').textContent).toContain('Guess');
+    await act(async () => {
+      fireEvent.keyDown(items[2], { key: 'ArrowLeft' });
+    });
+    expect(screen.getByTestId('link-detail').textContent).toContain('Older Record');
+  });
+
+  it.each([
+    ['plain', false, true],
+    ['modifier', false, false],
+    ['modifier', true, true],
+  ] as const)(
+    'with the wheel set to %s, a wheel turn (Ctrl held: %s) zooms the graph: %s',
+    async (wheelZoom, ctrlKey, zooms) => {
+      const { container } = render(<Graph wheelZoom={wheelZoom} />);
+      const svg = container.querySelector('svg[aria-label="Connections graph"]') as SVGSVGElement;
+      // d3 reads the pointer through SVG geometry this test's DOM lacks: it falls back to the
+      // element's box.
+      Object.defineProperty(svg, 'createSVGPoint', { value: undefined });
+      const drawing = svg.querySelector(':scope > g') as SVGGElement;
+      const before = drawing.getAttribute('transform');
+      const wheel = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+      // This test DOM's WheelEvent drops the modifier keys it is given.
+      Object.defineProperty(wheel, 'ctrlKey', { value: ctrlKey });
+      await act(async () => {
+        svg.dispatchEvent(wheel);
+      });
+      // A wheel the graph takes is kept from the page; one it leaves scrolls the page.
+      expect(wheel.defaultPrevented).toBe(zooms);
+      expect(drawing.getAttribute('transform') !== before).toBe(zooms);
+    },
+  );
+
+  it('names the zoom gesture as the wheel works', () => {
+    render(<Graph wheelZoom="modifier" />);
+    expect(screen.getByText('Ctrl or ⌘ + scroll to zoom')).toBeTruthy();
+    cleanup();
+    render(<Graph />);
+    expect(screen.getByText('Scroll to zoom')).toBeTruthy();
+  });
+
   it('hides the drawing’s own words from screen readers', () => {
     const { container } = render(<Graph />);
     expect(container.querySelector('g.link-labels')?.getAttribute('aria-hidden')).toBe('true');

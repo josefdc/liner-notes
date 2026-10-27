@@ -24,10 +24,21 @@ import {
   recordingOf,
 } from '../constants';
 import { resultModeOf } from '../utils/recording';
+import { usePlayerLayout } from '../utils/layout';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
-import { kindLabel, linkContext, relationLabelsByClaim, shownLinks } from './genealogy/links';
+import {
+  kindLabel,
+  linkContext,
+  nodeName,
+  nodesById,
+  relationLabelsByClaim,
+  shownLinks,
+  yearFrom,
+} from './genealogy/links';
+import { nodeQuery } from './genealogy/nodeTrack';
+import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
   AudioStats,
@@ -42,7 +53,12 @@ import { Button } from './ui/Button';
 import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
+import { linerNotes, relationLinkNotes } from './provenance/notes';
+import { notPlacedNote, placeSamples } from './provenance/timelineSamples';
+import { isRelationSubject } from './genealogy/relationWords';
 import { RejectedClaims } from './provenance/RejectedClaims';
+import { Attribution, shownProviders } from './provenance/Attribution';
+import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { moreFactsKey, moreFactsOf } from '../hooks/agent/moreFacts';
 import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
@@ -111,6 +127,20 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
 /** "1 fact", "3 facts". */
 const facts = (count: number) => `${count} ${count === 1 ? 'fact' : 'facts'}`;
 
+type Tab = 'context' | 'player' | 'genealogy';
+
+/** The phone tabs, in their order: each names its panel, and its colour when it is open. */
+const TABS: ReadonlyArray<{ id: Tab; label: string; panel: string; open: string }> = [
+  { id: 'context', label: 'Analysis', panel: 'panel-context', open: 'text-cyber border-cyber' },
+  { id: 'player', label: 'Player', panel: 'panel-player', open: 'text-white border-white' },
+  {
+    id: 'genealogy',
+    label: 'Connections',
+    panel: 'panel-genealogy',
+    open: 'text-analog border-analog',
+  },
+];
+
 const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
   track,
   onBack,
@@ -121,7 +151,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   headingRef,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'context' | 'player' | 'genealogy'>('player');
+  const [activeTab, setActiveTab] = useState<Tab>('player');
   const [isDecrypting, setIsDecrypting] = useState(false);
   // Why "More facts" could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
@@ -264,24 +294,58 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => new Set(allFactoids.map((factoid) => factoid.claimId)),
     [allFactoids],
   );
-  const creditClaims = useMemo(
+  // The liner notes below the cards: credits, samples and covers, history, then every other
+  // claim, each section without the claims a card shows.
+  const notes = useMemo(() => linerNotes(claims.shown, onCards), [claims, onCards]);
+  // Whether the verifier rejected claims of a section (listed with the rejected claims): an
+  // empty section then says so rather than that none were found.
+  const rejectedAbout = (about: readonly string[]) =>
+    claims.rejected.some((shown) => about.includes(shown.claim.about));
+  // The providers whose data the page shows, each with a link back.
+  const providers = useMemo(
     () =>
-      claims.shown.filter(
-        (shown) => shown.claim.about === 'credit' && !onCards.has(shown.claim.id),
-      ),
-    [claims, onCards],
+      shownProviders({
+        track,
+        claims,
+        links: graphLinks,
+        // The graph is drawn only with a related track; its preview buttons are these clips'.
+        nodePreviews:
+          genealogy.nodes.length > 1 ? previewTracksOf(genealogy).map((clip) => clip.url) : [],
+        coverSrc: cover.src,
+        factoids: resultFactoids,
+      }),
+    [track, claims, graphLinks, genealogy, cover.src, resultFactoids],
   );
-  const creditsOnCards = claims.shown.filter(
-    (shown) => shown.claim.about === 'credit' && onCards.has(shown.claim.id),
-  ).length;
-  // Claims no card or credit shows.
-  const otherClaims = useMemo(
-    () =>
-      claims.shown.filter(
-        (shown) => shown.claim.about !== 'credit' && !onCards.has(shown.claim.id),
-      ),
-    [claims, onCards],
+  // The samples, covers, remixes and interpolations the graph draws that no claim about a sample
+  // or cover states: listed with the claims, in the graph's words.
+  const relationLinks = useMemo(() => {
+    const nodes = nodesById(genealogy.nodes, yearFrom(track.releaseYear));
+    return relationLinkNotes(graphLinks, (id) => nodeName(nodes.get(id), id));
+  }, [graphLinks, genealogy.nodes, track.releaseYear]);
+  // The timeline's samples no shown sample or cover claim states: those it draws are counted
+  // when the section has nothing else to say; those it cannot draw (a time outside the song, an
+  // unknown duration, no time) are listed, so a sample is never left out of view.
+  const timelineSamples = useMemo(() => {
+    const stated = (id: unknown) => {
+      const shown = typeof id === 'string' ? claims.byId.get(id) : undefined;
+      return shown !== undefined && !claims.isHidden(id) && isRelationSubject(shown.claim.about);
+    };
+    return placeSamples(
+      samples.filter((sample) => !stated(sample.claimId)),
+      track.durationSeconds,
+    );
+  }, [samples, claims, track.durationSeconds]);
+  const relationNotes = useMemo(
+    () => [...relationLinks, ...timelineSamples.notPlaced.map(notPlacedNote)],
+    [relationLinks, timelineSamples],
   );
+  // The Player's layout at this width: the panels are tab panels only while the tabs show.
+  const layout = usePlayerLayout();
+  const tabbed = layout === 'tabs';
+  // A panel's tab panel role, named by its tab, while the tabs show (none from md up, where the
+  // tabs are hidden and the panels are columns, each headed by its own heading).
+  const panelRole = (tab: Tab) =>
+    tabbed ? { role: 'tabpanel' as const, 'aria-labelledby': `tab-${tab}` } : {};
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
@@ -328,12 +392,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     };
   }, []);
 
-  // UX: Escape key shortcut to go back
+  // Escape, scoped to the Player (playerKeys.ts): it closes what is open first, and goes back to
+  // the summary only when nothing is; never from a text field or from outside the Player.
+  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onBack();
-      }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      const action = escapeAction(event, root);
+      if (action === 'none') return;
+      event.preventDefault();
+      // The key's target is where the focus is (the body when no element has it).
+      if (action === 'close') {
+        closeOpen(root, event.target instanceof Element ? event.target : document.activeElement);
+      } else onBack();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -417,27 +489,32 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     }
   }, [roundEnded, allFactoids, resultMode, track]);
 
-  // Extract onNodeClick handler for GenealogyGraph (stable ref for React.memo)
+  // A connected track chosen in the graph: searched by the node's own title and artist (its
+  // label whole when it names no title), as the Dashboard's cards search it, never by an artist
+  // split from its label. The node's id is the graph's: Spotify's id is used only when matched.
   const handleNodeClick = useCallback(
     (node: GenealogyNode) => {
       if (!onAnalyzeTrack) return;
-      const title = node.trackTitle || node.label.split(' - ')[0] || node.label;
-      const artist =
-        node.trackArtist || node.label.split(' - ')[1]?.replace(/\s*\(\d{4}\)$/, '') || '';
-      const trackId = node.spotifyId || 'search';
-      onAnalyzeTrack(trackId, title, artist);
+      const query = nodeQuery(node);
+      if (!query) return;
+      onAnalyzeTrack(node.spotifyId || 'search', query, '');
     },
     [onAnalyzeTrack],
   );
 
-  const tabIds = {
-    context: 'panel-context',
-    player: 'panel-player',
-    genealogy: 'panel-genealogy',
-  } as const;
+  // The phone tabs (WAI-ARIA tabs): the arrow keys move to the next or previous tab, Home and End
+  // to the first and last; the open tab alone is in the Tab order.
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const next = tabKeyTarget(event.key, index, TABS.length);
+    if (next === null) return;
+    event.preventDefault();
+    setActiveTab(TABS[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   return (
-    <div className="h-full w-full flex flex-col bg-void relative overflow-hidden">
+    <div ref={rootRef} className="h-full w-full flex flex-col bg-void relative overflow-hidden">
       {/* Background Atmosphere */}
       {cover.src && (
         <img
@@ -450,24 +527,41 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )}
 
       {/* Navigation (P0:3 — New Search button) */}
-      <div className="z-20 px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
+      {/* Each label stays on one line, its letters set closer on phones so both buttons fit a
+          320 px row; a row still too narrow puts the second button under the first rather than
+          past the window's edge. */}
+      <div className="z-20 px-4 sm:px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-2 min-w-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<ArrowLeft size={14} />}
+            onClick={onBack}
+            className="whitespace-nowrap max-sm:tracking-normal"
+          >
             Back to summary
             <span className="hidden lg:inline text-text-muted text-chrome ml-1">Esc</span>
           </Button>
           {onNewSearch && (
-            <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Search size={12} />}
+              onClick={onNewSearch}
+              className="whitespace-nowrap max-sm:tracking-normal"
+            >
               New search
             </Button>
           )}
         </div>
       </div>
 
-      {/* The track, above the three columns from md up: the page's h1 (first of its headings,
-          before the columns' section headings), its artist, and the audio line. On phones it is
-          kept for screen readers only, and the Player tab shows the title and artist where they
-          scroll with it: no fixed band takes the phone's height. A div, not a page banner. */}
+      {/* The track, above the columns from md up: the page's h1 (first of its headings, before
+          the columns' section headings), its artist, and the audio line. The band stays above
+          the columns, so it is kept short: a long title is cut at two lines and a long artist at
+          one, each read whole by screen readers and shown whole on hover (title). On phones it
+          is kept for screen readers only, and the Player tab shows the title and artist where
+          they scroll with it: no fixed band takes the phone's height. A div, not a page banner. */}
       <div
         id="player-header"
         className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only"
@@ -476,11 +570,15 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           <h1
             ref={headingRef}
             tabIndex={-1}
-            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark outline-none break-words"
+            title={track.title}
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark outline-none break-words md:line-clamp-2"
           >
             {track.title}
           </h1>
-          <p className="text-sm md:text-base text-text-tertiary font-mono break-words">
+          <p
+            title={track.artist}
+            className="text-sm md:text-base text-text-tertiary font-mono break-words md:line-clamp-1"
+          >
             {track.artist}
           </p>
           {/* From md up a replayed result says so right under its title and artist, before any
@@ -527,15 +625,22 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
       )}
 
-      {/* Main Content Triptych */}
-      <div className="flex-1 relative z-10 flex flex-col md:flex-row overflow-hidden">
-        {/* Panel A: Context (Desktop: Left, Mobile: Tab) — P1:12 ARIA */}
+      {/* The panels. Phones (below md): one at a time, chosen with the tabs below; each scrolls
+          on its own. md up to xl: two columns, the notes and the player, with the connections
+          as a full-width row below them; the columns take the height of their content and the
+          whole area scrolls as one, down only (a timeline tooltip at rest past the window's
+          edge must not let it scroll sideways). xl (1280 px) and up: three columns, each
+          scrolling on its own. */}
+      <div
+        data-player-columns
+        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] xl:auto-rows-[100%] xl:overflow-hidden"
+      >
+        {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
-          id={tabIds.context}
-          role="tabpanel"
-          aria-labelledby="tab-context"
+          id="panel-context"
+          {...panelRole('context')}
           className={`
-            md:w-1/4 p-6 border-r border-white/5 bg-black/25 backdrop-blur-sm overflow-y-auto overscroll-contain
+            min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
@@ -699,18 +804,51 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </div>
           )}
 
-          {/* Credits, the claims no card shows, and the claims the verifier rejected */}
+          {/* The liner notes, below the cards: credits, samples and covers, history, then every
+              other claim no card shows; the claims the verifier rejected; and where the data
+              comes from. A relation is named in the words the graph and the cards use, hedged
+              ("Possible sample") unless it is sourced. */}
           <div className="mt-10 space-y-8">
             <CreditsList
-              credits={creditClaims}
-              onCards={creditsOnCards}
+              credits={notes.credits.claims}
+              onCards={notes.credits.onCards}
               uncited={track.credits}
               readings={readings}
               audio={measurement}
             />
             <ClaimList
+              title="Samples and covers"
+              claims={notes.relations.claims}
+              onCards={notes.relations.onCards}
+              links={relationNotes}
+              // "None" only when no claim, no drawn link and no timeline marker names one
+              emptyText={
+                timelineSamples.drawn.length > 0
+                  ? `The timeline marks ${timelineSamples.drawn.length === 1 ? '1 possible sample' : `${timelineSamples.drawn.length} possible samples`}; no claim or connection in this result states ${timelineSamples.drawn.length === 1 ? 'it' : 'them'}.`
+                  : rejectedAbout(['sample', 'cover'])
+                    ? 'The samples and covers found were rejected by the verifier (listed below).'
+                    : 'No samples or covers were found in this result.'
+              }
+              readings={readings}
+              audio={measurement}
+              relations={claimRelations}
+            />
+            <ClaimList
+              title="History"
+              claims={notes.history.claims}
+              onCards={notes.history.onCards}
+              emptyText={
+                rejectedAbout(['history'])
+                  ? 'The history claims found were rejected by the verifier (listed below).'
+                  : 'No history was found in this result.'
+              }
+              readings={readings}
+              audio={measurement}
+              relations={claimRelations}
+            />
+            <ClaimList
               title="More claims"
-              claims={otherClaims}
+              claims={notes.more}
               readings={readings}
               audio={measurement}
               relations={claimRelations}
@@ -720,19 +858,23 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               unreadable={claims.unreadableRejected}
               audio={measurement}
             />
+            <Attribution providers={providers} />
           </div>
         </div>
 
-        {/* Panel B: Artifact/Player (Desktop: Center, Mobile: Tab) — P1:12 ARIA */}
+        {/* Panel B: the player (md up: the centre or right column; phones: the Player tab) */}
         <div
-          id={tabIds.player}
-          role="tabpanel"
-          aria-labelledby="tab-player"
+          id="panel-player"
+          {...panelRole('player')}
           className={`
-            md:w-2/4 p-8 flex flex-col items-center justify-start relative overflow-y-auto overscroll-contain
-            ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
+            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            ${activeTab === 'player' ? 'block max-md:h-full' : 'hidden md:flex'}
         `}
         >
+          {/* The tab's heading on phones; from md up the track's h1 above heads the column */}
+          <h2 className="self-start mb-4 text-xs font-mono text-text-tertiary uppercase tracking-widest md:sr-only">
+            Player
+          </h2>
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}
@@ -740,7 +882,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             cover={cover}
             album={track.album}
             evidence={track.evidence}
-            className="mb-8 mt-4 flex-shrink-0 w-56 md:w-64 lg:w-80"
+            className="mb-8 mt-4 flex-shrink-0 w-56 max-w-full md:w-64 lg:w-80"
             frameClassName="group"
             surfaceClassName={`rounded-lg shadow-elevated-lg transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''} ${isPlaying && cover.src ? 'shadow-[var(--shadow-glow-cyber)]' : ''}`}
             iconSize={56}
@@ -826,20 +968,21 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           </div>
         </div>
 
-        {/* Panel C: Genealogy (Desktop: Right, Mobile: Tab) — P1:12 ARIA */}
+        {/* Panel C: the connections (xl: the right column; md up to xl: a full-width row below
+            the columns, 14rem shorter than the window (the nav, the header and the footer take
+            about 12rem), so a strip of the scrolling area always shows beside it to grab, even
+            on a landscape phone; phones: the Connections tab, covering the panels' area,
+            absolute, so it has that area's height for the graph) */}
         <div
-          id={tabIds.genealogy}
-          role="tabpanel"
-          aria-labelledby="tab-genealogy"
-          // On phones the open panel covers the panels' area (absolute, so it has that area's
-          // height for the graph); from md up it is one column of three.
+          id="panel-genealogy"
+          {...panelRole('genealogy')}
           className={`
-            md:w-1/4 border-l border-white/5 bg-black/25 backdrop-blur-sm md:relative
+            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
             ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
         `}
         >
           <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
-            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
+            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Connections
             </h2>
             {/* How the shown links are known, in the words and chips the legend, the list and
@@ -878,6 +1021,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 releaseYear={track.releaseYear}
                 hiddenLinks={hiddenLinks}
                 onNodeClick={handleNodeClick}
+                // From md up to xl the page scrolls past the graph: the wheel and one finger
+                // scroll it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones
+                // and at xl nothing scrolls behind the graph, and it takes them all.
+                wheelZoom={layout === 'columns' ? 'modifier' : 'plain'}
               />
             </ErrorBoundary>
           ) : (
@@ -905,45 +1052,35 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         )}
       </div>
 
-      {/* Mobile Tab Bar (P1:12 — ARIA roles) */}
+      {/* The phone tabs (WAI-ARIA tabs): Tab reaches the open tab only, the arrow keys move
+          between the tabs and open the one they reach, Home and End go to the first and last. */}
       <div
         role="tablist"
         aria-label="Player sections"
         className="md:hidden border-t border-white/5 bg-void/90 backdrop-blur-lg flex text-xs font-mono uppercase tracking-widest pb-[env(safe-area-inset-bottom)]"
       >
-        <button
-          type="button"
-          role="tab"
-          id="tab-context"
-          aria-selected={activeTab === 'context'}
-          aria-controls={tabIds.context}
-          onClick={() => setActiveTab('context')}
-          className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${activeTab === 'context' ? 'text-cyber border-t-2 border-cyber' : 'text-text-tertiary'}`}
-        >
-          Analysis
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-player"
-          aria-selected={activeTab === 'player'}
-          aria-controls={tabIds.player}
-          onClick={() => setActiveTab('player')}
-          className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${activeTab === 'player' ? 'text-white border-t-2 border-white' : 'text-text-tertiary'}`}
-        >
-          Player
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-genealogy"
-          aria-selected={activeTab === 'genealogy'}
-          aria-controls={tabIds.genealogy}
-          onClick={() => setActiveTab('genealogy')}
-          className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${activeTab === 'genealogy' ? 'text-analog border-t-2 border-analog' : 'text-text-tertiary'}`}
-        >
-          Connections
-        </button>
+        {TABS.map((tab, index) => {
+          const open = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              ref={(element) => {
+                tabRefs.current[index] = element;
+              }}
+              type="button"
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={open}
+              aria-controls={tab.panel}
+              tabIndex={open ? 0 : -1}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(event) => handleTabKeyDown(event, index)}
+              className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${open ? `border-t-2 ${tab.open}` : 'text-text-tertiary'}`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

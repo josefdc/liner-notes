@@ -35,6 +35,12 @@ interface ErrorBoundaryProps {
    * false for a piece inside a view whose own heading has the focus.
    */
   focusOnFail?: boolean;
+  /**
+   * Whether the fallback for a chunk-load error offers "Reload the page" (true by default):
+   * false where a reload would lose what the page shows around the part (a result that is
+   * not kept at its address).
+   */
+  offersReload?: boolean;
   children: ReactNode;
 }
 
@@ -110,11 +116,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidUpdate(_props: ErrorBoundaryProps, previous: ErrorBoundaryState) {
-    if (this.state.failed && !previous.failed && this.props.focusOnFail !== false) {
-      this.actionRef.current?.focus();
-    }
-    if (this.retried && !this.state.failed) {
-      this.retried = false;
+    // A way back is answered by the update it made, whatever came of it: never by a later one
+    // (another result's reset).
+    const retried = this.retried;
+    this.retried = false;
+    if (this.state.failed) {
+      // Failed again: the fallback is drawn afresh, and its way back takes the focus again from
+      // the button the user pressed; a part failing on its own takes it unless asked not to.
+      if (retried || (!previous.failed && this.props.focusOnFail !== false)) {
+        this.actionRef.current?.focus();
+      }
+    } else if (retried) {
       this.props.onRetried?.();
     }
   }
@@ -153,9 +165,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <Button ref={this.actionRef} variant="neutral" size="sm" onClick={this.retryLoad}>
               Try again
             </Button>
-            <Button variant="neutral" size="sm" onClick={() => window.location.reload()}>
-              Reload the page
-            </Button>
+            {this.props.offersReload !== false && (
+              <Button variant="neutral" size="sm" onClick={() => window.location.reload()}>
+                Reload the page
+              </Button>
+            )}
             {this.props.action.onClick && (
               <Button variant="neutral" size="sm" onClick={this.retry}>
                 {this.props.action.label}

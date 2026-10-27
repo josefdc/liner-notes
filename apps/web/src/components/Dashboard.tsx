@@ -14,6 +14,7 @@ import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
+import { isSpotifyTrackId } from '../utils/spotify';
 import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
@@ -180,7 +181,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   // The Sonic Fingerprint panel: takes the focus after its chart's "Try again".
   const fingerprintRef = useRef<HTMLElement>(null);
-  const focusFingerprint = useCallback(() => fingerprintRef.current?.focus(), []);
+  const focusFingerprint = useCallback(
+    () => fingerprintRef.current?.focus({ preventScroll: true }),
+    [],
+  );
   // Missing lists default to empty so a partial result renders instead of throwing.
   const trackData = useMemo(
     () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
@@ -367,7 +371,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           ref={fingerprintRef}
           tabIndex={-1}
           aria-label="Sonic Fingerprint"
-          className="outline-none lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="outline-none focus-visible:border-cyber/70 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel subtitle={fingerprintText} className="flex-1">
@@ -396,6 +400,10 @@ const Dashboard: React.FC<DashboardProps> = ({
               loadFailedMessage="The Sonic Fingerprint could not be loaded"
               focusOnFail={false}
               onRetried={focusFingerprint}
+              // A reload shows this result again only from its address, which only a result
+              // under a Spotify track id has (App.tsx, addressOf): for any other, it would lose
+              // the whole result for one chart, so it is not offered.
+              offersReload={isSpotifyTrackId(trackData?.id)}
               className="w-full h-full"
             >
               <Suspense

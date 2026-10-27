@@ -9,6 +9,9 @@ import { offline } from "./offline";
 
 const full = loadFixture("full-result");
 const budgetPaused = loadFixture("budget-paused");
+/** A stored run of the track STORED_ID, which its address `/t/<id>` opens (deeplink.spec.ts). */
+const stored = loadFixture("stored-run");
+const STORED_ID = "4cOdK2wGLETKBW3PvgPWqT";
 
 /**
  * Refuses the chunk whose address matches `pattern` until `allow()`: the browser reports it as
@@ -238,6 +241,10 @@ test("a Sonic Fingerprint whose code failed to load leaves the Dashboard, and lo
   // The rest of the Dashboard stays, and its heading keeps the focus.
   await expect(dashboardHeading(page)).toBeFocused();
   await expect(screenFallback(page)).toHaveCount(0);
+  // This result is under a placeholder id, kept at no address: a reload would lose it, so the
+  // panel does not offer one.
+  await expect(fallback.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(fallback.getByRole("button", { name: "Reload the page" })).toHaveCount(0);
 
   chunk.allow();
   await fallback.getByRole("button", { name: "Try again" }).click();
@@ -275,11 +282,69 @@ test("a Sonic Fingerprint whose code fails after the Dashboard is in leaves the 
   await expect(dashboardHeading(page)).toBeFocused();
   expect(chunk.counts()).toEqual({ refused: 1, served: 0 });
 
+  // From the keyboard: the panel takes the focus, and shows it.
   chunk.allow();
-  await region.getByRole("button", { name: "Try again" }).click();
+  const unfocusedBorder = await region.evaluate((el) => getComputedStyle(el).borderTopColor);
+  await region.getByRole("button", { name: "Try again" }).focus();
+  await page.keyboard.press("Enter");
   await expect(region.locator(".recharts-wrapper")).toBeVisible();
   await expect(region).toBeFocused();
+  expect(await region.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+  expect(await region.evaluate((el) => getComputedStyle(el).borderTopColor)).not.toBe(
+    unfocusedBorder,
+  );
   expect(otherProblems(problems, "SonicFingerprint-")).toEqual([]);
+});
+
+test("a Sonic Fingerprint that fails to draw again keeps the focus on its Try again", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await offline(page);
+  await useMockApi(page, full);
+  // The chart's code arrives, but throws on every draw.
+  await page.route(/\/assets\/SonicFingerprint-[\w-]+\.js$/, (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: "export default function Broken() { throw new Error('the chart failed'); }",
+    }),
+  );
+  await page.goto("/");
+  await search(page, "Bright Lines");
+  await page.getByRole("button", { name: "Open the results" }).click();
+  await expect(dashboardHeading(page)).toBeFocused();
+  const region = page.getByRole("region", { name: "Sonic Fingerprint" });
+  await expect(region.getByRole("alert")).toContainText("The Sonic Fingerprint could not be drawn");
+
+  await region.getByRole("button", { name: "Try again" }).focus();
+  await page.keyboard.press("Enter");
+  // Drawn afresh, the fallback's Try again has the focus again, not the page.
+  await expect(region.getByRole("alert")).toContainText("The Sonic Fingerprint could not be drawn");
+  await expect(region.getByRole("button", { name: "Try again" })).toBeFocused();
+  expect(problems.filter((line) => !line.includes("the chart failed"))).toEqual([]);
+});
+
+test("the Sonic Fingerprint of a result kept at its address offers a reload that shows it again", async ({
+  page,
+}) => {
+  await offline(page);
+  await useMockApi(page, stored);
+  await failChunk(page, /\/assets\/SonicFingerprint-[\w-]+\.js$/);
+  await page.goto(`/t/${STORED_ID}`);
+  await expect(dashboardHeading(page)).toHaveText("Bright Lines");
+  const address = page.url();
+  const region = page.getByRole("region", { name: "Sonic Fingerprint" });
+  await expect(region.getByRole("alert")).toContainText(
+    "The Sonic Fingerprint could not be loaded",
+  );
+
+  await markDocument(page);
+  await region.getByRole("button", { name: "Reload the page" }).click();
+  await page.waitForLoadState("load");
+  expect(await sameDocument(page)).toBe(false);
+  // The reload shows the same result again, from its address.
+  expect(page.url()).toBe(address);
+  await expect(dashboardHeading(page)).toHaveText("Bright Lines");
 });
 
 test("the paused banner whose code failed to load loads on Try again", async ({ page }) => {

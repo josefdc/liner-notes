@@ -165,6 +165,90 @@ describe('the error boundary and a chunk that could not be loaded', () => {
   });
 });
 
+describe('the error boundary after a way back', () => {
+  it('gives the focus back to "Try again" when the part fails again', () => {
+    // A part that throws on every draw (a generic error), in a boundary asked not to take the
+    // focus when the part fails on its own.
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        focusOnFail={false}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetried).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus back to "Try again" when the code fails to load again', () => {
+    failure = chunkError();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        focusOnFail={false}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(screen.getByRole('alert').textContent).toContain('could not be loaded');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+  });
+
+  it('does not call onRetried for a later reset after a way back that failed', () => {
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn();
+    const tree = (resetKey: string) => (
+      <ErrorBoundary
+        resetKey={resetKey}
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>
+    );
+    const { rerender } = render(tree('first'));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    // Another result: the boundary resets, and the part draws. No way back led there.
+    failure = null;
+    rerender(tree('second'));
+    expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+    expect(onRetried).not.toHaveBeenCalled();
+  });
+
+  it('leaves "Reload the page" out when asked to', () => {
+    failure = chunkError();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        offersReload={false}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const buttons = [...screen.getByRole('alert').querySelectorAll('button')].map(
+      (button) => button.textContent,
+    );
+    expect(buttons).toEqual(['Try again']);
+  });
+});
+
 describe('the error boundary and any other error', () => {
   it("keeps the boundary's own message and way back", () => {
     failure = new TypeError("Cannot read properties of undefined (reading 'title')");

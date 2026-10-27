@@ -9,7 +9,7 @@ import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 import {
@@ -18,10 +18,12 @@ import {
   describeError,
   fetchJson,
   hasStackTrace,
+  isMediaUrl,
   pick,
   plainMessage,
   plainReason,
   reasonIssue,
+  redactQuotedSecrets,
   redactText,
   redactTokenRuns,
   replacePhoneLike,
@@ -326,6 +328,74 @@ describe("scrubbing", () => {
     expect(text).not.toContain("123-4567");
   });
 
+  // The keys the parsed path redacts (scrubPayload), each written quoted in text that was not
+  // parsed. The values have no token shape, so only the quoted-key rule can catch them.
+  it.each([
+    "x-api-key",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "client_secret",
+    "password",
+    "token",
+    "secret",
+    "authorization",
+  ])('redacts the value of a quoted "%s" key in text, as the parsed path does', (key) => {
+    expect(scrubPayload({ [key]: "plain-value-1" })).toEqual({ [key]: "[redacted]" });
+    for (const written of [
+      `{"${key}":"plain-value-1"}`,
+      `<pre>{"error": 1, "${key}" : "plain-value-1"}</pre>`,
+      `{'${key}': 'plain-value-1'}`,
+      `{"${key.toUpperCase()}":"plain-value-1"}`,
+    ]) {
+      const text = scrubText(written);
+      expect(text, written).not.toContain("plain-value-1");
+      expect(text, written).toContain("[redacted]");
+    }
+  });
+
+  it("reads a quoted value to its closing quote, escapes included, and leaves other keys alone", () => {
+    const cases: Array<[string, string]> = [
+      ['{"password":"a\\"b\\\\c d"}', '{"password":"[redacted]"}'],
+      ['{"password" :\n "pw 1", "next":"kept"}', '{"password" :\n "[redacted]", "next":"kept"}'],
+      [`{'token': "it's mine"}`, `{'token': "[redacted]"}`],
+      // A JSON string inside a JSON string: the quotes are escaped, and so are its own escapes.
+      [
+        '{"error":"{\\"client_secret\\":\\"in \\\\\\"side\\",\\"next\\":\\"kept\\"}"}',
+        '{"error":"{\\"client_secret\\":\\"[redacted]\\",\\"next\\":\\"kept\\"}"}',
+      ],
+      // A body cut off inside the value: the rest of it goes.
+      ['<p>{"password":"hunter2 and the rest', '<p>{"password":"[redacted]'],
+      // Not a secret key, or not a value to read here: left as it is.
+      ['{"my_token":"kept-1","tokens":"kept-2","token_type":"kept-3"}', ""],
+      ['{"token":{"type":"kept-4"},"password":"","Secret":12345678}', ""],
+      ["token: kept-5 and password=", ""],
+    ];
+    for (const [text, expected] of cases) {
+      expect(redactQuotedSecrets(text), text).toBe(expected || text);
+    }
+    // Read before the `key=` rule, which would end the value at its escaped quote.
+    expect(scrubText('{"password":"key=abc\\" def"}')).toBe('{"password":"[redacted]"}');
+  });
+
+  it.each([
+    ["Deezer preview", "https:\\/\\/cdns-preview-1.dzcdn.net\\/stream\\/c-1?hdnea=exp=1~hmac=abc"],
+    ["protocol-relative image", "\\/\\/i.scdn.co\\/image\\/ab67616d0000b273"],
+    ["http mp3", "http:\\/\\/cdn.example.test\\/a\\/track.mp3"],
+  ])("removes a %s URL written with JSON-escaped slashes, as its plain form", (_name, url) => {
+    const plain = url.replaceAll("\\/", "/");
+    expect(scrubText(`see ${plain} now`)).toBe("see [media] now");
+    expect(scrubText(`{"note":"see ${url}","next":"kept"}`)).toBe(
+      '{"note":"see [media]","next":"kept"}',
+    );
+  });
+
+  it("keeps an ordinary link written with JSON-escaped slashes", () => {
+    const text = '{"page":"https:\\/\\/www.whosampled.com\\/Vanilla-Ice\\/"}';
+    expect(scrubText(text)).toBe(text);
+  });
+
   it("redacts a header value that fetch echoes in its error", () => {
     // Not a known key and no token shape: only the header rule can catch it.
     const error = new TypeError('Headers.append: "plain value 42\n" is an invalid header value.');
@@ -589,6 +659,94 @@ describe("cassettes", () => {
     const file = readFileSync(join(dir, "spotify.json"), "utf8");
     expect(file).not.toContain("BQabc123secret");
     expect(file).not.toContain("scdn.co");
+  });
+
+  describe("an error body that is not parsed", () => {
+    // Quoted secret keys and JSON-escaped signed preview links: what scrubPayload removes from a
+    // body that parses. None of the values may reach the cassette, the error or the log.
+    const pairs =
+      '"client_secret":"shh-upstream-secret-1", "password" : "hunter2-pw", ' +
+      '"authorization":"opaque-auth-value", "access_token":"at-value-1", ' +
+      '"refresh_token":"rt-value-1", "api_key":"ak-value-1", "token":"a\\"b tk-value-1", ' +
+      "'secret': 'single-quoted-value-1'";
+    const links =
+      "https:\\/\\/cdns-preview-1.dzcdn.net\\/stream\\/c-1?hdnea=exp=1~acl=x~hmac=abc and " +
+      "\\/\\/cdns-preview-2.dzcdn.net\\/stream\\/c-2?hdnea=exp=2~hmac=def";
+    const leaks = [
+      "shh-upstream-secret-1",
+      "hunter2-pw",
+      "opaque-auth-value",
+      "at-value-1",
+      "rt-value-1",
+      "ak-value-1",
+      "tk-value-1",
+      "single-quoted-value-1",
+      "hdnea",
+      "hmac",
+      "dzcdn",
+    ];
+    const lastfm = { source: "lastfm" as const, url: "https://ws.audioscrobbler.com/2.0/?m=x" };
+
+    /** Everything a caller or a log can see of a thrown error. */
+    const shown = (error: SourceError) =>
+      [
+        error.message,
+        String(error.body),
+        inspect(error, { showHidden: true, depth: 8 }),
+        JSON.stringify(error),
+      ].join("\n");
+
+    it.each([
+      [
+        "a text/html",
+        "text/html; charset=utf-8",
+        `<html><body><pre>{${pairs}, "preview":"${links}"}</pre></body></html>`,
+      ],
+      ["an invalid-JSON", "application/json", `{"error":6,${pairs},"preview":"${links}"`],
+    ])(
+      "keeps no secret or signed link of %s 400 body, live, recorded or replayed",
+      async (_name, contentType, body) => {
+        expect(Buffer.byteLength(body)).toBeLessThan(64 * 1024);
+        const errors: Record<string, SourceError> = {};
+        for (const mode of ["off", "record", "replay"]) {
+          process.env.SOURCE_CASSETTE = mode;
+          const net = stubFetch(() =>
+            mode === "replay"
+              ? undefined
+              : new Response(body, { status: 400, headers: { "content-type": contentType } }),
+          );
+          const logs = captureLogsForTests();
+          let error: SourceError;
+          try {
+            error = await rejection(fetchJson(lastfm));
+          } finally {
+            logs.restore();
+          }
+          expect(net.calls).toHaveLength(mode === "replay" ? 0 : 1);
+          expect(error).toMatchObject({ kind: "http", status: 400 });
+          expect(error.message).toBe("lastfm: HTTP 400 (the source rejected the request)");
+          const logged = JSON.stringify(logs.entries());
+          expect(logged).toContain("with a body that is not JSON");
+          for (const leak of leaks) {
+            expect(shown(error), `${mode}: error`).not.toContain(leak);
+            expect(logged, `${mode}: log`).not.toContain(leak);
+          }
+          expect(error.body).toContain("[redacted]");
+          expect(error.body).toContain("[media]");
+          errors[mode] = error;
+        }
+
+        const file = readFileSync(join(dir, "lastfm.json"), "utf8");
+        for (const leak of leaks) expect(file).not.toContain(leak);
+        const entry = Object.values(JSON.parse(file).entries)[0] as { text: string };
+        // The replayed error is the recorded one, which is the live one.
+        expect(entry.text).toBe(errors.record?.body);
+        for (const mode of ["off", "replay"]) {
+          expect(errors[mode]?.message).toBe(errors.record?.message);
+          expect(errors[mode]?.body).toBe(errors.record?.body);
+        }
+      },
+    );
   });
 
   it.each([
@@ -1041,9 +1199,181 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
     ["a long token-like run", () => scrubText(`a${"-a0".repeat(20_000)}-`).length, 500],
     ["a long run of number characters", () => scrubText(`${"(0- ".repeat(15_000)}x`).length, 500],
     ["a long run before an @", () => scrubText(`${"a".repeat(60_000)}@`).length, 500],
+    // 10 kB, and 60 kB: about 3 s each for a key search that reads on to the end of the text
+    // from each start.
+    ...[10_000, 60_000].flatMap((size): Array<[string, () => unknown, unknown]> => {
+      const fill = (unit: string) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+      return [
+        [
+          `${size} characters of escaped quotes around a key`,
+          () => redactQuotedSecrets(fill('\\"token\\')).length,
+          size,
+        ],
+        [
+          `${size} characters of quoted keys without a colon`,
+          () => redactQuotedSecrets(fill('\\"token\\" ')).length,
+          size,
+        ],
+        [`${size} characters of near keys`, () => scrubText(fill('\\"authorizatio')).length, 500],
+        [
+          `${size} characters of backslashes in an unterminated value`,
+          () => scrubText(`"token":"${fill("\\")}`),
+          '"token":"[redacted]',
+        ],
+        [
+          `${size} characters of escaped URL starts`,
+          () => scrubText(fill("https:\\/\\/")).length,
+          500,
+        ],
+      ];
+    }),
   ])("answers quickly on %s", (_name, call, expected) => {
     const { ms, result } = timed(call);
     expect(ms).toBeLessThan(400);
     expect(result).toBe(expected);
+  });
+});
+
+describe("text redaction against the rules before #202", { timeout: 30_000 }, () => {
+  // scrubText as it was before quoted secret keys and JSON-escaped links were read, from the
+  // parts that did not change. No credential is configured here, so knownSecrets is left out.
+  const OLD_ID_SHAPED =
+    /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9A-Za-z]{22}|[A-Z]{2}[A-Z0-9]{3}\d{7})$/i;
+  const OLD_SECRET_PATTERNS: Array<[RegExp, string]> = [
+    [/\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g, "$1 [redacted]"],
+    [
+      /\b(api_?key|key|token|access_token|refresh_token|client_secret|password|secret)=([^&\s"'<>]+)/gi,
+      "$1=[redacted]",
+    ],
+    [/\btvly-[A-Za-z0-9_-]+/g, "tvly-[redacted]"],
+    [/\bBQ[A-Za-z0-9_-]{40,}/g, "[redacted]"],
+  ];
+  const OLD_URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
+  const scrubTextBefore = (text: string): string => {
+    if (OLD_ID_SHAPED.test(text)) return text;
+    let out = /header/i.test(text) ? text.replace(/"[^"]*"/g, '"[redacted]"') : text;
+    for (const [pattern, replacement] of OLD_SECRET_PATTERNS) {
+      out = out.replace(pattern, replacement);
+    }
+    out = redactTokenRuns(out).replace(OLD_URL_IN_TEXT, (url) =>
+      isMediaUrl(url) ? "[media]" : url,
+    );
+    out = replacePhoneLike(withoutEmails(out), (match) => {
+      const digits = match.replace(/\D/g, "").length;
+      const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
+      return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
+    });
+    return out.length > 500 ? out.slice(0, 500) : out;
+  };
+
+  /** True when `now` is `old` with parts of it (none or more) replaced by a mask. */
+  const onlyNewRedactions = (now: string, old: string): boolean => {
+    const kept = now.split(/\[(?:redacted|media|email|phone)\]/);
+    const first = kept[0] ?? "";
+    const last = kept.at(-1) ?? "";
+    if (kept.length === 1) return now === old;
+    if (!old.startsWith(first)) return false;
+    let at = first.length;
+    for (const part of kept.slice(1, -1)) {
+      const found = old.indexOf(part, at);
+      if (found === -1) return false;
+      at = found + part.length;
+    }
+    return old.length - last.length >= at && old.endsWith(last);
+  };
+
+  const realistic = [
+    "Authorization: Bearer abc.def-123456789 then ?api_key=K1&key=K2&token=K3 and tvly-dev-XYZ123",
+    "Released 1990-10-02 (10016 plays), https://www.whosampled.com/Vanilla-Ice/ — " +
+      "write to fan.mail@example.org or call +1 (555) 123-4567.",
+    '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title></head></html>',
+    '{"error":{"status":401,"message":"Invalid access token"}}',
+    'Headers.append: "plain value 42\n" is an invalid header value.',
+    "see https://cdnt-preview.dzcdn.net/api/1/1/a/b/c.mp3?hdnea=exp=1 for the cover",
+    "e21857d5-3256-4547-afb3-4b6ded592596",
+  ];
+  const parts = [
+    '"token"',
+    "'password'",
+    '\\"api_key\\"',
+    '"Client_Secret"',
+    '"x-api-key"',
+    '"authorization"',
+    '"my_token"',
+    '"tokens"',
+    ":",
+    " : ",
+    '"',
+    "'",
+    "\\",
+    '\\"',
+    "\\\\",
+    "{",
+    "}",
+    "[",
+    ",",
+    "a",
+    "pw-1",
+    "12345",
+    "null",
+    " ",
+    "\n",
+    "[redacted]",
+    "https:\\/\\/",
+    "\\/\\/",
+    "https://",
+    "//",
+    "cdns-preview-1.dzcdn.net",
+    "i.scdn.co",
+    "www.example.org",
+    "\\/stream",
+    "\\/a.mp3",
+    "/a.png",
+    "?hdnea=exp=1",
+    "token=",
+    "Bearer abcdefghijkl1",
+    "header",
+    "x@y.co",
+    "+1 (555) 123-4567",
+    "2024-01-02",
+    "aB3dE6gH9jK2mN5pQ8sT1v",
+    "é",
+  ];
+  const corpus = [
+    ...realistic,
+    ...allStrings(['"token"', ":", '"', "\\", "a", "\\/\\/", "i.scdn.co"], 5),
+    ...randomStrings(parts, 40_000, 12),
+    // The corpora of the linear-time rewrites (#198), which hold no quoted key or escaped link.
+    ...randomStrings(["1", "23", "4567", " ", "-", "(", ")", "+", ".", "a", "_", "\n"], 5_000, 18),
+    ...randomStrings(["a", "b.c", "@", ".", "+", "-", "_", " ", "x@y.z", "é", "\n"], 5_000, 14),
+    ...randomStrings(["a", "A", "0", "_", "-", " ", "aB3dE6gH9jK2mN5pQ8sT1v", "="], 5_000, 24),
+  ];
+  const quotedKeyOrEscapedSlash = /\\\/|(?:api[-_]?key|token|secret|password|authorization)["']/i;
+
+  it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
+    const plain = corpus.filter((text) => !quotedKeyOrEscapedSlash.test(text));
+    expect(plain.length).toBeGreaterThan(20_000);
+    expect(disagreements(plain, scrubText, scrubTextBefore)).toEqual([]);
+  });
+
+  /** The text with each media link written with JSON-escaped slashes written plainly. */
+  const plainLinks = (text: string) =>
+    text.replace(/(?:https?:)?\\\/\\\/[^\s"'<>()[\]{}]+/gi, (url) => {
+      const plain = url.replaceAll("\\/", "/");
+      return isMediaUrl(plain) ? plain : url;
+    });
+
+  it("differs from before only where it redacts a secret or a link more", () => {
+    const changed = corpus.filter((text) => scrubText(text) !== scrubTextBefore(text));
+    // Either a pure redaction, or an escaped media link read exactly as before its plain form was
+    // (the e-mail and phone rules then read the text around it as around a plain link).
+    const other = changed
+      .filter((text) => !onlyNewRedactions(scrubText(text), scrubTextBefore(text)))
+      .filter((text) => scrubText(text) !== scrubTextBefore(plainLinks(text)))
+      .slice(0, 5)
+      .map((input) => ({ input, now: scrubText(input), old: scrubTextBefore(input) }));
+    expect(other).toEqual([]);
+    expect(changed.length).toBeGreaterThan(1_000);
+    expect(changed.every((text) => quotedKeyOrEscapedSlash.test(text))).toBe(true);
   });
 });

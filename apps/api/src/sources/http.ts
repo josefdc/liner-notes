@@ -103,14 +103,91 @@ function redactSecrets(text: string): string {
   return redactTokenRuns(out);
 }
 
+/** Keys whose value is redacted whatever it holds: in a parsed body, and quoted in text. */
+const SECRET_KEYS: ReadonlySet<string> = new Set([
+  "x-api-key",
+  "access_token",
+  "refresh_token",
+  "api_key",
+  "apikey",
+  "client_secret",
+  "password",
+  "token",
+  "secret",
+  "authorization",
+]);
+
+/**
+ * A quoted secret key (SECRET_KEYS, in any case; each a plain word) and its colon: `"password":`,
+ * `'token' :`, or `\"api_key\":` inside a JSON string. Group 1 is the backslash before each
+ * quote, if any.
+ */
+const QUOTED_SECRET_KEY = new RegExp(
+  `(\\\\?)(["'])(?:${[...SECRET_KEYS].join("|")})\\1\\2\\s*:\\s*`,
+  "gi",
+);
+
+/**
+ * Where a quoted value whose content starts at `start` ends (the index of its closing quote, or
+ * the end of the text when it has none). `escaped`: the quotes are written `\"` (a JSON string
+ * inside a JSON string), where a backslash of the inner string is written `\\`.
+ */
+function quotedValueEnd(text: string, start: number, quote: string, escaped: boolean): number {
+  let i = start;
+  while (i < text.length) {
+    const char = text.charAt(i);
+    if (!escaped) {
+      if (char === quote) return i;
+      i += char === "\\" ? 2 : 1;
+    } else if (char !== "\\") {
+      i += 1;
+    } else if (text.charAt(i + 1) === quote) {
+      return i;
+    } else if (text.charAt(i + 1) === "\\") {
+      // An escaped backslash of the inner string: the inner character after it is skipped too.
+      i += text.charAt(i + 2) === "\\" ? 4 : 3;
+    } else {
+      i += 2;
+    }
+  }
+  return text.length;
+}
+
+/**
+ * Each quoted value of a quoted secret key in text that was not parsed (an HTML page, a JSON body
+ * that does not parse, a message) as "[redacted]", as the parsed path redacts it by key
+ * (`"client_secret": "…"` → `"client_secret": "[redacted]"`): in either quote, escapes included,
+ * up to its closing quote or the end of the text. A value without quotes (a number, an object) is
+ * left to the other rules: where it ends is not plain from the text. Reads the text once.
+ */
+export function redactQuotedSecrets(text: string): string {
+  let out = "";
+  let kept = 0;
+  QUOTED_SECRET_KEY.lastIndex = 0;
+  for (let key = QUOTED_SECRET_KEY.exec(text); key; key = QUOTED_SECRET_KEY.exec(text)) {
+    const at = key.index + key[0].length;
+    const backslash = key[1] ?? "";
+    const quote = text.charAt(at + backslash.length);
+    if (!text.startsWith(backslash, at) || (quote !== '"' && quote !== "'")) continue;
+    const start = at + backslash.length + 1;
+    const end = quotedValueEnd(text, start, quote, backslash !== "");
+    if (end === start) continue;
+    out += `${text.slice(kept, start)}[redacted]`;
+    kept = end;
+    QUOTED_SECRET_KEY.lastIndex = Math.max(end, QUOTED_SECRET_KEY.lastIndex);
+  }
+  return out + text.slice(kept);
+}
+
 /**
  * Removes credentials from an error message or log line. Besides `redactSecrets`, a quoted value
  * in a message about a header is removed: fetch echoes an invalid header value, which is the
- * credential.
+ * credential; and so is the quoted value of a quoted secret key (redactQuotedSecrets), before the
+ * other rules can cut it at an escaped quote.
  */
 export function redactText(text: string): string {
   const out = /header/i.test(text) ? text.replace(/"[^"]*"/g, '"[redacted]"') : text;
-  return redactSecrets(out);
+  return redactSecrets(redactQuotedSecrets(out));
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
@@ -189,6 +266,18 @@ export function replacePhoneLike(text: string, replace: (match: string) => strin
 const withoutMediaUrls = (text: string) =>
   text.replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url));
 
+/** A URL whose slashes are JSON-escaped (`https:\/\/host\/path`), absolute or protocol-relative. */
+const ESCAPED_URL_IN_TEXT = /(?:https?:)?\\\/\\\/[^\s"'<>()[\]{}]+/gi;
+
+/**
+ * Each media URL written with JSON-escaped slashes as "[media]", as withoutMediaUrls removes the
+ * same URL written plainly: a signed preview link in a body that was not parsed.
+ */
+export const withoutEscapedMediaUrls = (text: string) =>
+  text.replace(ESCAPED_URL_IN_TEXT, (url) =>
+    isMediaUrl(url.replaceAll("\\/", "/")) ? "[media]" : url,
+  );
+
 /**
  * A string the pipeline reads, for a cassette: secrets redacted and media URLs removed, capped
  * well above what consumers read. Nothing else changes, so replay reproduces the recorded run;
@@ -201,12 +290,14 @@ export function scrubReadText(text: string): string {
 }
 
 /**
- * An error or text body for a cassette: secrets, media URLs, e-mails and phone numbers removed,
- * capped. These bodies only feed error handling and the debug log.
+ * An error or text body for a cassette: secrets (quoted secret keys included), media URLs (also
+ * written with JSON-escaped slashes), e-mails and phone numbers removed, capped. These bodies
+ * only feed error handling and the debug log.
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = replacePhoneLike(withoutEmails(withoutMediaUrls(redactText(text))), (match) => {
+  const urls = withoutEscapedMediaUrls(withoutMediaUrls(redactText(text)));
+  const out = replacePhoneLike(withoutEmails(urls), (match) => {
     const digits = match.replace(/\D/g, "").length;
     const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
     return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
@@ -257,7 +348,7 @@ export class SourceError extends Error {
   override readonly name = "SourceError";
   readonly status?: number;
   readonly retryAfterMs?: number;
-  /** The error body: parsed JSON, or capped text. */
+  /** The error body: parsed JSON, or text that was not parsed, scrubbed (scrubText) and capped. */
   readonly body?: unknown;
 
   constructor(
@@ -399,18 +490,6 @@ export function pick(value: unknown, shape: Shape): unknown {
   return out;
 }
 
-const SECRET_KEYS = new Set([
-  "x-api-key",
-  "access_token",
-  "refresh_token",
-  "api_key",
-  "apikey",
-  "client_secret",
-  "password",
-  "token",
-  "secret",
-  "authorization",
-]);
 const MEDIA_KEY =
   /^(?:preview|images?|picture|cover|thumbnail|artwork|favicon|avatar)(?:[_-]?\w*)$/i;
 
@@ -895,7 +974,9 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
         // Falls through: kept as text, reported as a parse error.
       }
     }
-    recorded.text = text.slice(0, MAX_TEXT * 4);
+    // A body that is not parsed is kept scrubbed from here on: the error's body, the debug log
+    // and the cassette all hold this text, so a replay gives the same error.
+    recorded.text = scrubText(text.slice(0, MAX_TEXT * 4));
     return recorded;
   } catch (error) {
     if (isSourceError(error)) throw error;
@@ -980,7 +1061,8 @@ function forCassette(req: SourceRequest, answer: Recorded): Recorded {
       ? scrubReadPayload(req.scrub ? pick(kept, req.scrub) : kept)
       : scrubPayload(answer.json);
   } else {
-    entry.text = scrubText(answer.text ?? "");
+    // Scrubbed when it was read (fetchLive), so the replayed error is the recorded one.
+    entry.text = answer.text ?? "";
   }
   return entry;
 }

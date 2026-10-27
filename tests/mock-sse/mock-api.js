@@ -38,7 +38,12 @@
 // POST /api/runs issues run tokens ("mock-run-token-1", "-2"…, listed in
 // `window.__mockApi.runTokens`), as the API does once Turnstile is passed. A stream on an analysis
 // or factoid path opened without one of them fails as the API's 401 does (the EventSource gives
-// up), and is recorded in `window.__mockApi.refused`.
+// up), and is recorded in `window.__mockApi.refused`. The Turnstile token each POST sent is
+// recorded in `window.__mockApi.turnstileTokens`.
+//   runTokenRefusals: [{ status, code, error, retryAfter }, ...] — the next POSTs /api/runs are
+//                refused with these JSON errors, one each, in order (a 401 `auth_expired`: the
+//                Turnstile token was not accepted; a 429 `rate_limited` with `retryAfter`, the
+//                Retry-After header in seconds); once the list is used up, tokens are issued.
 // Every API request (any URL whose path starts with /api/) is recorded in
 // `window.__mockApi.log`, without its run token (the token is checked instead). What each stream does is recorded in `window.__mockApi.streamLog`
 // as "<path> open", "<path> <event type>", "<path> closed" (by the app), "<path> ended"
@@ -56,6 +61,7 @@
   config.aborted = [];
   config.runTokens = [];
   config.refused = [];
+  config.turnstileTokens = [];
   const isApi = (url) => new URL(url, location.href).pathname.startsWith("/api/");
   const pathOf = (url) => new URL(url, location.href).pathname;
   // The routes that require a run token, as the API's gate.
@@ -201,6 +207,26 @@
       return json({ success: false, code: "not_found", error: "Not found." }, 404);
     }
     if (pathOf(url) === "/api/runs" && (init?.method ?? "GET").toUpperCase() === "POST") {
+      let sent = null;
+      try {
+        sent = JSON.parse(init?.body ?? "null")?.turnstileToken ?? null;
+      } catch {
+        // Not JSON: recorded as null.
+      }
+      config.turnstileTokens.push(sent);
+      const refusal = config.runTokenRefusals?.shift();
+      if (refusal) {
+        const headers = { "Content-Type": "application/json" };
+        if (refusal.retryAfter !== undefined) headers["Retry-After"] = String(refusal.retryAfter);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: refusal.code,
+            error: refusal.error ?? "Refused.",
+          }),
+          { status: refusal.status, headers },
+        );
+      }
       const runToken = `mock-run-token-${config.runTokens.length + 1}`;
       config.runTokens.push(runToken);
       const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();

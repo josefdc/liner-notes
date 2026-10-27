@@ -83,6 +83,7 @@ type MockWindow = {
     aborted: string[];
     runTokens: string[];
     refused: string[];
+    turnstileTokens: Array<string | null>;
     release: (name: string) => void;
   };
 };
@@ -101,6 +102,11 @@ export function runTokens(page: Page) {
     const { runTokens: issued, refused } = (window as unknown as MockWindow).__mockApi;
     return { issued, refused };
   });
+}
+
+/** The Turnstile tokens POST /api/runs was sent so far, in order (null: none could be read). */
+export function sentTurnstileTokens(page: Page) {
+  return page.evaluate(() => (window as unknown as MockWindow).__mockApi.turnstileTokens);
 }
 
 /**

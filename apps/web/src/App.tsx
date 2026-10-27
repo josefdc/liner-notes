@@ -174,6 +174,7 @@ const App: React.FC = () => {
     analyze,
     selectCandidate,
     retry,
+    retryAt,
     moreFacts,
     moreFactoidsStream,
     searchSuggest,
@@ -589,6 +590,7 @@ const App: React.FC = () => {
             analyze={startSearch}
             selectCandidate={selectCandidate}
             retry={retrySearch}
+            retryAt={retryAt}
             searchSuggest={searchSuggest}
             onComplete={handleAnalysisComplete}
             searchInputRef={searchInputRef}

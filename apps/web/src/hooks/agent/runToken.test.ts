@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TrackData } from '../../types';
-import { RunTokenError, requestRunToken } from './apiClient';
+import { RunTokenError, requestRunToken, retryAfterMs } from './apiClient';
 import { moreFactsUrl, newMoreFacts } from './moreFacts';
 import {
   DEV_BYPASS_TOKEN,
@@ -9,6 +9,7 @@ import {
   RUN_TOKEN_MARGIN_MS,
   withRunToken,
 } from './runToken';
+import type { TurnstileApi, TurnstileRenderOptions } from './turnstile';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,6 +24,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  delete window.turnstile;
 });
 
 describe('requestRunToken', () => {
@@ -52,6 +54,30 @@ describe('requestRunToken', () => {
     });
   });
 
+  it('reads how long a 429 says to wait, in seconds or as a date', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: false, code: 'rate_limited', error: 'Slow down.' }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '42' },
+      }),
+    );
+    await expect(requestRunToken('tt-1')).rejects.toMatchObject({
+      code: 'rate_limited',
+      retryAfterMs: 42_000,
+    });
+    // Without the header, no wait is known.
+    fetchSpy.mockResolvedValueOnce(json({ success: false, code: 'rate_limited' }, 429));
+    await expect(requestRunToken('tt-1')).rejects.toMatchObject({ retryAfterMs: null });
+
+    const now = Date.parse('2026-10-27T12:00:00.000Z');
+    expect(retryAfterMs('Tue, 27 Oct 2026 12:01:30 GMT', now)).toBe(90_000);
+    expect(retryAfterMs('Tue, 27 Oct 2026 11:59:00 GMT', now)).toBe(0);
+    expect(retryAfterMs(' 0 ', now)).toBe(0);
+    for (const unreadable of [null, '', 'soon', '-5', '1.5']) {
+      expect(retryAfterMs(unreadable, now)).toBeNull();
+    }
+  });
+
   it('rejects an answer it cannot read, or one without a token or an expiry', async () => {
     for (const answer of [
       new Response('<html>', { status: 502 }),
@@ -74,10 +100,66 @@ describe('newRunToken', () => {
     });
   });
 
-  it('never sends the bypass from a build with a site key', async () => {
+  /** A window.turnstile that answers each widget with `answer(n)` (the nth, from 1). */
+  function fakeTurnstile(answer: (n: number, options: TurnstileRenderOptions) => void) {
+    const rendered: TurnstileRenderOptions[] = [];
+    const api: TurnstileApi = {
+      render: (_container, options) => {
+        rendered.push(options);
+        const n = rendered.length;
+        queueMicrotask(() => answer(n, options));
+        return `widget-${n}`;
+      },
+      remove: () => {},
+    };
+    window.turnstile = api;
+    return rendered;
+  }
+  const body = (call: number) => JSON.parse(fetchSpy.mock.calls[call][1].body);
+
+  it("asks with the Turnstile widget's token in a build with a site key", async () => {
     vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
+    const rendered = fakeTurnstile((n, options) => options.callback(`widget-token-${n}`));
+    expect(await newRunToken()).toEqual({
+      runToken: 'v1.a.b',
+      expiresAt: Date.parse('2026-10-27T12:30:00.000Z'),
+    });
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0]).toMatchObject({
+      sitekey: '1x00000000000000000000AA',
+      appearance: 'interaction-only',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(body(0)).toEqual({ turnstileToken: 'widget-token-1' });
+  });
+
+  it('runs one new check when the API refuses the widget token, and no more', async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
+    const rendered = fakeTurnstile((n, options) => options.callback(`widget-token-${n}`));
+    const refused = () =>
+      json({ success: false, code: 'auth_expired', error: 'Check again.' }, 401);
+    fetchSpy.mockResolvedValueOnce(refused());
+    await newRunToken();
+    expect(rendered).toHaveLength(2);
+    expect([body(0), body(1)]).toEqual([
+      { turnstileToken: 'widget-token-1' },
+      { turnstileToken: 'widget-token-2' },
+    ]);
+
+    // Refused twice: the refusal is the answer; no third check.
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async () => refused());
+    await expect(newRunToken()).rejects.toMatchObject({ code: 'auth_expired' });
+    expect(rendered).toHaveLength(4);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks the API nothing when the check gives no token', async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
+    const rendered = fakeTurnstile((_n, options) => options['error-callback']('300030'));
     await expect(newRunToken()).rejects.toBeInstanceOf(RunTokenError);
-    await expect(newRunToken()).rejects.toMatchObject({ code: 'verification_unavailable' });
+    await expect(newRunToken()).rejects.toMatchObject({ code: 'verification_failed' });
+    expect(rendered).toHaveLength(2);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

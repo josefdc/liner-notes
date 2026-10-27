@@ -3,10 +3,11 @@ import { defineConfig } from "@playwright/test";
 // Browser tests run the web app alone; the API is replaced by tests/mock-sse/mock-api.js.
 // Outside the ports the dev setup uses (3000-3002 and the 31x0-31x2 worktree slots).
 const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 3290);
-// Relative to apps/web, one per port, so runs on different ports in one checkout never empty
-// each other's build (they still both rebuild packages/contract/dist). Ignored by git and Docker
-// (dist-e2e*).
-const outDir = `dist-e2e-${port}`;
+// A second build, served on the next port, made with Cloudflare's always-passing test site key:
+// the Turnstile specs run against it, with Cloudflare's script replaced by a route. Every other
+// spec runs against the build without a site key, as development does.
+const turnstilePort = port + 1;
+const TURNSTILE_SPECS = "**/turnstile*.spec.ts";
 
 export default defineConfig({
   testDir: "tests",
@@ -22,14 +23,36 @@ export default defineConfig({
     channel: "chrome",
     trace: "retain-on-failure",
   },
-  // A build served by `vite preview`, made once per run before any worker starts: the dev server
+  projects: [
+    { name: "no-site-key", testIgnore: TURNSTILE_SPECS },
+    {
+      name: "site-key",
+      testMatch: TURNSTILE_SPECS,
+      use: { baseURL: `http://127.0.0.1:${turnstilePort}` },
+    },
+  ],
+  // Builds served by `vite preview`, made once per run before any worker starts: the dev server
   // compiles each module on its first request, and on a cold cache a page could fail to load a
-  // lazy chunk (Dashboard, Player) while the workers' first pages were loading. The build goes to
-  // its own directory, so it never replaces apps/web/dist.
-  webServer: {
+  // lazy chunk (Dashboard, Player) while the workers' first pages were loading. The servers start
+  // one after the other, so the two builds never run at the same time.
+  webServer: [
+    previewServer(port, {}),
+    previewServer(turnstilePort, { VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" }),
+  ],
+});
+
+/**
+ * A build served by `vite preview` on `servedPort`, made with `env` besides the shared settings.
+ * The build goes to a directory of its own per port (relative to apps/web, ignored by git and
+ * Docker as dist-e2e*), so runs on different ports in one checkout never empty each other's
+ * build (they still both rebuild packages/contract/dist), and it never replaces apps/web/dist.
+ */
+function previewServer(servedPort: number, env: Record<string, string>) {
+  const outDir = `dist-e2e-${servedPort}`;
+  return {
     command:
       `npm run build -w apps/web -- --outDir ${outDir} && ` +
-      `npm exec -w apps/web -- vite preview --outDir ${outDir} --host 127.0.0.1 --port ${port} --strictPort`,
+      `npm exec -w apps/web -- vite preview --outDir ${outDir} --host 127.0.0.1 --port ${servedPort} --strictPort`,
     env: {
       // React's development build: the specs fail on console errors and warnings, and React
       // reports duplicate or missing keys, invalid nesting and the like only in that build.
@@ -40,14 +63,15 @@ export default defineConfig({
       // A request no mock or route answers reaches the preview's /api proxy: send it to a closed
       // port, so it fails instead of reaching an API someone runs on this machine.
       API_PROXY_TARGET: "http://127.0.0.1:9",
+      ...env,
     },
     // The build's output and any error the preview server reports go to the test log.
-    stdout: "pipe",
+    stdout: "pipe" as const,
     // Ready only when this run's own preview says it listens on the port. Not `url`: Playwright
     // would accept any server that answers there, such as another checkout's preview started
     // while this one was building, and run the tests against it. --strictPort makes our preview
     // exit when the port is taken, and that exit fails the run.
-    wait: { stdout: new RegExp(`Local:\\s+http://127\\.0\\.0\\.1:${port}/`) },
+    wait: { stdout: new RegExp(`Local:\\s+http://127\\.0\\.0\\.1:${servedPort}/`) },
     timeout: 60_000,
-  },
-});
+  };
+}

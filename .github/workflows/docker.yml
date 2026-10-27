@@ -12,7 +12,7 @@ on:
       - "package-lock.json"
       - ".npmrc"
       - ".dockerignore"
-      - "docker-compose.yml"
+      - "deploy/**"
       - ".github/workflows/docker.yml"
   push:
     branches: [main]
@@ -25,7 +25,7 @@ on:
       - "package-lock.json"
       - ".npmrc"
       - ".dockerignore"
-      - "docker-compose.yml"
+      - "deploy/**"
       - ".github/workflows/docker.yml"
   workflow_dispatch:
 
@@ -39,71 +39,93 @@ concurrency:
 jobs:
   compose-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    # deploy/compose.prod.yml requires these secrets: fake values here (nothing in this job asks
+    # Cloudflare, and the API never runs with a real key).
+    env:
+      RUN_TOKEN_SECRET: ci-only-run-token-secret-not-for-any-deployment
+      TURNSTILE_SECRET_KEY: ci-only-turnstile-secret
+      AUDIO_SERVICE_TOKEN: ci-only-audio-service-token
+      LOG_IP_SALT: ci-only-log-ip-salt
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # docker-compose.yml points the API at apps/api/.env; images never contain it.
-      - name: Create an empty API env file
-        run: touch apps/api/.env
       - uses: docker/setup-buildx-action@v4
-      # Builds the services defined in docker-compose.yml, reusing layers from earlier runs.
+      # Builds the services defined in deploy/compose.prod.yml, reusing layers from earlier runs.
       # Pull requests read the layer cache; only main writes it, which keeps the cache small.
+      # Bake takes the compose file's build contexts as relative to the working directory, not
+      # to the file, so each is set here from the repository root.
       - name: Build all images (read cache)
         if: github.event_name != 'push'
         uses: docker/bake-action@v7
         with:
           source: .
-          files: docker-compose.yml
+          files: deploy/compose.prod.yml
           set: |
-            sonic-web.cache-from=type=gha,scope=sonic-web
-            sonic-server.cache-from=type=gha,scope=sonic-server
-            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+            web.context=.
+            api.context=.
+            audio.context=services/audio
+            audio.platform=linux/amd64
+            web.cache-from=type=gha,scope=web
+            api.cache-from=type=gha,scope=api
+            audio.cache-from=type=gha,scope=audio
       - name: Build all images (read and write cache)
         if: github.event_name == 'push'
         uses: docker/bake-action@v7
         with:
           source: .
-          files: docker-compose.yml
+          files: deploy/compose.prod.yml
           set: |
-            sonic-web.cache-from=type=gha,scope=sonic-web
-            sonic-web.cache-to=type=gha,scope=sonic-web,mode=max
-            sonic-server.cache-from=type=gha,scope=sonic-server
-            sonic-server.cache-to=type=gha,scope=sonic-server,mode=max
-            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
-            sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max
-      # Loads the audio image (its layers come from the build above) to check how it runs:
-      # as a non-root user, without ffmpeg or wget, analysing a generated band offline (as MP3
-      # and as WAV) with the Essentia estimators (RhythmExtractor2013 and KeyExtractor),
-      # refusing M4A and AAC as a format it does not decode, and serving /health as "degraded"
-      # when the models are not downloaded.
-      - name: Load the audio image
+            web.context=.
+            api.context=.
+            audio.context=services/audio
+            audio.platform=linux/amd64
+            web.cache-from=type=gha,scope=web
+            web.cache-to=type=gha,scope=web,mode=max
+            api.cache-from=type=gha,scope=api
+            api.cache-to=type=gha,scope=api,mode=max
+            audio.cache-from=type=gha,scope=audio
+            audio.cache-to=type=gha,scope=audio,mode=max
+      # Loads the three images (their layers come from the build above), under the names compose
+      # gives them in the project "liner-notes", for the checks below and the stack's.
+      - name: Load the images
         uses: docker/bake-action@v7
         with:
           source: .
-          files: docker-compose.yml
-          targets: sonic-analysis
+          files: deploy/compose.prod.yml
           load: true
           set: |
-            sonic-analysis.tags=liner-notes-audio:ci
-            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+            web.context=.
+            api.context=.
+            audio.context=services/audio
+            audio.platform=linux/amd64
+            web.tags=liner-notes-web:latest
+            api.tags=liner-notes-api:latest
+            audio.tags=liner-notes-audio:latest
+            web.cache-from=type=gha,scope=web
+            api.cache-from=type=gha,scope=api
+            audio.cache-from=type=gha,scope=audio
+      # Checks how the audio image runs: as a non-root user, without ffmpeg or wget, analysing a
+      # generated band offline (as MP3 and as WAV) with the Essentia estimators
+      # (RhythmExtractor2013 and KeyExtractor), refusing M4A and AAC as a format it does not
+      # decode, and serving /health as "degraded" when the models are not downloaded.
       - name: Check the audio image
         run: |
-          echo "audio image size: $(docker image inspect -f '{{.Size}}' liner-notes-audio:ci | numfmt --to=iec)"
-          uid=$(docker run --rm liner-notes-audio:ci id -u)
+          echo "audio image size: $(docker image inspect -f '{{.Size}}' liner-notes-audio:latest | numfmt --to=iec)"
+          uid=$(docker run --rm liner-notes-audio:latest id -u)
           echo "audio image runs as uid $uid"
           test "$uid" -ne 0
 
           # The runtime stage has no ffmpeg or wget: soundfile decodes the previews, and the
           # health check is Python. A shell in the same image must first find python, so a
           # "not found" below cannot come from a shell or a docker run that failed.
-          docker run --rm --entrypoint sh liner-notes-audio:ci -c 'command -v python'
+          docker run --rm --entrypoint sh liner-notes-audio:latest -c 'command -v python'
           for tool in ffmpeg wget; do
             # 0 only when the shell ran and found no $tool: 1 when it found one, 125-127 when
             # docker run or the shell failed.
             status=0
-            docker run --rm --entrypoint sh liner-notes-audio:ci -c "! command -v $tool" || status=$?
+            docker run --rm --entrypoint sh liner-notes-audio:latest -c "! command -v $tool" || status=$?
             if [ "$status" -ne 0 ]; then
               echo "the audio image has $tool, or the check did not run (exit $status)"
               exit 1
@@ -113,7 +135,7 @@ jobs:
           # 30 s of kick, snare and an Am-F-C-G pad at 120 BPM, written as MP3 in the container:
           # the default (Essentia) estimators must report its tempo and a key. The same band as
           # WAV must decode to the same tempo.
-          docker run --rm -i --network none liner-notes-audio:ci python - <<'PY'
+          docker run --rm -i --network none liner-notes-audio:latest python - <<'PY'
           import numpy as np
           import soundfile as sf
 
@@ -154,7 +176,7 @@ jobs:
           # them, the refusal is out of date.
           docker run --rm -i --network none \
             -v "$GITHUB_WORKSPACE/services/audio/tests/fixtures:/fixtures:ro" \
-            liner-notes-audio:ci python - <<'PY'
+            liner-notes-audio:latest python - <<'PY'
           import soundfile as sf
 
           import main
@@ -177,7 +199,7 @@ jobs:
           PY
 
           docker run -d --name audio-smoke -e AUDIO_FETCH_MODELS=0 -p 127.0.0.1:3102:3002 \
-            liner-notes-audio:ci
+            liner-notes-audio:latest
           trap 'docker logs audio-smoke; docker rm -f audio-smoke' EXIT
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:3102/health && break
@@ -202,7 +224,7 @@ jobs:
 
           # A failed model download (no network) must leave the service running, degraded.
           docker run -d --name audio-offline --network none -e MODEL_FETCH_TIMEOUT_S=10 \
-            liner-notes-audio:ci
+            liner-notes-audio:latest
           trap 'docker logs audio-smoke; docker rm -f audio-smoke audio-offline' EXIT
           for _ in $(seq 1 30); do
             docker exec audio-offline python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:3002/health', timeout=2).read().decode())" > offline-health.json 2>/dev/null && break
@@ -210,32 +232,22 @@ jobs:
           done
           cat offline-health.json
           grep -q '"status":"degraded"' offline-health.json
-      # Loads the API image to check how it runs: Node 24, as a non-root user, without wget,
-      # with the native SQLite module loading (/api/ready), the recorded replays served
-      # (/api/replays), the run report reading the API's database, and Docker's health check
-      # (Node's fetch) turning healthy.
-      - name: Load the API image
-        uses: docker/bake-action@v7
-        with:
-          source: .
-          files: docker-compose.yml
-          targets: sonic-server
-          load: true
-          set: |
-            sonic-server.tags=liner-notes-api:ci
-            sonic-server.cache-from=type=gha,scope=sonic-server
+      # Checks how the API image runs: Node 24, as a non-root user, without wget, with the native
+      # SQLite module loading (/api/ready), the recorded replays served (/api/replays), the run
+      # report reading the API's database, and Docker's health check (Node's fetch) turning
+      # healthy.
       - name: Check the API image
         run: |
-          echo "API image size: $(docker image inspect -f '{{.Size}}' liner-notes-api:ci | numfmt --to=iec)"
-          docker run --rm liner-notes-api:ci node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
-          uid=$(docker run --rm liner-notes-api:ci id -u)
+          echo "API image size: $(docker image inspect -f '{{.Size}}' liner-notes-api:latest | numfmt --to=iec)"
+          docker run --rm liner-notes-api:latest node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
+          uid=$(docker run --rm liner-notes-api:latest id -u)
           echo "API image runs as uid $uid"
           test "$uid" -ne 0
           # No wget (the health check is Node). As in the audio check: a shell in the same image
           # must find node first, and only exit 0 means the shell ran and found no wget.
-          docker run --rm --entrypoint sh liner-notes-api:ci -c 'command -v node'
+          docker run --rm --entrypoint sh liner-notes-api:latest -c 'command -v node'
           status=0
-          docker run --rm --entrypoint sh liner-notes-api:ci -c '! command -v wget' || status=$?
+          docker run --rm --entrypoint sh liner-notes-api:latest -c '! command -v wget' || status=$?
           if [ "$status" -ne 0 ]; then
             echo "the API image has wget, or the check did not run (exit $status)"
             exit 1
@@ -246,7 +258,7 @@ jobs:
           docker run -d --name api-smoke -e REPLAY_MODE=only \
             -e RUN_TOKEN_SECRET=ci-only-run-token-secret-not-for-any-deployment \
             -e TURNSTILE_SECRET_KEY=ci-only-turnstile-secret \
-            -p 127.0.0.1:3101:3001 liner-notes-api:ci
+            -p 127.0.0.1:3101:3001 liner-notes-api:latest
           trap 'docker logs api-smoke; docker rm -f api-smoke' EXIT
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:3101/api/ready && break
@@ -270,3 +282,28 @@ jobs:
           done
           echo "health status: $status"
           test "$status" = healthy
+      # The production stack on this runner, through Caddy (deploy/check-stack.sh, which runs the
+      # same way on a development machine): every service healthy, no published port but Caddy's,
+      # a stream without a run token refused, the security headers and the policy on a page, a
+      # hashed asset, an API answer and an error, the cache rules, /apifoo not proxied, forged
+      # CF-Connecting-IP and X-Forwarded-For ignored, and the run token kept out of Caddy's log.
+      # The audio service skips its model download here (it serves "degraded", and is healthy).
+      - name: Check the production stack
+        env:
+          AUDIO_FETCH_MODELS: "0"
+        run: |
+          trap 'docker compose -f deploy/compose.prod.yml logs --no-color --tail 50' EXIT
+          docker compose -f deploy/compose.prod.yml up -d --no-build --wait --wait-timeout 300
+          deploy/check-stack.sh
+      # A replayed stream held 130 s (SSE_HOLD_MS) passes through Caddy and ends with "done". The
+      # API runs in development for this (deploy/compose.dev.yml): it accepts the hold setting
+      # and issues run tokens without Turnstile.
+      - name: Check a 130 s stream through Caddy
+        env:
+          AUDIO_FETCH_MODELS: "0"
+          SSE_HOLD_MS: "130000"
+        run: |
+          trap 'docker compose -f deploy/compose.prod.yml down -v' EXIT
+          docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d --no-build \
+            --wait --wait-timeout 300 api
+          deploy/check-stack.sh long-stream

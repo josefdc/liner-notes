@@ -139,7 +139,7 @@ The web app calls the API at `/api` on its own origin, and the Vite dev server f
 requests to the API on `API_PORT` (default 3001), or to `API_PROXY_TARGET` when set (an http(s)
 origin such as `http://192.168.1.20:3001`, for an API running elsewhere). A build can point the web app elsewhere with
 `VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
-image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API. A value that
+image is built with `VITE_API_URL=/api` and its Caddy forwards `/api/*` to the API. A value that
 cannot work (`api`, or an absolute URL without a path) stops the build with an error.
 `VITE_SOURCE_URL` sets where the footer's "Source" link points (default
 `https://github.com/josefdc/liner-notes`): a build of a modified version should point it at its
@@ -177,19 +177,71 @@ CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 
 ---
 
-## 🐳 Docker Deployment
+## 🐳 Deploying
 
-Run all services with Docker Compose:
+`deploy/compose.prod.yml` runs the three images: `web` (Caddy, which serves the built app and
+forwards `/api/*` to the API, `apps/web/Caddyfile`), `api` and `audio`. Only Caddy publishes a
+port; browsers reach the API through it, and only the API calls the audio service. This is the
+one Docker setup: for development, use `npm run dev` (above).
 
 ```bash
-docker-compose up --build
+cp deploy/.env.example deploy/.env && chmod 600 deploy/.env   # then fill it in
+docker compose -f deploy/compose.prod.yml up -d --build
+docker compose -f deploy/compose.prod.yml ps                  # every service turns healthy
 ```
 
-| Service        | URL                                                     |
-|----------------|---------------------------------------------------------|
-| Frontend       | http://localhost (port 80)                              |
-| Backend API    | http://localhost/api (direct: http://127.0.0.1:3001)    |
-| Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
+`deploy/.env` documents every setting. Compose stops, naming the variable, while
+`RUN_TOKEN_SECRET`, `TURNSTILE_SECRET_KEY` or `AUDIO_SERVICE_TOKEN` is empty. By default the
+site is plain HTTP on http://127.0.0.1:3180. On a server, set `SITE_ADDRESS` to the site's
+hostname (Caddy then obtains a certificate and serves HTTPS) and publish the standard ports with
+`PROXY_BIND=0.0.0.0`, `PROXY_PORT=80` and `PROXY_TLS_PORT=443`.
+
+| Service | Reached at | Notes |
+|---------|------------|-------|
+| `web`   | `PROXY_BIND:PROXY_PORT` (default 127.0.0.1:3180) and `PROXY_TLS_PORT` | Caddy; security headers and a Content-Security-Policy on every response |
+| `api`   | `/api/*` through Caddy only | `NODE_ENV=production`, `TRUST_PROXY=1`, `REPLAY_MODE=fallback` by default; database on the `sonic-data` volume (`/app/data/sonic-agent.db`), spend log on `llm-spend` |
+| `audio` | the API only | `linux/amd64`; models on the `audio-models` volume, fetched at the first start (up to 90 s) |
+
+The volume `sonic-data` and the file `sonic-agent.db` keep the names they had under the earlier
+root `docker-compose.yml`, so an existing database carries over when the project name is the
+same (`liner-notes`; compose prefixes volume names with it). Live model calls need the spend log,
+which is never created by itself; create it once:
+
+```bash
+docker compose -f deploy/compose.prod.yml exec api node -e "require('fs').closeSync(require('fs').openSync('/app/spend/llm-spend.jsonl', 'wx'))"
+```
+
+**Turnstile.** The web image takes the widget's site key as a build setting
+(`VITE_TURNSTILE_SITE_KEY` in `deploy/.env`, public); the API takes its secret key
+(`TURNSTILE_SECRET_KEY`) and the site's hostname (`TURNSTILE_EXPECTED_HOSTNAME`). Cloudflare's
+test keys (site key `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`)
+always pass, which is how to try the production stack with a real check.
+
+**Without Cloudflare.** `deploy/compose.dev.yml` runs the same images with the API in
+development: built without a site key, the page sends the development bypass, which that API
+accepts, and only recorded runs are served by default. `deploy/check-stack.sh` checks a running
+stack through Caddy, as CI does (`.github/workflows/docker.yml`):
+
+```bash
+docker compose -f deploy/compose.prod.yml up -d --build && deploy/check-stack.sh
+SSE_HOLD_MS=130000 docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d api \
+  && deploy/check-stack.sh long-stream   # a stream held 130 s through Caddy
+```
+
+**Client addresses.** Caddy takes the visitor's address from `CF-Connecting-IP` only when the
+request comes from one of Cloudflare's ranges, listed in `apps/web/Caddyfile` (`trusted_proxies`);
+from any other peer the header is ignored. It sends the API that one address in
+`X-Forwarded-For`, which the API trusts from one proxy (`TRUST_PROXY=1`) for its rate limits and
+its hashed log addresses. Caddy's own access log leaves out the run token, the typed query and the
+request headers, and shortens addresses to their network.
+
+**Cloudflare's addresses.** Cloudflare publishes its ranges at https://www.cloudflare.com/ips-v4
+and https://www.cloudflare.com/ips-v6. Before each deploy, compare them with the list in
+`apps/web/Caddyfile`; when they differ, update the list and its date, and rebuild the web image.
+
+**Order.** Deploy the API before the web: a web build reads the event types of its own API
+version, not an older API's. Roll both back together. The server, DNS, Cloudflare and Turnstile
+settings, and backups are in the runbook (#37).
 
 `GET /api/health` is the liveness probe the containers' health checks use. `GET /api/ready`
 answers 200 when the API can serve what it is set up to serve and 503 otherwise, listing each
@@ -211,7 +263,7 @@ a run id; the spend log (`LLM_SPEND_LOG`) stays the authoritative record of spen
 
 ```bash
 npm run report -w apps/api -- --days 14            # a checkout's database (SQLITE_DB_PATH)
-docker compose exec sonic-server node dist/report.js --days 14 --json   # the deployment's
+docker compose -f deploy/compose.prod.yml exec api node dist/report.js --days 14 --json   # the deployment's
 ```
 
 It writes nothing when the database has both its `-wal` and `-shm` files (the API has it open: it
@@ -220,14 +272,6 @@ about 2.3 times its size at peak, and kept only if it did not change meanwhile).
 opened read-only and SQLite creates the missing `-wal` or `-shm`, so run it as the API's user
 (`docker compose exec` runs it as that user, against the `sonic-data` volume).
 
-The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
-and the audio service's ports are published on the host's loopback only. The API runs with
-`TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in
-`X-Forwarded-For`. Behind another proxy (for example a TLS terminator in front of nginx), set it
-to the number of proxies in the shell that runs compose, e.g.
-`TRUST_PROXY=2 docker-compose up --build`; compose's `environment:` overrides `apps/api/.env`,
-so setting it there has no effect.
-
 The analysis, resume and factoid requests carry a run token (the `runToken` query parameter),
 which `POST /api/runs` issues once a visitor has passed Cloudflare Turnstile. The web app runs the
 Turnstile widget before each analysis when it is built with `VITE_TURNSTILE_SITE_KEY` (see
@@ -235,7 +279,7 @@ Turnstile widget before each analysis when it is built with `VITE_TURNSTILE_SITE
 `--build-arg VITE_TURNSTILE_SITE_KEY=...`); the widget shows only when Cloudflare asks for an
 interaction. Without a site key it sends the development bypass's token instead. The API image runs
 with `NODE_ENV=production` and does not start without `RUN_TOKEN_SECRET` (32 bytes or more, for
-example `openssl rand -base64 48`) and `TURNSTILE_SECRET_KEY` in `apps/api/.env`;
+example `openssl rand -base64 48`) and `TURNSTILE_SECRET_KEY` (`deploy/.env` for the compose stack);
 `TURNSTILE_EXPECTED_HOSTNAME` limits the check to the site's hostname. Only in development
 (`NODE_ENV` set to `development` or `test`, or unset under `npm run dev` or `smoke:llm`) can the
 API start without them: with no Turnstile secret the Turnstile token `dev-bypass` passes

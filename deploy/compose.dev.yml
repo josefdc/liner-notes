@@ -1,0 +1,20 @@
+# Runs the production images on a machine without Cloudflare (local tries and CI):
+#
+#   docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d --build
+#
+# The API runs in development mode, so with no Turnstile secret it accepts the development
+# bypass, which the web image built without VITE_TURNSTILE_SITE_KEY sends; run tokens are still
+# issued and checked. The secrets compose.prod.yml requires must still be set (test values do).
+# Never use this file for a deployment.
+
+services:
+  api:
+    environment:
+      NODE_ENV: development
+      TURNSTILE_SECRET_KEY: ""
+      TURNSTILE_EXPECTED_HOSTNAME: ""
+      # Recorded runs only by default: nothing calls a paid service.
+      REPLAY_MODE: ${REPLAY_MODE:-only}
+      # Holds a replayed stream open this many milliseconds, with heartbeats, before its first
+      # event (the long-stream check through Caddy). The API accepts it only in development.
+      SSE_HOLD_MS: ${SSE_HOLD_MS:-0}

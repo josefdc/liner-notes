@@ -1,0 +1,116 @@
+# Liner Notes web server (the web image's Caddy): serves the built app from /srv and forwards
+# /api/* to the API. The API and the audio service are reachable only through it.
+#
+# Settings from the environment (deploy/compose.prod.yml passes the first two):
+#   SITE_ADDRESS     the site's address. Default ":80", plain HTTP on port 80 (local use). A
+#                    hostname such as "liner-notes.example" makes Caddy serve HTTPS on 443 with
+#                    a certificate it obtains, and redirect port 80 to it.
+#   TRUSTED_PROXIES  more proxy ranges to trust besides Cloudflare's (default: none).
+#   API_UPSTREAM     the API's address on the compose network (default api:3001).
+{
+	# The configuration is baked into the image: nothing needs Caddy's admin endpoint.
+	admin off
+
+	servers {
+		# The visitor's address (client_ip, which the API's rate limits and logs key on) comes
+		# from CF-Connecting-IP only when the request arrives from one of these ranges; from any
+		# other peer the header is ignored and the peer's own address is used.
+		#
+		# Cloudflare's published ranges (https://www.cloudflare.com/ips-v4 and /ips-v6), copied
+		# 2026-10-27. Compare them with those lists before each deploy (README, "Cloudflare's
+		# addresses").
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32 {$TRUSTED_PROXIES}
+		client_ip_headers CF-Connecting-IP
+		trusted_proxies_strict
+	}
+}
+
+# Sent on every response of the site: pages, assets, the API's answers, and errors (imported
+# again in handle_errors). Deferred, so they replace any value an upstream sent.
+(security_headers) {
+	header {
+		defer
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data: https://i.scdn.co https://mosaic.scdn.co https://coverartarchive.org https://archive.org https://*.archive.org; media-src 'self' https://p.scdn.co https://*.dzcdn.net; connect-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-Via
+	}
+}
+
+# Container health check (the image's HEALTHCHECK): loopback only, and never logged.
+http://:2020 {
+	bind 127.0.0.1
+	respond /health "ok" 200
+	respond 404
+}
+
+{$SITE_ADDRESS::80} {
+	# Access log, one JSON line per request on stdout. The run token is a credential and the
+	# query is what a visitor typed, so neither is written; addresses are shortened to their
+	# network, and request headers (cookies, CF-Connecting-IP) are left out.
+	log {
+		output stdout
+		format filter {
+			request>uri query {
+				delete runToken
+				replace query REDACTED
+				replace q REDACTED
+			}
+			request>headers delete
+			request>remote_ip ip_mask 16 32
+			request>client_ip ip_mask 16 32
+		}
+	}
+
+	import security_headers
+
+	# The API. Only /api/... is forwarded: /api itself and /apifoo are the app's paths. Event
+	# streams are flushed at once, and nothing here is compressed.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3001} {
+			# The API trusts one proxy (TRUST_PROXY=1): this one, which sends only the address
+			# it settled on, never a list a client started.
+			header_up X-Forwarded-For {client_ip}
+			flush_interval -1
+		}
+	}
+
+	# Vite puts a content hash in these names: cached for a year. A missing one is a 404, never
+	# the app's page under a year-long cache.
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		encode zstd gzip
+		file_server
+	}
+
+	# Everything else is the app: a file from public/ when one exists, else index.html, which
+	# routes in the browser.
+	handle {
+		root * /srv
+		encode zstd gzip
+
+		# Files copied from public/ keep their names from one release to the next: cached for a
+		# day, then revalidated. OFL.txt is UTF-8 (IBM's notice has a ©).
+		@fixed path /fonts/* /favicon.svg
+		header @fixed Cache-Control "public, max-age=86400"
+		@notice path /fonts/OFL.txt
+		header @notice Content-Type "text/plain; charset=utf-8"
+
+		# index.html, under any path: revalidated every time, so a release shows at once.
+		@page not path /fonts/* /favicon.svg
+		header @page Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Caddy's own errors (a missing asset, the API unreachable): plain text, never cached.
+	handle_errors {
+		import security_headers
+		header Cache-Control "no-store"
+		respond "{err.status_code} {err.status_text}"
+	}
+}

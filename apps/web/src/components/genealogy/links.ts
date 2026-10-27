@@ -11,6 +11,9 @@ import {
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
 import { sourceLabel } from '../provenance/SourceLink';
+import { LINK_TYPE_LABEL, relationName } from './relationWords';
+
+export { LINK_TYPE_LABEL } from './relationWords';
 
 /**
  * How the web app reads and names genealogy links. Each link is read with the contract's link
@@ -23,7 +26,10 @@ import { sourceLabel } from '../provenance/SourceLink';
  * applies the claim rule itself too, to say why, and adds two rules of its own:
  * - a link whose claim the main view hides (rejected by the verifier, or unreadable: the one
  *   rule of `resultClaims` in provenance/claims.ts) is not shown at all;
- * - a link whose direction contradicts the release years is "related (direction unknown)".
+ * - a link whose direction contradicts the release years is "related (direction unknown)";
+ * - a link whose claim the verifier found only partly supported is not sourced: a relation is
+ *   stated whole, as the API's verifier reads it and as a fact's card reads the same claim
+ *   (results stored before the API did so may still carry such a claim as sourced).
  *
  * Direction, as the contract states it (`GenealogyLink`): `source` is the earlier record, the
  * one that is sampled, interpolated, covered, remixed or that influenced; `target` is the
@@ -43,19 +49,10 @@ export const LINK_TYPES: readonly LinkType[] = [
 
 /**
  * Relations that state a documented fact about a recording. Without evidence they are not
- * shown as such: an inferred sample is an inferred influence (the contract's rule, which the
- * API applies to the links the model proposes).
+ * shown as such: a sample that is not sourced is a possible sample (dashed, and hedged in words
+ * by `relationName`), never a documented one, and it marks no track as an origin.
  */
 const DOCUMENTED = new Set<LinkType>(['sample', 'interpolation', 'cover', 'remix']);
-
-export const LINK_TYPE_LABEL: Record<LinkType, string> = {
-  sample: 'Sample',
-  interpolation: 'Interpolation',
-  cover: 'Cover',
-  remix: 'Remix',
-  producer: 'Shared producer',
-  influence: 'Influence',
-};
 
 /** An evidence id a link cites, with the pack's item for it (null when it is not in the pack). */
 export interface Citation {
@@ -78,9 +75,9 @@ export interface ShownLink {
   /** The relation the link states (null when it states none: older results). */
   statedType: LinkType | null;
   /**
-   * The relation it is drawn and named as: the stated one, except that a sample,
-   * interpolation, cover or remix that is not sourced is an influence, and a link that states
-   * no relation is an influence.
+   * The relation it is drawn and named as: the stated one (an influence when it states none,
+   * or when the years contradict its direction). It is named as known only when the link is
+   * sourced: "Sample", else "Possible sample" (`relationLabel`).
    */
   type: LinkType;
   /** False when the release years contradict the link's direction: it is only "related". */
@@ -265,6 +262,9 @@ export function readLink(
     if (claimed.kind !== 'sourced') {
       kind = 'inferred';
       if (!claim?.verdict) reasons.push('its claim is not sourced');
+    } else if (claimed.claim.verdict === 'partial') {
+      // A relation is stated whole: a source that supports only part of it does not confirm it.
+      kind = 'inferred';
     } else if (link.claimId && context.sharedClaimIds.has(link.claimId)) {
       kind = 'inferred';
       reasons.push('its claim is also stated by another link');
@@ -278,14 +278,15 @@ export function readLink(
   }
   if (!directionKnown) kind = 'inferred';
   if (kind === 'inferred' && claim?.verdict) {
-    reasons.push(`the verifier found its claim ${claim.verdict}`);
+    reasons.push(
+      `the verifier found its claim ${claim.verdict === 'partial' ? 'only partly supported' : claim.verdict}`,
+    );
   }
 
   if (kind === 'inferred') {
-    if (statedType !== null && DOCUMENTED.has(statedType)) {
-      reasons.unshift(
-        `stated as ${article(LINK_TYPE_LABEL[statedType])}${directionKnown ? ', shown as an influence' : ''}`,
-      );
+    // Without a direction the link is only "related": the reasons say what it was stated as.
+    if (!directionKnown && statedType !== null && DOCUMENTED.has(statedType)) {
+      reasons.unshift(`stated as ${article(LINK_TYPE_LABEL[statedType])}`);
     }
     const known = citations.filter((c) => c.evidence !== null);
     const unknown = citations.filter((c) => c.evidence === null);
@@ -309,10 +310,7 @@ export function readLink(
     if (link.claimId && !claim) reasons.push('its claim is not in this result');
   }
 
-  const type: LinkType =
-    statedType === null || (kind !== 'sourced' && DOCUMENTED.has(statedType))
-      ? 'influence'
-      : statedType;
+  const type: LinkType = directionKnown ? (statedType ?? 'influence') : 'influence';
   return {
     link: {
       source: link.source,
@@ -441,9 +439,15 @@ export function relationSentence(link: ShownLink, nameOf: (id: string) => string
   const to = nameOf(link.target);
   if (!link.directionKnown) return `${from} and ${to} are related (direction unknown)`;
   if (link.kind !== 'sourced') {
-    return link.type === 'producer'
-      ? `${from} and ${to} may share a producer`
-      : `Possible influence between ${from} and ${to}`;
+    switch (link.type) {
+      case 'producer':
+        return `${from} and ${to} may share a producer`;
+      case 'influence':
+        return `Possible influence between ${from} and ${to}`;
+      default:
+        // "Possible sample: Bright Lines (2011) may sample X (1984)", in relationLabel's words.
+        return `${relationLabel(link)}: ${to} may ${VERB[link.type]} ${from}`;
+    }
   }
   switch (link.type) {
     case 'sample':
@@ -461,11 +465,21 @@ export function relationSentence(link: ShownLink, nameOf: (id: string) => string
   }
 }
 
-/** A short name for the relation, hedged when it is not sourced (a badge or a line's label). */
+/** What the later record of a documented relation does to the earlier one. */
+const VERB: Record<'sample' | 'interpolation' | 'cover' | 'remix', string> = {
+  sample: 'sample',
+  interpolation: 'interpolate',
+  cover: 'cover',
+  remix: 'remix',
+};
+
+/**
+ * A short name for the relation, hedged when it is not sourced (a card's badge, a line's label):
+ * `relationName`, the words a fact's card uses for the same relation.
+ */
 export function relationLabel(link: ShownLink): string {
   if (!link.directionKnown) return 'Related, direction unknown';
-  if (link.kind === 'sourced') return LINK_TYPE_LABEL[link.type];
-  return link.type === 'producer' ? 'Possible shared producer' : 'Possible influence';
+  return relationName(link.type, link.kind === 'sourced');
 }
 
 /** A link in one line: the relation as a sentence, then where it comes from. */

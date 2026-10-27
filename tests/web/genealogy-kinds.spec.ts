@@ -17,7 +17,8 @@ import {
 // what they say: one cites an id missing from the pack, one cites nothing, one the model marked
 // sourced with no verdict behind it, one whose years contradict its direction, and one whose
 // claim the verifier contradicted (not shown). One model link has a supported claim: sourced.
-// A link is drawn as what it is shown as (an unsourced sample is an influence), named in words,
+// A link is drawn as the relation it states, dashed and named a possible one when it is not
+// sourced (an unsourced sample is a "possible sample", as the fact cards say), named in words,
 // its relation stated as a sentence naming both tracks, and its provenance shown on hover and
 // focus and in a list; the Dashboard names a documented relation only for a sourced link.
 const fixture = loadFixture("genealogy-kinds");
@@ -65,15 +66,15 @@ const DRAWN = [
   ["sourced", "remix", "none", "remix"],
   ["sourced", "producer", "none", "shared producer"],
   ["sourced", "influence", "none", "influence"],
-  ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible influence"],
+  ["inferred", "sample", "6 4", "possible sample"],
+  ["inferred", "interpolation", "6 4", "possible interpolation"],
+  ["inferred", "cover", "6 4", "possible cover"],
+  ["inferred", "remix", "6 4", "possible remix"],
   ["inferred", "producer", "6 4", "possible shared producer"],
   ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible influence"], // cites an id not in the pack
-  ["inferred", "influence", "6 4", "possible influence"], // says sourced, cites nothing
-  ["inferred", "influence", "6 4", "possible influence"], // the model's "sourced", no verdict
+  ["inferred", "sample", "6 4", "possible sample"], // cites an id not in the pack
+  ["inferred", "sample", "6 4", "possible sample"], // says sourced, cites nothing
+  ["inferred", "sample", "6 4", "possible sample"], // the model's "sourced", no verdict
   ["sourced", "sample", "none", "sample"], // the model's, with a supported claim
   ["inferred", "influence", "6 4", "related"], // its years contradict its direction
 ];
@@ -467,7 +468,7 @@ test.describe("the genealogy graph", () => {
       `Sourced Remix - Someone (2015): Sourced Remix - Someone (2015) remixes ${CURRENT} (Sourced).`,
     );
     // The line labels and the tracks' drawn labels are hidden.
-    expect(snapshot).not.toContain("possible influence");
+    expect(snapshot).not.toContain("possible sample");
     expect(snapshot).not.toContain("Connected");
     expect(snapshot).not.toContain("Sourced Samp…");
   });
@@ -499,16 +500,15 @@ test.describe("the genealogy graph", () => {
       `Sourced Remix - Someone (2015) remixes ${CURRENT}. Sourced · cites ${MB_SOURCED}.`,
     );
     await expect(items.nth(6)).toHaveText(
-      `Possible influence between Inferred Sample - Someone Else (1990) and ${CURRENT}. ` +
-        "Model inference · stated as a sample, shown as an influence; no evidence cited.",
+      `Possible sample: ${CURRENT} may sample Inferred Sample - Someone Else (1990). ` +
+        "Model inference · no evidence cited.",
     );
     await expect(items.nth(11)).toContainText(
       `Model inference · cites ${MB}, not checked by a verifier.`,
     );
     await expect(items.nth(13)).toContainText("says sourced but cites no evidence");
     await expect(items.nth(14)).toContainText(
-      "Model inference · stated as a sample, shown as an influence; proposed by the model; no " +
-        "verifier verdict supports it",
+      "Model inference · proposed by the model; no " + "verifier verdict supports it",
     );
     await expect(items.nth(15)).toHaveText(
       `${CURRENT} samples Verified Model Sample - Someone (1982). Sourced · cites ${MB_SOURCED}.`,
@@ -663,14 +663,14 @@ test.describe("connected tracks on the Dashboard", () => {
     await expect(page.locator("#root")).not.toContainText(" samples ");
     const cards = page.getByRole("button").filter({ hasText: "Relation:" });
     await expect(cards.locator("[data-link-kind]")).toHaveText([
-      "Relation: Possible influence",
-      "Relation: Possible influence",
+      "Relation: Possible sample",
+      "Relation: Possible sample",
       "Relation: Related, direction unknown",
     ]);
     await expect(page.locator("#root")).not.toContainText("Rejected Sample");
     await expect(cards.locator("[data-link-provenance]")).toHaveText([
-      "Model inference · stated as a sample, shown as an influence; no evidence cited",
-      "Model inference · stated as a sample, shown as an influence; proposed by the model; no " +
+      "Model inference · no evidence cited",
+      "Model inference · proposed by the model; no " +
         `verifier verdict supports it; cites ${MB}, not checked by a verifier`,
       "Not sourced · stated as a sample; the years (2020 and 2011) do not fit this direction; " +
         `cites ${MB}, not checked by a verifier`,

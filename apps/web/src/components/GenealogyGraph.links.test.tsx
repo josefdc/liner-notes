@@ -107,11 +107,12 @@ describe('GenealogyGraph links', () => {
     }));
     expect(drawn).toEqual([
       { kind: 'sourced', type: 'sample', stroke: LINK_COLOR.sample, dash: 'none' },
-      { kind: 'inferred', type: 'influence', stroke: LINK_COLOR.influence, dash: '6 4' },
+      // The model's sample, not sourced: drawn as a sample, dashed, and named a possible one.
+      { kind: 'inferred', type: 'sample', stroke: LINK_COLOR.sample, dash: '6 4' },
       { kind: 'inferred', type: 'producer', stroke: LINK_COLOR.producer, dash: '6 4' },
     ]);
     const names = [...container.querySelectorAll('g.link-labels text')].map((t) => t.textContent);
-    expect(names).toEqual(['sample', 'possible influence', 'possible shared producer']);
+    expect(names).toEqual(['sample', 'possible sample', 'possible shared producer']);
     expect(screen.getByTestId('links-hidden').textContent).toBe(
       '1 link not shown: the claim behind it was rejected or cannot be read.',
     );
@@ -174,7 +175,8 @@ describe('GenealogyGraph links', () => {
       'inferred',
       'inferred',
     ]);
-    expect(lines(container)[0].getAttribute('data-link-type')).toBe('influence');
+    expect(lines(container)[0].getAttribute('data-link-type')).toBe('sample');
+    expect(container.querySelector('g.link-labels text')?.textContent).toBe('possible sample');
     expect(subLabel(container, 'older')).toBe('Connected');
   });
 
@@ -297,8 +299,8 @@ describe('GenealogyGraph links', () => {
         .map((item) => item.textContent),
     ).toEqual([
       `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
-      'Possible influence between Guess - Someone (1990) and Bright Lines (2011). Model ' +
-        'inference · stated as a sample, shown as an influence; no evidence cited.',
+      'Possible sample: Bright Lines (2011) may sample Guess - Someone (1990). Model ' +
+        'inference · no evidence cited.',
       'Peer - Someone (2001) and Bright Lines (2011) may share a producer. Model inference · ' +
         'cites ev-shs-1 (SecondHandSongs), not checked by a ' +
         'verifier.',
@@ -306,7 +308,7 @@ describe('GenealogyGraph links', () => {
     expect(screen.getByText('Links as a list (3)').closest('details')?.open).toBe(false);
     const legend = screen.getByRole('group', { name: 'Link legend' });
     expect(within(legend).getByRole('list', { name: 'Relations' }).textContent).toBe(
-      'SampleShared producerInfluence',
+      'SampleShared producer',
     );
   });
 
@@ -319,7 +321,7 @@ describe('GenealogyGraph links', () => {
       'Older Record - Someone (1984): Bright Lines (2011) samples Older Record - Someone (1984) (Sourced).',
     );
     expect(summary).toContain(
-      'Guess - Someone (1990): Possible influence between Guess - Someone (1990) and Bright Lines (2011) (Model inference).',
+      'Guess - Someone (1990): Possible sample: Bright Lines (2011) may sample Guess - Someone (1990) (Model inference).',
     );
     expect(summary).toContain('Disputed - Someone (1979): no direct link to this track.');
   });

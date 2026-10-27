@@ -23,7 +23,6 @@ import {
   describeLink,
   isDocumentedSource,
   kindLabel,
-  LINK_TYPE_LABEL,
   nodeName,
   nodesById,
   provenanceText,
@@ -31,6 +30,7 @@ import {
   linkContext,
   readGenealogy,
   yearFrom,
+  relationLabel,
   relationSentence,
   relationToTrack,
   type ShownLink,
@@ -55,11 +55,9 @@ const sameItem = (a: Item | null, b: Item | null) =>
     ? b.kind === 'node' && a.id === b.id
     : b.kind === 'link' && a.index === b.index);
 
-/** The words on a link's line: its relation, hedged when it is not sourced. */
+/** The words on a link's line: its relation as the cards name it, hedged when it is not sourced. */
 function lineLabel(link: ShownLink): string {
-  if (!link.directionKnown) return 'related';
-  const label = LINK_TYPE_LABEL[link.type].toLowerCase();
-  return link.kind === 'sourced' ? label : `possible ${label}`;
+  return link.directionKnown ? relationLabel(link).toLowerCase() : 'related';
 }
 
 /** Where along its line a line's label may go, the middle first. */

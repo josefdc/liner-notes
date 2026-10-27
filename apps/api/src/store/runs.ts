@@ -505,6 +505,29 @@ export function nextEventStream(db: Database.Database, runId: string): number {
     .get(runId) as number;
 }
 
+/**
+ * The time since the run started (`elapsedMs`, without waits for the user's choice) that the
+ * run's last stored event was sent with, when that event is the `done` that ended its stream:
+ * where a resumed run's time goes on from. Null when it is not known (no stream stored, a
+ * stream stored in part, or one sent without times).
+ */
+export function lastStreamElapsedMs(db: Database.Database, runId: string): number | null {
+  const last = db
+    .prepare("SELECT event FROM run_events WHERE run_id = ? ORDER BY stream DESC, seq DESC LIMIT 1")
+    .pluck()
+    .get(runId) as string | undefined;
+  if (last === undefined) return null;
+  try {
+    const event = JSON.parse(last) as { type?: unknown; elapsedMs?: unknown };
+    const ms = event.elapsedMs;
+    return event.type === "done" && Number.isInteger(ms) && (ms as number) >= 0
+      ? (ms as number)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** True when the run has a record. */
 export function runExists(db: Database.Database, runId: string): boolean {
   return db.prepare("SELECT 1 FROM runs WHERE run_id = ?").get(runId) !== undefined;

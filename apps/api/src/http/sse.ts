@@ -107,6 +107,13 @@ export interface EventStreamOptions {
   /** Interval between heartbeat events; 0 sends none. */
   heartbeatMs?: number;
   /**
+   * The time since the run started, in milliseconds, or undefined when it is not known: stamped
+   * on each numbered event (`elapsedMs`) as it is written, in place of any the event has (none,
+   * when it is not known). A stream without it leaves each event's own as it is: a replay sends
+   * the recorded times.
+   */
+  elapsedMs?: () => number | undefined;
+  /**
    * Called with each event written that carries a seq (every event but heartbeats), once it is
    * written: the event as the contract reads it (fields the contract does not name are left
    * out). An error it throws is logged and does not affect the stream.
@@ -128,7 +135,7 @@ function openStream(
   kind: StreamKind,
   res: Response,
   runId: string | null,
-  { heartbeatMs = HEARTBEAT_INTERVAL_MS, onSent }: EventStreamOptions = {},
+  { heartbeatMs = HEARTBEAT_INTERVAL_MS, onSent, elapsedMs }: EventStreamOptions = {},
 ): EventStream {
   writeHead(res);
 
@@ -141,6 +148,13 @@ function openStream(
   };
 
   let seq = 0;
+  /** The event with the run's time on it, when the stream keeps the run's time. */
+  const timed = <E extends Record<string, unknown>>(event: E): E => {
+    if (!elapsedMs) return event;
+    const { elapsedMs: _own, ...rest } = event;
+    const ms = elapsedMs();
+    return (ms === undefined ? rest : { ...rest, elapsedMs: ms }) as unknown as E;
+  };
   let outcome: string | null = null;
   let ended = false;
   const disconnect = new AbortController();
@@ -191,7 +205,7 @@ function openStream(
   };
 
   const sendNumbered = (body: EventBody, replacedWith?: Record<string, unknown>): boolean => {
-    const encoded = encode({ ...body, runId, seq });
+    const encoded = encode(timed({ ...body, runId, seq }));
     if ("problem" in encoded) {
       if (kind.replaced.has(body.type)) {
         // The client is waiting for this event: it is told the request failed instead.
@@ -232,12 +246,9 @@ function openStream(
 
   const done = () => {
     if (writable()) {
-      const written = write({
-        type: "done",
-        runId,
-        seq: seq++,
-        timestamp: new Date().toISOString(),
-      });
+      const written = write(
+        timed({ type: "done", runId, seq: seq++, timestamp: new Date().toISOString() }),
+      );
       if (written) sent(written);
     }
     ended = true;

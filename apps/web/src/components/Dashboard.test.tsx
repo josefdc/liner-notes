@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TrackData } from '../types';
+import type { AgentLog, TrackData } from '../types';
 import Dashboard from './Dashboard';
 import { claim, link, node, PACK } from './genealogy/testing';
 import { setReaderImport } from './genealogy/useLinkReader';
@@ -375,5 +375,46 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(connected([]));
     expect(await badges()).toEqual(Array(4).fill('LOGIC: No direct link to this track'));
     expect(screen.queryByText(/samples/)).toBeNull();
+  });
+
+  describe('activity log', () => {
+    const logs: AgentLog[] = [
+      {
+        id: 'l1',
+        message: 'Found the track on Spotify',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        code: 'SPOTIFY-FOUND',
+        elapsedMs: 12_400,
+      },
+      { id: 'l2', message: 'Recorded analysis replayed', timestamp: '2026-01-01T00:00:00.000Z' },
+    ];
+    const openLog = (trackData: TrackData) => {
+      render(<Dashboard trackData={trackData} onNavigate={() => {}} logs={logs} isComplete />);
+      fireEvent.click(screen.getByRole('button', { name: /activity log/ }));
+      return within(screen.getByRole('region', { name: 'Activity log entries' }));
+    };
+
+    it("shows a replayed run's recorded times since the run started, never 'Just now'", () => {
+      const replay = {
+        ...missingTrack,
+        run: {
+          id: 'r1',
+          mode: 'replay',
+          replayed: 'run',
+          recordedAt: '2026-10-24T10:00:00.000Z',
+          commit: 'abc1234',
+        },
+      } as unknown as TrackData;
+      const entries = openLog(replay);
+      expect(entries.getByText('+12.4 s')).toBeTruthy();
+      expect(entries.queryByText(/Just now|ago/)).toBeNull();
+    });
+
+    it("keeps a live run's relative times", () => {
+      const live = { ...missingTrack, run: { id: 'r2', mode: 'live' } } as unknown as TrackData;
+      const entries = openLog(live);
+      expect(entries.queryByText('+12.4 s')).toBeNull();
+      expect(entries.getAllByText(/ago|Just now/).length).toBe(2);
+    });
   });
 });

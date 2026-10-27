@@ -436,6 +436,31 @@ describe("ReplayRecord", () => {
     expect(issues(back)).toEqual(["events.3.atMs"]);
   });
 
+  it("keeps the recorded time since the run started on its events, and accepts events without it", () => {
+    const value = record();
+    value.events[1].event = event(1, { type: "status", message: "Searching", elapsedMs: 10 });
+    const parsed = ReplayRecord.parse(value);
+    expect(parsed.events[1].event).toMatchObject({ elapsedMs: 10 });
+    expect("elapsedMs" in parsed.events[2].event).toBe(false);
+  });
+
+  it("rejects a time since the run started that goes back, among the events that carry one", () => {
+    const timed = (times: Array<number | undefined>) => {
+      const value = record();
+      value.events.forEach((item, i) => {
+        if (times[i] !== undefined) {
+          item.event = { ...item.event, elapsedMs: times[i] } as typeof item.event;
+        }
+      });
+      return value;
+    };
+    expect(issues(timed([0, 10, 900, 901]))).toEqual([]);
+    // Events without one are skipped: the times of those that carry one still only rise.
+    expect(issues(timed([0, undefined, 900, 900]))).toEqual([]);
+    expect(issues(timed([0, 10, 5, 901]))).toEqual(["events.2.event.elapsedMs"]);
+    expect(issues(timed([500, undefined, 400, undefined]))).toEqual(["events.2.event.elapsedMs"]);
+  });
+
   it("holds events that the stream union accepts", () => {
     for (const { event: streamed } of record().events) {
       expect(ok(AnalyzeStreamEvent, streamed)).toBe(true);

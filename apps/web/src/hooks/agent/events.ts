@@ -54,7 +54,8 @@ function schemaOf(kind: Kind) {
   return kind === 'analysis' ? schemas.AnalyzeStreamEvent : schemas.FactoidStreamEvent;
 }
 
-type Envelope = { runId: string; seq: number };
+/** The envelope of an event, with the time since its run started when it carries one. */
+type Envelope = { runId: string; seq: number; elapsedMs?: number };
 
 /**
  * An analysis event as sent. The result (`complete`) is handed to the app as the server wrote
@@ -110,10 +111,12 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const text = (value: unknown) => (typeof value === 'string' ? value : '');
 
 function envelopeOf(value: Record<string, unknown>): Envelope | null {
-  const { runId, seq } = value;
+  const { runId, seq, elapsedMs } = value;
   if (typeof runId !== 'string' || runId === '') return null;
   if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 0) return null;
-  return { runId, seq };
+  // A time that is not one is left out, never guessed.
+  const timed = typeof elapsedMs === 'number' && Number.isInteger(elapsedMs) && elapsedMs >= 0;
+  return { runId, seq, ...(timed ? { elapsedMs } : {}) };
 }
 
 /**

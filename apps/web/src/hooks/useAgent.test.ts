@@ -349,6 +349,68 @@ describe('useAgent progress', () => {
     );
   });
 
+  it('keeps the time since the run started that a status line was sent with, and none without', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    analysis.send({
+      type: 'status',
+      message: 'Reading the track from Spotify',
+      node: 'scout',
+      elapsedMs: 24,
+    });
+    analysis.send({ type: 'status', message: 'Measuring tempo and key', node: 'engineer' });
+
+    const logs = hook.result.current.logs;
+    expect(logs.find((log) => log.message === 'Reading the track from Spotify')?.elapsedMs).toBe(
+      24,
+    );
+    const untimed = logs.find((log) => log.message === 'Measuring tempo and key');
+    expect(untimed).toBeDefined();
+    expect(untimed).not.toHaveProperty('elapsedMs');
+    // The page's own line, written before the stream opened, carries no time of the run.
+    expect(logs.find((log) => log.message.startsWith('Searching for'))).not.toHaveProperty(
+      'elapsedMs',
+    );
+  });
+
+  it('gives every line a server event writes the time that event was sent with', () => {
+    const timeOf = (logs: Array<{ message: string; elapsedMs?: number }>, start: string) =>
+      logs.find((log) => log.message.startsWith(start))?.elapsedMs;
+
+    const { hook, analysis } = openPicker();
+    expect(timeOf(hook.result.current.logs, 'Connected')).toBeUndefined();
+    analysis.send({ type: 'done' });
+
+    const timed = startAnalysis();
+    const stream = lastStream();
+    stream.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    stream.send({ ...interrupt(), elapsedMs: 312 });
+    expect(timeOf(timed.result.current.logs, 'Connected')).toBe(0);
+    expect(timed.result.current.logs.at(-1)?.elapsedMs).toBe(312);
+
+    const done = startAnalysis();
+    const result = lastStream();
+    result.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    result.send({ type: 'complete', data: track, elapsedMs: 20_167 });
+    expect(timeOf(done.result.current.logs, 'Analysis complete')).toBe(20_167);
+    expect(timeOf(done.result.current.logs, 'Searching for')).toBeUndefined();
+
+    const failed = startAnalysis();
+    const errored = lastStream();
+    errored.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    errored.send({ type: 'error', code: 'timeout', error: 'Took too long.', elapsedMs: 90_000 });
+    expect(timeOf(failed.result.current.logs, 'Error: ')).toBe(90_000);
+
+    const ended = startAnalysis();
+    const cut = lastStream();
+    cut.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    cut.send({ type: 'done', elapsedMs: 4_250 });
+    expect(timeOf(ended.result.current.logs, 'Error: The analysis ended without a result')).toBe(
+      4_250,
+    );
+  });
+
   it('logs a neutral picker line when the server sends no words', () => {
     const hook = startAnalysis();
     const analysis = lastStream();

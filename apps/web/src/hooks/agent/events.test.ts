@@ -138,6 +138,14 @@ describe('parseAnalysisEvent', () => {
     );
   });
 
+  it("keeps a leniently read outcome's time since the run started, and drops one that is not a time", () => {
+    const loose = { run: { id: 'r', mode: 'replay-v2', fallback: false } };
+    const timed = { ...complete(3), elapsedMs: 20_167, data: { ...result, ...loose } };
+    expect(parseAnalysisEvent(json(timed))).toMatchObject({ type: 'complete', elapsedMs: 20_167 });
+    const odd = { ...complete(4), elapsedMs: -1, data: { ...result, ...loose } };
+    expect(parseAnalysisEvent(json(odd))).not.toHaveProperty('elapsedMs');
+  });
+
   it('uses an interrupt with a candidate this page cannot fully read, and keeps what it can', () => {
     const candidate = { id: 'c1', title: 'Hurt', artist: 'NIN', album: 'A', coverUrl: '' };
     const event = {

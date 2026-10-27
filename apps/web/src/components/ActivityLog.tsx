@@ -2,12 +2,18 @@ import type React from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { Activity, CircleCheck, ChevronDown, LoaderCircle } from 'lucide-react';
 import type { AgentLog } from '../types';
+import { formatElapsed } from './console/elapsed';
 import { logStyle } from './console/logCodes';
 import { writtenLines } from '../hooks/agent/runLog';
 
 interface ActivityLogProps {
   logs: AgentLog[];
   isComplete: boolean;
+  /**
+   * The run is a recording played again: each entry shows the time since the recorded run
+   * started that it was sent with, or no time; never how long ago the replay showed it.
+   */
+  recorded?: boolean;
 }
 
 // The number of latest entries the log shows.
@@ -48,10 +54,17 @@ function useClock(running: boolean, newest: number): number {
   return now;
 }
 
-const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
+const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const newest = logs.length > 0 ? new Date(logs[logs.length - 1].timestamp).getTime() : 0;
-  const now = useClock(isExpanded, newest);
+  // A live run's entries say how long ago they came, on a clock; a recorded run's say when they
+  // were sent in the recorded run, which no clock changes. The time the replay showed an entry
+  // says nothing about the recorded run, so an entry recorded without a time shows none.
+  const now = useClock(isExpanded && !recorded, newest);
+  const timeOf = (log: AgentLog): string | null => {
+    if (!recorded) return formatRelativeTime(log.timestamp, now);
+    return log.elapsedMs === undefined ? null : formatElapsed(log.elapsedMs);
+  };
   // The run's lines, those the log no longer keeps included.
   const written = writtenLines(logs);
 
@@ -135,6 +148,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             {displayLogs.map((log, idx) => {
               const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
               const isLive = idx === 0 && !isComplete;
+              const time = timeOf(log);
 
               return (
                 <div
@@ -169,9 +183,12 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                         <Icon size={12} aria-hidden="true" className="shrink-0" />
                         {label}
                       </span>
-                      <span className="text-chrome text-text-muted font-mono">
-                        {formatRelativeTime(log.timestamp, now)}
-                      </span>
+                      {time !== null && (
+                        <span className="text-chrome text-text-muted font-mono">
+                          <span data-log-time>{time}</span>
+                          {recorded && <span className="sr-only"> into the recorded run</span>}
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-xs text-text-secondary">

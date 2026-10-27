@@ -134,16 +134,18 @@ export interface NumericOutcome {
 const NUMBER = String.raw`(\d{2,3}(?:[.,]\d{1,2})?)`;
 const NOT_IN_NUMBER = String.raw`(?<![\p{L}\p{N}.,])`;
 // A number then its unit: "120 BPM", "120-BPM", "96.5 beats per minute", "120 beats-per-minute".
+// The dash carries the whitespace after it, so a long run of whitespace is read once (the same
+// matches as `\s*-?\s*`); likewise in UNIT, TEMPO_UNIT_BEFORE and TEMPO_WORD.
 const TEMPO_UNIT_AFTER = new RegExp(
-  String.raw`${NOT_IN_NUMBER}${NUMBER}\s*-?\s*(?:bpm\b|b\.p\.m\.|beats[\s-]+(?:per|a|each)[\s-]+minute\b)`,
+  String.raw`${NOT_IN_NUMBER}${NUMBER}\s*(?:-\s*)?(?:bpm\b|b\.p\.m\.|beats[\s-]+(?:per|a|each)[\s-]+minute\b)`,
   "giu",
 );
 // The unit then its number: "BPM: 246", "BPM of 246", "bpm 120".
 const TEMPO_UNIT_BEFORE = new RegExp(
-  String.raw`\b(?:bpm|b\.p\.m\.)\s*(?::|=|of|is|was|at)?\s*${NUMBER}(?![\p{N}%])`,
+  String.raw`\b(?:bpm|b\.p\.m\.)\s*(?:(?::|=|of|is|was|at)\s*)?${NUMBER}(?![\p{N}%])`,
   "giu",
 );
-const UNIT = String.raw`\s*-?\s*(?:bpm\b|b\.p\.m\.|beats[\s-]+(?:per|a|each)[\s-]+minute\b)`;
+const UNIT = String.raw`\s*(?:-\s*)?(?:bpm\b|b\.p\.m\.|beats[\s-]+(?:per|a|each)[\s-]+minute\b)`;
 // A range then its unit: "100-110 BPM", "100–110 BPM", "100 to 110 BPM", "between 110 and 125 BPM".
 const TEMPO_RANGE = new RegExp(
   String.raw`(?:\bbetween\s+)?${NOT_IN_NUMBER}${NUMBER}\s*(?:-|–|—|to|and)\s*${NUMBER}${UNIT}`,
@@ -151,9 +153,22 @@ const TEMPO_RANGE = new RegExp(
 );
 // "a tempo of 246", "tempo: 246": read only when the claim points at the tempo.
 const TEMPO_WORD = new RegExp(
-  String.raw`\btempo\s*(?::|=|of|is|was|at|around|about)?\s*(?:about|around|roughly|approximately|~)?\s*${NUMBER}(?![\p{N}%])`,
+  String.raw`\btempo\s*(?:(?::|=|of|is|was|at|around|about)\s*)?(?:(?:about|around|roughly|approximately|~)\s*)?${NUMBER}(?![\p{N}%])`,
   "giu",
 );
+
+/**
+ * New copies of the tempo expressions, for tests. They are global, so a `.test()` or `.exec()`
+ * leaves `lastIndex` set, and `matchAll` would start there: the module's own are never shared.
+ */
+export function tempoExpressions(): Record<"unitAfter" | "unitBefore" | "range" | "word", RegExp> {
+  return {
+    unitAfter: new RegExp(TEMPO_UNIT_AFTER),
+    unitBefore: new RegExp(TEMPO_UNIT_BEFORE),
+    range: new RegExp(TEMPO_RANGE),
+    word: new RegExp(TEMPO_WORD),
+  };
+}
 
 /** A mention and where it stands in the text. */
 interface Placed<M> {

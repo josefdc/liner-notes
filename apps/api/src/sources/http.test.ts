@@ -17,18 +17,23 @@ import {
   credential,
   describeError,
   fetchJson,
+  hasStackTrace,
   pick,
   plainMessage,
   plainReason,
   reasonIssue,
   redactText,
+  redactTokenRuns,
+  replacePhoneLike,
   SourceError,
   scrubPayload,
   scrubReadPayload,
   scrubText,
   setCassetteLockWaitForTests,
+  withoutEmails,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
+import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
 
 // Pass-through, so one test can make a write fail half-way.
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -165,6 +170,46 @@ describe("fetchJson", () => {
     stubFetch(() => json({ message: `Too long ${"x".repeat(400)}` }, { status: 500 }));
     const long = await rejection(fetchJson({ source: "deezer", url: URL_A }));
     expect(long.message.length).toBeLessThan(150);
+  });
+
+  it("reads a JSON error body only up to 64 KiB in bytes; a success body of any size is parsed", async () => {
+    // 40,000 "é" are 40,000 UTF-16 units but 80,000 bytes.
+    const huge = { message: "Track not found", padding: "é".repeat(40_000) };
+    const bytes = Buffer.byteLength(JSON.stringify(huge));
+    stubFetch(() => json(huge, { status: 400 }));
+    const logs = captureLogsForTests();
+    let error: SourceError;
+    try {
+      error = await rejection(fetchJson({ source: "lastfm", url: URL_A }));
+    } finally {
+      logs.restore();
+    }
+    expect(error).toMatchObject({ kind: "http", status: 400 });
+    expect(error.message).toBe("lastfm: HTTP 400 (the source rejected the request)");
+    expect(error.body).toBeUndefined();
+    const logged = logs.entries().map((entry) => JSON.stringify(entry));
+    const line = `a JSON body too large to read (${bytes} bytes, over 65536 bytes)`;
+    expect(logged.some((entry) => entry.includes(line))).toBe(true);
+    expect(logged.some((entry) => entry.includes("not JSON") || entry.includes("é"))).toBe(false);
+
+    // At exactly 64 KiB it is read; one byte more and it is not.
+    const sized = (bytes: number) => {
+      const head = { message: "Track not found", padding: "" };
+      const room = bytes - Buffer.byteLength(JSON.stringify(head));
+      return { ...head, padding: `${"é".repeat(Math.floor(room / 2))}${"x".repeat(room % 2)}` };
+    };
+    for (const [bytes, message] of [
+      [64 * 1024, "lastfm: HTTP 400 — Track not found"],
+      [64 * 1024 + 1, "lastfm: HTTP 400 (the source rejected the request)"],
+    ] as const) {
+      const body = sized(bytes);
+      expect(Buffer.byteLength(JSON.stringify(body))).toBe(bytes);
+      stubFetch(() => json(body, { status: 400 }));
+      expect((await rejection(fetchJson({ source: "lastfm", url: URL_A }))).message).toBe(message);
+    }
+
+    stubFetch(() => json(huge));
+    expect(await fetchJson({ source: "lastfm", url: URL_A })).toEqual(huge);
   });
 
   it("keeps no escaped markup, link or stack trace in a source's reason", () => {
@@ -417,6 +462,65 @@ describe("cassettes", () => {
 
     expect(error).toMatchObject({ kind: "rate_limited", retryAfterMs: 2000 });
     expect(net.calls).toHaveLength(0);
+  });
+
+  it("records only the size of a JSON error body over the cap, and replays the same error", async () => {
+    // Secrets and an escaped signed link a parsed body would have redacted (scrubPayload); a body
+    // this large is not read, so none of it may reach the cassette or the log.
+    const head =
+      '{"error":6,"message":"Track not found","client_secret":"shh-upstream-secret-1",' +
+      '"password":"hunter2-pw","authorization":"opaque-auth-value",' +
+      '"preview":"https:\\/\\/cdns-preview-1.dzcdn.net\\/stream\\/c-1?hdnea=exp=1~acl=x~hmac=abc",' +
+      '"note":"see https://cdns-preview-2.dzcdn.net/stream/c-2?hdnea=exp=2~hmac=def"';
+    const body = `${head},"padding":"${"x".repeat(70_000)}"}`;
+    const bytes = Buffer.byteLength(body);
+    const leaks = [
+      "shh-upstream-secret-1",
+      "hunter2-pw",
+      "opaque-auth-value",
+      "hdnea",
+      "dzcdn",
+      "xxxx",
+    ];
+    const lastfm = {
+      source: "lastfm" as const,
+      url: "https://ws.audioscrobbler.com/2.0/?method=x",
+    };
+    const line = `lastfm answered HTTP 400 with a JSON body too large to read (${bytes} bytes, over 65536 bytes)`;
+
+    process.env.SOURCE_CASSETTE = "record";
+    stubFetch(
+      () => new Response(body, { status: 400, headers: { "content-type": "application/json" } }),
+    );
+    const recordLogs = captureLogsForTests();
+    let recorded: SourceError;
+    try {
+      recorded = await rejection(fetchJson(lastfm));
+    } finally {
+      recordLogs.restore();
+    }
+    const file = readFileSync(join(dir, "lastfm.json"), "utf8");
+    for (const leak of leaks) expect(file).not.toContain(leak);
+    const entry = Object.values(JSON.parse(file).entries)[0];
+    expect(entry).toEqual({ status: 400, contentType: "application/json", tooLarge: bytes });
+    const recordedLog = JSON.stringify(recordLogs.entries());
+    for (const leak of leaks) expect(recordedLog).not.toContain(leak);
+    expect(recordedLog).toContain(line);
+
+    process.env.SOURCE_CASSETTE = "replay";
+    const net = stubFetch(() => undefined);
+    const replayLogs = captureLogsForTests();
+    let replayed: SourceError;
+    try {
+      replayed = await rejection(fetchJson(lastfm));
+    } finally {
+      replayLogs.restore();
+    }
+    expect(net.calls).toHaveLength(0);
+    expect(replayed.message).toBe(recorded.message);
+    expect(replayed.message).toBe("lastfm: HTTP 400 (the source rejected the request)");
+    expect(replayed.body).toBeUndefined();
+    expect(JSON.stringify(replayLogs.entries())).toContain(line);
   });
 
   it("a request missing from the cassette is a typed error, never a network call", async () => {
@@ -762,5 +866,184 @@ describe("what an error message keeps", () => {
       const line = plainMessage(text);
       if (line !== undefined) expect(reasonIssue(line), text).toBeNull();
     }
+  });
+});
+
+describe("text patterns in linear time", { timeout: 30_000 }, () => {
+  // The expressions before #194, each quadratic on a long run of the characters it reads.
+  const STACK_TRACE =
+    /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+  const TOKEN =
+    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{64,}\b/g;
+  const PHONE_LIKE = /(?<![\w-])\+?\(?\d[\d\s().-]{7,}\d(?![\w-])/g;
+  const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+  const mark = (match: string) => `<${match}>`;
+
+  it("finds exactly the stack traces the earlier expression found", () => {
+    const realistic = [
+      "TypeError: x at handler (/srv/app/index.js:10:5)",
+      "at Object.<anonymous> (C:\\app\\x.js:1:2)",
+      "    at async Promise.all (index 0)",
+      "at node:internal/modules/cjs/loader:1537:15",
+      "boom at a.b:1:2",
+      "Quota resets at 10:30:00 UTC",
+      "failed at step 3: see logs",
+      "at foo (bar baz.js:1:2)",
+      "cat /etc/x:1:2",
+      "(at /x.js:1:2)",
+      'Traceback (most recent call last): File "main.py", line 4',
+      'File "", line 4',
+    ];
+    const symbols = ["at", " ", "(", "/", ".", ":1", "x", "\n"];
+    const parts = [
+      "at",
+      "at ",
+      " at ",
+      "(at ",
+      "xat ",
+      "_at ",
+      "Error ",
+      "(",
+      ")",
+      "/",
+      "\\",
+      ".",
+      "a.js",
+      ":",
+      "10",
+      ":5",
+      ":10:5",
+      " ",
+      "\t",
+      "\n",
+      'File "',
+      '"',
+      ", line ",
+      "4",
+      "\u00a0",
+    ];
+    const frames = [
+      "at ",
+      "xat ",
+      "(at ",
+      "fn ",
+      "(",
+      ")",
+      "/a.js:10:5",
+      "a.b:1:2",
+      "x:1:2",
+      "a/b",
+      ":10:5",
+      ":1",
+      " ",
+      "\n",
+    ];
+    const cases = [
+      ...realistic,
+      ...allStrings(symbols, 5),
+      ...randomStrings(parts, 20_000, 14),
+      ...randomStrings(frames, 20_000, 10),
+    ];
+
+    expect(disagreements(cases, hasStackTrace, (text) => STACK_TRACE.test(text))).toEqual([]);
+    expect(cases.filter((text) => STACK_TRACE.test(text)).length).toBeGreaterThan(1000);
+  });
+
+  it("redacts exactly the token-like runs the earlier expression redacted", () => {
+    const parts = [
+      "a",
+      "A",
+      "0",
+      "_",
+      "-",
+      "--",
+      " ",
+      ".",
+      "aB3dE6gH9jK2mN5pQ8sT1v",
+      "abcdefghij",
+      "ABCDEFGHIJ",
+      "0123456789",
+      "é",
+      "=",
+    ];
+    const cases = [
+      `key ${"aB3".repeat(25)} end`,
+      `-${"aB3".repeat(25)}-`,
+      ...randomStrings(parts, 20_000, 24),
+    ];
+
+    expect(
+      disagreements(cases, redactTokenRuns, (text) => text.replace(TOKEN, "[redacted]")),
+    ).toEqual([]);
+    expect(cases.filter((text) => TOKEN.test(text)).length).toBeGreaterThan(500);
+  });
+
+  it("finds exactly the phone-like numbers and e-mails the earlier expressions found", () => {
+    const phones = [
+      "call +1 (555) 123-4567.",
+      "Released 1990-10-02 (10016 plays)",
+      "Artist e21857d5-3256-4547-afb3-4b6ded592596.",
+      "tel 555.123.4567x",
+      "+44 20 7946 0958",
+      ...allStrings(["1", " ", "-", "(", ")", "+", "a"], 5),
+      ...randomStrings(
+        [
+          "1",
+          "23",
+          "4567",
+          " ",
+          "-",
+          "(",
+          ")",
+          "+",
+          ".",
+          "a",
+          "_",
+          "\n",
+          "+1 (555) 123-4567",
+          "2024-01-02",
+        ],
+        20_000,
+        18,
+      ),
+    ];
+    expect(
+      disagreements(
+        phones,
+        (text) => replacePhoneLike(text, mark),
+        (text) => text.replace(PHONE_LIKE, mark),
+      ),
+    ).toEqual([]);
+    expect(phones.filter((text) => text.replace(PHONE_LIKE, mark) !== text).length).toBeGreaterThan(
+      1000,
+    );
+
+    const emails = [
+      "write to fan.mail@example.org now",
+      "a@b.c+x@d.e",
+      "x@y",
+      ...allStrings(["a", "@", ".", "+", "-", " "], 6),
+      ...randomStrings(
+        ["a", "b.c", "@", ".", "+", "-", "_", " ", "x@y.z", "user.name+tag", "é", "\n"],
+        20_000,
+        14,
+      ),
+    ];
+    expect(disagreements(emails, withoutEmails, (text) => text.replace(EMAIL, "[email]"))).toEqual(
+      [],
+    );
+    expect(emails.filter((text) => text.replace(EMAIL, "") !== text).length).toBeGreaterThan(1000);
+  });
+
+  it.each<[string, () => unknown, unknown]>([
+    // About 2 s each with the earlier expressions.
+    ["a stack-trace look-alike", () => reasonIssue(`at x${".x".repeat(40_000)} `), null],
+    ["a long token-like run", () => scrubText(`a${"-a0".repeat(20_000)}-`).length, 500],
+    ["a long run of number characters", () => scrubText(`${"(0- ".repeat(15_000)}x`).length, 500],
+    ["a long run before an @", () => scrubText(`${"a".repeat(60_000)}@`).length, 500],
+  ])("answers quickly on %s", (_name, call, expected) => {
+    const { ms, result } = timed(call);
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(expected);
   });
 });

@@ -13,7 +13,11 @@ interface Rate {
 }
 interface StylesRun {
   suite: string;
-  styles: { model: string; n: number; hits: Record<string, { overN: Rate }> };
+  styles: {
+    model: string;
+    n: number;
+    hits: Record<string, { overN: Rate; baselineOverN: Rate }>;
+  };
 }
 
 const report = JSON.parse(reportJson) as { date: string; runs: StylesRun[] };
@@ -28,6 +32,15 @@ describe('the style accuracy the fingerprint states', () => {
     expect(styles?.n).toBe(STYLE_EVAL.n);
     expect(styles?.hits['1'].overN).toMatchObject({ n: STYLE_EVAL.n, total: STYLE_EVAL.hitAt1 });
     expect(styles?.hits['5'].overN).toMatchObject({ n: STYLE_EVAL.n, total: STYLE_EVAL.hitAt5 });
+    // The label-free constant baseline: the same k styles for every preview.
+    expect(styles?.hits['1'].baselineOverN).toMatchObject({
+      n: STYLE_EVAL.n,
+      total: STYLE_EVAL.baselineAt1,
+    });
+    expect(styles?.hits['5'].baselineOverN).toMatchObject({
+      n: STYLE_EVAL.n,
+      total: STYLE_EVAL.baselineAt5,
+    });
   });
 
   it("matches the report's own table", () => {
@@ -35,14 +48,27 @@ describe('the style accuracy the fingerprint states', () => {
     expect(reportText).toContain(
       `### Styles: hit@k against Discogs\n\n\`${model}\`'s styles on ${n} previews`,
     );
-    expect(reportText).toMatch(new RegExp(`\\n\\| 1 \\| ${hitAt1}/${n} = `));
-    expect(reportText).toMatch(new RegExp(`\\n\\| 5 \\| ${hitAt5}/${n} = `));
+    // k | hit@k over n | hit@k over answered | constant baseline over n | ...
+    const row = (k: number, hits: number, baseline: number) =>
+      new RegExp(`\\n\\| ${k} \\| ${hits}/${n} = [^|]*\\| [^|]*\\| ${baseline}/${n} = `);
+    expect(reportText).toMatch(row(1, hitAt1, STYLE_EVAL.baselineAt1));
+    expect(reportText).toMatch(row(5, hitAt5, STYLE_EVAL.baselineAt5));
+    // The caveat the note repeats: the model may have seen these releases.
+    expect(reportText).toContain(
+      'The style model was trained on Discogs styles (Discogs-4M, about 3.3 million tracks), ' +
+        'possibly of these very releases',
+    );
   });
 
-  it('says the counts, the sample size and the report in one sentence', () => {
-    expect(styleEvalText(STYLE_EVAL)).toBe(
-      "Against the release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
-        'the top style matched for 14 of 31, a top-5 style for 21 of 31.',
+  it('says the counts, the baseline, the sample size, the report and the training caveat', () => {
+    const text = styleEvalText(STYLE_EVAL);
+    expect(text).toBe(
+      "Against each release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
+        "the model's strongest style matched for 14 of 31, one of its 5 strongest for 21 of 31 " +
+        '(a fixed list of common styles: 3 and 12). ' +
+        'The model was trained on Discogs data, which may include these releases.',
     );
+    // Counts, never percentages beside the scores.
+    expect(text).not.toContain('%');
   });
 });

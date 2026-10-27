@@ -174,6 +174,16 @@ const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, 
 // measured colour on the preview lane's own axis, each only when it was measured: a missing
 // layer draws nothing. The model's song sections stay on the song timeline above, inferred.
 
+/**
+ * A hop as said aloud: milliseconds under a second (whole above 10 ms, two significant digits
+ * below), seconds to three significant digits otherwise; never rounded to 0.
+ */
+function hopWords(seconds: number): string {
+  if (seconds >= 1) return `${Number(seconds.toPrecision(3))} s`;
+  const ms = seconds * 1000;
+  return `${ms >= 10 ? Math.round(ms) : Number(ms.toPrecision(2))} ms`;
+}
+
 /** Times of 4 decimals at most, so the SVG holds the measured times without float noise. */
 const svgNumber = (value: number) => String(Math.round(value * 10_000) / 10_000);
 
@@ -220,7 +230,7 @@ const EnergyLine: React.FC<{ points: [number, number][]; length: number; hop: nu
     <svg
       data-measured-layer="energy"
       role="img"
-      aria-label={`Energy (RMS) every ${formatSeconds(hop)} s, measured in the preview, relative to its loudest frame`}
+      aria-label={`Energy (RMS) every ${hopWords(hop)}, measured in the preview, relative to its loudest frame`}
       viewBox={`0 0 ${svgNumber(length)} 1`}
       preserveAspectRatio="none"
       className="block h-8 w-full overflow-visible"
@@ -284,13 +294,23 @@ function measuredLayers(
   sections: MeasuredAudio['sections'] | undefined,
   length: number | null,
 ) {
-  if (length === null) return { beats: null, energy: null, sections: null, beatsOutside: 0 };
+  if (length === null) {
+    return {
+      beats: null,
+      energy: null,
+      sections: null,
+      outside: { beats: 0, frames: 0, sections: 0 },
+    };
+  }
   const inWindow = (time: number) => Number.isFinite(time) && time >= 0 && time <= length;
   const beatTimes = beats ? [...new Set(beats.times.filter(inWindow))].sort((a, b) => a - b) : [];
   const hop = energyContour?.hopSeconds ?? 0;
-  const frames = (energyContour?.values ?? [])
-    .map((value, i) => [(i + 0.5) * hop, value] as [number, number])
-    .filter(([time, value]) => inWindow(time) && Number.isFinite(value) && value >= 0);
+  const allFrames = (energyContour?.values ?? []).map(
+    (value, i) => [(i + 0.5) * hop, value] as [number, number],
+  );
+  const frames = allFrames.filter(
+    ([time, value]) => inWindow(time) && Number.isFinite(value) && value >= 0,
+  );
   const loudest = frames.reduce((max, [, value]) => Math.max(max, value), 0);
   const bands = (sections?.segments ?? [])
     .map((s) => ({ label: s.label, start: s.start, end: Math.min(s.end, length) }))
@@ -308,7 +328,12 @@ function measuredLayers(
           }
         : null,
     sections: bands.length > 0 ? bands : null,
-    beatsOutside: beats ? beats.times.length - beats.times.filter(inWindow).length : 0,
+    // What lies past the window's end is not drawn; a section that runs past it is cut.
+    outside: {
+      beats: (beats?.times ?? []).filter((time) => time > length).length,
+      frames: allFrames.filter(([time]) => time > length).length,
+      sections: (sections?.segments ?? []).filter((s) => s.start >= length).length,
+    },
   };
 }
 
@@ -504,8 +529,16 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               : 'No key moments'}
         </Note>
       )}
-      {layers.beatsOutside > 0 && (
-        <Note>{`${plural(layers.beatsOutside, 'beat')} outside the preview, not drawn`}</Note>
+      {(
+        [
+          [layers.outside.beats, 'beat'],
+          [layers.outside.sections, 'section'],
+          [layers.outside.frames, 'energy frame'],
+        ] as const
+      ).map(([count, word]) =>
+        count > 0 ? (
+          <Note key={word}>{`${plural(count, word)} outside the preview, not drawn`}</Note>
+        ) : null,
       )}
       {momentMarkers.outside > 0 && (
         <Note>{`${plural(momentMarkers.outside, 'key moment')} outside the preview, not drawn`}</Note>

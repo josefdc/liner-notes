@@ -128,8 +128,10 @@ test.describe("a measured result", () => {
     ]);
     // How often this style model agrees with Discogs, from the audio eval report.
     await expect(styles).toContainText(
-      "Against the release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
-        "the top style matched for 14 of 31, a top-5 style for 21 of 31.",
+      "Against each release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
+        "the model's strongest style matched for 14 of 31, one of its 5 strongest for 21 of 31 " +
+        "(a fixed list of common styles: 3 and 12). " +
+        "The model was trained on Discogs data, which may include these releases.",
     );
     await expect(fingerprint.getByRole("region", { name: "Tags (model estimate)" })).toContainText(
       "electronic 0.70",

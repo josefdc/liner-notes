@@ -10,7 +10,15 @@ vi.mock('./measured/styleEval', async (original) => {
   const actual = await original<typeof import('./measured/styleEval')>();
   return {
     ...actual,
-    STYLE_EVAL: { ...actual.STYLE_EVAL, n: 40, hitAt1: 11, hitAt5: 23, date: '2027-01-02' },
+    STYLE_EVAL: {
+      ...actual.STYLE_EVAL,
+      n: 40,
+      hitAt1: 11,
+      hitAt5: 23,
+      baselineAt1: 2,
+      baselineAt5: 9,
+      date: '2027-01-02',
+    },
   };
 });
 
@@ -33,9 +41,12 @@ describe("the fingerprint's style accuracy note", () => {
     render(
       <SonicFingerprint fingerprint={{ styles: shown('Styles', 'discogs-effnet-bs64-1'), tags }} />,
     );
+    // One style shown: the note speaks of the model's strongest styles, not of the shown list.
     expect(note()?.textContent).toBe(
-      "Against the release's Discogs styles, on 40 previews (audio eval report of 2027-01-02): " +
-        'the top style matched for 11 of 40, a top-5 style for 23 of 40.',
+      "Against each release's Discogs styles, on 40 previews (audio eval report of 2027-01-02): " +
+        "the model's strongest style matched for 11 of 40, one of its 5 strongest for 23 of 40 " +
+        '(a fixed list of common styles: 2 and 9). ' +
+        'The model was trained on Discogs data, which may include these releases.',
     );
     // Under the styles it describes, in a text colour, not the measured one.
     expect(note()?.closest('section')?.getAttribute('aria-label')).toBe('Styles (model estimate)');

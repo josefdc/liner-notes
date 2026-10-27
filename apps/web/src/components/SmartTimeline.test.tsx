@@ -224,6 +224,25 @@ const layer = (root: HTMLElement, name: string) =>
   root.querySelector(`[data-measured-layer="${name}"]`) as HTMLElement | null;
 
 describe('the measured layers of the preview', () => {
+  it.each([
+    [0.09288, 'every 93 ms'],
+    [0.0015, 'every 1.5 ms'],
+    [0.5, 'every 500 ms'],
+    [1, 'every 1 s'],
+    [2.25, 'every 2.25 s'],
+  ])('announces an energy hop of %s s as "%s"', (hopSeconds, words) => {
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        energyContour={{ ...contour, hopSeconds, values: [0.1, 0.2] }}
+      />,
+    );
+    const energy = screen.getByRole('img', { name: /^Energy \(RMS\)/ });
+    expect(energy.getAttribute('aria-label')).toContain(`(RMS) ${words},`);
+    expect(energy.getAttribute('aria-label')).not.toMatch(/every 0 s|every 0 ms/);
+  });
+
   it('draws the measured beats, energy and sections on the preview lane, in the measured colour', () => {
     render(
       <SmartTimeline
@@ -281,9 +300,11 @@ describe('the measured layers of the preview', () => {
     );
     expect(legend.textContent).toContain('not verse or chorus');
     expect(legend.textContent).toContain('sections A, B (by harmony, not verse or chorus)');
-    expect(screen.getByRole('group', { name: 'Song structure' }).textContent).toContain(
-      '1 beat outside the preview, not drawn',
-    );
+    // What falls past the window is left out, and each layer says so.
+    const timelineText = screen.getByRole('group', { name: 'Song structure' }).textContent;
+    expect(timelineText).toContain('1 beat outside the preview, not drawn');
+    expect(timelineText).toContain('1 section outside the preview, not drawn');
+    expect(timelineText).toContain('2 energy frames outside the preview, not drawn');
   });
 
   it("keeps the model's sections inferred beside the measured ones", () => {

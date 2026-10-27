@@ -16,6 +16,12 @@ export interface StyleEval {
   hitAt1: number;
   /** Previews with one of the release's styles among their top 5. */
   hitAt5: number;
+  /**
+   * The same counts for the report's constant baseline: one fixed list of styles (the model's
+   * average output) for every preview, using no audio.
+   */
+  baselineAt1: number;
+  baselineAt5: number;
 }
 
 export const STYLE_EVAL: StyleEval = {
@@ -25,12 +31,27 @@ export const STYLE_EVAL: StyleEval = {
   n: 31,
   hitAt1: 14,
   hitAt5: 21,
+  baselineAt1: 3,
+  baselineAt5: 12,
 };
 
-/** The accuracy note, in one sentence: counts of n, never percentages beside the scores. */
-export function styleEvalText({ n, date, hitAt1, hitAt5 }: StyleEval): string {
+/**
+ * The accuracy note: counts of n, never percentages beside the scores; what a fixed list of
+ * styles scores on the same previews; and the report's caveat that the model was trained on
+ * Discogs. It speaks of the model's strongest styles, so it holds however many are shown.
+ */
+export function styleEvalText({
+  n,
+  date,
+  hitAt1,
+  hitAt5,
+  baselineAt1,
+  baselineAt5,
+}: StyleEval): string {
   return (
-    `Against the release's Discogs styles, on ${n} previews (audio eval report of ${date}): ` +
-    `the top style matched for ${hitAt1} of ${n}, a top-5 style for ${hitAt5} of ${n}.`
+    `Against each release's Discogs styles, on ${n} previews (audio eval report of ${date}): ` +
+    `the model's strongest style matched for ${hitAt1} of ${n}, one of its 5 strongest for ` +
+    `${hitAt5} of ${n} (a fixed list of common styles: ${baselineAt1} and ${baselineAt5}). ` +
+    'The model was trained on Discogs data, which may include these releases.'
   );
 }

@@ -232,9 +232,11 @@ The analysis, resume and factoid requests carry a run token (the `runToken` quer
 which `POST /api/runs` issues once a visitor has passed Cloudflare Turnstile. The API image runs
 with `NODE_ENV=production` and does not start without `RUN_TOKEN_SECRET` (32 bytes or more, for
 example `openssl rand -base64 48`) and `TURNSTILE_SECRET_KEY` in `apps/api/.env`;
-`TURNSTILE_EXPECTED_HOSTNAME` limits the check to the site's hostname. In development, with no
-Turnstile secret, the Turnstile token `dev-bypass` passes and tokens are signed with a key of the
-process's own.
+`TURNSTILE_EXPECTED_HOSTNAME` limits the check to the site's hostname. Only in development
+(`NODE_ENV` set to `development` or `test`, or unset under `npm run dev` or `smoke:llm`) can the
+API start without them: with no Turnstile secret the Turnstile token `dev-bypass` passes
+(`TURNSTILE_BYPASS=0` turns that off) and tokens are signed with a key of the process's own. Any
+other `NODE_ENV`, unset included, needs both secrets.
 
 ---
 

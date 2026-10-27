@@ -6,6 +6,8 @@
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
+import type { AddressInfo } from "node:net";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeSseStream, AnalyzeStreamEvent, RunTokenResponse } from "@liner-notes/contract";
@@ -20,7 +22,7 @@ import {
 import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import { setReplayPacingForTests } from "../replay/player.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
-import { getRun } from "../store/runs.js";
+import { getRun, runExists } from "../store/runs.js";
 import { createApp } from "./app.js";
 import {
   createRunTokens,
@@ -38,6 +40,12 @@ import {
   type TurnstileVerifier,
   turnstileVerifierFor,
 } from "./turnstile.js";
+
+// The runs store as it is; a test can make runExists lag behind a run being started.
+vi.mock("../store/runs.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../store/runs.js")>();
+  return { ...actual, runExists: vi.fn(actual.runExists) };
+});
 
 const KEY = Buffer.alloc(32, "run-token-test-key");
 const LISTED = "http://localhost:3110";
@@ -96,7 +104,7 @@ async function sse(
   return { res, body, events: decodeSseStream(body, AnalyzeStreamEvent) };
 }
 
-const runCount = () => getDb().prepare("SELECT COUNT(*) FROM runs").pluck().get();
+const runCount = () => getDb().prepare("SELECT COUNT(*) FROM runs").pluck().get() as number;
 
 /** A refusal for the token: a real 401 with the JSON error, never a stream. */
 function expectUnauthorized(res: request.Response) {
@@ -307,7 +315,67 @@ describe("POST /api/runs", () => {
 // The routes that require a token
 // =============================================================================
 
+/**
+ * Sends `head` as it is over a raw socket (supertest always sends origin-form targets) and
+ * returns everything the server answered once it closes the connection.
+ */
+async function rawRequest(target: ReturnType<typeof appWith>, head: string, body = "") {
+  const server = target.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const socket = connect(port, "127.0.0.1");
+      let answer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk: string) => {
+        answer += chunk;
+      });
+      // What came within 1.5 s, if the server keeps the connection open longer.
+      const timer = setTimeout(() => socket.destroy(), 1500);
+      socket.on("close", () => {
+        clearTimeout(timer);
+        resolve(answer);
+      });
+      socket.on("error", reject);
+      socket.write(`${head}\r\nConnection: close\r\n\r\n${body}`);
+    });
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 describe("the analysis and factoid routes", () => {
+  it("start one run per token when the request target is in absolute form", async () => {
+    const { runToken, claims } = tokens.mint();
+    const target = `http://liner.example${withToken(streamPath(), runToken)}`;
+    const runs = runCount();
+    const answers = [];
+    for (let i = 0; i < 3; i++) {
+      answers.push(await rawRequest(app, `GET ${target} HTTP/1.1\r\nHost: liner.example`));
+    }
+    const post = JSON.stringify({ query: SHOWCASE });
+    answers.push(
+      await rawRequest(
+        app,
+        `POST http://liner.example${withToken("/api/analyze", runToken)} HTTP/1.1\r\n` +
+          `Host: liner.example\r\nContent-Type: application/json\r\nContent-Length: ${post.length}`,
+        post,
+      ),
+    );
+    const outcome = (answer: string) =>
+      `${answer.split("\r\n")[0]}${answer.includes('"type":"complete"') ? " complete" : ""}`;
+    expect(answers.map(outcome)).toEqual([
+      "HTTP/1.1 200 OK complete",
+      "HTTP/1.1 401 Unauthorized",
+      "HTTP/1.1 401 Unauthorized",
+      "HTTP/1.1 401 Unauthorized",
+    ]);
+    expect(runCount()).toBe(runs + 1);
+    expect(getRun(getDb(), claims.threadId)).not.toBeNull();
+  }, 20_000);
+
   it("refuse a request without a token with a 401, streams and JSON routes alike", async () => {
     const runs = runCount();
     for (const [method, path] of [
@@ -386,14 +454,41 @@ describe("the analysis and factoid routes", () => {
   });
 
   it("start one analysis per token when two requests use it at once", async () => {
+    // The store has not recorded the first run yet when the second asks: only the claim this
+    // process holds can refuse it.
+    vi.mocked(runExists).mockReturnValue(false);
     const { runToken, claims } = tokens.mint();
     const [a, b] = await Promise.all([
       sse(app, withToken(streamPath(), runToken)),
       request(app).post(withToken("/api/analyze", runToken)).send({ query: SHOWCASE }),
     ]);
+    vi.mocked(runExists).mockRestore();
     const statuses = [a.res.status, b.status].sort();
     expect(statuses).toEqual([200, 401]);
     expect(getRun(getDb(), claims.threadId)).not.toBeNull();
+    // Refused by the claim, before any run was started.
+    expect(logs.messages()).toContain("Run token refused: already used");
+    expect(logs.messages().some((msg) => msg.includes("the run is recorded already"))).toBe(false);
+  });
+
+  it("start no second run of a thread the store has recorded, whatever the claim says", async () => {
+    const { runToken, claims } = tokens.mint();
+    expect((await sse(app, withToken(streamPath(), runToken))).res.status).toBe(200);
+    // Another process on the same store, whose read of the runs lags: the claim lets it pass,
+    // and the run's record refuses it.
+    vi.mocked(runExists).mockReturnValue(false);
+    const other = () => appWith(createRunTokens(KEY, clock));
+    const stream = await request(other()).get(withToken(streamPath(), runToken));
+    const posted = await request(other())
+      .post(withToken("/api/analyze", runToken))
+      .send({ query: SHOWCASE });
+    vi.mocked(runExists).mockRestore();
+    expectUnauthorized(stream);
+    expectUnauthorized(posted);
+    expect(
+      logs.messages().filter((msg) => msg.includes("the run is recorded already")),
+    ).toHaveLength(2);
+    expect(getRun(getDb(), claims.threadId)?.status).toBe("completed");
   });
 
   it("POST /api/analyze answers with the token's thread id", async () => {

@@ -165,6 +165,10 @@ const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
   stream_stalled: view(`The analysis server stopped answering. ${EITHER_SIDE}`, 'retry'),
   connection_lost: view(CONNECTION_LOST, 'retry'),
   stream_open_failed: view('The analysis could not be started. Try again in a moment.', 'retry'),
+  stream_refused: view(
+    'The analysis server did not accept the request. Try again to send it with a new check.',
+    'retry',
+  ),
   resume_failed: view(
     'Your choice could not be sent to the analysis server. Try again in a moment.',
     'retry',

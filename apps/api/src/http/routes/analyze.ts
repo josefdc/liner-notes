@@ -31,7 +31,7 @@ import {
   updateRun,
 } from "../../store/runs.js";
 import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
-import { refuseToken, requireTokenFor, runTokenOf } from "../middleware/requireRunToken.js";
+import { claimRunToken, refuseToken, requireTokenFor } from "../middleware/requireRunToken.js";
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
 const router = Router();
@@ -165,6 +165,31 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
   }
 }
 
+/** True for the error SQLite raises when a row's key is taken. */
+const isDuplicateKey = (err: unknown) =>
+  typeof (err as { code?: unknown })?.code === "string" &&
+  ((err as { code: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    (err as { code: string }).code === "SQLITE_CONSTRAINT_UNIQUE");
+
+/**
+ * Records a new run, as recordRun does, but returns false when a run with its id is recorded
+ * already: its run token has started a run, so this request must not start another. Any other
+ * failure to record is logged and never stops the analysis (true).
+ */
+function recordNewRun(action: string, write: (db: ReturnType<typeof getDb>) => void): boolean {
+  try {
+    write(getDb());
+    return true;
+  } catch (err) {
+    if (isDuplicateKey(err)) {
+      logger("Runs").warn(`Could not ${action}: the run is recorded already; not started`);
+      return false;
+    }
+    logger("Runs").error(`Could not ${action}`, { err });
+    return true;
+  }
+}
+
 /** Reads from the runs store; a failure is logged and reads as null. */
 function readRun<T>(action: string, read: (db: ReturnType<typeof getDb>) => T): T | null {
   try {
@@ -193,12 +218,16 @@ function logRunStart(runId: string, how: string, query: string): void {
   log.debug(`${how}: query`, { runId, query });
 }
 
-/** Starts a new analysis: a fresh thread, claimed and recorded as an open run. */
-function startAnalysis(threadId: string, query: string): void {
-  activeThreads.add(threadId);
-  recordRun("record a run", (db) =>
+/**
+ * Starts a new analysis: a fresh thread, claimed and recorded as an open run. False, with
+ * nothing claimed, when a run of that thread is recorded already (recordNewRun).
+ */
+function startAnalysis(threadId: string, query: string): boolean {
+  const recorded = recordNewRun("record a run", (db) =>
     startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
   );
+  if (recorded) activeThreads.add(threadId);
+  return recorded;
 }
 
 /**
@@ -843,14 +872,15 @@ const replayOf = (record: ReplayRecord) => ({
  * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
  * (storeReplayOf), so it never reads as live whatever its outcome.
  */
-function startReplay(runId: string, query: string, record: ReplayRecord): void {
-  activeThreads.add(runId);
-  recordRun("record a replay", (db) =>
+function startReplay(runId: string, query: string, record: ReplayRecord): boolean {
+  const recorded = recordNewRun("record a replay", (db) =>
     db.transaction(() => {
       startRun(db, { runId, threadId: runId, query, commit: SERVER_COMMIT });
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );
+  if (recorded) activeThreads.add(runId);
+  return recorded;
 }
 
 /**
@@ -905,7 +935,10 @@ async function replayStream(
   query: string,
   record: ReplayRecord,
 ): Promise<void> {
-  startReplay(runId, query, record);
+  if (!startReplay(runId, query, record)) {
+    refuseToken(res, "already used");
+    return;
+  }
   const stream = openEventStream(res, runId, { replay: true });
   logRunStart(runId, "Streaming a replay", query);
   log.info(`Replaying the recorded run ${record.slug}`, { runId, replay: record.slug });
@@ -946,7 +979,10 @@ async function replayStream(
  */
 function replayJsonRun(res: Response, runId: string, query: string, record: ReplayRecord): void {
   asRun(res, runId, () => {
-    startReplay(runId, query, record);
+    if (!startReplay(runId, query, record)) {
+      refuseToken(res, "already used");
+      return;
+    }
     try {
       logRunStart(runId, "Analysis of a recorded track", query);
       const analysis = replayedAnalysis(record, runId);
@@ -1017,12 +1053,9 @@ router.post(
   asyncRoute(async (req: Request, res: Response) => {
     // On the monotonic clock, so a step of the wall clock does not change the run's duration.
     const startTime = pacingClock();
-    // The run's thread id is the one its token was issued for (middleware/requireRunToken.ts).
-    const token = runTokenOf(res);
-    if (!token) {
-      refuseToken(res, "none checked");
-      return;
-    }
+    // The run's thread id is the one its token was issued for, claimed for this run only.
+    const token = claimRunToken(req, res, { stream: false });
+    if (!token) return;
     const query = parseQuery(req.body?.query);
     const trackId = parseTrackId(req.body?.trackId);
     if (!query || trackId === null) {
@@ -1045,7 +1078,10 @@ router.post(
 
     const { threadId } = token;
     await asRun(res, threadId, async () => {
-      startAnalysis(threadId, query);
+      if (!startAnalysis(threadId, query)) {
+        refuseToken(res, "already used");
+        return;
+      }
       logRunStart(threadId, "Analysis", query);
       const control = new RunControl(req, res, threadId);
       try {
@@ -1095,11 +1131,9 @@ router.post(
 router.get(
   "/api/analyze/stream",
   asyncRoute(async (req: Request, res: Response) => {
-    const token = runTokenOf(res);
-    if (!token) {
-      refuseToken(res, "none checked");
-      return;
-    }
+    // The run's thread id is the one its token was issued for, claimed for this run only.
+    const token = claimRunToken(req, res, { stream: true });
+    if (!token) return;
     const query = parseQuery(req.query.query);
     const trackId = parseTrackId(req.query.trackId);
     if (!query || trackId === null) {
@@ -1126,7 +1160,10 @@ router.get(
     // The run id is the thread id: the one the run's token was issued for.
     const { threadId } = token;
     await asRun(res, threadId, async () => {
-      startAnalysis(threadId, query);
+      if (!startAnalysis(threadId, query)) {
+        refuseToken(res, "already used");
+        return;
+      }
       const stream = openEventStream(res, threadId);
       stream.startClock();
       stream.storeEvents();

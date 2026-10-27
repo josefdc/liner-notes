@@ -92,7 +92,13 @@ export const CLIENT_ERROR_CODES = {
   // The stream could not be opened (the exception's own text is kept in `error`, never shown).
   streamOpenFailed: 'stream_open_failed',
   resumeFailed: 'resume_failed',
+  // The server answered the stream's request with an error status (an EventSource cannot read
+  // which): a run token it refused, most often. A retry asks for a new one.
+  streamRefused: 'stream_refused',
 } as const;
+
+/** EventSource.CLOSED: the browser has given the stream up and will not reconnect. */
+const EVENT_SOURCE_CLOSED = 2;
 
 /** Loads the code that reads the streams, unless it is loaded already. */
 function readersReady(): Promise<void> | null {
@@ -333,6 +339,13 @@ export function useAgent(): UseAgentReturn {
   const moreFactsRef = useRef<MoreFacts | null>(null);
   // The latest run token this page was given: factoid requests send it again until it expires.
   const tokenRef = useRef<RunToken | null>(null);
+  /**
+   * Stops sending `token` again once the API refused it (or a stream sent with it failed): the
+   * next request that needs one asks for a new one, once. No request is retried here.
+   */
+  const dropToken = useCallback((token: RunToken | null) => {
+    if (token && tokenRef.current === token) tokenRef.current = null;
+  }, []);
 
   const setMoreFacts = useCallback((moreFacts: MoreFacts | null) => {
     moreFactsRef.current = moreFacts;
@@ -517,6 +530,8 @@ export function useAgent(): UseAgentReturn {
 
         case 'error': {
           close();
+          // The API refused the run's token: it is not sent again (a retry asks for a new one).
+          if (data.code === 'auth_expired') dropToken(run.token);
           // The pick could not resume live (the budget tripped while the picker was open, or
           // live analysis is off). When the very track picked has a recording, that recording
           // is replayed; another take with the same title and artist is not the track picked,
@@ -567,7 +582,7 @@ export function useAgent(): UseAgentReturn {
           break;
       }
     },
-    [addLog, fail],
+    [addLog, dropToken, fail],
   );
 
   /**
@@ -599,7 +614,9 @@ export function useAgent(): UseAgentReturn {
       run.controller.signal.addEventListener('abort', close, { once: true });
       streamRef.current = { source, close };
 
+      let opened = false;
       source.onopen = () => {
+        opened = true;
         if (isCurrent()) onOpen?.();
       };
       // A named `heartbeat` event; the data-message form is handled in onmessage.
@@ -622,11 +639,19 @@ export function useAgent(): UseAgentReturn {
         handleStreamEvent(run, data, close);
       };
       // EventSource reconnects by itself, which would start the analysis again on the
-      // server: close instead and let the user retry.
-      source.onerror = () =>
+      // server: close instead and let the user retry. A stream closed before it opened was
+      // answered with an error status (the browser gives up at once): the API refused the
+      // request, most often its run token, which is not sent again.
+      source.onerror = () => {
+        if (!opened && source.readyState === EVENT_SOURCE_CLOSED) {
+          dropToken(run.token);
+          lose('The analysis server did not accept the request.', CLIENT_ERROR_CODES.streamRefused);
+          return;
+        }
         lose('Lost the connection to the analysis.', CLIENT_ERROR_CODES.connectionLost);
+      };
     },
-    [fail, handleStreamEvent],
+    [dropToken, fail, handleStreamEvent],
   );
 
   /**
@@ -903,15 +928,20 @@ export function useAgent(): UseAgentReturn {
                 } else if (data.index === undefined) {
                   answer.refused = true;
                   answerFailed();
+                  // A refused run token is not sent again: the next click asks for a new one.
+                  if (data.code === 'auth_expired') dropToken(token);
                   console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;
             }
           };
 
+          // A 401 (a refused run token) reads like any failed connection here: the token is not
+          // sent again, and the next click asks for a new one.
           eventSource.onerror = () => {
             stop();
             answerFailed();
+            dropToken(token);
             reject(new Error('Factoid stream connection failed'));
           };
         };
@@ -958,7 +988,7 @@ export function useAgent(): UseAgentReturn {
         );
       });
     },
-    [setMoreFacts],
+    [dropToken, setMoreFacts],
   );
 
   /**

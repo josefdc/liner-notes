@@ -80,8 +80,15 @@ const EVENT_STREAM_PATHS = new Set([
  */
 export function isEventStreamRequest(req: Request): boolean {
   if (req.headers.accept?.includes("text/event-stream")) return true;
-  const path = req.originalUrl.split("?")[0].toLowerCase().replace(/\/+$/, "");
-  return EVENT_STREAM_PATHS.has(path);
+  return EVENT_STREAM_PATHS.has(routedPath(req).replace(/\/+$/, ""));
+}
+
+/**
+ * The path Express routes the request by, in lower case, whichever form its target took
+ * (`/api/x` or `http://host/api/x`): the mount path and the rest of it, never the raw target.
+ */
+function routedPath(req: Request): string {
+  return `${req.baseUrl}${req.path}`.toLowerCase();
 }
 
 /**
@@ -115,7 +122,7 @@ export function sendStreamError(
   detail?: RefusalDetail,
 ): void {
   if (res.headersSent || res.destroyed) return;
-  const path = req.originalUrl.split("?")[0].toLowerCase();
+  const path = routedPath(req);
   const threadId = req.query?.threadId;
   const runId = typeof threadId === "string" && STREAM_ID.test(threadId) ? threadId : undefined;
   refuseStream(res, path, code, HTTP_ERRORS[code].message, runId, detail);

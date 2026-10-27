@@ -510,12 +510,22 @@ describe("an API process with invalid configuration", () => {
     [
       "production without a run token secret",
       { NODE_ENV: "production", LLM_CASSETTE: "" },
-      "RUN_TOKEN_SECRET is required when NODE_ENV=production",
+      "RUN_TOKEN_SECRET is required unless NODE_ENV is development or test",
     ],
     [
       "production without a Turnstile secret",
       { NODE_ENV: "production", LLM_CASSETTE: "" },
-      "TURNSTILE_SECRET_KEY is required when NODE_ENV=production",
+      "TURNSTILE_SECRET_KEY is required unless NODE_ENV is development or test",
+    ],
+    [
+      "NODE_ENV unset outside the dev script",
+      { NODE_ENV: "", LLM_CASSETTE: "" },
+      "RUN_TOKEN_SECRET is required unless NODE_ENV is development or test",
+    ],
+    [
+      "NODE_ENV spelt Production",
+      { NODE_ENV: "Production", LLM_CASSETTE: "" },
+      "TURNSTILE_SECRET_KEY is required unless NODE_ENV is development or test",
     ],
     [
       "the Turnstile bypass in production",

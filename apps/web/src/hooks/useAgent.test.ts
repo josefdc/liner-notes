@@ -70,6 +70,14 @@ class FakeEventSource {
     if (this.closed) return;
     act(() => this.onerror?.(new Event('error')));
   }
+
+  /** The server answers the request with an error status (a 401): closed before it opened. */
+  readyState: number | undefined;
+  refuse() {
+    if (this.closed) return;
+    this.readyState = 2;
+    act(() => this.onerror?.(new Event('error')));
+  }
 }
 
 const streams = () => FakeEventSource.instances;
@@ -1828,6 +1836,78 @@ describe('useAgent run tokens', () => {
     });
     expect(streams()).toHaveLength(0);
     expect(result.current.errorCode).toBe('stream_open_failed');
+  });
+
+  /** Asks for more facts and returns the stream it opened, once the token is in. */
+  async function askMore(result: { current: UseAgentReturn }) {
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    pending.catch(() => {});
+    await tokenSettled();
+    return { stream: lastStream(), pending };
+  }
+
+  it('asks for a new token, once, after the API refused the one held for more facts', async () => {
+    const { result } = renderHook(() => useAgent());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = await askMore(result);
+    expect(tokenOf(first.stream)).toBe('token-1');
+    first.stream.send({ type: 'error', code: 'auth_expired', error: 'Check again.' });
+    first.stream.send({ type: 'done' });
+    await act(() => first.pending);
+    // Nothing is asked for by itself.
+    expect(requestRunToken).toHaveBeenCalledTimes(1);
+
+    const second = await askMore(result);
+    expect(tokenOf(second.stream)).toBe('token-2');
+    second.stream.send({ type: 'done' });
+    await act(() => second.pending);
+    const third = await askMore(result);
+    expect(tokenOf(third.stream)).toBe('token-2');
+    expect(requestRunToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks for a new token after a more-facts stream failed (a 401 reads as one)', async () => {
+    const { result } = renderHook(() => useAgent());
+    const first = await askMore(result);
+    first.stream.fail();
+    await act(async () => {
+      await expect(first.pending).rejects.toThrow('Factoid stream connection failed');
+    });
+    expect(requestRunToken).toHaveBeenCalledTimes(1);
+    const second = await askMore(result);
+    expect(tokenOf(second.stream)).toBe('token-2');
+  });
+
+  it('does not ask for more facts with a token the API refused on the analysis', async () => {
+    const { result } = await startAnalysis('Hurt');
+    lastStream().send({ type: 'error', code: 'auth_expired', error: 'Check again.' });
+    expect(result.current.errorCode).toBe('auth_expired');
+    const more = await askMore(result);
+    expect(tokenOf(more.stream)).toBe('token-2');
+  });
+
+  it('says the server did not accept a stream it refused, and drops its token', async () => {
+    const { result } = await startAnalysis('Hurt');
+    lastStream().refuse();
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('stream_refused');
+    const more = await askMore(result);
+    expect(tokenOf(more.stream)).toBe('token-2');
+
+    // A resume refused the same way.
+    const picker = await openPicker();
+    await act(async () => {
+      await picker.hook.result.current.selectCandidate('c2', 'click');
+    });
+    lastStream().refuse();
+    expect(picker.hook.result.current.errorCode).toBe('stream_refused');
+    // A connection that drops once open is still a lost connection.
+    const dropped = await startAnalysis('Hurt');
+    lastStream().fail();
+    expect(dropped.result.current.errorCode).toBe('connection_lost');
   });
 
   it('says more facts could not be asked for when no token is given', async () => {

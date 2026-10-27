@@ -337,7 +337,7 @@ export function readLlmSettings(env: NodeJS.ProcessEnv): {
   const cassetteRaw = env.LLM_CASSETTE?.trim() || "off";
   const cassette = (["off", "record", "replay"] as const).find((mode) => mode === cassetteRaw);
   if (!cassette) errors.push('LLM_CASSETTE: expected "record", "replay" or "off"');
-  if (cassette && cassette !== "off" && env.NODE_ENV === "production") {
+  if (cassette && cassette !== "off" && nodeEnv(env) === "production") {
     errors.push(
       `LLM_CASSETTE=${cassette} is not allowed when NODE_ENV=production: cassettes are for ` +
         "tests and evals",
@@ -457,37 +457,61 @@ export const MIN_RUN_TOKEN_SECRET_BYTES = 32;
 /** Longest SSE_HOLD_MS: ten minutes. */
 export const MAX_SSE_HOLD_MS = 600_000;
 
+/** NODE_ENV as it is meant: trimmed and in lower case, "" when unset. */
+export function nodeEnv(env: NodeJS.ProcessEnv): string {
+  return env.NODE_ENV?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * The API workspace's scripts for local work that read the settings (`npm run dev`, and the
+ * model smoke test, which serves nothing): npm names the one running in npm_lifecycle_event.
+ */
+const DEVELOPMENT_SCRIPTS = new Set(["dev", "smoke:llm"]);
+
+/**
+ * True when the API runs for development or tests: NODE_ENV is `development` or `test` (vitest
+ * sets `test`), or it is unset and the process is one of DEVELOPMENT_SCRIPTS. Anything else,
+ * unset included, is treated as a deployment: the Turnstile and run token secrets are required,
+ * and no test setting applies.
+ */
+export function isDevelopment(env: NodeJS.ProcessEnv): boolean {
+  const mode = nodeEnv(env);
+  if (mode === "development" || mode === "test") return true;
+  return mode === "" && DEVELOPMENT_SCRIPTS.has(env.npm_lifecycle_event ?? "");
+}
+
 /**
  * SSE_HOLD_MS: how long a replayed analysis stream is held open, with its heartbeats, before its
  * first event, so a check can see a long stream pass through a proxy. 0 (the default) holds
- * nothing. For development and tests only: production refuses to start with it set
- * (readSettings), and it reads as 0 under NODE_ENV=production whatever its value. Read on every
- * request, like REPLAY_MODE; a value that is not a whole number in range reads as 0.
+ * nothing. For development and tests only (isDevelopment): anywhere else the API refuses to
+ * start with it set (readSettings), and it reads as 0 whatever its value. Read on every request,
+ * like REPLAY_MODE; a value that is not a whole number in range reads as 0.
  */
 export function sseHoldMs(env: NodeJS.ProcessEnv = process.env): number {
-  if (env.NODE_ENV === "production") return 0;
+  if (!isDevelopment(env)) return 0;
   const raw = env.SSE_HOLD_MS?.trim() ?? "";
   const value = /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
   return value <= MAX_SSE_HOLD_MS ? value : 0;
 }
 
 /**
- * The run token and Turnstile settings. Production needs both secrets; outside production,
- * without a Turnstile secret, the development bypass applies. TURNSTILE_BYPASS=1 only says so
- * explicitly: with NODE_ENV=production or a Turnstile secret it is an error, never a way to turn
- * the check off. Errors name variables, never their values.
+ * The run token and Turnstile settings. Outside development and tests (isDevelopment) both
+ * secrets are required. In development, without a Turnstile secret, the development bypass
+ * applies unless TURNSTILE_BYPASS=0 turns it off; TURNSTILE_BYPASS=1 only says so explicitly:
+ * outside development or with a Turnstile secret it is an error, never a way to turn the check
+ * off. Errors name variables, never their values.
  */
 export function readRunTokenSettings(
   env: NodeJS.ProcessEnv,
-  production: boolean,
   errors: string[],
   warnings: string[],
 ): RunTokenSettings {
+  const development = isDevelopment(env);
   const secret = env.RUN_TOKEN_SECRET?.trim() || null;
   const turnstileSecret = env.TURNSTILE_SECRET_KEY?.trim() || null;
 
-  if (production && !secret) {
-    errors.push("RUN_TOKEN_SECRET is required when NODE_ENV=production");
+  if (!development && !secret) {
+    errors.push(`RUN_TOKEN_SECRET is required ${OUTSIDE_DEVELOPMENT}`);
   }
   if (secret && Buffer.byteLength(secret, "utf8") < MIN_RUN_TOKEN_SECRET_BYTES) {
     errors.push(
@@ -495,8 +519,8 @@ export function readRunTokenSettings(
         "(e.g. openssl rand -base64 48)",
     );
   }
-  if (production && !turnstileSecret) {
-    errors.push("TURNSTILE_SECRET_KEY is required when NODE_ENV=production");
+  if (!development && !turnstileSecret) {
+    errors.push(`TURNSTILE_SECRET_KEY is required ${OUTSIDE_DEVELOPMENT}`);
   }
   // Sent in a form body: printable ASCII, no space or line break.
   if (turnstileSecret && !/^[!-~]+$/.test(turnstileSecret)) {
@@ -506,8 +530,8 @@ export function readRunTokenSettings(
   const bypassRaw = env.TURNSTILE_BYPASS?.trim() ?? "";
   if (!["", "0", "1"].includes(bypassRaw)) {
     errors.push('TURNSTILE_BYPASS: expected "1" or "0"');
-  } else if (bypassRaw === "1" && production) {
-    errors.push("TURNSTILE_BYPASS=1 is not allowed when NODE_ENV=production");
+  } else if (bypassRaw === "1" && !development) {
+    errors.push(`TURNSTILE_BYPASS=1 is not allowed ${OUTSIDE_DEVELOPMENT}`);
   } else if (bypassRaw === "1" && turnstileSecret) {
     errors.push(
       "TURNSTILE_BYPASS=1 is not allowed with TURNSTILE_SECRET_KEY set: the bypass applies " +
@@ -523,22 +547,27 @@ export function readRunTokenSettings(
     } else {
       errors.push("TURNSTILE_EXPECTED_HOSTNAME: expected a hostname (no scheme, port or path)");
     }
-  } else if (production) {
+  } else if (!development) {
     warnings.push(
       "TURNSTILE_EXPECTED_HOSTNAME is not set: a challenge solved on any hostname of the " +
         "Turnstile widget is accepted",
     );
   }
 
-  return { secret, turnstileSecret, expectedHostname, bypass: !production && !turnstileSecret };
+  const bypass = development && !turnstileSecret && bypassRaw !== "0";
+  return { secret, turnstileSecret, expectedHostname, bypass };
 }
 
-/** SSE_HOLD_MS checked at startup: a whole number in range, and never set in production. */
-function checkSseHoldMs(env: NodeJS.ProcessEnv, production: boolean, errors: string[]): void {
+/** How the errors that hold outside development say so. */
+const OUTSIDE_DEVELOPMENT =
+  "unless NODE_ENV is development or test (or unset under the dev script)";
+
+/** SSE_HOLD_MS checked at startup: a whole number in range, and only in development. */
+function checkSseHoldMs(env: NodeJS.ProcessEnv, errors: string[]): void {
   const raw = env.SSE_HOLD_MS?.trim() ?? "";
   if (raw === "" || raw === "0") return;
-  if (production) {
-    errors.push("SSE_HOLD_MS is not allowed when NODE_ENV=production: it is for tests");
+  if (!isDevelopment(env)) {
+    errors.push(`SSE_HOLD_MS is not allowed ${OUTSIDE_DEVELOPMENT}: it is for tests`);
     return;
   }
   parseInteger(env, "SSE_HOLD_MS", 0, 0, MAX_SSE_HOLD_MS, errors);
@@ -612,7 +641,7 @@ function parseInteger(
 export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const production = env.NODE_ENV === "production";
+  const production = nodeEnv(env) === "production";
   const parsedReplayMode = parseReplayMode(env.REPLAY_MODE);
   if (!parsedReplayMode) errors.push('REPLAY_MODE: expected "off", "fallback" or "only"');
   const replayMode = parsedReplayMode ?? "off";
@@ -688,8 +717,8 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
     ),
   };
 
-  const runTokens = readRunTokenSettings(env, production, errors, warnings);
-  checkSseHoldMs(env, production, errors);
+  const runTokens = readRunTokenSettings(env, errors, warnings);
+  checkSseHoldMs(env, errors);
 
   // Each source reads its credential when it runs; here they are only checked.
   for (const key of Object.values(SOURCE_CREDENTIALS)) {

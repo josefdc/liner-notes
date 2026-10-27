@@ -2,8 +2,8 @@
 # (The only build setting named like a secret, VITE_TURNSTILE_SITE_KEY, is a public site key that
 # ships in the bundle; the web image holds no secret.)
 # =============================================================================
-# Sonic Agent Web - Multi-stage Production Build
-# React/Vite Frontend with Nginx
+# Liner Notes web - Multi-stage Production Build
+# The React/Vite app, served by Caddy (apps/web/Caddyfile), which also forwards /api to the API
 # =============================================================================
 
 # Stage 1: Build
@@ -45,28 +45,34 @@ ARG VITE_TURNSTILE_SITE_KEY=
 ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 RUN npm run build -w packages/contract && npm run build -w apps/web
 
-# Stage 2: Nginx Production
-FROM nginx:alpine AS production
+# Stage 2: Caddy 2.11.7 on Alpine, pinned by digest. It serves dist/ from /srv and forwards /api/*
+# to the API (apps/web/Caddyfile).
+FROM caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f AS production
 
-# Copy built files to nginx
-COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+# Unprivileged runtime user. Caddy needs no capability: the image's file capability (binding
+# ports below 1024) is removed, so the binary also runs with every capability dropped and
+# no-new-privileges. Docker lets any user of a container bind low ports in its own network
+# namespace (net.ipv4.ip_unprivileged_port_start=0). /data (certificates) and /config are
+# the only places Caddy writes.
+RUN setcap -r /usr/bin/caddy \
+    && addgroup -S -g 10001 app \
+    && adduser -S -D -H -u 10001 -G app -s /sbin/nologin app \
+    && chown app:app /data /config
 
-# Copy nginx configuration
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=755 apps/web/caddy-start.sh /usr/local/bin/caddy-start
+COPY --from=builder /app/apps/web/dist /srv
 
-# Create non-root user for nginx (security)
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chown -R nginx:nginx /var/cache/nginx && \
-    chown -R nginx:nginx /var/log/nginx && \
-    touch /var/run/nginx.pid && \
-    chown -R nginx:nginx /var/run/nginx.pid
+# The configuration must parse with the defaults it is shipped with.
+RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
-USER nginx
+USER app
 
-EXPOSE 80
+EXPOSE 80 443
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:80 || exit 1
+# Health check: Caddy's own loopback-only endpoint (busybox wget is part of the base image).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2020/health"]
 
-CMD ["nginx", "-g", "daemon off;"]
+# Caddy, after checking that a mounted site.d can be read (caddy-start.sh).
+CMD ["/usr/local/bin/caddy-start"]

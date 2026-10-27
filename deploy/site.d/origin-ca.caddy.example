@@ -1,0 +1,16 @@
+# A Cloudflare Origin CA certificate for the site (Cloudflare dashboard: SSL/TLS, Origin Server,
+# Create Certificate; SSL/TLS mode "Full (strict)").
+#
+# 1. Set SITE_ADDRESS in deploy/.env to the site's hostname (the certificate's name) first: on the
+#    default ":80" the site is plain HTTP and this line does not apply.
+# 2. Copy this file to origin-ca.caddy, and save the certificate as origin.pem and its private key
+#    as origin.key in this directory.
+# 3. The web container runs as uid 10001 and must read all of them: keep this directory 755 and
+#    origin-ca.caddy and origin.pem 644; restrict the key first, then hand it to that user:
+#      chmod 600 origin.key && sudo chown 10001 origin.key
+#    On an SELinux host, label the mount for containers (":Z" after ":ro" on the site.d volume in
+#    deploy/compose.prod.yml). The web container stops at start, naming the file, when it cannot
+#    read the directory or a file in it.
+# 4. After `up`, Caddy must say that it serves this certificate instead of asking for one:
+#      docker compose -f deploy/compose.prod.yml logs web | grep 'skipping automatic certificate management'
+tls /etc/caddy/site.d/origin.pem /etc/caddy/site.d/origin.key

@@ -44,8 +44,8 @@ re-creation) and checks each file against the SHA-256 pinned in `download_models
 download fails or times out, the service starts anyway without perceptual features and
 `/health` reports `degraded`.
 
-In the full stack the service is built and started by the root `docker-compose.yml`
-(`sonic-analysis`).
+In the full stack the service is built and started by `deploy/compose.prod.yml` (`audio`),
+with the models on a volume and no published port.
 
 ## Configuration
 

@@ -303,19 +303,250 @@ export function redactQuotedSecrets(text: string): string {
 }
 
 /**
- * Removes credentials from an error message or log line: each quoted secret value
- * (redactQuotedSecrets); in a text that mentions a header, every double-quoted value, since fetch
- * echoes an invalid header value, which is the credential; then `redactSecrets`.
+ * An object key without quotes, as JavaScript and util.inspect write it (`{ token: 'a' }`,
+ * `, apiKey: abc }`), and its colon. Only just after "{" or ",", so a key in prose ("the token: a
+ * short sentence") is not one. Group 1 is the key, which isSecretKey judges.
+ */
+const OBJECT_KEY = /[{,]\s*([A-Za-z0-9_-]{1,64})\s*:\s*/g;
+/**
+ * A value without quotes: up to whitespace, ",", "}" or "{" (an object is not a value here). A run
+ * that holds a quote, "<", ">" or "&" is not one either: those end a `name=` value, which must
+ * read on through a masked value as far as it read through the value itself.
+ */
+const BARE_VALUE = /[^\s,{}"'<>&]+/y;
+/** What ends a value without quotes: "," or "}", after any whitespace, or the end of the text. */
+const BARE_VALUE_END = /\s*(?:[,}]|$)/y;
+
+/**
+ * Where the value that starts at `at`, after an unquoted object key, lies: a quoted value as
+ * quotedKeySpans reads it (also `\"…\"` inside a JSON string, or `…` in backquotes), or a run
+ * that "," or "}" ends. A run that more words follow is prose, not a value.
+ */
+function objectValueSpan(text: string, at: number): Span | undefined {
+  const escaped = text.charAt(at) === "\\";
+  const quote = text.charAt(escaped ? at + 1 : at);
+  if (quote === '"' || quote === "'" || (quote === "`" && !escaped)) {
+    const start = at + (escaped ? 2 : 1);
+    const end = quotedValueEnd(text, start, quote, escaped);
+    return end > start ? [start, end] : undefined;
+  }
+  BARE_VALUE.lastIndex = at;
+  const run = BARE_VALUE.exec(text);
+  if (!run) return undefined;
+  const end = at + run[0].length;
+  BARE_VALUE_END.lastIndex = end;
+  return BARE_VALUE_END.test(text) ? [at, end] : undefined;
+}
+
+/** Where the value of each secret object key without quotes lies. Reads the text once. */
+function objectKeySpans(text: string): Span[] {
+  const spans: Span[] = [];
+  OBJECT_KEY.lastIndex = 0;
+  for (let key = OBJECT_KEY.exec(text); key; key = OBJECT_KEY.exec(text)) {
+    if (!isSecretKey(key[1] ?? "")) continue;
+    const span = objectValueSpan(text, key.index + key[0].length);
+    if (!span) continue;
+    spans.push(span);
+    // A key inside the value is not read again; "," or "}" after it can start the next key.
+    OBJECT_KEY.lastIndex = Math.max(span[1], OBJECT_KEY.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * An XML or HTML opening tag, with any attributes and an optional namespace prefix
+ * (`<access_token>`, `<wsse:Password Type="…">`). Group 1 is its name, group 2 the name without
+ * the prefix, which isSecretKey judges.
+ */
+const OPEN_TAG = /<((?:[A-Za-z_][\w.-]{0,63}:)?([A-Za-z_][\w.-]{0,63}))(?:\s[^<>]*)?>/g;
+/** A closing tag; group 1 is its name. */
+const CLOSE_TAG = /<\/((?:[A-Za-z_][\w.-]{0,63}:)?[A-Za-z_][\w.-]{0,63})\s*>/g;
+
+/**
+ * Where the content of each element named after a secret key lies, in any case: from its opening
+ * tag to the first closing tag of the same name after it. An element without one (a placeholder
+ * such as "--token <token>" in a usage line) is left alone. Reads the text twice: once for the
+ * closing tags, once for the opening ones, each closing tag passed once.
+ */
+function elementSpans(text: string): Span[] {
+  const closing = new Map<string, Span[]>();
+  CLOSE_TAG.lastIndex = 0;
+  for (let tag = CLOSE_TAG.exec(text); tag; tag = CLOSE_TAG.exec(text)) {
+    const name = (tag[1] ?? "").toLowerCase();
+    if (!isSecretKey(name.slice(name.indexOf(":") + 1))) continue;
+    const list = closing.get(name) ?? [];
+    list.push([tag.index, tag.index + tag[0].length]);
+    closing.set(name, list);
+  }
+  const spans: Span[] = [];
+  if (closing.size === 0) return spans;
+  const passed = new Map<string, number>();
+  OPEN_TAG.lastIndex = 0;
+  for (let tag = OPEN_TAG.exec(text); tag; tag = OPEN_TAG.exec(text)) {
+    const start = tag.index + tag[0].length;
+    const name = (tag[1] ?? "").toLowerCase();
+    const list = closing.get(name);
+    // Not a secret element, or one that closes itself (`<token/>`).
+    if (!list || text.charAt(start - 2) === "/") continue;
+    let next = passed.get(name) ?? 0;
+    while (next < list.length && (list[next] as Span)[0] < start) next++;
+    passed.set(name, next);
+    const close = list[next];
+    if (!close) continue;
+    if (close[0] > start) spans.push([start, close[0]]);
+    OPEN_TAG.lastIndex = close[1];
+  }
+  return spans;
+}
+
+/**
+ * A `Name: value` header line: a name at the start of a line (after any indent, or curl's "> "),
+ * then its colon. Group 1 is the name.
+ */
+const HEADER_LINE = /(?:^|[\r\n])[ \t]*(?:[<>][ \t]+)?([A-Za-z0-9_-]{1,64})[ \t]*:[ \t]*/g;
+/** A header value: one run without whitespace that reaches the end of its line (or a quoted one). */
+const HEADER_VALUE = /\S+/y;
+const HEADER_VALUE_END = /[ \t]*(?:[\r\n]|$)/y;
+
+/**
+ * Where the value of each header line for a secret lies (`X-Api-Key: abc`, `Api-Key: abc`,
+ * `X-Auth-Token: abc`): its name, without an "X-" prefix, is a secret key, and its value is one
+ * run to the end of the line, or a quoted value read as quotedKeySpans reads one. Reads the text
+ * once.
+ */
+function headerLineSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  HEADER_LINE.lastIndex = 0;
+  for (let line = HEADER_LINE.exec(text); line; line = HEADER_LINE.exec(text)) {
+    const name = line[1] ?? "";
+    if (!isSecretKey(name) && !isSecretKey(name.replace(/^x-/i, ""))) continue;
+    const start = line.index + line[0].length;
+    const quote = text.charAt(start);
+    if (quote === '"' || quote === "'") {
+      // A quoted value (`password: "a b"`, an indented line of util.inspect): its content.
+      const end = quotedValueEnd(text, start + 1, quote, false);
+      if (end > start + 1) spans.push([start + 1, end]);
+      HEADER_LINE.lastIndex = Math.max(end, HEADER_LINE.lastIndex);
+      continue;
+    }
+    HEADER_VALUE.lastIndex = start;
+    const value = HEADER_VALUE.exec(text);
+    if (!value) continue;
+    const end = start + value[0].length;
+    HEADER_VALUE_END.lastIndex = end;
+    if (!HEADER_VALUE_END.test(text)) continue;
+    spans.push([start, end]);
+    HEADER_LINE.lastIndex = end;
+  }
+  return spans;
+}
+
+/**
+ * Where each secret value of a key without quotes lies in text that was not parsed: after an
+ * object key, inside an element named after a secret key, or on a header line; each grown to what
+ * a later rule that starts inside it would have hidden (withLaterReads).
+ *
+ * Known limits of the shapes without a quoted key, left to the other rules:
+ * - an object key without quotes counts only just after "{" or ",", and a value without quotes
+ *   only when "," or "}" (or the end of the text) follows it: "the token: a short sentence" and
+ *   "Hello, token: a short sentence" are prose. A value that is an object or a list is left;
+ * - a header line counts only at the start of a line, and only with a value of one run to the end
+ *   of the line: "Invalid token: abc123" mid-line, "Password: must be 8 characters" and
+ *   "Authorization: Basic …" (the Bearer|Basic rule reads that one) are left, and so are lines
+ *   written with escaped line breaks (`\n` inside a JSON string);
+ * - an element needs its closing tag (a body cut off inside one keeps the rest), and tags written
+ *   as entities (`&lt;token&gt;`) are not read;
+ * - a name with "X-" before a secret key is read only on a header line, not as an object key or an
+ *   element;
+ * - a later rule that starts before a masked value and reads into it (a media link whose path runs
+ *   through `,token:…`, a phone number across a header line's end) reads the mask instead.
+ */
+const unquotedKeySpans = (text: string) =>
+  withLaterReads(
+    text,
+    maskableUnion(objectKeySpans(text), maskableUnion(elementSpans(text), headerLineSpans(text))),
+  );
+
+/**
+ * Where a later rule starts reading, and what it reads from there: the value of a secret `name=`
+ * pair and a Bearer or Basic token (redactSecrets), and a media link, plain or with JSON-escaped
+ * slashes (scrubText). `hides` tells whether the rule masks what it read.
+ */
+const LATER_READS: ReadonlyArray<{
+  start: RegExp;
+  read: RegExp;
+  hides?: (read: string) => boolean;
+}> = [
+  { start: new RegExp(`\\b(?:${SECRET_PARAM_NAMES})=`, "gi"), read: /[^&\s"'<>]*/y },
+  { start: /\b(?:Bearer|Basic) (?=[A-Za-z0-9._~+/=-]{12})/g, read: /[A-Za-z0-9._~+/=-]*/y },
+  { start: /(?:https?:)?\/\//gi, read: /[^\s"'<>()[\]{}]*/y, hides: isMediaUrl },
+  {
+    start: /(?:https?:)?\\\/\\\//gi,
+    read: /[^\s"'<>()[\]{}]*/y,
+    hides: (link) => isMediaUrl(link.replaceAll("\\/", "/")),
+  },
+];
+
+/**
+ * `spans` (sorted, not overlapping), each grown to the end of what a later rule that starts
+ * inside it reads and masks. Once the span is masked that rule no longer sees its start, and what
+ * it hid past the span would show (`{ token: key=a,b }` keeps ",b" hidden, as before). Reads the
+ * text once for the starts, then what each one reads once.
+ */
+function withLaterReads(text: string, spans: readonly Span[]): Span[] {
+  if (spans.length === 0) return [];
+  const starts: Array<[at: number, from: number, rule: number]> = [];
+  LATER_READS.forEach(({ start }, rule) => {
+    start.lastIndex = 0;
+    for (let found = start.exec(text); found; found = start.exec(text)) {
+      starts.push([found.index, found.index + found[0].length, rule]);
+    }
+  });
+  starts.sort((a, b) => a[0] - b[0]);
+  // Where each rule's last read ends: a start inside it is read on to the same place.
+  const reached = LATER_READS.map(() => 0);
+  const out: Span[] = [];
+  let next = 0;
+  for (const [start, spanEnd] of spans) {
+    let end = spanEnd;
+    while (next < starts.length && (starts[next] as [number, number, number])[0] < start) next++;
+    for (; next < starts.length && (starts[next] as [number, number, number])[0] < end; next++) {
+      const [at, from, rule] = starts[next] as [number, number, number];
+      const { read, hides } = LATER_READS[rule] as (typeof LATER_READS)[number];
+      if (from < (reached[rule] as number)) continue;
+      read.lastIndex = from;
+      read.exec(text);
+      reached[rule] = read.lastIndex;
+      if (!hides || hides(text.slice(at, read.lastIndex))) end = Math.max(end, read.lastIndex);
+    }
+    out.push([start, end]);
+  }
+  return out;
+}
+
+/**
+ * Removes credentials from an error message or log line: each secret value, quoted
+ * (redactQuotedSecrets) or not (unquotedKeySpans); in a text that mentions a header, every
+ * double-quoted value, since fetch echoes an invalid header value, which is the credential; then
+ * `redactSecrets`.
  *
  * The header rule pairs quotes without reading escapes. It is measured on the text as it came,
- * both as it pairs quotes there and as it pairs them once the secret values are gone, and what
- * any of these hides is hidden: so a quote inside a secret value cannot move a later pair and
- * show what the rule hid before. Text without a quoted secret value reads as it always did.
+ * both as it pairs quotes there and as it pairs them once the secret values are gone (the quoted
+ * ones, and all of them), and what any of these hides is hidden: so a quote inside a secret value
+ * cannot move a later pair and show what the rule hid before. Text without a secret value reads
+ * as it always did.
  */
 export function redactText(text: string): string {
-  const secrets = quotedSecretSpans(text);
+  const quoted = quotedSecretSpans(text);
+  const secrets = maskableUnion(quoted, unquotedKeySpans(text));
   const spans = /header/i.test(text)
-    ? mergeSpans(secrets, mergeSpans(doubleQuotedSpans(text), doubleQuotedSpans(text, secrets)))
+    ? mergeSpans(
+        secrets,
+        mergeSpans(
+          doubleQuotedSpans(text),
+          mergeSpans(doubleQuotedSpans(text, quoted), doubleQuotedSpans(text, secrets)),
+        ),
+      )
     : secrets;
   return redactSecrets(maskSpans(text, spans));
 }

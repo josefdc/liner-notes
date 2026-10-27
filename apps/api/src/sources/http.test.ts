@@ -479,6 +479,85 @@ describe("scrubbing", () => {
     });
   });
 
+  it.each<[string, string, string]>([
+    // An object key without quotes, as JavaScript and util.inspect write one.
+    ["an object key", '{ token: "sv-1 a" }', "sv-1 a"],
+    ["an object key", "{token:'sv-2'}", "sv-2"],
+    ["an object key", "{ apiKey: sv-3 }", "sv-3"],
+    ["an object key", "{ a: 1, client_secret: sv-4, b: 2 }", "sv-4"],
+    ["an object key", "Error: boom {\n  code: 'E1',\n  accessToken: 'sv-5'\n}", "sv-5"],
+    // Inside a JSON string, its escapes included.
+    ["an object key", '{"error":"{ password: \\"sv-6 \\\\\\" b\\" }"}', 'sv-6 \\\\\\" b'],
+    ["an object key", "{ refresh_token: `sv-7` }", "sv-7"],
+    // An XML or HTML element named after a secret key, in any case, with attributes.
+    ["an element", "<access_token>sv-8</access_token>", "sv-8"],
+    ["an element", '<r><Access_Token type="x">sv 9</ACCESS_TOKEN ></r>', "sv 9"],
+    ["an element", '<wsse:Password Type="t">sv-10</wsse:Password>', "sv-10"],
+    ["an element", "<secret><![CDATA[sv-11]]></secret><b>kept</b>", "<![CDATA[sv-11]]>"],
+    // A header line for an API key, the name read without an "X-" prefix.
+    ["a header line", "X-Api-Key: sv-12", "sv-12"],
+    ["a header line", "Accept: */*\r\nApi-Key: sv-13\r\nHost: a", "sv-13"],
+    ["a header line", "> GET / HTTP/1.1\n> X-Auth-Token: sv-14\n> Host: a", "sv-14"],
+    ["a header line", '  password: "sv 15"', "sv 15"],
+  ])("redacts the value of a secret key written as %s: %j", (_shape, text, value) => {
+    for (const out of [redactText(text), scrubText(text)]) {
+      expect(out, text).not.toContain(value);
+      expect(out, text).toBe(text.replace(value, "[redacted]"));
+    }
+  });
+
+  it("keeps hidden what the other rules hid next to a value without a quoted key", () => {
+    // A `name=` value, a Bearer token or a media link that starts inside the value read on past
+    // it: once the value is masked, the rule that hid the rest no longer sees where it starts.
+    for (const [text, hidden] of [
+      ["{ token: key=a,LEAK-1 }", "LEAK-1"],
+      ["{ token: token=a,Bearer LEAK-2abcdefgh }", "LEAK-2"],
+      ["{ token: https://i.scdn.co/a,LEAK-3 }", "LEAK-3"],
+      ["{ token: https:\\/\\/i.scdn.co\\/a,LEAK-4 }", "LEAK-4"],
+      // A plain link inside an escaped one is read as the plain link rule reads it.
+      ["{ token: \\/\\/https://i.scdn.co/a,LEAK-7 }", "LEAK-7"],
+      // The header rule pairs quotes as it always did, as it does once the quoted secret values
+      // are gone, and as it does once every secret value is gone: a quote inside an element's
+      // content neither shows a later pair (LEAK-5) nor moves one the quoted values kept (LEAK-6).
+      ['header<token>x"</token> "LEAK-5" ', "LEAK-5"],
+      [`header<token>''x y"</token>key="{ a: \\"\\\\ }"LEAK-6"`, "LEAK-6"],
+    ]) {
+      expect(redactText(text), text).not.toContain(hidden);
+      expect(scrubText(text), text).not.toContain(hidden);
+    }
+  });
+
+  it("tells each shape from its near-misses and from prose", () => {
+    // Each near-miss is kept as it is; the shape next to it is redacted.
+    const pairs: Array<[near: string, shape: string]> = [
+      ["tokens: 5", "token: 5"],
+      ["<token-count>3</token-count>", "<token>3</token>"],
+      ["Api-Keys-Allowed: yes", "Api-Key: yes"],
+      ["X-Api-Key-Count: 2", "X-Api-Key: 2"],
+      ["the token: a short sentence", "token: a"],
+      ["Hello, token: a short sentence", "Hello, token: a"],
+      ["Invalid token: abc123", "{ token: abc123 }"],
+      ["Password: must be at least 8 characters", "Password: hunter22"],
+      ["usage: login --token <token>\nthen go on", "<token>v</token>"],
+      ["<token />v</token>", "<token >v</token>"],
+      // A quote, "<", ">" or "&" in a run is not a value without quotes: they end a `name=` value.
+      ["{ token: x<y> }", "{ token: xy }"],
+      ["{ token: a&b, c: 1 }", "{ token: ab, c: 1 }"],
+      ["{ token: { type: 'kept' } }", "{ token: 'v' }"],
+      ["{ my_token: 'kept', tokenType: kept }", "{ authToken: 'v' }"],
+    ];
+    for (const [near, shape] of pairs) {
+      expect(scrubText(near), near).toBe(near);
+      expect(redactText(near), near).toBe(near);
+      expect(scrubText(shape), shape).toContain("[redacted]");
+    }
+    // A key inside a secret value is not read again, even where its own value would run on.
+    expect(redactText(`{ token: "x, secret: 'y" z' w }`)).toBe(`{ token: "[redacted]" z' w }`);
+    expect(redactText("<token>a <password>b</token> c</password>")).toBe(
+      "<token>[redacted]</token> c</password>",
+    );
+  });
+
   it.each([
     ["Deezer preview", "https:\\/\\/cdns-preview-1.dzcdn.net\\/stream\\/c-1?hdnea=exp=1~hmac=abc"],
     ["protocol-relative image", "\\/\\/i.scdn.co\\/image\\/ab67616d0000b273"],
@@ -1353,8 +1432,128 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
           () => scrubText(fill("https:\\/\\/")).length,
           500,
         ],
+        // The shapes without a quoted key: each start is read once, whatever follows it.
+        [
+          `${size} characters of a value after an object key`,
+          () => redactText(`{ token: ${fill("a")} }`),
+          "{ token: [redacted] }",
+        ],
+        [
+          `${size} characters of an unterminated value after an object key`,
+          () => redactText(`{ token: "${fill("a")}`),
+          '{ token: "[redacted]',
+        ],
+        [
+          `${size} characters of object keys whose value is an object`,
+          () => redactText(`${fill("{token:")} x, token: k}`).endsWith("token: [redacted]}"),
+          true,
+        ],
+        [
+          `${size} characters of object keys with prose after them`,
+          () => redactText(`{token: k} ${fill(",token: a b")}`).length,
+          size + 20,
+        ],
+        [
+          `${size} characters of object keys with quoted values that hold keys`,
+          () => redactText(fill(',token:"')).length,
+          size + (size * 3) / 16,
+        ],
+        [
+          `${size} characters without an object key after one`,
+          () => redactText(`{token: k} ${fill("token: a ")}`).length,
+          size + 20,
+        ],
+        [
+          `${size} characters of name= pairs inside a value`,
+          () => redactText(`{ token: ${fill("key=")} }`),
+          "{ token: [redacted] }",
+        ],
+        [
+          `${size} characters of links inside a value`,
+          () => redactText(`{ token: ${fill("//i.scdn.co/a")} }`),
+          "{ token: [redacted] }",
+        ],
+        [
+          `${size} characters of an element's content`,
+          () => redactText(`<token>${fill("a")}</token>`),
+          "<token>[redacted]</token>",
+        ],
+        [
+          `${size} characters of opening tags without a closing tag`,
+          () => redactText(`<token>k</token>${fill("<token>")}`).length,
+          size + 25,
+        ],
+        [
+          `${size} characters of closing tags before opening tags`,
+          () => redactText(`${fill("</token>")}<token>k</token>${fill("<token>")}`).length,
+          2 * size + 25,
+        ],
+        [
+          `${size} characters of an opening tag's attributes`,
+          () => redactText(`<token>k</token><token ${fill("a=b ")}`).length,
+          size + 32,
+        ],
+        [
+          `${size} characters without a tag after one`,
+          () => redactText(`<token>k</token>${fill("token a ")}`).length,
+          size + 25,
+        ],
+        [
+          `${size} characters of a header value`,
+          () => redactText(`X-Api-Key: ${fill("a")}`),
+          "X-Api-Key: [redacted]",
+        ],
+        [
+          `${size} characters of header lines with prose after them`,
+          () => redactText(`X-Api-Key: k\n${fill("\n token: a b")}`).length,
+          size + 22,
+        ],
+        [
+          `${size} characters without a header line after one`,
+          () => redactText(`X-Api-Key: k\n${fill("Token a ")}`).length,
+          size + 22,
+        ],
       ];
     }),
+  ])("answers quickly on %s", (_name, call, expected) => {
+    const { ms, result } = timed(call);
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(expected);
+  });
+});
+
+describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
+  // 200 kB: a scan that reads each start on to the end of its run takes seconds here, where a
+  // single pass takes milliseconds.
+  const size = 200_000;
+  const fill = (unit: string) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+
+  it.each<[string, () => unknown, unknown]>([
+    [
+      "object keys whose value is an object",
+      () => redactText(`${fill("{token:")} x, token: k}`).endsWith("token: [redacted]}"),
+      true,
+    ],
+    [
+      "closing tags before opening tags",
+      () => redactText(`${fill("</token>")}<token>k</token>${fill("<token>")}`).length,
+      2 * size + 25,
+    ],
+    [
+      "opening tags without a closing tag",
+      () => redactText(`<token>k</token>${fill("<token>")}`).length,
+      size + 25,
+    ],
+    [
+      "name= pairs inside a value",
+      () => redactText(`{ token: ${fill("key=")} }`),
+      "{ token: [redacted] }",
+    ],
+    [
+      "links inside a value",
+      () => redactText(`{ token: ${fill("//i.scdn.co/a")} }`),
+      "{ token: [redacted] }",
+    ],
   ])("answers quickly on %s", (_name, call, expected) => {
     const { ms, result } = timed(call);
     expect(ms).toBeLessThan(400);
@@ -1511,5 +1710,62 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     expect(other).toEqual([]);
     expect(changed.length).toBeGreaterThan(1_000);
     expect(changed.every((text) => quotedKeyOrEscapedSlash.test(text))).toBe(true);
+  });
+
+  it("differs from before on keys without quotes, elements and header lines only by masks", () => {
+    const shapes = randomStrings(
+      [
+        "token",
+        "apiKey",
+        "X-Api-Key",
+        "X-Auth-Token",
+        "Api-Keys",
+        "tokens",
+        ":",
+        ": ",
+        "{",
+        "}",
+        ",",
+        " ",
+        "\n",
+        "\r\n",
+        "> ",
+        "'",
+        '"',
+        "`",
+        "\\",
+        '\\"',
+        "<token>",
+        "</token>",
+        '<Password a="b">',
+        "</password>",
+        "<token/>",
+        "<token-count>",
+        "a",
+        "b c",
+        "sv-1",
+        "header",
+        "[redacted]",
+        "{ token: ",
+        ", password:",
+        "\nX-Api-Key: ",
+        "<access_token>",
+        "</ACCESS_TOKEN>",
+      ],
+      20_000,
+      12,
+      3,
+    );
+    const runs = shapes.map((input) => ({
+      input,
+      now: scrubText(input),
+      old: scrubTextBefore(input),
+    }));
+    const changed = runs.filter(({ now, old }) => now !== old);
+    expect(changed.filter(({ now, old }) => !onlyNewRedactions(now, old)).slice(0, 5)).toEqual([]);
+    // Most of these hold no quoted key: the new shapes are read.
+    expect(
+      changed.filter(({ input }) => !quotedKeyOrEscapedSlash.test(input)).length,
+    ).toBeGreaterThan(2_000);
   });
 });

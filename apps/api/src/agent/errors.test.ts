@@ -3,7 +3,7 @@
  * and a cancelled call or run is never retried.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmError } from "../llm/errors.js";
 import { SourceError } from "../sources/http.js";
 import { isAbortError, isTransient, TransientError, withRetry } from "./errors.js";
@@ -54,6 +54,10 @@ describe("isTransient", () => {
 });
 
 describe("withRetry", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("throws a non-transient error at once", async () => {
     let calls = 0;
     await expect(
@@ -89,20 +93,28 @@ describe("withRetry", () => {
   });
 
   it("cuts the wait before a retry short when the run is cancelled", async () => {
+    // On a fake clock, so how long the wait lasted is exact however busy the machine is.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const controller = new AbortController();
     let calls = 0;
     const started = Date.now();
+    let settledAfter: number | undefined;
     const pending = withRetry(
       async () => {
         calls++;
         throw new TransientError("busy", 503);
       },
       { maxAttempts: 2, initialInterval: 5000, signal: controller.signal },
-    );
+    ).finally(() => {
+      settledAfter = Date.now() - started;
+    });
+    pending.catch(() => {});
     setTimeout(() => controller.abort(), 20);
 
+    // The run is cancelled 20 ms in: the 5 s wait ends then, not when it would have.
+    await vi.advanceTimersByTimeAsync(20);
+    expect(settledAfter).toBe(20);
     await expect(pending).rejects.toThrow();
-    expect(Date.now() - started).toBeLessThan(1000);
     expect(calls).toBe(1);
   });
 });

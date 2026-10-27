@@ -2,7 +2,7 @@
  * Records a stored live run as a replay record:
  *
  *   npm run replay:record -w apps/api -- --run <run id> --slug <slug> [--commit <sha>]
- *     [--out <dir>] [--force]
+ *     [--out <dir>] [--force] [--allow-dirty]
  *
  * Reads the run and its events from the database (SQLITE_DB_PATH, as the API does; read-only),
  * builds the record (recorder.ts: scrubbed, then checked) and writes `<out>/<slug>.json` (default
@@ -12,6 +12,12 @@
  *
  * The record names the commit the run ran at, which the server stored with the run (see
  * recordCommit). --commit is needed only for a run stored without one, and must match otherwise.
+ *
+ * A record comes from a clean commit: one whose run ran from a working tree with uncommitted
+ * changes (its commit ends in "-dirty"), or made while the checkout has them (the same
+ * checkoutCommit the server stamps on its runs), is refused (cleanCommit). --allow-dirty records
+ * it anyway for a local experiment, stamped "-dirty", so the committed recording's own check
+ * (demo-recording.test.ts) still refuses it.
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -88,6 +94,40 @@ export function recordCommit({
   };
 }
 
+/** What a refusal of a dirty tree says (the start of the message). */
+export const DIRTY_REFUSAL =
+  "commit or stash your changes; showcase recordings must come from a clean commit";
+
+const DIRTY = "-dirty";
+
+/**
+ * The commit a record is stamped with, or why it is refused: `commit` (chosen by recordCommit)
+ * ends in "-dirty" when the run ran from uncommitted changes, and `checkout` (the checkout's
+ * commit now; null when it cannot be read) when the recorder runs from them. Either is refused
+ * unless `allowDirty`; then the stamp says "-dirty" whichever it was.
+ */
+export function cleanCommit({
+  commit,
+  checkout,
+  allowDirty,
+}: {
+  commit: string;
+  checkout: string | null;
+  allowDirty: boolean;
+}): { commit: string } | { refused: string } {
+  const where = [
+    ...(commit.endsWith(DIRTY) ? [`the run ran from uncommitted changes (${commit})`] : []),
+    ...(checkout?.endsWith(DIRTY) ? [`the checkout has uncommitted changes (${checkout})`] : []),
+  ];
+  if (where.length === 0) return { commit };
+  if (!allowDirty) {
+    return {
+      refused: `${DIRTY_REFUSAL}: ${where.join("; ")}. Pass --allow-dirty to record anyway for a local experiment (stamped "-dirty").`,
+    };
+  }
+  return { commit: commit.endsWith(DIRTY) ? commit : `${commit}${DIRTY}` };
+}
+
 export interface RecordDependencies {
   /** The settings file's values for the credential check (default: apps/api/.env). */
   settingsFileValues?: () => NodeJS.ProcessEnv;
@@ -104,12 +144,13 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
       commit: { type: "string" },
       out: { type: "string" },
       force: { type: "boolean", default: false },
+      "allow-dirty": { type: "boolean", default: false },
     },
   });
   if (!values.run || !values.slug) {
     console.error(
       "Usage: npm run replay:record -w apps/api -- --run <run id> --slug <slug> " +
-        "[--commit <sha>] [--out <dir>] [--force]",
+        "[--commit <sha>] [--out <dir>] [--force] [--allow-dirty]",
     );
     return 2;
   }
@@ -142,17 +183,29 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     return 1;
   }
 
+  const checkout = (deps.checkout ?? checkoutCommitOrNull)();
   const chosen = recordCommit({
     stored: run.commit,
     given: values.commit?.trim() || null,
-    checkout: (deps.checkout ?? checkoutCommitOrNull)(),
+    checkout,
   });
   if ("refused" in chosen) {
     console.error(chosen.refused);
     return 1;
   }
   if (chosen.warning) console.warn(`Warning: ${chosen.warning}`);
-  const { commit } = chosen;
+  const clean = cleanCommit({
+    commit: chosen.commit,
+    checkout,
+    allowDirty: values["allow-dirty"] ?? false,
+  });
+  if ("refused" in clean) {
+    console.error(clean.refused);
+    return 1;
+  }
+  const { commit } = clean;
+  if (commit.endsWith(DIRTY))
+    console.warn(`Warning: recorded from a dirty tree, stamped ${commit}`);
 
   const secrets = knownSecrets({
     ...(deps.settingsFileValues ?? settingsFileValues)(),

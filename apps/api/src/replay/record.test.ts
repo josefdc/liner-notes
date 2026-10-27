@@ -4,7 +4,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MIGRATIONS, runMigrations } from "../store/migrations.js";
-import { main, recordCommit } from "./record.js";
+import { cleanCommit, DIRTY_REFUSAL, main, recordCommit } from "./record.js";
 
 describe("the commit a record names", () => {
   it("is the one the run ran at, whatever is checked out now", () => {
@@ -47,6 +47,43 @@ describe("--commit", () => {
     for (const given of ["abc1234", "abc1234-dirty", "0123456789abcdef0123456789abcdef01234567"]) {
       expect(recordCommit({ stored: null, given, checkout: null })).toEqual({ commit: given });
     }
+  });
+});
+
+describe("a record from a dirty tree", () => {
+  it("is refused when the run ran from uncommitted changes, or the checkout has them now", () => {
+    for (const [commit, checkout, why] of [
+      ["aaa1111-dirty", "aaa1111", "the run ran from uncommitted changes (aaa1111-dirty)"],
+      ["aaa1111", "aaa1111-dirty", "the checkout has uncommitted changes (aaa1111-dirty)"],
+      ["aaa1111-dirty", null, "the run ran from uncommitted changes (aaa1111-dirty)"],
+    ] as const) {
+      const result = cleanCommit({ commit, checkout, allowDirty: false });
+      expect(result, `${commit} / ${checkout}`).toMatchObject({
+        refused: expect.stringContaining(why),
+      });
+      expect((result as { refused: string }).refused.startsWith(DIRTY_REFUSAL)).toBe(true);
+    }
+  });
+
+  it("is recorded from a clean run and checkout (or one that cannot be read), unchanged", () => {
+    expect(cleanCommit({ commit: "aaa1111", checkout: "aaa1111", allowDirty: false })).toEqual({
+      commit: "aaa1111",
+    });
+    expect(cleanCommit({ commit: "aaa1111", checkout: null, allowDirty: false })).toEqual({
+      commit: "aaa1111",
+    });
+  });
+
+  it("is recorded under --allow-dirty, stamped -dirty once", () => {
+    expect(cleanCommit({ commit: "aaa1111", checkout: "aaa1111-dirty", allowDirty: true })).toEqual(
+      { commit: "aaa1111-dirty" },
+    );
+    expect(cleanCommit({ commit: "aaa1111-dirty", checkout: "aaa1111", allowDirty: true })).toEqual(
+      { commit: "aaa1111-dirty" },
+    );
+    expect(cleanCommit({ commit: "aaa1111", checkout: "aaa1111", allowDirty: true })).toEqual({
+      commit: "aaa1111",
+    });
   });
 });
 

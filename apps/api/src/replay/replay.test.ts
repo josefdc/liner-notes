@@ -11,7 +11,15 @@
  * genealogy node's clip), a cover URL and the typed query in a field the contract does not name.
  */
 
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -430,6 +438,63 @@ describe("the recorder", () => {
     );
     expect(recordMain(args("vouched", "--commit", "ccccccc"), deps)).toBe(0);
     expect(JSON.parse(readFileSync(join(out, "vouched.json"), "utf8")).commit).toBe("ccccccc");
+  });
+
+  it("replay:record refuses a dirty tree, records a clean one, and stamps -dirty under --allow-dirty", async () => {
+    const runId = await liveRun("source run");
+    vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
+    const out = join(dir, "clean-tree");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const args = (slug: string, ...extra: string[]) => [
+      "--run",
+      runId,
+      "--slug",
+      slug,
+      "--out",
+      out,
+      ...extra,
+    ];
+    const withCheckout = (checkout: string) => ({
+      settingsFileValues: () => ({}),
+      checkout: () => checkout,
+    });
+    const refusals = () => errors.mock.calls.map(([m]) => String(m)).join("\n");
+    const written = (slug: string) => join(out, `${slug}.json`);
+
+    // A clean run, recorded from a clean checkout: written, with the run's commit.
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", runId);
+    expect(recordMain(args("clean"), withCheckout("aaaaaaaaaaaa"))).toBe(0);
+    expect(JSON.parse(readFileSync(written("clean"), "utf8")).commit).toBe("aaaaaaaaaaaa");
+
+    // The checkout has uncommitted changes now: refused, nothing written.
+    expect(recordMain(args("checkout-dirty"), withCheckout("aaaaaaaaaaaa-dirty"))).toBe(1);
+    expect(refusals()).toContain(
+      "commit or stash your changes; showcase recordings must come from a clean commit",
+    );
+    expect(refusals()).toMatch(/the checkout has uncommitted changes \(aaaaaaaaaaaa-dirty\)/);
+    expect(existsSync(written("checkout-dirty"))).toBe(false);
+
+    // The run itself ran from uncommitted changes: refused, though the checkout is clean now.
+    getDb()
+      .prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?")
+      .run("aaaaaaaaaaaa-dirty", runId);
+    expect(recordMain(args("run-dirty"), withCheckout("aaaaaaaaaaaa"))).toBe(1);
+    expect(refusals()).toMatch(/the run ran from uncommitted changes \(aaaaaaaaaaaa-dirty\)/);
+    expect(existsSync(written("run-dirty"))).toBe(false);
+
+    // --allow-dirty records either, stamped "-dirty", so the committed recording's check refuses
+    // it.
+    expect(recordMain(args("run-dirty", "--allow-dirty"), withCheckout("aaaaaaaaaaaa"))).toBe(0);
+    expect(JSON.parse(readFileSync(written("run-dirty"), "utf8")).commit).toBe(
+      "aaaaaaaaaaaa-dirty",
+    );
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", runId);
+    expect(
+      recordMain(args("checkout-dirty", "--allow-dirty"), withCheckout("aaaaaaaaaaaa-dirty")),
+    ).toBe(0);
+    const allowed = JSON.parse(readFileSync(written("checkout-dirty"), "utf8"));
+    expect(allowed.commit).toBe("aaaaaaaaaaaa-dirty");
+    expect(allowed.analysis.run.commit).toBe("aaaaaaaaaaaa-dirty");
   });
 
   it("a run resumed by a server at another commit keeps no commit; on the same server it keeps it", async () => {
@@ -1495,7 +1560,10 @@ describe("the recorded cover from the Cover Art Archive", () => {
     const runId = await liveRun("source run");
     vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
     const out = join(dir, "no-cover");
-    const deps = { settingsFileValues: () => ({}), checkout: () => runningCommit() ?? "abc1234" };
+    // A clean commit for the run and the checkout, whatever the state of the tree the tests run
+    // in (a dirty one is refused: see the replay:record test above).
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("abc1234abc12", runId);
+    const deps = { settingsFileValues: () => ({}), checkout: () => "abc1234abc12" };
     expect(recordMain(["--run", runId, "--slug", "no-cover", "--out", out], deps)).toBe(0);
     expect(vi.mocked(console.warn).mock.calls.map(([m]) => String(m))).toContain(
       "Warning: no cover kept: the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",

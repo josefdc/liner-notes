@@ -251,6 +251,39 @@ describe('resultClaims on the provenance fixture', () => {
   });
 });
 
+describe('resultClaims with the claims of more facts', () => {
+  it("reads them after the result's own, against the result's evidence pack", () => {
+    const track = withClaims([claim({ id: 'c-result' })]);
+    const more = [
+      claim({ id: 'fc-sourced', kind: 'sourced', evidenceIds: ['ev1'], verdict: 'supported' }),
+      claim({ id: 'fc-elsewhere', kind: 'sourced', evidenceIds: ['ev9'], verdict: 'supported' }),
+      { ...claim({ id: 'fc-unreadable' }), about: 'lyrics' },
+    ];
+    const claims = resultClaims(track, more);
+    expect(claims.all.map((shown) => [shown.key, shown.kind])).toEqual([
+      ['0:c-result', 'inferred'],
+      ['1:fc-sourced', 'sourced'],
+      // Cites an item this result does not hold: inference, with the citation counted missing.
+      ['2:fc-elsewhere', 'inferred'],
+    ]);
+    expect(claims.byId.get('fc-sourced')?.cited.map((item) => item.id)).toEqual(['ev1']);
+    expect(claims.byId.get('fc-elsewhere')?.missingCitations).toBe(1);
+    expect(claims.isUnreadable('fc-unreadable')).toBe(true);
+    // Without more facts, the result's claims alone.
+    expect(resultClaims(track).all.map((shown) => shown.claim.id)).toEqual(['c-result']);
+  });
+
+  it("keeps the result's claim when a later one repeats its id, and hides one rejected", () => {
+    const track = withClaims([claim({ id: 'c1', text: 'The result says so.' })]);
+    const repeat = claim({ id: 'c1', text: 'A later fact says so.' });
+    expect(resultClaims(track, [repeat]).byId.get('c1')?.claim.text).toBe('The result says so.');
+    const rejected = claim({ id: 'fc-wrong', verdict: 'contradicted' });
+    const claims = resultClaims(track, [rejected]);
+    expect(claims.isHidden('fc-wrong')).toBe(true);
+    expect(claims.rejected.map((shown) => shown.claim.id)).toEqual(['fc-wrong']);
+  });
+});
+
 describe('withoutHiddenRelations', () => {
   it('drops the relations whose claim is hidden, and the nodes only they related', () => {
     const track = provenanceTrack();

@@ -996,7 +996,10 @@ for (const fixture of ["full-result", "missing-states"]) {
   });
 }
 
-/** The provenance fixture with a "sample" fact whose text names an entity of every colour. */
+/**
+ * The provenance fixture with a "sample" fact whose text names an entity of every colour, and
+ * whose claim is sourced, so its entities link to the cited source.
+ */
 function withEntities() {
   const fixture = loadFixture("provenance");
   const complete = fixture.streams["/api/analyze/stream"].find(
@@ -1016,7 +1019,19 @@ function withEntities() {
     type: "sample",
     content: `Old Record, tape echo, Some Album, Ada Example, Juno, Ben Example, 1999.`,
     entities: entities.map(([text, type], i) => ({ id: `e${i}`, text, type })),
+    claimId: "c-entities",
   };
+  complete.data.claims.push({
+    id: "c-entities",
+    text: "Old Record is sampled.",
+    about: "sample",
+    kind: "sourced",
+    origin: "model",
+    evidenceIds: ["ev-review"],
+    verdict: "supported",
+    verdictReason: null,
+    numericCheck: "n/a",
+  });
   return { fixture, entities: entities.map(([text]) => text) };
 }
 
@@ -1026,7 +1041,7 @@ test("a fact's entity chips and type label meet 4.5:1, at rest and hovered", asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await analyzeAndOpenDashboard(page, "Track");
   await openPlayer(page);
-  const chip = (text: string) => `#panel-context button[title="Search: ${text}"]`;
+  const chip = (text: string) => `#panel-context a[data-entity-type][aria-label^="${text} ("]`;
   const atRest = await neutralBadgeContrast(
     page,
     [...entities.map(chip), "#panel-context span.ml-auto.rounded-full"].join(", "),

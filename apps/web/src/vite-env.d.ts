@@ -5,6 +5,11 @@ declare global {
     readonly VITE_API_URL?: string;
     /** Where the footer's "Source" link points; the public repository when unset. */
     readonly VITE_SOURCE_URL?: string;
+    /**
+     * The Turnstile site key. Unset, the page asks for run tokens with the development bypass,
+     * which only an API without a Turnstile secret, outside production, accepts.
+     */
+    readonly VITE_TURNSTILE_SITE_KEY?: string;
   }
 }
 

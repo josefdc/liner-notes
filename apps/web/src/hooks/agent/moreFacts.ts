@@ -13,6 +13,8 @@ import type { Claim } from '@liner-notes/contract';
 import { FIRST_FACTOID_ROUND, factoidRoundsLeft } from '@liner-notes/contract/factoids';
 import type { Factoid, TrackData } from '../../types';
 import { resultModeOf } from '../../utils/recording';
+import type { RunToken } from './apiClient';
+import { withRunToken } from './runToken';
 import { API_BASE_URL, type FailedFact, type MoreFacts } from './types';
 
 /** Which result a MoreFacts belongs to: its run id (when it names one) and its track id. */
@@ -39,8 +41,11 @@ export function moreFactsOf(result: TrackData, moreFacts: MoreFacts | null): Mor
   return moreFacts?.result === moreFactsKey(result) ? moreFacts : newMoreFacts(result);
 }
 
-/** The URL of the factoid stream that asks for the next round of facts about `result`. */
-export function moreFactsUrl(result: TrackData, moreFacts: MoreFacts): string {
+/**
+ * The URL of the factoid stream that asks for the next round of facts about `result`, with the
+ * run token the request carries (agent/runToken.ts).
+ */
+export function moreFactsUrl(result: TrackData, moreFacts: MoreFacts, token: RunToken): string {
   const existingIds = [...result.factoids, ...moreFacts.factoids].map((factoid) => factoid.id);
   const mode = resultModeOf(result.run);
   const runId = result.run?.id;
@@ -54,7 +59,7 @@ export function moreFactsUrl(result: TrackData, moreFacts: MoreFacts): string {
     // does (the API decides by this, not by what it allows right now).
     ...(mode ? { mode } : {}),
   });
-  return `${API_BASE_URL}/factoids/more/stream?${params}`;
+  return withRunToken(`${API_BASE_URL}/factoids/more/stream?${params}`, token);
 }
 
 /**

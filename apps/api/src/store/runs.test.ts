@@ -11,9 +11,11 @@ import {
   appendRunEvent,
   EVENT_BUSY_TIMEOUT_MS,
   getRun,
+  isPreviewUrl,
   lastStreamElapsedMs,
   latestRunsForTrack,
   runDurationSql,
+  SIGNED_URL,
   settleOpenRuns,
   startRun,
   storeReplayOf,
@@ -381,6 +383,65 @@ describe("withoutPreviewUrls", () => {
       "see https://example.com/a?hdnea=x for details",
     ];
     expect(withoutPreviewUrls(kept)).toEqual(kept);
+  });
+});
+
+describe("SIGNED_URL", () => {
+  // The expression before #189: it rescans the rest of the string for each candidate parameter.
+  const QUADRATIC = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
+
+  it("matches exactly the strings the earlier expression matched", () => {
+    const markers = ["hdnea", "hdnts", "x-amz-signature", "HDNEA", "HdNtS", "X-Amz-Signature"];
+    const near = ["hdne", "hdnea_", "x-amz-signatur", "x-amz-credential", "hmac", "sig", "token"];
+    const cases = [
+      "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/0/x.mp3?hdnea=exp=1~hmac=f",
+      "https://p.scdn.co/mp3-preview/abc",
+      "https://cdn.example.com/a.mp3?hdnea=exp=1~acl=x",
+      "https://bucket.s3.amazonaws.com/a.mp3?X-Amz-Signature=abc",
+      "https://e-cdns-preview-1.dzcdn.net/stream/x",
+      "https://cdn-images.dzcdn.net/images/cover/0a1b2c/250x250-000000-80-0-0.jpg",
+      "https://dzcdn.net.example.com/x",
+      "Signed links end in ?hdnts=… and expire",
+      "see https://example.com/a?hdnea=x for details",
+      "plain text",
+      "",
+      "https://",
+      "http://?hdnea=",
+      "https://~hdnts=",
+      "ftp://x/a?hdnea=1",
+      " https://x/a?hdnea=1",
+      "HTTPS://X/A?HDNEA=1",
+      "http://x/a?hdnea=1 ",
+      "http://x/a?hdnea=1\n",
+      "http://x/a?hdnea=1\tb",
+      "http://x/a b?hdnea=1",
+      "http://x/\u00a0?hdnea=1",
+      "http://x/a?hdnea",
+      "http://x/a?hdnea =1",
+      "http://x/a?=hdnea=1",
+      "http://x/a/hdnea=1",
+      "http://x/a#hdnea=1",
+      `http://x/${"~hdnea=".repeat(50)} b`,
+      `http://x/${"~hdnea=".repeat(50)}`,
+    ];
+    for (const marker of [...markers, ...near])
+      for (const sep of ["?", "&", ";", "~", "/", "#", "=", ""])
+        for (const tail of ["", "1", "a=b&c=d", "1 2", "1\n"])
+          for (const head of ["https://h/p", "http://h", "https:/h/p", "x https://h/p"])
+            cases.push(`${head}${sep}${marker}=${tail}`);
+
+    for (const value of cases) expect(SIGNED_URL.test(value), value).toBe(QUADRATIC.test(value));
+    // Both kinds of answer are exercised.
+    expect(cases.filter((value) => QUADRATIC.test(value)).length).toBeGreaterThan(100);
+    expect(cases.filter((value) => !QUADRATIC.test(value)).length).toBeGreaterThan(100);
+  });
+
+  it("answers quickly on a long run of signed-looking parameters before a space", () => {
+    const value = `http://x/${"~hdnea=".repeat(30_000)} b`;
+    const start = performance.now();
+    const preview = isPreviewUrl(value);
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(preview).toBe(false);
   });
 });
 

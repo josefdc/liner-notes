@@ -188,6 +188,27 @@ async function openGraph(
   return { graph, drawnAt, framesBefore };
 }
 
+/**
+ * The genealogy-kinds result with one connected track: one a sourced sample says this one uses
+ * (an origin), with no preview clip.
+ */
+function withSourcedOrigin() {
+  const fixture = loadFixture("genealogy-kinds");
+  const complete = fixture.streams[ANALYZE].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  const genealogy = complete.data.genealogy as {
+    nodes: Array<{ id: string }>;
+    links: Array<{ source: string; target: string }>;
+  };
+  const keep = new Set(["current", "sample-sourced"]);
+  genealogy.nodes = genealogy.nodes.filter((node) => keep.has(node.id));
+  genealogy.links = genealogy.links.filter(
+    (link) => keep.has(link.source) && keep.has(link.target),
+  );
+  return fixture;
+}
+
 /** The connected track's node (the current track's is the first). */
 const connected = (graph: ReturnType<typeof graphOf>) => graph.locator("g.nodes > g").last();
 
@@ -213,7 +234,8 @@ test("the genealogy graph is drawn settled under reduced motion: no frame asked 
 });
 
 test("a hover hint appears at once under reduced motion", async ({ page }) => {
-  const { graph, framesBefore } = await openGraph(page, "reduce");
+  // A track a sourced sample says this one uses, with no clip: pointing at it shows a hint.
+  const { graph, framesBefore } = await openGraph(page, "reduce", withSourcedOrigin());
   await connected(graph).hover();
   const hint = graph.locator(".preview-indicator");
   await expect(hint).toHaveCount(1);

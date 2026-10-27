@@ -1,4 +1,5 @@
-import { type Options, rateLimit } from "express-rate-limit";
+import type { Request } from "express";
+import { type Options, type RateLimitInfo, rateLimit } from "express-rate-limit";
 import type { RateLimitSettings } from "../../config/settings.js";
 import { refuse, requestFailed } from "./errors.js";
 
@@ -8,9 +9,16 @@ const options = ({ windowMs, max }: RateLimitSettings): Partial<Options> => ({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   // JSON 429 with Retry-After; an event-stream request gets the error inside a 200 stream,
-  // because an EventSource cannot read a 429.
-  handler: (req, res) => refuse(req, res, "rate_limited"),
+  // because an EventSource cannot read a 429, with the time left until the limit resets.
+  handler: (req, res) => refuse(req, res, "rate_limited", retryAfter(req)),
 });
+
+/** The time left until the limit that refused `req` resets, when the limiter knows it. */
+function retryAfter(req: Request): { retryAfterMs?: number } {
+  const resetTime = (req as Request & { rateLimit?: RateLimitInfo }).rateLimit?.resetTime;
+  if (!(resetTime instanceof Date)) return {};
+  return { retryAfterMs: Math.max(0, Math.ceil(resetTime.getTime() - Date.now())) };
+}
 
 /**
  * A per-IP limit: past `max` requests in `windowMs`, requests are refused. Every request counts,

@@ -34,7 +34,7 @@ import { isWholeRecording } from '../utils/recording';
 import { isSpotifyTrackId } from '../utils/spotify';
 import { pickerQuestion, pickerRows } from '../components/search/pickerRows';
 import { API_BASE_URL } from './agent/types';
-import { fetchReplays, fetchSuggestions } from './agent/apiClient';
+import { fetchReplays, fetchSuggestions, type RunToken, RunTokenError } from './agent/apiClient';
 import {
   type AnalysisEvent,
   eventSchemasLoaded,
@@ -54,6 +54,7 @@ import {
   withFailure,
 } from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
+import { isUsable, newRunToken, withRunToken } from './agent/runToken';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
@@ -91,7 +92,33 @@ export const CLIENT_ERROR_CODES = {
   // The stream could not be opened (the exception's own text is kept in `error`, never shown).
   streamOpenFailed: 'stream_open_failed',
   resumeFailed: 'resume_failed',
+  // The server answered the stream's request with an error status (an EventSource cannot read
+  // which): a run token it refused, most often. A retry asks for a new one.
+  streamRefused: 'stream_refused',
+  // This build has a Turnstile site key but cannot show the check yet: no request can start.
+  verificationUnavailable: 'verification_unavailable',
 } as const;
+
+/**
+ * A signal that aborts once `a` or `b` does: AbortSignal.any where the browser has it, else one
+ * controller listening to both (Safari before 17.4, Chrome before 116, Firefox before 124).
+ */
+export function eitherSignal(a: AbortSignal, b?: AbortSignal): AbortSignal {
+  if (!b) return a;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([a, b]);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (a.aborted || b.aborted) {
+    abort();
+  } else {
+    a.addEventListener('abort', abort, { once: true });
+    b.addEventListener('abort', abort, { once: true });
+  }
+  return controller.signal;
+}
+
+/** EventSource.CLOSED: the browser has given the stream up and will not reconnect. */
+const EVENT_SOURCE_CLOSED = 2;
 
 /** Loads the code that reads the streams, unless it is loaded already. */
 function readersReady(): Promise<void> | null {
@@ -236,6 +263,8 @@ interface Run {
   trackId: string | null;
   /** How the picker row the run asked for by id was picked, for a retry. */
   pickedBy: PickedBy | null;
+  /** The run token the run started with; its resume sends it again. */
+  token: RunToken | null;
 }
 
 /** How `analyze` was asked for: the request's own options, and the hook's own ones. */
@@ -260,6 +289,22 @@ function newRun(query: string): Run {
     trackId: null,
     pickedBy: null,
     branches: newBranches(),
+    token: null,
+  };
+}
+
+/**
+ * Why a run token could not be had, as an error the run ends with: the API's refusal (its code
+ * and message), an answer this page cannot read (`unreadableCode`), or no answer at all (the
+ * connection failed).
+ */
+function tokenFailure(error: unknown, unreadableCode: string): { message: string; code: string } {
+  if (error instanceof RunTokenError) {
+    return { message: error.message, code: error.code ?? unreadableCode };
+  }
+  return {
+    message: error instanceof Error ? error.message : 'Connection failed',
+    code: CLIENT_ERROR_CODES.connectionLost,
   };
 }
 
@@ -312,6 +357,15 @@ export function useAgent(): UseAgentReturn {
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
   // `moreFacts` as last set, for the next request (its round) before the state is rendered.
   const moreFactsRef = useRef<MoreFacts | null>(null);
+  // The latest run token this page was given: factoid requests send it again until it expires.
+  const tokenRef = useRef<RunToken | null>(null);
+  /**
+   * Stops sending `token` again once the API refused it (or a stream sent with it failed): the
+   * next request that needs one asks for a new one, once. No request is retried here.
+   */
+  const dropToken = useCallback((token: RunToken | null) => {
+    if (token && tokenRef.current === token) tokenRef.current = null;
+  }, []);
 
   const setMoreFacts = useCallback((moreFacts: MoreFacts | null) => {
     moreFactsRef.current = moreFacts;
@@ -496,6 +550,8 @@ export function useAgent(): UseAgentReturn {
 
         case 'error': {
           close();
+          // The API refused the run's token: it is not sent again (a retry asks for a new one).
+          if (data.code === 'auth_expired') dropToken(run.token);
           // The pick could not resume live (the budget tripped while the picker was open, or
           // live analysis is off). When the very track picked has a recording, that recording
           // is replayed; another take with the same title and artist is not the track picked,
@@ -546,7 +602,7 @@ export function useAgent(): UseAgentReturn {
           break;
       }
     },
-    [addLog, fail],
+    [addLog, dropToken, fail],
   );
 
   /**
@@ -578,7 +634,9 @@ export function useAgent(): UseAgentReturn {
       run.controller.signal.addEventListener('abort', close, { once: true });
       streamRef.current = { source, close };
 
+      let opened = false;
       source.onopen = () => {
+        opened = true;
         if (isCurrent()) onOpen?.();
       };
       // A named `heartbeat` event; the data-message form is handled in onmessage.
@@ -601,11 +659,19 @@ export function useAgent(): UseAgentReturn {
         handleStreamEvent(run, data, close);
       };
       // EventSource reconnects by itself, which would start the analysis again on the
-      // server: close instead and let the user retry.
-      source.onerror = () =>
+      // server: close instead and let the user retry. A stream closed before it opened was
+      // answered with an error status (the browser gives up at once): the API refused the
+      // request, most often its run token, which is not sent again.
+      source.onerror = () => {
+        if (!opened && source.readyState === EVENT_SOURCE_CLOSED) {
+          dropToken(run.token);
+          lose('The analysis server did not accept the request.', CLIENT_ERROR_CODES.streamRefused);
+          return;
+        }
         lose('Lost the connection to the analysis.', CLIENT_ERROR_CODES.connectionLost);
+      };
     },
-    [fail, handleStreamEvent],
+    [dropToken, fail, handleStreamEvent],
   );
 
   /**
@@ -640,13 +706,28 @@ export function useAgent(): UseAgentReturn {
         if (runRef.current !== run) return;
       }
 
+      // Every analysis starts with a token of its own (agent/runToken.ts).
+      try {
+        run.token = await newRunToken(run.controller.signal);
+      } catch (error) {
+        if (runRef.current !== run) return;
+        const { message, code } = tokenFailure(error, CLIENT_ERROR_CODES.streamOpenFailed);
+        fail(run, message, code);
+        return;
+      }
+      if (runRef.current !== run) return;
+      tokenRef.current = run.token;
+
       try {
         // With a track id (a clicked suggestion) the API analyses that very track.
         // An id that is not a Spotify track id (a placeholder) is not sent: the text is searched.
         const byId = isSpotifyTrackId(options.trackId);
         const trackId = byId ? `&trackId=${encodeURIComponent(options.trackId as string)}` : '';
         const how = byId && options.pickedBy ? `&pickedBy=${options.pickedBy}` : '';
-        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}${how}`;
+        const url = withRunToken(
+          `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}${how}`,
+          run.token,
+        );
         openRunStream(url, run, () =>
           setState((prev) =>
             prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
@@ -714,8 +795,14 @@ export function useAgent(): UseAgentReturn {
       }));
 
       try {
+        // The run's own token: only the token a run started with resumes it. One that has
+        // expired is sent all the same, and the API says so in the stream.
+        if (!run.token) throw new Error('The run has no run token');
         const how = pickedBy ? `&pickedBy=${pickedBy}` : '';
-        const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`;
+        const url = withRunToken(
+          `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`,
+          run.token,
+        );
         openRunStream(url, run);
       } catch (error) {
         fail(
@@ -767,10 +854,10 @@ export function useAgent(): UseAgentReturn {
           return;
         }
 
-        const open = () => {
+        const open = (token: RunToken) => {
           // What this result already has; another result's facts are let go.
           const before = moreFactsOf(result, moreFactsRef.current);
-          const url = moreFactsUrl(result, before);
+          const url = moreFactsUrl(result, before, token);
           setMoreFacts({ ...before, failed: [], answerFailed: false });
 
           const eventSource = new EventSource(url);
@@ -861,35 +948,67 @@ export function useAgent(): UseAgentReturn {
                 } else if (data.index === undefined) {
                   answer.refused = true;
                   answerFailed();
+                  // A refused run token is not sent again: the next click asks for a new one.
+                  if (data.code === 'auth_expired') dropToken(token);
                   console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;
             }
           };
 
+          // A 401 (a refused run token) reads like any failed connection here: the token is not
+          // sent again, and the next click asks for a new one.
           eventSource.onerror = () => {
             stop();
             answerFailed();
+            dropToken(token);
             reject(new Error('Factoid stream connection failed'));
           };
         };
 
-        // The stream is opened once the code that reads it is loaded.
+        // The stream is opened once the code that reads it is loaded, with the latest run token
+        // while it may still be sent, or else a new one.
+        const held = tokenRef.current;
+        let tokenFailed = false;
+        const token = isUsable(held)
+          ? held
+          : newRunToken(eitherSignal(runSignal, signal)).then(
+              (fresh) => {
+                tokenRef.current = fresh;
+                return fresh;
+              },
+              (error: unknown) => {
+                tokenFailed = true;
+                throw error;
+              },
+            );
         const ready = readersReady();
-        if (!ready) {
-          open();
+        if (!ready && !(token instanceof Promise)) {
+          open(token);
           return;
         }
-        ready.then(
-          () => {
+        Promise.all([ready, token]).then(
+          ([, usable]) => {
             if (runSignal.aborted || signal?.aborted) reject(abortError());
-            else open();
+            else open(usable);
           },
-          (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
+          (error: unknown) => {
+            if (runSignal.aborted || signal?.aborted) {
+              reject(abortError());
+              return;
+            }
+            // Without a token the answer could not be asked for: the Player says so, and the
+            // round is asked again.
+            if (tokenFailed) {
+              const kept = moreFactsOf(result, moreFactsRef.current);
+              setMoreFacts({ ...kept, failed: [], answerFailed: true });
+            }
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
         );
       });
     },
-    [setMoreFacts],
+    [dropToken, setMoreFacts],
   );
 
   /**

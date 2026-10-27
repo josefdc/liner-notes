@@ -23,6 +23,9 @@ import type {
 type Tempo = NonNullable<AudioFeatures['tempo']>;
 type MusicalKey = NonNullable<AudioFeatures['key']>;
 type Loudness = NonNullable<AudioFeatures['loudness']>;
+type Beats = NonNullable<AudioFeatures['beats']>;
+type EnergyContour = NonNullable<AudioFeatures['energyContour']>;
+type Sections = NonNullable<AudioFeatures['sections']>;
 type Fingerprint = NonNullable<AudioFeatures['fingerprint']>;
 type Styles = NonNullable<Fingerprint['styles']>;
 type Tags = NonNullable<Fingerprint['tags']>;
@@ -73,6 +76,10 @@ export interface MeasuredAudio {
   tempo: Tempo | null;
   key: MusicalKey | null;
   loudness: Loudness | null;
+  /** The beat grid, the energy contour and the neutral sections, timed like the key moments. */
+  beats: Beats | null;
+  energyContour: EnergyContour | null;
+  sections: Sections | null;
   /** null when the audio models were not loaded. */
   fingerprint: { styles: Styles | null; tags: Tags | null; moods: Moods | null } | null;
   /** Times are seconds from the start of the preview window (moments past it are kept). */
@@ -297,7 +304,17 @@ export function readAudio(value: unknown): MeasuredAudio | null {
     withheld: readWithheld((value as Obj).withheld),
   };
   if (!value.gate.passed) {
-    return { ...read, tempo: null, key: null, loudness: null, fingerprint: null, keyMoments: [] };
+    return {
+      ...read,
+      tempo: null,
+      key: null,
+      loudness: null,
+      beats: null,
+      energyContour: null,
+      sections: null,
+      fingerprint: null,
+      keyMoments: [],
+    };
   }
   const fingerprint = value.fingerprint;
   return {
@@ -305,6 +322,9 @@ export function readAudio(value: unknown): MeasuredAudio | null {
     tempo: value.tempo,
     key: value.key,
     loudness: value.loudness,
+    beats: value.beats,
+    energyContour: value.energyContour,
+    sections: value.sections,
     fingerprint: fingerprint && {
       styles: fingerprint.styles && { ...fingerprint.styles, top: byScore(fingerprint.styles.top) },
       tags: fingerprint.tags && { ...fingerprint.tags, scores: byScore(fingerprint.tags.scores) },

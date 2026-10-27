@@ -21,6 +21,7 @@ import { type CapturedLogs, captureLogsForTests, logger } from "../logger.js";
 import { setReplayPacingForTests } from "../replay/player.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { createApp } from "./app.js";
+import { testAuth, withRunToken } from "./testApp.js";
 
 vi.mock("../agent/nodes/index.js", async () => {
   const { interrupt } =
@@ -95,7 +96,7 @@ const settings: HttpSettings = {
   globalRateLimit: { windowMs: DEFAULT_RATE_LIMIT.windowMs, max: 10_000 },
   searchRateLimit: DEFAULT_SEARCH_RATE_LIMIT,
 };
-const app = createApp({ http: settings });
+const app = createApp({ ...testAuth, http: settings });
 
 let dir: string;
 let logs: CapturedLogs;
@@ -121,7 +122,7 @@ afterEach(() => {
 /** A stream's messages, once it ends. */
 async function stream(path: string): Promise<Array<{ type: string; threadId?: string }>> {
   const res = await request(app)
-    .get(path)
+    .get(withRunToken(path, new URLSearchParams(path.split("?")[1]).get("threadId") ?? undefined))
     .buffer(true)
     .parse((response, callback) => {
       let body = "";
@@ -155,7 +156,7 @@ const RESUMED = ["clarification ran", "engineer ran", "historian ran", "composer
 
 describe("the run id on every line of a run", () => {
   it("POST /api/analyze", async () => {
-    const res = await request(app).post("/api/analyze").send({ query: "plain song" });
+    const res = await request(app).post(withRunToken("/api/analyze")).send({ query: "plain song" });
     expect(res.body.status).toBe("complete");
     expectRunLines(res.body.threadId, NODES);
   });
@@ -166,11 +167,13 @@ describe("the run id on every line of a run", () => {
   });
 
   it("POST /api/analyze/resume", async () => {
-    const paused = await request(app).post("/api/analyze").send({ query: "ambiguous song" });
+    const paused = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "ambiguous song" });
     expect(paused.body.status).toBe("interrupted");
     logs.clear();
     const res = await request(app)
-      .post("/api/analyze/resume")
+      .post(withRunToken("/api/analyze/resume", paused.body.threadId))
       .send({ threadId: paused.body.threadId, selectedTrackId: "track-a" });
     expect(res.body.status).toBe("complete");
     expectRunLines(paused.body.threadId, RESUMED);
@@ -191,7 +194,9 @@ describe("the run id on every line of a run", () => {
   it("GET /api/analyze/stream, replayed", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
     // The recordings are read once per process; their lines belong to no run.
-    await request(app).post("/api/analyze").send({ query: "One More Time Daft Punk" });
+    await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "One More Time Daft Punk" });
     logs.clear();
     const events = await stream("/api/analyze/stream?query=One+More+Time+Daft+Punk");
     expect(events.map((event) => event.type)).toContain("complete");
@@ -202,7 +207,9 @@ describe("the run id on every line of a run", () => {
     vi.stubEnv("REPLAY_MODE", "only");
     await stream("/api/analyze/stream?query=One+More+Time+Daft+Punk");
     logs.clear();
-    const res = await request(app).post("/api/analyze").send({ query: "One More Time Daft Punk" });
+    const res = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "One More Time Daft Punk" });
     expect(res.body.data?.run?.mode).toBe("replay");
     expectRunLines(res.body.threadId, ["serving"]);
   });

@@ -75,7 +75,7 @@ import { setJudgeTimingForTests } from "../../agent/verifier/index.js";
 import { LlmError } from "../../llm/errors.js";
 import { llm } from "../../llm/invoke.js";
 import { closeDatabase, initializeDatabase } from "../../store/database.js";
-import { createTestApp } from "../testApp.js";
+import { createTestApp, withRunToken } from "../testApp.js";
 import analyzeRouter, { setRunDeadlineForTests } from "./analyze.js";
 
 const app = createTestApp(analyzeRouter);
@@ -133,7 +133,7 @@ function answering(judge: (signal: AbortSignal | undefined) => Promise<unknown>)
 
 async function stream(query: string) {
   const res = await request(app)
-    .get(`/api/analyze/stream?query=${encodeURIComponent(query)}`)
+    .get(withRunToken(`/api/analyze/stream?query=${encodeURIComponent(query)}`))
     .buffer(true)
     .parse((response, callback) => {
       let body = "";

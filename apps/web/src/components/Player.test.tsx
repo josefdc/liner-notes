@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { moreFactsOf } from '../hooks/agent/moreFacts';
 import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/types';
 import type { Factoid, TrackData } from '../types';
-import { audioBlock } from './measured/testing';
+import { audioBlock, measuredTrack } from './measured/testing';
 import Player from './Player';
 import { claim as aClaim, evidence as anItem } from './provenance/testing';
 
@@ -86,6 +86,94 @@ describe('the Player album cover', () => {
     const { container } = render(<Player trackData={missingTrack} onBack={() => {}} />);
     expect(screen.getByText('Cover not available')).toBeTruthy();
     expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+});
+
+describe("the Player's preview lane", () => {
+  const layers = {
+    beats: { times: [0.5, 1, 1.5], method: 'essentia.RhythmExtractor2013', basis: 'signal' },
+    energyContour: { hopSeconds: 0.5, values: [0.1, 0.2, 0.3], method: 'RMS', basis: 'signal' },
+    sections: {
+      segments: [
+        { label: 'A', start: 0, end: 12 },
+        { label: 'B', start: 12, end: 29.75 },
+      ],
+      method: 'novelty-on-beat-chroma',
+      basis: 'signal',
+    },
+  };
+  const drawn = () =>
+    [
+      ...screen
+        .getByRole('group', { name: 'Song structure' })
+        .querySelectorAll('[data-measured-layer]'),
+    ].map((layer) => layer.getAttribute('data-measured-layer'));
+
+  it('draws the beats, energy and sections the result measured, on the measured window', () => {
+    render(<Player trackData={measuredTrack(audioBlock(layers))} onBack={() => {}} />);
+    const lane = screen.getByRole('group', { name: 'Preview window (29.8 s, measured)' });
+    expect(drawn()).toEqual(['sections', 'energy', 'beats', 'legend']);
+    expect(within(lane).getByRole('img', { name: /^Beat grid: 3 beats/ })).toBeTruthy();
+    expect(
+      within(lane)
+        .getAllByRole('listitem')
+        .map((item) => item.style.width),
+    ).toEqual([
+      `${Math.round((12 / 29.75) * 100 * 10_000) / 10_000}%`,
+      `${Math.round((17.75 / 29.75) * 100 * 10_000) / 10_000}%`,
+    ]);
+  });
+
+  it('draws none of them when the gate stopped the measurement, or a layer is null', () => {
+    render(
+      <Player
+        trackData={measuredTrack(
+          audioBlock({ ...layers, gate: { passed: false, reason: 'silence' } }),
+          { audioSource: 'unavailable' },
+        )}
+        onBack={() => {}}
+      />,
+    );
+    expect(drawn()).toEqual([]);
+    cleanup();
+    render(
+      <Player
+        trackData={measuredTrack(audioBlock({ ...layers, beats: null }))}
+        onBack={() => {}}
+      />,
+    );
+    expect(drawn()).toEqual(['sections', 'energy', 'legend']);
+  });
+
+  it('says why the service withheld a layer, and not when the gate stopped everything', () => {
+    const unsteady = { code: 'unsteady_tempo', reason: 'the tempo does not hold over the window' };
+    render(
+      <Player
+        trackData={measuredTrack(
+          audioBlock({ ...layers, beats: null, withheld: { beats: unsteady } }),
+        )}
+        onBack={() => {}}
+      />,
+    );
+    const timeline = () => screen.getByRole('group', { name: 'Song structure' }).textContent;
+    expect(timeline()).toContain('Beat grid withheld — the tempo did not hold across the preview');
+    cleanup();
+    const silent = { code: 'gate_silence', reason: 'the preview is silent' };
+    render(
+      <Player
+        trackData={measuredTrack(
+          audioBlock({
+            ...layers,
+            gate: { passed: false, reason: 'silence' },
+            withheld: { beats: silent, energyContour: silent, sections: silent },
+          }),
+          { audioSource: 'unavailable' },
+        )}
+        onBack={() => {}}
+      />,
+    );
+    expect(timeline()).toContain('No key moments — the preview is silent');
+    expect(timeline()).not.toContain('withheld');
   });
 });
 

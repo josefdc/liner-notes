@@ -241,7 +241,12 @@ jobs:
             exit 1
           fi
 
-          docker run -d --name api-smoke -e REPLAY_MODE=only -p 127.0.0.1:3101:3001 liner-notes-api:ci
+          # The image runs with NODE_ENV=production, which does not start without the run token
+          # and Turnstile secrets: fake values here (nothing in this check asks Cloudflare).
+          docker run -d --name api-smoke -e REPLAY_MODE=only \
+            -e RUN_TOKEN_SECRET=ci-only-run-token-secret-not-for-any-deployment \
+            -e TURNSTILE_SECRET_KEY=ci-only-turnstile-secret \
+            -p 127.0.0.1:3101:3001 liner-notes-api:ci
           trap 'docker logs api-smoke; docker rm -f api-smoke' EXIT
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:3101/api/ready && break

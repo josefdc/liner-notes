@@ -23,6 +23,12 @@ const rule = (id) => rules.find((candidate) => candidate.id === id);
 const count = (id, text, path = "apps/web/src/snippet.tsx") =>
   countInText(rule(id), text, path).total;
 
+describe("rule owners", () => {
+  it("names #35 beside #34 for emoji in progress copy: its remaining hit is in the genealogy graph", () => {
+    expect(rule("emoji-in-progress").owner).toBe("#34, #35");
+  });
+});
+
 describe("random-values-api", () => {
   it.each([
     ["a direct call", "const bpm = 120 + Math.random() * 15;"],

@@ -339,7 +339,12 @@ export function latestRunsForTrack(
  */
 const PREVIEW_HOST =
   /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
-const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
+/**
+ * A whole URL (no whitespace) with an expiring-token parameter. The lookahead checks once that
+ * the rest holds no whitespace, so a long run of candidate parameters before a space is not
+ * rescanned for each one: the match runs in linear time.
+ */
+export const SIGNED_URL = /^https?:\/\/(?=\S*$)\S*?[?&;~](?:hdnea|hdnts|x-amz-signature)=/i;
 
 /** True for a preview clip URL (see PREVIEW_HOST and SIGNED_URL). */
 export function isPreviewUrl(value: string): boolean {

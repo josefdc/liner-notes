@@ -287,6 +287,36 @@ describe('GenealogyGraph links', () => {
     expect(screen.queryByTestId('link-detail')).toBeNull();
   });
 
+  it('closes the focused item’s detail with Escape, and leaves the next Escape to the page', async () => {
+    const { container } = render(<Graph />);
+    const items = focusables(container);
+    await act(async () => items[1].focus());
+    expect(screen.getByTestId('link-detail')).toBeTruthy();
+    // The first Escape is the graph's: the box closes, and the page is told it was handled.
+    const first = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      items[1].dispatchEvent(first);
+    });
+    expect(first.defaultPrevented).toBe(true);
+    expect(screen.queryByTestId('link-detail')).toBeNull();
+    expect(document.activeElement).toBe(items[1]);
+    // Nothing is open now: the next one goes on to the page (the Player goes back).
+    const second = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      items[1].dispatchEvent(second);
+    });
+    expect(second.defaultPrevented).toBe(false);
+    // Another item shows its detail again, and so does the first once the focus comes back.
+    await act(async () => {
+      fireEvent.keyDown(items[1], { key: 'ArrowRight' });
+    });
+    expect(screen.getByTestId('link-detail').textContent).toContain('Guess');
+    await act(async () => {
+      fireEvent.keyDown(items[2], { key: 'ArrowLeft' });
+    });
+    expect(screen.getByTestId('link-detail').textContent).toContain('Older Record');
+  });
+
   it('hides the drawing’s own words from screen readers', () => {
     const { container } = render(<Graph />);
     expect(container.querySelector('g.link-labels')?.getAttribute('aria-hidden')).toBe('true');

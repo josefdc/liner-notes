@@ -124,6 +124,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
   const [focused, setFocused] = useState<Item | null>(null);
+  // The item whose detail box Escape closed: the box stays closed until the pointer or the focus
+  // moves to another item (and the next Escape is the Player's).
+  const [dismissed, setDismissed] = useState<Item | null>(null);
+  // Closes the open detail box; false when none is open. Read by the drawing's key handler.
+  const dismissRef = useRef<() => boolean>(() => false);
+  // Another item under the pointer or the focus (or the same one again) shows its box again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when what is pointed at changes
+  useEffect(() => {
+    setDismissed(null);
+  }, [hovered, focused]);
 
   // Audio preview (extracted hook)
   const {
@@ -734,6 +744,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       if (items.length === 0) return;
       const at = items.findIndex(({ element }) => element === event.target);
       if (at === -1) return;
+      // Escape closes the focused item's detail box first; with none open it is the Player's.
+      if (event.key === 'Escape') {
+        if (dismissRef.current()) event.preventDefault();
+        return;
+      }
       const last = items.length - 1;
       const next =
         event.key === 'ArrowRight' || event.key === 'ArrowDown'
@@ -956,7 +971,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
   const nodeList = graphNodes(data);
   const related = nodeList.filter((node) => node.group !== 1);
-  const active = hovered ?? focused;
+  const pointed = hovered ?? focused;
+  const active = sameItem(pointed, dismissed) ? null : pointed;
+  useEffect(() => {
+    dismissRef.current = () => {
+      if (active === null) return false;
+      setDismissed(active);
+      return true;
+    };
+  }, [active]);
   const activeLink = active?.kind === 'link' ? (links[active.index] ?? null) : null;
   const activeNode =
     active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
@@ -1092,8 +1115,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           </div>
         )}
 
-        {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
-        <div className="absolute top-2 right-2 pointer-events-none md:hidden">
+        {/* Phones: a short hint in the bottom-right corner, clear of the panel's heading and
+            label along the top (a track's detail box covers it while shown) */}
+        <div className="absolute bottom-2 right-2 pointer-events-none md:hidden">
           <div className="text-chrome font-mono text-text-tertiary">Pinch, drag or tap</div>
         </div>
       </div>

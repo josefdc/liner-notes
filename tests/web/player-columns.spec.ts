@@ -1,60 +1,15 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { clippedLines } from "./clipping";
 import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./mock";
 
-// From md (768 px) the Player shows its three panels side by side, and below lg the side columns
-// are narrow (the left one is a quarter of the window). Provenance lines, measured-value lines and
-// badges must wrap inside their column there: a column scrolls vertically and clips sideways, so
-// a line wider than it loses its end (a measured value, an analyser name) without an ellipsis.
+// From md (768 px) the Player shows its panels side by side: the notes and the player in two
+// columns up to xl, with the connections in a row below, and three columns from xl (1280 px).
+// Provenance lines, measured-value lines and badges must wrap inside their column: the panels'
+// area (and from xl each column) scrolls vertically and clips sideways, so a line wider than its
+// column loses its end (a measured value, an analyser name) without an ellipsis.
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
-
-/**
- * Every line of text in the Player's panels (and its header above them) that reaches past the sides of the box that clips it
- * (its nearest ancestor whose overflow is not visible), with the amount. Text that is meant to be
- * cut (an ellipsis, a line clamp), text hidden at rest and screen-reader-only text are skipped.
- */
-function clippedLines(
-  page: Page,
-  ids = ["player-header", "panel-context", "panel-player", "panel-genealogy"],
-) {
-  return page.evaluate((ids) => {
-    const clipped: string[] = [];
-    const panels = ids
-      .map((id) => document.getElementById(id))
-      .filter((panel): panel is HTMLElement => panel !== null);
-    for (const panel of panels) {
-      const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const text = node.textContent?.trim();
-        const parent = node.parentElement;
-        if (!text || !parent || parent.closest("svg, .sr-only")) continue;
-        const style = getComputedStyle(parent);
-        if (style.textOverflow === "ellipsis" || style.webkitLineClamp !== "none") continue;
-        // Not shown at rest (a hover tooltip).
-        let shown = true;
-        for (let el: HTMLElement | null = parent; el && shown; el = el.parentElement) {
-          shown = getComputedStyle(el).opacity !== "0";
-        }
-        if (!shown) continue;
-        let clip: HTMLElement | null = parent;
-        while (clip && getComputedStyle(clip).overflowX === "visible") clip = clip.parentElement;
-        if (!clip) continue;
-        const box = clip.getBoundingClientRect();
-        const left = box.left + clip.clientLeft;
-        const right = left + clip.clientWidth;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        for (const line of range.getClientRects()) {
-          if (line.width === 0) continue;
-          const over = Math.max(left - line.left, line.right - right);
-          if (over > 0.5) clipped.push(`${text.slice(0, 50)} (${Math.round(over)} px)`);
-        }
-      }
-    }
-    return clipped;
-  }, ids);
-}
 
 for (const width of [768, 1024]) {
   for (const fixture of ["provenance", "genealogy-kinds"]) {
@@ -174,6 +129,9 @@ const LONG = {
 
 // The track's title and artist wrap rather than run past the window, even a word longer than the
 // line, and the audio line (from md up) stays on one line beside them, from phone to desktop.
+// From md up the header stays above the columns, so a title longer than two lines is cut there
+// with an ellipsis (and an artist longer than one): each is read whole (the heading's text) and
+// shown whole on hover (its title).
 for (const width of [390, 768, 1024, 1440]) {
   test(`at ${width} px the Player's title is whole`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -181,6 +139,7 @@ for (const width of [390, 768, 1024, 1440]) {
     await analyzeAndOpenDashboard(page, "Bright Lines");
     await openPlayer(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(LONG.title);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveAttribute("title", LONG.title);
     // Below md the header is for screen readers only, and the Player tab shows the title.
     const shown = width >= 768 ? ["player-header", "panel-player"] : ["panel-player"];
     if (width < 768) {

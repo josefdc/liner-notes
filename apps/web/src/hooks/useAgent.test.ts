@@ -916,6 +916,20 @@ describe('useAgent track picker', () => {
     expect(result.current.isReplay).toBe(false);
   });
 
+  it('ends a run as a replay after the replay notice, though its result does not say it is a recording', async () => {
+    const { result } = await startAnalysis('Hurt Nine Inch Nails');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'replay', code: 'SYS-INIT', message: 'Replaying' });
+    // A result with no recording time, commit or `replayed: 'run'`.
+    analysis.send({ type: 'complete', data: track });
+    expect(result.current.isReplay).toBe(true);
+    expect(result.current.logs.at(-1)?.message).toBe(
+      'Recorded analysis replayed. Nothing was analyzed live.',
+    );
+    expect(completeLogs(result.current.logs)).toBe(0);
+  });
+
   it('does not take a run whose model answers came from stored answers for a recording', async () => {
     const { result } = await startAnalysis('Hurt Nine Inch Nails');
     const analysis = lastStream();
@@ -1980,6 +1994,27 @@ describe('useAgent run tokens', () => {
       expect(eitherSignal(new AbortController().signal, already.signal).aborted).toBe(true);
       expect(eitherSignal(a.signal)).toBe(a.signal);
     });
+  });
+
+  it('says nothing about a check on the progress line when the build has no site key', async () => {
+    let issue!: () => void;
+    vi.mocked(requestRunToken).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          issue = () => resolve({ runToken: 'token-1', expiresAt: Date.now() + 30 * 60_000 });
+        }),
+    );
+    const hook = renderHook(() => useAgent());
+    act(() => {
+      void hook.result.current.analyze('Hurt');
+    });
+    await tokenSettled();
+    // The token is still being asked for: no check runs, and the line does not say one does.
+    expect(hook.result.current.status).toBe('connecting');
+    expect(hook.result.current.statusNote).toBeNull();
+    act(() => issue());
+    await tokenSettled();
+    expect(tokenOf(lastStream())).toBe('token-1');
   });
 
   describe('with a Turnstile site key', () => {

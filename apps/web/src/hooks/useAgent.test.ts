@@ -1140,6 +1140,92 @@ describe('useAgent factoid stream', () => {
     expect(late.current.moreFacts).toMatchObject({ nextRound: 2, finished: false });
   });
 
+  it('asks round 0 again after the API could not write some of its facts, then round 1', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const busy = (index: number) => ({
+      type: 'error',
+      code: 'rate_limited',
+      error: 'Busy.',
+      index,
+    });
+    const first = ask(hook, result());
+    answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') }, busy(1), busy(2));
+    await first;
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
+
+    // The API asks round 0's angles again (the round sent is the round asked).
+    const second = ask(hook, result());
+    expect(query(lastStream()).get('round')).toBe('0');
+    expect(query(lastStream()).get('existingIds')).toBe('s1,fc-a');
+    lastStream().send({ type: 'connected', nextRound: 1, roundsLeft: true });
+    lastStream().send({ type: 'factoid', data: factoid('fc-b') });
+    lastStream().send({ type: 'done' });
+    await second;
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 1, finished: false });
+
+    const third = ask(hook, result());
+    expect(query(lastStream()).get('round')).toBe('1');
+    lastStream().send({ type: 'connected', nextRound: 2, roundsLeft: false });
+    lastStream().send({ type: 'done' });
+    await third;
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 2, finished: true });
+  });
+
+  it.each([
+    ['an error for the whole answer', 'error'],
+    ['a stream that broke', 'broke'],
+    ['a stream that stopped responding', 'silent'],
+  ] as const)('says when %s, and clears it on the next click', async (_label, how) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result: hook } = renderHook(() => useAgent());
+    if (how === 'silent') vi.useFakeTimers();
+    const pending = ask(hook, result());
+    pending.catch(() => {});
+    lastStream().send({ type: 'connected', nextRound: 1 });
+    if (how === 'error') {
+      lastStream().send({ type: 'error', code: 'failed', error: 'Not written.' });
+      lastStream().send({ type: 'done' });
+      await pending;
+    } else if (how === 'broke') {
+      lastStream().fail();
+      await expect(pending).rejects.toThrow();
+    } else {
+      lastStream().sendNamed('heartbeat');
+      act(() => {
+        vi.advanceTimersByTime(STREAM_INACTIVITY_TIMEOUT_MS + 1);
+      });
+      await expect(pending).rejects.toThrow('stopped responding');
+    }
+    expect(hook.current.moreFacts).toMatchObject({ answerFailed: true, nextRound: 0 });
+
+    void ask(hook, result());
+    expect(hook.current.moreFacts?.answerFailed).toBe(false);
+  });
+
+  it('is not a failure when the caller leaves', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const controller = new AbortController();
+    const pending = ask(hook, result(), { signal: controller.signal });
+    act(() => controller.abort());
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(hook.current.moreFacts?.answerFailed).toBe(false);
+  });
+
+  it('lets the facts go on reset, also for a result with the same run id', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const first = ask(hook, result());
+    answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
+    await first;
+
+    act(() => hook.current.reset());
+    expect(hook.current.moreFacts).toBeNull();
+    const again = ask(hook, result());
+    expect(query(lastStream()).get('round')).toBe('0');
+    expect(query(lastStream()).get('existingIds')).toBe('s1');
+    answer(lastStream(), 1);
+    await again;
+  });
+
   it('lets the facts go when a new analysis starts, also for a result with the same run id', async () => {
     const hook = startAnalysis();
     const first = ask(hook.result, result());

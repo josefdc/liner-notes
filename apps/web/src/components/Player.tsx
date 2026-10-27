@@ -531,6 +531,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
                 </p>
               )}
+              {more.answerFailed && !decryptUnavailable && (
+                <p role="status" className="text-xs font-mono text-text-tertiary">
+                  More facts could not be written. Try again.
+                </p>
+              )}
               {more.failed.length > 0 && !decryptUnavailable && (
                 <p role="status" className="text-xs font-mono text-text-tertiary">
                   {more.failed.length === 1

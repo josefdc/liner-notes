@@ -1,14 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { factoidRoundsLeft } from '@liner-notes/contract/factoids';
 import { useRef, useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { moreFactsOf } from '../hooks/agent/moreFacts';
 import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/types';
 import type { Factoid, TrackData } from '../types';
 import { audioBlock } from './measured/testing';
 import Player from './Player';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const missingTrack = {
   id: 't1',
@@ -192,6 +195,8 @@ describe('Player', () => {
       failed?: FailedFact[];
       nextRound?: number;
       unavailable?: 'rate_limited' | 'budget_exhausted';
+      /** The answer failed as a whole; `broke`: its stream broke, so the request rejects. */
+      answerFailed?: 'error' | 'broke';
     }>;
   }) {
     const [moreFacts, setMoreFacts] = useState<MoreFacts | null>(null);
@@ -205,10 +210,12 @@ describe('Player', () => {
         ...before,
         factoids: [...before.factoids, ...factoids],
         failed: reply.failed ?? [],
+        answerFailed: reply.answerFailed !== undefined,
         ...(reply.nextRound !== undefined
           ? { nextRound: reply.nextRound, finished: !factoidRoundsLeft(reply.nextRound) }
           : {}),
       });
+      if (reply.answerFailed === 'broke') throw new Error('Factoid stream connection failed');
       return factoids;
     };
     return (
@@ -248,11 +255,63 @@ describe('Player', () => {
     ['rate_limited', 'quota or rate limit reached'],
     ['budget_exhausted', 'live model calls are paused, budget reached'],
   ] as const)('says why DECRYPT MORE added nothing: %s', async (code, text) => {
-    render(<MoreFactsPlayer track={releaseInfo} answers={[{ unavailable: code }]} />);
+    // Every fact failed for that reason: the reason is said once, not as facts not written.
+    const failed = [0, 1, 2].map((index) => ({ index, code }));
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ unavailable: code, failed }]} />);
     fireEvent.click(moreButton());
 
     const notice = await screen.findByText(`More facts unavailable: ${text}`);
     expect(notice.getAttribute('role')).toBe('status');
+    expect(screen.queryByText(/could not be written/)).toBeNull();
+  });
+
+  it.each([
+    ['an error for the whole answer', 'error'],
+    ['a stream that broke', 'broke'],
+  ] as const)('says so when more facts failed as a whole: %s', async (_label, how) => {
+    if (how === 'broke') vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ answerFailed: how }, {}]} />);
+    fireEvent.click(moreButton());
+
+    const notice = await screen.findByText('More facts could not be written. Try again.');
+    expect(notice.getAttribute('role')).toBe('status');
+    await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+    fireEvent.click(moreButton());
+    await waitFor(() =>
+      expect(screen.queryByText('More facts could not be written. Try again.')).toBeNull(),
+    );
+  });
+
+  it("shows nothing of another result's more facts", () => {
+    const shown = { ...releaseInfo, run: { id: 'run-a', mode: 'live' } } as TrackData;
+    const foreign = (other: TrackData): MoreFacts => ({
+      ...moreFactsOf(other, null),
+      factoids: [
+        { id: 'fc-x', title: 'Foreign Fact', content: 'Of another result.', type: 'trivia' },
+      ],
+      failed: [{ index: 1, code: 'failed' }],
+      nextRound: 2,
+      finished: true,
+      answerFailed: true,
+    });
+    for (const other of [
+      { ...shown, id: 'another-track' },
+      { ...shown, run: { id: 'run-b', mode: 'live' } },
+    ] as TrackData[]) {
+      render(
+        <Player
+          trackData={shown}
+          onBack={() => {}}
+          moreFacts={foreign(other)}
+          onMoreFactoidsStream={async () => []}
+        />,
+      );
+      expect(screen.queryByText('Foreign Fact')).toBeNull();
+      expect(screen.queryByText(/could not be written/)).toBeNull();
+      expect(screen.queryByText(/No more facts/)).toBeNull();
+      expect(moreButton().hasAttribute('disabled')).toBe(false);
+      cleanup();
+    }
   });
 
   it('says how many facts of a click could not be written, and shows the others', async () => {

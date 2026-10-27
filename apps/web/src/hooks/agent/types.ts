@@ -1,4 +1,4 @@
-import type { Claim } from '@liner-notes/contract';
+import type { Claim, ErrorCode } from '@liner-notes/contract';
 import type { TrackData, AgentLog, Factoid, FactoidUnavailableCode } from '../../types';
 
 export interface SearchCandidate {
@@ -69,8 +69,11 @@ export interface AgentState {
 export interface FailedFact {
   /** The fact's index in the answer (the stream's `error.index`). */
   index: number;
-  /** The stream's error code (`failed`, `rate_limited`, `budget_exhausted`…). */
-  code: string;
+  /**
+   * The stream's error code (`failed`, `rate_limited`, `budget_exhausted`…), or one this page
+   * does not know yet: the stream's codes are open (the contract's OpenErrorCode).
+   */
+  code: ErrorCode | (string & {});
 }
 
 /**
@@ -90,6 +93,12 @@ export interface MoreFacts {
   finished: boolean;
   /** The facts of the latest answer that could not be written, by index; the others are kept. */
   failed: FailedFact[];
+  /**
+   * The latest answer failed as a whole: an error for the whole answer that is not one of the
+   * reasons the caller is told (onUnavailable), a stream that broke, or one that stopped
+   * responding. Its round is asked again on the next click.
+   */
+  answerFailed: boolean;
   /**
    * The analysis run whose evidence the latest answer's facts were checked against: the stream's
    * own run id. Null when they were written without one (the result names no run, or the API has

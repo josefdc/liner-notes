@@ -728,10 +728,11 @@ export function useAgent(): UseAgentReturn {
    * The round moves on only once an answer has ended (withAnswer): an answer whose every fact
    * failed, or that the API could not write now (a paused budget, an error for the whole answer),
    * leaves the round to ask again, and so does a stream that broke or was left before its end.
-   * The API also counts the facts the client already has (each three of its fact ids are one
-   * earlier round), so after an answer that sent some of a round's facts before it failed or
-   * broke, the next click asks about the next round's angles, and the rest of that round's are not
-   * asked again.
+   * The API asks the round sent, as it is: the round's angles are asked again, and a fact of it
+   * the client already shows (the same text, up to case, spacing and punctuation) is not sent
+   * again. A fact that comes back in other words is not recognised (the client sends ids, not
+   * texts). An answer that failed as a whole, or a stream that broke or stopped responding, sets
+   * `moreFacts.answerFailed`, so the Player can say so.
    */
   const moreFactoidsStream = useCallback(
     (result: TrackData, { signal, onUnavailable }: MoreFactsOptions = {}): Promise<Factoid[]> => {
@@ -751,7 +752,7 @@ export function useAgent(): UseAgentReturn {
           // What this result already has; another result's facts are let go.
           const before = moreFactsOf(result, moreFactsRef.current);
           const url = moreFactsUrl(result, before);
-          setMoreFacts({ ...before, failed: [] });
+          setMoreFacts({ ...before, failed: [], answerFailed: false });
 
           const eventSource = new EventSource(url);
           const events = newRunEvents();
@@ -772,14 +773,17 @@ export function useAgent(): UseAgentReturn {
             stop();
             reject(abortError());
           };
+          const update = (change: (moreFacts: MoreFacts) => MoreFacts) =>
+            setMoreFacts(change(moreFactsOf(result, moreFactsRef.current)));
+          // The answer failed as a whole: the Player says so, and the round is asked again.
+          const answerFailed = () => update((moreFacts) => ({ ...moreFacts, answerFailed: true }));
           const watchdog = inactivityWatchdog(() => {
             stop();
+            answerFailed();
             reject(new Error('Factoid stream stopped responding'));
           });
           runSignal.addEventListener('abort', onAbort, { once: true });
           signal?.addEventListener('abort', onAbort, { once: true });
-          const update = (change: (moreFacts: MoreFacts) => MoreFacts) =>
-            setMoreFacts(change(moreFactsOf(result, moreFactsRef.current)));
 
           eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
           eventSource.onmessage = (event) => {
@@ -837,6 +841,7 @@ export function useAgent(): UseAgentReturn {
                   onUnavailable?.(data.code);
                 } else if (data.index === undefined) {
                   answer.refused = true;
+                  answerFailed();
                   console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;
@@ -845,6 +850,7 @@ export function useAgent(): UseAgentReturn {
 
           eventSource.onerror = () => {
             stop();
+            answerFailed();
             reject(new Error('Factoid stream connection failed'));
           };
         };

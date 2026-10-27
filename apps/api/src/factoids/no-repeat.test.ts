@@ -347,6 +347,46 @@ describe("rounds", () => {
     ]);
   });
 
+  it("asks a round again when the client sends it back after facts that could not be written", async () => {
+    const busy = () => new LlmError("rate_limited", "factoids: 429");
+    // Click 1, round 0: the first angle is written, the other two hit the rate limit.
+    const first = routerFor({ cards: [card(THREE[0]), busy(), busy()] });
+    const one = await postMore(first.router, [], { round: 0 });
+    expect(focusesAsked(first.llm)).toEqual([0, 1, 2]);
+    expect(one.body.factoids).toHaveLength(1);
+    const kept = one.body.factoids.map((factoid: { id: string }) => factoid.id);
+
+    // Click 2: the client keeps round 0, as it does after a refusal (useAgent). The same angles
+    // are asked again, and the fact it already shows, in other case and punctuation, is dropped.
+    const again = THREE.map((text) => card(text));
+    again[0] = card(`${THREE[0].toUpperCase().replace(".", "!")}`);
+    const second = routerFor({ cards: again });
+    const two = await postMore(second.router, kept, { round: 0 });
+    expect(focusesAsked(second.llm)).toEqual([0, 1, 2]);
+    expect(two.body.factoids.map((factoid: { content: string }) => factoid.content)).toEqual([
+      THREE[1],
+      THREE[2],
+    ]);
+    expect(two.body).toMatchObject({ nextRound: 1, roundsLeft: true });
+
+    // Click 3: round 1's angles, and then none are left.
+    const third = routerFor({ cards: [null, null, null, null, null, null] });
+    const shown = [...kept, ...two.body.factoids.map((factoid: { id: string }) => factoid.id)];
+    const three = await postMore(third.router, shown, { round: 1 });
+    expect(focusesAsked(third.llm)).toEqual([3, 4, 5]);
+    expect(three.body).toMatchObject({ nextRound: 2, roundsLeft: false });
+  });
+
+  it("counts the facts the client shows only when it sends no round", async () => {
+    const shown = ["fc-000000000001", "fc-000000000002", "fc-000000000003", "fc-000000000004"];
+    const withRound = routerFor({ cards: [] });
+    await postMore(withRound.router, shown, { round: 0 });
+    expect(focusesAsked(withRound.llm)).toEqual([0, 1, 2]);
+    const withoutRound = routerFor({ cards: [] });
+    await postMore(withoutRound.router, shown);
+    expect(focusesAsked(withoutRound.llm)).toEqual([]);
+  });
+
   it("has as many rounds as the contract tells the web, starting from its first", () => {
     expect(Math.ceil(FACTOID_FOCUSES.length / FACTOIDS_PER_REQUEST)).toBe(FACTOID_ROUNDS);
     expect(focusesFor(FIRST_FACTOID_ROUND)).toEqual(FACTOID_FOCUSES.slice(0, FACTOIDS_PER_REQUEST));

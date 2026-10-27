@@ -29,6 +29,7 @@ export function newMoreFacts(result: TrackData): MoreFacts {
     nextRound: FIRST_FACTOID_ROUND,
     finished: false,
     failed: [],
+    answerFailed: false,
     runId: null,
   };
 }

@@ -98,14 +98,15 @@ export { FACTOID_ROUNDS };
 const FACT_ID = /^fc-[0-9a-f]{12}$/;
 
 /**
- * The round of a request: the later of the round the client sends (`round`: the `nextRound` of
- * its last answer, so a click that wrote nothing still moves on) and the one the ids it sends
- * show (each FACTOIDS_PER_REQUEST of the ids factId gave, rounded up, is one earlier round; for a
- * client that sends no round).
+ * The round of a request: the round the client sends (`round`: the `nextRound` of its last
+ * answer, or the same round again when that answer could not write its facts), as it is. A
+ * client that sends no round is placed by the ids it sends: each FACTOIDS_PER_REQUEST of the ids
+ * factId gave, rounded up, is one earlier round, from FIRST_FACTOID_ROUND.
  */
-export function roundFor(existingIds: readonly string[], round = FIRST_FACTOID_ROUND): number {
+export function roundFor(existingIds: readonly string[], round?: number): number {
+  if (round !== undefined) return round;
   const written = existingIds.filter((id) => FACT_ID.test(id)).length;
-  return Math.max(round, Math.ceil(written / FACTOIDS_PER_REQUEST));
+  return Math.max(FIRST_FACTOID_ROUND, Math.ceil(written / FACTOIDS_PER_REQUEST));
 }
 
 /**

@@ -14,7 +14,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
-import { analysisIssues, runIssues, TrackAnalysis } from "@liner-notes/contract";
+import { analysisIssues, claimIsRejected, runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 
@@ -173,6 +173,7 @@ import { setUnpacedForTests } from "../sources/pacing.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { ANALYZER_VERSION, audioV2, keyWithheldV2 } from "./testing/measuredAudio.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
+import { statementsIn } from "./verifier/testing.js";
 
 // The web's query names the artist: a title alone always asks which recording is meant.
 const QUERY = "Ice Ice Baby Vanilla Ice";
@@ -411,6 +412,110 @@ describe("the analysis graph", () => {
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });
     // The research the planner chose ran: Last.fm tags reached the composer.
     expect(tools.getLastfmTrackTags.invoke).toHaveBeenCalled();
+  });
+
+  it("replays the verifier's judge from its cassette: the same verdicts, with the network denied", async () => {
+    const SUPPORTED = "The bass line comes from Under Pressure by Queen and David Bowie.";
+    const CONTRADICTED = "Ice Ice Baby was first released in 1975.";
+    // The composer cites the first item of the evidence pack it is shown; the judge supports
+    // the sample and contradicts the date.
+    const judged: ProviderRoute = (call, index) => {
+      if (schemaOf(call) === "JudgeOutput") {
+        const verdicts = statementsIn(call.body.input).map(({ claimId, text }) => ({
+          claimId,
+          verdict: text === CONTRADICTED ? "contradicted" : "supported",
+          reason:
+            text === CONTRADICTED ? "The page dates it 1990." : "The page names the bass line.",
+        }));
+        return Response.json(responseBody({ verdicts }, { input: 600, output: 80 }));
+      }
+      if (schemaOf(call) !== "ComposerOutput") return answering(call, index);
+      const pack = JSON.stringify(call.body.input)
+        .split("<<<SOURCE evidence pack>>>")[1]
+        ?.split("<<<END SOURCE>>>")[0];
+      const [cited] = [...(pack ?? "").matchAll(/\\"id\\":\\"([^\\]+)\\"/g)].map((m) => m[1]);
+      if (!cited) throw new Error("the composer was shown no evidence");
+      const claim = (text: string, about: string) => ({
+        text,
+        about,
+        evidenceIds: [cited],
+        field: null,
+        scope: "recording",
+      });
+      return Response.json(
+        responseBody(
+          {
+            claims: [claim(SUPPORTED, "sample"), claim(CONTRADICTED, "history")],
+            factoids: [],
+            genealogyNodes: [],
+            genealogyLinks: [],
+          },
+          { input: 900, output: 300 },
+        ),
+      );
+    };
+    const provider = providerFetch(judged);
+    const recorder = llmWith(
+      { LLM_CASSETTE: "record", LLM_CASSETTE_DIR: join(dir, "cassettes") },
+      { fetch: provider.fetch, commit: () => "abc123def456" },
+    );
+    const recorded = await run(recorder, { threadId: "judge-a", at: "2026-03-01T10:00:00.000Z" });
+
+    expect(recorded.threw).toBeNull();
+    expect(provider.calls.map(schemaOf)).toEqual([
+      "ResearchPlanOutput",
+      "ResearchPlanOutput",
+      "ComposerOutput",
+      "JudgeOutput",
+    ]);
+    const cassettes = readdirSync(join(dir, "cassettes"));
+    expect(cassettes.filter((file) => file.startsWith("JudgeOutput.judge."))).toHaveLength(1);
+    expect(cassettes).toHaveLength(4);
+
+    const denied = vi.fn(async () => {
+      throw new Error("network denied");
+    });
+    const replayer = llmWith(
+      { LLM_CASSETTE: "replay", LLM_CASSETTE_DIR: join(dir, "cassettes") },
+      { fetch: denied as unknown as typeof fetch },
+    );
+    const replayed = await run(replayer, { threadId: "judge-b", at: "2026-09-09T22:22:22.000Z" });
+
+    expect(replayed.threw).toBeNull();
+    expect(denied).not.toHaveBeenCalled();
+    expect(replayed.trackData?.run).toMatchObject({ mode: "replay", replayed: "model_answers" });
+    const verdicts = (data: TrackData | null) =>
+      (data?.claims ?? [])
+        .filter((claim) => claim.origin === "model")
+        .map(({ text, verdict, verdictReason, kind }) => ({ text, verdict, verdictReason, kind }));
+    // The recording judged both claims; the replay gives the same verdicts and reasons.
+    expect(verdicts(recorded.trackData)).toEqual([
+      {
+        text: SUPPORTED,
+        verdict: "supported",
+        verdictReason: "The page names the bass line.",
+        kind: "sourced",
+      },
+      {
+        text: CONTRADICTED,
+        verdict: "contradicted",
+        verdictReason: "The page dates it 1990.",
+        kind: "inferred",
+      },
+    ]);
+    expect(verdicts(replayed.trackData)).toEqual(verdicts(recorded.trackData));
+    // The replayed contradiction is a rejected claim, as the live one was; the supported is not.
+    const replayedClaim = (text: string) =>
+      replayed.trackData?.claims?.find((claim) => claim.text === text);
+    expect(claimIsRejected(replayedClaim(CONTRADICTED)!)).toBe(true);
+    expect(claimIsRejected(replayedClaim(SUPPORTED)!)).toBe(false);
+    expect(replayed.trackData?.run?.verifier).toEqual({ judged: 2, unjudged: 0 });
+    expect(replayed.trackData?.run?.verifier).toEqual(recorded.trackData?.run?.verifier);
+    // The judge's answer came from the cassette, recorded at the recording's commit: no spend.
+    expect(replayed.trackData?.run).toMatchObject({
+      commit: "abc123def456",
+      usage: { llmCalls: 4, usd: 0 },
+    });
   });
 
   it("makes at most MAX_LLM_CALLS_PER_RUN calls when every call fails with 429, and falls back", async () => {

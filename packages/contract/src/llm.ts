@@ -106,7 +106,7 @@ export const GenealogyRole = z.enum(["current", "source", "derived", "influence"
 export type GenealogyRole = z.infer<typeof GenealogyRole>;
 
 export const ComposerNode = z.strictObject({
-  id: z.string().describe("Short unique id; 'current' for the analysed track"),
+  id: z.string().describe("Short unique id; 'current' for the analyzed track"),
   role: GenealogyRole,
   label: z.string().describe("'Title - Artist (Year)'"),
   trackTitle: z.string().nullable(),

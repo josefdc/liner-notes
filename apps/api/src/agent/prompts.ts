@@ -158,7 +158,7 @@ Untrusted text
 Output
 - claims: one factual statement each, with what it is about.
 - factoids: at most 8 cards. Title without a trailing colon; one to three sentences; a type; the names in the text worth exploring (people, instruments, records, years) as entities. Prefer variety: production, credits, samples, history, connections.
-- genealogyNodes: the analysed track once, with id "current" and role "current". Add other recordings only when the evidence or the source material names them: role "source" (this track uses it), "derived" (it uses this track) or "influence". Labels read "Title - Artist (Year)", with the year only when known; use null for an unknown title, artist or year.
+- genealogyNodes: the analyzed track once, with id "current" and role "current". Add other recordings only when the evidence or the source material names them: role "source" (this track uses it), "derived" (it uses this track) or "influence". Labels read "Title - Artist (Year)", with the year only when known; use null for an unknown title, artist or year.
 - genealogyLinks: between the node ids you wrote, with the relation type, the ids of the evidence that documents it and its scope. A link points from the earlier recording to the later one: source is the recording that is sampled, interpolated, covered, remixed or that influenced, target the one that uses it. So a link with a "source" or "influence" node goes from that node to "current", and a link with a "derived" node goes from "current" to that node. A producer link has no direction.
 - Each link is checked against the evidence it cites; a sample, interpolation, cover or remix whose evidence does not support it is shown as an influence.
 - Use empty lists when there is nothing to say.`;

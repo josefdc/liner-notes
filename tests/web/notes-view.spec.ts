@@ -17,8 +17,10 @@ import { offline } from "./offline";
 // A section with nothing to list says so in a sentence: nothing is made up to fill it.
 //
 // Two showcases: the recorded run (fixtures/replays/one-more-time-daft-punk.json) for samples,
-// connections and the recording label; it has no credit or history claims, so the provenance
-// mock stands in for those.
+// covers, connections and the recording label. It has no history claims and no real credit: its
+// one "credit" is the album the track appears on, a release fact the model filed as a credit
+// (shown on a fact card; #216 addresses it). So the provenance mock stands in for credits and
+// history. The genealogy-kinds mock holds the samples no verdict supports.
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
@@ -63,7 +65,7 @@ async function openRecording(page: Page) {
   await openPlayer(page);
 }
 
-test("the recorded run's notes: sections in order, a hedged sample with its source", async ({
+test("the recorded run's notes: sections in order, its samples and covers with their sources", async ({
   page,
 }) => {
   const problems = collectProblems(page);
@@ -81,23 +83,32 @@ test("the recorded run's notes: sections in order, a hedged sample with its sour
     "H2:Data from",
   ]);
 
-  // The sample the model reported, which no card shows: named as a possible sample (its claim is
-  // the model's, not confirmed by a source), with the record it cites beside it.
+  // The relations no card shows, first the model's claims the verifier found supported, then
+  // those built from the MusicBrainz records: each named as what it is (no "Possible"), sourced,
+  // with the record it cites beside it.
   const samples = page.getByRole("region", { name: "Samples and covers" });
-  expect(await listed(page, "Samples and covers")).toEqual([
-    "Possible sampleDaft Punk’s recording samples “More Spell on You” by Eddie Johns.",
-  ]);
-  await expect(samples.locator("[data-claim-kind]")).toHaveAttribute("data-claim-kind", "inferred");
-  await expect(samples.locator('a[data-source="musicbrainz"]')).toHaveAttribute(
+  const rows = await listed(page, "Samples and covers");
+  expect(rows).toHaveLength(16);
+  expect(rows[0]).toBe("SampleDaft Punk’s recording samples Eddie Johns’s “More Spell on You.”");
+  for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
+  await expect(items).toHaveCount(16);
+  for (const item of await items.all()) {
+    await expect(item.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
+    await expect(item).toContainText("Sourced");
+  }
+  await expect(items.first().locator('a[data-source="musicbrainz"]')).toHaveAttribute(
     "href",
     "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
   );
-  // The other sample claim is on a fact card: counted, not listed twice.
+  // The sample claim on a fact card is counted, not listed twice.
   await expect(samples).toContainText("1 claim of this section is shown with the facts above.");
 
-  // The recording has no credit or history claims: each section says so, and lists nothing.
+  // The recording's one "credit" is a release fact (the album the track appears on) the model
+  // filed as a credit (#216 addresses it); it is on a fact card: counted, not listed twice. It has
+  // no history claim: the section says so, and lists nothing.
   await expect(page.getByRole("region", { name: "Credits" })).toContainText(
-    "No credits found in this result.",
+    "1 credit is shown with the facts above.",
   );
   const history = page.getByRole("region", { name: "History" });
   await expect(history).toContainText("No history was found in this result.");
@@ -107,10 +118,49 @@ test("the recorded run's notes: sections in order, a hedged sample with its sour
   // and its links are written out as a list.
   const genealogy = page.locator("#panel-genealogy");
   await expect(genealogy.locator('svg [tabindex="0"]')).toHaveCount(1);
-  await expect(genealogy.getByText(/Links as a list \(2\)/)).toBeVisible();
+  await expect(genealogy.getByText(/Links as a list \(9\)/)).toBeVisible();
 
   // The result is labelled as the recording it is.
   await expect(page.getByText(/Recorded run/).first()).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+// A sample the model reported that no verifier verdict supports is hedged ("Possible sample"),
+// whether it is a claim or a drawn link, and keeps the record it cites beside it.
+test("a sample no verdict supports is listed as possible, with the record it cites", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  const fixture = loadFixture("genealogy-kinds");
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  // The model's sample claim, as a run whose judge gave no verdict sends it: inferred.
+  for (const claim of complete.data.claims) {
+    if (claim.id === "cl-supported") Object.assign(claim, { kind: "inferred", verdict: null });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+
+  const samples = page.getByRole("region", { name: "Samples and covers" });
+  const rows = await listed(page, "Samples and covers");
+  expect(rows[0]).toBe("Possible sampleBright Lines samples Verified Model Sample.");
+  const claim = samples.getByRole("listitem").filter({ hasText: "Verified Model Sample." }).first();
+  await expect(claim.locator("[data-claim-kind]")).toHaveAttribute("data-claim-kind", "inferred");
+  await expect(claim.locator('a[data-source="musicbrainz"]')).toHaveAttribute(
+    "href",
+    "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000001",
+  );
+  // The model's link that says it is sourced but has no supporting verdict: hedged too, its
+  // citation named.
+  expect(rows).toContain(
+    "Possible sampleBright Lines (2011) may sample Model Says Sourced - Someone (1983).",
+  );
+  await expect(
+    samples.getByRole("listitem").filter({ hasText: "Model Says Sourced" }),
+  ).toContainText("no verifier verdict supports it; cites ev-mb-1 (MusicBrainz)");
   expect(problems).toEqual([]);
 });
 

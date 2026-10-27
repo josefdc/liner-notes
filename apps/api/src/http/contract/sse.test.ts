@@ -249,7 +249,7 @@ const factoidAnswer = (title: string) => ({
     factoids: [
       {
         title,
-        text: "Content.",
+        text: `Content of ${title}.`,
         type: "production",
         entities: [{ text: "Roland Juno-106", type: "synth" }],
         evidenceIds: [],
@@ -747,20 +747,22 @@ describe("event streams follow the contract", () => {
       expect(events[2]).toMatchObject({ code: "failed", index: 1 });
     });
 
-    it("sends heartbeats without seq while a call takes 40 s", async () => {
+    it("sends heartbeats without seq while the calls take 100 s", async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
       let entered!: () => void;
       const calling = new Promise<void>((resolve) => {
         entered = resolve;
       });
+      let call = 0;
       model.invoke.mockImplementation(() => {
         entered();
-        return new Promise((resolve) => setTimeout(() => resolve(factoidAnswer("Slow")), 40_000));
+        const answer = factoidAnswer(`Slow ${++call}`);
+        return new Promise((resolve) => setTimeout(() => resolve(answer), 100_000));
       });
 
       const pending = sse(factoidPath({ trackTitle: "Hurt" }));
       await calling;
-      // Three calls one after the other, each taking 40 s.
+      // Three calls at once, each taking 100 s.
       for (let step = 0; step < 13; step++) await vi.advanceTimersByTimeAsync(10_000);
       const events = expectFactoids(await pending);
 

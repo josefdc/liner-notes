@@ -118,7 +118,7 @@ const CURRENT_SIZE = 40;
 const MODEL_NODE_GROUP = 4;
 const MODEL_NODE_SIZE = 22;
 
-const FACTOID_ABOUT: Record<FactoidType, ClaimAbout> = {
+export const FACTOID_ABOUT: Record<FactoidType, ClaimAbout> = {
   production: "production",
   trivia: "trivia",
   credits: "credit",
@@ -177,6 +177,20 @@ export function relationScope(
   return source === "current" || target === "current" ? "recording" : stated;
 }
 
+/** A statement the model wrote: inferred and without a verdict until the verifier judges it. */
+export const modelClaim = (
+  id: string,
+  fields: Pick<Claim, "text" | "about" | "evidenceIds" | "scope">,
+): Claim => ({
+  id,
+  ...fields,
+  kind: "inferred",
+  origin: "model",
+  verdict: null,
+  verdictReason: null,
+  numericCheck: "n/a",
+});
+
 interface Composed {
   factoids: Factoid[];
   claims: Claim[];
@@ -202,18 +216,11 @@ export function composeFromOutput(
 ): Composed {
   const known = new Set(evidence.map((item) => item.id));
   const cited = (ids: readonly string[]) => [...new Set(ids.filter((id) => known.has(id)))];
-  const modelClaim = (fields: Pick<Claim, "text" | "about" | "evidenceIds" | "scope">): Claim => ({
-    id: newId(),
-    ...fields,
-    kind: "inferred",
-    origin: "model",
-    verdict: null,
-    verdictReason: null,
-    numericCheck: "n/a",
-  });
+  const claimOf = (fields: Pick<Claim, "text" | "about" | "evidenceIds" | "scope">) =>
+    modelClaim(newId(), fields);
 
   const claims: Claim[] = output.claims.map((claim) => ({
-    ...modelClaim({
+    ...claimOf({
       text: claim.text,
       about: claim.about,
       evidenceIds: cited(claim.evidenceIds),
@@ -224,7 +231,7 @@ export function composeFromOutput(
 
   const factoids: Factoid[] = output.factoids.map((card) => {
     const claim: Claim = {
-      ...modelClaim({
+      ...claimOf({
         text: card.text,
         about: FACTOID_ABOUT[card.type],
         evidenceIds: cited(card.evidenceIds),
@@ -300,7 +307,7 @@ export function composeFromOutput(
     if (!from || !to || from === to) return [];
     const [source, target] = directedEnds(from, to, link.type, (id) => roles.get(id));
     const evidenceIds = cited(link.evidenceIds);
-    const claim = modelClaim({
+    const claim = claimOf({
       text: RELATION_TEXT[link.type](named(source), named(target)),
       about: LINK_CLAIM_ABOUT[link.type][0],
       evidenceIds,

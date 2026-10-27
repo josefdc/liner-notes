@@ -22,7 +22,7 @@ import {
 import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import { setReplayPacingForTests } from "../replay/player.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
-import { getRun, runExists } from "../store/runs.js";
+import { getRun, runExists, startRun } from "../store/runs.js";
 import { createApp } from "./app.js";
 import {
   createRunTokens,
@@ -41,10 +41,11 @@ import {
   turnstileVerifierFor,
 } from "./turnstile.js";
 
-// The runs store as it is; a test can make runExists lag behind a run being started.
+// The runs store as it is; a test can make runExists lag behind a run being started, or a run's
+// row fail to be written.
 vi.mock("../store/runs.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../store/runs.js")>();
-  return { ...actual, runExists: vi.fn(actual.runExists) };
+  return { ...actual, runExists: vi.fn(actual.runExists), startRun: vi.fn(actual.startRun) };
 });
 
 const KEY = Buffer.alloc(32, "run-token-test-key");
@@ -471,6 +472,37 @@ describe("the analysis and factoid routes", () => {
     expect(logs.messages().some((msg) => msg.includes("the run is recorded already"))).toBe(false);
   });
 
+  it("start nothing when the run's row cannot be written", async () => {
+    const full = () => {
+      throw Object.assign(new Error("database or disk is full"), { code: "SQLITE_FULL" });
+    };
+    const runs = runCount();
+
+    vi.mocked(startRun).mockImplementationOnce(full);
+    const { runToken, claims } = tokens.mint();
+    const { res, events } = await sse(app, withToken(streamPath(), runToken));
+    expect(res.status).toBe(200);
+    expect(events.map((event) => (event.type === "error" ? event.code : event.type))).toEqual([
+      "internal_error",
+      "done",
+    ]);
+
+    vi.mocked(startRun).mockImplementationOnce(full);
+    const posted = tokens.mint();
+    const json = await request(app)
+      .post(withToken("/api/analyze", posted.runToken))
+      .send({ query: SHOWCASE });
+    expect(json.status).toBe(500);
+    expect(json.body).toMatchObject({ success: false, code: "internal_error" });
+
+    // Nothing ran, and nothing is recorded as running.
+    expect(runCount()).toBe(runs);
+    expect(getRun(getDb(), claims.threadId)).toBeNull();
+    expect(getRun(getDb(), posted.claims.threadId)).toBeNull();
+    expect(logs.messages().some((msg) => msg.startsWith("Replaying the recorded run"))).toBe(false);
+    expect(logs.messages().some((msg) => msg.startsWith("Served the recorded run"))).toBe(false);
+  });
+
   it("start no second run of a thread the store has recorded, whatever the claim says", async () => {
     const { runToken, claims } = tokens.mint();
     expect((await sse(app, withToken(streamPath(), runToken))).res.status).toBe(200);
@@ -510,10 +542,16 @@ describe("the analysis and factoid routes", () => {
     closeDatabase();
     initializeDatabase(join(dir, "test.db"));
     const restarted = appWith(createRunTokens(KEY, clock));
+    logs.clear();
     expectUnauthorized(await request(restarted).get(withToken(streamPath(), runToken)));
     expectUnauthorized(
       await request(restarted).post(withToken("/api/analyze", runToken)).send({ query: SHOWCASE }),
     );
+    // Refused by the claim, from the store's record of the run, before any run was started.
+    expect(logs.messages().filter((msg) => msg === "Run token refused: already used")).toHaveLength(
+      2,
+    );
+    expect(logs.messages().some((msg) => msg.includes("the run is recorded already"))).toBe(false);
     // A new token still starts one.
     const fresh = await sse(restarted, withToken(streamPath(), tokens.mint().runToken));
     expect(fresh.events.map((event) => event.type)).toContain("complete");

@@ -95,7 +95,27 @@ export const CLIENT_ERROR_CODES = {
   // The server answered the stream's request with an error status (an EventSource cannot read
   // which): a run token it refused, most often. A retry asks for a new one.
   streamRefused: 'stream_refused',
+  // This build has a Turnstile site key but cannot show the check yet: no request can start.
+  verificationUnavailable: 'verification_unavailable',
 } as const;
+
+/**
+ * A signal that aborts once `a` or `b` does: AbortSignal.any where the browser has it, else one
+ * controller listening to both (Safari before 17.4, Chrome before 116, Firefox before 124).
+ */
+export function eitherSignal(a: AbortSignal, b?: AbortSignal): AbortSignal {
+  if (!b) return a;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([a, b]);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (a.aborted || b.aborted) {
+    abort();
+  } else {
+    a.addEventListener('abort', abort, { once: true });
+    b.addEventListener('abort', abort, { once: true });
+  }
+  return controller.signal;
+}
 
 /** EventSource.CLOSED: the browser has given the stream up and will not reconnect. */
 const EVENT_SOURCE_CLOSED = 2;
@@ -952,7 +972,7 @@ export function useAgent(): UseAgentReturn {
         let tokenFailed = false;
         const token = isUsable(held)
           ? held
-          : newRunToken(signal ? AbortSignal.any([runSignal, signal]) : runSignal).then(
+          : newRunToken(eitherSignal(runSignal, signal)).then(
               (fresh) => {
                 tokenRef.current = fresh;
                 return fresh;

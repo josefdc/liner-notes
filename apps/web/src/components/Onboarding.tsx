@@ -117,7 +117,8 @@ function BannerLoading({ code }: { code: LiveUnavailableCode }) {
 const ERROR_TITLE = 'The analysis did not finish';
 
 /** The error block's primary button: the step that can help after this failure. */
-type ErrorAction = 'retry' | 'search' | 'reload';
+// `none`: nothing on this page can help (this build cannot start an analysis at all).
+type ErrorAction = 'retry' | 'search' | 'reload' | 'none';
 
 interface ErrorView {
   /** What happened and what to do next. */
@@ -165,6 +166,12 @@ const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
   stream_stalled: view(`The analysis server stopped answering. ${EITHER_SIDE}`, 'retry'),
   connection_lost: view(CONNECTION_LOST, 'retry'),
   stream_open_failed: view('The analysis could not be started. Try again in a moment.', 'retry'),
+  // A build with a Turnstile site key but no widget yet: no request can be verified, so a
+  // retry or another song would fail the same way.
+  verification_unavailable: view(
+    'This version of the page cannot verify requests, so it cannot start an analysis. The site needs an update before it can be used.',
+    'none',
+  ),
   stream_refused: view(
     'The analysis server did not accept the request. Try again to send it with a new check.',
     'retry',
@@ -204,7 +211,7 @@ function errorView(error: string | null, code: string | null): ErrorView {
   return view(GENERIC_ERROR, 'retry');
 }
 
-const ERROR_ACTION_LABEL: Record<ErrorAction, string> = {
+const ERROR_ACTION_LABEL: Record<Exclude<ErrorAction, 'none'>, string> = {
   retry: 'Try again',
   search: 'Search again',
   reload: 'Reload the page',
@@ -549,34 +556,40 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   {line}
                 </p>
               ))}
-              <div className="flex flex-col items-center gap-3">
-                <Button
-                  variant="cyber"
-                  size="md"
-                  leftIcon={
-                    shownError.action === 'search' ? <Search size={14} /> : <RotateCcw size={14} />
-                  }
-                  onClick={
-                    shownError.action === 'retry'
-                      ? handleRetry
-                      : shownError.action === 'search'
-                        ? handleSearchAgain
-                        : () => window.location.reload()
-                  }
-                >
-                  {ERROR_ACTION_LABEL[shownError.action]}
-                </Button>
-                {/* "Search again" already leads to a different song: no second link beside it */}
-                {shownError.action !== 'search' && (
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+              {shownError.action !== 'none' && (
+                <div className="flex flex-col items-center gap-3">
+                  <Button
+                    variant="cyber"
+                    size="md"
+                    leftIcon={
+                      shownError.action === 'search' ? (
+                        <Search size={14} />
+                      ) : (
+                        <RotateCcw size={14} />
+                      )
+                    }
+                    onClick={
+                      shownError.action === 'retry'
+                        ? handleRetry
+                        : shownError.action === 'search'
+                          ? handleSearchAgain
+                          : () => window.location.reload()
+                    }
                   >
-                    or try a different song
-                  </button>
-                )}
-              </div>
+                    {ERROR_ACTION_LABEL[shownError.action]}
+                  </Button>
+                  {/* "Search again" already leads to a different song: no second link beside it */}
+                  {shownError.action !== 'search' && (
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                    >
+                      or try a different song
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

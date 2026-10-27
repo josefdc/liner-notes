@@ -77,6 +77,7 @@ describe('newRunToken', () => {
   it('never sends the bypass from a build with a site key', async () => {
     vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
     await expect(newRunToken()).rejects.toBeInstanceOf(RunTokenError);
+    await expect(newRunToken()).rejects.toMatchObject({ code: 'verification_unavailable' });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

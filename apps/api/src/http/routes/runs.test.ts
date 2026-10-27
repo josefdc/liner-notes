@@ -596,14 +596,12 @@ describe("runs routes", () => {
     });
   });
 
-  it("stores no events for a run whose record could not be written", async () => {
+  it("starts no run whose record could not be written, and stores nothing of it", async () => {
+    // Without its record a run's token could start it again after a restart: it is refused.
     await withFailingWrite("BEFORE INSERT ON runs", async () => {
       const { runId, events } = await analyze("plain query");
-      expect(events.map((e) => e.type)).toEqual([
-        "connected",
-        "status",
-        "status",
-        "complete",
+      expect(events.map((e) => (e.type === "error" ? e.code : e.type))).toEqual([
+        "internal_error",
         "done",
       ]);
       expect(getRun(getDb(), runId)).toBeNull();

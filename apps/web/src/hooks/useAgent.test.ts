@@ -5,6 +5,7 @@ import { loadEventSchemas, resetSkippedReports } from './agent/events';
 import { LOG_LIMIT } from './agent/runLog';
 import type { TrackData } from '../types';
 import {
+  eitherSignal,
   OUTDATED_ERROR,
   STREAM_INACTIVITY_TIMEOUT_MS,
   type UseAgentReturn,
@@ -1908,6 +1909,86 @@ describe('useAgent run tokens', () => {
     const dropped = await startAnalysis('Hurt');
     lastStream().fail();
     expect(dropped.result.current.errorCode).toBe('connection_lost');
+  });
+
+  describe('in a browser without AbortSignal.any', () => {
+    // The page's AbortSignal may inherit `any`: it is hidden by a property of its own.
+    const own = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    beforeEach(() => {
+      Object.defineProperty(AbortSignal, 'any', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    });
+    afterEach(() => {
+      if (own) Object.defineProperty(AbortSignal, 'any', own);
+      else Reflect.deleteProperty(AbortSignal, 'any');
+    });
+
+    it('asks for more facts with the caller signal, and stops when it aborts', async () => {
+      expect(AbortSignal.any).toBeUndefined();
+      const { result } = renderHook(() => useAgent());
+      const controller = new AbortController();
+      let pending!: Promise<unknown>;
+      act(() => {
+        pending = result.current.moreFactoidsStream(moreFactsOf(), { signal: controller.signal });
+      });
+      pending.catch(() => {});
+      await tokenSettled();
+      expect(tokenOf(lastStream())).toBe('token-1');
+      lastStream().send({ type: 'done' });
+      await act(() => pending);
+
+      // The caller leaves while the token is on its way: the request is aborted with it.
+      const seen: AbortSignal[] = [];
+      vi.mocked(requestRunToken).mockImplementationOnce(
+        (_token, signal) =>
+          new Promise((_resolve, reject) => {
+            if (signal) seen.push(signal);
+            signal?.addEventListener('abort', () => reject(new DOMException('gone', 'AbortError')));
+          }),
+      );
+      const other = renderHook(() => useAgent());
+      const leaving = new AbortController();
+      act(() => {
+        pending = other.result.current.moreFactoidsStream(moreFactsOf(), {
+          signal: leaving.signal,
+        });
+      });
+      await tokenSettled();
+      expect(seen).toHaveLength(1);
+      leaving.abort();
+      await act(async () => {
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      });
+      expect(seen[0].aborted).toBe(true);
+    });
+
+    it('makes one signal that aborts with either of two', () => {
+      const a = new AbortController();
+      const b = new AbortController();
+      const either = eitherSignal(a.signal, b.signal);
+      expect(either.aborted).toBe(false);
+      b.abort();
+      expect(either.aborted).toBe(true);
+      const already = new AbortController();
+      already.abort();
+      expect(eitherSignal(new AbortController().signal, already.signal).aborted).toBe(true);
+      expect(eitherSignal(a.signal)).toBe(a.signal);
+    });
+  });
+
+  it('says a build with a site key but no Turnstile check cannot start, without asking', async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
+    try {
+      const { result } = await startAnalysis('Hurt');
+      expect(streams()).toHaveLength(0);
+      expect(requestRunToken).not.toHaveBeenCalled();
+      expect(result.current.errorCode).toBe('verification_unavailable');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('says more facts could not be asked for when no token is given', async () => {

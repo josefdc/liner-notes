@@ -22,7 +22,10 @@ export const RUN_TOKEN_MARGIN_MS = 30_000;
 /** The token of a passed Turnstile check: the bypass's, while this build has no site key. */
 async function turnstileToken(): Promise<string> {
   if (!import.meta.env.VITE_TURNSTILE_SITE_KEY) return DEV_BYPASS_TOKEN;
-  throw new RunTokenError('This page cannot verify requests yet. Reload the page later.', null);
+  throw new RunTokenError(
+    'This version of the page cannot verify requests yet.',
+    'verification_unavailable',
+  );
 }
 
 /** A new run token from the API. Rejects as requestRunToken does. */

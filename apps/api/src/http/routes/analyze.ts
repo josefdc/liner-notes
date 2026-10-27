@@ -30,9 +30,15 @@ import {
   storeRunResult,
   updateRun,
 } from "../../store/runs.js";
-import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
+import {
+  asyncRoute,
+  eventStreamHead,
+  HTTP_ERRORS,
+  markFailed,
+  sendError,
+} from "../middleware/errors.js";
 import { claimRunToken, refuseToken, requireTokenFor } from "../middleware/requireRunToken.js";
-import { nodeEvent, openAnalysisStream } from "../sse.js";
+import { nodeEvent, openAnalysisStream, refuseStream } from "../sse.js";
 
 const router = Router();
 const log = logger("Run");
@@ -172,21 +178,40 @@ const isDuplicateKey = (err: unknown) =>
     (err as { code: string }).code === "SQLITE_CONSTRAINT_UNIQUE");
 
 /**
- * Records a new run, as recordRun does, but returns false when a run with its id is recorded
- * already: its run token has started a run, so this request must not start another. Any other
- * failure to record is logged and never stops the analysis (true).
+ * Whether a new run may go on: `started` once its row is written; `used` when a run with its id
+ * is recorded already (its run token has started one); `unrecorded` when the row could not be
+ * written. A run without its row would let its token start another after a restart, or on
+ * another process, so it does not start either.
  */
-function recordNewRun(action: string, write: (db: ReturnType<typeof getDb>) => void): boolean {
+type RunStart = "started" | "used" | "unrecorded";
+
+/** Records a new run's row (see RunStart). */
+function recordNewRun(action: string, write: (db: ReturnType<typeof getDb>) => void): RunStart {
   try {
     write(getDb());
-    return true;
+    return "started";
   } catch (err) {
     if (isDuplicateKey(err)) {
       logger("Runs").warn(`Could not ${action}: the run is recorded already; not started`);
-      return false;
+      return "used";
     }
-    logger("Runs").error(`Could not ${action}`, { err });
-    return true;
+    logger("Runs").error(`Could not ${action}; not started`, { err });
+    return "unrecorded";
+  }
+}
+
+/**
+ * Refuses a run that did not start: its token used, with a 401 JSON (requireRunToken.ts); its
+ * row not written, with `internal_error`, inside a stream on a stream route (`stream`).
+ */
+function refuseStart(res: Response, start: Exclude<RunStart, "started">, stream: boolean): void {
+  if (start === "used") {
+    refuseToken(res, "already used");
+  } else if (stream) {
+    markFailed(res);
+    refuseStream(res, "/api/analyze/stream", "internal_error", HTTP_ERRORS.internal_error.message);
+  } else {
+    sendError(res, "internal_error");
   }
 }
 
@@ -219,15 +244,15 @@ function logRunStart(runId: string, how: string, query: string): void {
 }
 
 /**
- * Starts a new analysis: a fresh thread, claimed and recorded as an open run. False, with
- * nothing claimed, when a run of that thread is recorded already (recordNewRun).
+ * Starts a new analysis: a fresh thread, claimed and recorded as an open run. Anything but
+ * `started` claims nothing, and the run must not go on (recordNewRun).
  */
-function startAnalysis(threadId: string, query: string): boolean {
-  const recorded = recordNewRun("record a run", (db) =>
+function startAnalysis(threadId: string, query: string): RunStart {
+  const start = recordNewRun("record a run", (db) =>
     startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
   );
-  if (recorded) activeThreads.add(threadId);
-  return recorded;
+  if (start === "started") activeThreads.add(threadId);
+  return start;
 }
 
 /**
@@ -872,15 +897,15 @@ const replayOf = (record: ReplayRecord) => ({
  * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
  * (storeReplayOf), so it never reads as live whatever its outcome.
  */
-function startReplay(runId: string, query: string, record: ReplayRecord): boolean {
-  const recorded = recordNewRun("record a replay", (db) =>
+function startReplay(runId: string, query: string, record: ReplayRecord): RunStart {
+  const start = recordNewRun("record a replay", (db) =>
     db.transaction(() => {
       startRun(db, { runId, threadId: runId, query, commit: SERVER_COMMIT });
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );
-  if (recorded) activeThreads.add(runId);
-  return recorded;
+  if (start === "started") activeThreads.add(runId);
+  return start;
 }
 
 /**
@@ -935,8 +960,9 @@ async function replayStream(
   query: string,
   record: ReplayRecord,
 ): Promise<void> {
-  if (!startReplay(runId, query, record)) {
-    refuseToken(res, "already used");
+  const start = startReplay(runId, query, record);
+  if (start !== "started") {
+    refuseStart(res, start, true);
     return;
   }
   const stream = openEventStream(res, runId, { replay: true });
@@ -979,8 +1005,9 @@ async function replayStream(
  */
 function replayJsonRun(res: Response, runId: string, query: string, record: ReplayRecord): void {
   asRun(res, runId, () => {
-    if (!startReplay(runId, query, record)) {
-      refuseToken(res, "already used");
+    const start = startReplay(runId, query, record);
+    if (start !== "started") {
+      refuseStart(res, start, false);
       return;
     }
     try {
@@ -1078,8 +1105,9 @@ router.post(
 
     const { threadId } = token;
     await asRun(res, threadId, async () => {
-      if (!startAnalysis(threadId, query)) {
-        refuseToken(res, "already used");
+      const start = startAnalysis(threadId, query);
+      if (start !== "started") {
+        refuseStart(res, start, false);
         return;
       }
       logRunStart(threadId, "Analysis", query);
@@ -1160,8 +1188,9 @@ router.get(
     // The run id is the thread id: the one the run's token was issued for.
     const { threadId } = token;
     await asRun(res, threadId, async () => {
-      if (!startAnalysis(threadId, query)) {
-        refuseToken(res, "already used");
+      const start = startAnalysis(threadId, query);
+      if (start !== "started") {
+        refuseStart(res, start, true);
         return;
       }
       const stream = openEventStream(res, threadId);

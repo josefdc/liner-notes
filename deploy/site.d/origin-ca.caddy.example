@@ -1,0 +1,6 @@
+# A Cloudflare Origin CA certificate for the site (Cloudflare dashboard: SSL/TLS, Origin Server,
+# Create Certificate; SSL/TLS mode "Full (strict)"). Copy this file to origin-ca.caddy, save the
+# certificate as origin.pem and its private key as origin.key in this directory, and let the web
+# container's user read the key: sudo chown 10001 origin.key && chmod 600 origin.key.
+# Caddy then serves that certificate for SITE_ADDRESS and does not ask a certificate authority.
+tls /etc/caddy/site.d/origin.pem /etc/caddy/site.d/origin.key

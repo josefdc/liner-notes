@@ -9,18 +9,27 @@
 # Caddy serves plain HTTP on 127.0.0.1:${DEV_PROXY_PORT:-3182}, whatever deploy/.env says.
 #
 # The API runs in development, so with no Turnstile secret it accepts the development bypass,
-# which the web image built without VITE_TURNSTILE_SITE_KEY sends; run tokens are still issued
-# and checked. The secrets compose.prod.yml requires must still be set (test values do).
+# which this project's own web image (<IMAGE_PREFIX>-web-dev, built without a Turnstile site key)
+# sends; run tokens are still issued and checked. The API and audio images are the production
+# ones. The settings compose.prod.yml requires must still be set (test values do).
 
 name: liner-notes-dev
 
 services:
   web:
+    image: ${IMAGE_PREFIX:-liner-notes}-web-dev:${IMAGE_TAG:-latest}
+    build:
+      args:
+        VITE_TURNSTILE_SITE_KEY: ""
     ports: !override
       - target: 80
         published: "${DEV_PROXY_PORT:-3182}"
         host_ip: 127.0.0.1
         protocol: tcp
+    # Not the deployment's site.d (its certificate settings are for the site's hostname).
+    volumes: !override
+      - caddy-data:/data
+      - caddy-config:/config
     environment:
       SITE_ADDRESS: ":80"
 
@@ -29,6 +38,8 @@ services:
       NODE_ENV: development
       TURNSTILE_SECRET_KEY: ""
       TURNSTILE_EXPECTED_HOSTNAME: ""
+      # This project's own origin.
+      CORS_ORIGINS: http://127.0.0.1:${DEV_PROXY_PORT:-3182},http://localhost:${DEV_PROXY_PORT:-3182}
       # Recorded runs only by default, whatever REPLAY_MODE deploy/.env sets: nothing calls a
       # paid service.
       REPLAY_MODE: ${DEV_REPLAY_MODE:-only}

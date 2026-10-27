@@ -47,6 +47,10 @@ jobs:
       TURNSTILE_SECRET_KEY: ci-only-turnstile-secret
       AUDIO_SERVICE_TOKEN: ci-only-audio-service-token
       LOG_IP_SALT: ci-only-log-ip-salt
+      # The local site's origin (deploy/check-stack.sh sends it), and Cloudflare's public
+      # always-passing test site key (nothing here loads the widget).
+      CORS_ORIGINS: http://127.0.0.1:3180,http://localhost:3180
+      VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
     steps:
       - uses: actions/checkout@v7
         with:
@@ -299,6 +303,19 @@ jobs:
       # (SSE_HOLD_MS): a stream the visitor leaves puts no token, query or full address in
       # Caddy's log, and a held stream passes through Caddy and ends with "done". The production
       # project's API must be the same container afterwards.
+      # The development stack's own web image: the page built without a site key.
+      - name: Load the development web image
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: |
+            deploy/compose.prod.yml
+            deploy/compose.dev.yml
+          targets: web
+          load: true
+          set: |
+            web.context=.
+            web.cache-from=type=gha,scope=web
       - name: Check a cut and a 130 s stream through Caddy
         env:
           AUDIO_FETCH_MODELS: "0"

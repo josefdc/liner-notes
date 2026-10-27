@@ -35,17 +35,17 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
       args:
-        # Public: it ships in the page. Empty builds a page that sends the development bypass,
-        # which only an API in development accepts (compose.dev.yml).
-        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+        # Public: it ships in the page. Required: without it the page sends the development
+        # bypass, which the API here refuses (compose.dev.yml builds its own page without it).
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:?set VITE_TURNSTILE_SITE_KEY in deploy/.env (the Turnstile widget's site key)}
         VITE_SOURCE_URL: ${VITE_SOURCE_URL:-}
     ports:
       - target: 80
         published: "${PROXY_PORT:-3180}"
         host_ip: "${PROXY_BIND:-127.0.0.1}"
         protocol: tcp
-      # HTTPS, when SITE_ADDRESS is a hostname (Caddy obtains the certificate and redirects
-      # port 80 to it).
+      # HTTPS, when SITE_ADDRESS is a hostname (Caddy redirects port 80 to it; README,
+      # "Certificates").
       - target: 443
         published: "${PROXY_TLS_PORT:-3181}"
         host_ip: "${PROXY_BIND:-127.0.0.1}"
@@ -55,9 +55,12 @@ services:
       # Proxy ranges to trust for CF-Connecting-IP besides Cloudflare's own (space-separated).
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     volumes:
-      # Certificates and Caddy's state.
+      # Certificates Caddy obtains, and its state.
       - caddy-data:/data
       - caddy-config:/config
+      # The deployment's own site settings and certificate files, read-only: *.caddy files are
+      # read into the site (deploy/site.d/origin-ca.caddy.example). Nothing there by default.
+      - ./site.d:/etc/caddy/site.d:ro
     depends_on:
       api:
         condition: service_healthy
@@ -87,9 +90,10 @@ services:
       HOST: 0.0.0.0
       # Every request comes through Caddy, which sends one X-Forwarded-For: the visitor's address.
       TRUST_PROXY: "1"
-      # The browser calls /api on the page's own origin and needs no CORS entry; list other
-      # origins that call the API, if any.
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Required: the site's own origin(s), as browsers send them (https://liner-notes.example;
+      # locally http://127.0.0.1:3180). A browser that does not mark a request as same-origin
+      # (no Sec-Fetch-Site header) is otherwise refused on the paid routes and on POST /api/runs.
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in deploy/.env to the site's origin (https://<hostname>; locally http://127.0.0.1:3180)}
       # Live analysis when it can run; the recorded showcase runs when it cannot (no keys, no
       # spend log, the budget spent).
       REPLAY_MODE: ${REPLAY_MODE:-fallback}

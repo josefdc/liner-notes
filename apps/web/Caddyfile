@@ -7,19 +7,25 @@
 #                    redirect port 80 to it (README, "Certificates", for the certificate).
 #   TRUSTED_PROXIES  more proxy ranges to trust besides Cloudflare's (default: none).
 #   API_UPSTREAM     the API's address on the compose network (default api:3001).
+#
+# Files /etc/caddy/site.d/*.caddy, when mounted (deploy/compose.prod.yml mounts deploy/site.d), are
+# read into the site: for example a `tls` line naming a Cloudflare Origin CA certificate
+# (deploy/site.d/origin-ca.caddy.example).
 {
 	# The configuration is baked into the image: nothing needs Caddy's admin endpoint.
 	admin off
 
-	# Caddy's own log lines (warnings and errors, such as a stream the visitor left before the
-	# API ended it) carry the request too: only its path is kept, with the track in /t/<id> and
-	# /api/runs/by-track/<id> left out, and no query, no headers, and addresses shortened to
-	# their network. Each request's access line is written by the site's own loggers below.
+	# Caddy's other log lines (warnings and errors, such as a stream the visitor left before the
+	# API ended it, and the access lines of requests for another host) carry the request too:
+	# only its path is kept, with the track in /t/<id> and /api/runs/by-track/<id> left out, and
+	# no query, no request headers, no redirect target (Location repeats the query), and
+	# addresses shortened to their network. The site's own access log is below.
 	log default {
 		output stderr
 		format filter {
 			request>uri regexp "(?i)^([^?]*?/(?:t|by-track)/).*$|\?.*$" "${1}…"
 			request>headers delete
+			resp_headers>Location delete
 			request>remote_ip ip_mask 16 32
 			request>client_ip ip_mask 16 32
 		}
@@ -66,22 +72,15 @@ http://:2020 {
 }
 
 {$SITE_ADDRESS::80} {
-	# Access log, one JSON line per request on stdout. Nothing that names what a visitor looked
-	# up or holds a credential is written: the run token is left out; the typed query and the
-	# track's id, title and artist read REDACTED (the thread id stays, to follow one run); the
-	# track in /t/<id> and /api/runs/by-track/<id> reads "…" (their own logger; every other
-	# request goes to "access", defined last, which is the one Caddy falls back to);
-	# addresses are shortened to their network, and request headers (cookies, CF-Connecting-IP)
-	# are left out.
-	log tracks {
-		output stdout
-		format filter {
-			request>uri regexp "(?i)^([^?]*?/(?:t|by-track)/).*$|\?.*$" "${1}…"
-			request>headers delete
-			request>remote_ip ip_mask 16 32
-			request>client_ip ip_mask 16 32
-		}
-	}
+	# Access log, one JSON line per request on stdout, the automatic redirect to HTTPS included.
+	# The typed text and the run token are not written: the query's runToken is left out, and
+	# query, q, trackTitle, trackArtist, trackId and selectedTrackId read REDACTED. Ids that
+	# follow one run (threadId, runId) and the track id in a path (/t/<id>) stay. Request
+	# headers (cookies, CF-Connecting-IP) and the redirect target (Location repeats the query)
+	# are left out, and addresses are shortened to their network.
+	#
+	# One filter per field: a second one on request>uri (a regexp after the query filter) is
+	# accepted by Caddy and silently replaces the first.
 	log access {
 		output stdout
 		format filter {
@@ -95,14 +94,14 @@ http://:2020 {
 				replace trackArtist REDACTED
 			}
 			request>headers delete
+			resp_headers>Location delete
 			request>remote_ip ip_mask 16 32
 			request>client_ip ip_mask 16 32
 		}
 	}
-	@track path /t/* /api/runs/by-track/*
-	log_name @track tracks
-	@untracked not path /t/* /api/runs/by-track/*
-	log_name @untracked access
+
+	# Site settings of the deployment (deploy/site.d/*.caddy); none by default.
+	import /etc/caddy/site.d/*.caddy
 
 	import security_headers
 

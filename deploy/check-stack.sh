@@ -6,8 +6,10 @@
 #                                      Caddy's, the API refusing a stream without a run token,
 #                                      the security headers and cache rules, /api/* only going to
 #                                      the API, forged client addresses ignored and Cloudflare's
-#                                      used from a trusted peer, what a visitor looked up and the
-#                                      run token kept out of Caddy's access log
+#                                      used from a trusted peer, the site's origin accepted from a
+#                                      browser that sends no Sec-Fetch-Site and another refused,
+#                                      the typed text and the run token kept out of Caddy's logs,
+#                                      over HTTP and over HTTPS with its redirect
 #   deploy/check-stack.sh long-stream  the development stack (deploy/compose.dev.yml, whose API
 #                                      issues run tokens without Turnstile and holds replayed
 #                                      streams for SSE_HOLD_MS=130000): a stream the visitor
@@ -17,8 +19,9 @@
 #
 # COMPOSE is the compose command of the stack, default "docker compose -f deploy/compose.prod.yml"
 # (long-stream: with "-f deploy/compose.dev.yml" added). The API must have LOG_IP_SALT set, so
-# the address hashes in its log can be checked. The address checks start a second Caddy from the
-# web image for a few seconds (compose run, no published port); the running services are not
+# the address hashes in its log can be checked, and CORS_ORIGINS must list the site's local
+# origin (http://<the published address>). The address and HTTPS checks start a second Caddy
+# from the web image for a few seconds (no published port); the running services are not
 # restarted.
 set -euo pipefail
 
@@ -39,7 +42,15 @@ base="http://$published"
 
 # The response headers of a GET, lower-cased names.
 headers() {
-  curl -sS -D - -o /dev/null "$@" | tr -d '\r' | sed 's/^\([^:]*\):/\L\1:/'
+  local line name
+  curl -sS -D - -o /dev/null "$@" | tr -d '\r' | while IFS= read -r line; do
+    name=${line%%:*}
+    if [ "$name" = "$line" ]; then
+      printf '%s\n' "$line"
+    else
+      printf '%s:%s\n' "$(tr '[:upper:]' '[:lower:]' <<<"$name")" "${line#*:}"
+    fi
+  done
 }
 
 # The value of one header in `headers` output.
@@ -89,13 +100,17 @@ if [ "$mode" = long-stream ]; then
   # A visitor leaves a held stream: Caddy logs the cut response (a warning with the request), and
   # that line must hold no more than the access line does.
   token=$(mint)
+  sleep 1
+  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   curl -sN --max-time 4 "$base/api/analyze/stream?query=One%20More%20Time%20Daft%20Punk&runToken=$token" \
     >/dev/null || true
   sleep 2
   web=$("${compose[@]}" ps -q web)
   gateway=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' "$web")
+  recent=$("${compose[@]}" logs --no-color --no-log-prefix --since "$since" web)
+  grep -q 'incomplete response' <<<"$recent" ||
+    fail "Caddy logged no cut stream for this request (is SSE_HOLD_MS set?)"
   logs=$("${compose[@]}" logs --no-color --no-log-prefix web)
-  grep -q 'incomplete response' <<<"$logs" || fail "Caddy logged no cut stream (is SSE_HOLD_MS set?)"
   for secret in "$token" "Daft" "\"$gateway\""; do
     if grep -qF -- "$secret" <<<"$logs"; then
       fail "Caddy's log holds ${secret:0:12}… after a stream was cut"
@@ -121,14 +136,17 @@ if [ "$mode" = long-stream ]; then
   exit 0
 fi
 
-# Every service healthy (the audio service may still be fetching its models).
+# Every service healthy (the audio service may still be fetching its models). Stopped
+# containers count too (ps -a).
 for _ in $(seq 1 60); do
-  unhealthy=$("${compose[@]}" ps --format '{{.Service}} {{.Health}}' | grep -vc ' healthy$' || true)
-  [ "$unhealthy" -eq 0 ] && break
+  states=$("${compose[@]}" ps -a --format '{{.Service}} {{.State}} {{.Health}}')
+  unhealthy=$(grep -v ' running healthy$' <<<"$states" || true)
+  [ -z "$unhealthy" ] && [ "$(wc -l <<<"$states")" -ge 3 ] && break
   sleep 5
 done
-"${compose[@]}" ps --format '{{.Service}} {{.Health}}'
-[ "$unhealthy" -eq 0 ] || fail "not every service is healthy"
+echo "$states"
+[ -z "$unhealthy" ] || fail "not healthy: $(tr '\n' ';' <<<"$unhealthy")"
+[ "$(wc -l <<<"$states")" -ge 3 ] || fail "expected the web, api and audio services"
 
 # Only Caddy publishes a port.
 for service in api audio; do
@@ -141,6 +159,19 @@ echo "ok: the API and the audio service publish no port"
 status=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/analyze/stream?query=x")
 [ "$status" = 401 ] || fail "a stream without a run token answered $status"
 echo "ok: no run token, 401"
+
+# The site's origin is accepted from a browser that sends Origin but no Sec-Fetch-Site (Safari
+# before 16.4) on POST /api/runs; another origin is refused. An empty body gets 400 once the
+# origin check passes, so Turnstile is never asked.
+runs_status() {
+  curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' \
+    -H "Origin: $1" -d '{}' "$base/api/runs"
+}
+status=$(runs_status "$base")
+[ "$status" = 400 ] || fail "POST /api/runs from the site's origin $base answered $status (is it in CORS_ORIGINS?)"
+status=$(runs_status https://unlisted.example)
+[ "$status" = 403 ] || fail "POST /api/runs from an unlisted origin answered $status"
+echo "ok: the site's origin accepted without Sec-Fetch-Site, another origin refused"
 
 # The security headers on a page, a hashed asset, an API answer and an error.
 page=$(curl -sS "$base/")
@@ -219,14 +250,45 @@ curl -s -o /dev/null "$base/t/check-stack-track?q=check-stack-typed"
 curl -s -o /dev/null "$base/api/factoids?trackTitle=check-stack-typed&trackArtist=check-stack-typed&trackId=check-stack-track"
 sleep 1
 access=$("${compose[@]}" logs --no-color --no-log-prefix web)
-for secret in check-stack-token check-stack-typed check-stack-track; do
+for secret in check-stack-token check-stack-typed; do
   if grep -q "$secret" <<<"$access"; then
     fail "Caddy's log holds $secret"
   fi
 done
 grep -q '"uri":"/api/analyze/stream?query=REDACTED&threadId=check-stack-thread"' <<<"$access" ||
   fail "no access line for the stream request (or the thread id is gone)"
-grep -q '"uri":"/t/…"' <<<"$access" || fail "no access line for the /t/ page"
-echo "ok: the run token and what a visitor looked up are kept out of Caddy's log"
+grep -q '"uri":"/t/check-stack-track?q=REDACTED"' <<<"$access" || fail "no access line for the /t/ page"
+grep -q '"uri":"/api/factoids?trackArtist=REDACTED&trackId=REDACTED&trackTitle=REDACTED"' <<<"$access" ||
+  fail "the factoid request's track fields are not REDACTED"
+echo "ok: the typed text and the run token are kept out of Caddy's access log"
+
+# Over HTTPS (SITE_ADDRESS=localhost: Caddy's own local certificate), from inside a second Caddy
+# of the same image, with its own temporary state: neither the redirect from HTTP (whose
+# Location repeats the query) nor any other line writes the typed text or the run token.
+image=$(docker inspect -f '{{.Config.Image}}' "$("${compose[@]}" ps -q web)")
+https_probe=$(docker run -d --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /data:uid=10001,gid=10001 --tmpfs /config:uid=10001,gid=10001 --tmpfs /tmp \
+  -e SITE_ADDRESS=localhost "$image")
+trap 'docker rm -f "$https_probe" >/dev/null 2>&1 || true' EXIT
+for _ in $(seq 1 50); do
+  docker exec "$https_probe" wget -q -O /dev/null http://127.0.0.1:2020/health 2>/dev/null && break
+  sleep 0.2
+done
+sleep 1
+for url in "http://localhost/t/check-https-track?q=check-https-typed&runToken=check-https-token" \
+  "http://127.0.0.1/api/analyze/stream?query=check-https-typed&runToken=check-https-token" \
+  "https://localhost/api/analyze/stream?query=check-https-typed&runToken=check-https-token"; do
+  docker exec "$https_probe" wget -q -O /dev/null --no-check-certificate "$url" 2>/dev/null || true
+done
+sleep 1
+https_logs=$(docker logs "$https_probe" 2>&1)
+docker rm -f "$https_probe" >/dev/null
+grep -q '"status":308' <<<"$https_logs" || fail "no redirect to HTTPS was logged"
+for secret in check-https-token check-https-typed; do
+  if grep -q "$secret" <<<"$https_logs"; then
+    fail "Caddy's log over HTTPS holds $secret"
+  fi
+done
+echo "ok: over HTTPS and its redirect, the typed text and the run token stay out of Caddy's log"
 
 echo "all checks passed"

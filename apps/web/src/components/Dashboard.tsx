@@ -14,7 +14,7 @@ import { isValidImageUrl } from '../utils/image';
 import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
-import { nodeTrack, UNTITLED_TRACK } from './genealogy/nodeTrack';
+import { nodeQuery, nodeTrack } from './genealogy/nodeTrack';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE, placeholderBackground } from '../styles/placeholder';
@@ -103,12 +103,9 @@ function getRelatedTracks(
       return {
         id: node.id,
         ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-        // A node without a label (the contract requires one) is searched by its title; one with
-        // nothing to search by is not searched at all.
-        query:
-          [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') ||
-          (typeof node.label === 'string' && node.label.trim()) ||
-          (track.title === UNTITLED_TRACK ? '' : track.title),
+        // The text the Player searches the same node by (a node with nothing to search by is
+        // not searched at all).
+        query: nodeQuery(node),
         ...track,
         relation,
         sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,

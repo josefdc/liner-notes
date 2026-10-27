@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { errorName } from '../rootErrors';
 import { Button } from './ui/Button';
 
 interface ErrorBoundaryProps {
@@ -17,8 +18,12 @@ interface ErrorBoundaryState {
 
 /**
  * Keeps a part of the page that throws while it renders from taking the rest down: in its place
- * it says what failed and offers a way back. The console gets the error, never the data the
- * part was given.
+ * it says what failed and offers a way back. The console gets what failed and the error's name,
+ * never its message or the data the part was given.
+ *
+ * Like any React error boundary it catches throws while its children render and in their
+ * effects, not in callbacks that run later outside React: event handlers, timers, d3's ticks
+ * and zoom handlers, a ResizeObserver's callback.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { failed: false };
@@ -28,8 +33,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: unknown, _info: ErrorInfo) {
-    const reason = error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error';
-    console.error(`${this.props.message} (${reason})`);
+    console.error(`${this.props.message} (${errorName(error)})`);
   }
 
   private retry = () => {

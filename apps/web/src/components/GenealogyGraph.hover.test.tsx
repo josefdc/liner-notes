@@ -1,8 +1,9 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The hover label a node with a clip shows (hovering never plays it). The audio hook is stubbed
-// with stable callbacks (as the real one's are); a test says when the clip could not be loaded.
+// Pointing at a node with a clip: no hint names a preview, and nothing plays. The audio hook is
+// stubbed with stable callbacks (as the real one's are); a test says when the clip could not be
+// loaded.
 const audio = vi.hoisted(() => ({
   played: [] as string[],
   setUnavailable: null as null | ((id: string | null) => void),
@@ -77,7 +78,7 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph hover on a node with a clip', () => {
-  it('says the track has a preview, never a sample, and does not play it', async () => {
+  it('shows no hint of a preview or a sample, and does not play it', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const node = nodeGroup(container, 'Under Pressure');
 
@@ -87,22 +88,15 @@ describe('GenealogyGraph hover on a node with a clip', () => {
 
     // The preview plays from its button only (GenealogyGraph.robust.test.tsx).
     expect(audio.played).toEqual([]);
-    const label = container.querySelector('.preview-indicator');
-    expect(label?.textContent).toBe('♪ PREVIEW');
-    expect(container.textContent).not.toMatch(/SAMPL/);
+    expect(container.querySelector('.preview-indicator')).toBeNull();
+    expect(container.querySelector('svg')?.textContent).not.toMatch(/PREVIEW|SAMPL/);
   });
 
-  it('takes the label away when the clip cannot be loaded', async () => {
+  it('says when the clip cannot be loaded', async () => {
     const view = render(<GenealogyGraph data={data} />);
-    const node = nodeGroup(view.container, 'Under Pressure');
-    await act(async () => {
-      node.dispatchEvent(new MouseEvent('mouseenter'));
-    });
-    expect(view.container.querySelector('.preview-indicator')).not.toBeNull();
 
     await act(async () => audio.setUnavailable?.('n1'));
 
-    expect(view.container.querySelector('.preview-indicator')).toBeNull();
     expect(view.getByRole('status').textContent).toContain('PREVIEW UNAVAILABLE');
   });
 });

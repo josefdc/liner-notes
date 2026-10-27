@@ -91,20 +91,64 @@ const fitScale = (page: Page) =>
 const LAYOUT_MS = 15_000;
 
 /**
- * Marks the graph drawn now and its zoom, before a resize: the resize keeps both (it moves the
- * layout to the panel's new middle; the graph is drawn again only for new data).
+ * Where the graph sits in its panel (the svg) on screen: the zoom's scale, the centre of the
+ * tracks' discs less the panel's centre (px), and how many discs lie past the panel's edge.
+ */
+const placeInPanel = (page: Page) =>
+  graphOf(page).evaluate((svg) => {
+    const panel = svg.getBoundingClientRect();
+    const discs = [...svg.querySelectorAll("g.nodes > g > circle:first-of-type")].map((disc) =>
+      disc.getBoundingClientRect(),
+    );
+    const scale = /scale\(([\d.]+)/.exec(
+      svg.querySelector(":scope > g")?.getAttribute("transform") ?? "",
+    )?.[1];
+    return {
+      size: [panel.width, panel.height],
+      k: Number(scale),
+      offset: [
+        (Math.min(...discs.map((d) => d.left)) + Math.max(...discs.map((d) => d.right))) / 2 -
+          (panel.left + panel.right) / 2,
+        (Math.min(...discs.map((d) => d.top)) + Math.max(...discs.map((d) => d.bottom))) / 2 -
+          (panel.top + panel.bottom) / 2,
+      ],
+      outside: discs.filter(
+        (d) =>
+          d.left < panel.left - 1 ||
+          d.right > panel.right + 1 ||
+          d.top < panel.top - 1 ||
+          d.bottom > panel.bottom + 1,
+      ).length,
+    };
+  });
+
+/**
+ * Marks the graph drawn now, before a resize, and says where it sits in its panel: the resize
+ * keeps the drawing (it is drawn again only for new data) and its zoom.
  */
 async function markDrawing(page: Page) {
-  const zoomed = graphOf(page).locator(":scope > g");
-  await zoomed.evaluate((g) => g.setAttribute("data-kept", ""));
-  return zoomed.getAttribute("transform");
+  await graphOf(page)
+    .locator(":scope > g")
+    .evaluate((g) => g.setAttribute("data-kept", ""));
+  return placeInPanel(page);
 }
 
-/** The drawing marked before a resize is still the one shown, at the same zoom. */
-async function drawingKept(page: Page, zoom: string | null) {
-  const zoomed = graphOf(page).locator(":scope > g[data-kept]");
-  await expect(zoomed).toHaveCount(1);
-  expect(await zoomed.getAttribute("transform")).toBe(zoom);
+/**
+ * The drawing marked before a resize is still the one shown, at the same scale, and as centred
+ * in the resized panel as it was before.
+ */
+async function drawingKept(page: Page, before: Awaited<ReturnType<typeof placeInPanel>>) {
+  await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
+  const now = await placeInPanel(page);
+  expect(now.k).toBe(before.k);
+  expect(Math.abs(now.offset[0] - before.offset[0])).toBeLessThanOrEqual(2);
+  expect(Math.abs(now.offset[1] - before.offset[1])).toBeLessThanOrEqual(2);
+  // A panel no smaller than before still holds every track that was in it. (One that shrank
+  // may cut some off: the zoom was fitted to the larger one, and is kept.)
+  if (now.size[0] >= before.size[0] && now.size[1] >= before.size[1]) {
+    expect(now.outside).toBeLessThanOrEqual(before.outside);
+  }
+  return now;
 }
 
 /**
@@ -233,11 +277,11 @@ test.describe("the genealogy graph", () => {
     }) => {
       if (width !== 1440) {
         await graphFitted(page);
-        const zoom = await markDrawing(page);
+        const placed = await markDrawing(page);
         await page.setViewportSize({ width, height: 900 });
         if (width < 768) await page.getByRole("tab", { name: "Network" }).click();
         await graphFitted(page);
-        await drawingKept(page, zoom);
+        await drawingKept(page, placed);
       }
       await graphFitted(page);
       const labels = await graphLabels(page);
@@ -288,6 +332,23 @@ test.describe("the genealogy graph", () => {
       expect(after?.shown).toBe(false);
     });
   }
+
+  test("keeps the graph centred and whole when its panel narrows, then widens", async ({
+    page,
+  }) => {
+    // Fitted to the panel at 1440 px; then 1024 px (a narrower panel) and 1920 px (a wider one).
+    await graphFitted(page);
+    const placed = await markDrawing(page);
+    expect(placed.outside).toBe(0);
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await graphFitted(page);
+    await drawingKept(page, placed);
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await graphFitted(page);
+    const now = await drawingKept(page, placed);
+    expect(now.size[0]).toBeGreaterThan(placed.size[0]);
+    expect(now.outside).toBe(0);
+  });
 
   test("has a legend in words for the lines and every relation shown", async ({ page }) => {
     const legend = page.getByRole("group", { name: "Link legend" });
@@ -468,14 +529,14 @@ test.describe("the genealogy graph", () => {
       page,
     }, testInfo) => {
       await graphFitted(page);
-      const zoom = await markDrawing(page);
+      const placed = await markDrawing(page);
       await page.setViewportSize({ width, height });
       await page.getByRole("tab", { name: "Network" }).click();
       const panel = page.locator("#panel-genealogy");
       const tabBar = page.getByRole("tablist", { name: "Player sections" });
       await expect(page.getByRole("group", { name: "Link legend" })).toBeVisible();
       await graphFitted(page);
-      await drawingKept(page, zoom);
+      await drawingKept(page, placed);
       const [panelBox, barBox, graphBox] = await Promise.all([
         panel.boundingBox(),
         tabBar.boundingBox(),
@@ -504,7 +565,7 @@ test.describe("a related track's preview", () => {
   // The clip's request is held unanswered, so the clip neither plays through nor fails.
   const CLIP = "https://p.scdn.co/mp3-preview/genealogy-kinds-test";
 
-  test("plays from its button in the list of links, by click and from the keyboard, never on hover", async ({
+  test("plays from its button in the list of previews, by click and from the keyboard, never on hover", async ({
     page,
   }) => {
     const withPreview = loadFixture("genealogy-kinds");
@@ -524,16 +585,18 @@ test.describe("a related track's preview", () => {
     await openPlayer(page);
     const problems = collectProblems(page);
 
-    // The pointer on the track says it has a preview, and plays nothing.
+    // The pointer on the track plays nothing, and no hint offers a preview there (a click
+    // analyses the track).
     const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
     await track.dispatchEvent("mouseenter");
-    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(1);
+    await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(0);
     await track.dispatchEvent("mouseleave");
 
-    await page.getByText("Links as a list (17)").click();
-    const button = page.getByRole("button", {
+    await page.getByText("Previews (1)").click();
+    const button = page.getByRole("list", { name: "Track previews" }).getByRole("button", {
       name: "Play preview of Sourced Sample - Someone (1984)",
     });
     await expect(button).toHaveCount(1);

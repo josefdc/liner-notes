@@ -773,7 +773,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             )}
           </div>
           {genealogy.nodes.length > 1 ? (
-            // A graph that throws leaves the rest of the Player as it is.
+            // A graph that throws while it renders leaves the rest of the Player as it is. (A
+            // throw inside d3's ticks or zoom handlers or the ResizeObserver's callback is not
+            // caught here: those run outside React.)
             <ErrorBoundary
               key={track.id}
               message="The connections graph could not be drawn"

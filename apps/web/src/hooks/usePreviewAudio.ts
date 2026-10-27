@@ -54,8 +54,14 @@ function acquire() {
   const audio = new Audio();
   audio.onplay = () => owner?.events.onPlay?.();
   audio.onpause = () => owner?.events.onPause?.();
-  audio.onended = () => owner?.events.onEnded?.();
-  audio.onerror = () => owner?.events.onError?.();
+  // An end or an error queued for a clip another user has since replaced is not the new
+  // clip's: a new clip clears the element's `ended` and `error`.
+  audio.onended = () => {
+    if (audio.ended) owner?.events.onEnded?.();
+  };
+  audio.onerror = () => {
+    if (audio.error) owner?.events.onError?.();
+  };
   element = audio;
 }
 

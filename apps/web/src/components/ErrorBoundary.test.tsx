@@ -47,9 +47,11 @@ describe('the genealogy graph error boundary', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(track.title);
     expect(screen.getAllByRole('button', { name: /BACK TO BASE/ }).length).toBeGreaterThan(0);
 
-    // Logged without the result's data.
+    // Logged with the error's name only: neither the result's data nor the error's message,
+    // which can carry it.
     const logged = JSON.stringify(vi.mocked(console.error).mock.calls.map(([first]) => first));
-    expect(logged).toContain('The connections graph could not be drawn');
+    expect(logged).toContain('The connections graph could not be drawn (Error)');
     expect(logged).not.toContain(track.title);
+    expect(logged).not.toContain('the graph failed');
   });
 });

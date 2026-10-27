@@ -19,6 +19,7 @@ import {
   routeUrl,
   writeHistoryEntry,
 } from './router/route';
+import { screenKey } from './router/screenKey';
 import { ShownResults } from './router/shownResults';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
@@ -606,7 +607,7 @@ const App: React.FC = () => {
         {/* A screen that throws (or whose code cannot be loaded) says so in its place, with a
             way back to the search; the next screen starts afresh. */}
         <ErrorBoundary
-          key={link ? 'link' : phase}
+          key={screenKey(phase, link !== null, effectiveTrackData?.id)}
           message="This screen could not be shown"
           action={{ label: 'New search', onClick: handleNewSearch }}
           className="flex-1 min-h-0 w-full bg-void"

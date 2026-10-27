@@ -11,6 +11,7 @@ class FakeAudio {
   volume = 1;
   paused = true;
   currentTime = 0;
+  error: { code: number } | null = null;
   onplay: (() => void) | null = null;
   onpause: (() => void) | null = null;
   onended: (() => void) | null = null;
@@ -81,7 +82,11 @@ describe('useAudioPreview', () => {
     const { result } = renderHook(() => useAudioPreview());
 
     await act(async () => result.current.playPreview(clip, 'n2'));
-    await act(async () => lastAudio?.onerror?.());
+    await act(async () => {
+      if (!lastAudio) return;
+      lastAudio.error = { code: 4 };
+      lastAudio.onerror?.();
+    });
 
     expect(result.current.unavailableNodeId).toBe('n2');
     expect(result.current.hasPreviewSupport).toBe(true);

@@ -38,7 +38,8 @@ import { labelHeight, labelWidth, placeLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
 import { LinkLegend } from './genealogy/LinkLegend';
-import { type LinkPreviews, LinkList } from './genealogy/LinkList';
+import { LinkList } from './genealogy/LinkList';
+import { PreviewList } from './genealogy/PreviewList';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
 import type { TrackData } from '../types';
@@ -140,17 +141,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   useEffect(() => {
     onNodeClickRef.current = onNodeClick;
   }, [onNodeClick]);
-
-  // A clip that could not be loaded takes its hover label with it.
-  useEffect(() => {
-    if (!unavailableNodeId || !svgRef.current) return;
-    select(svgRef.current)
-      .selectAll<SVGTextElement, unknown>('.preview-indicator')
-      .filter(function () {
-        return this.getAttribute('data-node-id') === unavailableNodeId;
-      })
-      .remove();
-  }, [unavailableNodeId]);
 
   // The graph's size on screen (ResizeObserver). The first one draws the graph and fixes its
   // node scale; a later one moves the layout's middle and keeps the drawing and the zoom
@@ -277,11 +267,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
 
     // Create simulation centered at viewport center
-    const center = forceCenter<CustomNode>(width / 2, height / 2); // Center the whole graph
-    // A light pull to the middle: a track with no link shown (its only link rejected, or
-    // none sent) is not pushed off into the distance, taking the fit with it.
-    const pullX = forceX<CustomNode>(width / 2).strength(0.04);
-    const pullY = forceY<CustomNode>(height / 2).strength(0.04);
     const simulation = forceSimulation<CustomNode, CustomLink>(nodes)
       .force(
         'link',
@@ -290,13 +275,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .distance(linkDistance),
       )
       .force('charge', forceManyBody<CustomNode>().strength(chargeStrength))
-      .force('center', center)
+      .force('center', forceCenter<CustomNode>(width / 2, height / 2)) // Center the whole graph
       .force(
         'collide',
         forceCollide<CustomNode>().radius((d) => d.size + (isMobile ? 8 : 15)),
       )
-      .force('x', pullX)
-      .force('y', pullY);
+      // A light pull to the middle: a track with no link shown (its only link rejected, or
+      // none sent) is not pushed off into the distance, taking the fit with it.
+      .force('x', forceX<CustomNode>(width / 2).strength(0.04))
+      .force('y', forceY<CustomNode>(height / 2).strength(0.04));
     /** The ticks a layout takes to settle from `alpha`, played at once under reduced motion. */
     const ticksToSettle = (alpha: number) =>
       Math.ceil(Math.log(simulation.alphaMin() / alpha) / Math.log(1 - simulation.alphaDecay()));
@@ -817,24 +804,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )
           .style('opacity', 1);
 
-        // A track with a preview says so; the preview plays only from its button (in the list
-        // of links), never on hover.
-        if (d.previewUrl && d.group !== 1) {
-          // Add audio indicator (removed again if the clip cannot be loaded, see above)
-          select(this)
-            .append('text')
-            .attr('class', 'preview-indicator')
-            .attr('aria-hidden', 'true')
-            .attr('data-node-id', d.id)
-            .attr('y', -d.size - 10)
-            .attr('text-anchor', 'middle')
-            .attr('font-family', 'IBM Plex Mono')
-            .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
-            .attr('fill', colors.cyber)
-            // A preview of the node's track, whatever its relation to this one
-            .text('♪ PREVIEW')
-            .call(fadeIn);
-        } else if (isOrigin(d)) {
+        // No hint names a preview: pointing at a track never plays one and clicking it analyses
+        // it; previews play from their own buttons (PreviewList).
+        if (!d.previewUrl && isOrigin(d)) {
           // Fallback visual for origin nodes without preview
           select(this)
             .append('text')
@@ -925,21 +897,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       settle();
     }
 
-    // A resize keeps the drawing, its tracks' size and the zoom: the svg takes the new size and
-    // the layout moves to the new middle (at once under reduced motion).
+    // A resize keeps the drawing, its tracks' size and their places, and the zoom's scale: the
+    // svg takes the new size, and the view moves by half the change, so what was at the middle
+    // of the panel is at its middle again. Nothing moves in the layout, and nothing glides.
     resizeRef.current = (next) => {
+      const [dx, dy] = [(next.width - width) / 2, (next.height - height) / 2];
       ({ width, height } = next);
       svg.attr('width', width).attr('height', height);
-      center.x(width / 2).y(height / 2);
-      pullX.x(width / 2);
-      pullY.y(height / 2);
-      if (reducedMotion) {
-        simulation.alpha(0.3).tick(ticksToSettle(0.3));
-        draw();
-        fitText();
-      } else {
-        simulation.alpha(0.3).restart();
-      }
+      // translateBy moves by graph units: the screen's dx is dx / k of them.
+      const k = transform.k || 1;
+      svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
 
     // Everything the drawing started stops with it: the layout, transitions (the fit's glide,
@@ -968,17 +935,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
   const activeRelation = activeNode ? relationToTrack(links, activeNode.id, currentId) : null;
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
-  // Each related track's preview, played from its button in the list of links.
-  const previewUrls = new Map(
-    nodeList
-      .filter((node) => node.group !== 1 && typeof node.previewUrl === 'string' && node.previewUrl)
-      .map((node) => [node.id, node.previewUrl as string]),
+  // Every drawn related track with a clip, whether or not a shown link names it: each has its
+  // preview button (PreviewList).
+  const previewTracks = nodeList.flatMap((node) =>
+    node.group !== 1 && typeof node.previewUrl === 'string' && node.previewUrl
+      ? [{ id: node.id, url: node.previewUrl }]
+      : [],
   );
-  const previews: LinkPreviews = {
-    urlOf: (id) => previewUrls.get(id),
-    playingId: isPlaying ? playingNodeId : null,
-    toggle: (id, url) => playPreview(url, id),
-  };
 
   return (
     <div className="relative w-full h-full flex flex-col">
@@ -1099,10 +1062,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       </div>
 
       {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
-      {(links.length > 0 || hidden > 0) && (
+      {(links.length > 0 || hidden > 0 || previewTracks.length > 0) && (
         // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
         <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
-          <LinkLegend types={links.map((link) => link.type)} />
+          {(links.length > 0 || hidden > 0) && (
+            <LinkLegend types={links.map((link) => link.type)} />
+          )}
           {hidden > 0 && (
             <p className="text-chrome font-mono text-text-chip" data-testid="links-hidden">
               {hidden === 1
@@ -1110,7 +1075,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 : `${hidden} links not shown: the claims behind them were rejected or cannot be read.`}
             </p>
           )}
-          <LinkList links={links} nameOf={nameOf} previews={previews} />
+          <LinkList links={links} nameOf={nameOf} />
+          <PreviewList
+            tracks={previewTracks}
+            nameOf={nameOf}
+            playingId={isPlaying ? playingNodeId : null}
+            onToggle={(id, url) => playPreview(url, id)}
+          />
         </div>
       )}
     </div>

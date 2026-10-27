@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // d3-timer asks for animation frames through the requestAnimationFrame it finds when it loads:
@@ -14,6 +14,7 @@ const frames = vi.hoisted(() => {
 });
 
 import GenealogyGraph from './GenealogyGraph';
+import { link, node, PACK } from './genealogy/testing';
 
 const CLIP = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
 const RELATED = 'musicbrainz:recording/x y';
@@ -97,6 +98,23 @@ const data = {
   ],
 };
 
+/**
+ * The graph with an origin too: a track a sourced sample says this one uses (its hover hint
+ * fades in), with no clip of its own.
+ */
+const withOrigin = {
+  nodes: [...data.nodes, node('older', 2, 'Older Record - Someone (1984)')],
+  links: [
+    ...data.links,
+    link('older', 'musicbrainz:recording/current', {
+      type: 'sample',
+      kind: 'sourced',
+      origin: 'code',
+      evidenceIds: ['ev-mb-1'],
+    }),
+  ],
+};
+
 const drawnTracks = (container: HTMLElement) => [...container.querySelectorAll('g.nodes > g')];
 const relatedTrack = (container: HTMLElement) => {
   const track = drawnTracks(container).find((g) => g.getAttribute('data-node-id') === RELATED);
@@ -108,6 +126,42 @@ const placeOf = (track: Element) =>
   (/translate\(([-\d.e]+),([-\d.e]+)\)/.exec(track.getAttribute('transform') ?? '') ?? [])
     .slice(1)
     .map(Number);
+/** The zoom, from the drawing's `translate(x,y) scale(k)`. */
+function zoomOf(svg: SVGSVGElement) {
+  const [x, y, k] = (
+    /translate\(([-\d.e]+),([-\d.e]+)\) scale\(([-\d.e]+)\)/.exec(
+      svg.querySelector(':scope > g')?.getAttribute('transform') ?? '',
+    ) ?? []
+  )
+    .slice(1)
+    .map(Number);
+  return { x, y, k };
+}
+/**
+ * Where the graph is on screen, in the svg's pixels: the box of the tracks' discs (their outer
+ * ring), and the centre of the box the fit centres (each track with 40 px more round its disc).
+ */
+function onScreen(svg: SVGSVGElement) {
+  const { x, y, k } = zoomOf(svg);
+  const discs = [...svg.querySelectorAll('g.nodes > g')].map((track) => {
+    const [cx, cy] = placeOf(track);
+    // The outer ring's radius is the track's size + 4; the fit pads the size by 40.
+    const ring = Number(track.querySelector('circle')?.getAttribute('r'));
+    return { cx: x + k * cx, cy: y + k * cy, r: k * ring, pad: k * (ring - 4 + 40) };
+  });
+  const box = (grow: (disc: (typeof discs)[number]) => number) => ({
+    left: Math.min(...discs.map((d) => d.cx - grow(d))),
+    right: Math.max(...discs.map((d) => d.cx + grow(d))),
+    top: Math.min(...discs.map((d) => d.cy - grow(d))),
+    bottom: Math.max(...discs.map((d) => d.cy + grow(d))),
+  });
+  const fitted = box((d) => d.pad);
+  return {
+    k,
+    centre: [(fitted.left + fitted.right) / 2, (fitted.top + fitted.bottom) / 2],
+    discs: box((d) => d.r),
+  };
+}
 const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 beforeEach(() => {
@@ -123,7 +177,7 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph on a resize', () => {
-  it('keeps the zoom, the drawn tracks and their scale, and moves the layout to the new middle', async () => {
+  it('keeps the zoom, the drawn tracks and their scale, and the graph centred on screen', async () => {
     reduceMotion(true);
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
@@ -131,14 +185,16 @@ describe('GenealogyGraph on a resize', () => {
     const zoomed = svg.querySelector(':scope > g');
     const tracks = drawnTracks(container);
     expect(tracks).toHaveLength(2);
-    const transform = zoomed?.getAttribute('transform');
-    expect(transform).toMatch(/scale\(/);
+    const before = onScreen(svg);
+    // Fitted to 800 by 600 at its largest zoom.
+    expect(before.k).toBe(1.5);
+    expect(before.centre[0]).toBeCloseTo(400, 0);
+    expect(before.centre[1]).toBeCloseTo(300, 0);
     const ring = relatedTrack(container).querySelector('circle')?.getAttribute('r');
 
     await act(async () => report?.(400, 300));
 
     expect(svg.querySelector(':scope > g')).toBe(zoomed);
-    expect(zoomed?.getAttribute('transform')).toBe(transform);
     const after = drawnTracks(container);
     expect(after).toHaveLength(2);
     after.forEach((track, i) => {
@@ -146,13 +202,18 @@ describe('GenealogyGraph on a resize', () => {
     });
     // The node scale is the first size's: no smaller tracks on the narrower panel.
     expect(relatedTrack(container).querySelector('circle')?.getAttribute('r')).toBe(ring);
-    // The svg takes the new size, and the layout is centred on it.
+    // The svg takes the new size; on screen the graph keeps its zoom and stays centred on the
+    // panel, every track inside it.
     expect(svg.getAttribute('width')).toBe('400');
     expect(svg.getAttribute('height')).toBe('300');
-    const places = after.map(placeOf);
-    const middle = [0, 1].map((axis) => (places[0][axis] + places[1][axis]) / 2);
-    expect(middle[0]).toBeCloseTo(200, 0);
-    expect(middle[1]).toBeCloseTo(150, 0);
+    const now = onScreen(svg);
+    expect(now.k).toBe(1.5);
+    expect(now.centre[0]).toBeCloseTo(200, 0);
+    expect(now.centre[1]).toBeCloseTo(150, 0);
+    expect(now.discs.left).toBeGreaterThanOrEqual(0);
+    expect(now.discs.right).toBeLessThanOrEqual(400);
+    expect(now.discs.top).toBeGreaterThanOrEqual(0);
+    expect(now.discs.bottom).toBeLessThanOrEqual(300);
   });
 });
 
@@ -181,17 +242,21 @@ describe("GenealogyGraph's pictures", () => {
 });
 
 describe('GenealogyGraph previews', () => {
-  it('never plays a preview when the pointer enters a track', async () => {
+  it('neither plays nor offers a preview when the pointer enters a track', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     await act(async () => {
       relatedTrack(container).dispatchEvent(new MouseEvent('mouseenter'));
     });
     expect(played).toEqual([]);
+    // Clicking the track analyses it: no hint names a preview there.
+    expect(container.querySelector('.preview-indicator')).toBeNull();
+    expect(container.textContent).not.toMatch(/PREVIEW/);
   });
 
-  it('plays a preview from its button in the list of links, which says when it is playing', async () => {
+  it('plays a preview from its button in the list of previews, which says when it is playing', async () => {
     render(<GenealogyGraph data={data} />);
-    const button = screen.getByRole('button', {
+    const previews = screen.getByRole('list', { name: 'Track previews', hidden: true });
+    const button = within(previews).getByRole('button', {
       name: 'Play preview of Under Pressure - Queen (1981)',
       hidden: true,
     });
@@ -205,6 +270,15 @@ describe('GenealogyGraph previews', () => {
     expect(played).toEqual([CLIP]);
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
+  it('has a preview button for a track with a clip whose link is not shown', () => {
+    render(<GenealogyGraph data={{ nodes: data.nodes, links: [] }} />);
+    expect(
+      screen.getByRole('button', {
+        name: 'Play preview of Under Pressure - Queen (1981)',
+        hidden: true,
+      }),
+    ).toBeTruthy();
+  });
 });
 
 describe('GenealogyGraph when it goes', () => {
@@ -216,12 +290,13 @@ describe('GenealogyGraph when it goes', () => {
     }
     const add = vi.spyOn(target as EventTarget, 'addEventListener');
     const remove = vi.spyOn(target as EventTarget, 'removeEventListener');
-    const view = render(<GenealogyGraph data={data} />);
+    const view = render(<GenealogyGraph data={withOrigin} evidence={PACK} />);
     const svg = view.container.querySelector('svg');
     if (!svg) throw new Error('no svg');
-    // The pointer on a track: its hint fades in (a transition), while the layout plays out.
+    // The pointer on the origin: its hint fades in (a transition), while the layout plays out.
+    const origin = view.container.querySelector('g.nodes > g[data-node-id="older"]');
     await act(async () => {
-      relatedTrack(view.container).dispatchEvent(new MouseEvent('mouseenter'));
+      origin?.dispatchEvent(new MouseEvent('mouseenter'));
     });
     expect(view.container.querySelector('.preview-indicator')).not.toBeNull();
 

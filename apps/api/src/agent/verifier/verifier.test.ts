@@ -7,8 +7,10 @@
 import {
   analysisIssues,
   type Claim,
+  ClaimAbout,
   claimIsRejected,
   type Evidence,
+  LinkType,
   linkDisplayKind,
   resultContext,
   TrackAnalysis,
@@ -46,7 +48,14 @@ import type { GenealogyLink } from "../schema.js";
 import type { SonicAgentStateType } from "../state.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
 import { withRun } from "../../logger.js";
-import { applyVerdicts, checkClaims, createVerifierNode, setJudgeTimingForTests } from "./index.js";
+import {
+  applyVerdicts,
+  checkClaims,
+  createVerifierNode,
+  LINK_IS_RELATION,
+  RELATION_ABOUT,
+  setJudgeTimingForTests,
+} from "./index.js";
 import { draftOf, judging, modelClaim, sentStatements, stateFor, trackRecord } from "./testing.js";
 import { audioV2 } from "../testing/measuredAudio.js";
 
@@ -112,6 +121,12 @@ async function verify(
   );
   return { out, llm, writer, result: TrackAnalysis.parse(out.trackData) };
 }
+
+/** The kind and verdict of claim `id` in `claims`. */
+const provenance = (claims: Claim[] | undefined, id: string) => {
+  const claim = claims?.find((each) => each.id === id);
+  return { kind: claim?.kind, verdict: claim?.verdict };
+};
 
 beforeEach(() => {
   store.put.mockReset();
@@ -285,6 +300,28 @@ describe("kinds after the verifier", () => {
     expect(analysisIssues(result)).toEqual([]);
   });
 
+  // Their subjects are not RELATION_ABOUT's: only the link states these claims as relations.
+  it.each([
+    ["producer", "credit"],
+    ["producer", "production"],
+    ["influence", "connection"],
+    ["influence", "history"],
+  ] as const)(
+    "does not source the %s link of a partly supported %s claim either",
+    async (type, about) => {
+      const claim = modelClaim("rel", { about, evidenceIds: ["ev-track"] });
+      const { result } = await verify(
+        [claim],
+        [linkTo("rel", ["ev-track"], { type })],
+        () => "partial",
+      );
+
+      expect(provenance(result.claims, "rel")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(result.genealogy.links[0].kind).toBe("inferred");
+      expect(analysisIssues(result)).toEqual([]);
+    },
+  );
+
   it("draws a link whose claim the verifier rejects as an inferred influence, with clean link checks", async () => {
     for (const verdict of ["contradicted", "unsupported"] as const) {
       const claim = modelClaim("rel", { about: "sample", evidenceIds: ["ev-track"] });
@@ -325,6 +362,93 @@ describe("kinds after the verifier", () => {
       ["current", 1],
       ["older", 2],
       ["later", 3],
+    ]);
+  });
+});
+
+describe("a claim about a relation is stated whole, with or without a link", () => {
+  const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
+  const PRODUCTION = "The synth line was played on a Roland Juno-106 at home.";
+  type CardType = "sample" | "production";
+
+  /** An analysis card's claim, as the composer writes it, citing ev-track. */
+  const cardClaim = (id: string, type: CardType, text: string) =>
+    modelClaim(id, {
+      text,
+      about: type,
+      evidenceIds: ["ev-track"],
+      factoid: { title: `About ${id}`, type, entities: [] },
+    });
+
+  // More facts gives a card the same kind and verdict for each of these (factoids/verified.test).
+  it("reads a partly supported sample card as inferred", async () => {
+    const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "partial");
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
+  it("keeps a fully supported sample card sourced", async () => {
+    const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "supported");
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  it("leaves a partly supported production card sourced", async () => {
+    const { result } = await verify(
+      [cardClaim("card", "production", PRODUCTION)],
+      [],
+      () => "partial",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+  });
+
+  it("reads a partly supported cover claim as inferred, and keeps a supported one sourced", async () => {
+    const cover = (id: string) =>
+      modelClaim(id, { text: id, about: "cover", evidenceIds: ["ev-track"] });
+    const { result } = await verify([cover("partly"), cover("whole")], [], (text) =>
+      text === "partly" ? "partial" : "supported",
+    );
+
+    expect(provenance(result.claims, "partly")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(provenance(result.claims, "whole")).toEqual({ kind: "sourced", verdict: "supported" });
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
+  it("states a relation for a sample or a cover and for nothing else", () => {
+    expect([...RELATION_ABOUT].sort()).toEqual(["cover", "sample"]);
+  });
+
+  it("demotes a partly supported claim no link states only when it is about a sample or a cover", () => {
+    // Written out, not derived: whether a claim about each subject states a relation.
+    const isRelation: Record<ClaimAbout, boolean> = {
+      track: false,
+      credit: false,
+      sample: true,
+      cover: true,
+      history: false,
+      sound: false,
+      production: false,
+      connection: false,
+      trivia: false,
+    };
+    expect(Object.keys(isRelation).sort()).toEqual([...ClaimAbout.options].sort());
+    for (const about of ClaimAbout.options) {
+      const claim = modelClaim("c", { about, evidenceIds: ["ev-track"] });
+      const verdicts = new Map([["c", { verdict: "partial" as const, reason: "" }]]);
+      const [judged] = applyVerdicts(draftOf([claim]), verdicts).claims;
+      expect(judged.kind, about).toBe(isRelation[about] ? "inferred" : "sourced");
+    }
+  });
+
+  it("classifies every link type as a relation or not", () => {
+    expect(Object.keys(LINK_IS_RELATION).sort()).toEqual([...LinkType.options].sort());
+    expect(LinkType.options.filter((type) => LINK_IS_RELATION[type])).toEqual([
+      "sample",
+      "interpolation",
+      "cover",
+      "remix",
     ]);
   });
 });

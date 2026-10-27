@@ -123,6 +123,13 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   SEARCH_RATE_LIMIT_WINDOW_MS: "",
   SEARCH_RATE_LIMIT_MAX: "",
   REPLAY_MODE: "",
+  // Development without a Turnstile secret: the bypass applies, and run tokens are signed with a
+  // key of the process's own.
+  TURNSTILE_SECRET_KEY: "",
+  TURNSTILE_BYPASS: "",
+  TURNSTILE_EXPECTED_HOSTNAME: "",
+  RUN_TOKEN_SECRET: "",
+  SSE_HOLD_MS: "",
   CHECKPOINT_RETENTION_HOURS: "",
   STORE_RETENTION_DAYS: "",
   RUN_RETENTION_DAYS: "",
@@ -200,6 +207,18 @@ function untilOutput(child: Child, test: (output: string) => boolean, ms = 4000)
 
 const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
 
+/** A run token from the API on `port`, through the development bypass of Turnstile. */
+async function runToken(port: number): Promise<string> {
+  const res = await fetch(`http://127.0.0.1:${port}/api/runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ turnstileToken: "dev-bypass" }),
+    signal: AbortSignal.timeout(5000),
+  });
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { runToken: string }).runToken;
+}
+
 /**
  * Opens a POST whose body never completes, and resolves once the API has read the request head
  * (it answers "100 Continue"). Until then the connection counts as idle: server.close() closes
@@ -208,6 +227,7 @@ const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
  * answer, such as a 429) means the request was not held.
  */
 async function openRequest(port: number): Promise<{ socket: Socket; received: () => string }> {
+  const token = encodeURIComponent(await runToken(port));
   const socket = connect(port, "127.0.0.1");
   await new Promise<void>((resolve, reject) => {
     socket.once("connect", () => resolve());
@@ -220,7 +240,7 @@ async function openRequest(port: number): Promise<{ socket: Socket; received: ()
     received += chunk;
   });
   socket.write(
-    "POST /api/factoids/more HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+    `POST /api/factoids/more?runToken=${token} HTTP/1.1\r\nHost: 127.0.0.1\r\n` +
       "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
   );
   const interim = await new Promise<string>((resolve) => {
@@ -318,11 +338,12 @@ describe("the API process", () => {
   // The issue's body, and one that passes the required-field check that used to come first and
   // so reached `existingFactoidIds.join` outside any try (which ended the process).
   it("answers malformed factoids bodies with 400 and keeps serving", async () => {
+    const token = encodeURIComponent(await runToken(port));
     for (const body of [
       { existingFactoidIds: "not-an-array" },
       { trackId: "x", trackTitle: "y", existingFactoidIds: "not-an-array" },
     ]) {
-      const res = await fetch(`http://127.0.0.1:${port}/api/factoids/more`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/factoids/more?runToken=${token}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -485,6 +506,38 @@ describe("an API process with invalid configuration", () => {
     ["an unknown replay mode", { REPLAY_MODE: "on" }, "REPLAY_MODE"],
     ["a wildcard CORS origin", { CORS_ORIGINS: "*" }, "CORS_ORIGINS"],
     ["no Spotify keys", { SPOTIFY_CLIENT_ID: "", SPOTIFY_CLIENT_SECRET: "" }, "SPOTIFY_CLIENT_ID"],
+    // Production without the run token and Turnstile secrets (cassettes are refused there too).
+    [
+      "production without a run token secret",
+      { NODE_ENV: "production", LLM_CASSETTE: "" },
+      "RUN_TOKEN_SECRET is required unless NODE_ENV is development or test",
+    ],
+    [
+      "production without a Turnstile secret",
+      { NODE_ENV: "production", LLM_CASSETTE: "" },
+      "TURNSTILE_SECRET_KEY is required unless NODE_ENV is development or test",
+    ],
+    [
+      "NODE_ENV unset outside the dev script",
+      { NODE_ENV: "", LLM_CASSETTE: "" },
+      "RUN_TOKEN_SECRET is required unless NODE_ENV is development or test",
+    ],
+    [
+      "NODE_ENV spelt Production",
+      { NODE_ENV: "Production", LLM_CASSETTE: "" },
+      "TURNSTILE_SECRET_KEY is required unless NODE_ENV is development or test",
+    ],
+    [
+      "the Turnstile bypass in production",
+      {
+        NODE_ENV: "production",
+        LLM_CASSETTE: "",
+        RUN_TOKEN_SECRET: "test-only-run-token-secret-of-at-least-32-bytes",
+        TURNSTILE_SECRET_KEY: "test-only-turnstile-secret",
+        TURNSTILE_BYPASS: "1",
+      },
+      "TURNSTILE_BYPASS=1 is not allowed",
+    ],
   ])(
     "exits 1 before opening the database: %s",
     async (_label, extra, key) => {

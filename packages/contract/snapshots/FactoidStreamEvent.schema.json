@@ -108,6 +108,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "retryAfterMs": {
+            "description": "Milliseconds to wait before asking again, when the refusal says (a rate limit's reset); absent when it is not known",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["type", "runId", "seq", "code", "error"]
@@ -242,6 +248,12 @@
           "error": { "type": "string" },
           "index": {
             "description": "Which factoid failed; absent for the stream",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "retryAfterMs": {
+            "description": "Milliseconds to wait before asking again, when the refusal says (a rate limit's reset); absent when it is not known",
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991

@@ -18,7 +18,7 @@ vi.hoisted(() => {
 
 import { SpotifyAuthManager } from "../../sources/spotify.js";
 import { closeDatabase, initializeDatabase } from "../../store/database.js";
-import { createTestApp } from "../testApp.js";
+import { createTestApp, withRunToken } from "../testApp.js";
 import analyzeRouter from "./analyze.js";
 
 const app = createTestApp(analyzeRouter);
@@ -63,7 +63,9 @@ describe("analyze with no Spotify match", () => {
   });
 
   it("POST /api/analyze answers 422 no_match", async () => {
-    const res = await request(app).post("/api/analyze").send({ query: "zzzz no such song one" });
+    const res = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "zzzz no such song one" });
 
     expect(res.status).toBe(422);
     expect(res.body).toMatchObject({ success: false, code: "no_match" });
@@ -74,7 +76,7 @@ describe("analyze with no Spotify match", () => {
 
   it("the stream reports an error with code no_match", async () => {
     const res = await request(app)
-      .get("/api/analyze/stream")
+      .get(withRunToken("/api/analyze/stream"))
       .query({ query: "zzzz no such song two" })
       .buffer(true)
       .parse((response, callback) => {

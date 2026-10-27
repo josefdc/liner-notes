@@ -1,9 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RunTokenError, requestRunToken } from './agent/apiClient';
 import { loadEventSchemas, resetSkippedReports } from './agent/events';
 import { LOG_LIMIT } from './agent/runLog';
 import type { TrackData } from '../types';
 import {
+  eitherSignal,
   OUTDATED_ERROR,
   STREAM_INACTIVITY_TIMEOUT_MS,
   type UseAgentReturn,
@@ -69,6 +71,14 @@ class FakeEventSource {
     if (this.closed) return;
     act(() => this.onerror?.(new Event('error')));
   }
+
+  /** The server answers the request with an error status (a 401): closed before it opened. */
+  readyState: number | undefined;
+  refuse() {
+    if (this.closed) return;
+    this.readyState = 2;
+    act(() => this.onerror?.(new Event('error')));
+  }
 }
 
 const streams = () => FakeEventSource.instances;
@@ -98,12 +108,25 @@ const factoid = (id: string) => ({ id, title: `Fact ${id}`, content: 'Content.',
 const completeLogs = (logs: Array<{ message: string }>) =>
   logs.filter((log) => log.message.startsWith('Analysis complete')).length;
 
+// The run token every analysis, resume and factoid request carries (agent/runToken.ts): asked
+// for with the development bypass's Turnstile token, since tests set no site key.
+vi.mock('./agent/apiClient', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./agent/apiClient')>()),
+  requestRunToken: vi.fn(async () => ({
+    runToken: `token-${++tokensIssued}`,
+    expiresAt: Date.now() + 30 * 60_000,
+  })),
+}));
+let tokensIssued = 0;
+
 let fetchSpy: ReturnType<typeof vi.fn>;
 
 // The stream reader is a chunk of its own; once it is loaded, streams open at once.
 beforeAll(() => loadEventSchemas());
 
 beforeEach(() => {
+  tokensIssued = 0;
+  vi.mocked(requestRunToken).mockClear();
   FakeEventSource.instances = [];
   resetSkippedReports();
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -116,16 +139,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function startAnalysis(query = 'Hurt') {
+/** Lets the hook's pending promises settle: the run token request answers at once. */
+async function tokenSettled() {
+  await act(async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  });
+}
+
+async function startAnalysis(query = 'Hurt') {
   const hook = renderHook(() => useAgent());
-  act(() => {
-    hook.result.current.analyze(query);
+  await act(async () => {
+    await hook.result.current.analyze(query);
   });
   return hook;
 }
 
-function openPicker() {
-  const hook = startAnalysis();
+async function openPicker() {
+  const hook = await startAnalysis();
   const analysis = lastStream();
   analysis.send({ type: 'connected', threadId: 't1' });
   analysis.send(interrupt());
@@ -133,8 +163,8 @@ function openPicker() {
 }
 
 describe('useAgent stream errors', () => {
-  it('shows an error on a broken stream and never re-runs the analysis', () => {
-    const { result } = startAnalysis();
+  it('shows an error on a broken stream and never re-runs the analysis', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.fail();
@@ -147,10 +177,10 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('asks for a clicked suggestion by its track id, and a typed search by text only', () => {
+  it('asks for a clicked suggestion by its track id, and a typed search by text only', async () => {
     const hook = renderHook(() => useAgent());
-    act(() => {
-      hook.result.current.analyze('Hurt Johnny Cash', { trackId: '28cnXtME493VX9NOw9cIUh' });
+    await act(async () => {
+      await hook.result.current.analyze('Hurt Johnny Cash', { trackId: '28cnXtME493VX9NOw9cIUh' });
     });
     expect(lastStream().url).toContain(
       '/api/analyze/stream?query=Hurt%20Johnny%20Cash&trackId=28cnXtME493VX9NOw9cIUh',
@@ -159,23 +189,25 @@ describe('useAgent stream errors', () => {
     // A retry asks for the same track again.
     lastStream().fail();
     act(() => hook.result.current.retry());
+    await tokenSettled();
     expect(lastStream().url).toContain('&trackId=28cnXtME493VX9NOw9cIUh');
 
-    act(() => {
-      hook.result.current.analyze('Hurt');
+    await act(async () => {
+      await hook.result.current.analyze('Hurt');
     });
     expect(lastStream().url).not.toContain('trackId');
     // An id that is not a Spotify track id is not sent.
-    act(() => {
-      hook.result.current.analyze('Hurt', { trackId: 'c1' });
+    await act(async () => {
+      await hook.result.current.analyze('Hurt', { trackId: 'c1' });
     });
     expect(lastStream().url).not.toContain('trackId');
   });
 
-  it('retries by opening a new stream for the same query', () => {
-    const { result } = startAnalysis('Hurt');
+  it('retries by opening a new stream for the same query', async () => {
+    const { result } = await startAnalysis('Hurt');
     lastStream().fail();
     act(() => result.current.retry());
+    await tokenSettled();
 
     expect(streams()).toHaveLength(2);
     expect(lastStream().url).toContain('/api/analyze/stream?query=Hurt');
@@ -183,9 +215,9 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('ends the run with the reload hint on a complete event it cannot read', () => {
+  it('ends the run with the reload hint on a complete event it cannot read', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     lastStream().send({ type: 'complete' });
 
     expect(result.current.status).toBe('error');
@@ -195,8 +227,8 @@ describe('useAgent stream errors', () => {
     expect(lastStream().closed).toBe(true);
   });
 
-  it('treats a stream that ends without a result as an error', () => {
-    const { result } = startAnalysis();
+  it('treats a stream that ends without a result as an error', async () => {
+    const { result } = await startAnalysis();
     lastStream().send({ type: 'connected', threadId: 't1' });
     lastStream().send({ type: 'done' });
 
@@ -204,8 +236,8 @@ describe('useAgent stream errors', () => {
     expect(result.current.errorCode).toBe('no_result');
   });
 
-  it('gives a search without candidates the no_match code', () => {
-    const { result } = startAnalysis();
+  it('gives a search without candidates the no_match code', async () => {
+    const { result } = await startAnalysis();
     lastStream().send({ type: 'connected', threadId: 't1' });
     lastStream().send(interrupt([]));
 
@@ -213,7 +245,7 @@ describe('useAgent stream errors', () => {
     expect(result.current.errorCode).toBe('no_match');
   });
 
-  it('gives a stream that cannot be opened its own code', () => {
+  it('gives a stream that cannot be opened its own code', async () => {
     vi.stubGlobal(
       'EventSource',
       class {
@@ -222,14 +254,14 @@ describe('useAgent stream errors', () => {
         }
       },
     );
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
 
     expect(result.current.status).toBe('error');
     expect(result.current.errorCode).toBe('stream_open_failed');
   });
 
   it('gives a resume that cannot be opened its own code', async () => {
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     vi.stubGlobal(
       'EventSource',
       class {
@@ -248,8 +280,8 @@ describe('useAgent stream errors', () => {
 });
 
 describe('useAgent results', () => {
-  it('ignores a duplicate complete for the same thread', () => {
-    const { result } = startAnalysis();
+  it('ignores a duplicate complete for the same thread', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'complete', data: track });
@@ -264,11 +296,11 @@ describe('useAgent results', () => {
     expect(analysis.closed).toBe(true);
   });
 
-  it('keeps a closed analysis from touching a newer run', () => {
-    const { result } = startAnalysis('first');
+  it('keeps a closed analysis from touching a newer run', async () => {
+    const { result } = await startAnalysis('first');
     const first = lastStream();
-    act(() => {
-      result.current.analyze('second');
+    await act(async () => {
+      await result.current.analyze('second');
     });
     expect(first.closed).toBe(true);
 
@@ -280,8 +312,8 @@ describe('useAgent results', () => {
 });
 
 describe('useAgent progress', () => {
-  it('moves to checking when the verifier reports, after composing', () => {
-    const { result } = startAnalysis();
+  it('moves to checking when the verifier reports, after composing', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({
@@ -310,7 +342,7 @@ describe('useAgent progress', () => {
   it.each(['click', 'countdown'] as const)(
     'logs what happened in plain words, for a row picked by %s: no emoji and no prototype copy',
     async (pickedBy) => {
-      const { hook, analysis } = openPicker();
+      const { hook, analysis } = await openPicker();
       await act(async () => {
         await hook.result.current.selectCandidate('c2', pickedBy);
       });
@@ -332,8 +364,8 @@ describe('useAgent progress', () => {
     },
   );
 
-  it("logs the picker with the server's own words, as a Spotify step and not a warning", () => {
-    const hook = startAnalysis();
+  it("logs the picker with the server's own words, as a Spotify step and not a warning", async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     const message = 'One possible track from Spotify; confirm it or search again';
@@ -349,8 +381,8 @@ describe('useAgent progress', () => {
     );
   });
 
-  it('keeps the time since the run started that a status line was sent with, and none without', () => {
-    const hook = startAnalysis();
+  it('keeps the time since the run started that a status line was sent with, and none without', async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     analysis.send({
@@ -374,35 +406,35 @@ describe('useAgent progress', () => {
     );
   });
 
-  it('gives every line a server event writes the time that event was sent with', () => {
+  it('gives every line a server event writes the time that event was sent with', async () => {
     const timeOf = (logs: Array<{ message: string; elapsedMs?: number }>, start: string) =>
       logs.find((log) => log.message.startsWith(start))?.elapsedMs;
 
-    const { hook, analysis } = openPicker();
+    const { hook, analysis } = await openPicker();
     expect(timeOf(hook.result.current.logs, 'Connected')).toBeUndefined();
     analysis.send({ type: 'done' });
 
-    const timed = startAnalysis();
+    const timed = await startAnalysis();
     const stream = lastStream();
     stream.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     stream.send({ ...interrupt(), elapsedMs: 312 });
     expect(timeOf(timed.result.current.logs, 'Connected')).toBe(0);
     expect(timed.result.current.logs.at(-1)?.elapsedMs).toBe(312);
 
-    const done = startAnalysis();
+    const done = await startAnalysis();
     const result = lastStream();
     result.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     result.send({ type: 'complete', data: track, elapsedMs: 20_167 });
     expect(timeOf(done.result.current.logs, 'Analysis complete')).toBe(20_167);
     expect(timeOf(done.result.current.logs, 'Searching for')).toBeUndefined();
 
-    const failed = startAnalysis();
+    const failed = await startAnalysis();
     const errored = lastStream();
     errored.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     errored.send({ type: 'error', code: 'timeout', error: 'Took too long.', elapsedMs: 90_000 });
     expect(timeOf(failed.result.current.logs, 'Error: ')).toBe(90_000);
 
-    const ended = startAnalysis();
+    const ended = await startAnalysis();
     const cut = lastStream();
     cut.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
     cut.send({ type: 'done', elapsedMs: 4_250 });
@@ -411,8 +443,8 @@ describe('useAgent progress', () => {
     );
   });
 
-  it('logs a neutral picker line when the server sends no words', () => {
-    const hook = startAnalysis();
+  it('logs a neutral picker line when the server sends no words', async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ ...interrupt(candidates.slice(0, 1)), message: '' });
@@ -421,8 +453,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
-  it('asks about one track when only one of the candidates sent can be read', () => {
-    const hook = startAnalysis();
+  it('asks about one track when only one of the candidates sent can be read', async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({
@@ -436,8 +468,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.logs.at(-1)?.message).toBe(question);
   });
 
-  it('counts the rows shown when the page cannot read one of the candidates sent', () => {
-    const hook = startAnalysis();
+  it('counts the rows shown when the page cannot read one of the candidates sent', async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({
@@ -453,8 +485,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.logs.at(-1)?.message).toBe(question);
   });
 
-  it("keeps the server's question for every row it sends, rows sharing an ISRC too", () => {
-    const hook = startAnalysis();
+  it("keeps the server's question for every row it sends, rows sharing an ISRC too", async () => {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     // Words that are not the picker's own count: kept only if the page did not rewrite them.
@@ -479,8 +511,8 @@ describe('useAgent progress', () => {
   // The API's order, from the recorded demo run: the historian reports before any await, the
   // engineer only after its health probe and preview lookup (research at 328 ms, AUDIO-INIT at
   // 753 ms, the engineer's result at 10 877 ms).
-  function realOrder() {
-    const hook = startAnalysis();
+  async function realOrder() {
+    const hook = await startAnalysis();
     const analysis = lastStream();
     const send = (node: string, message: string, code?: string) =>
       analysis.send({ type: 'status', node, message, ...(code ? { code } : {}) });
@@ -490,8 +522,8 @@ describe('useAgent progress', () => {
     return { hook, analysis, send };
   }
 
-  it('shows the measurement while research runs, in the order the API sends them', () => {
-    const { hook, send } = realOrder();
+  it('shows the measurement while research runs, in the order the API sends them', async () => {
+    const { hook, send } = await realOrder();
     const status = () => hook.result.current.status;
     send('historian', 'Starting the research: Last.fm, MusicBrainz', 'RESEARCH-START');
     expect(status()).toBe('researching');
@@ -512,8 +544,8 @@ describe('useAgent progress', () => {
     expect(status()).toBe('composing');
   });
 
-  it('keeps measuring for the whole measurement after a research cache hit', () => {
-    const { hook, send } = realOrder();
+  it('keeps measuring for the whole measurement after a research cache hit', async () => {
+    const { hook, send } = await realOrder();
     const stored = 'Using the research stored by an earlier run';
     send('historian', stored, 'RESEARCH-FOUND');
     expect(hook.result.current.status).toBe('researching');
@@ -527,8 +559,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.status).toBe('researching');
   });
 
-  it('measures first when the engineer reports before the historian, as older runs did', () => {
-    const { hook, send } = realOrder();
+  it('measures first when the engineer reports before the historian, as older runs did', async () => {
+    const { hook, send } = await realOrder();
     send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
     expect(hook.result.current.status).toBe('measuring');
     send('historian', 'Starting the research', 'RESEARCH-START');
@@ -537,8 +569,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.status).toBe('researching');
   });
 
-  it('never says it measures on an audio cache hit', () => {
-    const { hook, send } = realOrder();
+  it('never says it measures on an audio cache hit', async () => {
+    const { hook, send } = await realOrder();
     send('engineer', 'Measured in an earlier run: 123 BPM, A minor', 'AUDIO-COMPLETE');
     expect(hook.result.current.status).toBe('analyzing');
     send('historian', 'Starting the research', 'RESEARCH-START');
@@ -554,7 +586,7 @@ describe('useAgent progress', () => {
     ['an audio cache hit', ['AUDIO-COMPLETE']],
   ])(
     'never moves the step back, whatever the order of the engineer and historian (%s)',
-    (_, audio) => {
+    async (_, audio) => {
       const RANK: Partial<Record<string, number>> = {
         searching: 1,
         analyzing: 2,
@@ -574,7 +606,7 @@ describe('useAgent progress', () => {
       expect(orders.length).toBeGreaterThan(2);
 
       for (const order of orders) {
-        const { hook, send } = realOrder();
+        const { hook, send } = await realOrder();
         const seen: string[] = [hook.result.current.status];
         for (const code of [...order, 'LLM-CONNECT']) {
           const node = code.startsWith('AUDIO')
@@ -598,7 +630,7 @@ describe('useAgent progress', () => {
   );
 
   it('says it reads the selected track after a pick, not that it reads the audio', async () => {
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2', 'countdown');
     });
@@ -606,8 +638,8 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Reading the track you selected...');
   });
 
-  it("checks only on the verifier's model lines, not on its cover-art lookup", () => {
-    const { result } = startAnalysis();
+  it("checks only on the verifier's model lines, not on its cover-art lookup", async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     const verifier = (code: string, message: string) =>
       analysis.send({ type: 'status', node: 'verifier', code, message });
@@ -619,8 +651,8 @@ describe('useAgent progress', () => {
     expect(result.current.status).toBe('checking');
   });
 
-  it("says the composer's fallback in the server's words, not that notes are being written", () => {
-    const { result } = startAnalysis();
+  it("says the composer's fallback in the server's words, not that notes are being written", async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'status', node: 'composer', code: 'LLM-CONNECT', message: 'Writing' });
@@ -640,8 +672,8 @@ describe('useAgent run log', () => {
     ...(code ? { code } : {}),
   });
 
-  it('shows a line the server sends twice in a row once, without a new state', () => {
-    const { result } = startAnalysis();
+  it('shows a line the server sends twice in a row once, without a new state', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send(status('Searching: sample history on the web'));
@@ -661,8 +693,8 @@ describe('useAgent run log', () => {
     ]);
   });
 
-  it("keeps the run's latest lines only, numbered in the run", () => {
-    const { result } = startAnalysis();
+  it("keeps the run's latest lines only, numbered in the run", async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     for (let n = 0; n < LOG_LIMIT + 10; n++) analysis.send(status(`Line ${n}`));
@@ -673,11 +705,11 @@ describe('useAgent run log', () => {
     expect(logs[0].index).toBe(12);
   });
 
-  it('starts the numbering again for a new run', () => {
-    const { result } = startAnalysis();
+  it('starts the numbering again for a new run', async () => {
+    const { result } = await startAnalysis();
     lastStream().send({ type: 'connected', threadId: 't1' });
-    act(() => {
-      result.current.analyze('Another song');
+    await act(async () => {
+      await result.current.analyze('Another song');
     });
     expect(result.current.logs.map((log) => [log.message, log.index])).toEqual([
       ['Searching for "Another song"', 0],
@@ -686,8 +718,8 @@ describe('useAgent run log', () => {
 });
 
 describe('useAgent track picker', () => {
-  it('keeps the picker when the analysis stream ends after the interrupt', () => {
-    const { hook, analysis } = openPicker();
+  it('keeps the picker when the analysis stream ends after the interrupt', async () => {
+    const { hook, analysis } = await openPicker();
     analysis.send({ type: 'done' });
     analysis.fail();
 
@@ -696,9 +728,9 @@ describe('useAgent track picker', () => {
     expect(analysis.closed).toBe(true);
   });
 
-  it('opens the picker on the interrupt only: a candidates event is not part of the protocol', () => {
+  it('opens the picker on the interrupt only: a candidates event is not part of the protocol', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const hook = startAnalysis();
+    const hook = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'candidates', candidates });
@@ -714,7 +746,7 @@ describe('useAgent track picker', () => {
     ['click', '&pickedBy=click'],
     ['countdown', '&pickedBy=countdown'],
   ] as const)('says the row was picked by %s when it resumes', async (pickedBy, param) => {
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2', pickedBy);
     });
@@ -724,7 +756,7 @@ describe('useAgent track picker', () => {
   });
 
   it('without a thread, asks for the picked row by id with the searched text and how it was picked', async () => {
-    const hook = startAnalysis('Hurt');
+    const hook = await startAnalysis('Hurt');
     const analysis = lastStream();
     const rows = candidates.map((c, i) => ({ ...c, id: `28cnXtME493VX9NOw9cIU${i}` }));
     analysis.send({ type: 'connected', threadId: '' });
@@ -740,11 +772,12 @@ describe('useAgent track picker', () => {
     // A retry asks the same way.
     lastStream().fail();
     act(() => hook.result.current.retry());
+    await tokenSettled();
     expect(lastStream().url).toContain(`&trackId=${rows[1].id}&pickedBy=countdown`);
   });
 
   it('without a thread, ends with an error for a row that has no Spotify id', async () => {
-    const hook = startAnalysis('Hurt');
+    const hook = await startAnalysis('Hurt');
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: '' });
     analysis.send({ ...interrupt(), threadId: '' });
@@ -762,7 +795,7 @@ describe('useAgent track picker', () => {
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {
-    const { hook, analysis } = openPicker();
+    const { hook, analysis } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
       await hook.result.current.selectCandidate('c2');
@@ -792,7 +825,7 @@ describe('useAgent track picker', () => {
   it('replays the recording of the very track picked when its resume is refused', async () => {
     // Recorded under its own title, which the query names alone.
     recordings({ id: 'c2', title: 'Hurt (Recorded)', artist: 'Nine Inch Nails' });
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -815,7 +848,7 @@ describe('useAgent track picker', () => {
   it('never shows another take than the one picked', async () => {
     // c1 shares the picked track's title, but only c1 is recorded.
     recordings({ id: 'c1', title: 'Hurt', artist: 'Nine Inch Nails' });
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -827,7 +860,7 @@ describe('useAgent track picker', () => {
 
     // And when the recordings cannot be listed: the refusal as well.
     fetchSpy.mockImplementation(async () => new Response('{}', { status: 503 }));
-    const second = openPicker();
+    const second = await openPicker();
     await act(async () => {
       await second.hook.result.current.selectCandidate('c2');
     });
@@ -838,7 +871,7 @@ describe('useAgent track picker', () => {
 
   it('does not show a replayed result of another track than the one asked for', async () => {
     recordings({ id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails' });
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -849,8 +882,8 @@ describe('useAgent track picker', () => {
     expect(hook.result.current.trackData).toBeNull();
   });
 
-  it('says a run is a replay from the replay notice on, and ends it as a replay', () => {
-    const { result } = startAnalysis('Hurt Nine Inch Nails');
+  it('says a run is a replay from the replay notice on, and ends it as a replay', async () => {
+    const { result } = await startAnalysis('Hurt Nine Inch Nails');
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     expect(result.current.isReplay).toBe(false);
@@ -874,14 +907,14 @@ describe('useAgent track picker', () => {
       'Recorded analysis replayed. Nothing was analyzed live.',
     );
     expect(completeLogs(result.current.logs)).toBe(0);
-    act(() => {
-      result.current.analyze('Another');
+    await act(async () => {
+      await result.current.analyze('Another');
     });
     expect(result.current.isReplay).toBe(false);
   });
 
-  it('does not take a run whose model answers came from stored answers for a recording', () => {
-    const { result } = startAnalysis('Hurt Nine Inch Nails');
+  it('does not take a run whose model answers came from stored answers for a recording', async () => {
+    const { result } = await startAnalysis('Hurt Nine Inch Nails');
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     // A live run in development with model cassettes: "replay", but no recording time or commit.
@@ -896,8 +929,8 @@ describe('useAgent track picker', () => {
     expect(completeLogs(result.current.logs)).toBe(1);
 
     // Stored answers that say when and where they were recorded: still not a recording.
-    act(() => {
-      result.current.analyze('Hurt Nine Inch Nails');
+    await act(async () => {
+      await result.current.analyze('Hurt Nine Inch Nails');
     });
     const again = lastStream();
     again.send({ type: 'connected', threadId: 't1' });
@@ -919,7 +952,7 @@ describe('useAgent track picker', () => {
   });
 
   it("does not let the analysis stream's late done close the resume stream", async () => {
-    const { hook, analysis } = openPicker();
+    const { hook, analysis } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -937,7 +970,7 @@ describe('useAgent track picker', () => {
   });
 
   it('shows an error with no fallback request when the resume stream breaks', async () => {
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -957,8 +990,8 @@ describe('useAgent inactivity watchdog', () => {
     expect(STREAM_INACTIVITY_TIMEOUT_MS).toBe(45_000);
   });
 
-  it('never times out a stream that has sent no heartbeat', () => {
-    const { result } = startAnalysis();
+  it('never times out a stream that has sent no heartbeat', async () => {
+    const { result } = await startAnalysis();
     lastStream().send({ type: 'connected', threadId: 't1' });
     act(() => vi.advanceTimersByTime(10 * 60_000));
 
@@ -966,8 +999,8 @@ describe('useAgent inactivity watchdog', () => {
     expect(lastStream().closed).toBe(false);
   });
 
-  it('stays quiet while heartbeats arrive and fails after a silence once armed', () => {
-    const { result } = startAnalysis();
+  it('stays quiet while heartbeats arrive and fails after a silence once armed', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.sendNamed('heartbeat');
     for (let i = 0; i < 8; i++) {
@@ -987,8 +1020,8 @@ describe('useAgent inactivity watchdog', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('counts other events as activity once armed', () => {
-    const { result } = startAnalysis();
+  it('counts other events as activity once armed', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.sendNamed('heartbeat');
     act(() => vi.advanceTimersByTime(40_000));
@@ -998,8 +1031,8 @@ describe('useAgent inactivity watchdog', () => {
     expect(result.current.status).toBe('analyzing');
   });
 
-  it('does not fail a run that already has its result', () => {
-    const { result } = startAnalysis();
+  it('does not fail a run that already has its result', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.sendNamed('heartbeat');
     analysis.send({ type: 'complete', data: track });
@@ -1031,8 +1064,12 @@ describe('useAgent factoid stream', () => {
     verdictReason: null,
     numericCheck: 'n/a',
   });
-  /** Asks for more facts, as a click does (its state changes are applied at once). */
-  function ask(
+  /**
+   * Asks for more facts, as a click does (its state changes are applied at once), and waits for
+   * the stream to open (the run token comes first). The answer is in a list, so awaiting this
+   * does not wait for it.
+   */
+  async function ask(
     hook: { current: UseAgentReturn },
     ...args: Parameters<UseAgentReturn['moreFactoidsStream']>
   ) {
@@ -1040,7 +1077,10 @@ describe('useAgent factoid stream', () => {
     act(() => {
       pending = hook.current.moreFactoidsStream(...args);
     });
-    return pending;
+    // A rejection is handled by the test that awaits it.
+    pending.catch(() => {});
+    await tokenSettled();
+    return [pending] as const;
   }
   /** One answer: `connected` naming the next round, the events given, then `done`. */
   function answer(stream: FakeEventSource, nextRound: number | undefined, ...events: object[]) {
@@ -1051,7 +1091,7 @@ describe('useAgent factoid stream', () => {
 
   it("asks for the first round with the result's own run id", async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const pending = ask(hook, result());
+    const [pending] = await ask(hook, result());
     const stream = lastStream();
     expect(new URL(stream.url, 'http://x').pathname).toBe('/api/factoids/more/stream');
     expect(query(stream).get('runId')).toBe('run-1');
@@ -1063,11 +1103,11 @@ describe('useAgent factoid stream', () => {
 
   it('asks the second click for the round the first answer named, with its facts as known', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
     await first;
 
-    const second = ask(hook, result());
+    const [second] = await ask(hook, result());
     expect(streams()).toHaveLength(2);
     expect(query(lastStream()).get('round')).toBe('1');
     expect(query(lastStream()).get('existingIds')).toBe('s1,fc-a');
@@ -1077,23 +1117,23 @@ describe('useAgent factoid stream', () => {
 
   it('makes no request once every round has been asked, and says so in its state', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1);
     await first;
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 1, finished: false });
-    const second = ask(hook, result());
+    const [second] = await ask(hook, result());
     answer(lastStream(), 2);
     await second;
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 2, finished: true });
 
-    const third = ask(hook, result());
+    const [third] = await ask(hook, result());
     expect(streams()).toHaveLength(2);
     await expect(third).resolves.toEqual([]);
   });
 
   it('keeps every claim once, by its id, and every fact once, across clicks', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1, {
       type: 'factoid',
       data: { ...factoid('fc-a'), claimId: 'c-a' },
@@ -1101,7 +1141,7 @@ describe('useAgent factoid stream', () => {
     });
     await expect(first).resolves.toMatchObject([{ id: 'fc-a' }]);
 
-    const second = ask(hook, result());
+    const [second] = await ask(hook, result());
     answer(
       lastStream(),
       2,
@@ -1120,7 +1160,7 @@ describe('useAgent factoid stream', () => {
   it('keeps the other facts when one fact of the answer failed, and says which', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result: hook } = renderHook(() => useAgent());
-    const pending = ask(hook, result());
+    const [pending] = await ask(hook, result());
     answer(
       lastStream(),
       1,
@@ -1136,7 +1176,7 @@ describe('useAgent factoid stream', () => {
     expect(warn).not.toHaveBeenCalled();
 
     // The next click starts with no failure of its own.
-    void ask(hook, result());
+    await ask(hook, result());
     expect(hook.current.moreFacts?.failed).toEqual([]);
   });
 
@@ -1148,7 +1188,7 @@ describe('useAgent factoid stream', () => {
     const { result: hook } = renderHook(() => useAgent());
     // The API names the next round before it writes anything (as it does).
     for (const nextRound of [1, 2]) {
-      const pending = ask(hook, result());
+      const [pending] = await ask(hook, result());
       expect(query(lastStream()).get('round')).toBe('0');
       answer(lastStream(), nextRound, ...allFailed('failed'));
       expect(await pending).toEqual([]);
@@ -1156,7 +1196,7 @@ describe('useAgent factoid stream', () => {
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
     expect(hook.current.moreFacts?.failed).toHaveLength(3);
 
-    const third = ask(hook, result());
+    const [third] = await ask(hook, result());
     expect(streams()).toHaveLength(3);
     expect(query(lastStream()).get('round')).toBe('0');
     answer(lastStream(), 1);
@@ -1178,7 +1218,7 @@ describe('useAgent factoid stream', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result: hook } = renderHook(() => useAgent());
     for (const nextRound of [1, 2]) {
-      const pending = ask(hook, result());
+      const [pending] = await ask(hook, result());
       expect(query(lastStream()).get('round')).toBe('0');
       answer(lastStream(), nextRound, ...events);
       await pending;
@@ -1188,14 +1228,14 @@ describe('useAgent factoid stream', () => {
 
   it("prefers the API's word on whether rounds are left over its own count", async () => {
     const early = renderHook(() => useAgent()).result;
-    const first = ask(early, result());
+    const [first] = await ask(early, result());
     lastStream().send({ type: 'connected', nextRound: 1, roundsLeft: false });
     lastStream().send({ type: 'done' });
     await first;
     expect(early.current.moreFacts).toMatchObject({ nextRound: 1, finished: true });
 
     const late = renderHook(() => useAgent()).result;
-    const second = ask(late, result());
+    const [second] = await ask(late, result());
     lastStream().send({ type: 'connected', nextRound: 2, roundsLeft: true });
     lastStream().send({ type: 'done' });
     await second;
@@ -1210,13 +1250,13 @@ describe('useAgent factoid stream', () => {
       error: 'Busy.',
       index,
     });
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') }, busy(1), busy(2));
     await first;
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
 
     // The API asks round 0's angles again (the round sent is the round asked).
-    const second = ask(hook, result());
+    const [second] = await ask(hook, result());
     expect(query(lastStream()).get('round')).toBe('0');
     expect(query(lastStream()).get('existingIds')).toBe('s1,fc-a');
     lastStream().send({ type: 'connected', nextRound: 1, roundsLeft: true });
@@ -1225,7 +1265,7 @@ describe('useAgent factoid stream', () => {
     await second;
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 1, finished: false });
 
-    const third = ask(hook, result());
+    const [third] = await ask(hook, result());
     expect(query(lastStream()).get('round')).toBe('1');
     lastStream().send({ type: 'connected', nextRound: 2, roundsLeft: false });
     lastStream().send({ type: 'done' });
@@ -1241,7 +1281,7 @@ describe('useAgent factoid stream', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result: hook } = renderHook(() => useAgent());
     if (how === 'silent') vi.useFakeTimers();
-    const pending = ask(hook, result());
+    const [pending] = await ask(hook, result());
     pending.catch(() => {});
     lastStream().send({ type: 'connected', nextRound: 1 });
     if (how === 'error') {
@@ -1260,14 +1300,14 @@ describe('useAgent factoid stream', () => {
     }
     expect(hook.current.moreFacts).toMatchObject({ answerFailed: true, nextRound: 0 });
 
-    void ask(hook, result());
+    await ask(hook, result());
     expect(hook.current.moreFacts?.answerFailed).toBe(false);
   });
 
   it('is not a failure when the caller leaves', async () => {
     const { result: hook } = renderHook(() => useAgent());
     const controller = new AbortController();
-    const pending = ask(hook, result(), { signal: controller.signal });
+    const [pending] = await ask(hook, result(), { signal: controller.signal });
     act(() => controller.abort());
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(hook.current.moreFacts?.answerFailed).toBe(false);
@@ -1275,13 +1315,13 @@ describe('useAgent factoid stream', () => {
 
   it('lets the facts go on reset, also for a result with the same run id', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
     await first;
 
     act(() => hook.current.reset());
     expect(hook.current.moreFacts).toBeNull();
-    const again = ask(hook, result());
+    const [again] = await ask(hook, result());
     expect(query(lastStream()).get('round')).toBe('0');
     expect(query(lastStream()).get('existingIds')).toBe('s1');
     answer(lastStream(), 1);
@@ -1289,21 +1329,21 @@ describe('useAgent factoid stream', () => {
   });
 
   it('lets the facts go when a new analysis starts, also for a result with the same run id', async () => {
-    const hook = startAnalysis();
-    const first = ask(hook.result, result());
+    const hook = await startAnalysis();
+    const [first] = await ask(hook.result, result());
     answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
     await first;
     expect(hook.result.current.moreFacts?.factoids).toHaveLength(1);
 
-    act(() => {
-      hook.result.current.analyze('Hurt');
+    await act(async () => {
+      await hook.result.current.analyze('Hurt');
     });
     expect(hook.result.current.moreFacts).toBeNull();
     lastStream().send({ type: 'complete', data: track });
     expect(hook.result.current.moreFacts).toBeNull();
 
     // The same track, with the same run id: nothing of the earlier page is kept or sent.
-    const again = ask(hook.result, result());
+    const [again] = await ask(hook.result, result());
     expect(query(lastStream()).get('round')).toBe('0');
     expect(query(lastStream()).get('existingIds')).toBe('s1');
     expect(hook.result.current.moreFacts?.factoids).toEqual([]);
@@ -1313,7 +1353,7 @@ describe('useAgent factoid stream', () => {
 
   it('keeps the run whose evidence the facts were checked against, or none', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const checked = ask(hook, result());
+    const [checked] = await ask(hook, result());
     const stream = lastStream();
     for (const [seq, event] of [
       { type: 'connected', nextRound: 1 },
@@ -1326,17 +1366,17 @@ describe('useAgent factoid stream', () => {
     expect(hook.current.moreFacts?.runId).toBe('run-1');
 
     // The API had no stored result for the run: its stream names none.
-    const unchecked = ask(hook, result());
+    const [unchecked] = await ask(hook, result());
     answer(lastStream(), 2, { type: 'factoid', data: factoid('fc-b') });
     await unchecked;
     expect(hook.current.moreFacts?.runId).toBeNull();
   });
 
   it("sends no run id for a result that names none, never the analysis thread's", async () => {
-    const hook = startAnalysis();
+    const hook = await startAnalysis();
     lastStream().send({ type: 'connected', threadId: 't1' });
     lastStream().send({ type: 'complete', data: track });
-    const pending = ask(hook.result, result(null));
+    const [pending] = await ask(hook.result, result(null));
     expect(query(lastStream()).has('runId')).toBe(false);
     expect(query(lastStream()).get('round')).toBe('0');
     answer(lastStream(), 1);
@@ -1345,12 +1385,12 @@ describe('useAgent factoid stream', () => {
 
   it("starts from the first round for another result, and lets the first one's facts go", async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const first = ask(hook, result());
+    const [first] = await ask(hook, result());
     answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
     await first;
 
     const other = { ...result({ id: 'run-2', mode: 'live' }), id: 'c9' } as TrackData;
-    const pending = ask(hook, other);
+    const [pending] = await ask(hook, other);
     expect(query(lastStream()).get('round')).toBe('0');
     expect(query(lastStream()).get('runId')).toBe('run-2');
     expect(query(lastStream()).get('existingIds')).toBe('s1');
@@ -1361,21 +1401,21 @@ describe('useAgent factoid stream', () => {
 
   it('asks the same round again after a stream that broke', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const broken = ask(hook, result());
+    const [broken] = await ask(hook, result());
     lastStream().send({ type: 'connected', nextRound: 1 });
     lastStream().fail();
     await expect(broken).rejects.toThrow('Factoid stream connection failed');
 
-    const again = ask(hook, result());
+    const [again] = await ask(hook, result());
     expect(query(lastStream()).get('round')).toBe('0');
     answer(lastStream(), 1);
     await again;
   });
 
   it('closes the stream and rejects when a new analysis starts', async () => {
-    const { result: hook } = startAnalysis();
+    const { result: hook } = await startAnalysis();
     lastStream().send({ type: 'complete', data: track });
-    const pending = ask(hook, result());
+    const [pending] = await ask(hook, result());
     const more = lastStream();
     more.send({ type: 'factoid', data: factoid('f1') });
 
@@ -1389,7 +1429,7 @@ describe('useAgent factoid stream', () => {
   it("closes the stream when the caller's signal aborts", async () => {
     const { result: hook } = renderHook(() => useAgent());
     const controller = new AbortController();
-    const pending = ask(hook, result(), { signal: controller.signal });
+    const [pending] = await ask(hook, result(), { signal: controller.signal });
     const more = lastStream();
     controller.abort();
 
@@ -1400,7 +1440,7 @@ describe('useAgent factoid stream', () => {
   it('reports the rate limit and a paused budget to the caller, and goes on', async () => {
     const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
-    const pending = ask(hook, result(), { onUnavailable });
+    const [pending] = await ask(hook, result(), { onUnavailable });
     const more = lastStream();
     more.send({ type: 'error', code: 'rate_limited', error: 'busy', index: 0 });
     more.send({ type: 'error', code: 'budget_exhausted', error: 'paused', index: 1 });
@@ -1417,7 +1457,7 @@ describe('useAgent factoid stream', () => {
     const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
     const recorded = result({ id: 'run-1', mode: 'replay', replayed: 'run' });
-    const pending = ask(hook, recorded, { onUnavailable });
+    const [pending] = await ask(hook, recorded, { onUnavailable });
     lastStream().send({ type: 'error', code: 'not_found', error: 'gone' });
     lastStream().send({ type: 'done' });
     await pending;
@@ -1427,14 +1467,14 @@ describe('useAgent factoid stream', () => {
   it("sends the result's run mode, so more facts stay on its side", async () => {
     const { result: hook } = renderHook(() => useAgent());
     const recorded = result({ id: 'run-1', mode: 'replay', replayed: 'run' });
-    const pending = ask(hook, recorded);
+    const [pending] = await ask(hook, recorded);
     const more = lastStream();
     expect(query(more).get('mode')).toBe('replay');
     // Recorded facts name no round: the next click asks the same round again.
     more.send({ type: 'done' });
     await pending;
     expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
-    const older = ask(hook, result(null));
+    const [older] = await ask(hook, result(null));
     expect(query(lastStream()).has('mode')).toBe(false);
     lastStream().send({ type: 'done' });
     await older;
@@ -1443,7 +1483,7 @@ describe('useAgent factoid stream', () => {
   it('reports live calls switched off (a server that replays recordings only)', async () => {
     const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
-    const pending = ask(hook, result(), { onUnavailable });
+    const [pending] = await ask(hook, result(), { onUnavailable });
     const more = lastStream();
     more.send({ type: 'error', code: 'live_disabled', error: 'off' });
     more.send({ type: 'done' });
@@ -1455,7 +1495,7 @@ describe('useAgent factoid stream', () => {
 
   it('resolves on done', async () => {
     const { result: hook } = renderHook(() => useAgent());
-    const pending = ask(hook, result());
+    const [pending] = await ask(hook, result());
     lastStream().send({ type: 'done' });
 
     await expect(pending).resolves.toEqual([]);
@@ -1481,9 +1521,9 @@ describe('useAgent search suggestions', () => {
 // The API's stream protocol: heartbeats as data messages, the picker announced by `interrupt`
 // alone, and refusals sent as an `error` with a code, followed by `done`.
 describe('useAgent with the interrupt-only protocol', () => {
-  it('arms the watchdog on heartbeats sent as data messages', () => {
+  it('arms the watchdog on heartbeats sent as data messages', async () => {
     vi.useFakeTimers();
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     for (let i = 0; i < 6; i++) {
@@ -1498,7 +1538,7 @@ describe('useAgent with the interrupt-only protocol', () => {
   });
 
   it('opens the picker on an interrupt without a candidates event and resumes', async () => {
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'status', node: 'scout', message: 'Searching' });
@@ -1524,7 +1564,7 @@ describe('useAgent with the interrupt-only protocol', () => {
   });
 
   it('shows a refused resume with its code, makes no request and retries the search', async () => {
-    const { result } = startAnalysis('Hurt');
+    const { result } = await startAnalysis('Hurt');
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send(interrupt());
@@ -1547,6 +1587,7 @@ describe('useAgent with the interrupt-only protocol', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     act(() => result.current.retry());
+    await tokenSettled();
     expect(lastStream().url).toContain('/api/analyze/stream?query=Hurt');
     expect(result.current.errorCode).toBeNull();
   });
@@ -1555,9 +1596,9 @@ describe('useAgent with the interrupt-only protocol', () => {
 // Every message is parsed with the contract's schema; repeats, events of another run and a
 // second result of the run are dropped (agent/events.ts).
 describe('useAgent typed events', () => {
-  it('skips unknown types and events that do not fit the contract, logging each kind once', () => {
+  it('skips unknown types and events that do not fit the contract, logging each kind once', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'mystery', detail: 'from a newer server' });
@@ -1580,8 +1621,8 @@ describe('useAgent typed events', () => {
     expect(result.current.status).toBe('complete');
   });
 
-  it('drops an event repeated with the same seq, and one that arrives out of order', () => {
-    const { result } = startAnalysis();
+  it('drops an event repeated with the same seq, and one that arrives out of order', async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'status', node: 'engineer', message: 'Analyzing', seq: 5 });
@@ -1593,8 +1634,8 @@ describe('useAgent typed events', () => {
     expect(messages).not.toContain('Earlier');
   });
 
-  it("ignores events of another run on the run's stream", () => {
-    const { result } = startAnalysis();
+  it("ignores events of another run on the run's stream", async () => {
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'complete', data: { ...track, title: 'Older run' }, runId: 't0' });
@@ -1607,7 +1648,7 @@ describe('useAgent typed events', () => {
   });
 
   it('takes one complete per run, across its analysis and resume streams', async () => {
-    const { hook, analysis } = openPicker();
+    const { hook, analysis } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -1622,9 +1663,9 @@ describe('useAgent typed events', () => {
     expect(completeLogs(hook.result.current.logs)).toBe(1);
   });
 
-  it('shows a result from a newer API that this page reads leniently', () => {
+  it('shows a result from a newer API that this page reads leniently', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({
@@ -1636,9 +1677,9 @@ describe('useAgent typed events', () => {
     expect(result.current.trackData?.title).toBe('Hurt');
   });
 
-  it('opens the picker on an interrupt from a newer API', () => {
+  it('opens the picker on an interrupt from a newer API', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = startAnalysis();
+    const { result } = await startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({
@@ -1652,7 +1693,7 @@ describe('useAgent typed events', () => {
   });
 
   it('shows a refused resume that carries a run id of its own', async () => {
-    const { hook } = openPicker();
+    const { hook } = await openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
@@ -1672,6 +1713,7 @@ describe('useAgent typed events', () => {
       ...track,
       factoids: [],
     } as unknown as TrackData);
+    await tokenSettled();
     const more = lastStream();
     more.send({ type: 'connected' });
     more.send({ type: 'factoid', data: { ...factoid('f1'), type: 'lyrics' } });
@@ -1680,6 +1722,288 @@ describe('useAgent typed events', () => {
     more.send({ type: 'done' });
 
     expect((await pending).map((data) => data.id)).toEqual(['f2']);
+  });
+});
+
+describe('useAgent run tokens', () => {
+  const tokenOf = (stream: FakeEventSource) =>
+    new URL(stream.url, 'http://x').searchParams.get('runToken');
+  const moreFactsOf = () =>
+    ({ ...track, factoids: [], run: { id: 'run-1', mode: 'live' } }) as unknown as TrackData;
+
+  it('asks for a token with the bypass when no site key is set, one per analysis', async () => {
+    const { result } = await startAnalysis('Hurt');
+    expect(requestRunToken).toHaveBeenLastCalledWith('dev-bypass', expect.any(AbortSignal));
+    expect(tokenOf(lastStream())).toBe('token-1');
+
+    lastStream().fail();
+    act(() => result.current.retry());
+    await tokenSettled();
+    expect(tokenOf(lastStream())).toBe('token-2');
+
+    await act(async () => {
+      await result.current.analyze('Another', { trackId: '28cnXtME493VX9NOw9cIUh' });
+    });
+    expect(tokenOf(lastStream())).toBe('token-3');
+    expect(lastStream().url).toContain('&trackId=28cnXtME493VX9NOw9cIUh&runToken=token-3');
+  });
+
+  it("resumes with the run's own token, without asking for another", async () => {
+    const { hook } = await openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+    expect(lastStream().url).toContain('/analyze/stream/resume?threadId=t1&selectedTrackId=c2');
+    expect(tokenOf(lastStream())).toBe('token-1');
+    expect(requestRunToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for more facts with the latest token while it lasts, or else a new one', async () => {
+    // A result shown without an analysis on this page (a stored run): a token of its own.
+    const { result } = renderHook(() => useAgent());
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    await tokenSettled();
+    expect(tokenOf(lastStream())).toBe('token-1');
+    lastStream().send({ type: 'done' });
+    await act(() => pending);
+
+    // The same token again, while it is good.
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    expect(tokenOf(lastStream())).toBe('token-1');
+    lastStream().send({ type: 'done' });
+    await act(() => pending);
+
+    // After an analysis, its token.
+    await act(async () => {
+      await result.current.analyze('Hurt');
+    });
+    expect(tokenOf(lastStream())).toBe('token-2');
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    expect(tokenOf(lastStream())).toBe('token-2');
+    lastStream().send({ type: 'done' });
+    await act(() => pending);
+    expect(requestRunToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks for a new token for more facts once the one held is about to expire', async () => {
+    vi.mocked(requestRunToken).mockResolvedValueOnce({
+      runToken: 'short-lived',
+      expiresAt: Date.now() + 10_000,
+    });
+    const { result } = await startAnalysis('Hurt');
+    expect(tokenOf(lastStream())).toBe('short-lived');
+
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    await tokenSettled();
+    expect(tokenOf(lastStream())).toBe('token-1');
+    lastStream().send({ type: 'done' });
+    await act(() => pending);
+  });
+
+  it("ends the run with the API's refusal when no token is given, and opens no stream", async () => {
+    vi.mocked(requestRunToken).mockRejectedValueOnce(
+      new RunTokenError('Too many requests. Please try again later.', 'rate_limited'),
+    );
+    const { result } = await startAnalysis('Hurt');
+    expect(streams()).toHaveLength(0);
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('rate_limited');
+    expect(result.current.error).toBe('Too many requests. Please try again later.');
+
+    // No answer: the connection failed.
+    vi.mocked(requestRunToken).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await act(async () => {
+      await result.current.analyze('Hurt');
+    });
+    expect(streams()).toHaveLength(0);
+    expect(result.current.errorCode).toBe('connection_lost');
+
+    // An answer this page cannot read (a proxy's error page).
+    vi.mocked(requestRunToken).mockRejectedValueOnce(
+      new RunTokenError('Run token refused (HTTP 502)', null),
+    );
+    await act(async () => {
+      await result.current.analyze('Hurt');
+    });
+    expect(streams()).toHaveLength(0);
+    expect(result.current.errorCode).toBe('stream_open_failed');
+  });
+
+  /** Asks for more facts and returns the stream it opened, once the token is in. */
+  async function askMore(result: { current: UseAgentReturn }) {
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    pending.catch(() => {});
+    await tokenSettled();
+    return { stream: lastStream(), pending };
+  }
+
+  it('asks for a new token, once, after the API refused the one held for more facts', async () => {
+    const { result } = renderHook(() => useAgent());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = await askMore(result);
+    expect(tokenOf(first.stream)).toBe('token-1');
+    first.stream.send({ type: 'error', code: 'auth_expired', error: 'Check again.' });
+    first.stream.send({ type: 'done' });
+    await act(() => first.pending);
+    // Nothing is asked for by itself.
+    expect(requestRunToken).toHaveBeenCalledTimes(1);
+
+    const second = await askMore(result);
+    expect(tokenOf(second.stream)).toBe('token-2');
+    second.stream.send({ type: 'done' });
+    await act(() => second.pending);
+    const third = await askMore(result);
+    expect(tokenOf(third.stream)).toBe('token-2');
+    expect(requestRunToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks for a new token after a more-facts stream failed (a 401 reads as one)', async () => {
+    const { result } = renderHook(() => useAgent());
+    const first = await askMore(result);
+    first.stream.fail();
+    await act(async () => {
+      await expect(first.pending).rejects.toThrow('Factoid stream connection failed');
+    });
+    expect(requestRunToken).toHaveBeenCalledTimes(1);
+    const second = await askMore(result);
+    expect(tokenOf(second.stream)).toBe('token-2');
+  });
+
+  it('does not ask for more facts with a token the API refused on the analysis', async () => {
+    const { result } = await startAnalysis('Hurt');
+    lastStream().send({ type: 'error', code: 'auth_expired', error: 'Check again.' });
+    expect(result.current.errorCode).toBe('auth_expired');
+    const more = await askMore(result);
+    expect(tokenOf(more.stream)).toBe('token-2');
+  });
+
+  it('says the server did not accept a stream it refused, and drops its token', async () => {
+    const { result } = await startAnalysis('Hurt');
+    lastStream().refuse();
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('stream_refused');
+    const more = await askMore(result);
+    expect(tokenOf(more.stream)).toBe('token-2');
+
+    // A resume refused the same way.
+    const picker = await openPicker();
+    await act(async () => {
+      await picker.hook.result.current.selectCandidate('c2', 'click');
+    });
+    lastStream().refuse();
+    expect(picker.hook.result.current.errorCode).toBe('stream_refused');
+    // A connection that drops once open is still a lost connection.
+    const dropped = await startAnalysis('Hurt');
+    lastStream().fail();
+    expect(dropped.result.current.errorCode).toBe('connection_lost');
+  });
+
+  describe('in a browser without AbortSignal.any', () => {
+    // The page's AbortSignal may inherit `any`: it is hidden by a property of its own.
+    const own = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    beforeEach(() => {
+      Object.defineProperty(AbortSignal, 'any', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    });
+    afterEach(() => {
+      if (own) Object.defineProperty(AbortSignal, 'any', own);
+      else Reflect.deleteProperty(AbortSignal, 'any');
+    });
+
+    it('asks for more facts with the caller signal, and stops when it aborts', async () => {
+      expect(AbortSignal.any).toBeUndefined();
+      const { result } = renderHook(() => useAgent());
+      const controller = new AbortController();
+      let pending!: Promise<unknown>;
+      act(() => {
+        pending = result.current.moreFactoidsStream(moreFactsOf(), { signal: controller.signal });
+      });
+      pending.catch(() => {});
+      await tokenSettled();
+      expect(tokenOf(lastStream())).toBe('token-1');
+      lastStream().send({ type: 'done' });
+      await act(() => pending);
+
+      // The caller leaves while the token is on its way: the request is aborted with it.
+      const seen: AbortSignal[] = [];
+      vi.mocked(requestRunToken).mockImplementationOnce(
+        (_token, signal) =>
+          new Promise((_resolve, reject) => {
+            if (signal) seen.push(signal);
+            signal?.addEventListener('abort', () => reject(new DOMException('gone', 'AbortError')));
+          }),
+      );
+      const other = renderHook(() => useAgent());
+      const leaving = new AbortController();
+      act(() => {
+        pending = other.result.current.moreFactoidsStream(moreFactsOf(), {
+          signal: leaving.signal,
+        });
+      });
+      await tokenSettled();
+      expect(seen).toHaveLength(1);
+      leaving.abort();
+      await act(async () => {
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      });
+      expect(seen[0].aborted).toBe(true);
+    });
+
+    it('makes one signal that aborts with either of two', () => {
+      const a = new AbortController();
+      const b = new AbortController();
+      const either = eitherSignal(a.signal, b.signal);
+      expect(either.aborted).toBe(false);
+      b.abort();
+      expect(either.aborted).toBe(true);
+      const already = new AbortController();
+      already.abort();
+      expect(eitherSignal(new AbortController().signal, already.signal).aborted).toBe(true);
+      expect(eitherSignal(a.signal)).toBe(a.signal);
+    });
+  });
+
+  it('says a build with a site key but no Turnstile check cannot start, without asking', async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
+    try {
+      const { result } = await startAnalysis('Hurt');
+      expect(streams()).toHaveLength(0);
+      expect(requestRunToken).not.toHaveBeenCalled();
+      expect(result.current.errorCode).toBe('verification_unavailable');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('says more facts could not be asked for when no token is given', async () => {
+    vi.mocked(requestRunToken).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useAgent());
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.moreFactoidsStream(moreFactsOf());
+    });
+    await act(async () => {
+      await expect(pending).rejects.toThrow('Failed to fetch');
+    });
+    expect(streams()).toHaveLength(0);
+    expect(result.current.moreFacts?.answerFailed).toBe(true);
+    expect(result.current.moreFacts?.nextRound).toBe(0);
   });
 });
 

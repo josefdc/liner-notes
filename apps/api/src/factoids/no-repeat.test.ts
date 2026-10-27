@@ -10,7 +10,7 @@ import type { Router } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { messagesOf } from "../agent/testing/stubLlm.js";
-import { createTestApp } from "../http/testApp.js";
+import { createTestApp, withRunToken } from "../http/testApp.js";
 import { createFactoidsRouter } from "../http/routes/factoids.js";
 import { FACTOID_LIMITS, FACTOID_ROUNDS, FIRST_FACTOID_ROUND } from "@liner-notes/contract";
 import { LlmError } from "../llm/errors.js";
@@ -79,7 +79,7 @@ describe("a run with five stored facts", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ ...DEMO_TRACK, runId: RUN_ID, existingFactoidIds: [] })
       .timeout(5000);
 
@@ -120,14 +120,17 @@ async function streamOf(router: Router, query: string): Promise<Array<Record<str
   const { port } = server.address() as AddressInfo;
   const body = await new Promise<string>((resolve, reject) => {
     http
-      .get(`http://127.0.0.1:${port}/api/factoids/more/stream?${query}`, (res) => {
-        let text = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk: string) => {
-          text += chunk;
-        });
-        res.on("end", () => resolve(text));
-      })
+      .get(
+        `http://127.0.0.1:${port}${withRunToken(`/api/factoids/more/stream?${query}`)}`,
+        (res) => {
+          let text = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk: string) => {
+            text += chunk;
+          });
+          res.on("end", () => resolve(text));
+        },
+      )
       .on("error", reject);
   });
   server.closeAllConnections();
@@ -201,7 +204,7 @@ describe("fact ids and repeats across clicks", () => {
     const answers = texts.map((text) => card(text));
     const post = (router: Router, existingFactoidIds: string[]) =>
       request(createTestApp(router))
-        .post("/api/factoids/more")
+        .post(withRunToken("/api/factoids/more"))
         .send({ ...DEMO_TRACK, runId: RUN_ID, existingFactoidIds })
         .timeout(5000);
 
@@ -240,7 +243,7 @@ describe("repeats", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ ...DEMO_TRACK, runId: RUN_ID })
       .timeout(5000);
 
@@ -261,7 +264,7 @@ describe("repeats", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ ...DEMO_TRACK, runId: RUN_ID })
       .timeout(5000);
 
@@ -285,7 +288,7 @@ const THREE = [
 /** A POST for the demo track with these ids (and round, when given). */
 const postMore = (router: Router, existingFactoidIds: string[], extra: object = {}) =>
   request(createTestApp(router))
-    .post("/api/factoids/more")
+    .post(withRunToken("/api/factoids/more"))
     .send({ ...DEMO_TRACK, existingFactoidIds, ...extra })
     .timeout(5000);
 
@@ -479,7 +482,7 @@ describe("the prompt", () => {
         id === RUN_ID ? storedRun([evidenceItem("ev-1", "A record.")], stored) : null,
     });
     await request(createTestApp(router))
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ ...DEMO_TRACK, ...track, existingFactoidIds: [], ...extra })
       .timeout(5000);
     return messagesOf(llm.calls[0]).user;
@@ -511,7 +514,7 @@ describe("the prompt", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ ...withoutArtist, trackId: "local-track-1", runId: RUN_ID })
       .timeout(5000);
 

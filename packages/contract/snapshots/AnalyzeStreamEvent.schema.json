@@ -223,7 +223,13 @@
             "maximum": 9007199254740991
           },
           "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
-          "error": { "type": "string", "description": "Short message for the user" }
+          "error": { "type": "string", "description": "Short message for the user" },
+          "retryAfterMs": {
+            "description": "Milliseconds to wait before asking again, when the refusal says (a rate limit's reset); absent when it is not known",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
         },
         "required": ["type", "runId", "seq", "code", "error"]
       },
@@ -483,7 +489,13 @@
             "maximum": 9007199254740991
           },
           "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
-          "error": { "type": "string", "description": "Short message for the user" }
+          "error": { "type": "string", "description": "Short message for the user" },
+          "retryAfterMs": {
+            "description": "Milliseconds to wait before asking again, when the refusal says (a rate limit's reset); absent when it is not known",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
         },
         "required": ["type", "runId", "seq", "code", "error"],
         "additionalProperties": false

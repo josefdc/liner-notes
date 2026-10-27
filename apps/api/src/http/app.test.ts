@@ -5,19 +5,34 @@
 
 import { Router } from "express";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   DEFAULT_RATE_LIMIT,
   DEFAULT_SEARCH_RATE_LIMIT,
   type HttpSettings,
 } from "../config/settings.js";
+import { mkdtempSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { brotliCompressSync, deflateSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import express from "express";
 import { llm } from "../llm/invoke.js";
 import { type CapturedLogs, captureLogsForTests } from "../logger.js";
+import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { createApp } from "./app.js";
+import { TEST_TURNSTILE_TOKEN, testAuth, withRunToken } from "./testApp.js";
 import { asyncRoute } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
 
@@ -54,7 +69,20 @@ function settings(overrides: Partial<HttpSettings> = {}): HttpSettings {
   };
 }
 
-const app = (overrides?: Partial<HttpSettings>) => createApp({ http: settings(overrides) });
+const app = (overrides?: Partial<HttpSettings>) =>
+  createApp({ ...testAuth, http: settings(overrides) });
+
+// A request that starts an analysis checks that its run token started no run yet (the runs
+// store), before the body is read.
+let dbDir: string;
+beforeAll(() => {
+  dbDir = mkdtempSync(join(tmpdir(), "app-test-"));
+  initializeDatabase(join(dbDir, "test.db"));
+});
+afterAll(() => {
+  closeDatabase();
+  rmSync(dbDir, { recursive: true, force: true });
+});
 
 let logs: CapturedLogs;
 beforeEach(() => {
@@ -122,7 +150,10 @@ describe("malformed factoids body (acceptance 1)", () => {
   ])("answers 400 to %j and the app keeps serving", async (body) => {
     const server = app();
 
-    const res = await request(server).post("/api/factoids/more").send(body).timeout(2000);
+    const res = await request(server)
+      .post(withRunToken("/api/factoids/more"))
+      .send(body)
+      .timeout(2000);
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("invalid_input");
 
@@ -134,7 +165,7 @@ describe("malformed factoids body (acceptance 1)", () => {
 describe("error handling", () => {
   it("answers malformed JSON with a JSON 400 and no stack trace", async () => {
     const res = await request(app())
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .set("Content-Type", "application/json")
       .send("{bad");
 
@@ -150,7 +181,7 @@ describe("error handling", () => {
 
   it("answers a body over 16 kB with a JSON 413", async () => {
     const res = await request(app())
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ trackTitle: "a".repeat(17 * 1024) });
 
     expect(res.status).toBe(413);
@@ -159,7 +190,7 @@ describe("error handling", () => {
 
   it("accepts a body just under the limit", async () => {
     const res = await request(app())
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ padding: "a".repeat(15 * 1024) });
 
     expect(res.status).toBe(400); // reaches validation
@@ -177,7 +208,7 @@ describe("error handling", () => {
         throw new Error("secret detail at /home/user/app/src/y.ts");
       }),
     );
-    const server = createApp({ http: settings(), routers: [router] });
+    const server = createApp({ ...testAuth, http: settings(), routers: [router] });
 
     for (const path of ["/api/throws", "/api/rejects"]) {
       const res = await request(server).get(path).timeout(2000);
@@ -202,7 +233,7 @@ describe("error handling", () => {
     router.get("/api/plain", async () => {
       throw new Error("plain");
     });
-    const server = createApp({ http: settings(), routers: [router] });
+    const server = createApp({ ...testAuth, http: settings(), routers: [router] });
 
     for (const path of ["/api/wrapped", "/api/plain"]) {
       logs.clear();
@@ -219,7 +250,7 @@ describe("error handling", () => {
       res.write("partial");
       next(new Error("failed half way"));
     });
-    const server = createApp({ http: settings(), routers: [router] });
+    const server = createApp({ ...testAuth, http: settings(), routers: [router] });
 
     const res = await request(server).get("/api/partial").timeout(2000);
     expect(res.status).toBe(200);
@@ -227,15 +258,15 @@ describe("error handling", () => {
   });
 
   it("logs a request body the client abandoned, and answers nothing", async () => {
-    const server = createApp({ http: settings() }).listen(0, "127.0.0.1");
+    const server = createApp({ ...testAuth, http: settings() }).listen(0, "127.0.0.1");
     await new Promise((resolve) => server.once("listening", resolve));
     const { port } = server.address() as { port: number };
     try {
       const socket = connect(port, "127.0.0.1");
       await new Promise((resolve) => socket.once("connect", resolve));
       socket.write(
-        "POST /api/analyze HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n" +
-          "Content-Length: 100\r\n\r\n{",
+        `POST ${withRunToken("/api/analyze")} HTTP/1.1\r\nHost: x\r\n` +
+          "Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       socket.destroy();
@@ -296,7 +327,7 @@ describe("content encodings", () => {
     post: Awaited<ReturnType<typeof listen>>["post"],
     encoding: string,
     body: Buffer,
-    path = "/api/factoids/more",
+    path = withRunToken("/api/factoids/more"),
   ) =>
     post(
       path,
@@ -360,7 +391,7 @@ describe("content encodings", () => {
       // A chunked body (no Content-Length) is refused the same way.
       expect(
         await post(
-          "/api/factoids/more",
+          withRunToken("/api/factoids/more"),
           {
             "Content-Type": "application/json",
             "Content-Encoding": "br",
@@ -437,7 +468,7 @@ describe("requests without a JSON body", () => {
       bodies.map(([label, type, body]) => [path, label, type, body] as const),
     ),
   )("POST %s with %s answers 400 invalid_input", async (path, _label, type, body) => {
-    let req = request(app()).post(path).timeout(2000);
+    let req = request(app()).post(withRunToken(path)).timeout(2000);
     if (type) req = req.set("Content-Type", type);
     const res = await (body === undefined ? req : req.send(body));
 
@@ -503,7 +534,7 @@ describe("rate limits", () => {
     const statuses: number[] = [];
     let last: request.Response | undefined;
     for (let i = 0; i < 5; i++) {
-      last = await request(server).post("/api/factoids/more").send({});
+      last = await request(server).post(withRunToken("/api/factoids/more")).send({});
       statuses.push(last.status);
     }
 
@@ -518,12 +549,14 @@ describe("rate limits", () => {
 
   it("counts the analysis routes and the factoid stream in the same limit", async () => {
     const server = app(limited);
-    await request(server).post("/api/analyze").send({});
-    await request(server).get("/api/analyze/stream");
-    await request(server).post("/api/analyze/resume").send({});
+    await request(server).post(withRunToken("/api/analyze")).send({});
+    await request(server).get(withRunToken("/api/analyze/stream"));
+    await request(server).post(withRunToken("/api/analyze/resume")).send({});
 
-    const stream = await request(server).get("/api/factoids/more/stream?trackTitle=x");
-    const resume = await request(server).get("/api/analyze/stream/resume");
+    const stream = await request(server).get(
+      withRunToken("/api/factoids/more/stream?trackTitle=x"),
+    );
+    const resume = await request(server).get(withRunToken("/api/analyze/stream/resume"));
     // Typed events (see sse.ts): a factoid stream has no analysis run; a refused analysis
     // stream gets a run id of its own.
     for (const [res, runId] of [
@@ -537,17 +570,24 @@ describe("rate limits", () => {
           seq: 0,
           code: "rate_limited",
           error: "Too many requests. Please try again later.",
+          retryAfterMs: expect.any(Number),
         },
         { type: "done", runId, seq: 1, timestamp: expect.any(String) },
       ]);
+      // The time left in the limit's window (60 s here), as Retry-After says to a JSON client.
+      const { retryAfterMs } = messages(res)[0] as { retryAfterMs: number };
+      expect(retryAfterMs).toBeGreaterThan(50_000);
+      expect(retryAfterMs).toBeLessThanOrEqual(60_000);
     }
   });
 
   it("refuses an event-stream request in the stream with 200, a JSON one with 429", async () => {
     const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
-    await request(server).post("/api/factoids/more").send({});
+    await request(server).post(withRunToken("/api/factoids/more")).send({});
 
-    const stream = await request(server).get("/api/factoids/more/stream?trackTitle=x");
+    const stream = await request(server).get(
+      withRunToken("/api/factoids/more/stream?trackTitle=x"),
+    );
     expect(stream.status).toBe(200);
     expect(stream.headers["content-type"]).toContain("text/event-stream");
     expect(messages(stream).map((m) => [m.type, m.code])).toEqual([
@@ -557,24 +597,24 @@ describe("rate limits", () => {
 
     // A request for an event stream (an EventSource sends this Accept header) on any route.
     const accepting = await request(server)
-      .get("/api/factoids/more")
+      .get(withRunToken("/api/factoids/more"))
       .set("Accept", "text/event-stream");
     expect(accepting.status).toBe(200);
     expect(messages(accepting)[0]).toMatchObject({ type: "error", code: "rate_limited" });
 
-    const json = await request(server).post("/api/factoids/more").send({});
+    const json = await request(server).post(withRunToken("/api/factoids/more")).send({});
     expect(json.status).toBe(429);
     expect(Number(json.headers["retry-after"])).toBeGreaterThan(0);
   });
 
   it("refuses on the factoid routes' old paths as on the new ones", async () => {
     const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
-    await request(server).post("/api/factoids/more").send({});
+    await request(server).post(withRunToken("/api/factoids/more")).send({});
 
     const answers = [];
     for (const path of ["/api/factoids/more", "/api/factoids/decrypt"]) {
-      const stream = await request(server).get(`${path}/stream?trackTitle=x`);
-      const json = await request(server).post(path).send({});
+      const stream = await request(server).get(withRunToken(`${path}/stream?trackTitle=x`));
+      const json = await request(server).post(withRunToken(path)).send({});
       answers.push({
         stream: [
           stream.status,
@@ -596,7 +636,7 @@ describe("rate limits", () => {
     const statuses = [];
     for (let i = 0; i < 3; i++) {
       const res = await request(server)
-        .post("/api/factoids/more")
+        .post(withRunToken("/api/factoids/more"))
         .set("Content-Type", "application/json")
         .send("{bad");
       statuses.push(res.status);
@@ -615,14 +655,21 @@ describe("rate limits", () => {
 
     // Invalid requests (JSON and in-stream) from many addresses use none of the shared budget.
     for (let i = 0; i < 10; i++) {
-      expect((await request(server).post("/api/analyze").set(from(i)).send({})).status).toBe(400);
-      const stream = await request(server).get("/api/factoids/more/stream").set(from(i));
+      expect(
+        (await request(server).post(withRunToken("/api/analyze")).set(from(i)).send({})).status,
+      ).toBe(400);
+      const stream = await request(server)
+        .get(withRunToken("/api/factoids/more/stream"))
+        .set(from(i));
       expect(messages(stream)[0]).toMatchObject({ code: "invalid_input" });
     }
 
     const statuses = [];
     for (let i = 0; i < 5; i++) {
-      const res = await request(server).post("/api/factoids/more").set(from(i)).send(DECRYPT);
+      const res = await request(server)
+        .post(withRunToken("/api/factoids/more"))
+        .set(from(i))
+        .send(DECRYPT);
       statuses.push(res.status);
     }
     expect(statuses).toEqual([200, 200, 200, 429, 429]);
@@ -639,7 +686,10 @@ describe("rate limits", () => {
       globalRateLimit: { windowMs: 60_000, max: 3 },
     });
     const send = (ip: string) =>
-      request(server).post("/api/factoids/more").set("X-Forwarded-For", ip).send(DECRYPT);
+      request(server)
+        .post(withRunToken("/api/factoids/more"))
+        .set("X-Forwarded-For", ip)
+        .send(DECRYPT);
 
     const greedy = [];
     for (let i = 0; i < 6; i++) greedy.push((await send("203.0.113.1")).status);
@@ -660,7 +710,9 @@ describe("rate limits", () => {
     for (let i = 0; i < 5; i++) {
       expect((await request(server).get("/api/health")).status).toBe(200);
     }
-    expect((await request(server).post("/api/factoids/more").send({})).status).toBe(400);
+    expect((await request(server).post(withRunToken("/api/factoids/more")).send({})).status).toBe(
+      400,
+    );
   });
 
   it("limits readiness per address, on a counter of its own", async () => {
@@ -686,7 +738,10 @@ describe("rate limits", () => {
   it("keys on the client address from X-Forwarded-For only behind a trusted proxy", async () => {
     const behindProxy = app({ ...limited, trustProxy: 1 });
     const from = (ip: string) =>
-      request(behindProxy).post("/api/factoids/more").set("X-Forwarded-For", ip).send({});
+      request(behindProxy)
+        .post(withRunToken("/api/factoids/more"))
+        .set("X-Forwarded-For", ip)
+        .send({});
     for (let i = 0; i < 3; i++) await from("203.0.113.1");
     expect((await from("203.0.113.1")).status).toBe(429);
     expect((await from("203.0.113.2")).status).toBe(400);
@@ -694,7 +749,7 @@ describe("rate limits", () => {
     // Without a trusted proxy the header is ignored: a client cannot pick a fresh key.
     const direct = app(limited);
     const spoofed = (ip: string) =>
-      request(direct).post("/api/factoids/more").set("X-Forwarded-For", ip).send({});
+      request(direct).post(withRunToken("/api/factoids/more")).set("X-Forwarded-For", ip).send({});
     const statuses = [];
     for (let i = 0; i < 4; i++) statuses.push((await spoofed(`203.0.113.${i + 10}`)).status);
     expect(statuses).toEqual([400, 400, 400, 429]);
@@ -702,8 +757,11 @@ describe("rate limits", () => {
 
   it("lets a listed origin read the 429", async () => {
     const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
-    await request(server).post("/api/factoids/more").send({});
-    const res = await request(server).post("/api/factoids/more").set("Origin", LISTED).send({});
+    await request(server).post(withRunToken("/api/factoids/more")).send({});
+    const res = await request(server)
+      .post(withRunToken("/api/factoids/more"))
+      .set("Origin", LISTED)
+      .send({});
 
     expect(res.status).toBe(429);
     expect(res.headers["access-control-allow-origin"]).toBe(LISTED);
@@ -716,9 +774,12 @@ describe("requests other sites make a browser send", () => {
   it("refuses a paid JSON route with 403 when the Origin is not listed", async () => {
     for (const send of [
       (server: ReturnType<typeof app>) =>
-        request(server).post("/api/factoids/more").set("Origin", EVIL).send({}),
+        request(server).post(withRunToken("/api/factoids/more")).set("Origin", EVIL).send({}),
       (server: ReturnType<typeof app>) =>
-        request(server).post("/api/analyze").set("Origin", "null").send({ query: "x" }),
+        request(server)
+          .post(withRunToken("/api/analyze"))
+          .set("Origin", "null")
+          .send({ query: "x" }),
       (server: ReturnType<typeof app>) =>
         request(server).get("/api/search/suggest?query=midnight").set("Origin", EVIL),
     ]) {
@@ -749,7 +810,7 @@ describe("requests other sites make a browser send", () => {
 
   it("refuses a same-site request with no Origin (another page on localhost, any port)", async () => {
     const res = await request(app())
-      .get("/api/factoids/more/stream?trackTitle=Midnight+City")
+      .get(withRunToken("/api/factoids/more/stream?trackTitle=Midnight+City"))
       .set("Sec-Fetch-Site", "same-site");
     expect(messages(res)[0]).toMatchObject({ type: "error", code: "forbidden_origin" });
 
@@ -803,7 +864,7 @@ describe("requests other sites make a browser send", () => {
 
   it("refuses a cross-site request with no Origin (an <img> or a no-cors GET)", async () => {
     const stream = await request(app())
-      .get("/api/factoids/more/stream?trackTitle=Midnight+City")
+      .get(withRunToken("/api/factoids/more/stream?trackTitle=Midnight+City"))
       .set("Sec-Fetch-Site", "cross-site");
     expect(messages(stream)[0]).toMatchObject({ type: "error", code: "forbidden_origin" });
 
@@ -816,14 +877,14 @@ describe("requests other sites make a browser send", () => {
   it("lets the web app's own requests through", async () => {
     // Cross-origin fetch or EventSource from the listed web origin (a different port).
     const listed = await request(app())
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .set("Origin", LISTED)
       .set("Sec-Fetch-Site", "same-site")
       .send({});
     expect(listed.status).toBe(400); // reached validation
     // The listed origin on another site (a deployment with the API on its own domain).
     const otherSite = await request(app())
-      .get("/api/analyze/stream")
+      .get(withRunToken("/api/analyze/stream"))
       .set("Origin", LISTED)
       .set("Sec-Fetch-Site", "cross-site");
     expect(messages(otherSite)[0]).toMatchObject({ code: "invalid_input" });
@@ -832,10 +893,25 @@ describe("requests other sites make a browser send", () => {
       .get("/api/search/suggest?query=a")
       .set("Sec-Fetch-Site", "same-origin");
     expect(sameOrigin.status).toBe(400);
+    // A same-origin POST sends the page's origin, which need not be listed: the browser says
+    // the page is the API's own.
+    const ownPost = await request(app())
+      .post("/api/runs")
+      .set("Origin", "https://liner.example")
+      .set("Sec-Fetch-Site", "same-origin")
+      .send({ turnstileToken: TEST_TURNSTILE_TOKEN });
+    expect(ownPost.status).toBe(200);
+    // The same Origin from another site is refused.
+    const elsewhere = await request(app())
+      .post("/api/runs")
+      .set("Origin", "https://liner.example")
+      .set("Sec-Fetch-Site", "cross-site")
+      .send({ turnstileToken: TEST_TURNSTILE_TOKEN });
+    expect(elsewhere.status).toBe(403);
   });
 
   it("lets requests with neither header through (curl, server to server)", async () => {
-    const res = await request(app()).post("/api/factoids/more").send({});
+    const res = await request(app()).post(withRunToken("/api/factoids/more")).send({});
     expect(res.status).toBe(400);
   });
 
@@ -843,20 +919,22 @@ describe("requests other sites make a browser send", () => {
     const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
     expect((await request(server).get("/api/health").set("Origin", EVIL)).status).toBe(200);
     for (let i = 0; i < 3; i++) {
-      await request(server).post("/api/factoids/more").set("Origin", EVIL).send({});
+      await request(server).post(withRunToken("/api/factoids/more")).set("Origin", EVIL).send({});
     }
-    expect((await request(server).post("/api/factoids/more").send({})).status).toBe(400);
+    expect((await request(server).post(withRunToken("/api/factoids/more")).send({})).status).toBe(
+      400,
+    );
   });
 });
 
 describe("error messages", () => {
   it("are the same on every route for the same code", async () => {
-    const analyze = await request(app()).post("/api/analyze").send({});
-    const factoids = await request(app()).post("/api/factoids/more").send({});
+    const analyze = await request(app()).post(withRunToken("/api/analyze")).send({});
+    const factoids = await request(app()).post(withRunToken("/api/factoids/more")).send({});
     expect(analyze.body.code).toBe("invalid_input");
     expect(analyze.body.error).toBe(factoids.body.error);
 
-    const stream = await request(app()).get("/api/analyze/stream");
+    const stream = await request(app()).get(withRunToken("/api/analyze/stream"));
     expect(messages(stream)[0]).toMatchObject({
       code: "invalid_input",
       error: factoids.body.error,
@@ -892,7 +970,7 @@ describe("logging", () => {
   it("keeps a client's text from breaking the log line", async () => {
     // The parser's message quotes the start of the body, line breaks included.
     await request(app())
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .set("Content-Type", "application/json")
       .send('{"a": bad\n[Server] forged line\n}');
 
@@ -903,7 +981,7 @@ describe("logging", () => {
 
   it("caps a client's text in the log", async () => {
     const origin = `https://${"a".repeat(1000)}.example`;
-    await request(app()).post("/api/factoids/more").set("Origin", origin).send({});
+    await request(app()).post(withRunToken("/api/factoids/more")).set("Origin", origin).send({});
 
     const line = logged("refused origin");
     expect(line).toBeDefined();

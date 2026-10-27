@@ -196,3 +196,27 @@ describe("FactoidStreamEvent", () => {
     expect(FactoidStreamEvent.safeParse(event).success).toBe(false);
   });
 });
+
+describe("a refusal's retry delay (retryAfterMs)", () => {
+  const refusal = { type: "error", seq: 0, code: "rate_limited", error: "Too many requests." };
+
+  it("is optional on the analysis and factoid streams' errors, and kept when sent", () => {
+    for (const [schema, runId] of [
+      [AnalyzeStreamEvent, "run-1"],
+      [FactoidStreamEvent, null],
+    ] as const) {
+      expect(schema.parse({ ...refusal, runId })).toEqual({ ...refusal, runId });
+      const delayed = { ...refusal, runId, retryAfterMs: 42_000 };
+      expect(schema.parse(delayed)).toEqual(delayed);
+      expect(decodeSseStream(encodeSseEvent(delayed as never), schema)).toEqual([delayed]);
+    }
+  });
+
+  it("is a whole number of milliseconds, never negative", () => {
+    for (const retryAfterMs of [-1, 1.5, "42000"]) {
+      const event = { ...refusal, runId: "run-1", retryAfterMs };
+      expect(AnalyzeStreamEvent.safeParse(event).success, String(retryAfterMs)).toBe(false);
+      expect(FactoidStreamEvent.safeParse({ ...event, runId: null }).success).toBe(false);
+    }
+  });
+});

@@ -5,6 +5,7 @@ import {
   fullResultData,
   loadFixture,
   releaseStream,
+  routeRunTokens,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -198,6 +199,7 @@ test.describe("with the browser's EventSource", () => {
     await page.route("**/api/search/suggest**", (route) =>
       route.fulfill({ json: { success: true, suggestions: [] } }),
     );
+    await routeRunTokens(page);
     await page.route("**/api/analyze/stream?**", (route) => {
       opened.push(route.request().url());
       return route.fulfill({

@@ -311,8 +311,9 @@ export function openFactoidStream(
 
 /**
  * A whole stream that only refuses the request: one `error` with the code, then `done`. Used by
- * the middleware (rate limit, origin) for the stream routes, before any run exists. A resume
- * request names its run, so its refusal carries that run's id.
+ * the middleware (rate limit, origin, run token) for the stream routes, before any run exists. A
+ * resume request names its run, so its refusal carries that run's id. `detail.retryAfterMs` (a
+ * rate limit's reset) goes with the error.
  */
 export function refuseStream(
   res: Response,
@@ -320,11 +321,12 @@ export function refuseStream(
   code: ErrorCode,
   message: string,
   runId?: string,
+  detail?: { retryAfterMs?: number },
 ): void {
   const stream = path.startsWith("/api/factoids/")
     ? openFactoidStream(res, null, { heartbeatMs: 0 })
     : openAnalysisStream(res, runId ?? randomUUID(), { heartbeatMs: 0 });
-  stream.error(code, message);
+  stream.error(code, message, detail?.retryAfterMs !== undefined ? detail : undefined);
   stream.done();
 }
 

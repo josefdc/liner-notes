@@ -1,7 +1,8 @@
 // Spawned by src/index.test.ts with the API's settings in its environment (PORT=0: the API binds
 // a port of the system's choosing). Starts the API (argv: loader URL, entry, database path) with
 // that environment, its stdout and stderr in a pipe whose only reader is this process, reads the
-// port from the API's "listening" log line, keeps one request open, stops reading (closes the
+// port from the API's "listening" log line, gets a run token, keeps one request open, stops
+// reading (closes the
 // pipe) and sends SIGTERM. Prints one JSON line: { code, signal, ms, afterContinue } of the
 // API's exit, or { error }.
 
@@ -78,6 +79,16 @@ for (;;) {
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
+// The held request needs a run token: development has the Turnstile bypass ("dev-bypass").
+const tokenAnswer = await fetch(`http://127.0.0.1:${port}/api/runs`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ turnstileToken: "dev-bypass" }),
+  signal: AbortSignal.timeout(5_000),
+}).catch((error) => fail(`could not get a run token: ${error.message}`));
+if (!tokenAnswer.ok) fail(`could not get a run token (HTTP ${tokenAnswer.status})`);
+const { runToken } = await tokenAnswer.json();
+
 // A request whose body never completes. The signal is sent only once the API has read the
 // request head, which it shows by answering "100 Continue": a connection whose request has not
 // been read yet counts as idle, and server.close() closes it at once (Node 26), so the shutdown
@@ -97,8 +108,9 @@ socket.on("data", (chunk) => {
   received += chunk;
 });
 socket.write(
-  "POST /api/factoids/more HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
-    "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
+  `POST /api/factoids/more?runToken=${encodeURIComponent(runToken)} HTTP/1.1\r\n` +
+    "Host: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: 100\r\n" +
+    "Expect: 100-continue\r\n\r\n",
 );
 const interim = await new Promise((resolve) => {
   const timer = setTimeout(() => resolve("no interim answer within 5 s"), 5_000);

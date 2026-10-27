@@ -1,0 +1,296 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ErrorBoundary } from './ErrorBoundary';
+
+// The boundary's two fallbacks: a part whose code could not be loaded (a chunk-load error) can
+// be loaded again or the page reloaded; a part that threw while it rendered keeps the boundary's
+// own message and way back.
+
+let failure: Error | null = null;
+function Part() {
+  if (failure) throw failure;
+  return <h2>The part</h2>;
+}
+
+const chunkError = () =>
+  new TypeError(
+    'Failed to fetch dynamically imported module: http://127.0.0.1/assets/Dashboard-1a2b.js',
+  );
+
+beforeEach(() => {
+  // React reports the caught error too.
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => {
+  cleanup();
+  failure = null;
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+describe('the error boundary and a chunk that could not be loaded', () => {
+  it('says the part could not be loaded and offers "Try again", "Reload the page" and the way elsewhere', () => {
+    failure = chunkError();
+    const onWayBack = vi.fn();
+    render(
+      <ErrorBoundary
+        message="This screen could not be shown"
+        action={{ label: 'New search', onClick: onWayBack }}
+        loadFailedMessage="This screen could not be loaded"
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('This screen could not be loaded.');
+    expect(alert.textContent).toContain('The connection may have dropped');
+    expect(alert.textContent).not.toContain('This screen could not be shown');
+    const buttons = [...alert.querySelectorAll('button')].map((button) => button.textContent);
+    expect(buttons).toEqual(['Try again', 'Reload the page', 'New search']);
+    // The focus moves as for any failure: to the fallback's first way back.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+
+    // "Try again" shows the part again, without the boundary's own way back.
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+    expect(onWayBack).not.toHaveBeenCalled();
+  });
+
+  it("still offers the boundary's way elsewhere", () => {
+    failure = chunkError();
+    const onWayBack = vi.fn();
+    render(
+      <ErrorBoundary
+        message="This screen could not be shown"
+        action={{ label: 'New search', onClick: onWayBack }}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'New search' }));
+    expect(onWayBack).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+  });
+
+  it('calls onRetried once the part is back', () => {
+    failure = chunkError();
+    const onRetried = vi.fn(() => screen.queryByRole('heading', { name: 'The part' }));
+    render(
+      <ErrorBoundary
+        message="The part could not be shown"
+        action={{ label: 'Start over' }}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('This part of the page could not be loaded.');
+    // An action that only tries again is not offered twice.
+    const buttons = [...alert.querySelectorAll('button')].map((button) => button.textContent);
+    expect(buttons).toEqual(['Try again', 'Reload the page']);
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetried).toHaveBeenCalledTimes(1);
+    // Called after the part is in the page.
+    expect(onRetried.mock.results[0].value).toBeTruthy();
+  });
+
+  it('keeps the focus where it is when asked to', () => {
+    failure = chunkError();
+    render(
+      <>
+        <button type="button">Elsewhere</button>
+        <ErrorBoundary
+          message="The chart could not be drawn"
+          action={{ label: 'Try again' }}
+          focusOnFail={false}
+        >
+          <Part />
+        </ErrorBoundary>
+      </>,
+    );
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('keeps the focus where it is when the part fails after it was shown, when asked to', () => {
+    const tree = (focusOnFail?: boolean) => (
+      <>
+        <button type="button">Elsewhere</button>
+        <ErrorBoundary
+          message="The chart could not be drawn"
+          action={{ label: 'Try again' }}
+          focusOnFail={focusOnFail}
+        >
+          <Part />
+        </ErrorBoundary>
+      </>
+    );
+    const { rerender } = render(tree(false));
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+    // The chart's code fails after the view around it is in (a slow connection).
+    failure = chunkError();
+    rerender(tree(false));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(elsewhere);
+
+    // By default the fallback's first way back takes it.
+    cleanup();
+    failure = null;
+    const again = render(tree());
+    failure = chunkError();
+    again.rerender(tree());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+  });
+
+  it('logs the line it shows, with the error name only in the production build', () => {
+    vi.stubEnv('DEV', false);
+    failure = chunkError();
+    render(
+      <ErrorBoundary
+        message="This screen could not be shown"
+        action={{ label: 'New search' }}
+        loadFailedMessage="This screen could not be loaded"
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const logged = vi.mocked(console.error).mock.calls.map(([first]) => first);
+    expect(logged).toContain('This screen could not be loaded (TypeError)');
+  });
+});
+
+describe('the error boundary after a way back', () => {
+  it('gives the focus back to "Try again" when the part fails again', () => {
+    // A part that throws on every draw (a generic error), in a boundary asked not to take the
+    // focus when the part fails on its own.
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        focusOnFail={false}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetried).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus back to "Try again" when the code fails to load again', () => {
+    failure = chunkError();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        focusOnFail={false}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(screen.getByRole('alert').textContent).toContain('could not be loaded');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+  });
+
+  it('does not call onRetried for a later reset after a way back that failed', () => {
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn();
+    const tree = (resetKey: string) => (
+      <ErrorBoundary
+        resetKey={resetKey}
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>
+    );
+    const { rerender } = render(tree('first'));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    // Another result: the boundary resets, and the part draws. No way back led there.
+    failure = null;
+    rerender(tree('second'));
+    expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+    expect(onRetried).not.toHaveBeenCalled();
+  });
+
+  it('leaves "Reload the page" out when asked to', () => {
+    failure = chunkError();
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        offersReload={false}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    const buttons = [...screen.getByRole('alert').querySelectorAll('button')].map(
+      (button) => button.textContent,
+    );
+    expect(buttons).toEqual(['Try again']);
+  });
+});
+
+describe('the error boundary and any other error', () => {
+  it("keeps the boundary's own message and way back", () => {
+    failure = new TypeError("Cannot read properties of undefined (reading 'title')");
+    const onWayBack = vi.fn();
+    render(
+      <ErrorBoundary
+        message="This screen could not be shown"
+        action={{ label: 'New search', onClick: onWayBack }}
+        loadFailedMessage="This screen could not be loaded"
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('This screen could not be shown.');
+    expect(alert.textContent).not.toContain('could not be loaded');
+    const buttons = [...alert.querySelectorAll('button')].map((button) => button.textContent);
+    expect(buttons).toEqual(['New search']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New search' }));
+
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'New search' }));
+    expect(onWayBack).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+  });
+
+  it('calls onRetried once its way back has put the part back', () => {
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn(() => screen.queryByRole('heading', { name: 'The part' }));
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetried).toHaveBeenCalledTimes(1);
+    expect(onRetried.mock.results[0].value).toBeTruthy();
+  });
+});

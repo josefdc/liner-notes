@@ -1,5 +1,8 @@
-import React, { useState, useMemo, useCallback, Suspense } from 'react';
-const SonicFingerprint = React.lazy(() => import('./SonicFingerprint'));
+import type React from 'react';
+import { useState, useMemo, useCallback, useRef, Suspense } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { ErrorBoundary } from './ErrorBoundary';
+const SonicFingerprint = lazyWithRetry(() => import('./SonicFingerprint'));
 import ActivityLog from './ActivityLog';
 import { Music, ArrowRight, ExternalLink, Search } from 'lucide-react';
 import { AppPhase, type TrackData, type AgentLog } from '../types';
@@ -11,6 +14,7 @@ import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
+import { isSpotifyTrackId } from '../utils/spotify';
 import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
@@ -175,6 +179,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   headingRef,
   isRestoredSession = false,
 }) => {
+  // The Sonic Fingerprint panel: takes the focus after its chart's "Try again".
+  const fingerprintRef = useRef<HTMLElement>(null);
+  const focusFingerprint = useCallback(
+    () => fingerprintRef.current?.focus({ preventScroll: true }),
+    [],
+  );
   // Missing lists default to empty so a partial result renders instead of throwing.
   const trackData = useMemo(
     () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
@@ -358,8 +368,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
         {/* Hero: Sonic Fingerprint */}
         <section
+          ref={fingerprintRef}
+          tabIndex={-1}
           aria-label="Sonic Fingerprint"
-          className="lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="outline-none focus-visible:border-cyber/70 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel subtitle={fingerprintText} className="flex-1">
@@ -378,19 +390,36 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">
-                  Loading...
-                </div>
-              }
+            {/* A chart that cannot be loaded or drawn says so in its place, with a retry: the
+                rest of the Dashboard stays, and its heading keeps the focus. After the retry,
+                the panel takes the focus from the button that is gone. */}
+            <ErrorBoundary
+              resetKey={trackData?.id}
+              message="The Sonic Fingerprint could not be drawn"
+              action={{ label: 'Try again' }}
+              loadFailedMessage="The Sonic Fingerprint could not be loaded"
+              focusOnFail={false}
+              onRetried={focusFingerprint}
+              // A reload shows this result again only from its address, which only a result
+              // under a Spotify track id has (App.tsx, addressOf): for any other, it would lose
+              // the whole result for one chart, so it is not offered.
+              offersReload={isSpotifyTrackId(trackData?.id)}
+              className="w-full h-full"
             >
-              <SonicFingerprint
-                genreProfile={trackData?.genreProfile}
-                modelUnavailable={trackData?.modelUnavailable}
-                fingerprint={fingerprint}
-              />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">
+                    Loading...
+                  </div>
+                }
+              >
+                <SonicFingerprint
+                  genreProfile={trackData?.genreProfile}
+                  modelUnavailable={trackData?.modelUnavailable}
+                  fingerprint={fingerprint}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </div>
           {/* Decorative BG */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyber/5 blur-[100px] pointer-events-none"></div>

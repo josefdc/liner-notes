@@ -137,11 +137,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.3+librosa"
-    assert main.analyzer_version("essentia") == "2.3.3+essentia"
+    assert main.analyzer_version("librosa") == "2.3.4+librosa"
+    assert main.analyzer_version("essentia") == "2.3.4+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.3+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.4+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -153,7 +153,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.3+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.4+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -653,13 +653,111 @@ def test_a_run_on_the_spacing_but_off_the_beat_is_left_out():
     """
     Six beats under the pad at the band's spacing, but 35 % of a period early against its
     first beat: the interval to that beat is part of the run's spacing (5.8 % off), so the run
-    is left out. The phase is spread over the run: a run n beats long and a fraction p of a
-    period out of phase is about p / n off, so a long run out of phase stays (at 45 %, runs of
-    14 beats or more).
+    is left out. (It is also off the grid's phase.)
     """
     band = list(np.arange(6.0, 30.0, 0.5))
     intro = [6.0 - 0.5 * 1.35 - 0.5 * k for k in range(5, -1, -1)]
     assert reported_over(pad_then_band(), [*intro, *band]) == [round(t, 3) for t in band]
+
+
+@pytest.mark.parametrize(("phase", "kept"), [(0.0, True), (0.2, True), (0.3, False), (0.45, False)])
+def test_a_long_run_on_the_spacing_is_left_out_off_the_grid_phase(phase, kept):
+    """
+    Fourteen beats under an 8 s pad at the band's spacing, `phase` of a period early against
+    its grid. Spread over the run, the phase leaves its spacing within EDGE_RUN_TOLERANCE (3.2 %
+    off at 45 %), so the run is judged on its phase too: its beats are more than
+    EDGE_RUN_PHASE_TOLERANCE (a quarter of a period) from the grid counted back from the band's
+    first beat, and it is left out; at 0 or 20 % of a period it stays.
+    """
+    band = list(np.arange(8.0, 30.0, 0.5))
+    intro = [8.0 - 0.5 * (1 + phase) - 0.5 * k for k in range(13, -1, -1)]
+    reported = reported_over(pad_then_band(8.0), [*intro, *band])
+    assert reported == [round(float(t), 3) for t in ([*intro, *band] if kept else band)]
+
+
+def add_click(y: np.ndarray, t: float, amplitude: float) -> np.ndarray:
+    """`y` with a 10 ms burst of noise (2 ms decay) at `t`: a stray click, a breath."""
+    y = y.copy()
+    n = round(0.01 * FIXTURE_SR)
+    burst = np.random.default_rng(round(t * 1000)).standard_normal(n)
+    a = round(t * FIXTURE_SR)
+    y[a : a + n] += amplitude * burst * np.exp(-np.arange(n) / (0.002 * FIXTURE_SR))
+    return y
+
+
+@pytest.mark.parametrize("beat", [4, 7, 10])
+def test_one_click_under_an_intro_beat_does_not_bring_its_run_back(beat):
+    """
+    Fourteen beats 10 % slow under an 8 s pad before a 120 BPM band, with one click under the
+    pad's `beat`th beat. That beat is on an onset, but the measured grid starts at the first
+    two beats on onsets in a row (the band's), so the whole run is judged and left out.
+    (Before 2.3.4 the grid started at the click: the beats from it to the band were reported.)
+    """
+    band = list(np.arange(8.0, 30.0, 0.5))
+    intro = [8.0 - 0.55 * k for k in range(14, 0, -1)]
+    y = add_click(pad_then_band(8.0), intro[beat - 1], 0.3)
+    assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize("beat", [2, 5, 8])
+def test_one_click_under_an_outro_beat_does_not_bring_its_run_back(beat):
+    """
+    The same at the end: ten beats 10 % slow under a pad after the band, with one click under
+    the pad's `beat`th beat; the measured grid ends with the band's last beats on onsets. A
+    click on the second beat makes the beats around the band's last one on, off and on onsets,
+    which is not the alternation that would carry the grid on. (The pad's entry at 24 s is an
+    onset, so the run starts one period after it.)
+    """
+    band = list(np.arange(0.0, 24.0, 0.5))
+    outro = [23.5 + k * 0.55 for k in range(2, 12)]
+    y = add_click(pad_then_band(0.0, 6.0), outro[beat - 1], 0.3)
+    assert reported_over(y, [*band, *outro]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize("pickups", [2, 3])
+def test_a_pickup_before_the_band_does_not_start_the_grid_in_the_pad(pickups):
+    """
+    Two or three eighth-note clicks (a pickup) just before a 120 BPM band, after eight beats
+    10 % slow under a 6 s pad. The pad's last beat falls on the pickup and is reported with
+    the band; the beats before it are left out, not taken into the measured grid.
+    """
+    band = list(np.arange(6.0, 30.0, 0.5))
+    intro = [5.5 - 0.55 * k for k in range(7, -1, -1)]
+    notes = [6.0 - 0.25 * k for k in range(pickups, 0, -1)]
+    y = pad_then_band()
+    for t in notes:
+        y = add_click(y, t, 0.3)
+    reported = reported_over(y, [*intro, *band])
+    on_the_pickup = [t for t in intro if min(abs(t - n) for n in notes) < 0.07]
+    assert on_the_pickup == [intro[-1]]
+    assert reported == [round(float(t), 3) for t in [*on_the_pickup, *band]]
+
+
+@pytest.mark.parametrize(
+    "kicks",
+    [
+        pytest.param([4.0, 5.0, 6.0, 7.0], id="every-other-beat"),
+        pytest.param([4.0, 4.5, 5.5, 6.0, 7.0, 7.5], id="two-of-three-beats"),
+    ],
+)
+def test_a_band_whose_first_beats_are_not_all_on_onsets_starts_the_grid(kicks):
+    """
+    A 120 BPM band whose first two bars (4-8 s) are only kicks over a pad, after ticks 20 %
+    slow under the pad alone. With a kick on every other beat, no two beats on onsets come in a
+    row before 8 s, but beats alternating on and off onsets (GRID_START_ALTERNATE) start the
+    measured grid too; with kicks on two beats of every three, two in a row (GRID_START_BEATS)
+    do, where three would not until 7 s. Either way the grid starts at the first kick, and only
+    the pad's ticks before it are left out. (The first beats of two Ballroom clips are on and
+    off onsets like these.)
+    """
+    y = pad_then_band(8.0)
+    kick = signals.drum_pattern(120)[: round(0.2 * FIXTURE_SR)]
+    for t in kicks:
+        a = round(t * FIXTURE_SR)
+        y[a : a + kick.size] += kick
+    intro = [4.0 - 0.6 * k for k in range(6, 0, -1)]
+    band = list(np.arange(4.0, 30.0, 0.5))
+    assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
 
 
 def test_a_run_is_compared_with_the_grid_next_to_it():
@@ -736,6 +834,44 @@ def test_no_beats_are_reported_under_hum_or_hiss_before_the_band(intro, estimato
     tracked = tracked_beats(y, estimator)
     _, v2 = analyse_array(y, estimator)
     assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
+
+
+@needs_essentia
+@pytest.mark.parametrize(("beat", "amplitude"), [(4, 0.3), (7, 0.1), (10, 0.03)])
+def test_one_click_under_a_pad_beat_brings_none_of_its_beats_back(beat, amplitude):
+    """
+    The pad before the 97 BPM band, with one 10 ms click under the pad's `beat`th beat as
+    Essentia tracks it. Before 2.3.4 the measured grid started at the click, and Essentia's
+    beats under the pad were reported again (15, 15 and 6 of 15); now none is.
+    """
+    y = PROBES["band-97-after-10s-pad"]
+    pad = [t for t in tracked_beats(y, "essentia") if t < 10.0]
+    y = add_click(y, pad[beat - 1], amplitude)
+    tracked = tracked_beats(y, "essentia")
+    _, v2 = analyse_array(y, "essentia")
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
+    assert round(v2["tempo"]["bpm"]) == 97
+
+
+@needs_essentia
+@pytest.mark.parametrize("pickups", [2, 3])
+def test_a_pickup_before_the_band_reports_no_pad_beat_before_it(pickups):
+    """
+    Two or three eighth-note piano notes just before the 97 BPM band, after the pad: Essentia
+    puts a beat on the last of them, which is reported with the band; none of the beats it
+    counted under the pad before them is.
+    """
+    first = 17 * 60 / 97
+    notes = [first - k * 30 / 97 for k in range(pickups, 0, -1)]
+    y = PROBES["band-97-after-10s-pad"].copy()
+    for t in notes:
+        a = round(t * FIXTURE_SR)
+        y[a : a + round(0.3 * FIXTURE_SR)] += 0.3 * signals.piano_note(signals.hz(69), 0.3)
+    tracked = tracked_beats(y, "essentia")
+    _, v2 = analyse_array(y, "essentia")
+    before = [t for t in v2["beats"]["times"] if t < 10.0]
+    assert before and all(min(abs(t - n) for n in notes) < 0.07 for t in before)
+    assert v2["beats"]["times"] == [t for t in tracked if t >= before[0]]
 
 
 @needs_essentia
@@ -2680,7 +2816,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.3+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.4+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

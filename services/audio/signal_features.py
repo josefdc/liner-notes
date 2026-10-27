@@ -127,56 +127,71 @@ SILENCE_FULL_S = 2.0
 BEAT_LEVEL_WINDOW_S = 0.05
 BEAT_BELOW_PEAK_DB = 60.0
 BEAT_MIN_RMS = 3e-5
-# A tracker also keeps counting through an intro or an ending that has sound but no beat (a
-# pad, a drone, hum or hiss): Essentia reported 15 beats under the pad before a 97 BPM band
-# and 23 before a 132 BPM one (tests/signals.py), none on an onset. Such a run is left out of
-# the reported grid when it is at an end of the grid, has at least EDGE_RUN_MIN_BEATS beats
-# with sound under them (audible_beats; ticks over silence are left out anyway and do not
-# count), none of them on an onset (estimators.onset_beats), and its spacing is more than
-# EDGE_RUN_TOLERANCE off the grid next to it: the median interval of the EDGE_RUN_GRID_BEATS
-# beats on onsets nearest to it, against the mean interval of the run and the beat it meets,
-# over whole periods (a beat the tracker skipped counts as two periods, a tick less than half
-# a period after the last as one). The spacing is measured on every tick of the run. A run on
-# the grid's spacing but a fraction p of a period out of phase comes out about p / n off for a
-# run of n beats: a short run out of phase is left out (six beats 35 % out, tests/test_v2.py),
-# a long one stays (at 45 % out, runs of 14 beats or more). Onset support is relative to the
-# clip's own beats (at least 0.1 of the 90th percentile of their onset strength), so with only
-# a few beats on the band, under a tenth of the window, the beats under the pad count as on
-# onsets and nothing is left out.
-# Measured: the runs under the probes' pads are 13 to 23 beats long and 6.4 to 12.8 % off the
-# grid (6.8 % at 97 BPM, 12.8 % at 132, 6.4 % at 85); under hum at -50 dBFS 9.7 %, under hiss
-# at -60 dBFS 4.9 %. On the evals harness's 30 s clips of 100 Ballroom and 100 GiantSteps Tempo
-# tracks (seed 1; 600 results), six reported runs have four audible beats or more: three keep
-# the grid (18 beats at 0.0 %, 12 at 1.0 %, 6 at 1.2 %) and stay; three are 4.7 to 8.5 % off
-# (15 beats, left out), all Essentia's. Two are intros: a fade-in in GiantSteps 4565270 (7
-# beats, no beat annotations) and a crescendo in Ballroom Latin_Jam5-08, whose first annotated
-# beat is at 2.13 s (3 beats 481 to 1584 ms before it, 1 within 64 ms of it). The third is a
-# Ballroom clip's end (Classics4-11), where the rule removes as many right beats as wrong ones
-# (2 within 47 to 65 ms of an annotated beat, 2 at 90 and 91 ms), with the annotations aligned
-# to the clip's window (clips.clip_offset). Over the 100 Ballroom clips, Essentia's beats
-# within 70 ms of an annotated beat go from 3630 to 3627 and those further from 947 to 942.
-# The gain is in intros; at clip ends the rule is about even. (Counting ticks over silence
-# toward EDGE_RUN_MIN_BEATS, as first written, also removed the ends of three more Ballroom
-# clips; the 14 Ballroom beats removed then were 8 more than 70 ms from an annotated beat and
-# 6 within 37 to 65 ms of one.)
-# Runs of one to three audible beats are not judged: the drift of so few intervals is within
-# the trackers' frame grid (23 ms for librosa, 12 ms for Essentia: two frames over three
-# intervals at 140 BPM is up to 3.6 %), and on the real clips 31 such runs (45 beats, 21 of
-# them a single beat, 23 at the start) are more than 4 % off, 25 of them within 20 dB of the
-# loudest frame.
+# A tracker also keeps counting through an intro or an ending that has sound but no beat (a pad, a
+# drone, hum or hiss): Essentia reported 15 beats under the pad before a 97 BPM band and 23 before a
+# 132 BPM one (tests/signals.py), none on an onset. The measured grid starts where the band's onsets
+# start: at the first two beats on onsets in a row (GRID_START_BEATS), or the first five beats that
+# alternate on and off onsets, starting on one (GRID_START_ALTERNATE: a band whose beat sounds on
+# every other tick). It ends at the last such beats, read backward. So one onset in an intro (a
+# click, a breath) does not start the grid: with one 10 ms click under a pad tick, Essentia's beats
+# under the pad before the 97 BPM band were reported again before 2.3.4 (15, 15 and 6 of 15 for a
+# click under the 4th, 7th and 10th), and none are now. A pickup on the beat before the band does
+# start it there, with that beat.
+# The run of beats before the grid's start, or after its end, onsets included, is left out of the
+# reported grid when it has at least EDGE_RUN_MIN_BEATS beats with sound under them (audible_beats;
+# ticks over silence are left out anyway and do not count) and is off the grid's spacing or phase:
+# - spacing: its spacing is more than EDGE_RUN_TOLERANCE off the grid next to it: the median
+#   interval of the EDGE_RUN_GRID_BEATS beats on onsets nearest to it, inside the grid, against the
+#   mean interval of the run and the beat it meets, over whole periods (a beat the tracker skipped
+#   counts as two periods, a tick less than half a period after the last as one);
+# - phase: the median distance of its beats from the grid counted on from that beat, every median
+#   interval, is more than EDGE_RUN_PHASE_TOLERANCE of a period. The spacing alone spreads a phase p
+#   over the run, about p / n off for n beats, so a long run on the spacing but out of phase used to
+#   stay (at 45 % out, runs of 14 beats or more).
+# Both are measured on every tick of the run. A run within the spacing tolerance drifts too: 3.5 %
+# off, a six-beat run is a median 0.12 of a period off the grid and stays, a 15-beat run 0.28 and is
+# left out. Onset support is relative to the clip's own beats (at least 0.1 of the 90th percentile
+# of their onset strength), so with only a few beats on the band, under a tenth of the window, the
+# beats under the pad count as on onsets and nothing is left out.
+# Measured: the runs under the probes' pads are 13 to 23 beats long and 6.4 to 12.8 % off the grid
+# (6.8 % at 97 BPM, 12.8 % at 132, 6.4 % at 85); under hum at -50 dBFS 9.7 %, under hiss at -60 dBFS
+# 4.9 %. On the evals harness's 30 s clips of 100 Ballroom and 100 GiantSteps Tempo tracks (seed 1;
+# 600 results), with Ballroom's beat annotations aligned to each clip's window (clips.clip_offset):
+# - 2.3.3, with the grid starting at the first beat on an onset, left out 15 beats, all Essentia's:
+#   a fade-in in GiantSteps 4565270 (7 beats, no beat annotations), a crescendo in Ballroom
+#   Latin_Jam5-08 (3 beats 481 to 1584 ms before its first annotated beat, 1 within 64 ms of it) and
+#   the end of Classics4-11 (2 within 47 to 65 ms of an annotated beat, 2 at 90 and 91 ms).
+#   Essentia's beats within 70 ms of an annotated beat went from 3630 to 3627, those further from
+#   947 to 942. (Counting ticks over silence toward EDGE_RUN_MIN_BEATS, as first written, also
+#   removed the ends of three more Ballroom clips, 6 of their 14 beats within 37 to 65 ms of an
+#   annotated beat.)
+# - 2.3.4 leaves out 53 more, all Essentia's, in four intros with one to three isolated onsets:
+#   Ballroom Media-103815 (9 beats, 618 to 4484 ms before the first annotated beat) and GiantSteps
+#   3964688, 4265125 and 3873575 (31, 9 and 4 beats; no beat annotations; a median onset strength of
+#   0.00 to 0.53 against 5.8 to 16.7 on the rest of the grid). The four runs are 4.5 to 19.5 % off
+#   the grid's spacing. Within 70 ms of an annotated beat: still 3627; further: 933. The phase rule
+#   changes none of the 600 results; it is what leaves out two of the hiss intros below. Starting
+#   the grid only at two or three beats on onsets in a row, without the alternation, would also have
+#   left out 4 and 9 Ballroom beats within 70 ms of an annotated beat (the first five beats of
+#   Media-103815's band alternate on and off onsets).
+# Runs of one to three audible beats are not judged: the drift of so few intervals is within the
+# trackers' frame grid (23 ms for librosa, 12 ms for Essentia: two frames over three intervals at
+# 140 BPM is up to 3.6 %), and on the real clips 31 such runs (45 beats, 21 of them a single beat,
+# 23 at the start) are more than 4 % off, 25 of them within 20 dB of the loudest frame.
 # Known limits:
-# - A tracker that counts through a beatless intro at the band's own spacing is not caught.
-#   Essentia counts 15 beats at the band's spacing through 8 s of a rubato piano before a
-#   120 BPM band (all reported, tests/test_v2.py), and in 27 hiss and hum intros (-70 to
-#   -40 dBFS) before bands at 97, 120 and 132 BPM, 3 runs of 19 to 21 beats stayed within 4 %
-#   of the band (0.2 to 3.9 %) and are reported; 8 more were only 5.0 to 5.9 % off.
-# - One onset on any tick of an intro (a click, a breath, a pickup note) defeats the rule for
-#   that run: the ticks from it to the band count as interior, and those before it are judged
-#   against a grid that starts with the intro's own ticks. With one 10 ms click on a pad tick,
-#   Essentia's 14 to 15 beats under the pad before the 97 BPM band are reported again.
+# - A tracker that counts through a beatless intro at the band's own spacing and phase is not
+#   caught. Essentia counts 15 beats at the band's spacing through 8 s of a rubato piano before a
+#   120 BPM band (all reported, tests/test_v2.py), and in 27 hiss and hum intros (-70 to -40 dBFS)
+#   before bands at 97, 120 and 132 BPM, 1 run of 19 beats (hiss at -70 dBFS before the 120 BPM
+#   band, 0.2 % off) stays and is reported; 8 left out were only 5.0 to 5.9 % off.
+# - Two onsets on adjacent ticks of an intro, or three on alternate ticks, start the grid there; one
+#   onset on the tick just before the band (or just after it) joins the grid, as a pickup does.
 EDGE_RUN_MIN_BEATS = 4
 EDGE_RUN_TOLERANCE = 0.04
 EDGE_RUN_GRID_BEATS = 8
+GRID_START_BEATS = 2
+GRID_START_ALTERNATE = (True, False, True, False, True)
+EDGE_RUN_PHASE_TOLERANCE = 0.25
 
 
 @dataclass(frozen=True)
@@ -269,33 +284,75 @@ def _spacing_off(beats: np.ndarray, period: float) -> float:
     return abs(float(intervals.sum() / (whole.sum() * period)) - 1)
 
 
+def _phase_off(run: np.ndarray, anchor: float, period: float) -> float:
+    """
+    How far the beats of `run` are from the grid counted from `anchor` every `period`: the
+    median distance of a beat to the nearest beat of that grid, in periods (0..0.5).
+    """
+    periods = np.abs(run - anchor) / period
+    return float(np.median(np.abs(periods - np.round(periods))))
+
+
+def _grid_starts(on: np.ndarray) -> np.ndarray:
+    """
+    Whether the measured grid can start at each beat, reading `on` (each beat on an onset or
+    not) from it onward: the beat and the next are on onsets (GRID_START_BEATS), or the beat
+    and the next four alternate on and off onsets (GRID_START_ALTERNATE).
+    """
+    starts = np.zeros(on.size, dtype=bool)
+    for pattern in (np.ones(GRID_START_BEATS, dtype=bool), np.array(GRID_START_ALTERNATE)):
+        if on.size >= pattern.size:
+            windows = np.lib.stride_tricks.sliding_window_view(on, pattern.size)
+            starts[: on.size - pattern.size + 1] |= (windows == pattern).all(axis=1)
+    return starts
+
+
+def _measured_span(on: np.ndarray) -> tuple[int, int] | None:
+    """
+    The first and last beat of the measured grid, by index (_grid_starts, read forward from
+    the start and backward from the end), or None when no beat can start it.
+    """
+    starts = np.flatnonzero(_grid_starts(on))
+    ends = np.flatnonzero(_grid_starts(on[::-1]))
+    if starts.size == 0:
+        return None
+    return int(starts[0]), on.size - 1 - int(ends[0])
+
+
 def beats_on_the_grid(signals: Signals, beats: np.ndarray, loudness: Levels) -> np.ndarray:
     """
     The beats without a leading or trailing run that a tracker counted through a stretch
-    without a beat (EDGE_RUN_MIN_BEATS, EDGE_RUN_TOLERANCE), in their order. Interior beats
-    and runs that keep the grid's spacing stay. Only beats with sound under them
-    (audible_beats) count toward EDGE_RUN_MIN_BEATS; the spacing is measured on every beat.
+    without a beat, in their order. The measured grid starts where the band's onsets start
+    and ends where they end (_measured_span), so one onset on a beat of an intro does not
+    start it; every beat between stays. The run before or after it, with any onsets it has,
+    is left out when it has at least EDGE_RUN_MIN_BEATS beats with sound under them
+    (audible_beats) and is off the grid's spacing (EDGE_RUN_TOLERANCE) or phase
+    (EDGE_RUN_PHASE_TOLERANCE); both are measured on every beat of the run.
     """
     beats = np.asarray(beats, dtype=float)
     if beats.size == 0:
         return beats
-    audible = beat_levels(signals, beats) >= beat_floor(loudness)
     on = np.isin(beats, estimators.onset_beats(beats, signals))
-    keep = np.ones(beats.size, dtype=bool)
-    onsets = np.flatnonzero(on)
-    if onsets.size < 2:
+    span = _measured_span(on)
+    if span is None:
         return beats
-    first, last = onsets[0], onsets[-1]
+    first, last = span
+    audible = beat_levels(signals, beats) >= beat_floor(loudness)
+    keep = np.ones(beats.size, dtype=bool)
+    onsets = first + np.flatnonzero(on[first : last + 1])
     near_first = beats[first : onsets[:EDGE_RUN_GRID_BEATS][-1] + 1]
     near_last = beats[onsets[-EDGE_RUN_GRID_BEATS:][0] : last + 1]
-    for run, with_anchor, grid in (
-        (slice(0, first), beats[: first + 1], near_first),
-        (slice(last + 1, beats.size), beats[last:], near_last),
+    for run, anchor, with_anchor, grid in (
+        (slice(0, first), first, beats[: first + 1], near_first),
+        (slice(last + 1, beats.size), last, beats[last:], near_last),
     ):
         if np.count_nonzero(audible[run]) < EDGE_RUN_MIN_BEATS:
             continue
         period = float(np.median(np.diff(grid)))
-        if period > 0 and _spacing_off(with_anchor, period) > EDGE_RUN_TOLERANCE:
+        if period > 0 and (
+            _spacing_off(with_anchor, period) > EDGE_RUN_TOLERANCE
+            or _phase_off(beats[run], beats[anchor], period) > EDGE_RUN_PHASE_TOLERANCE
+        ):
             keep[run] = False
     return beats[keep]
 

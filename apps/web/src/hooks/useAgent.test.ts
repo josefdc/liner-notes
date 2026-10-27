@@ -353,44 +353,13 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
-  it('counts the rows the picker shows when it merges rows that share an ISRC', () => {
+  it('asks about one track when only one of the candidates sent can be read', () => {
     const hook = startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
-    // An older server: one recording sent twice (its album and a compilation), counted as two.
-    const cash = {
-      ...candidates[0],
-      isrc: 'USUM70207211',
-      releaseDate: '2002-11-05',
-      explicit: false,
-      durationMs: 218_000,
-    };
-    const compilation = { ...cash, id: 'c3', album: 'C', releaseDate: '2008' };
     analysis.send({
       ...interrupt(),
-      candidates: [cash, candidates[1], compilation],
-      message: '3 possible tracks from Spotify; choose one',
-    });
-
-    const question = '2 possible tracks from Spotify; choose one';
-    expect(hook.result.current.statusNote).toBe(question);
-    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
-  });
-
-  it('asks about one track when the picker merges every row into one', () => {
-    const hook = startAnalysis();
-    const analysis = lastStream();
-    analysis.send({ type: 'connected', threadId: 't1' });
-    const cash = {
-      ...candidates[0],
-      isrc: 'USUM70207211',
-      releaseDate: '2002-11-05',
-      explicit: false,
-      durationMs: 218_000,
-    };
-    analysis.send({
-      ...interrupt(),
-      candidates: [cash, { ...cash, id: 'c3', album: 'C', releaseDate: '2008' }],
+      candidates: [candidates[0], { title: 'Hurt', artist: 'Leona Lewis' }],
       message: '2 possible tracks from Spotify; choose one',
     });
 
@@ -416,17 +385,22 @@ describe('useAgent progress', () => {
     expect(hook.result.current.logs.at(-1)?.message).toBe(question);
   });
 
-  it("keeps the server's question when no rows are merged: different ISRCs stay apart", () => {
+  it("keeps the server's question for every row it sends, rows sharing an ISRC too", () => {
     const hook = startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
-    const message = '2 possible tracks from Spotify; choose one';
+    // Words that are not the picker's own count: kept only if the page did not rewrite them.
+    const message = 'Pick one of these';
+    const cash = {
+      ...candidates[0],
+      isrc: 'USUM70207211',
+      releaseDate: '2002-11-05',
+      explicit: false,
+      durationMs: 218_000,
+    };
     analysis.send({
       ...interrupt(),
-      candidates: [
-        { ...candidates[0], isrc: 'USUM70207211' },
-        { ...candidates[0], id: 'c3', isrc: 'USUM70300001' },
-      ],
+      candidates: [cash, { ...cash, id: 'c3', album: 'C', releaseDate: '2008' }],
       message,
     });
 

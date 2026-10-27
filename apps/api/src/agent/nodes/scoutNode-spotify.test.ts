@@ -744,7 +744,7 @@ describe("the picker's candidates: ISRC, release date, and one row per recording
     expect(sent[0].message).toBe("3 possible tracks from Spotify; choose one");
   });
 
-  it('prefers a dated release to one dated "0000" or not at all; of two undated, keeps the first', async () => {
+  it('prefers a dated release to one dated "0000"; of two undated, the same one in any order', async () => {
     const unknown = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
     const dated = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
     const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
@@ -755,6 +755,46 @@ describe("the picker's candidates: ISRC, release date, and one row per recording
     const second = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
     spotifySearch([first, second, nin]);
     expect(ids((await scout("Hurt")).candidates)).toEqual([first.id, nin.id]);
+    // The tie is settled by track id, not by Spotify's order.
+    spotifySearch([second, first, nin]);
+    expect(ids((await scout("Hurt")).candidates)).toEqual([first.id, nin.id]);
+  });
+
+  it("offers the same rows whatever Spotify's order: 200.0 s, 201.5 s and 203.0 s are one recording", async () => {
+    const isrc = "USUM70207211";
+    const take = (date: string, ms: number) =>
+      spotifyTrack("Hurt", ["Johnny Cash"], { ...released(date, isrc), duration_ms: ms });
+    const a = take("2008", 200_000);
+    const b = take("2002", 201_500);
+    const c = take("2010", 203_000);
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+
+    spotifySearch([a, b, c, nin]);
+    const abc = ids((await scout("Hurt")).candidates);
+    spotifySearch([a, c, b, nin]);
+    const acb = ids((await scout("Hurt")).candidates);
+
+    expect(abc).toEqual([b.id, nin.id]);
+    expect(acb).toEqual(abc);
+  });
+
+  it("never merges rows whose length Spotify did not give, though they share an ISRC", async () => {
+    const isrc = "USUM70207211";
+    const one = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2002", isrc),
+      duration_ms: 0,
+    });
+    const two = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2008", isrc),
+      duration_ms: 0,
+    });
+    spotifySearch([one, two]);
+
+    const out = await scout("Hurt");
+
+    expect(ids(out.candidates)).toEqual([one.id, two.id]);
+    for (const candidate of out.candidates ?? [])
+      expect(candidate).not.toHaveProperty("durationMs");
   });
 
   it("keeps the earliest release when it is listed first, not the one listed last", async () => {
@@ -766,12 +806,13 @@ describe("the picker's candidates: ISRC, release date, and one row per recording
     expect(ids((await scout("Hurt")).candidates)).toEqual([album.id, nin.id]);
   });
 
-  it("compares dates as far as both go: a year is not before a day in it", async () => {
+  it("prefers a precise date to its year alone, whatever the order", async () => {
     const day = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
     const year = spotifyTrack("Hurt", ["Johnny Cash"], released("2002", "USUM70207211"));
     const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
     spotifySearch([day, year, nin]);
-
+    expect(ids((await scout("Hurt")).candidates)).toEqual([day.id, nin.id]);
+    spotifySearch([year, day, nin]);
     expect(ids((await scout("Hurt")).candidates)).toEqual([day.id, nin.id]);
   });
 

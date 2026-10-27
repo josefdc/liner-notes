@@ -401,9 +401,11 @@ export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;
  *
  * The picker's candidates also carry the recording's `isrc` (null when Spotify gave none),
  * whether Spotify marks the track `explicit`, and its length (`durationMs`). The API sends one
- * row per recording: rows that share an ISRC, have the same `explicit` value and lengths within
- * 2 s are one row, the earliest known release, otherwise the first listed. Rows without an ISRC
- * or a length are never merged, nor are an explicit and a clean version, or two edits.
+ * row per recording, by `oneRowPerRecording` (picker.ts), which the search box applies to its
+ * suggestions too: rows that share an ISRC and an `explicit` value, with lengths within 2 s of
+ * the kept row's, are one row, the earliest known release (a tie is settled by track id). Rows
+ * without an ISRC or a length are never merged, nor are an explicit and a clean version, or two
+ * edits.
  */
 export const SearchCandidate = z.object({
   id: z.string(),

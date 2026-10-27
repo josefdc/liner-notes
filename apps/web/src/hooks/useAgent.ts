@@ -412,9 +412,8 @@ export function useAgent(): UseAgentReturn {
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
           // The server counts the candidates it sent ("One possible track…"): its words are the
-          // line, unless the picker shows another number of rows, for any reason (a candidate
-          // this page could not read; rows of one recording that pickerRows merges, a guard
-          // for a server that does not), when the line counts the rows shown.
+          // line, unless the picker shows another number of rows (a candidate this page could
+          // not read, a track id sent twice), when the line counts the rows shown.
           const shown = pickerRows(candidates).length;
           const question =
             shown === data.sentCount ? data.message || PICK_FALLBACK : pickerQuestion(shown);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { SearchCandidate } from '@liner-notes/contract';
+import { oneRowPerRecording } from '@liner-notes/contract/picker';
 
 /**
  * Asks the API for suggestions (useAgent's `searchSuggest`). Rejects when the request fails, and
@@ -23,87 +24,17 @@ export const SUGGESTIONS_SHOWN = 5;
 /** Shorter text gets no suggestions: the API asks for at least two characters. */
 const MIN_QUERY_LENGTH = 2;
 
-// Lowercased the same way in every locale (a Turkish locale would lowercase "I" to "ı").
-const normalized = (text: string) =>
-  text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
-
-const isrcOf = (suggestion: SearchCandidate) =>
-  typeof suggestion.isrc === 'string' && suggestion.isrc.trim()
-    ? suggestion.isrc.trim().toUpperCase()
-    : null;
-
 /**
- * The release date, if any: the contract's `releaseDate` (Spotify's, as sent), or the
- * `releaseYear` of a recorded track. Spotify gives "0000" for a date it does not know.
- */
-const dateOf = (suggestion: SearchCandidate) => {
-  const date = suggestion.releaseDate || suggestion.releaseYear || null;
-  return date && !/^0+(?:-|$)/.test(date) ? date : null;
-};
-
-const songOf = (suggestion: SearchCandidate) =>
-  `${normalized(suggestion.title)}\u0000${normalized(suggestion.artist)}`;
-
-/**
- * The recording each of `rows` stands for, as a key. A row with an ISRC is that recording, and
- * rows with different ISRCs are different recordings (a live take, a re-recording). A row
- * without one stands for the one recording listed with its title and artist (case, spacing and
- * Unicode forms aside); when the list holds no recording with them, or several, it cannot tell
- * which, and stands for its title and artist alone. So no row joins two ISRCs, and the keys do
- * not depend on the order of the rows.
- */
-function recordingKeys(rows: SearchCandidate[]) {
-  const isrcsBySong = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const isrc = isrcOf(row);
-    if (!isrc) continue;
-    const isrcs = isrcsBySong.get(songOf(row)) ?? new Set<string>();
-    isrcs.add(isrc);
-    isrcsBySong.set(songOf(row), isrcs);
-  }
-  return (row: SearchCandidate) => {
-    const isrc = isrcOf(row);
-    if (isrc) return `isrc:${isrc}`;
-    const isrcs = isrcsBySong.get(songOf(row));
-    return isrcs?.size === 1 ? `isrc:${[...isrcs][0]}` : `song:${songOf(row)}`;
-  };
-}
-
-/**
- * `date` is before `than`, compared as far as both go: a year alone is as early as any day in
- * it. A missing date is before nothing and after nothing.
- */
-function isEarlier(date: string | null, than: string | null) {
-  if (!date || !than) return false;
-  const length = Math.min(date.length, than.length);
-  return date.slice(0, length) < than.slice(0, length);
-}
-
-/**
- * The suggestions with each recording listed once (see `recordingKeys`): Spotify often lists one
- * recording twice (the album track and its single, a reissue, a compilation), and the rows would
- * look the same. Of the rows for one recording, the one released first is kept, in the place of
- * the one listed first; when a date is missing, Spotify's order decides. Which recordings are
- * listed does not depend on Spotify's order; only which of two equal rows is kept can.
+ * The suggestions with each recording listed once, by the rule the API applies to the track
+ * picker's rows (the contract's `oneRowPerRecording`): Spotify often lists one recording twice
+ * (the album track and its single, a reissue, a compilation), and the rows would look the same.
+ * Rows are one recording when they share an ISRC and an explicit value and their lengths are
+ * within 2 s of the kept row's; the earliest known release is kept, in the place of the first
+ * listed. Rows without an ISRC or a length are never merged, so the search box and the picker
+ * offer the same rows for the same results.
  */
 export function mergeDuplicates(candidates: SearchCandidate[]): SearchCandidate[] {
-  const keyOf = recordingKeys(candidates);
-  const kept: SearchCandidate[] = [];
-  const places = new Map<string, number>();
-  const ids = new Set<string>();
-  for (const row of candidates) {
-    if (ids.has(row.id)) continue;
-    ids.add(row.id);
-    const key = keyOf(row);
-    const place = places.get(key);
-    if (place === undefined) {
-      places.set(key, kept.length);
-      kept.push(row);
-    } else if (isEarlier(dateOf(row), dateOf(kept[place]))) {
-      kept[place] = row;
-    }
-  }
-  return kept;
+  return oneRowPerRecording(candidates);
 }
 
 interface SuggestionState {

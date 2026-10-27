@@ -18,14 +18,12 @@
 
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { SearchCandidate as SearchCandidateSchema } from "@liner-notes/contract";
-import { isSourceError } from "../../sources/http.js";
 import {
-  knownReleaseDate,
-  normalizeIsrc,
-  RELEASE_DATE,
-  releaseYearOf,
-} from "../../sources/musicbrainz.js";
+  oneRowPerRecording,
+  SearchCandidate as SearchCandidateSchema,
+} from "@liner-notes/contract";
+import { isSourceError } from "../../sources/http.js";
+import { normalizeIsrc, RELEASE_DATE, releaseYearOf } from "../../sources/musicbrainz.js";
 import { fetchTrack, searchTracks } from "../../sources/spotify.js";
 import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
@@ -71,58 +69,6 @@ function withSpotifyRetry<T>(
       });
     },
   });
-}
-
-/** How far apart two lengths may be for two rows to be one recording (a remaster, a reissue). */
-const SAME_LENGTH_MS = 2000;
-
-/**
- * Whether two rows are one recording listed twice (the album track and its single, a reissue,
- * a compilation): they share an ISRC, Spotify marks both explicit or both not (or knows
- * neither), and their lengths are known and within SAME_LENGTH_MS. Labels sometimes reuse an
- * ISRC for a clean version or an edit; those stay apart. A row without an ISRC or a length is
- * never one recording with another, even with the same title and artist: two takes may be two
- * recordings, and the picker is where to tell them apart.
- */
-function sameRecording(a: SearchCandidate, b: SearchCandidate): boolean {
-  return (
-    !!a.isrc &&
-    a.isrc === b.isrc &&
-    (a.explicit ?? null) === (b.explicit ?? null) &&
-    typeof a.durationMs === "number" &&
-    typeof b.durationMs === "number" &&
-    Math.abs(a.durationMs - b.durationMs) <= SAME_LENGTH_MS
-  );
-}
-
-/**
- * Whether `row` is the release to keep rather than `kept`, both of one recording: a release of
- * a known date (knownReleaseDate) before one of an unknown date, and of two known dates the
- * earlier, compared as far as both go (a year alone is as early as any day in it). Otherwise
- * the one listed first is kept.
- */
-function keptInstead(row: SearchCandidate, kept: SearchCandidate): boolean {
-  const date = knownReleaseDate(row.releaseDate);
-  const than = knownReleaseDate(kept.releaseDate);
-  if (!date) return false;
-  if (!than) return true;
-  const length = Math.min(date.length, than.length);
-  return date.slice(0, length) < than.slice(0, length);
-}
-
-/**
- * The candidates with each recording offered once (sameRecording): of the rows of one
- * recording, the earliest known release is kept (keptInstead), in the place of the first
- * listed.
- */
-function oneRowPerRecording(candidates: SearchCandidate[]): SearchCandidate[] {
-  const kept: SearchCandidate[] = [];
-  for (const candidate of candidates) {
-    const place = kept.findIndex((row) => sameRecording(row, candidate));
-    if (place === -1) kept.push(candidate);
-    else if (keptInstead(candidate, kept[place])) kept[place] = candidate;
-  }
-  return kept;
 }
 
 /** Why a Spotify call failed, as the scout reports it. */
@@ -301,7 +247,7 @@ export async function scoutNode(
     }
 
     if (needsChoice(ranked)) {
-      // Convert to candidates for human selection: one row per recording (see
+      // Convert to candidates for human selection: one row per recording (the contract's
       // oneRowPerRecording), at most maxCandidates of them, so that the question counts the
       // rows sent. One the contract does not accept is left out rather than failing the whole
       // choice.

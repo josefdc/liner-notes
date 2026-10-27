@@ -32,6 +32,8 @@ const five: Candidate[] = [
     album: "Hurt: The EP",
     coverUrl: "",
     releaseYear: "2011",
+    explicit: true,
+    durationMs: 238_000,
   },
   {
     id: "c5",
@@ -40,6 +42,7 @@ const five: Candidate[] = [
     album: "Phenomenon",
     coverUrl: "",
     releaseYear: "2003",
+    durationMs: 4_013_000,
   },
 ];
 
@@ -362,53 +365,53 @@ test("every track the server counts gets a row: a studio and a live take with on
   await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-live")]);
 });
 
-test("rows sharing an ISRC show as one, other ISRCs stay apart, and the question counts the rows shown", async ({
-  page,
-}) => {
-  // A server that does not merge sends one recording twice (its single and its album: one
-  // ISRC, both clean, one length) and counts both.
-  const single = {
-    id: "m-single",
-    title: "Midnight City",
-    artist: "M83",
-    album: "Midnight City",
-    coverUrl: "",
-    releaseYear: "2012",
-    isrc: "GB55H1100002",
-    releaseDate: "2012-01-17",
-    explicit: false,
-    durationMs: 243_000,
-  };
-  const album = {
-    ...single,
-    id: "m-album",
-    album: "Hurry Up, We're Dreaming",
-    releaseYear: "2011",
-    releaseDate: "2011-10-18",
-  };
-  const live = {
-    ...single,
-    id: "m-live",
-    album: "Live at Coachella",
-    releaseYear: "2013",
-    isrc: "GB55H1300009",
-    releaseDate: "2013",
-  };
-  await useMockApi(page, {
-    suggestions: [],
-    streams: { [ANALYZE]: pickerStream([single, album, live]), [RESUME]: held },
-  });
-  await openPicker(page, "Midnight City");
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1440, height: 900 },
+]) {
+  test(`at ${viewport.width}x${viewport.height} a clean and an explicit version of one song are two rows that say which is which`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    // The server keeps the versions apart (one ISRC, two explicit values) and counts both.
+    const clean = {
+      id: "h-clean",
+      title: "Hurt",
+      artist: "Johnny Cash",
+      album: "American IV: The Man Comes Around",
+      coverUrl: "",
+      releaseYear: "2002",
+      isrc: "USUM70207211",
+      releaseDate: "2002-11-05",
+      explicit: false,
+      durationMs: 218_000,
+    };
+    const explicit = { ...clean, id: "h-explicit", explicit: true, durationMs: 219_400 };
+    await useMockApi(page, {
+      suggestions: [],
+      streams: {
+        [ANALYZE]: pickerStream([clean, explicit]),
+        [RESUME]: held,
+      },
+    });
+    await openPicker(page);
 
-  const rows = picker(page).getByRole("option");
-  await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("M83 • 2011");
-  await expect(rows.nth(1)).toContainText("M83 • 2013");
-  // The question counts the two rows shown, not the three the server sent.
-  await expect(progressStatus(page)).toHaveText(question(2));
-  await page.keyboard.press("Enter");
-  await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-album")]);
-});
+    const rows = picker(page).getByRole("option");
+    await expect(rows).toHaveCount(2);
+    // Two rows with one title, artist and year, told apart by their names.
+    await expect(rows.nth(0)).toHaveAccessibleName(/Hurt Johnny Cash • 2002 • 3:38$/);
+    await expect(rows.nth(1)).toHaveAccessibleName(/Hurt Johnny Cash • 2002 • 3:39 Explicit$/);
+    await expect(picker(page).getByText("E", { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => clippedRows(page)).toEqual([]);
+    // The server's question, which counts the two rows shown.
+    await expect(progressStatus(page)).toHaveText(question(2));
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(async () => resumes(await apiRequests(page)))
+      .toEqual([resumeWith("h-explicit")]);
+  });
+}
 
 test("the question names the list alone, so it is read once", async ({ page }) => {
   await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(three) } });

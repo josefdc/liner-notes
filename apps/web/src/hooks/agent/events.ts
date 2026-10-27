@@ -134,9 +134,8 @@ function readCandidate(value: unknown): SearchCandidate | null {
     coverUrl: text(value.coverUrl),
     ...(typeof releaseYear === 'string' ? { releaseYear } : {}),
     ...(typeof popularity === 'number' && Number.isFinite(popularity) ? { popularity } : {}),
-    // What the picker merges rows of one recording by (pickerRows): the ISRC, whether the
-    // track is explicit and its length, and the date by which it keeps the earliest release.
-    // Left out when of another type.
+    // The recording and its version: the ISRC, the release date, whether the track is
+    // explicit and its length (the picker shows the last two). Left out when of another type.
     ...(typeof isrc === 'string' && isrc ? { isrc } : {}),
     ...(typeof releaseDate === 'string' && releaseDate ? { releaseDate } : {}),
     ...(typeof explicit === 'boolean' ? { explicit } : {}),

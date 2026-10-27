@@ -20,7 +20,7 @@
  * its own.
  */
 
-import type { QueryMatch } from "@liner-notes/contract";
+import { choiceMessage as sharedChoiceMessage, type QueryMatch } from "@liner-notes/contract";
 import type { SpotifyData } from "./state.js";
 
 /**
@@ -586,13 +586,10 @@ function sameTake(a: SpotifyData, b: SpotifyData): boolean {
 /**
  * The line that asks the user to choose among the `count` candidates offered: "One possible
  * track from Spotify; confirm it or search again", "5 possible tracks from Spotify; choose one".
- * It counts what is offered, never what Spotify returned (the offer is capped).
+ * It counts what is offered, never what Spotify returned (the offer is capped). The wording is
+ * the contract's, which the web uses too when it counts the rows it shows.
  */
-export function choiceMessage(count: number): string {
-  return count === 1
-    ? "One possible track from Spotify; confirm it or search again"
-    : `${count} possible tracks from Spotify; choose one`;
-}
+export const choiceMessage = sharedChoiceMessage;
 
 /**
  * Whether the user has to choose among ranked results. A query that names no artist always

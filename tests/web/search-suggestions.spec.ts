@@ -115,8 +115,8 @@ test("one recording Spotify lists twice is suggested once, from its earliest rel
   page,
 }) => {
   // "Midnight City M83" as MusicBrainz records it: the album track and the single are one
-  // recording (ISRC GB55H1100002); the remix is another recording.
-  const song = { artist: "M83", coverUrl: "" };
+  // recording (ISRC GB55H1100002, both clean, one length); the remix is another recording.
+  const song = { artist: "M83", coverUrl: "", explicit: false, durationMs: 243_000 };
   await useMockApi(page, {
     suggestions: [
       {

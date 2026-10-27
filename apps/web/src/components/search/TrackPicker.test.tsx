@@ -128,39 +128,39 @@ describe('TrackPicker', () => {
     expect(screen.getByText('Nothing is analyzed until you choose a track.')).toBeTruthy();
   });
 
-  it('shows rows sharing an ISRC as one, the earliest release, in the place of the first', () => {
-    // One recording, listed as its single and on its album: one row, the album's (2011).
+  it('tells an explicit and a clean version apart: a marker, and each length as m:ss', () => {
+    // One title, artist and year, and one ISRC: the server keeps the versions apart.
+    const clean = {
+      ...track('clean', 'Johnny Cash', '2002'),
+      isrc: 'USUM70207211',
+      explicit: false,
+      durationMs: 218_000,
+    };
+    const explicit = { ...clean, id: 'explicit', explicit: true, durationMs: 219_400 };
+    renderPicker([clean, explicit]);
+
+    expect(screen.queryAllByRole('option', { name: /Explicit/ })).toEqual([options()[1]]);
+    expect(screen.getByRole('option', { name: /3:38/ })).toBe(options()[0]);
+    expect(screen.getByRole('option', { name: /3:39/ })).toBe(options()[1]);
+    expect(options()[0].textContent).not.toMatch(/Explicit/);
+  });
+
+  it('shows no length when it is not known, never 0:00', () => {
+    renderPicker([track('a', 'Johnny Cash'), { ...track('b', 'Nine Inch Nails'), durationMs: 0 }]);
+    for (const row of options()) expect(row.textContent).not.toMatch(/\d:\d\d/);
+  });
+
+  it('shows every row the server sends, rows sharing an ISRC too: the server merges them', () => {
     const single = {
       ...track('m-single', 'M83', '2012'),
       title: 'Midnight City',
       isrc: 'GB55H1100002',
-      releaseDate: '2012-01-17',
       explicit: false,
       durationMs: 243_000,
     };
-    const album = { ...single, id: 'm-album', releaseYear: '2011', releaseDate: '2011-10-18' };
-    // Another recording of the song (a live take): another ISRC, its own row.
-    const liveIsrc = {
-      ...single,
-      id: 'm-live',
-      album: 'Live',
-      isrc: 'GB55H1300009',
-      releaseYear: '2013',
-      releaseDate: '2013',
-    };
-    const { onPick } = renderPicker([
-      single,
-      track('c2', 'Nine Inch Nails', '1994'),
-      album,
-      liveIsrc,
-    ]);
-    expect(options().map((row) => row.textContent)).toEqual([
-      expect.stringContaining('M83 • 2011'),
-      expect.stringContaining('Nine Inch Nails • 1994'),
-      expect.stringContaining('M83 • 2013'),
-    ]);
-    press('Enter');
-    expect(onPick).toHaveBeenCalledWith(album);
+    const album = { ...single, id: 'm-album', releaseYear: '2011' };
+    renderPicker([single, album]);
+    expect(options()).toHaveLength(2);
   });
 
   it('never merges rows without an ISRC, even with the same title and artist', () => {

@@ -24,6 +24,15 @@ function rowFor(key: string, current: number, count: number): number | null {
   }
 }
 
+/** A track's length as m:ss, or null when it is not known (never "0:00"). */
+function lengthOf(durationMs: number | undefined): string | null {
+  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return null;
+  }
+  const seconds = Math.floor(durationMs / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 /** The visible height of the nearest box that scrolls `element`, or of the window. */
 function scrollAreaHeight(element: HTMLElement): number {
   for (let around = element.parentElement; around; around = around.parentElement) {
@@ -50,11 +59,12 @@ interface TrackPickerProps {
  *
  * Nothing is chosen for the user: the run waits until a row is picked or the picker is left.
  *
- * The rows are `pickerRows`: each track id once, and the rows of one recording (one ISRC, one
- * explicit value, one length) as one. Rows without an ISRC are never merged, as two rows with
- * one title and artist can be two takes (a studio and a live one), of which the picker is the
- * last place to choose. When this leaves fewer rows than the server counted, the question
- * counts the rows shown (useAgent).
+ * The rows are `pickerRows`: each track id the server sends, once. The server already sends
+ * one row per recording, and the rows it keeps apart can share a title, an artist and a year
+ * (a clean and an explicit version, two edits, two takes): each row shows its length and an
+ * "Explicit" marker when Spotify gives them, so the picker is where to tell them apart. When
+ * the picker shows another number of rows than the server counted, the question counts the
+ * rows shown (useAgent).
  */
 export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerProps) {
   const id = useId();
@@ -173,8 +183,24 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
                 <span className="text-white text-sm font-mono truncate block">
                   {candidate.title}
                 </span>
-                <span className="text-text-tertiary text-xs truncate block">
-                  {candidate.artist} • {candidate.releaseYear || candidate.album}
+                {/* Which version this is: its length and whether it is explicit, so that the
+                    versions the server keeps apart (one ISRC, a clean and an explicit version,
+                    two edits) do not look the same. Shown only when known. */}
+                <span className="flex items-center gap-1.5 min-w-0 text-text-tertiary text-xs">
+                  <span className="truncate">
+                    {candidate.artist} • {candidate.releaseYear || candidate.album}
+                  </span>
+                  {lengthOf(candidate.durationMs) && (
+                    <span className="flex-shrink-0 font-mono">
+                      • {lengthOf(candidate.durationMs)}
+                    </span>
+                  )}
+                  {candidate.explicit === true && (
+                    <span className="flex-shrink-0 rounded-sm border border-white/15 bg-white/5 px-1 font-mono text-chrome text-text-chip">
+                      <span aria-hidden="true">E</span>
+                      <span className="sr-only">Explicit</span>
+                    </span>
+                  )}
                 </span>
               </div>
               {/* Kept in the layout on every row, so moving the highlight moves nothing */}

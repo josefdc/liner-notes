@@ -736,6 +736,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               audioAnalyzed={noMomentsReason === null}
               noMomentsReason={noMomentsReason}
               previewSeconds={measurement?.windowSeconds}
+              beats={measurement?.beats}
+              energyContour={measurement?.energyContour}
+              measuredSections={measurement?.sections}
+              withheld={measurement?.withheld.fields}
             />
           </div>
         </div>

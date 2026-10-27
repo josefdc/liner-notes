@@ -158,7 +158,7 @@ export async function createFallbackTrackData(
       })),
     });
   };
-  sampleCard("source", "Sample DNA", "This track samples");
+  sampleCard("source", "Samples", "This track samples");
   sampleCard("derived", "Sampled By", "Sampled by");
 
   // 3. Song-meaning research is not used (its page text can quote the song).

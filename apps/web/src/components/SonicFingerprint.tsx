@@ -6,6 +6,7 @@ import type { AudioReadings, ScoreListReading } from '../constants';
 import { colors } from '../styles/theme';
 import { MeasuredValue } from './measured/MeasuredValue';
 import { MissingValue } from './measured/MissingValue';
+import { STYLE_EVAL, styleEvalText } from './measured/styleEval';
 
 interface SonicFingerprintProps {
   genreProfile?: GenreProfileItem[];
@@ -28,7 +29,7 @@ const scoreLabel = (label: string) => label.replaceAll('---', ' / ');
  * One ranked list of audio-model activations: scores, not probabilities, so they are listed
  * with their value and never drawn as shares of a whole. Labelled as a model estimate.
  */
-const ScoreList: React.FC<{ reading: ScoreListReading }> = ({ reading }) => {
+const ScoreList: React.FC<{ reading: ScoreListReading; note?: string }> = ({ reading, note }) => {
   if (reading.state === 'missing') {
     return <MissingValue label={reading.label} status="not available" reason={reading.reason} />;
   }
@@ -63,16 +64,23 @@ const ScoreList: React.FC<{ reading: ScoreListReading }> = ({ reading }) => {
           </li>
         ))}
       </ul>
+      {note && <p className="text-chrome font-mono text-text-chip">{note}</p>}
     </section>
   );
 };
+
+/** How often the style model agrees with Discogs, when the styles shown are that model's. */
+const styleNote = (styles: ScoreListReading) =>
+  styles.state === 'shown' && styles.model === STYLE_EVAL.model
+    ? styleEvalText(STYLE_EVAL)
+    : undefined;
 
 /** The audio models' style and tag scores, or why each is missing. */
 const AudioScores: React.FC<{ fingerprint: NonNullable<AudioReadings['fingerprint']> }> = ({
   fingerprint,
 }) => (
   <div className="flex flex-col gap-4">
-    <ScoreList reading={fingerprint.styles} />
+    <ScoreList reading={fingerprint.styles} note={styleNote(fingerprint.styles)} />
     <ScoreList reading={fingerprint.tags} />
   </div>
 );

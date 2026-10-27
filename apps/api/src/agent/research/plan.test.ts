@@ -491,7 +491,7 @@ describe("the research plan of a track with an ISRC", () => {
     const run = await runPlan([], { composerFails: true });
 
     expect(run.trackData?.modelUnavailable).toBe(true);
-    const card = run.trackData?.factoids?.find((f) => f.title === "Sample DNA");
+    const card = run.trackData?.factoids?.find((f) => f.title === "Samples");
     expect(card?.content).toContain('"Under Pressure" by Queen & David Bowie');
     // Cached with the research's evidence, apart from the research itself.
     const [, cachedResearch] = cache.putResearch.mock.calls[0] as [

@@ -119,7 +119,7 @@ export interface RunEvidence {
   lasting: SourceError[];
   /**
    * The recording's MusicBrainz sample relations as a research entry ("[MusicBrainz Samples]
-   * […]"), for the result built without the model (its Sample DNA cards); empty when none.
+   * […]"), for the result built without the model (its sample cards); empty when none.
    */
   samples: string[];
   /**

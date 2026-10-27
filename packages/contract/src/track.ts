@@ -393,10 +393,19 @@ export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;
  *
  * `releaseDate` and `releaseYear` come from the same Spotify date. A live search suggestion
  * carries `releaseDate` as Spotify sent it (null when it is not a year, a month or a day); the
- * picker's candidates and the suggestions of a recorded track carry `releaseYear` instead. The
- * search box orders duplicates by a row's `releaseDate` when it has one, else by its
- * `releaseYear`. A `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is
- * not read in its place.
+ * picker's candidates carry it too, with the `releaseYear` of a known date (none for "0000");
+ * the suggestions of a recorded track carry `releaseYear` only. The search box orders
+ * duplicates by a row's `releaseDate` when it has one, else by its `releaseYear`. A
+ * `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is not read in its
+ * place.
+ *
+ * The picker's candidates also carry the recording's `isrc` (null when Spotify gave none),
+ * whether Spotify marks the track `explicit`, and its length (`durationMs`). The API sends one
+ * row per recording, by `oneRowPerRecording` (picker.ts), which the search box applies to its
+ * suggestions too: rows that share an ISRC and an `explicit` value, with lengths within 2 s of
+ * the kept row's, are one row, the earliest known release (a tie is settled by track id). Rows
+ * without an ISRC or a length are never merged, nor are an explicit and a clean version, or two
+ * edits.
  */
 export const SearchCandidate = z.object({
   id: z.string(),
@@ -414,5 +423,15 @@ export const SearchCandidate = z.object({
     .describe(
       'Spotify\'s album release date as sent: a year ("2011"), a month ("2011-10") or a day ("2011-10-18"); "0000" means unknown. Null or absent when not known',
     ),
+  explicit: z
+    .boolean()
+    .nullable()
+    .optional()
+    .describe("Whether Spotify marks the track explicit. Null or absent when not known"),
+  durationMs: z
+    .int()
+    .min(0)
+    .optional()
+    .describe("The track's length in milliseconds as Spotify gave it. Absent when not known"),
 });
 export type SearchCandidate = z.infer<typeof SearchCandidate>;

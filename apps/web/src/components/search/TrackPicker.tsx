@@ -2,6 +2,8 @@ import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
+import { pickerRows } from './pickerRows';
+import { TrackVersion } from './TrackVersion';
 import { scrollBehavior } from '../../utils/motion';
 
 /** The picker's question: its heading and the name of its list. */
@@ -49,20 +51,19 @@ interface TrackPickerProps {
  *
  * Nothing is chosen for the user: the run waits until a row is picked or the picker is left.
  *
- * Every track the server offers gets a row (a repeated track id once), so the rows always match
- * the count in the server's question. Rows are not merged as the search suggestions are: the
- * server sends no ISRC here, and two rows with one title and artist can be two takes (a studio
- * and a live one), of which the picker is the last place to choose.
+ * The rows are `pickerRows`: each track id the server sends, once. The server already sends
+ * one row per recording, and the rows it keeps apart can share a title, an artist and a year
+ * (a clean and an explicit version, two edits, two takes): each row shows its length and an
+ * "Explicit" marker when Spotify gives them, so the picker is where to tell them apart. When
+ * the picker shows another number of rows than the server counted, the question counts the
+ * rows shown (useAgent).
  */
 export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerProps) {
   const id = useId();
   const headingId = `${id}-question`;
   const hintId = `${id}-hint`;
 
-  const rows = useMemo(() => {
-    const seen = new Set<string>();
-    return candidates.filter((candidate) => !seen.has(candidate.id) && seen.add(candidate.id));
-  }, [candidates]);
+  const rows = useMemo(() => pickerRows(candidates), [candidates]);
   const [highlighted, setHighlighted] = useState(0);
   // A new list starts at its first row.
   const [listShown, setListShown] = useState(rows);
@@ -174,8 +175,14 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
                 <span className="text-white text-sm font-mono truncate block">
                   {candidate.title}
                 </span>
-                <span className="text-text-tertiary text-xs truncate block">
-                  {candidate.artist} • {candidate.releaseYear || candidate.album}
+                {/* Which version this is: its length and whether it is explicit, so that the
+                    versions the server keeps apart (one ISRC, a clean and an explicit version,
+                    two edits) do not look the same. Shown only when known. */}
+                <span className="flex items-center gap-1.5 min-w-0 text-text-tertiary text-xs">
+                  <span className="truncate">
+                    {candidate.artist} • {candidate.releaseYear || candidate.album}
+                  </span>
+                  <TrackVersion durationMs={candidate.durationMs} explicit={candidate.explicit} />
                 </span>
               </div>
               {/* Kept in the layout on every row, so moving the highlight moves nothing */}

@@ -12,14 +12,14 @@ const song = (id: string, title: string, artist = 'M83', album = 'An album'): Se
 });
 
 /**
- * A suggestion as the API sends it, with its ISRC and release date when Spotify gave them: both
- * are fields of the contract's SearchCandidate.
+ * A suggestion as the API sends it (Spotify's summary of the track): its ISRC and release date
+ * when Spotify gave them, and the version, clean and 4:03 long unless changed.
  */
 const record = (
   id: string,
   title: string,
-  extra: Pick<SearchCandidate, 'isrc' | 'releaseDate'>,
-): SearchCandidate => ({ ...song(id, title), ...extra });
+  extra: Pick<SearchCandidate, 'isrc' | 'releaseDate' | 'explicit' | 'durationMs'>,
+): SearchCandidate => ({ ...song(id, title), explicit: false, durationMs: 243_000, ...extra });
 
 interface Call {
   query: string;
@@ -245,118 +245,50 @@ describe('mergeDuplicates', () => {
     ).toEqual(['album', 'live']);
   });
 
-  it('merges rows without an ISRC with the same title and artist, and with the one recording of that title (case and spacing aside)', () => {
+  it('keeps an explicit and a clean version apart, though they share an ISRC, as the picker does', () => {
     expect(
       ids([
-        song('a', 'Midnight City', 'M83'),
-        song('b', ' midnight  city ', 'm83'),
-        song('c', 'Midnight City', 'M83, Eric Prydz'),
-        song('d', 'Midnight City (Live)', 'M83'),
-        record('e', 'Midnight City', { isrc: 'GB55H1100002' }),
+        record('clean', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2002-11-05' }),
+        record('explicit', 'Hurt', {
+          isrc: 'USAT29900609',
+          releaseDate: '2002-11-05',
+          explicit: true,
+        }),
       ]),
-    ).toEqual(['a', 'c', 'd']);
+    ).toEqual(['clean', 'explicit']);
   });
 
-  /** Every order of `list`. */
-  const orders = <T>(list: T[]): T[][] =>
-    list.length <= 1
-      ? [list]
-      : list.flatMap((item, index) =>
-          orders([...list.slice(0, index), ...list.slice(index + 1)]).map((rest) => [
-            item,
-            ...rest,
-          ]),
-        );
-
-  it('never puts two different ISRCs together, whatever order Spotify lists the rows in', () => {
-    // A row without an ISRC whose title and artist match two recordings cannot tell which one
-    // it is: it stays a row of its own instead of joining (and bridging) either.
-    const sets = [
-      [
-        record('noIsrc', 'Hurt', { isrc: null, releaseDate: '2002' }),
-        record('studio', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2002-11-05' }),
-        record('live', 'Hurt', { isrc: 'USAT20200001', releaseDate: '2003-06-01' }),
-      ],
-      [
-        record('studio', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2005' }),
-        record('noIsrc', 'Hurt', { isrc: null, releaseDate: '2001' }),
-        record('live', 'Hurt', { isrc: 'USAT20200001', releaseDate: '2003' }),
-      ],
-    ];
-    for (const rows of sets) {
-      for (const order of orders(rows)) {
-        expect([...ids(order)].sort(), order.map((row) => row.id).join(',')).toEqual([
-          'live',
-          'noIsrc',
-          'studio',
-        ]);
-      }
-    }
+  it('keeps two edits apart (3:30 and 5:10), though they share an ISRC', () => {
+    expect(
+      ids([
+        record('edit', 'Hurt', { isrc: 'USAT29900609', durationMs: 210_000 }),
+        record('full', 'Hurt', { isrc: 'USAT29900609', durationMs: 310_000 }),
+      ]),
+    ).toEqual(['edit', 'full']);
   });
 
-  it('groups the same way in every order; only which of two equal rows is kept may change', () => {
-    const rows = [
-      record('album', 'Midnight City', { isrc: 'GB55H1100002' }),
-      record('single', 'Midnight City', { isrc: 'gb55h1100002' }),
-      record('undated', 'midnight city', {}),
-      record('remix', 'Midnight City', { isrc: 'GB55H1200001' }),
-      record('other', 'Wait', {}),
-    ];
-    // Each kept row stands for its group: its recording, or the title of an ISRC-less row.
-    const groups = (list: SearchCandidate[]) =>
-      mergeDuplicates(list)
-        .map((row) => row.isrc?.toUpperCase() ?? `title:${row.title}`)
-        .sort();
-    const expected = groups(rows);
-    expect(expected).toEqual(['GB55H1100002', 'GB55H1200001', 'title:Wait', 'title:midnight city']);
-    for (const order of orders(rows)) {
-      expect(groups(order), order.map((row) => row.id).join(',')).toEqual(expected);
-    }
+  it('never merges rows without an ISRC or a length, even with the same title and artist', () => {
+    expect(ids([song('a', 'Midnight City'), song('b', ' midnight  city ')])).toEqual(['a', 'b']);
+    expect(
+      ids([
+        record('a', 'Midnight City', { isrc: 'GB55H1100002', durationMs: undefined }),
+        record('b', 'Midnight City', { isrc: 'GB55H1100002', durationMs: undefined }),
+      ]),
+    ).toEqual(['a', 'b']);
   });
 
   it('keeps the earliest release of a duplicate, in the place of the first one listed', () => {
     expect(
       ids([
         song('first', 'Wait'),
-        record('late', 'Intro', { releaseDate: '2016-04-08' }),
-        record('early', 'intro', { releaseDate: '2011-10-18' }),
+        record('late', 'Intro', { isrc: 'GB55H1100003', releaseDate: '2016-04-08' }),
+        record('early', 'intro', { isrc: 'GB55H1100003', releaseDate: '2011-10-18' }),
       ]),
     ).toEqual(['first', 'early']);
-    // A year alone is as early as any day in it: Spotify's order decides.
-    expect(
-      ids([
-        record('day', 'Intro', { releaseDate: '2011-10-18' }),
-        record('year', 'Intro', { releaseDate: '2011' }),
-      ]),
-    ).toEqual(['day']);
-    // A recorded track's year counts as its date.
-    expect(
-      ids([
-        record('later', 'Intro', { releaseDate: '2016-04-08' }),
-        { ...song('recorded', 'Intro'), releaseYear: '2011' },
-      ]),
-    ).toEqual(['recorded']);
-    // A row with both reads its release date, not its year.
-    expect(
-      ids([
-        { ...record('both', 'Intro', { releaseDate: '2016-04-08' }), releaseYear: '2011' },
-        record('dated', 'Intro', { releaseDate: '2012-01-01' }),
-      ]),
-    ).toEqual(['dated']);
-    // A date of 0000 is unknown, and the row's year is not read in its place.
-    expect(
-      ids([
-        record('dated', 'Intro', { isrc: 'USAT29900609', releaseDate: '2012-01-01' }),
-        {
-          ...record('unknown', 'Intro', { isrc: 'USAT29900609', releaseDate: '0000' }),
-          releaseYear: '2011',
-        },
-      ]),
-    ).toEqual(['dated']);
   });
 
   // The web does not parse this answer (apiClient.ts casts it to its own type); parsing here
-  // checks that the contract's schema keeps the date the merge reads.
+  // checks that the contract's schema keeps the fields the merge reads.
   it("keeps the earliest release of an answer the contract's SearchSuggestResponse accepts", () => {
     const answer = SearchSuggestResponse.parse({
       success: true,
@@ -371,35 +303,12 @@ describe('mergeDuplicates', () => {
   it("takes a release date of 0000, Spotify's unknown date, as missing", () => {
     const midnight = (id: string, releaseDate: string) =>
       record(id, 'Midnight City', { isrc: 'GB55H1100002', releaseDate });
-    expect(ids([midnight('album', '2011-10-18'), midnight('compilation', '0000')])).toEqual([
+    expect(ids([midnight('compilation', '0000'), midnight('album', '2011-10-18')])).toEqual([
       'album',
     ]);
-    expect(ids([midnight('album', '2011-10-18'), midnight('compilation', '0000-00-00')])).toEqual([
+    expect(ids([midnight('compilation', '0000-00-00'), midnight('album', '2011-10-18')])).toEqual([
       'album',
     ]);
-  });
-
-  it('keeps Spotify order when either date is missing', () => {
-    expect(
-      ids([record('undated', 'Intro', {}), record('dated', 'Intro', { releaseDate: '2011' })]),
-    ).toEqual(['undated']);
-    expect(
-      ids([record('dated', 'Intro', { releaseDate: '2016' }), record('undated', 'Intro', {})]),
-    ).toEqual(['dated']);
-    expect(ids([song('a', 'One'), song('b', 'one')])).toEqual(['a']);
-  });
-
-  it('folds case the same way in every locale', () => {
-    const original = String.prototype.toLocaleLowerCase;
-    // A Turkish default locale lowercases "I" to a dotless "ı".
-    String.prototype.toLocaleLowerCase = function (this: string) {
-      return original.call(this, 'tr');
-    } as typeof original;
-    try {
-      expect(ids([song('a', 'INTRO', 'XX'), song('b', 'intro', 'xx')])).toEqual(['a']);
-    } finally {
-      String.prototype.toLocaleLowerCase = original;
-    }
   });
 
   it('lists a track id once', () => {

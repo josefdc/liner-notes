@@ -7,7 +7,7 @@ import { forwardRef } from 'react';
  * particular (neutral). The colour is never the only cue: a badge's words say the same.
  */
 export type BadgeVariant = 'measured' | 'sourced' | 'inferred' | 'warning' | 'error' | 'neutral';
-type BadgeSize = 'sm' | 'md';
+type BadgeSize = 'xs' | 'sm' | 'md';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
@@ -37,6 +37,8 @@ const glowStyles: Record<BadgeVariant, string> = {
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
+  // A marker inside a line of text: no taller than the text's own line (leading-none).
+  xs: 'px-1 text-chrome leading-none gap-0.5',
   sm: 'px-2.5 py-1 text-chrome gap-1',
   md: 'px-3 py-1.5 text-xs gap-1.5',
 };

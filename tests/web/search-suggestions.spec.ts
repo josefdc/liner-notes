@@ -115,8 +115,8 @@ test("one recording Spotify lists twice is suggested once, from its earliest rel
   page,
 }) => {
   // "Midnight City M83" as MusicBrainz records it: the album track and the single are one
-  // recording (ISRC GB55H1100002); the remix is another recording.
-  const song = { artist: "M83", coverUrl: "" };
+  // recording (ISRC GB55H1100002, both clean, one length); the remix is another recording.
+  const song = { artist: "M83", coverUrl: "", explicit: false, durationMs: 243_000 };
   await useMockApi(page, {
     suggestions: [
       {
@@ -169,6 +169,60 @@ test("two takes with different ISRCs both stay suggestions", async ({ page }) =>
 
   await expect(page.getByRole("option")).toHaveCount(2);
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1440, height: 900 },
+]) {
+  test(`at ${viewport.width}x${viewport.height} a clean and an explicit version under one ISRC are two suggestions that say which is which`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    // One song on one album, as Spotify lists both editions: only the version differs.
+    const clean = {
+      id: "clean",
+      title: "Hurt",
+      artist: "Johnny Cash",
+      album: "American IV: The Man Comes Around",
+      coverUrl: "",
+      isrc: "USUM70207211",
+      releaseDate: "2002-11-05",
+      explicit: false,
+      durationMs: 218_000,
+    };
+    const explicit = { ...clean, id: "explicit", explicit: true, durationMs: 219_400 };
+    await useMockApi(page, { suggestions: [clean, explicit], streams: {} });
+    await page.goto("/");
+    await page.getByRole("combobox", { name: "Song title and artist" }).fill("Hurt Johnny Cash");
+
+    const options = page.getByRole("option");
+    await expect(options).toHaveCount(2);
+    await expect(options.nth(0)).toHaveAccessibleName(/Hurt.*Johnny Cash • American IV.* • 3:38$/);
+    await expect(options.nth(1)).toHaveAccessibleName(
+      /Hurt.*Johnny Cash • American IV.* • 3:39 Explicit$/,
+    );
+    // The length and the marker are shown whole inside their rows, which keep one height, and
+    // nothing in a row runs past its edge (the album name is cut instead).
+    const marker = page.getByRole("listbox").getByText("E", { exact: true });
+    await expect(marker).toBeInViewport({ ratio: 1 });
+    const boxes = await options.evaluateAll((rows) =>
+      rows.map((row) => {
+        const box = row.getBoundingClientRect();
+        const inside = [...row.querySelectorAll("span:not(.sr-only)")].every((part) => {
+          const r = part.getBoundingClientRect();
+          return r.width === 0 || (r.left >= box.left - 0.5 && r.right <= box.right + 0.5);
+        });
+        return { height: box.height, inside, overflow: row.scrollWidth > row.clientWidth };
+      }),
+    );
+    expect(boxes.map((box) => box.inside)).toEqual([true, true]);
+    expect(boxes.map((box) => box.overflow)).toEqual([false, false]);
+    expect(boxes[1].height).toBeCloseTo(boxes[0].height, 1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  });
+}
 
 test("a typed search does not show the track an earlier suggestion picked", async ({ page }) => {
   const picked = { ...candidates[0], id: "28cnXtME493VX9NOw9cIUh" };

@@ -8,6 +8,7 @@
 import { getStore, interrupt } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { SourceError } from "@liner-notes/contract";
+import { normalizeIsrc } from "../../sources/musicbrainz.js";
 import { errorRecord } from "../../sources/records.js";
 import { fetchTrack } from "../../sources/spotify.js";
 import type { PickedBy, SonicAgentStateType, SpotifyData } from "../state.js";
@@ -105,8 +106,9 @@ export async function clarificationNode(
   let detailed = true;
   // Set when the details could not be read, with Spotify's typed error: the run goes on with
   // the candidate's fields, and its result is not stored (the composer stores nothing built
-  // without the details), so a later run with the track's full details (its ISRC and duration,
-  // which the audio lookup needs) is never served this one.
+  // without the details), so a later run with the track's full details is never served this
+  // one. The candidate's ISRC is the one Spotify's search gave for the track (the same value
+  // the details carry), so the sources keyed by it are still read.
   let sourceErrors: SourceError[] = [];
   try {
     config.signal?.throwIfAborted();
@@ -114,9 +116,10 @@ export async function clarificationNode(
     log.info(`User selected: ${spotifyData.title}`);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
-    // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
-    // left unknown rather than guessed: the duration (0, shown as missing), whether the track
-    // is explicit (null), its ISRC and its popularity.
+    // Fallback: minimal SpotifyData from the candidate, with the ISRC and release date Spotify's
+    // search gave for it. The rest is left unknown rather than guessed: the duration (0, shown
+    // as missing), whether the track is explicit (null), its popularity, and its ISRC or date
+    // when the search gave none.
     detailed = false;
     sourceErrors = [errorRecord("spotify", error)];
     log.warn(`Track details not read; using the candidate: ${selectedId}`);
@@ -129,10 +132,11 @@ export async function clarificationNode(
       ...(selected.artistNames ? { artistNames: selected.artistNames } : {}),
       artistIds: selected.artistIds ?? [],
       album: selected.album,
-      releaseDate: selected.releaseYear || null,
+      // Candidates sent before they carried the date carry its year only.
+      releaseDate: selected.releaseDate ?? (selected.releaseYear || null),
       coverUrl: selected.coverUrl,
       ...(typeof selected.popularity === "number" ? { popularity: selected.popularity } : {}),
-      isrc: null,
+      isrc: normalizeIsrc(selected.isrc),
       duration: "",
       durationMs: 0,
       explicit: null,

@@ -18,8 +18,12 @@
 
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { SearchCandidate as SearchCandidateSchema } from "@liner-notes/contract";
+import {
+  oneRowPerRecording,
+  SearchCandidate as SearchCandidateSchema,
+} from "@liner-notes/contract";
 import { isSourceError } from "../../sources/http.js";
+import { normalizeIsrc, RELEASE_DATE, releaseYearOf } from "../../sources/musicbrainz.js";
 import { fetchTrack, searchTracks } from "../../sources/spotify.js";
 import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
@@ -243,22 +247,39 @@ export async function scoutNode(
     }
 
     if (needsChoice(ranked)) {
-      // Convert to candidates for human selection (limited by maxCandidates config). One the
-      // contract does not accept is left out rather than failing the whole choice.
-      const candidates: SearchCandidate[] = ranked
-        .slice(0, maxCandidates)
-        .map(({ track: t }) => ({
-          id: t.id,
-          title: t.title,
-          artist: t.artist,
-          ...(t.artistNames ? { artistNames: t.artistNames } : {}),
-          ...(t.artistIds ? { artistIds: t.artistIds } : {}),
-          album: t.album,
-          coverUrl: t.coverUrl,
-          releaseYear: t.releaseDate?.split("-")[0],
-          // Only a score Spotify gave; none is invented when it is missing.
-          ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
-        }))
+      // Convert to candidates for human selection: one row per recording (the contract's
+      // oneRowPerRecording), at most maxCandidates of them, so that the question counts the
+      // rows sent. One the contract does not accept is left out rather than failing the whole
+      // choice.
+      const offered: SearchCandidate[] = ranked
+        .map(({ track: t }) => {
+          const releaseYear = releaseYearOf(t.releaseDate);
+          return {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            ...(t.artistNames ? { artistNames: t.artistNames } : {}),
+            ...(t.artistIds ? { artistIds: t.artistIds } : {}),
+            album: t.album,
+            coverUrl: t.coverUrl,
+            // The date as Spotify sent it ("0000" when it does not know it), or null; the year
+            // only from a known date.
+            releaseDate:
+              typeof t.releaseDate === "string" && RELEASE_DATE.test(t.releaseDate)
+                ? t.releaseDate
+                : null,
+            ...(releaseYear ? { releaseYear } : {}),
+            isrc: normalizeIsrc(t.isrc),
+            // Which version this is (explicit or clean, and its length), so that two versions
+            // under one ISRC are not merged; none when Spotify did not say.
+            ...(typeof t.explicit === "boolean" ? { explicit: t.explicit } : {}),
+            ...(Number.isInteger(t.durationMs) && t.durationMs > 0
+              ? { durationMs: t.durationMs }
+              : {}),
+            // Only a score Spotify gave; none is invented when it is missing.
+            ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
+          };
+        })
         .filter((candidate) => {
           const checked = SearchCandidateSchema.safeParse(candidate);
           if (!checked.success) {
@@ -268,6 +289,7 @@ export async function scoutNode(
           }
           return checked.success;
         });
+      const candidates = oneRowPerRecording(offered).slice(0, maxCandidates);
       // A pick remembered for the same text is not reused: it was one user's choice (or the
       // picker's countdown), and a title alone must always ask.
       log.info("Choice needed", {

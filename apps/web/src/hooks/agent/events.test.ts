@@ -155,10 +155,50 @@ describe('parseAnalysisEvent', () => {
     };
     expect(parseAnalysisEvent(json(event))).toEqual({
       ...event,
+      // Three were sent; the one without an id cannot be read.
+      sentCount: 3,
       // A wider bound is kept as sent; a field of the wrong type reads as missing.
       candidates: [
         { ...candidate, popularity: 120 },
         { ...candidate, id: 'c2', releaseYear: '1994' },
+      ],
+    });
+  });
+
+  it("keeps a candidate's ISRC, release date, explicit flag and length, by which the picker merges rows", () => {
+    const candidate = { id: 'c1', title: 'Hurt', artist: 'NIN', album: 'A', coverUrl: '' };
+    const event = {
+      type: 'interrupt',
+      runId: 'run-1',
+      seq: 2,
+      reason: 'disambiguation',
+      threadId: 'run-1',
+      message: 'Pick one',
+      candidates: [
+        {
+          ...candidate,
+          isrc: 'USIR19400001',
+          releaseDate: '1994-03-08',
+          explicit: true,
+          durationMs: 218_000,
+        },
+        { ...candidate, id: 'c2', isrc: null, releaseDate: null, explicit: null },
+        { ...candidate, id: 'c3', isrc: 7, releaseDate: 1994, explicit: 'yes', durationMs: '218' },
+      ],
+    };
+    expect(parseAnalysisEvent(json(event))).toEqual({
+      ...event,
+      sentCount: 3,
+      candidates: [
+        {
+          ...candidate,
+          isrc: 'USIR19400001',
+          releaseDate: '1994-03-08',
+          explicit: true,
+          durationMs: 218_000,
+        },
+        { ...candidate, id: 'c2' },
+        { ...candidate, id: 'c3' },
       ],
     });
   });

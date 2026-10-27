@@ -5,6 +5,7 @@ import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
 import { Button } from '../ui/Button';
 import { inputVisualStyles } from '../ui/Input';
+import { TrackVersion } from './TrackVersion';
 import { type SuggestionFetcher, useSuggestions } from './useSuggestions';
 
 /** The box's name: the words its placeholder shows, so a spoken command can name it. */
@@ -291,8 +292,16 @@ export function SearchBox({
                   <CoverThumb url={candidate.coverUrl} className="w-10 h-10 rounded" />
                   <div className="flex-1 min-w-0">
                     <div className="text-white font-mono text-sm truncate">{candidate.title}</div>
-                    <div className="text-text-tertiary text-xs truncate">
-                      {candidate.artist} • {candidate.album}
+                    {/* The version (length, explicit) after the truncated text, as in the
+                        picker: suggestions of one song can share a title, artist and album */}
+                    <div className="flex items-center gap-1.5 min-w-0 text-text-tertiary text-xs">
+                      <span className="truncate">
+                        {candidate.artist} • {candidate.album}
+                      </span>
+                      <TrackVersion
+                        durationMs={candidate.durationMs}
+                        explicit={candidate.explicit}
+                      />
                     </div>
                   </div>
                 </div>

@@ -101,9 +101,10 @@ const CLAIM_CATEGORIES: Record<ClaimAbout, { Icon: LucideIcon; label: string }> 
 
 // A relation to another record (a sample, a cover) the card names as such only when it is known:
 // its claim is shown as sourced or measured and was not found only partly supported, or, without
-// a claim, the card was taken from source data. A relation is stated whole (as the verifier
-// reads a link's claim): a source that supports only part of it does not confirm it. A model's
-// guess reads as possible.
+// a claim, the card was taken from source data. A relation is stated whole, as the verifier
+// reads every claim about one, a card's or a link's: a source that supports only part of it does
+// not confirm it (results stored before it did so may still hold a partly supported relation
+// read as sourced). A model's guess reads as possible.
 const RELATIONS: ReadonlySet<string> = new Set(['sample', 'cover']);
 
 /**

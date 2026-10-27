@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { Claim } from '@liner-notes/contract';
 import { factoidRoundsLeft } from '@liner-notes/contract/factoids';
 import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,7 @@ import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/typ
 import type { Factoid, TrackData } from '../types';
 import { audioBlock } from './measured/testing';
 import Player from './Player';
+import { claim as aClaim, evidence as anItem } from './provenance/testing';
 
 afterEach(() => {
   cleanup();
@@ -192,6 +194,8 @@ describe('Player', () => {
     track: TrackData;
     answers: Array<{
       factoids?: Factoid[];
+      /** The facts' claims, kept by id as useAgent keeps them. */
+      claims?: Claim[];
       failed?: FailedFact[];
       nextRound?: number;
       unavailable?: 'rate_limited' | 'budget_exhausted';
@@ -209,6 +213,10 @@ describe('Player', () => {
       setMoreFacts({
         ...before,
         factoids: [...before.factoids, ...factoids],
+        claims: {
+          ...before.claims,
+          ...Object.fromEntries((reply.claims ?? []).map((claim) => [claim.id, claim])),
+        },
         failed: reply.failed ?? [],
         answerFailed: reply.answerFailed !== undefined,
         ...(reply.nextRound !== undefined
@@ -344,5 +352,150 @@ describe('Player', () => {
     expect(reason.getAttribute('role')).toBe('status');
     await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(true));
     expect(moreButton().getAttribute('aria-describedby')).toBe(reason.id);
+  });
+
+  describe('the Player with the claims of its facts', () => {
+    const SOURCE_URL = 'https://www.whosampled.com/sample/1/';
+    const evidence = [anItem({ id: 'ev1', source: 'tavily', sourceTier: 'web', url: SOURCE_URL })];
+    /** A model claim about a sample, judged supported by the item it cites: shown as sourced. */
+    const sourcedSample = (id: string) =>
+      aClaim({
+        id,
+        about: 'sample',
+        kind: 'sourced',
+        evidenceIds: ['ev1'],
+        verdict: 'supported',
+        text: 'It samples Old Record.',
+      });
+    const card = (id: string, title: string, claimId?: string): Factoid => ({
+      id,
+      title,
+      content: `${title}: it samples Old Record.`,
+      type: 'sample',
+      ...(claimId ? { claimId } : {}),
+      entities: [{ id: `${id}-e1`, text: 'Old Record', type: 'sample', searchQuery: 'Old Record' }],
+    });
+    const withFacts = (factoids: Factoid[], claims: Claim[]) =>
+      ({ ...missingTrack, evidence, claims, factoids }) as unknown as TrackData;
+    const cardOf = (title: string) =>
+      screen.getAllByText(title)[0].closest('[data-factoid-category]') as HTMLElement;
+    const badgeOf = (title: string) =>
+      cardOf(title).querySelector('[data-factoid-type]')?.textContent;
+
+    it("shows each fact's claim: a sourced sample links its source, a guessed one is possible", () => {
+      const track = withFacts(
+        [card('f1', 'Known Sample', 'c-known'), card('f2', 'Guessed Sample', 'c-guess')],
+        [sourcedSample('c-known'), aClaim({ id: 'c-guess', about: 'sample' })],
+      );
+      render(<Player trackData={track} onBack={() => {}} />);
+
+      const known = cardOf('Known Sample');
+      expect(known.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind')).toBe(
+        'sourced',
+      );
+      expect(badgeOf('Known Sample')).toBe('SAMPLE');
+      const link = within(known).getByRole('link', {
+        name: 'Old Record (sample), opens the cited source in a new tab',
+      });
+      expect(link.getAttribute('href')).toBe(SOURCE_URL);
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+      expect(link.getAttribute('target')).toBe('_blank');
+
+      const guessed = cardOf('Guessed Sample');
+      expect(guessed.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind')).toBe(
+        'inferred',
+      );
+      expect(badgeOf('Guessed Sample')).toBe('POSSIBLE SAMPLE');
+      expect(within(guessed).queryByRole('link', { name: /Old Record/ })).toBeNull();
+      expect(within(guessed).queryByRole('button', { name: /Old Record/ })).toBeNull();
+    });
+
+    it('opens no web search for an entity', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const track = withFacts(
+        [card('f2', 'Guessed Sample', 'c-guess')],
+        [aClaim({ id: 'c-guess', about: 'sample' })],
+      );
+      render(<Player trackData={track} onBack={() => {}} />);
+      fireEvent.click(within(cardOf('Guessed Sample')).getByText('Old Record'));
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it("uses the claims of the second round's facts, and says a fact with no verdict was not checked", async () => {
+      // The control shows under the result's own facts.
+      const track = withFacts(releaseInfo.factoids, []);
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('fc-aaaaaaaaaaaa', 'First Round', 'fc-aaaaaaaaaaaa')],
+              claims: [
+                aClaim({
+                  id: 'fc-aaaaaaaaaaaa',
+                  about: 'sample',
+                  evidenceIds: ['ev1'],
+                  verdict: null,
+                }),
+              ],
+              nextRound: 1,
+            },
+            {
+              factoids: [card('fc-bbbbbbbbbbbb', 'Second Round', 'fc-bbbbbbbbbbbb')],
+              claims: [sourcedSample('fc-bbbbbbbbbbbb')],
+              nextRound: 2,
+            },
+          ]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await screen.findByText('First Round');
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      fireEvent.click(moreButton());
+      await screen.findByText('Second Round');
+
+      const second = cardOf('Second Round');
+      expect(second.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind')).toBe(
+        'sourced',
+      );
+      expect(badgeOf('Second Round')).toBe('SAMPLE');
+      expect(
+        within(second)
+          .getByRole('link', { name: /^Old Record .*opens the cited source/ })
+          .getAttribute('href'),
+      ).toBe(SOURCE_URL);
+
+      const first = cardOf('First Round');
+      expect(first.textContent).toContain('not checked by the verifier');
+      expect(badgeOf('First Round')).toBe('POSSIBLE SAMPLE');
+      expect(within(first).queryByRole('link', { name: /Old Record/ })).toBeNull();
+      // Each card shows its own claim: the section is not labelled model inference as a whole.
+      const decrypted = screen.getByRole('region', { name: 'Decrypted insights' });
+      expect(decrypted.querySelectorAll('[data-claim-kind]')).toHaveLength(2);
+      // A claim a card shows is not listed again.
+      expect(
+        screen.queryByRole('region', { name: 'More claims' })?.textContent ?? '',
+      ).not.toContain('It samples Old Record.');
+    });
+
+    it('shows a fact once when its id repeats, with no duplicate keys', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const track = withFacts(
+        [card('f1', 'Known Sample', 'c-known'), card('f1', 'Known Sample', 'c-known')],
+        [sourcedSample('c-known')],
+      );
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f1', 'Known Sample', 'c-known')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      expect(screen.getAllByText('Known Sample')).toHaveLength(1);
+      expect(screen.getByText('1 insights decoded')).toBeTruthy();
+      const keyWarnings = error.mock.calls.filter((call) => /same key/.test(String(call[0])));
+      expect(keyWarnings).toEqual([]);
+    });
   });
 });

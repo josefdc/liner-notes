@@ -115,3 +115,49 @@ export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreF
   const roundsLeft = answer.roundsLeft ?? factoidRoundsLeft(nextRound);
   return { ...moreFacts, nextRound, finished: !roundsLeft, runId };
 }
+
+/**
+ * A change to the facts kept for "more facts", always about one result: the facts kept for
+ * another result are let go first (moreFactsOf).
+ */
+export type MoreFactsAction =
+  /** A new answer is asked for: the last answer's failures are cleared. */
+  | { type: 'answerStarted'; result: TrackData }
+  /** The answer sent a fact, with its claim. */
+  | { type: 'factReceived'; result: TrackData; factoid: Factoid; claim?: Claim }
+  /** The answer could not write one of its facts. */
+  | { type: 'factFailed'; result: TrackData; failure: FailedFact }
+  /** The answer ended (`done`). */
+  | { type: 'answerEnded'; result: TrackData; answer: MoreFactsAnswer }
+  /** The answer failed as a whole: an error for all of it, or a stream that broke. */
+  | { type: 'answerFailed'; result: TrackData }
+  /** No answer could be asked for: no run token was given. */
+  | { type: 'tokenRefused'; result: TrackData };
+
+/** The facts kept after `action` (moreFacts is null before the first answer). */
+export function moreFactsReducer(moreFacts: MoreFacts | null, action: MoreFactsAction): MoreFacts {
+  const kept = moreFactsOf(action.result, moreFacts);
+  switch (action.type) {
+    case 'answerStarted':
+      return { ...kept, failed: [], answerFailed: false };
+    case 'factReceived':
+      return withFact(kept, action.factoid, action.claim);
+    case 'factFailed':
+      return withFailure(kept, action.failure);
+    case 'answerEnded':
+      return withAnswer(kept, action.answer);
+    case 'answerFailed':
+      return { ...kept, answerFailed: true };
+    case 'tokenRefused':
+      return { ...kept, failed: [], answerFailed: true };
+  }
+}
+
+/** True when `factoid` is not kept for `result` yet (by id): the answer adds it. */
+export function isNewFact(
+  moreFacts: MoreFacts | null,
+  result: TrackData,
+  factoid: Factoid,
+): boolean {
+  return !moreFactsOf(result, moreFacts).factoids.some((kept) => kept.id === factoid.id);
+}

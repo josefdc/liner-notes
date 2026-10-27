@@ -40,7 +40,6 @@ export interface AgentState {
   logs: AgentLog[];
   trackData: TrackData | null;
   candidates: SearchCandidate[] | null;
-  threadId: string | null;
   error: string | null;
   /**
    * Why the run failed: the code of the server's `error` event (no_match, choice_expired,

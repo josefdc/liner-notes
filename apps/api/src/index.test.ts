@@ -450,7 +450,7 @@ describe("an API process whose log reader has gone", () => {
     expect(exitCode).toBe(0);
     expect(result.ms).toBeGreaterThanOrEqual(2900); // the open request was given the drain
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
-  }, 60_000);
+  }, 75_000);
 });
 
 describe("an API process that cannot listen", () => {

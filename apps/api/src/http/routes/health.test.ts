@@ -141,8 +141,8 @@ const degraded = json(200, { status: "degraded", analyzer_version: "test-1", mod
 
 /**
  * A port nothing listens on, which no other test's server can take: unlike a port bound and
- * released, 1023 is below the ephemeral range that listen(0) picks from, and only a privileged
- * process can bind it. Not 9 (as playwright.config.ts uses): fetch refuses it as a bad port
+ * released, 1023 is below the ephemeral range that listen(0) picks from, and no test binds it.
+ * Not 9 (as playwright.config.ts uses): fetch refuses it as a bad port
  * before connecting, so it would never be refused by the system.
  */
 async function closedPort(): Promise<string> {

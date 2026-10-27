@@ -231,7 +231,17 @@ function fromContract(parsed: AudioFeatures): MeasuredAudio {
     withheld: withheldFromContract(parsed),
   };
   if (!parsed.gate.passed) {
-    return { ...read, tempo: null, key: null, loudness: null, fingerprint: null, keyMoments: [] };
+    return {
+      ...read,
+      tempo: null,
+      key: null,
+      loudness: null,
+      beats: null,
+      energyContour: null,
+      sections: null,
+      fingerprint: null,
+      keyMoments: [],
+    };
   }
   const f = parsed.fingerprint;
   return {
@@ -239,6 +249,9 @@ function fromContract(parsed: AudioFeatures): MeasuredAudio {
     tempo: parsed.tempo,
     key: parsed.key,
     loudness: parsed.loudness,
+    beats: parsed.beats,
+    energyContour: parsed.energyContour,
+    sections: parsed.sections,
     fingerprint: f && {
       styles: f.styles && { ...f.styles, top: sorted(f.styles.top) },
       tags: f.tags && { ...f.tags, scores: sorted(f.tags.scores) },
@@ -309,6 +322,9 @@ describe('readAudio against the contract', () => {
       expect(read?.tempo).toEqual(parsed.tempo);
       expect(read?.key).toEqual(parsed.key);
       expect(read?.loudness).toEqual(parsed.loudness);
+      expect(read?.beats).toEqual(parsed.beats);
+      expect(read?.energyContour).toEqual(parsed.energyContour);
+      expect(read?.sections).toEqual(parsed.sections);
       expect(read?.keyMoments).toEqual(parsed.keyMoments);
       expect(read?.fingerprint?.moods ?? null).toEqual(parsed.fingerprint?.moods ?? null);
       const sorted = (items: { label: string; score: number }[] | undefined) =>

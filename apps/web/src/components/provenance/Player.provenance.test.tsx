@@ -167,7 +167,7 @@ describe('the Player with claims', () => {
       claims: undefined,
       evidence: undefined,
       factoids: [
-        { id: 's1', title: 'Sample DNA', content: 'This track samples "X" by Y.', type: 'sample' },
+        { id: 's1', title: 'Samples', content: 'This track samples "X" by Y.', type: 'sample' },
         { id: 's2', title: 'Sonic Profile', content: 'Measured at 123 BPM.', type: 'production' },
       ],
     } as TrackData;

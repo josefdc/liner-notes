@@ -718,7 +718,7 @@ export const rules = [
   },
   {
     id: "emoji-in-progress",
-    owner: "#34",
+    owner: "#34, #35",
     description:
       "Emoji in progress, log and status messages: string literals in API and web source",
     files: (p) =>

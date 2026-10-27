@@ -190,13 +190,16 @@ times are seconds from the start of the preview. Every block is `null` when it w
   first two beats on onsets in a row, or five beats that alternate on and off onsets; it ends
   where they end (with no such beats anywhere, as with onsets only on the downbeats, from the
   first beat on an onset to the last). So one onset in an intro (a click, a breath) does not
-  start it. The run of beats before or after it is left out when it has four or more beats
-  with sound under them and its spacing is more than 4 % off the grid next to it, or its
-  beats are a median of more than a quarter of a period off the grid's phase. A band's sparse
-  first bars in that run (from its first onset on) stay when they are on the grid, and the
-  beats before its first onset are also judged on their own (Essentia counted 15 and 23 beats under the
-  pads before two bands, 6.8 and 12.8 % off; with one click under a pad beat, it reported all
-  or 6 of the 15 again before 2.3.4). The gain is in intros. On the evals harness's 30 s
+  start it. The run of beats before or after it is left out, as a whole and onsets included,
+  when it has four or more beats with sound under them and its spacing is more than 4 % off
+  the grid next to it, or its beats are a median of more than a quarter of a period off the
+  grid's phase. When the run stays, the beats before its first onset are also judged on their
+  own against the same grid, so ticks before a few kicks do not stay with them. Essentia
+  counted 15 and 23 beats under the pads before two bands, 6.8 and 12.8 % off; with one click
+  under a pad beat, it reported all or 6 of the 15 again before 2.3.4. In the tests, one click
+  under a pad beat no longer brings an intro back (under the pads before the 85, 97 and
+  132 BPM bands, and under ticks 3.5 to 10 % off a band's spacing); the known limits below
+  are where it still can. The gain is in intros. On the evals harness's 30 s
   clips at seed 1 (100 Ballroom and 100 GiantSteps Tempo tracks, Ballroom's beat annotations
   aligned to each clip's window), it left out 68 beats in seven runs, all Essentia's: six
   intros (a fade-in, a crescendo with three beats before the first annotated beat, and four
@@ -204,16 +207,28 @@ times are seconds from the start of the preview. Every block is `null` when it w
   of a Ballroom clip) and the end of one Ballroom clip, where it removed as many beats on the
   annotated beat as off it. At clip ends it is about even.
   The tempo is still fitted to the tracked beats on onsets, and the
-  steadiness check and the sections still use every tracked beat. Known limits: beats a
-  tracker counts through a beatless intro at the band's own spacing and phase are still
-  reported (a rubato piano intro, and some hum and hiss intros: 1 of 27 tried), as are runs
-  of one to three beats. Two onsets on adjacent beats of an intro, or three on alternate
-  beats, start the grid there, and one on the beat next to the band joins it, as a pickup
-  does; with Essentia, two clicks two beats apart under the 85 BPM pad also brought back 14 of
-  its 15 beats. An intro whose only onsets are sparse (downbeat kicks) and whose tempo drifts
-  from the band's is left out whole: all 23 to 24 beats of a 24-beat intro at 2.5 to 3 % (none
-  at 2 %), and the 14 beats of a 110 BPM intro before a 120 BPM band. Onsets count relative to the clip's own beats, so a band on under a tenth of the
-  window leaves its pad's beats in.
+  steadiness check and the sections still use every tracked beat. Known limits:
+  - Beats a tracker counts through a beatless intro at the band's own spacing and phase are
+    still reported (a rubato piano intro, and some hum and hiss intros: 1 of 27 tried), as
+    are runs of one to three beats. A quiet click (0.03) under the 4th or 6th pad beat of the
+    97 BPM probe makes Essentia track the whole pad again on the band's grid, and its 16
+    beats are reported, as in every version before.
+  - Two onsets on adjacent beats of an intro, or three on alternate beats, start the grid
+    there, and one on the beat next to the band joins it, as a pickup does; with Essentia,
+    two clicks two beats apart under the 85 BPM pad also brought back 14 of its 15 beats.
+  - A band whose first bars hold only a downbeat, after a pad's ticks, loses those bars with
+    the ticks (8 beats in the tests): the run is judged whole, and the ticks put it off the
+    grid. So does a band's lone first hit two or three beats before its groove, or a last hit
+    two or three beats after it before a ringing tail (2.3.3 kept them). Those beats are
+    missing, not invented: keeping the part of a run from its first onset when it alone was
+    on the grid also kept Essentia's ticks after one click (up to 13 of the 23 before the
+    132 BPM band), because its ticks come close to the band's grid near it.
+  - An intro whose only onsets are sparse (downbeat kicks) and whose tempo drifts from the
+    band's is left out whole: all 23 to 24 beats of a 24-beat intro at 2.5 to 3 % (none at
+    2 %), and the 14 beats of a 110 BPM intro before a 120 BPM band.
+  - Onsets count relative to the clip's own beats, so a band on under a tenth of the window
+    leaves its pad's beats in.
+
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

@@ -295,40 +295,158 @@ export function scopeText(evidence: Pick<Evidence, 'recordRef'>): string | null 
 // of results; a link to one would expire, or carry a credential.
 const PREVIEW_HOST =
   /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
-const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
-// Query (or fragment) parameters that carry a credential or sign a URL: tokens and keys, S3
-// (X-Amz-*), Google Cloud Storage, Azure SAS (sig, se), CloudFront (Policy, Signature,
-// Key-Pair-Id) and Akamai (hdnea, hdnts).
-const CREDENTIAL_PARAMS = new Set([
-  'access_token',
-  'id_token',
-  'api_key',
-  'apikey',
-  'token',
-  'signature',
-  'sig',
-  'se',
-  'policy',
-  'key-pair-id',
-  'x-amz-credential',
-  'x-amz-signature',
-  'x-amz-security-token',
-  'x-goog-credential',
-  'x-goog-signature',
-  'hdnea',
-  'hdnts',
-]);
+// The lookahead checks once that the rest holds no whitespace, so a long run of candidate
+// parameters before a space is not rescanned for each one.
+const SIGNED_URL = /^https?:\/\/(?=\S*$)\S*?[?&;~](?:hdnea|hdnts|x-amz-signature)=/i;
+/** A parameter name as compared: lower case, without `-` or `_` (`accessToken`, `access-token`). */
+const paramKey = (name: string) => name.toLowerCase().replace(/[-_]/g, '');
+// Query (or fragment) parameters that carry a credential or sign a URL: tokens, keys,
+// secrets, passwords, OAuth codes and signatures, session ids, S3 (X-Amz-*), Google Cloud
+// Storage, Azure SAS (sig, se), CloudFront (Policy, Signature, Key-Pair-Id) and Akamai (hdnea,
+// hdnts). Compared by paramKey, so one spelling of each is enough. `sid` is left out: it also
+// names public story ids (Slashdot, PHP-Nuke); as a path parameter it is refused (SESSION_PATH).
+const CREDENTIAL_PARAMS = new Set(
+  [
+    'access_token',
+    'id_token',
+    'refresh_token',
+    'auth_token',
+    'x_auth_token',
+    'api_token',
+    'oauth_token',
+    'oauth_signature',
+    'jwt',
+    'bearer',
+    'key',
+    'api_key',
+    'x_api_key',
+    'private_key',
+    'secret',
+    'client_secret',
+    'password',
+    'passwd',
+    'pwd',
+    'auth',
+    'code',
+    'session',
+    'session_id',
+    'sessid',
+    'jsessionid',
+    'phpsessid',
+    'token',
+    'signature',
+    'sig',
+    'se',
+    'policy',
+    'key-pair-id',
+    'x-amz-credential',
+    'x-amz-signature',
+    'x-amz-security-token',
+    'x-goog-credential',
+    'x-goog-signature',
+    'hdnea',
+    'hdnts',
+  ].map(paramKey),
+);
+
+// A parameter name before `=`, in a query or a fragment, after any separator a server or a
+// client-side router may read: `&`, `;` (which also drops the `amp` of an HTML-escaped `&amp;`),
+// `!`, `/` and `?` (`#!key=…`, `#/route?code=…`, `?next=https://app.example/cb/?code=…`).
+const PARAM_NAME = /(?:^|[?#&;!/])([^=?#&;!/]+)=/g;
+// Path parameters that carry a session id or a token (`/a;jsessionid=…`).
+const SESSION_PATH = /;(?:jsessionid|phpsessid|sid|token)=/i;
 
 /** True when a query or fragment (`?a=1&b=2`, `#access_token=…`) names a credential parameter. */
 function carriesCredential(params: string): boolean {
-  const keys = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
-  return keys.some((key) => CREDENTIAL_PARAMS.has(key.toLowerCase()));
+  const names = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
+  for (const [, name] of params.matchAll(PARAM_NAME)) names.push(decodeName(name));
+  return names.some((name) => CREDENTIAL_PARAMS.has(paramKey(name)));
+}
+
+/** A percent-encoded parameter name, decoded as a query string would be; as is if malformed. */
+function decodeName(name: string): string {
+  try {
+    return decodeURIComponent(name.replace(/\+/g, ' '));
+  } catch {
+    return name;
+  }
+}
+
+/** The eight 16-bit groups of a compressed IPv6 address as `URL` writes it (no dotted tail). */
+function ipv6Groups(v6: string): number[] {
+  const [head, tail] = v6.split('::');
+  const before = head ? head.split(':') : [];
+  const after = tail ? tail.split(':') : [];
+  const zeros = Array<string>(8 - before.length - after.length).fill('0');
+  return [...before, ...zeros, ...after].map((group) => Number.parseInt(group, 16));
+}
+
+/**
+ * The first two octets of the IPv4 address an IPv6 one embeds: IPv4-compatible (`::/96`, `::`
+ * and `::1` included), IPv4-mapped (`::ffff:0:0/96`), SIIT (`::ffff:0:0:0/96`), NAT64
+ * (`64:ff9b::/96`) and 6to4 (`2002::/16`); null for any other address.
+ */
+function embeddedIPv4(g: number[]): [number, number] | null {
+  const zero = (from: number, to: number) => g.slice(from, to).every((group) => group === 0);
+  const tail =
+    zero(0, 6) ||
+    (zero(0, 5) && g[5] === 0xffff) ||
+    (zero(0, 4) && g[4] === 0xffff && g[5] === 0) ||
+    (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6));
+  const high = tail ? g[6] : g[0] === 0x2002 ? g[1] : null;
+  return high === null ? null : [high >> 8, high & 0xff];
+}
+
+/**
+ * True for a host that is not on the public internet: localhost, and loopback, private, shared,
+ * link-local, site-local, multicast (IPv4 and IPv6), reserved or unspecified addresses, IPv6
+ * forms that embed an IPv4 one included. `hostname` is the parsed URL's, so it is lower case, a
+ * numeric, hex or octal IPv4 spelling is already dotted decimal, and IPv6 is compressed hex.
+ */
+function isPrivateHost(hostname: string): boolean {
+  // Trailing dots are stripped with a loop: `/\.+$/` is quadratic on a long run of dots that is
+  // not at the end, and `URL` keeps empty labels.
+  let end = hostname.length;
+  while (end > 0 && hostname[end - 1] === '.') end--;
+  const host = hostname.slice(0, end);
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === 'localhost.localdomain') return true;
+  let v4 = host
+    .match(/^(\d+)\.(\d+)\.\d+\.\d+$/)
+    ?.slice(1)
+    .map(Number);
+  if (host.startsWith('[')) {
+    const groups = ipv6Groups(host.slice(1, -1));
+    v4 = embeddedIPv4(groups) ?? undefined;
+    // fc00::/7 (unique local), fe80::/10 (link-local), fec0::/10 (site-local), ff00::/8
+    // (multicast).
+    if (!v4) {
+      const first = groups[0];
+      return (first & 0xfe00) === 0xfc00 || (first & 0xff80) === 0xfe80 || first >> 8 === 0xff;
+    }
+  }
+  if (!v4) return false;
+  const [a, b] = v4;
+  // 0/8 (unspecified), 10/8, 100.64/10 (shared), 127/8, 169.254/16, 172.16/12, 192.168/16, and
+  // 224/4 (multicast) and above (reserved, broadcast).
+  return (
+    a === 0 ||
+    a === 10 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224
+  );
 }
 
 /**
  * A link that may be opened: an absolute http or https URL, as the browser resolves it; null for
  * anything else (javascript:, data:, a relative path, text that is not a URL), and for a URL that
- * carries a credential (a user name or password, a signed or token query) or is a preview clip.
+ * carries a credential (a user name or password, a signed, token or session query, a session or
+ * token path parameter such as `;jsessionid=`), is a preview clip or points to a private host
+ * (isPrivateHost).
  */
 export function safeHref(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -340,7 +458,11 @@ export function safeHref(url: string | null | undefined): string | null {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
-  if (carriesCredential(parsed.search) || carriesCredential(parsed.hash)) return null;
+  if (isPrivateHost(parsed.hostname)) return null;
+  if (SESSION_PATH.test(parsed.pathname)) return null;
+  // A fragment without `=` is an anchor (`#auth`), not parameters.
+  if (carriesCredential(parsed.search)) return null;
+  if (parsed.hash.includes('=') && carriesCredential(parsed.hash)) return null;
   const href = parsed.href;
   for (const value of [url.trim(), href]) {
     if (PREVIEW_HOST.test(value) || SIGNED_URL.test(value)) return null;

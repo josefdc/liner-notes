@@ -9,6 +9,10 @@ export interface SearchCandidate {
   releaseYear?: string;
   /** Optional in the contract: the API may stop sending it. */
   popularity?: number;
+  /** The recording's ISRC; null or absent when Spotify gave none (older servers send none). */
+  isrc?: string | null;
+  /** Spotify's release date as sent ("0000" when unknown); null or absent when not known. */
+  releaseDate?: string | null;
 }
 
 export type AgentStatus =

@@ -163,6 +163,31 @@ describe('parseAnalysisEvent', () => {
     });
   });
 
+  it("keeps a candidate's ISRC and release date, by which the picker merges rows", () => {
+    const candidate = { id: 'c1', title: 'Hurt', artist: 'NIN', album: 'A', coverUrl: '' };
+    const event = {
+      type: 'interrupt',
+      runId: 'run-1',
+      seq: 2,
+      reason: 'disambiguation',
+      threadId: 'run-1',
+      message: 'Pick one',
+      candidates: [
+        { ...candidate, isrc: 'USIR19400001', releaseDate: '1994-03-08' },
+        { ...candidate, id: 'c2', isrc: null, releaseDate: null },
+        { ...candidate, id: 'c3', isrc: 7, releaseDate: 1994 },
+      ],
+    };
+    expect(parseAnalysisEvent(json(event))).toEqual({
+      ...event,
+      candidates: [
+        { ...candidate, isrc: 'USIR19400001', releaseDate: '1994-03-08' },
+        { ...candidate, id: 'c2' },
+        { ...candidate, id: 'c3' },
+      ],
+    });
+  });
+
   it.each([
     ['a result that is not an object', { ...complete(1), data: 'Hurt' }],
     ['a result without a seq', { type: 'complete', runId: 'run-1', data: result }],

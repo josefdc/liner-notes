@@ -45,14 +45,22 @@ const songOf = (suggestion: SearchCandidate) =>
   `${normalized(suggestion.title)}\u0000${normalized(suggestion.artist)}`;
 
 /**
+ * How `mergeDuplicates` treats a row without an ISRC. "by-song" (the search box): it stands for
+ * the recording listed with its title and artist (see `recordingKeys`). "apart" (the track
+ * picker): it stands for itself, and is never merged with another row.
+ */
+export type WithoutIsrc = 'by-song' | 'apart';
+
+/**
  * The recording each of `rows` stands for, as a key. A row with an ISRC is that recording, and
  * rows with different ISRCs are different recordings (a live take, a re-recording). A row
  * without one stands for the one recording listed with its title and artist (case, spacing and
  * Unicode forms aside); when the list holds no recording with them, or several, it cannot tell
  * which, and stands for its title and artist alone. So no row joins two ISRCs, and the keys do
- * not depend on the order of the rows.
+ * not depend on the order of the rows. With `withoutIsrc` "apart", a row without an ISRC
+ * stands for itself (its track id).
  */
-function recordingKeys(rows: SearchCandidate[]) {
+function recordingKeys(rows: SearchCandidate[], withoutIsrc: WithoutIsrc) {
   const isrcsBySong = new Map<string, Set<string>>();
   for (const row of rows) {
     const isrc = isrcOf(row);
@@ -64,6 +72,7 @@ function recordingKeys(rows: SearchCandidate[]) {
   return (row: SearchCandidate) => {
     const isrc = isrcOf(row);
     if (isrc) return `isrc:${isrc}`;
+    if (withoutIsrc === 'apart') return `id:${row.id}`;
     const isrcs = isrcsBySong.get(songOf(row));
     return isrcs?.size === 1 ? `isrc:${[...isrcs][0]}` : `song:${songOf(row)}`;
   };
@@ -84,10 +93,15 @@ function isEarlier(date: string | null, than: string | null) {
  * recording twice (the album track and its single, a reissue, a compilation), and the rows would
  * look the same. Of the rows for one recording, the one released first is kept, in the place of
  * the one listed first; when a date is missing, Spotify's order decides. Which recordings are
- * listed does not depend on Spotify's order; only which of two equal rows is kept can.
+ * listed does not depend on Spotify's order; only which of two equal rows is kept can. A row
+ * whose track id was listed before is dropped. `withoutIsrc` says how rows without an ISRC are
+ * treated (see `WithoutIsrc`).
  */
-export function mergeDuplicates(candidates: SearchCandidate[]): SearchCandidate[] {
-  const keyOf = recordingKeys(candidates);
+export function mergeDuplicates(
+  candidates: SearchCandidate[],
+  withoutIsrc: WithoutIsrc = 'by-song',
+): SearchCandidate[] {
+  const keyOf = recordingKeys(candidates, withoutIsrc);
   const kept: SearchCandidate[] = [];
   const places = new Map<string, number>();
   const ids = new Set<string>();

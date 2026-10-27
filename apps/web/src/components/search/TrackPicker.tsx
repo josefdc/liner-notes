@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
+import { pickerRows } from './pickerRows';
 import { scrollBehavior } from '../../utils/motion';
 
 /** The picker's question: its heading and the name of its list. */
@@ -49,20 +50,17 @@ interface TrackPickerProps {
  *
  * Nothing is chosen for the user: the run waits until a row is picked or the picker is left.
  *
- * Every track the server offers gets a row (a repeated track id once), so the rows always match
- * the count in the server's question. Rows are not merged as the search suggestions are: the
- * server sends no ISRC here, and two rows with one title and artist can be two takes (a studio
- * and a live one), of which the picker is the last place to choose.
+ * The rows are `pickerRows`: each track id once, and the rows that share an ISRC as one. Rows
+ * without an ISRC are never merged, as two rows with one title and artist can be two takes (a
+ * studio and a live one), of which the picker is the last place to choose. When this leaves
+ * fewer rows than the server counted, the question counts the rows shown (useAgent).
  */
 export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerProps) {
   const id = useId();
   const headingId = `${id}-question`;
   const hintId = `${id}-hint`;
 
-  const rows = useMemo(() => {
-    const seen = new Set<string>();
-    return candidates.filter((candidate) => !seen.has(candidate.id) && seen.add(candidate.id));
-  }, [candidates]);
+  const rows = useMemo(() => pickerRows(candidates), [candidates]);
   const [highlighted, setHighlighted] = useState(0);
   // A new list starts at its first row.
   const [listShown, setListShown] = useState(rows);

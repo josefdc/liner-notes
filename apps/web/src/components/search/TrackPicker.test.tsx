@@ -128,20 +128,45 @@ describe('TrackPicker', () => {
     expect(screen.getByText('Nothing is analyzed until you choose a track.')).toBeTruthy();
   });
 
-  it('shows every track the server offers: rows sharing an ISRC, or a title and artist, all stay', () => {
-    // The API sends no ISRC in the picker yet; whatever it sends, the rows match its count.
+  it('shows rows sharing an ISRC as one, the earliest release, in the place of the first', () => {
+    // One recording, listed as its single and on its album: one row, the album's (2011).
     const single = {
       ...track('m-single', 'M83', '2012'),
       title: 'Midnight City',
       isrc: 'GB55H1100002',
+      releaseDate: '2012-01-17',
     };
-    const album = { ...single, id: 'm-album', releaseYear: '2011' };
+    const album = { ...single, id: 'm-album', releaseYear: '2011', releaseDate: '2011-10-18' };
+    // Another recording of the song (a live take): another ISRC, its own row.
+    const liveIsrc = {
+      ...single,
+      id: 'm-live',
+      album: 'Live',
+      isrc: 'GB55H1300009',
+      releaseYear: '2013',
+      releaseDate: '2013',
+    };
+    const { onPick } = renderPicker([
+      single,
+      track('c2', 'Nine Inch Nails', '1994'),
+      album,
+      liveIsrc,
+    ]);
+    expect(options().map((row) => row.textContent)).toEqual([
+      expect.stringContaining('M83 • 2011'),
+      expect.stringContaining('Nine Inch Nails • 1994'),
+      expect.stringContaining('M83 • 2013'),
+    ]);
+    press('Enter');
+    expect(onPick).toHaveBeenCalledWith(album);
+  });
+
+  it('never merges rows without an ISRC, even with the same title and artist', () => {
+    // Two takes the server cannot tell apart (no ISRC): both stay, the picker is where to choose.
     const studio = { ...track('t-full', 'Test Artist', '2001'), title: 'Bright Lines' };
     const live = { ...studio, id: 't-live-take', album: 'Live at the Hall', releaseYear: '2004' };
-    const { onPick } = renderPicker([single, album, studio, live]);
+    const { onPick } = renderPicker([studio, live]);
     expect(options().map((row) => row.textContent)).toEqual([
-      expect.stringContaining('M83 • 2012'),
-      expect.stringContaining('M83 • 2011'),
       expect.stringContaining('Test Artist • 2001'),
       expect.stringContaining('Test Artist • 2004'),
     ]);

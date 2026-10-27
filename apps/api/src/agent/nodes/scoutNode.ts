@@ -20,6 +20,12 @@ import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { SearchCandidate as SearchCandidateSchema } from "@liner-notes/contract";
 import { isSourceError } from "../../sources/http.js";
+import {
+  knownReleaseDate,
+  normalizeIsrc,
+  RELEASE_DATE,
+  releaseYearOf,
+} from "../../sources/musicbrainz.js";
 import { fetchTrack, searchTracks } from "../../sources/spotify.js";
 import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
@@ -65,6 +71,42 @@ function withSpotifyRetry<T>(
       });
     },
   });
+}
+
+/**
+ * `date` is before `than`, compared as far as both go: a year alone is as early as any day in
+ * it. An unknown date (knownReleaseDate) is before nothing and after nothing.
+ */
+function releasedBefore(date: string | null | undefined, than: string | null | undefined) {
+  const a = knownReleaseDate(date);
+  const b = knownReleaseDate(than);
+  if (!a || !b) return false;
+  const length = Math.min(a.length, b.length);
+  return a.slice(0, length) < b.slice(0, length);
+}
+
+/**
+ * The candidates with each recording offered once. Spotify often lists one recording several
+ * times (the album track and its single, a reissue, a compilation), all with its ISRC: of the
+ * rows that share an ISRC, the one released first is kept, in the place of the first listed;
+ * when a date is unknown, the first listed is kept. Rows with different ISRCs stay apart (a live
+ * take, a re-recording), and a row without an ISRC is never merged, even with a row of the same
+ * title and artist: two takes may be two recordings, and the picker is where to tell them apart.
+ */
+function oneRowPerRecording(candidates: SearchCandidate[]): SearchCandidate[] {
+  const kept: SearchCandidate[] = [];
+  const places = new Map<string, number>();
+  for (const candidate of candidates) {
+    const isrc = candidate.isrc;
+    const place = isrc ? places.get(isrc) : undefined;
+    if (place === undefined) {
+      if (isrc) places.set(isrc, kept.length);
+      kept.push(candidate);
+    } else if (releasedBefore(candidate.releaseDate, kept[place].releaseDate)) {
+      kept[place] = candidate;
+    }
+  }
+  return kept;
 }
 
 /** Why a Spotify call failed, as the scout reports it. */
@@ -243,22 +285,33 @@ export async function scoutNode(
     }
 
     if (needsChoice(ranked)) {
-      // Convert to candidates for human selection (limited by maxCandidates config). One the
-      // contract does not accept is left out rather than failing the whole choice.
-      const candidates: SearchCandidate[] = ranked
-        .slice(0, maxCandidates)
-        .map(({ track: t }) => ({
-          id: t.id,
-          title: t.title,
-          artist: t.artist,
-          ...(t.artistNames ? { artistNames: t.artistNames } : {}),
-          ...(t.artistIds ? { artistIds: t.artistIds } : {}),
-          album: t.album,
-          coverUrl: t.coverUrl,
-          releaseYear: t.releaseDate?.split("-")[0],
-          // Only a score Spotify gave; none is invented when it is missing.
-          ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
-        }))
+      // Convert to candidates for human selection: one row per recording (see
+      // oneRowPerRecording), at most maxCandidates of them, so that the question counts the
+      // rows sent. One the contract does not accept is left out rather than failing the whole
+      // choice.
+      const offered: SearchCandidate[] = ranked
+        .map(({ track: t }) => {
+          const releaseYear = releaseYearOf(t.releaseDate);
+          return {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            ...(t.artistNames ? { artistNames: t.artistNames } : {}),
+            ...(t.artistIds ? { artistIds: t.artistIds } : {}),
+            album: t.album,
+            coverUrl: t.coverUrl,
+            // The date as Spotify sent it ("0000" when it does not know it), or null; the year
+            // only from a known date.
+            releaseDate:
+              typeof t.releaseDate === "string" && RELEASE_DATE.test(t.releaseDate)
+                ? t.releaseDate
+                : null,
+            ...(releaseYear ? { releaseYear } : {}),
+            isrc: normalizeIsrc(t.isrc),
+            // Only a score Spotify gave; none is invented when it is missing.
+            ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
+          };
+        })
         .filter((candidate) => {
           const checked = SearchCandidateSchema.safeParse(candidate);
           if (!checked.success) {
@@ -268,6 +321,7 @@ export async function scoutNode(
           }
           return checked.success;
         });
+      const candidates = oneRowPerRecording(offered).slice(0, maxCandidates);
       // A pick remembered for the same text is not reused: it was one user's choice (or the
       // picker's countdown), and a title alone must always ask.
       log.info("Choice needed", {

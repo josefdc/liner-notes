@@ -353,6 +353,42 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
+  it('counts the rows the picker shows when it merges rows that share an ISRC', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    // An older server: one recording sent twice (its album and a compilation), counted as two.
+    const cash = { ...candidates[0], isrc: 'USUM70207211', releaseDate: '2002-11-05' };
+    const compilation = { ...cash, id: 'c3', album: 'C', releaseDate: '2008' };
+    analysis.send({
+      ...interrupt(),
+      candidates: [cash, candidates[1], compilation],
+      message: '3 possible tracks from Spotify; choose one',
+    });
+
+    const question = '2 possible tracks from Spotify; choose one';
+    expect(hook.result.current.statusNote).toBe(question);
+    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
+  });
+
+  it("keeps the server's question when no rows are merged: different ISRCs stay apart", () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    const message = '2 possible tracks from Spotify; choose one';
+    analysis.send({
+      ...interrupt(),
+      candidates: [
+        { ...candidates[0], isrc: 'USUM70207211' },
+        { ...candidates[0], id: 'c3', isrc: 'USUM70300001' },
+      ],
+      message,
+    });
+
+    expect(hook.result.current.statusNote).toBe(message);
+    expect(hook.result.current.candidates).toHaveLength(2);
+  });
+
   // The API's order, from the recorded demo run: the historian reports before any await, the
   // engineer only after its health probe and preview lookup (research at 328 ms, AUDIO-INIT at
   // 753 ms, the engineer's result at 10 877 ms).

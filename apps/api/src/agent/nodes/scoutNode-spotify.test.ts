@@ -664,3 +664,118 @@ describe("scoutNode with takes of one song that Spotify titles alike", () => {
     expect(out.isrc ?? null).toBeNull();
   });
 });
+
+describe("the picker's candidates: ISRC, release date, and one row per recording", () => {
+  const released = (date: string, isrc?: string) => ({
+    album: {
+      name: `Album of ${date}`,
+      release_date: date,
+      images: [{ url: "https://i.scdn.co/image/x" }],
+    },
+    ...(isrc ? { external_ids: { isrc } } : {}),
+  });
+
+  /** The scout's run on `query`: its state and the question it sent with the candidates. */
+  async function scoutStream(query: string) {
+    const graph = new StateGraph(SonicAgentState)
+      .addNode("scout", scoutNode)
+      .addEdge(START, "scout")
+      .addEdge("scout", END)
+      .compile({ store: new InMemoryStore() });
+    const sent: { candidates: unknown[]; message: string }[] = [];
+    let state: Record<string, unknown> = {};
+    const stream = await graph.stream({ songQuery: query }, { streamMode: ["custom", "values"] });
+    for await (const [mode, data] of stream as AsyncIterable<[string, Record<string, unknown>]>) {
+      if (mode === "values") state = data;
+      else if (data.type === "candidates") {
+        sent.push(data as unknown as { candidates: unknown[]; message: string });
+      }
+    }
+    return { state: state as { candidates?: Array<Record<string, unknown>> }, sent };
+  }
+
+  it("carries each track's ISRC and full release date as Spotify gave them", async () => {
+    const cash = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "usum70207211"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03"));
+    spotifySearch([cash, nin]);
+
+    const out = await scout("Hurt");
+
+    expect(out.candidates).toEqual([
+      expect.objectContaining({
+        id: cash.id,
+        isrc: "USUM70207211",
+        releaseDate: "2002-11-05",
+        releaseYear: "2002",
+      }),
+      expect.objectContaining({
+        id: nin.id,
+        isrc: null,
+        releaseDate: "1994-03",
+        releaseYear: "1994",
+      }),
+    ]);
+  });
+
+  it("sends the rows of one recording as one, the earliest release, and counts what it sends", async () => {
+    // Spotify lists Cash's "Hurt" from a compilation first, then from its album: one ISRC.
+    const compilation = spotifyTrack(
+      "Hurt",
+      ["Johnny Cash"],
+      released("2008-05-01", "USUM70207211"),
+    );
+    const album = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
+    // A live take is another recording: another ISRC.
+    const live = spotifyTrack("Hurt", ["Johnny Cash"], released("2003", "USUM70300001"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08", "USIR19400001"));
+    spotifySearch([compilation, album, live, nin]);
+
+    const { state, sent } = await scoutStream("Hurt");
+
+    const offered = (state.candidates ?? []).map((candidate) => candidate.id);
+    expect(offered).toHaveLength(3);
+    expect(offered).toContain(album.id);
+    expect(offered).not.toContain(compilation.id);
+    expect(offered).toEqual(expect.arrayContaining([live.id, nin.id]));
+    // The album's row takes the compilation's place, the first of the two listed.
+    expect(offered.indexOf(album.id)).toBeLessThan(offered.indexOf(live.id));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].candidates).toHaveLength(3);
+    expect(sent[0].message).toBe("3 possible tracks from Spotify; choose one");
+  });
+
+  it("keeps the first listed of one recording when a release date is unknown", async () => {
+    const first = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
+    const second = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([first, second, nin]);
+
+    const out = await scout("Hurt");
+
+    expect(ids(out.candidates)).toEqual([first.id, nin.id]);
+  });
+
+  it("never merges rows without an ISRC, even with the same title and artist", async () => {
+    const studio = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05"));
+    const other = spotifyTrack("Hurt", ["Johnny Cash"], released("2003"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([studio, other, nin]);
+
+    const { state, sent } = await scoutStream("Hurt");
+
+    expect(state.candidates).toHaveLength(3);
+    expect(sent[0].message).toBe("3 possible tracks from Spotify; choose one");
+  });
+
+  it('gives a candidate dated "0000" no release year, and keeps the date as Spotify sent it', async () => {
+    const unknown = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([unknown, nin]);
+
+    const out = await scout("Hurt");
+
+    const candidate = out.candidates?.find((row: { id: string }) => row.id === unknown.id);
+    expect(candidate).toMatchObject({ releaseDate: "0000" });
+    expect(candidate).not.toHaveProperty("releaseYear");
+  });
+});

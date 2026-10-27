@@ -111,10 +111,13 @@ function envelopeOf(value: Record<string, unknown>): Envelope | null {
   return { runId, seq };
 }
 
-/** A picker row the app can show and resume with: an id, a title and an artist. */
+/**
+ * A picker row the app can show and resume with: an id, a title and an artist, with the other
+ * fields it shows or merges rows by when they are there.
+ */
 function readCandidate(value: unknown): SearchCandidate | null {
   if (!isObject(value)) return null;
-  const { id, title, artist, releaseYear, popularity } = value;
+  const { id, title, artist, releaseYear, popularity, isrc, releaseDate } = value;
   if (typeof id !== 'string' || id === '') return null;
   if (typeof title !== 'string' || typeof artist !== 'string') return null;
   return {
@@ -125,6 +128,10 @@ function readCandidate(value: unknown): SearchCandidate | null {
     coverUrl: text(value.coverUrl),
     ...(typeof releaseYear === 'string' ? { releaseYear } : {}),
     ...(typeof popularity === 'number' && Number.isFinite(popularity) ? { popularity } : {}),
+    // The recording's ISRC, by which the picker merges rows of one recording, and the date by
+    // which it keeps the earliest of them; left out when not text.
+    ...(typeof isrc === 'string' && isrc ? { isrc } : {}),
+    ...(typeof releaseDate === 'string' && releaseDate ? { releaseDate } : {}),
   };
 }
 

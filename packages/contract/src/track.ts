@@ -393,10 +393,15 @@ export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;
  *
  * `releaseDate` and `releaseYear` come from the same Spotify date. A live search suggestion
  * carries `releaseDate` as Spotify sent it (null when it is not a year, a month or a day); the
- * picker's candidates and the suggestions of a recorded track carry `releaseYear` instead. The
- * search box orders duplicates by a row's `releaseDate` when it has one, else by its
- * `releaseYear`. A `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is
- * not read in its place.
+ * picker's candidates carry it too, with the `releaseYear` of a known date (none for "0000");
+ * the suggestions of a recorded track carry `releaseYear` only. The search box orders
+ * duplicates by a row's `releaseDate` when it has one, else by its `releaseYear`. A
+ * `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is not read in its
+ * place.
+ *
+ * The picker's candidates also carry the recording's `isrc` (null when Spotify gave none), and
+ * the API sends one row per ISRC: the earliest release of that recording. Rows without one are
+ * never merged.
  */
 export const SearchCandidate = z.object({
   id: z.string(),

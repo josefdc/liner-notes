@@ -31,6 +31,7 @@ import type {
 import { isLiveUnavailable } from '../liveUnavailable';
 import { isWholeRecording } from '../utils/recording';
 import { isSpotifyTrackId } from '../utils/spotify';
+import { pickerQuestion, pickerRows } from '../components/search/pickerRows';
 import { API_BASE_URL } from './agent/types';
 import { fetchReplays, fetchSuggestions } from './agent/apiClient';
 import {
@@ -410,8 +411,12 @@ export function useAgent(): UseAgentReturn {
           // Keep the same list object when nothing changed, so the picker is not reset.
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
-          // The server counts the candidates ("One possible track…"): its words are the line.
-          const question = data.message || PICK_FALLBACK;
+          // The server counts the candidates ("One possible track…"): its words are the line,
+          // unless the picker shows fewer rows (pickerRows merges the rows of one recording, a
+          // guard for older servers and recordings), when the line counts the rows shown.
+          const shown = pickerRows(candidates).length;
+          const question =
+            shown === candidates.length ? data.message || PICK_FALLBACK : pickerQuestion(shown);
           setState((prev) => ({
             ...prev,
             status: 'disambiguation',

@@ -1047,6 +1047,21 @@ const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
  */
 export const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
+/**
+ * A release date that says when the release came out: one of RELEASE_DATE's shapes whose year
+ * is not "0000" (Spotify's unknown date). Anything else, missing or malformed, is null.
+ */
+export function knownReleaseDate(date: unknown): string | null {
+  return typeof date === "string" && RELEASE_DATE.test(date) && !date.startsWith("0000")
+    ? date
+    : null;
+}
+
+/** The year of a known release date ("2011" for "2011-10-18"); undefined when it is unknown. */
+export function releaseYearOf(date: unknown): string | undefined {
+  return knownReleaseDate(date)?.slice(0, 4);
+}
+
 /** An ISRC in its canonical form (upper case, no hyphens, dashes or spaces), or null. */
 export function normalizeIsrc(value: unknown): string | null {
   if (typeof value !== "string") return null;

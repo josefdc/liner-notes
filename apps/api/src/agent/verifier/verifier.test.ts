@@ -650,6 +650,19 @@ describe("the result", () => {
     expect(result.audio).toEqual(audioV2());
   });
 
+  it("carries the year of Spotify's release date, and none for a date it does not know", async () => {
+    const dated = (releaseDate: string) => (draft: ReturnType<typeof draftOf>) => {
+      const state = stateFor(draft, PACK);
+      return { ...state, spotifyData: { ...state.spotifyData!, releaseDate } };
+    };
+
+    const known = await verify([], [], undefined, dated("1990-09-10"));
+    const unknown = await verify([], [], undefined, dated("0000"));
+
+    expect(known.result.releaseYear).toBe("1990");
+    expect(unknown.result).not.toHaveProperty("releaseYear");
+  });
+
   it("passes the fallback through without a judge call, and stores none", async () => {
     const llm = judging(() => []);
     const writer = vi.fn();

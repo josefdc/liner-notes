@@ -174,6 +174,16 @@ describe("createFallbackTrackData", () => {
     expect(without).not.toMatch(/popularity/i);
   });
 
+  it('gives no release year for a date Spotify does not know ("0000")', async () => {
+    const td = await build(null, emptyResearch, { releaseDate: "0000" });
+
+    expect(td.releaseYear).toBeUndefined();
+    const text = allText(td.factoids);
+    expect(text).not.toContain("0000");
+    expect(text).toContain('Released on "To the Extreme".');
+    expect((await build(null)).releaseYear).toBe("1990");
+  });
+
   it("omits missing metadata instead of printing undefined or Unknown", async () => {
     const td = await build(null, emptyResearch, {
       releaseDate: "",

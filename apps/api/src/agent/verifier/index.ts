@@ -60,6 +60,7 @@ import {
   scopeSupports,
   TrackAnalysis,
 } from "@liner-notes/contract";
+import { releaseYearOf } from "../../sources/musicbrainz.js";
 import { maskHandles } from "../../sources/search.js";
 import { plainSourceError } from "../../sources/toolResult.js";
 import { replayedRecording, runUsage } from "../callRecords.js";
@@ -444,6 +445,8 @@ async function withArtwork(
  * finalize.ts's (finalizeResult, the last step of every result).
  */
 function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
+  // The year of a known release date; none for a date Spotify does not know ("0000").
+  const releaseYear = releaseYearOf(spotify.releaseDate);
   return {
     id: spotify.id,
     title: spotify.title,
@@ -454,9 +457,7 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // The engineer's clip of the chosen recording, for the player; none when it found none (a
     // clip it turned down is never sent).
     ...(state.previewUrl ? { previewUrl: state.previewUrl } : {}),
-    ...(spotify.releaseDate?.split("-")[0]
-      ? { releaseYear: spotify.releaseDate.split("-")[0] }
-      : {}),
+    ...(releaseYear ? { releaseYear } : {}),
     ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),

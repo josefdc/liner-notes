@@ -14,6 +14,8 @@ type Candidate = {
   album: string;
   coverUrl: string;
   releaseYear: string;
+  isrc?: string | null;
+  releaseDate?: string | null;
 };
 
 const hitl = loadFixture("hitl");
@@ -44,7 +46,7 @@ const question = (count: number) =>
   count === 1
     ? "One possible track from Spotify; confirm it or search again"
     : `${count} possible tracks from Spotify; choose one`;
-// The candidates as the API sends them in `interrupt`: no ISRC (scoutNode.ts).
+// The candidates as the API sends them in `interrupt` (scoutNode.ts), counted by its question.
 const pickerStream = (candidates: Candidate[]) => [
   { type: "connected", threadId: "thread-hitl" },
   { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
@@ -356,6 +358,51 @@ test("every track the server counts gets a row: a studio and a live take with on
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-live")]);
+});
+
+test("rows sharing an ISRC show as one, other ISRCs stay apart, and the question counts the rows shown", async ({
+  page,
+}) => {
+  // An older server sends one recording twice (its single and its album) and counts both.
+  const single = {
+    id: "m-single",
+    title: "Midnight City",
+    artist: "M83",
+    album: "Midnight City",
+    coverUrl: "",
+    releaseYear: "2012",
+    isrc: "GB55H1100002",
+    releaseDate: "2012-01-17",
+  };
+  const album = {
+    ...single,
+    id: "m-album",
+    album: "Hurry Up, We're Dreaming",
+    releaseYear: "2011",
+    releaseDate: "2011-10-18",
+  };
+  const live = {
+    ...single,
+    id: "m-live",
+    album: "Live at Coachella",
+    releaseYear: "2013",
+    isrc: "GB55H1300009",
+    releaseDate: "2013",
+  };
+  await useMockApi(page, {
+    suggestions: [],
+    streams: { [ANALYZE]: pickerStream([single, album, live]), [RESUME]: held },
+  });
+  await openPicker(page, "Midnight City");
+
+  const rows = picker(page).getByRole("option");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("M83 • 2011");
+  await expect(rows.nth(1)).toContainText("M83 • 2013");
+  // The question counts the two rows shown, not the three the server sent.
+  await expect(progressStatus(page)).toHaveText(question(2));
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-album")]);
 });
 
 test("the question names the list alone, so it is read once", async ({ page }) => {

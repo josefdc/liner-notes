@@ -1167,6 +1167,10 @@ describe("withoutEdition", () => {
     ["a long bracket part", `${" ".repeat(1000)}(${"Deluxe".repeat(1000)}`],
     // About 5 s with the earlier expression.
     ["a long dash part", `${" ".repeat(200)}- ${" ".repeat(200)}${"Deluxe".repeat(200)}\n`],
+    // Seconds for a rewrite that searched again from inside a bracket part, or looked for a line
+    // break after every edition word.
+    ["runs of opening brackets", `${"(".repeat(50_000)})`],
+    ["edition words before a line break", ` - ${"deluxe".repeat(100_000)}\n`],
   ])("answers quickly on %s built to make the earlier expressions backtrack", (_name, album) => {
     const { ms, result } = timed(() => withoutEdition(album));
     expect(ms).toBeLessThan(100);
@@ -1263,6 +1267,8 @@ describe("withoutFeatured", () => {
     ["unclosed notes with an artist", "(with ".repeat(25_000)],
     ["a credit with a long run of spaces", `Song (with X${" ".repeat(60_000)}x)`],
     ["featured-artist tails before a line break", `${" - feat x".repeat(30_000)}\ny`],
+    // Seconds for a rewrite that looked for the closing bracket again from every opening one.
+    ["runs of opening brackets", `${"(".repeat(50_000)})`],
   ])("answers quickly on %s", (_name, title) => {
     const { ms, result } = timed(() => withoutFeatured(title, ["X"]));
     expect(ms).toBeLessThan(100);

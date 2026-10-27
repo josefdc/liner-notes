@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { allStrings, randomStrings, timed } from "../sources/testing/strings.js";
 import type { SpotifyData } from "./state.js";
 import {
+  bracketParts,
   matchTrack,
   needsChoice,
   partTitlesDiffer,
@@ -2257,5 +2258,41 @@ describe("quotedSources", () => {
     expect(ms).toBeLessThan(100);
     expect(result).toEqual([]);
     expect(timed(() => partTitlesDiffer({ title }, { title: "Song" })).ms).toBeLessThan(100);
+  });
+});
+
+describe("bracketParts", () => {
+  // The expressions before #194: each "(" or "[" looked for its closing bracket again.
+  const PARTS = /\(([^)]*)\)|\[([^\]]*)\]/g;
+  const old = (text: string) => ({
+    parts: [...text.matchAll(PARTS)].map((m) => m[1] ?? m[2] ?? ""),
+    rest: text.replace(PARTS, " "),
+  });
+
+  it("finds exactly the parts the earlier expressions found, and leaves the same rest", () => {
+    const cases = [
+      "Song (Live) [Remastered 2011]",
+      "Song (feat. X",
+      "Song [a (b] c)",
+      "Song ((x)) [[y]]",
+      "Song )( ][",
+      ...allStrings(["(", ")", "[", "]", "x", " "], 7),
+      ...randomStrings(
+        ["(", ")", "[", "]", "((", "]]", "Live", " ", "\n", "x", "Remix"],
+        20_000,
+        14,
+      ),
+    ];
+    for (const text of cases) expect(bracketParts(text), JSON.stringify(text)).toEqual(old(text));
+    expect(cases.filter((text) => old(text).parts.length > 0).length).toBeGreaterThan(1000);
+  });
+
+  it("answers quickly on runs of opening brackets", () => {
+    // About 2.7 s with the earlier expressions.
+    for (const text of [`Song ${"[".repeat(60_000)}`, `Song ${"(".repeat(60_000)}`]) {
+      const { ms, result } = timed(() => bracketParts(text));
+      expect(ms).toBeLessThan(100);
+      expect(result).toEqual({ parts: [], rest: text });
+    }
   });
 });

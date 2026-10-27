@@ -40,8 +40,9 @@ const MAX_ERROR_TEXT = 500;
 /** Cap for a source's own reason in an error message: a short line, never a body. */
 const MAX_DETAIL = 120;
 /**
- * Cap for a JSON error body that is parsed (an error answer is a short message): a longer one
- * is kept as text, cut, and its status speaks for it.
+ * Cap, in UTF-8 bytes, for a JSON error body that is parsed (an error answer is a short
+ * message). A longer one is not read at all: neither its text nor anything in it is kept, only
+ * its size, and its status speaks for it.
  */
 const MAX_ERROR_JSON = 64 * 1024;
 
@@ -478,8 +479,8 @@ interface Recorded {
   retryAfterMs?: number;
   json?: unknown;
   text?: string;
-  /** A JSON error body longer than MAX_ERROR_JSON: kept as cut text, not parsed. */
-  tooLarge?: true;
+  /** The size in bytes of a JSON error body over MAX_ERROR_JSON, which is not kept. */
+  tooLarge?: number;
 }
 
 interface Cassette {
@@ -879,11 +880,14 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
     const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
     if (retryAfterMs !== undefined) recorded.retryAfterMs = retryAfterMs;
     const ok = response.status >= 200 && response.status <= 299;
-    const tooLarge = !ok && text.length > MAX_ERROR_JSON;
-    if (isJsonType(contentType) && tooLarge) {
-      // Not parsed: kept as text, and its status reports it.
-      recorded.tooLarge = true;
-    } else if (isJsonType(contentType)) {
+    if (isJsonType(contentType) && !ok) {
+      const bytes = Buffer.byteLength(text);
+      if (bytes > MAX_ERROR_JSON) {
+        recorded.tooLarge = bytes;
+        return recorded;
+      }
+    }
+    if (isJsonType(contentType)) {
       try {
         recorded.json = JSON.parse(text);
         return recorded;
@@ -911,13 +915,16 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
   const { source } = req;
   const body = answer.json !== undefined ? answer.json : answer.text;
   const ok = answer.status >= 200 && answer.status <= 299;
-  if (answer.json === undefined && answer.text) {
-    // An answer that is not JSON is an error; its text (an error page, a bot challenge, or a
-    // JSON error body too large to read) goes to the debug log only, never into the error message.
-    const what = answer.tooLarge
-      ? `a JSON body too large to read (over ${MAX_ERROR_JSON / 1024} KiB)`
-      : "a body that is not JSON";
-    log.debug(`${source} answered HTTP ${answer.status} with ${what}`, {
+  if (answer.tooLarge !== undefined) {
+    // Only its size: a body this large was never read.
+    log.debug(
+      `${source} answered HTTP ${answer.status} with a JSON body too large to read ` +
+        `(${answer.tooLarge} bytes, over ${MAX_ERROR_JSON} bytes)`,
+    );
+  } else if (answer.json === undefined && answer.text) {
+    // An answer that is not JSON is an error; its text (an error page, a bot challenge) goes to
+    // the debug log only, never into the error message.
+    log.debug(`${source} answered HTTP ${answer.status} with a body that is not JSON`, {
       answerText: scrubText(answer.text),
     });
   }
@@ -963,9 +970,11 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
 function forCassette(req: SourceRequest, answer: Recorded): Recorded {
   const entry: Recorded = { status: answer.status, contentType: answer.contentType };
   if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
-  if (answer.tooLarge) entry.tooLarge = true;
   const ok = answer.status >= 200 && answer.status <= 299;
-  if (answer.json !== undefined) {
+  if (answer.tooLarge !== undefined) {
+    // Its size only: the body was never read.
+    entry.tooLarge = answer.tooLarge;
+  } else if (answer.json !== undefined) {
     const kept = ok && req.recordAs ? req.recordAs(answer.json) : answer.json;
     entry.json = ok
       ? scrubReadPayload(req.scrub ? pick(kept, req.scrub) : kept)

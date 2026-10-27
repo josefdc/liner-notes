@@ -182,7 +182,23 @@ export function splitRoles(role: string | undefined): string[] {
 
 const samePosition = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase();
 
-const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+/** True for a character `\s` matches, told by its code without running an expression. */
+function isSpace(char: string | undefined): boolean {
+  const c = char === undefined || char === "" ? -1 : char.charCodeAt(0);
+  return (
+    c === 0x20 ||
+    (c >= 0x09 && c <= 0x0d) ||
+    c === 0xa0 ||
+    c === 0x1680 ||
+    (c >= 0x2000 && c <= 0x200a) ||
+    c === 0x2028 ||
+    c === 0x2029 ||
+    c === 0x202f ||
+    c === 0x205f ||
+    c === 0x3000 ||
+    c === 0xfeff
+  );
+}
 /** The characters `.` does not match. */
 const isLineBreak = (char: string | undefined) =>
   char === "\n" || char === "\r" || char === "\u2028" || char === "\u2029";
@@ -208,7 +224,10 @@ export function creditRange(part: string): [string, string] | null {
     if (!isLineBreak(part[i])) lastOther = i;
     else if (i < trailing) lastBreak = i;
   }
-  const isTo = (at: number) => /^to$/i.test(part.slice(at, at + 2));
+  const isTo = (at: number) => {
+    const [t, o] = [part.charAt(at), part.charAt(at + 1)];
+    return (t === "t" || t === "T") && (o === "o" || o === "O");
+  };
   // The second end, after "to" and the whitespace that starts at `at`, or null.
   const second = (at: number): string | null => {
     if (!isSpace(part[at])) return null;

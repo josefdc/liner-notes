@@ -559,4 +559,20 @@ describe("creditRange", () => {
     expect(ms).toBeLessThan(100);
     expect(result).toBe(false);
   });
+
+  it("answers quickly on 800 kB of ranges before a line break", () => {
+    // Seconds for a rewrite that looked for a line break after every "to" again.
+    const tracks = `A1${" to x".repeat(160_000)}\nZ`;
+    const { ms, result } = timed(() => creditCovers(tracks, "A1", ["A1", "A2"]));
+    expect(ms).toBeLessThan(100);
+    expect(result).toBe(false);
+  });
+
+  it("reads every whitespace character as the earlier expression did", () => {
+    for (let code = 0; code <= 0xffff; code++) {
+      const char = String.fromCharCode(code);
+      const part = `A1${char}to${char}A3`;
+      expect(creditRange(part), `U+${code.toString(16)}`).toEqual(old(part));
+    }
+  });
 });

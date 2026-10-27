@@ -447,8 +447,16 @@ export function withoutFeatured(title: string, artists: readonly string[] = []):
  * "Acoustic", "Extended Mix", "Demo") is not one of them and stays in the title.
  */
 const RELEASE_LABEL = String.raw`(?:(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?|radio\s+edit|single\s+(?:version|edit)|album\s+version|(?:mono|stereo)(?:\s+version)?)`;
-const RELEASE_LABEL_DASHED = new RegExp(String.raw`\s+-\s+${RELEASE_LABEL}\s*$`, "i");
-const RELEASE_LABEL_BRACKETED = new RegExp(String.raw`\s*[([]\s*${RELEASE_LABEL}\s*[)\]]`, "gi");
+/**
+ * A release label after " - " or in brackets, with the whitespace before it. That whitespace is
+ * read from the start of its run only, so a long run of it is read once: the same matches as
+ * with `\s+` (dashed) or `\s*` (bracketed) in front.
+ */
+export const RELEASE_LABEL_DASHED = new RegExp(String.raw`(?<!\s)\s+-\s+${RELEASE_LABEL}\s*$`, "i");
+export const RELEASE_LABEL_BRACKETED = new RegExp(
+  String.raw`(?:(?<!\s)\s+)?[([]\s*${RELEASE_LABEL}\s*[)\]]`,
+  "gi",
+);
 
 /**
  * A Spotify track title as MusicBrainz files the recording: without a featured-artist note (see

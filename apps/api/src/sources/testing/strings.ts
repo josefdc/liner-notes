@@ -12,7 +12,7 @@ export function allStrings(parts: readonly string[], maxParts: number): string[]
   let last = [""];
   for (let length = 1; length <= maxParts; length++) {
     last = last.flatMap((prefix) => parts.map((part) => prefix + part));
-    out.push(...last);
+    for (const text of last) out.push(text);
   }
   return out;
 }

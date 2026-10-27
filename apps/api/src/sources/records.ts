@@ -55,8 +55,16 @@ export const DURATION_TOLERANCE_MS = 3000;
 export const PRINTED_DURATION_TOLERANCE_MS = 5000;
 
 const REMASTER = String.raw`(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?`;
-const REMASTER_BRACKETED = new RegExp(String.raw`\s*[([]\s*${REMASTER}\s*[)\]]`, "gi");
-const REMASTER_DASHED = new RegExp(String.raw`\s+-\s+${REMASTER}\s*$`, "i");
+/**
+ * A remaster label in brackets or after " - ", with the whitespace before it. That whitespace is
+ * read from the start of its run only, so a long run of it is read once: the same matches as
+ * with `\s*` (bracketed) or `\s+` (dashed) in front.
+ */
+export const REMASTER_BRACKETED = new RegExp(
+  String.raw`(?:(?<!\s)\s+)?[([]\s*${REMASTER}\s*[)\]]`,
+  "gi",
+);
+export const REMASTER_DASHED = new RegExp(String.raw`(?<!\s)\s+-\s+${REMASTER}\s*$`, "i");
 
 /**
  * A title without featured-artist and remaster suffixes: "Under Pressure - Remastered 2011".

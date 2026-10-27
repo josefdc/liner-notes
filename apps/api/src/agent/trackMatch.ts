@@ -280,11 +280,38 @@ interface TitleParts {
   sources: string[][];
 }
 
+/**
+ * The bracketed parts of a text ("(…)" or "[…]", each closed by the first bracket of its kind
+ * after it) and the text with each part replaced by a space: what /\(([^)]*)\)|\[([^\]]*)\]/g
+ * matched and replaced, in linear time. That expression looked for the closing bracket again
+ * from every opening one; here a bracket that is never closed is looked for once.
+ */
+export function bracketParts(text: string): { parts: string[]; rest: string } {
+  const parts: string[] = [];
+  let rest = "";
+  let kept = 0;
+  const unclosed = new Set<string>();
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at];
+    const closing = char === "(" ? ")" : char === "[" ? "]" : "";
+    if (!closing || unclosed.has(closing)) continue;
+    const close = text.indexOf(closing, at + 1);
+    if (close === -1) {
+      unclosed.add(closing);
+      continue;
+    }
+    parts.push(text.slice(at + 1, close));
+    rest += `${text.slice(kept, at)} `;
+    kept = close + 1;
+    at = close;
+  }
+  return { parts, rest: rest + text.slice(kept) };
+}
+
 function titleParts(title: string): TitleParts {
-  const brackets = [...title.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map((m) =>
-    words(m[1] ?? m[2] ?? ""),
-  );
-  let base = title.replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
+  const bracketed = bracketParts(title);
+  const brackets = bracketed.parts.map(words);
+  let base = bracketed.rest;
   let dashed: string[] = [];
   const dash = base.search(/\s[-–—]\s/);
   if (dash >= 0) {
@@ -765,10 +792,8 @@ function recordingTitle(title: string): RecordingTitle {
     kept = end;
   }
   unsourced += title.slice(kept);
-  const brackets = [...unsourced.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map(
-    (m) => m[1] ?? m[2] ?? "",
-  );
-  let rest = unsourced.replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
+  const { parts: brackets, rest: unbracketed } = bracketParts(unsourced);
+  let rest = unbracketed;
   const parts = [...brackets];
   const dash = rest.search(/\s[-–—]\s/);
   if (dash >= 0) {
@@ -816,8 +841,9 @@ function releaseMarkers(album: string, base: string[]): string[] {
 
 /** An album's name without the parts that name an edition ("(2011 Remaster)", "- Deluxe"). */
 function albumName(album: string): string[] {
-  const parts = [...album.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map((m) => m[1] ?? m[2] ?? "");
-  let rest = album.replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
+  const bracketed = bracketParts(album);
+  const parts = bracketed.parts;
+  let rest = bracketed.rest;
   const dash = rest.search(/\s[-–—]\s/);
   if (dash >= 0) {
     parts.push(rest.slice(dash + 3));

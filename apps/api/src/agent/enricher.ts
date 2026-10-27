@@ -381,10 +381,17 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
   return { lookUp, done: () => budget.clear() };
 }
 
+/**
+ * The joins between the artists of a credit. Whitespace before a join is read from the start of
+ * its run only, so a long run of spaces is read once: the same splits as with `\s*` in front.
+ */
+export const CREDIT_JOIN =
+  /(?:(?<!\s)\s+)?(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i;
+
 /** The artists a credit names: "Queen & David Bowie", "Daft Punk feat. Pharrell Williams". */
 function creditParts(credit: string): string[] {
   return credit
-    .split(/\s*(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i)
+    .split(CREDIT_JOIN)
     .map((part) => part.trim())
     .filter(Boolean);
 }

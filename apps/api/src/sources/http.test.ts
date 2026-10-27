@@ -17,18 +17,23 @@ import {
   credential,
   describeError,
   fetchJson,
+  hasStackTrace,
   pick,
   plainMessage,
   plainReason,
   reasonIssue,
   redactText,
+  redactTokenRuns,
+  replacePhoneLike,
   SourceError,
   scrubPayload,
   scrubReadPayload,
   scrubText,
   setCassetteLockWaitForTests,
+  withoutEmails,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
+import { allStrings, randomStrings, timed } from "./testing/strings.js";
 
 // Pass-through, so one test can make a write fail half-way.
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -165,6 +170,18 @@ describe("fetchJson", () => {
     stubFetch(() => json({ message: `Too long ${"x".repeat(400)}` }, { status: 500 }));
     const long = await rejection(fetchJson({ source: "deezer", url: URL_A }));
     expect(long.message.length).toBeLessThan(150);
+  });
+
+  it("parses a JSON error body only up to 64 KiB; a success body of any size is parsed", async () => {
+    const huge = { message: "Track not found", padding: "x".repeat(70_000) };
+    stubFetch(() => json(huge, { status: 400 }));
+    const error = await rejection(fetchJson({ source: "lastfm", url: URL_A }));
+    expect(error).toMatchObject({ kind: "http", status: 400 });
+    expect(error.message).toBe("lastfm: HTTP 400 (the source rejected the request)");
+    expect(typeof error.body).toBe("string");
+
+    stubFetch(() => json(huge));
+    expect(await fetchJson({ source: "lastfm", url: URL_A })).toEqual(huge);
   });
 
   it("keeps no escaped markup, link or stack trace in a source's reason", () => {
@@ -762,5 +779,183 @@ describe("what an error message keeps", () => {
       const line = plainMessage(text);
       if (line !== undefined) expect(reasonIssue(line), text).toBeNull();
     }
+  });
+});
+
+describe("text patterns in linear time", () => {
+  // The expressions before #194, each quadratic on a long run of the characters it reads.
+  const STACK_TRACE =
+    /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+  const TOKEN =
+    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{64,}\b/g;
+  const PHONE_LIKE = /(?<![\w-])\+?\(?\d[\d\s().-]{7,}\d(?![\w-])/g;
+  const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+  const mark = (match: string) => `<${match}>`;
+
+  it("finds exactly the stack traces the earlier expression found", () => {
+    const realistic = [
+      "TypeError: x at handler (/srv/app/index.js:10:5)",
+      "at Object.<anonymous> (C:\\app\\x.js:1:2)",
+      "    at async Promise.all (index 0)",
+      "at node:internal/modules/cjs/loader:1537:15",
+      "boom at a.b:1:2",
+      "Quota resets at 10:30:00 UTC",
+      "failed at step 3: see logs",
+      "at foo (bar baz.js:1:2)",
+      "cat /etc/x:1:2",
+      "(at /x.js:1:2)",
+      'Traceback (most recent call last): File "main.py", line 4',
+      'File "", line 4',
+    ];
+    const symbols = ["at", " ", "(", "/", ".", ":1", "x", "\n"];
+    const parts = [
+      "at",
+      "at ",
+      " at ",
+      "(at ",
+      "xat ",
+      "_at ",
+      "Error ",
+      "(",
+      ")",
+      "/",
+      "\\",
+      ".",
+      "a.js",
+      ":",
+      "10",
+      ":5",
+      ":10:5",
+      " ",
+      "\t",
+      "\n",
+      'File "',
+      '"',
+      ", line ",
+      "4",
+      "\u00a0",
+    ];
+    const frames = [
+      "at ",
+      "xat ",
+      "(at ",
+      "fn ",
+      "(",
+      ")",
+      "/a.js:10:5",
+      "a.b:1:2",
+      "x:1:2",
+      "a/b",
+      ":10:5",
+      ":1",
+      " ",
+      "\n",
+    ];
+    const cases = [
+      ...realistic,
+      ...allStrings(symbols, 5),
+      ...randomStrings(parts, 20_000, 14),
+      ...randomStrings(frames, 20_000, 10),
+    ];
+
+    for (const text of cases)
+      expect(hasStackTrace(text), JSON.stringify(text)).toBe(STACK_TRACE.test(text));
+    expect(cases.filter((text) => STACK_TRACE.test(text)).length).toBeGreaterThan(1000);
+  });
+
+  it("redacts exactly the token-like runs the earlier expression redacted", () => {
+    const parts = [
+      "a",
+      "A",
+      "0",
+      "_",
+      "-",
+      "--",
+      " ",
+      ".",
+      "aB3dE6gH9jK2mN5pQ8sT1v",
+      "abcdefghij",
+      "ABCDEFGHIJ",
+      "0123456789",
+      "é",
+      "=",
+    ];
+    const cases = [
+      `key ${"aB3".repeat(25)} end`,
+      `-${"aB3".repeat(25)}-`,
+      ...randomStrings(parts, 20_000, 24),
+    ];
+
+    for (const text of cases) {
+      expect(redactTokenRuns(text), JSON.stringify(text)).toBe(text.replace(TOKEN, "[redacted]"));
+    }
+    expect(cases.filter((text) => TOKEN.test(text)).length).toBeGreaterThan(500);
+  });
+
+  it("finds exactly the phone-like numbers and e-mails the earlier expressions found", () => {
+    const phones = [
+      "call +1 (555) 123-4567.",
+      "Released 1990-10-02 (10016 plays)",
+      "Artist e21857d5-3256-4547-afb3-4b6ded592596.",
+      "tel 555.123.4567x",
+      "+44 20 7946 0958",
+      ...allStrings(["1", " ", "-", "(", ")", "+", "a"], 6),
+      ...randomStrings(
+        [
+          "1",
+          "23",
+          "4567",
+          " ",
+          "-",
+          "(",
+          ")",
+          "+",
+          ".",
+          "a",
+          "_",
+          "\n",
+          "+1 (555) 123-4567",
+          "2024-01-02",
+        ],
+        20_000,
+        18,
+      ),
+    ];
+    for (const text of phones) {
+      expect(replacePhoneLike(text, mark), JSON.stringify(text)).toBe(
+        text.replace(PHONE_LIKE, mark),
+      );
+    }
+    expect(phones.filter((text) => text.replace(PHONE_LIKE, mark) !== text).length).toBeGreaterThan(
+      1000,
+    );
+
+    const emails = [
+      "write to fan.mail@example.org now",
+      "a@b.c+x@d.e",
+      "x@y",
+      ...allStrings(["a", "@", ".", "+", "-", " "], 6),
+      ...randomStrings(
+        ["a", "b.c", "@", ".", "+", "-", "_", " ", "x@y.z", "user.name+tag", "é", "\n"],
+        20_000,
+        14,
+      ),
+    ];
+    for (const text of emails) {
+      expect(withoutEmails(text), JSON.stringify(text)).toBe(text.replace(EMAIL, "[email]"));
+    }
+    expect(emails.filter((text) => text.replace(EMAIL, "") !== text).length).toBeGreaterThan(1000);
+  });
+
+  it.each<[string, () => unknown, unknown]>([
+    // About 2 s each with the earlier expressions.
+    ["a stack-trace look-alike", () => reasonIssue(`at x${".x".repeat(40_000)} `), null],
+    ["a long token-like run", () => scrubText(`a${"-a0".repeat(20_000)}-`).length, 500],
+    ["a long run of number characters", () => scrubText(`${"(0- ".repeat(15_000)}x`).length, 500],
+    ["a long run before an @", () => scrubText(`${"a".repeat(60_000)}@`).length, 500],
+  ])("answers quickly on %s", (_name, call, expected) => {
+    const { ms, result } = timed(call);
+    expect(ms).toBeLessThan(100);
+    expect(result).toBe(expected);
   });
 });

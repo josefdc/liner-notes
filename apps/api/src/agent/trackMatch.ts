@@ -700,8 +700,41 @@ const ENSEMBLE_WORDS = new Set([
   "chorus",
   "orchestral",
 ]);
-// A quoted work a title names as its source: `From "Frozen"`, `from “Encanto”`.
-const QUOTED_SOURCE = /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu;
+// The start of a quoted work a title names as its source: `From "Frozen"`, `from “Encanto”`.
+const QUOTED_SOURCE_START = /\bfrom\s+(["“'‘«])/giu;
+const CLOSING_QUOTE: Readonly<Record<string, string>> = {
+  '"': '"',
+  "“": "”",
+  "'": "'",
+  "‘": "’",
+  "«": "»",
+};
+
+/**
+ * Where each quoted work a title names as its source starts and ends ([start, end)): what
+ * /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu matched, in linear time. That
+ * expression looked for the closing quote again from every "from"; here a quote that is never
+ * closed is looked for once, and a quote that closes ends the match, so the next search starts
+ * after it.
+ */
+export function quotedSources(title: string): Array<[number, number]> {
+  const found: Array<[number, number]> = [];
+  // Closing quotes with none left in the title after the last search for them.
+  const unclosed = new Set<string>();
+  const start = new RegExp(QUOTED_SOURCE_START);
+  for (let m = start.exec(title); m; m = start.exec(title)) {
+    const closing = CLOSING_QUOTE[m[1] ?? ""] ?? "";
+    const close = unclosed.has(closing) ? -1 : title.indexOf(closing, m.index + m[0].length);
+    if (close === -1) {
+      unclosed.add(closing);
+      start.lastIndex = m.index + 1;
+      continue;
+    }
+    found.push([m.index, close + 1]);
+    start.lastIndex = close + 1;
+  }
+  return found;
+}
 
 /**
  * How a title tells one recording from another, for comparing entries of two catalogues (a
@@ -724,9 +757,14 @@ function recordingTitle(title: string): RecordingTitle {
   // " - "): in `Theme From "Jurassic Park"` it is the title itself.
   const starts = [title.search(/[([]/), title.search(/\s[-–—]\s/)].filter((at) => at >= 0);
   const properEnd = starts.length > 0 ? Math.min(...starts) : title.length;
-  const unsourced = title.replace(QUOTED_SOURCE, (source, at: number) =>
-    at < properEnd ? source : " ",
-  );
+  let unsourced = "";
+  let kept = 0;
+  for (const [at, end] of quotedSources(title)) {
+    if (at < properEnd) continue;
+    unsourced += `${title.slice(kept, at)} `;
+    kept = end;
+  }
+  unsourced += title.slice(kept);
   const brackets = [...unsourced.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map(
     (m) => m[1] ?? m[2] ?? "",
   );

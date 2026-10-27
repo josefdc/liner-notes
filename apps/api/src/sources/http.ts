@@ -39,6 +39,11 @@ const MAX_TEXT = 4000;
 const MAX_ERROR_TEXT = 500;
 /** Cap for a source's own reason in an error message: a short line, never a body. */
 const MAX_DETAIL = 120;
+/**
+ * Cap for a JSON error body that is parsed (an error answer is a short message): a longer one
+ * is kept as text, cut, and its status speaks for it.
+ */
+const MAX_ERROR_JSON = 64 * 1024;
 
 /** The source credentials, redacted whatever their length: each is sent on every request. */
 const SOURCE_CREDENTIAL_NAMES: ReadonlySet<string> = new Set(Object.values(SOURCE_CREDENTIALS));
@@ -66,20 +71,35 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
     "$1=[redacted]",
   ],
   [/\btvly-[A-Za-z0-9_-]+/g, "tvly-[redacted]"],
-  // Spotify access tokens, and any long mixed-case token-like run.
+  // Spotify access tokens (any other long mixed-case token-like run: redactTokenRuns).
   [/\bBQ[A-Za-z0-9_-]{40,}/g, "[redacted]"],
-  [
-    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{64,}\b/g,
-    "[redacted]",
-  ],
 ];
+
+/**
+ * A run of token characters ([A-Za-z0-9_-]) without its dashes at either end, which is where a
+ * word boundary falls. The run is matched once, never rescanned from each dash inside it.
+ */
+const TOKEN_RUN = /[A-Za-z0-9_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?/g;
+/**
+ * Each long mixed-case token-like run (64 characters or more, with a digit, an upper and a
+ * lower case letter) as "[redacted]": what
+ * /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{64,}\b/g
+ * replaced, in linear time.
+ */
+export function redactTokenRuns(text: string): string {
+  return text.replace(TOKEN_RUN, (run) =>
+    run.length >= 64 && /\d/.test(run) && /[A-Z]/.test(run) && /[a-z]/.test(run)
+      ? "[redacted]"
+      : run,
+  );
+}
 
 /** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
 function redactSecrets(text: string): string {
   let out = text;
   for (const secret of knownSecrets()) out = out.split(secret).join("[redacted]");
   for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
-  return out;
+  return redactTokenRuns(out);
 }
 
 /**
@@ -114,9 +134,56 @@ export function isMediaUrl(value: string): boolean {
 }
 
 const URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
-// Not inside a longer token (a UUID's digit groups are not a phone number).
-const PHONE_LIKE = /(?<![\w-])\+?\(?\d[\d\s().-]{7,}\d(?![\w-])/g;
+/** The characters of an e-mail address before "@". */
+const EMAIL_LOCAL = /[\w.+-]+/g;
+/** An e-mail address's domain, just after "@" (set lastIndex). */
+const EMAIL_DOMAIN = /[\w-]+(?:\.[\w-]+)+/y;
+
+/**
+ * Each e-mail address as "[email]": what /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g replaced, in linear
+ * time. Every start inside a run of local-part characters reaches the same "@", so the run is
+ * read once, not once per character.
+ */
+export function withoutEmails(text: string): string {
+  let out = "";
+  let kept = 0;
+  EMAIL_LOCAL.lastIndex = 0;
+  for (let local = EMAIL_LOCAL.exec(text); local; local = EMAIL_LOCAL.exec(text)) {
+    const at = local.index + local[0].length;
+    if (text.charAt(at) !== "@") continue;
+    EMAIL_DOMAIN.lastIndex = at + 1;
+    const domain = EMAIL_DOMAIN.exec(text);
+    if (!domain) continue;
+    out += `${text.slice(kept, local.index)}[email]`;
+    kept = at + 1 + domain[0].length;
+    EMAIL_LOCAL.lastIndex = kept;
+  }
+  return out + text.slice(kept);
+}
+
+/**
+ * Where a phone number may start (not inside a longer token: a UUID's digit groups are not a
+ * phone number) and the run of number characters after it. The number is read from the run by
+ * replacePhoneLike.
+ */
+const PHONE_RUN = /(?<![\w-])\+?\(?\d[\d\s().-]*/g;
+
+/**
+ * Replaces each phone-like number: what /(?<![\w-])\+?\(?\d[\d\s().-]{7,}\d(?![\w-])/g matched,
+ * in linear time. A number ends at the last digit of its run that no word character or "-"
+ * follows, at least eight characters after its first digit; a run holds at most one number.
+ */
+export function replacePhoneLike(text: string, replace: (match: string) => string): string {
+  return text.replace(PHONE_RUN, (run: string, offset: number) => {
+    const first = run.search(/\d/);
+    for (let end = run.length; end >= first + 9; end--) {
+      if (/\d/.test(run.charAt(end - 1)) && !/[\w-]/.test(text.charAt(offset + end))) {
+        return replace(run.slice(0, end)) + run.slice(end);
+      }
+    }
+    return run;
+  });
+}
 
 const withoutMediaUrls = (text: string) =>
   text.replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url));
@@ -138,13 +205,11 @@ export function scrubReadText(text: string): string {
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = withoutMediaUrls(redactText(text))
-    .replace(EMAIL, "[email]")
-    .replace(PHONE_LIKE, (match) => {
-      const digits = match.replace(/\D/g, "").length;
-      const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
-      return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
-    });
+  const out = replacePhoneLike(withoutEmails(withoutMediaUrls(redactText(text))), (match) => {
+    const digits = match.replace(/\D/g, "").length;
+    const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
+    return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
+  });
   return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
@@ -609,12 +674,35 @@ const isJsonType = (contentType: string) => /\bjson\b/i.test(contentType);
 
 /** Markup, also escaped as entities, once or more ("&lt;", "&#60;", "&#x3c;", "&amp;lt;"). */
 export const MARKUP = /[<>]|&(?:amp;)*(?:lt|gt|#0*6[02]|#x0*3[ce]);/i;
+/** A Python traceback. */
+const PYTHON_TRACE = /Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+
+/** A word with a path, a line and a column: "/", "\" or "." somewhere before ":10:5". */
+function isFrameLocation(word: string | undefined): boolean {
+  const separator = word?.search(/[/\\.]/) ?? -1;
+  return separator !== -1 && /:\d+:\d/.test(word?.slice(separator + 1) ?? "");
+}
+
 /**
- * A stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)", with a path, so "at 10:30:00"
- * is not one) or a Python traceback.
+ * True for a stack trace: a JavaScript frame ("at fn (/path/file.js:10:5)", with a path, so
+ * "at 10:30:00" is not one) or a Python traceback. The frame is what
+ * /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+/ matched, read word by word: that expression took
+ * quadratic time on a long error body, and this runs in linear time.
  */
-const STACK_TRACE =
-  /\bat\s+(?:\S+\s+\()?\S*[/\\.]\S*:\d+:\d+\)?|Traceback \(most recent call last\)|File "[^"]+", line \d+/;
+export function hasStackTrace(text: string): boolean {
+  if (PYTHON_TRACE.test(text)) return true;
+  const words = text.split(/\s+/);
+  for (let i = 0; i + 1 < words.length; i++) {
+    const word = words[i] ?? "";
+    // "at" as a word of its own, or after a character that is not a word character ("(at").
+    if (!word.endsWith("at") || /\w/.test(word.charAt(word.length - 3))) continue;
+    const after = words[i + 2];
+    if (isFrameLocation(words[i + 1]) || (after?.startsWith("(") && isFrameLocation(after))) {
+      return true;
+    }
+  }
+  return false;
+}
 /** A signature or token parameter, also in a link written without a scheme. */
 const SIGNED_PARAM = /(?:^|[?&;~\s])(?:sig|signature|token|hdnts|hdnea)=|X-Amz-/i;
 
@@ -626,7 +714,7 @@ const SIGNED_PARAM = /(?:^|[?&;~\s])(?:sig|signature|token|hdnts|hdnea)=|X-Amz-/
  */
 export function reasonIssue(text: string): string | null {
   if (MARKUP.test(text)) return "markup";
-  if (STACK_TRACE.test(text)) return "a stack trace";
+  if (hasStackTrace(text)) return "a stack trace";
   if (SIGNED_PARAM.test(text)) return "a signature or token parameter";
   if (text.search(URL_IN_TEXT) !== -1) return "a link";
   return null;
@@ -788,12 +876,14 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
     const recorded: Recorded = { status: response.status, contentType };
     const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
     if (retryAfterMs !== undefined) recorded.retryAfterMs = retryAfterMs;
-    if (isJsonType(contentType)) {
+    const ok = response.status >= 200 && response.status <= 299;
+    if (isJsonType(contentType) && (ok || text.length <= MAX_ERROR_JSON)) {
       try {
         recorded.json = JSON.parse(text);
         return recorded;
       } catch {
-        // Falls through: kept as text, reported as a parse error.
+        // Falls through: kept as text, reported as a parse error (an error body longer than
+        // MAX_ERROR_JSON is not parsed: its status reports it).
       }
     }
     recorded.text = text.slice(0, MAX_TEXT * 4);

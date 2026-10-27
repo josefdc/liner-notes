@@ -6,8 +6,17 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { allStrings, randomStrings, timed } from "../sources/testing/strings.js";
 import type { SpotifyData } from "./state.js";
-import { matchTrack, needsChoice, rankTracks, sameArtistName, words } from "./trackMatch.js";
+import {
+  matchTrack,
+  needsChoice,
+  partTitlesDiffer,
+  quotedSources,
+  rankTracks,
+  sameArtistName,
+  words,
+} from "./trackMatch.js";
 
 function track(title: string, ...artistNames: string[]): SpotifyData {
   return {
@@ -2190,5 +2199,63 @@ describe("the scout's decision", () => {
     expect(words("が")).toEqual(["が"]);
     expect(words("Мой")).toEqual(["мой"]);
     expect(words("Ｆｕｌｌｗｉｄｔｈ")).toEqual(["fullwidth"]);
+  });
+});
+
+describe("quotedSources", () => {
+  // The expression before #194: it looked for the closing quote again from every "from".
+  const QUADRATIC = /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu;
+  const old = (title: string) =>
+    [...title.matchAll(QUADRATIC)].map((m) => [m.index, m.index + m[0].length]);
+
+  it("finds exactly the quoted works the earlier expression found", () => {
+    const realistic = [
+      'Let It Go - From "Frozen"',
+      "Let It Go (From “Frozen”/Soundtrack Version)",
+      'Theme From "Jurassic Park"',
+      "Song (from 'Encanto')",
+      "Song - from ‘Encanto’",
+      "Song (from «Amélie»)",
+      'Song (from "unclosed',
+      "Song (from the Basement)",
+      'Song (fromage "x")',
+      'Song (xfrom "x")',
+      'Song (ſfrom "x")',
+    ];
+    const symbols = ["from", " ", '"', "“", "”", "'", "’", "x"];
+    const parts = [
+      'from "',
+      "From “",
+      "from  '",
+      "FROM ‘",
+      "from «",
+      'from\n"',
+      '"',
+      "”",
+      "'",
+      "’",
+      "»",
+      "x",
+      " ",
+      "xfrom '",
+      '(from "',
+      "é",
+      "ſfrom '",
+      "\u212afrom '",
+    ];
+    const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000, 10)];
+
+    for (const title of cases)
+      expect(quotedSources(title), JSON.stringify(title)).toEqual(old(title));
+    expect(cases.filter((title) => old(title).length > 0).length).toBeGreaterThan(1000);
+  });
+
+  it('answers quickly on a title of unclosed quotes after "from"', () => {
+    // About 1.2 s with the earlier expression.
+    const title = `Song (${"from “".repeat(10_000)})`;
+    const { ms, result } = timed(() => quotedSources(title));
+    expect(ms).toBeLessThan(100);
+    expect(result).toEqual([]);
+    expect(timed(() => partTitlesDiffer({ title }, { title: "Song" })).ms).toBeLessThan(100);
   });
 });

@@ -182,6 +182,57 @@ export function splitRoles(role: string | undefined): string[] {
 
 const samePosition = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase();
 
+const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+/** The characters `.` does not match. */
+const isLineBreak = (char: string | undefined) =>
+  char === "\n" || char === "\r" || char === "\u2028" || char === "\u2029";
+
+/**
+ * The two ends of a range in one part of a `tracks` field ("A1 to A3" → ["A1", "A3"]), or null:
+ * exactly what /^\s*(.+?)\s+to\s+(.+?)\s*$/i captures, found in one pass. That expression
+ * backtracks in polynomial time on runs of whitespace and "to", and any Discogs user can edit
+ * the field. As there, an end never spans a line break, and the shortest first end that leaves
+ * a second one is taken.
+ */
+export function creditRange(part: string): [string, string] | null {
+  const n = part.length;
+  // runEnd[i]: where the whitespace run starting at i ends (i itself when part[i] is not one).
+  const runEnd = new Int32Array(n + 1);
+  runEnd[n] = n;
+  for (let i = n - 1; i >= 0; i--) runEnd[i] = isSpace(part[i]) ? runEnd[i + 1] : i;
+  let trailing = n;
+  while (trailing > 0 && isSpace(part[trailing - 1])) trailing--;
+  let lastBreak = -1; // the last line break before the trailing whitespace
+  let lastOther = -1; // the last character that is not a line break
+  for (let i = 0; i < n; i++) {
+    if (!isLineBreak(part[i])) lastOther = i;
+    else if (i < trailing) lastBreak = i;
+  }
+  const isTo = (at: number) => /^to$/i.test(part.slice(at, at + 2));
+  // The second end, after "to" and the whitespace that starts at `at`, or null.
+  const second = (at: number): string | null => {
+    if (!isSpace(part[at])) return null;
+    const start = runEnd[at];
+    if (start < n) return lastBreak < start ? part.slice(start, trailing) : null;
+    // Only whitespace follows "to": the expression takes its last character that is not a line break.
+    return lastOther > at ? part.charAt(lastOther) : null;
+  };
+  // The first end starts at the first character that is not whitespace and ends before a
+  // whitespace run followed by "to".
+  const lead = runEnd[0];
+  for (let end = lead + 1; end < n && !isLineBreak(part[end - 1]); end++) {
+    if (!isSpace(part[end]) || isSpace(part[end - 1])) continue;
+    const to = isTo(runEnd[end]) ? second(runEnd[end] + 2) : null;
+    if (to !== null) return [part.slice(lead, end), to];
+  }
+  // Otherwise only a part that opens with "to" matches: its first end is one whitespace
+  // character before it.
+  const to = isTo(lead) ? second(lead + 2) : null;
+  if (to === null) return null;
+  for (let at = lead - 2; at >= 0; at--) if (!isLineBreak(part[at])) return [part.charAt(at), to];
+  return null;
+}
+
 export type Coverage = boolean | "all" | "ambiguous";
 
 /**
@@ -201,10 +252,10 @@ export function creditCovers(
   const own = indexes(position);
   let ambiguous = false;
   for (const part of tracks.split(",")) {
-    const range = part.match(/^\s*(.+?)\s+to\s+(.+?)\s*$/i);
+    const range = creditRange(part);
     if (range) {
-      const from = indexes(range[1]);
-      const to = indexes(range[2]);
+      const from = indexes(range[0]);
+      const to = indexes(range[1]);
       if (from.length === 0 || to.length === 0) continue;
       const spans = from.flatMap((f) => to.filter((t) => t >= f).map((t) => [f, t] as const));
       const hits = spans.filter(([f, t]) => own.some((i) => i >= f && i <= t));

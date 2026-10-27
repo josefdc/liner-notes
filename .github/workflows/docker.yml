@@ -115,13 +115,18 @@ jobs:
       # "degraded" when the models are not downloaded.
       - name: Check the audio image
         env:
-          # Bytes, of the image's unpacked layers (services/audio/README.md, "Image size").
+          # Bytes, of the image's unpacked layers (services/audio/README.md, "Image size"). The
+          # image measured 1 287 974 912 on the containerd store and 1 254 570 996 on overlay2 (the
+          # runner's store today): the budget is about 16 % and 20 % above them, and must pass on
+          # both.
           AUDIO_IMAGE_BUDGET: "1500000000"
         run: |
           # The image's unpacked layers, summed. Unlike `docker image inspect`'s Size, which the
-          # containerd store makes larger by the compressed layers, this is about the same on every
-          # image store (the containerd store rounds files up to whole disk blocks, a few per
-          # cent). Anything but one size in bytes per layer fails here.
+          # containerd store makes larger by the compressed layers, this counts the same files on
+          # every image store, but not the same bytes: the containerd store rounds each file up to
+          # whole disk blocks and overlay2 does not, so the same image measures about 3 % more
+          # (audio) or 15 % more (the API, with many small files) on containerd. That difference
+          # is not growth. Anything but one size in bytes per layer fails here.
           layers=$(docker history -H=false --format '{{.Size}}' liner-notes-audio:latest)
           if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
             echo "::error title=Audio image size unknown::docker history did not print the audio image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"
@@ -257,15 +262,18 @@ jobs:
       # health check (Node's fetch) turning healthy.
       - name: Check the API image
         env:
-          # Bytes, of the image's unpacked layers as for the audio image: about 26 % above the
-          # 388.5 MB the image measured when the budget was set. Raise it in the change that makes
-          # the image larger, and say why.
+          # Bytes, of the image's unpacked layers as for the audio image. The image measured
+          # 388 505 600 on the containerd store and 336 484 899 on overlay2 (the runner's store
+          # today): the budget is about 26 % and 46 % above them, and must pass on both. Raise it
+          # in the change that makes the image larger, and say why.
           API_IMAGE_BUDGET: "490000000"
         run: |
           # The image's unpacked layers, summed. Unlike `docker image inspect`'s Size, which the
-          # containerd store makes larger by the compressed layers, this is about the same on every
-          # image store (the containerd store rounds files up to whole disk blocks, a few per
-          # cent). Anything but one size in bytes per layer fails here.
+          # containerd store makes larger by the compressed layers, this counts the same files on
+          # every image store, but not the same bytes: the containerd store rounds each file up to
+          # whole disk blocks and overlay2 does not, so the same image measures about 3 % more
+          # (audio) or 15 % more (the API, with many small files) on containerd. That difference
+          # is not growth. Anything but one size in bytes per layer fails here.
           layers=$(docker history -H=false --format '{{.Size}}' liner-notes-api:latest)
           if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
             echo "::error title=API image size unknown::docker history did not print the API image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"

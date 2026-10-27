@@ -55,16 +55,28 @@ over it, or when it cannot read the sizes. The budget is `AUDIO_IMAGE_BUDGET` in
 `.github/workflows/docker.yml`.
 
 The check sums the sizes of the image's layers as `docker history -H=false` prints them, in bytes,
-which is what the layers take unpacked. That is about the same on every Docker image store: the
-containerd store rounds each file up to whole disk blocks, which adds a few per cent. The size
-`docker image inspect` reports is not: the containerd image store (the default on a new Docker 29
-install) adds the compressed layers to it, and the older overlay2 store does not. The image
-measures 1 287 974 912 bytes (1.29 GB) of unpacked layers, and the budget is about 16 % above
-that; with the containerd store `docker image inspect` reports 1 783 716 776 bytes (1.78 GB) for
-it, and reported 2.48 GB for the single-stage image before it.
+which is what the layers take unpacked. That counts the same files on every Docker image store, but
+not the same bytes: the containerd image store (the default on a new Docker 29 install) rounds each
+file up to whole disk blocks, and the overlay2 store (GitHub's `ubuntu-24.04` runner, Docker 28)
+does not. The audio image therefore measures about 3 % more on containerd than on overlay2, and the
+API image, with many small files, about 15 % more. A difference of that size between two stores is
+not growth. The budget has to pass on both. The size `docker image inspect` reports differs much
+more: the containerd store adds the compressed layers to it.
 
-Almost all of it is the virtual environment: one 1.16 GB layer, 1.13 GB of files (`du -sb
-/app/.venv`). The largest packages in its `site-packages`:
+The reference measurements, from the same build:
+
+| Measure | containerd store | overlay2 store |
+| --- | --- | --- |
+| Unpacked layers (what the check sums) | 1 287 974 912 bytes (1.29 GB) | 1 254 570 996 bytes (1.25 GB) |
+| Budget above that | about 16 % | about 20 % |
+| Virtual environment layer | 1 156 431 872 bytes (1.16 GB) | 1 134 725 325 bytes (1.13 GB) |
+| `docker image inspect` | 1 783 716 776 bytes (1.78 GB) | not measured |
+
+With the containerd store, `docker image inspect` reported 2.48 GB for the single-stage image
+before this one.
+
+Almost all of the image is the virtual environment: 1.13 GB of files (`du -sb /app/.venv`, the
+same on both stores). The largest packages in its `site-packages`, also by `du -sb`:
 
 | Package | Size | Why it is there |
 | --- | --- | --- |
@@ -76,8 +88,8 @@ Almost all of it is the virtual environment: one 1.16 GB layer, 1.13 GB of files
 | `numpy`, `numpy.libs` | 41 MB, 28 MB | Everything above. |
 | `numba` | 30 MB | Required by `librosa`. |
 
-The rest is the `python:3.12.15-slim-trixie` base (about 131 MB) and the service's own files
-(0.4 MB). To measure a build the same way:
+The rest is the `python:3.12.15-slim-trixie` base (about 131 MB on the containerd store) and the
+service's own files (0.4 MB). To measure a build the same way:
 
 ```bash
 docker history -H=false --format '{{.Size}}' liner-notes-audio:latest | awk '{s += $1} END {printf "%.0f\n", s}'
@@ -86,11 +98,12 @@ docker run --rm --entrypoint sh liner-notes-audio:latest -c \
   'du -sb /app/.venv; cd /app/.venv/lib/python3.12/site-packages && du -sb * | sort -rn | head'
 ```
 
-When the check fails, compare those numbers with the ones above to find what grew: usually a new
-or upgraded dependency in `uv.lock`, or files in the build context that `.dockerignore` should
-leave out. Remove the growth if the service does not need it. If it does, raise
-`AUDIO_IMAGE_BUDGET` in the same change and update this section with the new measurements and
-the reason.
+When the check fails, compare those numbers with the ones above for the same store to find what
+grew (the "Docker info" group of the `setup-buildx-action` step shows the runner's store under
+`Storage Driver`): usually a new or upgraded dependency in `uv.lock`, or files in the build context
+that `.dockerignore` should leave out. Remove the growth if the service does not need it. If it
+does, raise `AUDIO_IMAGE_BUDGET` in the same change and update this section with the new
+measurements and the reason.
 
 ## Configuration
 

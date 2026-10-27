@@ -378,9 +378,11 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * forums, Rate Your Music, Disqus and Wayback Machine copies of excluded pages, and the comment
  * layouts of Discourse, phpBB, Reddit, Gearspace, YouTube, Disqus, Songfacts and Amazon, with
  * more of XenForo's and MetaFilter's (a row of 7 may hold them, or research text written from
- * them).
+ * them). 9: the relations map is read with the primary sources: related recordings carry their
+ * MusicBrainz first release dates and the second hop's items and relations are kept (a row of 8
+ * has neither, so its map would show no years and no second hop).
  */
-export const CACHED_EVIDENCE_FORMAT = 8;
+export const CACHED_EVIDENCE_FORMAT = 9;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the

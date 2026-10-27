@@ -355,6 +355,9 @@ describe("the research key and what a hit trusts", () => {
       "of the format before comment layouts were left out",
       (row) => withEvidence(row, { format: 7 }),
     ],
+    // Written before related recordings were dated and the second hop read: read again, so the
+    // relations map has its years and its second hop.
+    ["of the format before the relations map was read", (row) => withEvidence(row, { format: 8 })],
     [
       "holding a timeout as lasting",
       (row) =>

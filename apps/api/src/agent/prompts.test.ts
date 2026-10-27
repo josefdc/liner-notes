@@ -9,7 +9,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FACTOIDS_SYSTEM_PROMPT, factoidMessages } from "../http/routes/factoids.js";
+import { FACTOIDS_SYSTEM_PROMPT, factoidMessages } from "../factoids/prompt.js";
 import {
   COMPOSER_SYSTEM_PROMPT,
   type ComposerPromptInput,
@@ -158,7 +158,7 @@ describe("instructions", () => {
       step: 1,
       maxSteps: 2,
     });
-    const factoids = factoidMessages({ title: "T", artist: "A" }, ["studio secrets"]);
+    const factoids = factoidMessages({ track: { title: "T", artist: "A" } }, ["studio secrets"]);
     const judge = judgeMessages({
       track: { title: "T", artist: "A", album: null, year: null },
       statements: [{ claimId: "c1", text: "A fact.", scope: "recording", evidenceIds: [] }],

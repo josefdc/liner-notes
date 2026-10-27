@@ -84,15 +84,17 @@ function keptReason(reason: string): string {
 /**
  * Judges `claims` (model claims that cite evidence, in the order to send them) against the
  * excerpts they cite. Never throws for a model failure or a judge timeout; rethrows a cancel of
- * the run (`signal`).
+ * the run (`signal`). `callSite` names the call in the spend log and the call records (default
+ * JUDGE_CALL_SITE, the analysis verifier's).
  */
 export async function judgeClaims(
   claims: readonly Claim[],
   evidence: readonly Evidence[],
   track: PromptTrack,
   runtime: AgentRuntime,
-  options: { runId: string; signal?: AbortSignal; timeoutMs?: number },
+  options: { runId: string; signal?: AbortSignal; timeoutMs?: number; callSite?: string },
 ): Promise<JudgeResult> {
+  const callSite = options.callSite ?? JUDGE_CALL_SITE;
   const verdicts = new Map<string, JudgedClaim>();
   const tooLong = claims
     .filter((claim) => claim.text.trim().length > JUDGE_STATEMENT_MAX)
@@ -101,7 +103,7 @@ export async function judgeClaims(
   const nothing = { verdicts, omitted: 0, tooLong, judged: 0, unjudged: claims.length };
   if (fits.length === 0) return { ...nothing, call: null, failure: null };
   if (options.timeoutMs !== undefined && options.timeoutMs <= 0) {
-    const failure = new LlmError("timeout", `${JUDGE_CALL_SITE}: no time left in the run to judge`);
+    const failure = new LlmError("timeout", `${callSite}: no time left in the run to judge`);
     return { ...nothing, call: null, failure, notAsked: true };
   }
   const batch = fits.slice(0, JUDGE_BATCH_MAX);
@@ -131,7 +133,7 @@ export async function judgeClaims(
   const signal = options.signal ? AbortSignal.any([options.signal, timer.signal]) : timer.signal;
   let result: InvokeResult<JudgeOutput>;
   try {
-    result = await runtime.llm.invoke(JUDGE_CALL_SITE, "judge", messages, JudgeOutput, {
+    result = await runtime.llm.invoke(callSite, "judge", messages, JudgeOutput, {
       purpose: runtime.purpose,
       runId: options.runId,
       maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
@@ -142,15 +144,12 @@ export async function judgeClaims(
     if (timer.signal.aborted) {
       const timeout = new LlmError(
         "timeout",
-        `${JUDGE_CALL_SITE}: no answer within its ${options.timeoutMs} ms of the run's time`,
+        `${callSite}: no answer within its ${options.timeoutMs} ms of the run's time`,
       );
-      return unjudgedAll(
-        { ...failedCall(JUDGE_CALL_SITE, "judge", error), status: "timeout" },
-        timeout,
-      );
+      return unjudgedAll({ ...failedCall(callSite, "judge", error), status: "timeout" }, timeout);
     }
     if (isAbortError(error)) throw error;
-    return unjudgedAll(failedCall(JUDGE_CALL_SITE, "judge", error), error);
+    return unjudgedAll(failedCall(callSite, "judge", error), error);
   } finally {
     clearTimeout(clock);
   }
@@ -159,9 +158,9 @@ export async function judgeClaims(
   if (issues.length > 0) {
     const refused = new LlmError(
       "invalid_output",
-      `${JUDGE_CALL_SITE}: the answer breaks the JudgeOutput rules (${issues.slice(0, 3).join("; ")})`,
+      `${callSite}: the answer breaks the JudgeOutput rules (${issues.slice(0, 3).join("; ")})`,
     );
-    return unjudgedAll(refusedAnswer(JUDGE_CALL_SITE, result, "invalid_output"), refused);
+    return unjudgedAll(refusedAnswer(callSite, result, "invalid_output"), refused);
   }
   for (const { claimId, verdict, reason } of result.output.verdicts) {
     const claim = batch[sentIds.indexOf(claimId)];
@@ -169,7 +168,7 @@ export async function judgeClaims(
   }
   return {
     verdicts,
-    call: answeredCall(JUDGE_CALL_SITE, result),
+    call: answeredCall(callSite, result),
     failure: null,
     omitted: batch.length - verdicts.size,
     tooLong,

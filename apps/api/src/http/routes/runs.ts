@@ -28,7 +28,7 @@ export const BY_TRACK_CANDIDATES = 5;
  * with its id, while a record with that same content (digest) is served and is of the run's
  * track; else null.
  */
-function resultOf(record: RunRecord): unknown {
+export function resultOf(record: RunRecord): unknown {
   if (record.analysis !== null) return record.analysis;
   const replayOf = replayOfRun(record);
   if (!replayOf || record.status !== "completed") return null;

@@ -1892,9 +1892,13 @@ describe("REPLAY_MODE", () => {
       trackArtist: "The Recorders",
     });
     expect(byName.status).toBe(200);
-    expect(byName.body.factoids.map((f: { claimId?: string }) => f.claimId)).toEqual([
-      "claim-a",
-      undefined,
+    // The recording has no claim "claim-a" (a producer rule it breaks), so its card is sent
+    // without a link to it.
+    expect(
+      byName.body.factoids.map((f: { id: string; claimId?: string }) => [f.id, f.claimId]),
+    ).toEqual([
+      ["fa", undefined],
+      ["fb", undefined],
     ]);
     noLiveCalls();
   });

@@ -11,6 +11,12 @@
       "runId": {
         "description": "The analysis the factoids are for, so they do not repeat",
         "type": "string"
+      },
+      "round": {
+        "description": "The round of facts asked for: the nextRound of the last answer, so each asks anew",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       }
     },
     "required": ["trackId", "trackTitle"]
@@ -27,6 +33,12 @@
       "runId": {
         "description": "The analysis the factoids are for, so they do not repeat",
         "type": "string"
+      },
+      "round": {
+        "description": "The round of facts asked for: the nextRound of the last answer, so each asks anew",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       }
     },
     "required": ["trackId", "trackTitle"],

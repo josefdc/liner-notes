@@ -291,6 +291,19 @@ describe("error handling", () => {
     expect(res.body).toMatchObject({ success: false, code: "not_found" });
   });
 
+  it("answers the factoid routes' old paths with a JSON 404, the stream's included", async () => {
+    const server = app();
+    const stream = await request(server).get(
+      withRunToken("/api/factoids/decrypt/stream?trackTitle=x"),
+    );
+    const json = await request(server).post(withRunToken("/api/factoids/decrypt")).send({});
+
+    for (const res of [stream, json]) {
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ success: false, code: "not_found" });
+    }
+  });
+
   it("does not advertise the framework", async () => {
     const res = await request(app()).get("/api/health");
     expect(res.headers["x-powered-by"]).toBeUndefined();
@@ -607,28 +620,16 @@ describe("rate limits", () => {
     expect(Number(json.headers["retry-after"])).toBeGreaterThan(0);
   });
 
-  it("refuses on the factoid routes' old paths as on the new ones", async () => {
+  it("refuses the factoid stream's old path with a JSON 429: it is no event-stream route", async () => {
     const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
     await request(server).post(withRunToken("/api/factoids/more")).send({});
 
-    const answers = [];
-    for (const path of ["/api/factoids/more", "/api/factoids/decrypt"]) {
-      const stream = await request(server).get(withRunToken(`${path}/stream?trackTitle=x`));
-      const json = await request(server).post(withRunToken(path)).send({});
-      answers.push({
-        stream: [
-          stream.status,
-          stream.headers["content-type"],
-          messages(stream).map((m) => m.code),
-        ],
-        json: [json.status, json.body],
-      });
-    }
-    expect(answers[1]).toEqual(answers[0]);
-    expect(answers[0]).toEqual({
-      stream: [200, expect.stringContaining("text/event-stream"), ["rate_limited", undefined]],
-      json: [429, expect.objectContaining({ code: "rate_limited" })],
-    });
+    const res = await request(server).get(
+      withRunToken("/api/factoids/decrypt/stream?trackTitle=x"),
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.body).toMatchObject({ success: false, code: "rate_limited" });
   });
 
   it("counts requests whose JSON is invalid: the limit runs before the body is parsed", async () => {

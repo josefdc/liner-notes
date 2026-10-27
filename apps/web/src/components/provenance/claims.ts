@@ -297,15 +297,23 @@ const PREVIEW_HOST =
   /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
 const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
 // Query (or fragment) parameters that carry a credential or sign a URL: tokens, keys,
-// passwords, OAuth codes and session ids, S3 (X-Amz-*), Google Cloud Storage, Azure SAS (sig,
-// se), CloudFront (Policy, Signature, Key-Pair-Id) and Akamai (hdnea, hdnts).
+// secrets, passwords, OAuth codes and signatures, session ids, S3 (X-Amz-*), Google Cloud
+// Storage, Azure SAS (sig, se), CloudFront (Policy, Signature, Key-Pair-Id) and Akamai (hdnea,
+// hdnts).
 const CREDENTIAL_PARAMS = new Set([
   'access_token',
   'id_token',
+  'refresh_token',
+  'auth_token',
+  'oauth_token',
+  'oauth_signature',
+  'jwt',
   'key',
   'api_key',
   'api-key',
   'apikey',
+  'x-api-key',
+  'secret',
   'client_secret',
   'password',
   'passwd',
@@ -315,6 +323,8 @@ const CREDENTIAL_PARAMS = new Set([
   'session',
   'sessionid',
   'jsessionid',
+  'phpsessid',
+  'sid',
   'token',
   'signature',
   'sig',
@@ -330,55 +340,96 @@ const CREDENTIAL_PARAMS = new Set([
   'hdnts',
 ]);
 
+// A parameter name before `=`, after any separator a server or a client-side router may read:
+// `&`, `;` (which also drops the `amp` of an HTML-escaped `&amp;`), and `!`, `/` or `?` in a
+// fragment (`#!key=…`, `#/route?code=…`).
+const PARAM_NAME = /(?:^|[?#&;!/])([^=?#&;!/]+)=/g;
+// Path parameters that carry a session id or a token (`/a;jsessionid=…`).
+const SESSION_PATH = /;(?:jsessionid|phpsessid|sid|token)=/i;
+
 /** True when a query or fragment (`?a=1&b=2`, `#access_token=…`) names a credential parameter. */
 function carriesCredential(params: string): boolean {
-  const keys = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
-  return keys.some((key) => CREDENTIAL_PARAMS.has(key.toLowerCase()));
+  const names = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
+  for (const [, name] of params.matchAll(PARAM_NAME)) names.push(decodeName(name));
+  return names.some((name) => CREDENTIAL_PARAMS.has(name.toLowerCase()));
+}
+
+/** A percent-encoded parameter name, decoded as a query string would be; as written if malformed. */
+function decodeName(name: string): string {
+  try {
+    return decodeURIComponent(name.replace(/\+/g, ' '));
+  } catch {
+    return name;
+  }
+}
+
+/** The eight 16-bit groups of a compressed IPv6 address as `URL` writes it (no dotted tail). */
+function ipv6Groups(v6: string): number[] {
+  const [head, tail] = v6.split('::');
+  const before = head ? head.split(':') : [];
+  const after = tail ? tail.split(':') : [];
+  const zeros = Array<string>(8 - before.length - after.length).fill('0');
+  return [...before, ...zeros, ...after].map((group) => Number.parseInt(group, 16));
 }
 
 /**
- * True for a host that is not on the public internet: localhost, and loopback, private,
- * link-local or unspecified addresses, IPv4-mapped ones included. `hostname` is the parsed URL's,
- * so a numeric, hex or octal IPv4 spelling is already dotted decimal and IPv6 is compressed hex.
+ * The first two octets of the IPv4 address an IPv6 one embeds: IPv4-compatible (`::/96`, `::`
+ * and `::1` included), IPv4-mapped (`::ffff:0:0/96`), SIIT (`::ffff:0:0:0/96`), NAT64
+ * (`64:ff9b::/96`) and 6to4 (`2002::/16`); null for any other address.
+ */
+function embeddedIPv4(g: number[]): [number, number] | null {
+  const zero = (from: number, to: number) => g.slice(from, to).every((group) => group === 0);
+  const tail =
+    zero(0, 6) ||
+    (zero(0, 5) && g[5] === 0xffff) ||
+    (zero(0, 4) && g[4] === 0xffff && g[5] === 0) ||
+    (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6));
+  const high = tail ? g[6] : g[0] === 0x2002 ? g[1] : null;
+  return high === null ? null : [high >> 8, high & 0xff];
+}
+
+/**
+ * True for a host that is not on the public internet: localhost, and loopback, private, shared,
+ * link-local, site-local, multicast, reserved or unspecified addresses, IPv6 forms that embed an
+ * IPv4 one included. `hostname` is the parsed URL's, so it is lower case, a numeric, hex or octal
+ * IPv4 spelling is already dotted decimal, and IPv6 is compressed hex.
  */
 function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, '');
+  const host = hostname.replace(/\.+$/, '');
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === 'localhost.localdomain') return true;
   let v4 = host
     .match(/^(\d+)\.(\d+)\.\d+\.\d+$/)
     ?.slice(1)
     .map(Number);
   if (host.startsWith('[')) {
-    const v6 = host.slice(1, -1);
-    if (v6 === '::' || v6 === '::1') return true;
-    const mapped = v6.match(/^::ffff:([\da-f]{1,4}):[\da-f]{1,4}$/);
-    if (mapped) {
-      const high = Number.parseInt(mapped[1], 16);
-      v4 = [high >> 8, high & 0xff];
-    } else {
-      const first = v6.startsWith('::') ? 0 : Number.parseInt(v6, 16);
-      // fc00::/7 (unique local) and fe80::/10 (link-local).
-      return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
-    }
+    const groups = ipv6Groups(host.slice(1, -1));
+    v4 = embeddedIPv4(groups) ?? undefined;
+    // fc00::/7 (unique local), fe80::/10 (link-local) and fec0::/10 (site-local).
+    if (!v4) return (groups[0] & 0xfe00) === 0xfc00 || (groups[0] & 0xff80) === 0xfe80;
   }
   if (!v4) return false;
   const [a, b] = v4;
-  // 0/8 (unspecified), 10/8, 127/8, 169.254/16, 172.16/12, 192.168/16.
+  // 0/8 (unspecified), 10/8, 100.64/10 (shared), 127/8, 169.254/16, 172.16/12, 192.168/16, and
+  // 224/4 (multicast) and above (reserved, broadcast).
   return (
     a === 0 ||
     a === 10 ||
+    (a === 100 && b >= 64 && b <= 127) ||
     a === 127 ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 168) ||
+    a >= 224
   );
 }
 
 /**
  * A link that may be opened: an absolute http or https URL, as the browser resolves it; null for
  * anything else (javascript:, data:, a relative path, text that is not a URL), and for a URL that
- * carries a credential (a user name or password, a signed, token or session query, a
- * `;jsessionid=` path), is a preview clip or points to a private host (isPrivateHost).
+ * carries a credential (a user name or password, a signed, token or session query, a session or
+ * token path parameter such as `;jsessionid=`), is a preview clip or points to a private host
+ * (isPrivateHost).
  */
 export function safeHref(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -391,7 +442,7 @@ export function safeHref(url: string | null | undefined): string | null {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
   if (isPrivateHost(parsed.hostname)) return null;
-  if (/;jsessionid=/i.test(parsed.pathname)) return null;
+  if (SESSION_PATH.test(parsed.pathname)) return null;
   // A fragment without `=` is an anchor (`#auth`), not parameters.
   if (carriesCredential(parsed.search)) return null;
   if (parsed.hash.includes('=') && carriesCredential(parsed.hash)) return null;

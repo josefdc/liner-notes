@@ -163,6 +163,15 @@ describe('safeHref', () => {
     'signature',
     'session',
     'sessionid',
+    'refresh_token',
+    'oauth_token',
+    'oauth_signature',
+    'auth_token',
+    'secret',
+    'x-api-key',
+    'phpsessid',
+    'sid',
+    'jwt',
   ])('never links a URL whose query or fragment names %s, in any case', (name) => {
     for (const url of [
       `https://example.org/a?q=1&${name}=abc`,
@@ -173,10 +182,26 @@ describe('safeHref', () => {
     }
   });
 
-  it('never links a URL that carries a session id as a path parameter', () => {
-    expect(safeHref('https://example.org/a;jsessionid=ABC123?q=1')).toBeNull();
-    expect(safeHref('https://example.org/a;JSESSIONID=ABC123')).toBeNull();
+  it.each([
+    'https://example.org/a?q=1;key=abc',
+    'https://example.org/a?q=1;token=abc',
+    'https://example.org/a?q=1&amp;key=abc',
+    'https://example.org/a#/route?code=abc',
+    'https://example.org/a#!key=abc',
+    'https://example.org/a#!/x?token=abc',
+    'https://example.org/a#/access_token=abc',
+    'https://example.org/a?q=1;%6Bey=abc',
+  ])('never links a credential behind another separator: %s', (url) => {
+    expect(safeHref(url), url).toBeNull();
   });
+
+  it.each(['jsessionid', 'JSESSIONID', 'phpsessid', 'sid', 'token'])(
+    'never links a URL that carries ;%s= as a path parameter',
+    (name) => {
+      expect(safeHref(`https://example.org/a;${name}=ABC123?q=1`)).toBeNull();
+      expect(safeHref(`https://example.org/a;${name}=ABC123`)).toBeNull();
+    },
+  );
 
   it.each([
     ['localhost', 'http://localhost/'],
@@ -204,6 +229,26 @@ describe('safeHref', () => {
     ['IPv4-mapped loopback', 'http://[::ffff:127.0.0.1]/'],
     ['IPv4-mapped private, in hex', 'http://[::ffff:c0a8:101]/'],
     ['IPv4-mapped link-local', 'http://[::ffff:169.254.169.254]/'],
+    ['IPv4-compatible loopback', 'http://[::127.0.0.1]/'],
+    ['IPv4-compatible link-local', 'http://[::169.254.169.254]/'],
+    ['NAT64 loopback', 'http://[64:ff9b::127.0.0.1]/'],
+    ['NAT64 link-local', 'http://[64:ff9b::a9fe:a9fe]/'],
+    ['SIIT loopback', 'http://[::ffff:0:127.0.0.1]/'],
+    ['6to4 loopback', 'http://[2002:7f00:1::]/'],
+    ['6to4 private', 'http://[2002:c0a8:101::1]/'],
+    ['IPv6 site-local', 'http://[fec0::1]/'],
+    ['IPv6 site-local, high end', 'http://[feff::1]/'],
+    ['shared address space, low end', 'http://100.64.0.1/'],
+    ['shared address space, high end', 'http://100.127.255.255/'],
+    ['shared address space (cloud metadata)', 'http://100.100.100.200/'],
+    ['multicast', 'http://224.0.0.1/'],
+    ['multicast, high end', 'http://239.255.255.250/'],
+    ['reserved', 'http://240.0.0.1/'],
+    ['broadcast', 'http://255.255.255.255/'],
+    ['localhost with two trailing dots', 'http://localhost../'],
+    ['localhost with three trailing dots', 'http://app.localhost.../'],
+    ['localhost.localdomain', 'http://localhost.localdomain/'],
+    ['localhost.localdomain with a trailing dot', 'http://LOCALHOST.localdomain./'],
   ])('never links a private host: %s', (_name, url) => {
     expect(safeHref(url), url).toBeNull();
   });
@@ -228,6 +273,18 @@ describe('safeHref', () => {
       'http://[fe00::1]/',
       'http://[::ffff:8.8.8.8]/',
       'https://localhost.example.com/',
+      'http://100.63.255.255/',
+      'http://100.128.0.1/',
+      'http://223.255.255.255/',
+      'http://[64:ff9b::808:808]/',
+      'http://[2002:808:808::1]/',
+      'http://[fe7f::1]/',
+      'https://www.youtube.com/watch?v=abc&t=42',
+      'https://en.wikipedia.org/wiki/Key_(music)#Usage',
+      'https://example.com/search?q=1;keyword=x',
+      'https://example.com/#!/search?q=key',
+      'https://example.com/a?next=/session/new&x=1',
+      'https://example.com/a;v=1/keys',
     ]) {
       expect(safeHref(url), url).toBe(new URL(url).href);
     }

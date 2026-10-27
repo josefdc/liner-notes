@@ -1,4 +1,5 @@
 import type React from 'react';
+import { closeOtherLists, GRAPH_LISTS } from './exclusiveLists';
 import { Pause, Play } from 'lucide-react';
 
 /**
@@ -17,7 +18,11 @@ export const PreviewList: React.FC<{
 }> = ({ tracks, nameOf, playingId, onToggle }) => {
   if (tracks.length === 0) return null;
   return (
-    <details name="genealogy-lists" className="text-chrome font-mono text-text-chip">
+    <details
+      name={GRAPH_LISTS}
+      onToggle={closeOtherLists}
+      className="text-chrome font-mono text-text-chip"
+    >
       <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70 rounded-sm">
         Previews ({tracks.length})
       </summary>

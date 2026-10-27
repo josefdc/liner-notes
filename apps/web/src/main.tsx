@@ -10,7 +10,7 @@ if (!rootElement) {
 }
 
 // Errors are logged by name only: their messages can carry the page's data (rootErrors.ts).
-const root = ReactDOM.createRoot(rootElement, rootErrorOptions);
+const root = ReactDOM.createRoot(rootElement, rootErrorOptions());
 root.render(
   <React.StrictMode>
     <App />

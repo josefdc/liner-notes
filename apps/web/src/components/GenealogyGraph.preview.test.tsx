@@ -9,6 +9,7 @@ const audio = vi.hoisted(() => ({
     playingNodeId: 'n1' as string | null,
     hasPreviewSupport: true,
     unavailableNodeId: null as string | null,
+    blockedNodeId: null as string | null,
   },
 }));
 vi.mock('./genealogy/useAudioPreview', () => ({
@@ -32,6 +33,7 @@ describe('GenealogyGraph preview indicator', () => {
       playingNodeId: 'n1',
       hasPreviewSupport: true,
       unavailableNodeId: null,
+      blockedNodeId: null,
     };
   });
   afterEach(cleanup);
@@ -54,10 +56,15 @@ describe('GenealogyGraph preview indicator', () => {
       isPlaying: false,
       playingNodeId: null,
       hasPreviewSupport: false,
+      blockedNodeId: 'n1',
     };
     render(<GenealogyGraph data={data} />);
     expect(screen.getByText('AUDIO BLOCKED')).toBeTruthy();
     expect(screen.queryByText('PREVIEW UNAVAILABLE')).toBeNull();
+    // Which track's preview, in the live region.
+    expect(screen.getByRole('status').textContent).toBe(
+      'Preview of Other - Artist was blocked by the browser.',
+    );
   });
 
   it('says a track is previewing, without calling it a sample', () => {

@@ -13,6 +13,7 @@ import {
 import type { Simulation } from 'd3-force';
 import { type D3DragEvent, drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
+import type { Transition } from 'd3-transition';
 import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors } from '../styles/theme';
 import { placeholderImage } from '../styles/placeholder';
@@ -127,6 +128,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     isPlaying,
     playingNodeId,
     hasPreviewSupport,
+    blockedNodeId,
     unavailableNodeId,
     playPreview,
     stopPreview,
@@ -143,9 +145,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   }, [onNodeClick]);
 
   // The graph's size on screen (ResizeObserver). The first one draws the graph and fixes its
-  // node scale; a later one moves the layout's middle and keeps the drawing and the zoom
-  // (`resizeRef`, set by the drawing). A hidden panel (the phone tabs) measures 0 by 0: the
-  // graph keeps its last size.
+  // node scale; a later one keeps the drawing, its layout and the zoom's scale, and shifts the
+  // view so the graph stays centred (`resizeRef`, set by the drawing). A hidden panel (the phone
+  // tabs) measures 0 by 0: the graph keeps its last size.
   const sizeRef = useRef<Size | null>(null);
   const firstSizeRef = useRef<Size | null>(null);
   const resizeRef = useRef<((size: Size) => void) | null>(null);
@@ -293,12 +295,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // Auto-fit once the layout first settles; a later drag keeps the user's view.
     let fitted = false;
+    // The fit's glide while it runs (cleared when it ends or something interrupts it): a resize
+    // meanwhile fits again to the new size, where shifting the view would stop the glide halfway.
+    let glide: Transition<SVGSVGElement, unknown, null, undefined> | null = null;
     const settle = () => {
       if (fitted) {
         fitText();
         return;
       }
       fitted = true;
+      fitView();
+    };
+    /** Fits the graph to the panel's size now, gliding there unless motion is reduced. */
+    function fitView() {
       // Calculate bounding box of all nodes
       let minX = Infinity,
         maxX = -Infinity,
@@ -330,9 +339,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const translateY = height / 2 - graphCenterY * scale;
 
       const fit = zoomIdentity.translate(translateX, translateY).scale(scale);
-      if (reducedMotion) svg.call(zoomBehavior.transform, fit);
-      else svg.transition().duration(500).call(zoomBehavior.transform, fit);
-    };
+      if (reducedMotion) {
+        svg.call(zoomBehavior.transform, fit);
+        return;
+      }
+      const gliding = svg.transition().duration(500);
+      glide = gliding;
+      gliding
+        .on('end.glide interrupt.glide', () => {
+          if (glide === gliding) glide = null;
+        })
+        .call(zoomBehavior.transform, fit);
+    }
     simulation.on('end', settle);
 
     // 5. Render links: the colour is the relation a link is shown as, the line its kind (solid
@@ -804,10 +822,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )
           .style('opacity', 1);
 
-        // No hint names a preview: pointing at a track never plays one and clicking it analyses
-        // it; previews play from their own buttons (PreviewList).
-        if (!d.previewUrl && isOrigin(d)) {
-          // Fallback visual for origin nodes without preview
+        // An origin says a click explores it (it analyses the track), whether or not it has a
+        // clip. No hint names a preview: previews play from their own buttons (PreviewList).
+        if (isOrigin(d)) {
           select(this)
             .append('text')
             .attr('class', 'preview-indicator')
@@ -899,11 +916,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // A resize keeps the drawing, its tracks' size and their places, and the zoom's scale: the
     // svg takes the new size, and the view moves by half the change, so what was at the middle
-    // of the panel is at its middle again. Nothing moves in the layout, and nothing glides.
+    // of the panel is at its middle again. Nothing moves in the layout, and nothing glides. While
+    // the first fit is still gliding in, the graph is fitted to the new size instead.
     resizeRef.current = (next) => {
       const [dx, dy] = [(next.width - width) / 2, (next.height - height) / 2];
       ({ width, height } = next);
       svg.attr('width', width).attr('height', height);
+      if (glide) {
+        fitView();
+        return;
+      }
       // translateBy moves by graph units: the screen's dx is dx / k of them.
       const k = transform.k || 1;
       svg.call(zoomBehavior.translateBy, dx / k, dy / k);
@@ -1020,9 +1042,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           </div>
         )}
 
+        {/* Which track's preview failed, in words: the region is in the page from the start, so
+            a message put in it is announced (the badges below show it, and are not read). */}
+        <p role="status" className="sr-only">
+          {!hasPreviewSupport && blockedNodeId
+            ? `Preview of ${nameOf(blockedNodeId)} was blocked by the browser.`
+            : hasPreviewSupport && unavailableNodeId
+              ? `Preview of ${nameOf(unavailableNodeId)} is unavailable.`
+              : ''}
+        </p>
+
         {/* No Preview Support Warning (browsers may block autoplay) */}
         {!hasPreviewSupport && (
-          <div className="absolute top-4 right-4 pointer-events-none" role="status">
+          <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
               <span>AUDIO BLOCKED</span>
@@ -1033,7 +1065,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* A node's clip that could not be loaded (preview links expire); its preview button
             tries again */}
         {hasPreviewSupport && unavailableNodeId && (
-          <div className="absolute top-4 right-4 pointer-events-none" role="status">
+          <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
               <span>PREVIEW UNAVAILABLE</span>

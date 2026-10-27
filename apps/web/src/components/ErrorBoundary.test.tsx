@@ -32,11 +32,14 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe('the genealogy graph error boundary', () => {
   it('says the graph could not be drawn and keeps the rest of the Player', () => {
+    // The production build: the log names the error only (Vitest runs as development).
+    vi.stubEnv('DEV', false);
     const track = withGraph();
     render(<Player trackData={track} onBack={() => {}} />);
 
@@ -53,5 +56,25 @@ describe('the genealogy graph error boundary', () => {
     expect(logged).toContain('The connections graph could not be drawn (Error)');
     expect(logged).not.toContain(track.title);
     expect(logged).not.toContain('the graph failed');
+  });
+
+  it('logs the whole error and where it was thrown in development', () => {
+    vi.stubEnv('DEV', true);
+    render(<Player trackData={withGraph()} onBack={() => {}} />);
+    const line = vi
+      .mocked(console.error)
+      .mock.calls.find(([first]) => first === 'The connections graph could not be drawn');
+    if (!line) throw new Error('the boundary logged nothing');
+    expect(line[1]).toBeInstanceOf(Error);
+    expect((line[1] as Error).message).toBe('the graph failed');
+    expect(line[2]).toEqual(expect.stringContaining('\n'));
+  });
+
+  it('puts the focus on the way back when the graph fails', () => {
+    render(<Player trackData={withGraph()} onBack={() => {}} />);
+    const panel = document.querySelector('#panel-genealogy');
+    const retry = panel?.querySelector('[role="alert"] button');
+    expect(retry?.textContent).toBe('Try again');
+    expect(document.activeElement).toBe(retry);
   });
 });

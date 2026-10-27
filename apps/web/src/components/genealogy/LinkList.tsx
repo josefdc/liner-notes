@@ -1,4 +1,5 @@
 import type React from 'react';
+import { closeOtherLists, GRAPH_LISTS } from './exclusiveLists';
 import { provenanceText, relationSentence, type ShownLink } from './links';
 
 /**
@@ -14,7 +15,11 @@ export const LinkList: React.FC<{
   if (links.length === 0) return null;
   return (
     // One of the graph's lists is open at a time (the previews are the other): both lie over it.
-    <details name="genealogy-lists" className="text-chrome font-mono text-text-chip">
+    <details
+      name={GRAPH_LISTS}
+      onToggle={closeOtherLists}
+      className="text-chrome font-mono text-text-chip"
+    >
       <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70 rounded-sm">
         Links as a list ({links.length})
       </summary>

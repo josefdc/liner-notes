@@ -14,6 +14,8 @@ class FakeAudio {
   ended = false;
   error: { code: number } | null = null;
   loads = 0;
+  /** How many times a clip was set. */
+  sets = 0;
   onplay: (() => void) | null = null;
   onpause: (() => void) | null = null;
   onended: (() => void) | null = null;
@@ -25,6 +27,7 @@ class FakeAudio {
     return this.#src;
   }
   set src(url: string) {
+    this.sets += 1;
     this.#src = url;
     this.ended = false;
     this.error = null;
@@ -130,6 +133,21 @@ describe('usePreviewAudio', () => {
     expect(audio.currentTime).toBe(12);
     expect(player.result.current.playing()).toBe(true);
     expect(graph.result.current.playing()).toBe(false);
+  });
+
+  it('loads a clip that failed again when it is played again', async () => {
+    const heard: string[] = [];
+    const graph = user('G', heard);
+    const audio = made[0];
+    await act(async () => graph.result.current.play('https://clips.test/g.mp3', 0.4));
+    const sets = audio.sets;
+    audio.error = { code: 4 };
+
+    await act(async () => graph.result.current.play('https://clips.test/g.mp3', 0.4));
+
+    expect(audio.sets).toBe(sets + 1);
+    expect(audio.src).toBe('https://clips.test/g.mp3');
+    expect(audio.error).toBeNull();
   });
 
   it("does not charge a late error or end of one user's clip to the user that took over", async () => {

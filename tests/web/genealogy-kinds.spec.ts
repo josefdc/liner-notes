@@ -585,14 +585,15 @@ test.describe("a related track's preview", () => {
     await openPlayer(page);
     const problems = collectProblems(page);
 
-    // The pointer on the track plays nothing, and no hint offers a preview there (a click
-    // analyses the track).
+    // The pointer on the track plays nothing. The track is an origin: its hint says a click
+    // explores it (it analyses the track), and no hint offers a preview there.
     const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
     await track.dispatchEvent("mouseenter");
     await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
-    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(0);
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveText(/CLICK TO EXPLORE/);
+    await expect(graphOf(page)).not.toContainText(/PREVIEW/);
     await track.dispatchEvent("mouseleave");
 
     await page.getByText("Previews (1)").click();

@@ -22,6 +22,7 @@ vi.mock('./genealogy/useAudioPreview', async () => {
         isPlaying: false,
         playingNodeId: null,
         hasPreviewSupport: true,
+        blockedNodeId: null,
         unavailableNodeId,
         playPreview: audio.playPreview,
         stopPreview: audio.stopPreview,
@@ -92,11 +93,16 @@ describe('GenealogyGraph hover on a node with a clip', () => {
     expect(container.querySelector('svg')?.textContent).not.toMatch(/PREVIEW|SAMPL/);
   });
 
-  it('says when the clip cannot be loaded', async () => {
+  it("says which track's clip cannot be loaded, in a live region that was there before", async () => {
     const view = render(<GenealogyGraph data={data} />);
+    // Mounted empty, so the message is announced when it comes.
+    const region = view.getByRole('status');
+    expect(region.textContent).toBe('');
 
     await act(async () => audio.setUnavailable?.('n1'));
 
-    expect(view.getByRole('status').textContent).toContain('PREVIEW UNAVAILABLE');
+    expect(view.getByRole('status')).toBe(region);
+    expect(region.textContent).toBe('Preview of Under Pressure - Queen (1981) is unavailable.');
+    expect(view.getByText('PREVIEW UNAVAILABLE')).toBeTruthy();
   });
 });

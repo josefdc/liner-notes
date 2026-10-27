@@ -88,7 +88,9 @@ function release(user: User) {
 function play(user: User, url: string, volume: number) {
   const audio = element;
   if (!audio) return undefined;
-  if (owner !== user || ownerUrl !== url) {
+  // A new user or clip loads it; so does the same clip again after it failed (a retry fetches
+  // it afresh instead of playing the failed load).
+  if (owner !== user || ownerUrl !== url || audio.error) {
     const previous = owner;
     owner = user;
     ownerUrl = url;

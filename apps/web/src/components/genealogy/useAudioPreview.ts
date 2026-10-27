@@ -9,10 +9,10 @@ import { type PreviewEvents, usePreviewAudio } from '../../hooks/usePreviewAudio
  * here stops the Player's, and one started there stops this one (`playingNodeId` goes back to
  * null). A preview starts only from an explicit control, never on hover.
  *
- * `hasPreviewSupport` is false only while the browser refuses to play (autoplay blocked); it
- * comes back with the next clip that plays. A clip that cannot be loaded (preview links are
- * signed and expire within minutes) sets `unavailableNodeId` instead, until the next preview or
- * stop, so the preview can be tried again.
+ * `hasPreviewSupport` is false only while the browser refuses to play (autoplay blocked), and
+ * `blockedNodeId` is the track it refused; both come back with the next clip that plays. A clip
+ * that cannot be loaded (preview links are signed and expire within minutes) sets
+ * `unavailableNodeId` instead, until the next preview or stop, so the preview can be tried again.
  */
 export function useAudioPreview() {
   const playingNodeIdRef = useRef<string | null>(null);
@@ -20,6 +20,7 @@ export function useAudioPreview() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingNodeId, setPlayingNodeId] = useState<string | null>(null);
   const [hasPreviewSupport, setHasPreviewSupport] = useState(true);
+  const [blockedNodeId, setBlockedNodeId] = useState<string | null>(null);
   const [unavailableNodeId, setUnavailableNodeId] = useState<string | null>(null);
 
   // Track play state for UI feedback
@@ -63,7 +64,10 @@ export function useAudioPreview() {
       const playPromise = audio.play(url, 0.4); // Subtle preview volume
       if (playPromise !== undefined) {
         playPromise
-          .then(() => setHasPreviewSupport(true))
+          .then(() => {
+            setHasPreviewSupport(true);
+            setBlockedNodeId(null);
+          })
           .catch((error: unknown) => {
             const name = error instanceof Error ? error.name : '';
             // Another preview or a stop interrupted this one: nothing went wrong.
@@ -71,6 +75,7 @@ export function useAudioPreview() {
             if (name === 'NotAllowedError') {
               console.log('Audio preview blocked by the browser');
               setHasPreviewSupport(false);
+              setBlockedNodeId(nodeId);
               return;
             }
             // Any other failure is this clip's (an expired link): only it is unavailable.
@@ -98,6 +103,7 @@ export function useAudioPreview() {
     isPlaying,
     playingNodeId,
     hasPreviewSupport,
+    blockedNodeId,
     unavailableNodeId,
     playPreview,
     stopPreview,

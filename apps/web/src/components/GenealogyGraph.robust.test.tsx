@@ -158,6 +158,8 @@ function onScreen(svg: SVGSVGElement) {
   const fitted = box((d) => d.pad);
   return {
     k,
+    /** The fitted box's size in graph units: what the fit divides the panel by. */
+    graph: [(fitted.right - fitted.left) / k, (fitted.bottom - fitted.top) / k],
     centre: [(fitted.left + fitted.right) / 2, (fitted.top + fitted.bottom) / 2],
     discs: box((d) => d.r),
   };
@@ -217,6 +219,52 @@ describe('GenealogyGraph on a resize', () => {
   });
 });
 
+describe('GenealogyGraph resized while its fit glides in', () => {
+  it('fits the graph to the new size, centred, instead of stopping the glide halfway', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    // The layout plays out, then the fit glides from the whole view to 1.5: resize halfway.
+    await vi.waitFor(
+      () => {
+        const { k } = zoomOf(svg);
+        expect(k).toBeGreaterThan(1.05);
+        expect(k).toBeLessThan(1.4);
+      },
+      { timeout: 10_000, interval: 2 },
+    );
+    await act(async () => report?.(400, 300));
+    await act(() => waitFor(800));
+
+    const now = onScreen(svg);
+    // The fit for 400 by 300: 60 px of padding each side, at most 1.5.
+    const [width, height] = now.graph;
+    const fit = Math.max(Math.min((400 - 120) / width, (300 - 120) / height, 1.5), 0.35);
+    expect(now.k).toBeCloseTo(fit, 2);
+    expect(now.centre[0]).toBeCloseTo(200, 0);
+    expect(now.centre[1]).toBeCloseTo(150, 0);
+  });
+});
+
+describe('GenealogyGraph resized once its fit is in', () => {
+  it('keeps the zoom and shifts the view, as without motion', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    // The glide has ended: the fit's 1.5 holds.
+    await vi.waitFor(() => expect(zoomOf(svg).k).toBe(1.5), { timeout: 10_000, interval: 5 });
+    await act(() => waitFor(100));
+
+    await act(async () => report?.(400, 300));
+    await act(() => waitFor(700));
+
+    const now = onScreen(svg);
+    expect(now.k).toBe(1.5);
+    expect(now.centre[0]).toBeCloseTo(200, 0);
+    expect(now.centre[1]).toBeCloseTo(150, 0);
+  });
+});
+
 describe("GenealogyGraph's pictures", () => {
   it('clips each picture by a valid id of its own, which its url(#…) names', () => {
     const { container } = render(<GenealogyGraph data={data} />);
@@ -270,6 +318,23 @@ describe('GenealogyGraph previews', () => {
     expect(played).toEqual([CLIP]);
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
+  it('shows the click hint on an origin that has a clip too, and plays nothing', async () => {
+    const withClip = {
+      ...withOrigin,
+      nodes: withOrigin.nodes.map((n) =>
+        n.id === 'older' ? { ...n, previewUrl: `${CLIP}&older` } : n,
+      ),
+    };
+    const { container } = render(<GenealogyGraph data={withClip} evidence={PACK} />);
+    await act(async () => {
+      container
+        .querySelector('g.nodes > g[data-node-id="older"]')
+        ?.dispatchEvent(new MouseEvent('mouseenter'));
+    });
+    expect(container.querySelector('.preview-indicator')?.textContent).toMatch(/CLICK TO EXPLORE/);
+    expect(played).toEqual([]);
+  });
+
   it('has a preview button for a track with a clip whose link is not shown', () => {
     render(<GenealogyGraph data={{ nodes: data.nodes, links: [] }} />);
     expect(
@@ -278,6 +343,31 @@ describe('GenealogyGraph previews', () => {
         hidden: true,
       }),
     ).toBeTruthy();
+  });
+});
+
+describe("GenealogyGraph's lists", () => {
+  // Both lists lie over the graph: one is open at a time. A browser without exclusive
+  // <details name> (as here) gets it from the lists' toggle handler.
+  it('closes the list of links when the previews open, and the other way round', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const [links, previews] = [...container.querySelectorAll('details')];
+    expect(links.textContent).toMatch(/^Links as a list/);
+    expect(previews.textContent).toMatch(/^Previews/);
+    const open = (details: HTMLDetailsElement) =>
+      act(async () => {
+        details.open = true;
+        details.dispatchEvent(new Event('toggle'));
+      });
+
+    await open(links);
+    expect(links.open).toBe(true);
+    await open(previews);
+    expect(previews.open).toBe(true);
+    expect(links.open).toBe(false);
+    await open(links);
+    expect(links.open).toBe(true);
+    expect(previews.open).toBe(false);
   });
 });
 

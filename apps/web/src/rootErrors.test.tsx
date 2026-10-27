@@ -6,6 +6,7 @@ import { rootErrorOptions } from './rootErrors';
 
 // What React logs when a part of the page throws: in production its default logs the whole
 // error, whose message can carry the data the part was given (here, a signed preview link).
+// Vitest runs with import.meta.env.DEV true: each test says which build it stands for.
 
 const SECRET = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
 
@@ -24,6 +25,7 @@ const errorLog = () =>
 
 let container: HTMLElement;
 beforeEach(() => {
+  vi.stubEnv('DEV', false);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   container = document.createElement('div');
@@ -31,12 +33,18 @@ beforeEach(() => {
 });
 afterEach(() => {
   container.remove();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe("the page's root error logging", () => {
+  it("keeps React's own logging, the whole error, in development", () => {
+    vi.stubEnv('DEV', true);
+    expect(rootErrorOptions()).toEqual({});
+  });
+
   it('logs a part caught by a boundary by the error name only', async () => {
-    const root = createRoot(container, rootErrorOptions);
+    const root = createRoot(container, rootErrorOptions());
     await act(async () =>
       root.render(
         <ErrorBoundary message="This part could not be shown" action={{ label: 'Try again' }}>
@@ -57,7 +65,7 @@ describe("the page's root error logging", () => {
     const actEnvironment = scope.IS_REACT_ACT_ENVIRONMENT;
     scope.IS_REACT_ACT_ENVIRONMENT = false;
     try {
-      const root = createRoot(container, rootErrorOptions);
+      const root = createRoot(container, rootErrorOptions());
       root.render(<Broken />);
       await vi.waitFor(() => expect(errorLog()).toContain('TypeError'));
       expect(errorLog()).not.toContain('hdnea');
@@ -83,6 +91,10 @@ describe("the page's root error logging", () => {
     document.body.append(root);
     await import('./main');
     root.remove();
-    expect(created.options).toBe(rootErrorOptions);
+    // The production build's options: React's error handlers replaced.
+    const options = created.options as Record<string, unknown>;
+    expect(Object.keys(options).sort()).toEqual(Object.keys(rootErrorOptions()).sort());
+    expect(typeof options.onCaughtError).toBe('function');
+    expect(typeof options.onUncaughtError).toBe('function');
   });
 });

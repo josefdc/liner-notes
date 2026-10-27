@@ -98,11 +98,13 @@ describe('useAudioPreview', () => {
     nextPlay = 'NotAllowedError';
     await act(async () => result.current.playPreview(clip, 'n1'));
     expect(result.current.hasPreviewSupport).toBe(false);
+    expect(result.current.blockedNodeId).toBe('n1');
     expect(result.current.unavailableNodeId).toBeNull();
 
     nextPlay = 'plays';
     await act(async () => result.current.playPreview(clip, 'n3'));
     expect(result.current.hasPreviewSupport).toBe(true);
+    expect(result.current.blockedNodeId).toBeNull();
   });
 
   it('ignores a play that another preview interrupted', async () => {

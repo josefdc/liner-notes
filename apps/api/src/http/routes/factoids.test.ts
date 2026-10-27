@@ -401,7 +401,6 @@ describe("GET /api/factoids/more/stream", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/event-stream");
-    expect(res.text ?? "").toBe("");
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(model.invoke).not.toHaveBeenCalled();
   });

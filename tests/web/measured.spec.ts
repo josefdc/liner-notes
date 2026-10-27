@@ -130,7 +130,7 @@ test.describe("a measured result", () => {
     await expect(styles).toContainText(
       "Against each release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
         "the model's strongest style matched for 14 of 31, one of its 5 strongest for 21 of 31 " +
-        "(a fixed list of common styles: 3 and 12). " +
+        "(the model's most common styles: 3 and 12 of 31). " +
         "The model was trained on Discogs data, which may include these releases.",
     );
     await expect(fingerprint.getByRole("region", { name: "Tags (model estimate)" })).toContainText(

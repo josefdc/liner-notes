@@ -144,6 +144,37 @@ describe("the Player's preview lane", () => {
     );
     expect(drawn()).toEqual(['sections', 'energy', 'legend']);
   });
+
+  it('says why the service withheld a layer, and not when the gate stopped everything', () => {
+    const unsteady = { code: 'unsteady_tempo', reason: 'the tempo does not hold over the window' };
+    render(
+      <Player
+        trackData={measuredTrack(
+          audioBlock({ ...layers, beats: null, withheld: { beats: unsteady } }),
+        )}
+        onBack={() => {}}
+      />,
+    );
+    const timeline = () => screen.getByRole('group', { name: 'Song structure' }).textContent;
+    expect(timeline()).toContain('Beat grid withheld — the tempo did not hold across the preview');
+    cleanup();
+    const silent = { code: 'gate_silence', reason: 'the preview is silent' };
+    render(
+      <Player
+        trackData={measuredTrack(
+          audioBlock({
+            ...layers,
+            gate: { passed: false, reason: 'silence' },
+            withheld: { beats: silent, energyContour: silent, sections: silent },
+          }),
+          { audioSource: 'unavailable' },
+        )}
+        onBack={() => {}}
+      />,
+    );
+    expect(timeline()).toContain('No key moments — the preview is silent');
+    expect(timeline()).not.toContain('withheld');
+  });
 });
 
 describe('Player', () => {

@@ -45,7 +45,7 @@ describe("the fingerprint's style accuracy note", () => {
     expect(note()?.textContent).toBe(
       "Against each release's Discogs styles, on 40 previews (audio eval report of 2027-01-02): " +
         "the model's strongest style matched for 11 of 40, one of its 5 strongest for 23 of 40 " +
-        '(a fixed list of common styles: 2 and 9). ' +
+        "(the model's most common styles: 2 and 9 of 40). " +
         'The model was trained on Discogs data, which may include these releases.',
     );
     // Under the styles it describes, in a text colour, not the measured one.

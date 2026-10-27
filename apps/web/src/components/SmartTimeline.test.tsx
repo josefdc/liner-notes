@@ -419,4 +419,118 @@ describe('the measured layers of the preview', () => {
     );
     expect(document.querySelector('[data-measured-layer]')).toBeNull();
   });
+
+  it('cuts a section that runs past the window at its end, with no note', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        previewSeconds={20}
+        measuredSections={{
+          ...neutralSections,
+          segments: [
+            { label: 'A', start: 0, end: 12 },
+            { label: 'B', start: 12, end: 25 },
+          ],
+        }}
+      />,
+    );
+    const items = within(
+      screen.getByRole('list', { name: 'Sections measured in the preview' }),
+    ).getAllByRole('listitem');
+    expect(items.map((item) => [item.style.left, item.style.width])).toEqual([
+      ['0%', '60%'],
+      ['60%', '40%'],
+    ]);
+    expect(items[1].getAttribute('aria-label')).toBe('Section B, 0:12 to 0:20 (measured)');
+    expect(screen.getByRole('group', { name: 'Song structure' }).textContent).not.toContain(
+      'outside the preview',
+    );
+  });
+
+  it('scales the energy line to the loudest frame drawn, not to one past the window', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={2}
+        energyContour={{ ...contour, hopSeconds: 1, values: [1, 2, 100] }}
+      />,
+    );
+    const energy = screen.getByRole('img', { name: /^Energy \(RMS\)/ });
+    expect(energy.querySelector('polyline')?.getAttribute('points')).toBe('0.5,0.5 1.5,0');
+  });
+
+  it.each([
+    ['beats', 'unsteady_tempo', 'Beat grid withheld — the tempo did not hold across the preview'],
+    [
+      'energyContour',
+      'estimate_failed',
+      'Energy contour withheld — the estimator failed on this preview',
+    ],
+    ['sections', 'estimate_failed', 'Sections withheld — the estimator failed on this preview'],
+  ] as const)('says why the service withheld the %s layer', (field, code, note) => {
+    const present = { beats: grid, energyContour: contour, measuredSections: neutralSections };
+    const prop = field === 'sections' ? 'measuredSections' : field;
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        audioAnalyzed
+        {...present}
+        {...{ [prop]: null }}
+        withheld={{ [field]: { code, reason: 'the service reason' } }}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain(note);
+    // Only that one: the layers drawn have no note.
+    expect(timeline.textContent?.match(/withheld/g)).toHaveLength(1);
+  });
+
+  it('says nothing was withheld for a layer it drew, or when nothing was analysed', () => {
+    const reason = { code: 'unsteady_tempo' as const, reason: 'x' };
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        audioAnalyzed
+        beats={grid}
+        withheld={{ beats: reason }}
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Song structure' }).textContent).not.toContain(
+      'withheld',
+    );
+    cleanup();
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        audioAnalyzed={false}
+        noMomentsReason="the preview is silent"
+        withheld={{ beats: reason, energyContour: reason, sections: reason }}
+      />,
+    );
+    const text = screen.getByRole('group', { name: 'Song structure' }).textContent;
+    expect(text).toContain('No key moments — the preview is silent');
+    expect(text).not.toContain('withheld');
+  });
+
+  it('says no beats were measured when the grid is empty', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        audioAnalyzed
+        beats={{ ...grid, times: [] }}
+        energyContour={contour}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain('No beats measured');
+    expect(timeline.querySelector('[data-measured-layer="beats"]')).toBeNull();
+    cleanup();
+    render(<SmartTimeline segments={template} previewSeconds={20} audioAnalyzed beats={null} />);
+    expect(document.body.textContent).not.toContain('No beats measured');
+  });
 });

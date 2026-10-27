@@ -739,6 +739,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               beats={measurement?.beats}
               energyContour={measurement?.energyContour}
               measuredSections={measurement?.sections}
+              withheld={measurement?.withheld.fields}
             />
           </div>
         </div>

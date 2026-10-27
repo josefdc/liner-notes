@@ -4,8 +4,8 @@ import type { SongSegment, KeyMoment, TrackData } from '../types';
 import { colors } from '../styles/theme';
 import { InferenceLabel } from './EstimatedWarning';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
-import { formatSeconds } from '../constants';
-import type { MeasuredAudio } from './measured/audio';
+import { AUDIO_WITHHELD_TEXT, formatSeconds } from '../constants';
+import type { MeasuredAudio, MeasuredWithheld } from './measured/audio';
 
 interface SmartTimelineProps {
   segments?: SongSegment[];
@@ -38,7 +38,19 @@ interface SmartTimelineProps {
   beats?: MeasuredAudio['beats'];
   energyContour?: MeasuredAudio['energyContour'];
   measuredSections?: MeasuredAudio['sections'];
+  /**
+   * Why the service withheld each value (`audio.withheld`): a layer it withheld is not drawn,
+   * and a note says why.
+   */
+  withheld?: MeasuredWithheld['fields'];
 }
+
+/** The measured layers the service may withhold, and their names in the notes. */
+const WITHHELD_LAYERS = [
+  ['beats', 'Beat grid'],
+  ['energyContour', 'Energy contour'],
+  ['sections', 'Sections'],
+] as const;
 
 // The preview lane. When the result carries its measurement, the lane spans the measured
 // preview window (`audio.window.durationSeconds`), and moments past it are not drawn. Results
@@ -353,6 +365,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   beats,
   energyContour,
   measuredSections,
+  withheld,
 }) => {
   const duration = positiveSeconds(durationSeconds);
   const measuredPreview = positiveSeconds(previewSeconds);
@@ -529,6 +542,17 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               : 'No key moments'}
         </Note>
       )}
+      {/* A layer the service withheld, and why; when nothing was analysed (the gate), the note
+          above already says why for all of them. */}
+      {audioAnalyzed !== false &&
+        WITHHELD_LAYERS.map(([field, name]) => {
+          const given = { beats, energyContour, sections: measuredSections }[field];
+          const reason = withheld?.[field];
+          return !given && reason ? (
+            <Note key={field}>{`${name} withheld — ${AUDIO_WITHHELD_TEXT[reason.code]}`}</Note>
+          ) : null;
+        })}
+      {beats && beats.times.length === 0 && <Note>No beats measured</Note>}
       {(
         [
           [layers.outside.beats, 'beat'],

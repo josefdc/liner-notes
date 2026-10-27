@@ -358,7 +358,7 @@ describe("kinds after the verifier", () => {
     const verdicts = new Map(
       claims.map((c) => [c.id, { verdict: "supported" as const, reason: "" }]),
     );
-    const { genealogy } = applyVerdicts(draft, verdicts, []);
+    const { genealogy } = applyVerdicts({ ...draft, citesRelation: new Set() }, verdicts);
     expect(genealogy.nodes.map((node) => [node.id, node.group])).toEqual([
       ["current", 1],
       ["older", 2],
@@ -438,7 +438,7 @@ describe("a claim about a relation is stated whole, with or without a link", () 
     for (const about of ClaimAbout.options) {
       const claim = modelClaim("c", { about, evidenceIds: ["ev-track"] });
       const verdicts = new Map([["c", { verdict: "partial" as const, reason: "" }]]);
-      const [judged] = applyVerdicts(draftOf([claim]), verdicts, PACK).claims;
+      const [judged] = applyVerdicts(checkClaims(draftOf([claim]), PACK, null), verdicts).claims;
       expect(judged.kind, about).toBe(isRelation[about] ? "inferred" : "sourced");
     }
   });
@@ -599,6 +599,59 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
 
     expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
   });
+
+  // The model asserted the relation by citing its record: that holds when the scope check drops
+  // the record (a cover of the song, cited for a claim about this recording).
+  describe("by the citations the model gave it, before the scope check", () => {
+    const misScoped = () =>
+      labelled("card", "connection", COVER, ["ev-work", "ev-web"], "recording");
+
+    it("reads a partly supported claim whose cover record was dropped for scope as inferred", async () => {
+      const { result } = await verifyIn([misScoped()], () => "partial");
+
+      // The check kept the web page only; the claim still asserts the cover.
+      expect(result.claims?.find((claim) => claim.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(analysisIssues(result)).toEqual([]);
+    });
+
+    it("keeps the same claim sourced when supported: only the partial verdict is read otherwise", async () => {
+      const { result } = await verifyIn([misScoped()], () => "supported");
+
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+    });
+
+    it("leaves a claim that cites no relation record, before or after the check, as before", async () => {
+      // The release-wide credit is dropped for scope; the web page is kept.
+      const claim = labelled("card", "connection", TRIVIA, ["ev-release", "ev-web"], "recording");
+      const { result } = await verifyIn([claim], () => "partial");
+
+      expect(result.claims?.find((each) => each.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    });
+  });
+
+  // The rule reads the claim's citations, not its link's type: a producer or influence link's
+  // claim that cites a relation record is stated whole, as every link's claim is.
+  it.each([
+    ["influence", "connection"],
+    ["producer", "credit"],
+  ] as const)(
+    "reads the %s link of a partly supported %s claim citing a relation record as inferred",
+    async (type, about) => {
+      const claim = modelClaim("rel", { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] });
+      const { result } = await verify(
+        [claim],
+        [linkTo("rel", ["ev-sampled-by"], { type })],
+        () => "partial",
+        (draft) => stateFor(draft, RELATION_PACK),
+      );
+
+      expect(provenance(result.claims, "rel")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(result.genealogy.links[0]).toMatchObject({ type, kind: "inferred" });
+      expect(analysisIssues(result)).toEqual([]);
+    },
+  );
 });
 
 describe("the numeric check in the verifier", () => {

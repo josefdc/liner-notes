@@ -29,9 +29,9 @@
  *    that still cite evidence (in focus order), and applyVerdicts. A fact is sourced only when
  *    the judge found its cited excerpts supporting it; never measured. A fact that asserts a
  *    sample or a cover is stated whole, as the analysis states its claims and links' claims that
- *    do: a sample card, and a card of any type that cites a relation record of the pack (a
- *    trivia or connection card on a record that samples or covers the track; no card type is
- *    about a cover). Only a supported one is sourced, a partly supported one reads as inferred.
+ *    do: a sample card, and a card of any type whose own citations include a relation record of
+ *    the pack, even one the scope check then dropped (a trivia or connection card on a record
+ *    that samples or covers the track; no card type is about a cover). Only a supported one is sourced, a partly supported one reads as inferred.
  *    When the judge fails or the budget refuses it, the facts are kept with no verdict, read as
  *    inferred, and say they were not checked.
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
@@ -581,9 +581,8 @@ export async function writeFactoids(
     // A fact that asserts a sample or a cover, whatever its card type, is stated whole, as the
     // analysis's are (applyVerdicts).
     const verified = applyVerdicts(
-      { claims: checked.claims, genealogy: noGraph },
+      { claims: checked.claims, genealogy: noGraph, citesRelation: checked.citesRelation },
       judged.verdicts,
-      context.evidence,
     );
     const sent = new Set(toJudge.map((claim) => claim.id));
     const tooLong = new Set(judged.tooLong);

@@ -255,7 +255,7 @@ describe("a relation from more facts is stated whole, as the analysis states it"
     const checked = checkClaims(draftOf([claim], linked ? [link] : []), PACK, null);
     const verdicts = new Map([["cl-a", { verdict, reason: "The cited excerpt decides it." }]]);
     // The verifier node's call (agent/verifier/index.ts, step 4).
-    const [judged] = applyVerdicts(checked, verdicts, PACK).claims;
+    const [judged] = applyVerdicts(checked, verdicts).claims;
     return { kind: judged.kind, verdict: judged.verdict };
   }
 
@@ -369,6 +369,21 @@ describe("a statement from more facts that asserts a relation is stated whole, w
     );
 
     expect(claimOf(COVER)).toMatchObject({ about: "connection", evidenceIds: [coveredBy.id] });
+    expect(provenance(claimOf(COVER))).toEqual({ kind: "inferred", verdict: "partial" });
+  });
+
+  it("reads a partly supported cover statement as inferred when its cover record was dropped for scope", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(COVER, "connection", [coveredBy.id, "ev-1"]), null],
+        judge: () => "partial",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    // Scoped to the recording, the card keeps ev-1 only; it still asserts the cover.
+    expect(claimOf(COVER)).toMatchObject({ scope: "recording", evidenceIds: ["ev-1"] });
     expect(provenance(claimOf(COVER))).toEqual({ kind: "inferred", verdict: "partial" });
   });
 });

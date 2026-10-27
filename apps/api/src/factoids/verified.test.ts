@@ -4,10 +4,13 @@
  * fake (factoids/testing/fakes.ts): it writes one card per focus and judges what it is sent.
  */
 
-import { type Claim, FactoidsResponse } from "@liner-notes/contract";
+import { type Claim, FactoidsResponse, type Verdict } from "@liner-notes/contract";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GenealogyLink } from "../agent/schema.js";
 import { stubLlm } from "../agent/testing/stubLlm.js";
+import { applyVerdicts, checkClaims, RELATION_ABOUT } from "../agent/verifier/index.js";
+import { draftOf, modelClaim } from "../agent/verifier/testing.js";
 import { createTestApp } from "../http/testApp.js";
 import { createFactoidsRouter } from "../http/routes/factoids.js";
 import { LlmError } from "../llm/errors.js";
@@ -217,5 +220,74 @@ describe("more facts as verified claims", () => {
       ),
     ).rejects.toBeDefined();
     expect(llm.calls.map((call) => call.callSite)).toEqual(["factoids", "factoids", "factoids"]);
+  });
+});
+
+describe("a relation from more facts is stated whole, as the analysis states it", () => {
+  const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
+  const sampleCard = (text: string, evidenceIds: string[]) => ({
+    ...card(text, evidenceIds),
+    type: "sample" as const,
+  });
+
+  /**
+   * The kind and verdict the analysis gives a claim citing ev-1 that the judge found `verdict`:
+   * a model sample link's own claim (`about: "sample"`), or a plain production claim.
+   */
+  function fromAnalysis(verdict: Verdict, relation: boolean) {
+    const claim = modelClaim("cl-a", {
+      text: relation ? SAMPLE : SOURCED,
+      about: relation ? "sample" : "production",
+      evidenceIds: ["ev-1"],
+    });
+    const link = {
+      source: "up",
+      target: "current",
+      value: 1,
+      type: "sample",
+      kind: "inferred",
+      origin: "model",
+      claimId: "cl-a",
+      evidenceIds: ["ev-1"],
+    } as GenealogyLink;
+    const checked = checkClaims(draftOf([claim], relation ? [link] : []), PACK, null);
+    const verdicts = new Map([["cl-a", { verdict, reason: "The cited excerpt decides it." }]]);
+    // The verifier node's call (agent/verifier/index.ts, step 4).
+    const [judged] = applyVerdicts(checked, verdicts, { relations: RELATION_ABOUT }).claims;
+    return { kind: judged.kind, verdict: judged.verdict };
+  }
+
+  const provenance = (claim: Claim | undefined) => ({ kind: claim?.kind, verdict: claim?.verdict });
+
+  it("reads a partly supported sample as inferred, as the analysis reads its sample link's claim", async () => {
+    const { claimOf } = await moreFacts({
+      cards: [null, sampleCard(SAMPLE, ["ev-1"]), null],
+      judge: () => "partial",
+    });
+
+    expect(claimOf(SAMPLE)).toMatchObject({ about: "sample", evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(SAMPLE))).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("partial", true));
+  });
+
+  it("keeps a fully supported sample sourced, as the analysis does", async () => {
+    const { claimOf } = await moreFacts({
+      cards: [null, sampleCard(SAMPLE, ["ev-1"]), null],
+      judge: () => "supported",
+    });
+
+    expect(provenance(claimOf(SAMPLE))).toEqual({ kind: "sourced", verdict: "supported" });
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("supported", true));
+  });
+
+  it("leaves a partly supported claim that states no relation sourced", async () => {
+    const { claimOf } = await moreFacts({
+      cards: [card(SOURCED, ["ev-1"]), null, null],
+      judge: () => "partial",
+    });
+
+    expect(claimOf(SOURCED)).toMatchObject({ about: "production" });
+    expect(provenance(claimOf(SOURCED))).toEqual({ kind: "sourced", verdict: "partial" });
+    expect(provenance(claimOf(SOURCED))).toEqual(fromAnalysis("partial", false));
   });
 });

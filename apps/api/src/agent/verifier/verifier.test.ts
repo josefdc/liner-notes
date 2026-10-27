@@ -40,6 +40,14 @@ vi.mock(
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
+import { writeFactoids } from "../../factoids/service.js";
+import {
+  card as factCard,
+  evidenceItem,
+  fakeModel,
+  storedRun,
+  DEMO_TRACK,
+} from "../../factoids/testing/fakes.js";
 import { JUDGE_STATEMENT_MAX, JUDGE_SYSTEM_PROMPT } from "../prompts.js";
 import { heldTextIssue, UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import type { GenealogyLink } from "../schema.js";
@@ -326,6 +334,81 @@ describe("kinds after the verifier", () => {
       ["older", 2],
       ["later", 3],
     ]);
+  });
+});
+
+describe("a fact card about a relation is stated whole, on both paths", () => {
+  const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
+  const PRODUCTION = "The synth line was played on a Roland Juno-106 at home.";
+  type CardType = "sample" | "production";
+
+  /** An analysis card's claim, as the composer writes it, citing ev-track. */
+  const cardClaim = (id: string, type: CardType, text: string) =>
+    modelClaim(id, {
+      text,
+      about: type,
+      evidenceIds: ["ev-track"],
+      factoid: { title: `About ${id}`, type, entities: [] },
+    });
+
+  /** The kind and verdict more facts gives a card of `type` the judge finds `verdict`. */
+  async function fromMoreFacts(type: CardType, text: string, verdict: "supported" | "partial") {
+    const { outcomes } = await writeFactoids(
+      {
+        track: { title: DEMO_TRACK.trackTitle, artist: DEMO_TRACK.trackArtist },
+        runId: "run-more-facts-1",
+        existingIds: [],
+      },
+      {
+        llm: fakeModel({
+          cards: [{ ...factCard(text, ["ev-1"]), type }, null, null],
+          judge: () => verdict,
+        }),
+        purpose: "dev",
+        signal: new AbortController().signal,
+        loadRun: () => storedRun([evidenceItem("ev-1", "MusicBrainz: a record.")]),
+      },
+    );
+    const written = outcomes.find((outcome) => outcome.status === "written");
+    const claim = written?.status === "written" ? written.claim : undefined;
+    return { kind: claim?.kind, verdict: claim?.verdict };
+  }
+
+  const provenance = (claims: Claim[] | undefined, id: string) => {
+    const claim = claims?.find((each) => each.id === id);
+    return { kind: claim?.kind, verdict: claim?.verdict };
+  };
+
+  it("reads a partly supported sample card as inferred, as more facts reads one", async () => {
+    const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "partial");
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(provenance(result.claims, "card")).toEqual(
+      await fromMoreFacts("sample", SAMPLE, "partial"),
+    );
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
+  it("keeps a fully supported sample card sourced, as more facts does", async () => {
+    const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "supported");
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+    expect(provenance(result.claims, "card")).toEqual(
+      await fromMoreFacts("sample", SAMPLE, "supported"),
+    );
+  });
+
+  it("leaves a partly supported production card sourced, as more facts does", async () => {
+    const { result } = await verify(
+      [cardClaim("card", "production", PRODUCTION)],
+      [],
+      () => "partial",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    expect(provenance(result.claims, "card")).toEqual(
+      await fromMoreFacts("production", PRODUCTION, "partial"),
+    );
   });
 });
 

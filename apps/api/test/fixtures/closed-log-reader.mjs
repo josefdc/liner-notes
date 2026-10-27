@@ -21,6 +21,8 @@ api.stderr.on("data", (chunk) => {
   output += chunk;
 });
 
+const LISTENING = "Liner Notes API listening on port";
+
 /** The port in the API's own "listening" log line, once it has written it. */
 function listeningPort() {
   for (const line of output.split("\n")) {
@@ -28,7 +30,7 @@ function listeningPort() {
       const entry = JSON.parse(line);
       if (
         entry?.component === "Server" &&
-        String(entry.msg).startsWith("Liner Notes API listening on port") &&
+        String(entry.msg).startsWith(LISTENING) &&
         typeof entry.port === "number"
       ) {
         return entry.port;
@@ -46,14 +48,16 @@ function fail(error) {
   console.log(JSON.stringify({ error }));
   process.exit(1);
 }
-const killTimer = setTimeout(() => fail("the API did not exit within 30 s of its start"), 30_000);
+const killTimer = setTimeout(() => fail("the API did not exit within 45 s of its start"), 45_000);
 
-// Waits for the API's own "listening" line, then for it to answer on that port, within 15 s.
-const deadline = Date.now() + 15_000;
+// Waits for the API's own "listening" line, then for it to answer on that port, within 30 s
+// (about 1 s on a quiet machine, 10-12 s on two busy cores).
+const startedAt = Date.now();
+const deadline = startedAt + 30_000;
 let port;
 for (;;) {
   if (api.exitCode !== null || api.signalCode !== null) {
-    fail(`the API exited at startup:\n${output}`);
+    fail(`the API exited ${Date.now() - startedAt} ms into its startup:\n${output}`);
   }
   port ??= listeningPort();
   if (port !== undefined) {
@@ -67,8 +71,8 @@ for (;;) {
   if (Date.now() >= deadline) {
     fail(
       port === undefined
-        ? `the API did not report that it listens within 15 s:\n${output}`
-        : `the API listens on port ${port} but did not answer /api/health within 15 s:\n${output}`,
+        ? `the API wrote no "${LISTENING} <port>" line (Server, with a numeric port) within ${Date.now() - startedAt} ms:\n${output}`
+        : `the API listens on port ${port} but did not answer /api/health within ${Date.now() - startedAt} ms:\n${output}`,
     );
   }
   await new Promise((resolve) => setTimeout(resolve, 50));

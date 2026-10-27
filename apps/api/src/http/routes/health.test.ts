@@ -139,13 +139,14 @@ const json = (status: number, body: unknown) => (res: import("node:http").Server
 const healthy = json(200, { status: "ok", analyzer_version: "test-1", models: true });
 const degraded = json(200, { status: "degraded", analyzer_version: "test-1", models: false });
 
-/** A port nothing listens on: a server is started and closed. */
+/**
+ * A port nothing listens on, which no other test's server can take: unlike a port bound and
+ * released, 1023 is below the ephemeral range that listen(0) picks from, and only a privileged
+ * process can bind it. Not 9 (as playwright.config.ts uses): fetch refuses it as a bad port
+ * before connecting, so it would never be refused by the system.
+ */
 async function closedPort(): Promise<string> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return `http://127.0.0.1:${port}`;
+  return "http://127.0.0.1:1023";
 }
 
 const KEY = "dummy-ready-key-0123456789abcdef";

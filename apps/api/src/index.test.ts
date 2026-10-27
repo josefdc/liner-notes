@@ -243,18 +243,21 @@ async function openRequest(port: number): Promise<{ socket: Socket; received: ()
   return { socket, received: () => received };
 }
 
+const LISTENING = "Liner Notes API listening on port";
+
 /** The port in the API's own "listening" log line, once the child has written it. */
 function listeningPort(output: string): number | undefined {
   const entry = logEntries(output).find(
     (entry) =>
       entry.component === "Server" &&
-      String(entry.msg).startsWith("Liner Notes API listening on port") &&
+      String(entry.msg).startsWith(LISTENING) &&
       typeof entry.port === "number",
   );
   return entry?.port as number | undefined;
 }
 
-const START_MS = 15_000;
+// A child takes about 1 s to listen on a quiet machine, and 10-12 s on two busy cores.
+const START_MS = 30_000;
 
 /**
  * Starts the API with a scratch database and waits until it answers. The child binds a port of
@@ -262,21 +265,27 @@ const START_MS = 15_000;
  * line: a port picked here and released could be taken, before the child binds it, by a
  * short-lived server of another test file, which would answer the health probe and then go away.
  * Then /api/health is polled on that port every 50 ms (requests wait while startup settles the
- * runs). Fails with the child's output if it exits, or is not answering within 15 s.
+ * runs). Fails with the child's output if it exits, or is not answering within 30 s.
  */
 async function startApi(): Promise<{ api: Child; port: number; dbPath: string }> {
   const { dir, dbPath } = scratch();
   const api = start(ENTRY, dir, apiEnv(0, dbPath));
-  const deadline = Date.now() + START_MS;
+  const startedAt = Date.now();
+  const deadline = startedAt + START_MS;
   try {
     await untilOutput(api, (output) => listeningPort(output) !== undefined, START_MS);
   } catch (error) {
-    throw new Error(`the API did not report that it listens: ${(error as Error).message}`);
+    throw new Error(
+      `the API wrote no "${LISTENING} <port>" line (Server, with a numeric port) within ` +
+        `${Date.now() - startedAt} ms: ${(error as Error).message}`,
+    );
   }
   const port = listeningPort(api.output()) as number;
   for (;;) {
     if (api.process.exitCode !== null || api.process.signalCode !== null) {
-      throw new Error(`the API exited at startup:\n${api.output()}`);
+      throw new Error(
+        `the API exited ${Date.now() - startedAt} ms into its startup:\n${api.output()}`,
+      );
     }
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
@@ -288,7 +297,8 @@ async function startApi(): Promise<{ api: Child; port: number; dbPath: string }>
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `the API listens on port ${port} but did not answer /api/health within ${START_MS} ms:\n${api.output()}`,
+        `the API listens on port ${port} but did not answer /api/health within ` +
+          `${Date.now() - startedAt} ms:\n${api.output()}`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -303,7 +313,7 @@ describe("the API process", () => {
   // Shared by these tests, in any order: none of them stops it.
   beforeAll(async () => {
     ({ api, port, dbPath } = await startApi());
-  }, 40_000);
+  }, 45_000);
 
   // The issue's body, and one that passes the required-field check that used to come first and
   // so reached `existingFactoidIds.join` outside any try (which ended the process).
@@ -404,7 +414,7 @@ describe("an API process stopped by SIGTERM", () => {
     expect(logged(api.output(), "Database", "Connection closed.")).toBe(true);
     expect(logged(api.output(), "Server", "Stopped")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
-  }, 20_000);
+  }, 45_000);
 });
 
 describe("an API process stopped by SIGINT", () => {
@@ -414,7 +424,7 @@ describe("an API process stopped by SIGINT", () => {
     expect(await api.exit).toBe(0);
     expect(logged(api.output(), "Server", "SIGINT received")).toBe(true);
     expect(logged(api.output(), "Server", "Stopped")).toBe(true);
-  }, 40_000);
+  }, 45_000);
 });
 
 describe("an API process whose log reader has gone", () => {
@@ -466,7 +476,7 @@ describe("an API process that cannot listen", () => {
 
     expect(logged(api.output(), "Server", "Could not listen")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "left-open")?.status)).toBe("running");
-  }, 30_000);
+  }, 45_000);
 });
 
 describe("an API process with invalid configuration", () => {
@@ -489,7 +499,7 @@ describe("an API process with invalid configuration", () => {
       expect(api.output()).not.toMatch(/\n\s+at /);
       expect(api.output()).not.toContain('"stack"');
     },
-    30_000,
+    45_000,
   );
 });
 

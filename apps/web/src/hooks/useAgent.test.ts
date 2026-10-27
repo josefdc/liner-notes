@@ -2,7 +2,13 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEventSchemas, resetSkippedReports } from './agent/events';
 import { LOG_LIMIT } from './agent/runLog';
-import { OUTDATED_ERROR, STREAM_INACTIVITY_TIMEOUT_MS, useAgent } from './useAgent';
+import type { TrackData } from '../types';
+import {
+  OUTDATED_ERROR,
+  STREAM_INACTIVITY_TIMEOUT_MS,
+  type UseAgentReturn,
+  useAgent,
+} from './useAgent';
 
 /**
  * An EventSource the test drives by hand. `send` adds what the API's stream adds to each event:
@@ -943,74 +949,242 @@ describe('useAgent inactivity watchdog', () => {
 });
 
 describe('useAgent factoid stream', () => {
-  it('closes the stream and rejects when a new analysis starts', async () => {
-    const { result } = startAnalysis();
-    lastStream().send({ type: 'complete', data: track });
-    const onFactoid = vi.fn();
-    const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], onFactoid);
-    const decrypt = lastStream();
-    decrypt.send({ type: 'factoid', data: factoid('f1') });
+  /** A result as the Player shows it, with its own run (live) unless `run` says otherwise. */
+  const result = (run: TrackData['run'] | null = { id: 'run-1', mode: 'live' }) =>
+    ({
+      ...track,
+      factoids: [factoid('s1')],
+      ...(run ? { run } : {}),
+    }) as unknown as TrackData;
+  const query = (stream: FakeEventSource) => new URL(stream.url, 'http://x').searchParams;
+  /** A claim as the API sends one with a fact. */
+  const claim = (id: string) => ({
+    id,
+    text: `Claim ${id}`,
+    about: 'trivia',
+    kind: 'inferred',
+    origin: 'model',
+    evidenceIds: [],
+    verdict: null,
+    verdictReason: null,
+    numericCheck: 'n/a',
+  });
+  /** Asks for more facts, as a click does (its state changes are applied at once). */
+  function ask(
+    hook: { current: UseAgentReturn },
+    ...args: Parameters<UseAgentReturn['moreFactoidsStream']>
+  ) {
+    let pending!: ReturnType<UseAgentReturn['moreFactoidsStream']>;
+    act(() => {
+      pending = hook.current.moreFactoidsStream(...args);
+    });
+    return pending;
+  }
+  /** One answer: `connected` naming the next round, the events given, then `done`. */
+  function answer(stream: FakeEventSource, nextRound: number | undefined, ...events: object[]) {
+    stream.send({ type: 'connected', ...(nextRound === undefined ? {} : { nextRound }) });
+    for (const event of events) stream.send(event as { type: string });
+    stream.send({ type: 'done' });
+  }
 
-    act(() => result.current.reset());
+  it("asks for the first round with the result's own run id", async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const pending = ask(hook, result());
+    const stream = lastStream();
+    expect(new URL(stream.url, 'http://x').pathname).toBe('/api/factoids/more/stream');
+    expect(query(stream).get('runId')).toBe('run-1');
+    expect(query(stream).get('round')).toBe('0');
+    expect(query(stream).get('existingIds')).toBe('s1');
+    answer(stream, 1);
+    await pending;
+  });
+
+  it('asks the second click for the round the first answer named, with its facts as known', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const first = ask(hook, result());
+    answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
+    await first;
+
+    const second = ask(hook, result());
+    expect(streams()).toHaveLength(2);
+    expect(query(lastStream()).get('round')).toBe('1');
+    expect(query(lastStream()).get('existingIds')).toBe('s1,fc-a');
+    answer(lastStream(), 2);
+    await second;
+  });
+
+  it('makes no request once every round has been asked, and says so in its state', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const first = ask(hook, result());
+    answer(lastStream(), 1);
+    await first;
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 1, finished: false });
+    const second = ask(hook, result());
+    answer(lastStream(), 2);
+    await second;
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 2, finished: true });
+
+    const third = ask(hook, result());
+    expect(streams()).toHaveLength(2);
+    await expect(third).resolves.toEqual([]);
+  });
+
+  it('keeps every claim once, by its id, and every fact once, across clicks', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const first = ask(hook, result());
+    answer(lastStream(), 1, {
+      type: 'factoid',
+      data: { ...factoid('fc-a'), claimId: 'c-a' },
+      claim: claim('c-a'),
+    });
+    await expect(first).resolves.toMatchObject([{ id: 'fc-a' }]);
+
+    const second = ask(hook, result());
+    answer(
+      lastStream(),
+      2,
+      { type: 'factoid', data: { ...factoid('fc-b'), claimId: 'c-b' }, claim: claim('c-b') },
+      // The same fact and claim again (an older server that resends them).
+      { type: 'factoid', data: { ...factoid('fc-a'), claimId: 'c-a' }, claim: claim('c-a') },
+    );
+    expect((await second).map((fact) => fact.id)).toEqual(['fc-b']);
+
+    const kept = hook.current.moreFacts;
+    expect(kept?.factoids.map((fact) => fact.id)).toEqual(['fc-a', 'fc-b']);
+    expect(Object.keys(kept?.claims ?? {})).toEqual(['c-a', 'c-b']);
+    expect(kept?.claims['c-b']).toEqual(claim('c-b'));
+  });
+
+  it('keeps the other facts when one fact of the answer failed, and says which', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result: hook } = renderHook(() => useAgent());
+    const pending = ask(hook, result());
+    answer(
+      lastStream(),
+      1,
+      { type: 'error', code: 'failed', error: 'This fact could not be generated.', index: 1 },
+      { type: 'factoid', data: factoid('fc-a') },
+      { type: 'factoid', data: factoid('fc-c') },
+    );
+
+    expect((await pending).map((fact) => fact.id)).toEqual(['fc-a', 'fc-c']);
+    expect(hook.current.moreFacts?.factoids.map((fact) => fact.id)).toEqual(['fc-a', 'fc-c']);
+    expect(hook.current.moreFacts?.failed).toEqual([{ index: 1, code: 'failed' }]);
+    expect(hook.current.moreFacts?.nextRound).toBe(1);
+    expect(warn).not.toHaveBeenCalled();
+
+    // The next click starts with no failure of its own.
+    void ask(hook, result());
+    expect(hook.current.moreFacts?.failed).toEqual([]);
+  });
+
+  it('keeps the run whose evidence the facts were checked against, or none', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const checked = ask(hook, result());
+    const stream = lastStream();
+    for (const [seq, event] of [
+      { type: 'connected', nextRound: 1 },
+      { type: 'factoid', data: factoid('fc-a') },
+      { type: 'done' },
+    ].entries()) {
+      stream.send({ ...event, runId: 'run-1', seq });
+    }
+    await checked;
+    expect(hook.current.moreFacts?.runId).toBe('run-1');
+
+    // The API had no stored result for the run: its stream names none.
+    const unchecked = ask(hook, result());
+    answer(lastStream(), 2, { type: 'factoid', data: factoid('fc-b') });
+    await unchecked;
+    expect(hook.current.moreFacts?.runId).toBeNull();
+  });
+
+  it("sends no run id for a result that names none, never the analysis thread's", async () => {
+    const hook = startAnalysis();
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    lastStream().send({ type: 'complete', data: track });
+    const pending = ask(hook.result, result(null));
+    expect(query(lastStream()).has('runId')).toBe(false);
+    expect(query(lastStream()).get('round')).toBe('0');
+    answer(lastStream(), 1);
+    await pending;
+  });
+
+  it("starts from the first round for another result, and lets the first one's facts go", async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const first = ask(hook, result());
+    answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
+    await first;
+
+    const other = { ...result({ id: 'run-2', mode: 'live' }), id: 'c9' } as TrackData;
+    const pending = ask(hook, other);
+    expect(query(lastStream()).get('round')).toBe('0');
+    expect(query(lastStream()).get('runId')).toBe('run-2');
+    expect(query(lastStream()).get('existingIds')).toBe('s1');
+    expect(hook.current.moreFacts?.factoids).toEqual([]);
+    answer(lastStream(), 1);
+    await pending;
+  });
+
+  it('asks the same round again after a stream that broke', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    const broken = ask(hook, result());
+    lastStream().send({ type: 'connected', nextRound: 1 });
+    lastStream().fail();
+    await expect(broken).rejects.toThrow('Factoid stream connection failed');
+
+    const again = ask(hook, result());
+    expect(query(lastStream()).get('round')).toBe('0');
+    answer(lastStream(), 1);
+    await again;
+  });
+
+  it('closes the stream and rejects when a new analysis starts', async () => {
+    const { result: hook } = startAnalysis();
+    lastStream().send({ type: 'complete', data: track });
+    const pending = ask(hook, result());
+    const more = lastStream();
+    more.send({ type: 'factoid', data: factoid('f1') });
+
+    act(() => hook.current.reset());
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    expect(decrypt.closed).toBe(true);
-    decrypt.send({ type: 'factoid', data: factoid('f2') }, { late: true });
-    expect(onFactoid).toHaveBeenCalledTimes(1);
+    expect(more.closed).toBe(true);
+    more.send({ type: 'factoid', data: factoid('f2') }, { late: true });
+    expect(hook.current.moreFacts).toBeNull();
   });
 
   it("closes the stream when the caller's signal aborts", async () => {
-    const { result } = renderHook(() => useAgent());
+    const { result: hook } = renderHook(() => useAgent());
     const controller = new AbortController();
-    const pending = result.current.decryptMoreFactoidsStream(
-      'Hurt',
-      'NIN',
-      [],
-      () => {},
-      controller.signal,
-    );
-    const decrypt = lastStream();
+    const pending = ask(hook, result(), { signal: controller.signal });
+    const more = lastStream();
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    expect(decrypt.closed).toBe(true);
+    expect(more.closed).toBe(true);
   });
 
   it('reports the rate limit and a paused budget to the caller, and goes on', async () => {
-    const { result } = renderHook(() => useAgent());
+    const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
-    const onFactoid = vi.fn();
-    const pending = result.current.decryptMoreFactoidsStream(
-      'Hurt',
-      'NIN',
-      [],
-      onFactoid,
-      undefined,
-      onUnavailable,
-    );
-    const decrypt = lastStream();
-    decrypt.send({ type: 'error', code: 'rate_limited', error: 'busy', index: 0 });
-    decrypt.send({ type: 'error', code: 'budget_exhausted', error: 'paused', index: 1 });
-    decrypt.send({ type: 'error', code: 'failed', error: 'x', index: 2 });
-    decrypt.send({ type: 'factoid', data: factoid('f1') });
-    decrypt.send({ type: 'done' });
+    const pending = ask(hook, result(), { onUnavailable });
+    const more = lastStream();
+    more.send({ type: 'error', code: 'rate_limited', error: 'busy', index: 0 });
+    more.send({ type: 'error', code: 'budget_exhausted', error: 'paused', index: 1 });
+    more.send({ type: 'error', code: 'failed', error: 'x', index: 2 });
+    more.send({ type: 'factoid', data: factoid('f1') });
+    more.send({ type: 'done' });
 
-    await pending;
+    expect(await pending).toHaveLength(1);
     expect(onUnavailable.mock.calls).toEqual([['rate_limited'], ['budget_exhausted']]);
-    expect(onFactoid).toHaveBeenCalledTimes(1);
+    expect(hook.current.moreFacts?.failed.map((failure) => failure.index)).toEqual([0, 1, 2]);
   });
 
   it('reports a replayed result whose recording is no longer served', async () => {
-    const { result } = renderHook(() => useAgent());
+    const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
-    const pending = result.current.decryptMoreFactoidsStream(
-      'Hurt',
-      'NIN',
-      [],
-      () => {},
-      undefined,
-      onUnavailable,
-      'replay',
-    );
+    const recorded = result({ id: 'run-1', mode: 'replay', replayed: 'run' });
+    const pending = ask(hook, recorded, { onUnavailable });
     lastStream().send({ type: 'error', code: 'not_found', error: 'gone' });
     lastStream().send({ type: 'done' });
     await pending;
@@ -1018,51 +1192,40 @@ describe('useAgent factoid stream', () => {
   });
 
   it("sends the result's run mode, so more facts stay on its side", async () => {
-    const { result } = renderHook(() => useAgent());
-    const pending = result.current.decryptMoreFactoidsStream(
-      'Hurt',
-      'NIN',
-      ['f1'],
-      () => {},
-      undefined,
-      undefined,
-      'replay',
-    );
-    const decrypt = lastStream();
-    expect(new URL(decrypt.url, 'http://x').searchParams.get('mode')).toBe('replay');
-    decrypt.send({ type: 'done' });
+    const { result: hook } = renderHook(() => useAgent());
+    const recorded = result({ id: 'run-1', mode: 'replay', replayed: 'run' });
+    const pending = ask(hook, recorded);
+    const more = lastStream();
+    expect(query(more).get('mode')).toBe('replay');
+    // Recorded facts name no round: the next click asks the same round again.
+    more.send({ type: 'done' });
     await pending;
-    const older = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});
-    expect(new URL(lastStream().url, 'http://x').searchParams.has('mode')).toBe(false);
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
+    const older = ask(hook, result(null));
+    expect(query(lastStream()).has('mode')).toBe(false);
     lastStream().send({ type: 'done' });
     await older;
   });
 
   it('reports live calls switched off (a server that replays recordings only)', async () => {
-    const { result } = renderHook(() => useAgent());
+    const { result: hook } = renderHook(() => useAgent());
     const onUnavailable = vi.fn();
-    const pending = result.current.decryptMoreFactoidsStream(
-      'Hurt',
-      'NIN',
-      [],
-      () => {},
-      undefined,
-      onUnavailable,
-    );
-    const decrypt = lastStream();
-    decrypt.send({ type: 'error', code: 'live_disabled', error: 'off' });
-    decrypt.send({ type: 'done' });
+    const pending = ask(hook, result(), { onUnavailable });
+    const more = lastStream();
+    more.send({ type: 'error', code: 'live_disabled', error: 'off' });
+    more.send({ type: 'done' });
 
     await pending;
     expect(onUnavailable.mock.calls).toEqual([['live_disabled']]);
+    expect(hook.current.moreFacts?.failed).toEqual([]);
   });
 
   it('resolves on done', async () => {
-    const { result } = renderHook(() => useAgent());
-    const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});
+    const { result: hook } = renderHook(() => useAgent());
+    const pending = ask(hook, result());
     lastStream().send({ type: 'done' });
 
-    await expect(pending).resolves.toBeUndefined();
+    await expect(pending).resolves.toEqual([]);
     expect(lastStream().closed).toBe(true);
   });
 });
@@ -1272,17 +1435,18 @@ describe('useAgent typed events', () => {
   it('skips a factoid that does not fit the contract and goes on', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result } = renderHook(() => useAgent());
-    const onFactoid = vi.fn();
-    const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], onFactoid);
-    const decrypt = lastStream();
-    decrypt.send({ type: 'connected' });
-    decrypt.send({ type: 'factoid', data: { ...factoid('f1'), type: 'lyrics' } });
-    decrypt.send({ type: 'factoid', data: factoid('f2') });
-    decrypt.send({ type: 'factoid', data: factoid('f2'), seq: 2 });
-    decrypt.send({ type: 'done' });
+    const pending = result.current.moreFactoidsStream({
+      ...track,
+      factoids: [],
+    } as unknown as TrackData);
+    const more = lastStream();
+    more.send({ type: 'connected' });
+    more.send({ type: 'factoid', data: { ...factoid('f1'), type: 'lyrics' } });
+    more.send({ type: 'factoid', data: factoid('f2') });
+    more.send({ type: 'factoid', data: factoid('f2'), seq: 2 });
+    more.send({ type: 'done' });
 
-    await pending;
-    expect(onFactoid.mock.calls.map(([data]) => data.id)).toEqual(['f2']);
+    expect((await pending).map((data) => data.id)).toEqual(['f2']);
   });
 });
 

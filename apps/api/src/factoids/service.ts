@@ -43,8 +43,10 @@ import {
   type Claim,
   type ComposerFactoid,
   type Evidence,
+  FACTOID_ROUNDS,
   type Factoid,
   FactoidsOutput,
+  FIRST_FACTOID_ROUND,
   SPOTIFY_ID_PATTERN,
   TrackAnalysis,
 } from "@liner-notes/contract";
@@ -85,8 +87,12 @@ export const FACTOID_FOCUSES = [
   "the other records and artists it is tied to",
 ] as const;
 
-/** The rounds of a track's "more facts": FACTOID_FOCUSES asked FACTOIDS_PER_REQUEST at a time. */
-export const FACTOID_ROUNDS = Math.ceil(FACTOID_FOCUSES.length / FACTOIDS_PER_REQUEST);
+/**
+ * The rounds of a track's "more facts": FACTOID_FOCUSES asked FACTOIDS_PER_REQUEST at a time. The
+ * number is the contract's, which the web reads to stop asking once every round has been asked;
+ * a test keeps it in step with the focuses.
+ */
+export { FACTOID_ROUNDS };
 
 /** An id factId gives. */
 const FACT_ID = /^fc-[0-9a-f]{12}$/;
@@ -97,7 +103,7 @@ const FACT_ID = /^fc-[0-9a-f]{12}$/;
  * show (each FACTOIDS_PER_REQUEST of the ids factId gave, rounded up, is one earlier round; for a
  * client that sends no round).
  */
-export function roundFor(existingIds: readonly string[], round = 0): number {
+export function roundFor(existingIds: readonly string[], round = FIRST_FACTOID_ROUND): number {
   const written = existingIds.filter((id) => FACT_ID.test(id)).length;
   return Math.max(round, Math.ceil(written / FACTOIDS_PER_REQUEST));
 }

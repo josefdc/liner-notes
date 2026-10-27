@@ -83,11 +83,11 @@ describe("the request log", () => {
 
   it("logs the full path of a request refused inside a mounted limit", async () => {
     const app = createApp({ http: settings({ rateLimit: { windowMs: 60_000, max: 1 } }) });
-    await request(app).post("/api/factoids/decrypt").send({});
-    await request(app).post("/api/factoids/decrypt").send({});
+    await request(app).post("/api/factoids/more").send({});
+    await request(app).post("/api/factoids/more").send({});
     expect(requestLines().map((line) => [line.path, line.status])).toEqual([
-      ["/api/factoids/decrypt", 400],
-      ["/api/factoids/decrypt", 429],
+      ["/api/factoids/more", 400],
+      ["/api/factoids/more", 429],
     ]);
   });
 

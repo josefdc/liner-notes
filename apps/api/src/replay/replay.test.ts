@@ -1727,7 +1727,7 @@ describe("REPLAY_MODE", () => {
   it("only: more facts are the recorded ones the client does not have, or live_disabled", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
     const more = await request(app)
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({
         trackId: TRACK_ID,
         trackTitle: "Recorded Song",
@@ -1740,19 +1740,19 @@ describe("REPLAY_MODE", () => {
     ]);
 
     const other = await request(app)
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ trackId: "other", trackTitle: "Other", existingFactoidIds: [] });
     expect(other.status).toBe(503);
     expect(other.body.code).toBe("live_disabled");
 
     const streamed = await sse(
-      "/api/factoids/decrypt/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders",
+      "/api/factoids/more/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders",
     );
     expect(streamed.map((e) => e.type)).toEqual(["connected", "factoid", "factoid", "done"]);
-    const refused = await sse("/api/factoids/decrypt/stream?trackTitle=Other");
+    const refused = await sse("/api/factoids/more/stream?trackTitle=Other");
     expect(refused.map((e) => e.code ?? e.type)).toEqual(["live_disabled", "done"]);
     // A title without its artist does not name a recording.
-    const titleOnly = await sse("/api/factoids/decrypt/stream?trackTitle=Recorded%20Song");
+    const titleOnly = await sse("/api/factoids/more/stream?trackTitle=Recorded%20Song");
     expect(titleOnly.map((e) => e.code ?? e.type)).toEqual(["live_disabled", "done"]);
     noLiveCalls();
   });
@@ -1873,7 +1873,7 @@ describe("REPLAY_MODE", () => {
     vi.stubEnv("REPLAY_MODE", "only");
     const post = (body: Record<string, unknown>) =>
       request(app)
-        .post("/api/factoids/decrypt")
+        .post("/api/factoids/more")
         .send({ existingFactoidIds: [], ...body });
     // The id alone names the recording, whatever the title says.
     expect((await post({ trackId: TRACK_ID, trackTitle: "Something else" })).status).toBe(200);
@@ -2000,16 +2000,16 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
     const suggest = await request(app).get("/api/search/suggest?query=recorded");
     expect(suggest.body.suggestions.map((c: { id: string }) => c.id)).toEqual([TRACK_ID]);
     const facts = await request(app)
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ trackId: TRACK_ID, trackTitle: "Recorded Song", existingFactoidIds: [] });
     expect(facts.status).toBe(200);
     expect(facts.body.meta).toMatchObject({ mode: "replay" });
     const otherFacts = await request(app)
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
     expect(otherFacts.status).toBe(503);
     expect(otherFacts.body.code).toBe("budget_exhausted");
-    const streamedFacts = await sse("/api/factoids/decrypt/stream?trackTitle=Other");
+    const streamedFacts = await sse("/api/factoids/more/stream?trackTitle=Other");
     expect(streamedFacts.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
     noLiveCalls();
 
@@ -2064,7 +2064,7 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
       "done",
     ]);
     const facts = await request(app)
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
     expect(facts.body.code).toBe("budget_exhausted");
     expect(live.scout).toBe(1);
@@ -2107,7 +2107,7 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
   it("keeps more facts on the side of the result: recorded for a replay, never for a live one", async () => {
     const stream = (mode: string) =>
       sse(
-        `/api/factoids/decrypt/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders&existingIds=fa&mode=${mode}`,
+        `/api/factoids/more/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders&existingIds=fa&mode=${mode}`,
       );
     // Budget spent: a live result of a recorded track gets the refusal, not recorded facts.
     spent(30);

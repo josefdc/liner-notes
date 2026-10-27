@@ -13,6 +13,7 @@ export * from "./checks.js";
 export * from "./common.js";
 export * from "./events.js";
 export * from "./evidence.js";
+export * from "./factoids.js";
 export * from "./jsonSchema.js";
 export * from "./llm.js";
 export * from "./picker.js";

@@ -174,7 +174,8 @@ const App: React.FC = () => {
     analyze,
     selectCandidate,
     retry,
-    decryptMoreFactoidsStream,
+    moreFacts,
+    moreFactoidsStream,
     searchSuggest,
     reset,
   } = useAgent();
@@ -566,7 +567,8 @@ const App: React.FC = () => {
           <Player
             trackData={effectiveTrackData}
             onBack={handleBackToDashboard}
-            onDecryptMoreStream={decryptMoreFactoidsStream}
+            moreFacts={moreFacts}
+            onMoreFactoidsStream={moreFactoidsStream}
             onAnalyzeTrack={handleAnalyzeTrack}
             onNewSearch={handleNewSearch}
             headingRef={setPlayerHeading}

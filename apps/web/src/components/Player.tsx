@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useId, useMemo, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -43,7 +43,8 @@ import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
-import type { ResultMode } from '../hooks/agent/types';
+import { moreFactsOf } from '../hooks/agent/moreFacts';
+import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type {
   TrackData,
   FactoidEntity,
@@ -55,19 +56,14 @@ import type {
 interface PlayerProps {
   trackData: TrackData | null;
   onBack: () => void;
+  /** The facts "more facts" added so far, with their claims (useAgent's `moreFacts`). */
+  moreFacts?: MoreFacts | null;
   /**
-   * Stream factoids one-by-one via SSE for faster perceived speed. Aborting `signal` closes
-   * the stream and rejects with an AbortError.
+   * Asks for the next round of facts about the result (useAgent's `moreFactoidsStream`) and
+   * resolves with the facts it added. Aborting `options.signal` closes the stream and rejects
+   * with an AbortError.
    */
-  onDecryptMoreStream?: (
-    trackTitle: string,
-    trackArtist: string,
-    existingIds: string[],
-    onFactoid: (factoid: Factoid) => void,
-    signal?: AbortSignal,
-    onUnavailable?: (code: FactoidUnavailableCode) => void,
-    resultMode?: ResultMode,
-  ) => Promise<void>;
+  onMoreFactoidsStream?: (result: TrackData, options?: MoreFactsOptions) => Promise<Factoid[]>;
   // Callback for navigating to a new track from genealogy graph
   onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
   // P0:3 — New search callback
@@ -116,7 +112,8 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
 const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
   track,
   onBack,
-  onDecryptMoreStream,
+  moreFacts,
+  onMoreFactoidsStream,
   onAnalyzeTrack,
   onNewSearch,
   headingRef,
@@ -126,7 +123,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [isDecrypting, setIsDecrypting] = useState(false);
   // Why DECRYPT MORE could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
-  const [additionalFactoids, setAdditionalFactoids] = useState<Factoid[]>([]);
   // P3:25 — Decrypt complete toast
   const [showDecryptToast, setShowDecryptToast] = useState(false);
   const [decryptToastCount, setDecryptToastCount] = useState(0);
@@ -236,6 +232,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const recorded = recordingOf(track) !== null;
   // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
+  // What "more facts" added to this result, and whether a round is left to ask for.
+  const more = useMemo(() => moreFactsOf(track, moreFacts ?? null), [track, moreFacts]);
+  const noMoreRoundsId = useId();
+  const additionalFactoids = useMemo(() => displayableFactoids(more.factoids), [more.factoids]);
   // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
     () => [...resultFactoids, ...additionalFactoids],
@@ -252,7 +252,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
   // Refs for transient values in handleDecryptMore
   const isDecryptingRef = useRef(false);
-  const additionalFactoidsRef = useRef<Factoid[]>([]);
   // The running DECRYPT MORE stream; closed when the Player goes away.
   const decryptControllerRef = useRef<AbortController | null>(null);
 
@@ -263,10 +262,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       isDecryptingRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    additionalFactoidsRef.current = additionalFactoids;
-  }, [additionalFactoids]);
 
   // UX: Escape key shortcut to go back
   useEffect(() => {
@@ -323,7 +318,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
   // Handle decrypt more factoids - streams one-by-one for faster perceived speed
   const handleDecryptMore = useCallback(async () => {
-    if (!onDecryptMoreStream || isDecryptingRef.current) return;
+    if (!onMoreFactoidsStream || isDecryptingRef.current) return;
 
     isDecryptingRef.current = true;
     setIsDecrypting(true);
@@ -332,29 +327,17 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     let unavailable = false;
     const controller = new AbortController();
     decryptControllerRef.current = controller;
-    let newCount = 0;
     try {
-      const existingIds = [...track.factoids, ...additionalFactoidsRef.current].map((f) => f.id);
-
-      // Stream factoids - each one is added immediately when received
-      await onDecryptMoreStream(
-        track.title,
-        track.artist,
-        existingIds,
-        (newFactoid) => {
-          // Only factoids that are shown count (lyric factoids are dropped).
-          const shown = displayableFactoids([newFactoid]);
-          if (shown.length === 0) return;
-          setAdditionalFactoids((prev) => [...prev, ...shown]);
-          newCount++;
-        },
-        controller.signal,
-        (code) => {
+      // The facts are kept by the hook as they come (`moreFacts`), with their claims.
+      const added = await onMoreFactoidsStream(track, {
+        signal: controller.signal,
+        onUnavailable: (code) => {
           unavailable = true;
           setDecryptUnavailable(code);
         },
-        resultMode,
-      );
+      });
+      // Only factoids that are shown count (lyric factoids are dropped).
+      const newCount = displayableFactoids(added).length;
       if (resultMode === 'replay' && newCount === 0 && !unavailable) setNoMoreRecorded(true);
 
       // P3:25 — Show completion toast
@@ -375,7 +358,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         setIsDecrypting(false);
       }
     }
-  }, [onDecryptMoreStream, track.title, track.artist, track.factoids, resultMode]);
+  }, [onMoreFactoidsStream, track, resultMode]);
 
   // Extract onNodeClick handler for GenealogyGraph (stable ref for React.memo)
   const handleNodeClick = useCallback(
@@ -515,18 +498,21 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               )}
 
               {/* Standalone Decrypt More card */}
-              {onDecryptMoreStream && (
+              {onMoreFactoidsStream && (
                 <button
                   type="button"
                   onClick={handleDecryptMore}
-                  disabled={isDecrypting}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4
+                  // Once every round has been asked, another click would bring nothing new.
+                  disabled={isDecrypting || more.finished}
+                  aria-describedby={more.finished ? noMoreRoundsId : undefined}
+                  className={`w-full flex items-center justify-center gap-2 py-3 px-4
                                border border-dashed border-cyber/30 rounded-md
                                text-xs font-mono text-cyber/70 uppercase tracking-wider
                                hover:border-cyber hover:text-cyber hover:bg-cyber/5
                                focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none
-                               disabled:opacity-50 disabled:cursor-wait
-                               transition-all duration-(--duration-fast)"
+                               disabled:opacity-50
+                               ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
+                               transition-all duration-(--duration-fast)`}
                 >
                   {isDecrypting ? (
                     <>
@@ -543,6 +529,22 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               {decryptUnavailable && (
                 <p role="status" className="text-xs font-mono text-text-tertiary">
                   More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
+                </p>
+              )}
+              {more.failed.length > 0 && !decryptUnavailable && (
+                <p role="status" className="text-xs font-mono text-text-tertiary">
+                  {more.failed.length === 1
+                    ? '1 fact could not be written.'
+                    : `${more.failed.length} facts could not be written.`}
+                </p>
+              )}
+              {more.finished && (
+                <p
+                  id={noMoreRoundsId}
+                  role="status"
+                  className="text-xs font-mono text-text-tertiary"
+                >
+                  No more facts: every angle on this track has been asked.
                 </p>
               )}
               {noMoreRecorded && (

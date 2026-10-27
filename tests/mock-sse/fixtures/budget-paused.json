@@ -200,7 +200,7 @@
         ]
       ]
     },
-    "/api/factoids/decrypt/stream": [
+    "/api/factoids/more/stream": [
       {
         "type": "connected",
         "runId": null,

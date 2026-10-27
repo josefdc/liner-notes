@@ -18,13 +18,14 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
+import type { LogCode, Factoid, TrackData } from '../types';
 import type {
   AgentState,
   AgentStatus,
   AnalyzeOptions as RequestOptions,
+  MoreFacts,
+  MoreFactsOptions,
   PickedBy,
-  ResultMode,
   UseAgentReturn,
   SearchCandidate,
 } from './agent/types';
@@ -44,6 +45,7 @@ import {
   type RunEvents,
   streamGuard,
 } from './agent/events';
+import { moreFactsOf, moreFactsUrl, withAnswer, withFact, withFailure } from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
 
 // Re-export types for consumers that import from this file
@@ -101,6 +103,7 @@ const INITIAL_STATE: AgentState = {
   isComplete: false,
   isReplay: false,
   statusNote: null,
+  moreFacts: null,
 };
 
 // The order of a run's steps. A step reported after a later one does not move the run back.
@@ -300,6 +303,13 @@ export function useAgent(): UseAgentReturn {
   );
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
+  // `moreFacts` as last set, for the next request (its round) before the state is rendered.
+  const moreFactsRef = useRef<MoreFacts | null>(null);
+
+  const setMoreFacts = useCallback((moreFacts: MoreFacts | null) => {
+    moreFactsRef.current = moreFacts;
+    setState((prev) => (prev.moreFacts === moreFacts ? prev : { ...prev, moreFacts }));
+  }, []);
 
   // Fetch the stream reader as soon as the app is up, so the first search does not wait for it.
   // A failure is reported by the search that needs it, which tries again.
@@ -358,6 +368,7 @@ export function useAgent(): UseAgentReturn {
   const reset = useCallback(() => {
     runRef.current.controller.abort();
     runRef.current = newRun('');
+    moreFactsRef.current = null;
     setState(INITIAL_STATE);
   }, []);
 
@@ -582,6 +593,7 @@ export function useAgent(): UseAgentReturn {
       run.trackId = isSpotifyTrackId(options.trackId) ? options.trackId : null;
       run.pickedBy = run.trackId ? (options.pickedBy ?? null) : null;
       runRef.current = run;
+      moreFactsRef.current = null;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`Searching for "${query}"`);
@@ -699,19 +711,16 @@ export function useAgent(): UseAgentReturn {
   }, [analyze]);
 
   /**
-   * Stream factoids one-by-one via SSE for faster perceived speed
-   * Each factoid is emitted immediately when generated
+   * "More facts" about a result: the next round of the factoid stream (agent/moreFacts.ts), asked
+   * for with the result's own run id and the round the last answer named. The facts and their
+   * claims are kept in `moreFacts` as they come, each once by id, and the promise resolves with
+   * the facts this answer added. Once every round has been asked no request is made, and it
+   * resolves with none. A fact that could not be written is kept in `moreFacts.failed` by its
+   * index; the other facts of the answer are kept. The round moves on only when the answer has
+   * ended, so a stream that broke or was left asks the same round again.
    */
-  const decryptMoreFactoidsStream = useCallback(
-    (
-      trackTitle: string,
-      trackArtist: string,
-      existingIds: string[],
-      onFactoid: (factoid: Factoid) => void,
-      signal?: AbortSignal,
-      onUnavailable?: (code: FactoidUnavailableCode) => void,
-      resultMode?: ResultMode,
-    ): Promise<void> => {
+  const moreFactoidsStream = useCallback(
+    (result: TrackData, { signal, onUnavailable }: MoreFactsOptions = {}): Promise<Factoid[]> => {
       return new Promise((resolve, reject) => {
         // A new analysis or a reset ends the stream, as does the caller's signal.
         const runSignal = runRef.current.controller.signal;
@@ -719,20 +728,22 @@ export function useAgent(): UseAgentReturn {
           reject(abortError());
           return;
         }
+        if (moreFactsOf(result, moreFactsRef.current).finished) {
+          resolve([]);
+          return;
+        }
 
         const open = () => {
-          const params = new URLSearchParams({
-            trackTitle,
-            trackArtist: trackArtist || '',
-            existingIds: existingIds.join(','),
-            // More of a replayed result comes only from its recording, and more of a live
-            // result never does (the API decides by this, not by what it allows right now).
-            ...(resultMode ? { mode: resultMode } : {}),
-          });
+          // What this result already has; another result's facts are let go.
+          const before = moreFactsOf(result, moreFactsRef.current);
+          const url = moreFactsUrl(result, before);
+          setMoreFacts({ ...before, failed: [] });
 
-          const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
           const eventSource = new EventSource(url);
-          const accept = streamGuard(newRunEvents());
+          const events = newRunEvents();
+          const accept = streamGuard(events);
+          const added: Factoid[] = [];
+          let nextRound: number | undefined;
           let active = true;
 
           const stop = () => {
@@ -752,6 +763,8 @@ export function useAgent(): UseAgentReturn {
           });
           runSignal.addEventListener('abort', onAbort, { once: true });
           signal?.addEventListener('abort', onAbort, { once: true });
+          const update = (change: (moreFacts: MoreFacts) => MoreFacts) =>
+            setMoreFacts(change(moreFactsOf(result, moreFactsRef.current)));
 
           eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
           eventSource.onmessage = (event) => {
@@ -762,10 +775,19 @@ export function useAgent(): UseAgentReturn {
             if (!data || !accept(data)) return;
 
             switch (data.type) {
-              case 'factoid':
-                // Emit factoid immediately to callback
-                onFactoid(data.data as Factoid);
+              case 'connected':
+                nextRound = data.nextRound;
                 break;
+
+              case 'factoid': {
+                const factoid = data.data as Factoid;
+                const kept = moreFactsOf(result, moreFactsRef.current);
+                const next = withFact(kept, factoid, data.claim);
+                // A fact already kept (by id) is not added again.
+                if (next.factoids !== kept.factoids) added.push(factoid);
+                setMoreFacts(next);
+                break;
+              }
 
               case 'heartbeat':
                 watchdog.heartbeat();
@@ -773,14 +795,19 @@ export function useAgent(): UseAgentReturn {
 
               case 'done':
                 stop();
-                resolve();
+                update((moreFacts) => withAnswer(moreFacts, nextRound, events.runId));
+                resolve(added);
                 break;
 
               case 'error':
-                // The rate limit, a paused budget, live calls switched off and a recording no
-                // longer served are reported to the caller, which shows them; other failures
-                // are logged. Either way the stream goes on (one failed fact does not fail the
-                // others).
+                // One fact that failed (an index) is kept as failed; the stream goes on, and
+                // the other facts are kept. The rate limit, a paused budget, live calls switched
+                // off and a recording no longer served are also reported to the caller, which
+                // says why; other failures of the whole request are logged.
+                if (data.index !== undefined) {
+                  const failure = { index: data.index, code: data.code };
+                  update((moreFacts) => withFailure(moreFacts, failure));
+                }
                 if (
                   data.code === 'rate_limited' ||
                   data.code === 'budget_exhausted' ||
@@ -788,7 +815,7 @@ export function useAgent(): UseAgentReturn {
                   data.code === 'not_found'
                 ) {
                   onUnavailable?.(data.code);
-                } else {
+                } else if (data.index === undefined) {
                   console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;
@@ -816,7 +843,7 @@ export function useAgent(): UseAgentReturn {
         );
       });
     },
-    [],
+    [setMoreFacts],
   );
 
   /**
@@ -841,10 +868,10 @@ export function useAgent(): UseAgentReturn {
       analyze,
       selectCandidate,
       retry,
-      decryptMoreFactoidsStream,
+      moreFactoidsStream,
       searchSuggest,
       reset,
     }),
-    [state, analyze, selectCandidate, retry, decryptMoreFactoidsStream, searchSuggest, reset],
+    [state, analyze, selectCandidate, retry, moreFactoidsStream, searchSuggest, reset],
   );
 }

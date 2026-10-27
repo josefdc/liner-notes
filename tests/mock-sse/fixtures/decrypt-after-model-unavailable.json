@@ -97,7 +97,7 @@
         "timestamp": "2026-10-16T00:00:00.000Z"
       }
     ],
-    "/api/factoids/decrypt/stream": [
+    "/api/factoids/more/stream": [
       {
         "type": "connected",
         "runId": null,

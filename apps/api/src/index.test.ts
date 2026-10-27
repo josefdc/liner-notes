@@ -220,7 +220,7 @@ async function openRequest(port: number): Promise<{ socket: Socket; received: ()
     received += chunk;
   });
   socket.write(
-    "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+    "POST /api/factoids/more HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
       "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
   );
   const interim = await new Promise<string>((resolve) => {
@@ -322,7 +322,7 @@ describe("the API process", () => {
       { existingFactoidIds: "not-an-array" },
       { trackId: "x", trackTitle: "y", existingFactoidIds: "not-an-array" },
     ]) {
-      const res = await fetch(`http://127.0.0.1:${port}/api/factoids/decrypt`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/factoids/more`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

@@ -102,7 +102,7 @@ export const SearchSuggestResponse = z.object({
     .optional(),
 });
 
-/** POST /api/factoids/decrypt */
+/** POST /api/factoids/more (rounds: ./factoids.ts) */
 export const FactoidsRequest = z.object({
   trackId: z.string().min(1),
   trackTitle: z.string().min(1),

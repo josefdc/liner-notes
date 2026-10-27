@@ -183,7 +183,7 @@ export type AnalyzeStreamEvent = z.infer<typeof AnalyzeStreamEvent>;
 export type AnalyzeStreamEventType = AnalyzeStreamEvent["type"];
 
 // =============================================================================
-// Factoid stream: GET /api/factoids/decrypt/stream
+// Factoid stream: GET /api/factoids/more/stream
 // =============================================================================
 
 const factoidEnvelope = {

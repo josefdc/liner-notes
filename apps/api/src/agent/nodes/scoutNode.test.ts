@@ -8,7 +8,7 @@
  * errors.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const spotify = vi.hoisted(() => ({
   calls: 0,
@@ -100,13 +100,18 @@ afterEach(() => {
 });
 
 /**
- * Runs the graph run that `start` begins on a fake clock (setTimeout, clearTimeout and
- * Date.now), moving it 100 ms a step until the run settles. Its waits take no real time and
+ * Runs the graph run that `start` begins on a fake clock (setTimeout, clearTimeout and the
+ * whole Date), moving it 100 ms a step until the run settles. Its waits take no real time and
  * their lengths are exact, however busy the machine is: timers fire at their own time on the
- * clock. Returns what the run resolved to and the clock time at which it settled.
+ * clock. Returns what the run resolved to and how long it took on the clock, from start to
+ * settle.
  */
 async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapsed: number }> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  let finished = false;
+  onTestFinished(() => {
+    finished = true;
+  });
   try {
     const started = Date.now();
     let settledAt: number | undefined;
@@ -114,8 +119,8 @@ async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapse
       settledAt = Date.now();
     });
     run.catch(() => {});
-    // Stops if the timers were restored under it (the test timed out and the next one began).
-    for (let step = 0; step < 2000 && settledAt === undefined && vi.isFakeTimers(); step++) {
+    // Stops once its test has ended (a timeout included): the clock may be the next test's.
+    for (let step = 0; step < 2000 && settledAt === undefined && !finished; step++) {
       await vi.advanceTimersByTimeAsync(100);
     }
     expect(
@@ -124,7 +129,8 @@ async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapse
     ).toBeDefined();
     return { out: await run, elapsed: (settledAt as number) - started };
   } finally {
-    vi.useRealTimers();
+    // After its test has ended the timers are the next test's to keep or restore.
+    if (!finished) vi.useRealTimers();
   }
 }
 
@@ -150,6 +156,36 @@ describe("scoutNode when the run is cancelled", () => {
       const settled = node.settled;
       // Past the end of the backoff (1 s and up to a tenth more), had the wait not been cut.
       await new Promise((resolve) => setTimeout(resolve, 1500));
+      return { rejected, settled };
+    });
+
+    expect(out.rejected).toBe(true);
+    expect(out.settled).toMatch(/^rejected/);
+    expect(spotify.calls).toBe(1);
+  });
+
+  it("cuts a Retry-After wait short and sends no second search", async () => {
+    // The first search is rate limited and asks for 5 s: the scout waits that out.
+    spotify.answer = async () => {
+      if (spotify.calls === 1) {
+        throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 5000 });
+      }
+      return JSON.stringify([track]);
+    };
+    const { graph, node } = scoutGraph();
+    const controller = new AbortController();
+
+    const { out } = await onFakeClock(async () => {
+      setTimeout(() => controller.abort(), 50);
+      const rejected = await graph.invoke({ songQuery: "x" }, { signal: controller.signal }).then(
+        () => false,
+        () => true,
+      );
+      // How the node itself settled 100 ms after the cancel, well inside the 5 s asked for.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const settled = node.settled;
+      // Past the end of the 5 s, had the wait not been cut.
+      await new Promise((resolve) => setTimeout(resolve, 6000));
       return { rejected, settled };
     });
 
@@ -579,6 +615,7 @@ describe("scoutNode's Spotify failures", () => {
     // The backoff's random part is half its most: a tenth of the wait, times 0.5.
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     const statuses: string[] = [];
+    const saidAt: number[] = [];
     const { graph } = scoutGraph();
 
     const { out } = await onFakeClock(() =>
@@ -586,7 +623,9 @@ describe("scoutNode's Spotify failures", () => {
         streamMode: "values",
         // The writer the scout reports progress through.
         writer: (event: { type?: string; message?: string }) => {
-          if (event.type === "status" && event.message) statuses.push(event.message);
+          if (event.type !== "status" || !event.message) return;
+          statuses.push(event.message);
+          if (event.message.startsWith("Spotify did not answer")) saidAt.push(Date.now());
         },
       } as never),
     );
@@ -600,6 +639,8 @@ describe("scoutNode's Spotify failures", () => {
       "Spotify did not answer; trying again in 1 s",
       "Spotify did not answer; trying again in 2 s",
     ]);
+    // Each wait is said when the attempt before it fails, before the wait, not after it.
+    expect(saidAt).toEqual([spotify.startedAt[0], spotify.startedAt[1]]);
   });
 
   it("waits out a Retry-After of exactly its 10 s limit", async () => {
@@ -639,17 +680,37 @@ describe("scoutNode's Spotify failures", () => {
       return JSON.stringify([track]);
     };
     const statuses: string[] = [];
+    const saidAt: number[] = [];
     const { graph } = scoutGraph();
 
     await onFakeClock(() =>
       graph.invoke({ songQuery: "Song A" }, {
         writer: (event: { type?: string; message?: string }) => {
-          if (event.type === "status" && event.message) statuses.push(event.message);
+          if (event.type !== "status" || !event.message) return;
+          statuses.push(event.message);
+          if (event.message.startsWith("Spotify is limiting")) saidAt.push(Date.now());
         },
       } as never),
     );
 
     expect(statuses).toContain("Spotify is limiting requests; trying again in 1 s");
+    // Said when the search is rate limited, before the 50 ms wait, not after it.
+    expect(saidAt).toEqual([spotify.startedAt[0]]);
+  });
+
+  it("waits out a short Retry-After on each try, then says it was rate limited", async () => {
+    spotify.answer = async () => {
+      throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 250 });
+    };
+    const { graph } = scoutGraph();
+
+    const { out } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
+
+    // 3 tries in all, the Retry-After waited out before each retry.
+    expect(spotify.calls).toBe(3);
+    const waits = [1, 2].map((i) => spotify.startedAt[i] - spotify.startedAt[i - 1]);
+    expect(waits).toEqual([250, 250]);
+    expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 250 });
   });
 
   it("says nothing matched when Spotify finds nothing", async () => {
@@ -819,5 +880,38 @@ describe("scoutNode for a request by track id", () => {
     expect(out.statusMessages).toEqual([said]);
     expect(out.scoutFailure).toEqual({ kind });
     expect(spotify.calls).toBe(0);
+  });
+});
+
+describe("onFakeClock after its test times out", () => {
+  // The first test times out on purpose (it.fails passes on that). The second runs straight
+  // after on its own fake clock: the helper left behind must neither move that clock nor
+  // switch the second test back to real timers.
+  /** Set when the second test is done: the first test's run stops setting timers then. */
+  let probeDone = false;
+
+  it.fails("is cut off by a 30 ms test timeout while its run still goes on", async () => {
+    await onFakeClock(() => {
+      // Keeps the clock busy each step, as the graph's store does, so the steps take time.
+      const poll = () => {
+        if (!probeDone) setTimeout(poll, 0);
+      };
+      poll();
+      return new Promise(() => {});
+    });
+  }, 30);
+
+  it("leaves the next test's fake clock alone", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const at = Date.now();
+    // 50 ms of real time (performance is not faked) for the helper left behind to act.
+    const until = performance.now() + 50;
+    while (performance.now() < until) await new Promise((resolve) => setImmediate(resolve));
+    const moved = Date.now() - at;
+    const stillFake = vi.isFakeTimers();
+    probeDone = true;
+
+    expect(moved).toBe(0);
+    expect(stillFake).toBe(true);
   });
 });

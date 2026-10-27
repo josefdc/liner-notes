@@ -146,6 +146,92 @@ describe('safeHref', () => {
     expect(safeHref('https://e-cdns-images.dzcdn.net/images/cover/1.jpg')).not.toBeNull();
     expect(safeHref('https://www.discogs.com/search?q=Paper+Lanterns&type=all')).not.toBeNull();
   });
+
+  it.each([
+    'key',
+    'api_key',
+    'api-key',
+    'apikey',
+    'client_secret',
+    'password',
+    'passwd',
+    'pwd',
+    'auth',
+    'code',
+    'jsessionid',
+    'sig',
+    'signature',
+    'session',
+    'sessionid',
+  ])('never links a URL whose query or fragment names %s, in any case', (name) => {
+    for (const url of [
+      `https://example.org/a?q=1&${name}=abc`,
+      `https://example.org/a?${name.toUpperCase()}=abc`,
+      `https://example.org/a#${name}=abc`,
+    ]) {
+      expect(safeHref(url), url).toBeNull();
+    }
+  });
+
+  it('never links a URL that carries a session id as a path parameter', () => {
+    expect(safeHref('https://example.org/a;jsessionid=ABC123?q=1')).toBeNull();
+    expect(safeHref('https://example.org/a;JSESSIONID=ABC123')).toBeNull();
+  });
+
+  it.each([
+    ['localhost', 'http://localhost/'],
+    ['localhost with a port', 'http://localhost:3001/api'],
+    ['localhost with a trailing dot', 'http://localhost./'],
+    ['a localhost subdomain', 'https://app.localhost/'],
+    ['loopback', 'http://127.0.0.1/'],
+    ['loopback elsewhere in 127/8', 'http://127.1.2.3:8080/x'],
+    ['loopback as a decimal number', 'http://2130706433/'],
+    ['loopback in hex', 'http://0x7f.1/'],
+    ['loopback in octal', 'http://017700000001/'],
+    ['10/8', 'http://10.0.0.5/'],
+    ['172.16/12, low end', 'http://172.16.0.1/'],
+    ['172.16/12, high end', 'http://172.31.255.255/'],
+    ['192.168/16', 'http://192.168.1.1/'],
+    ['link-local (cloud metadata)', 'http://169.254.169.254/latest/meta-data/'],
+    ['unspecified', 'http://0.0.0.0/'],
+    ['unspecified as a number', 'http://0/'],
+    ['IPv6 loopback', 'http://[::1]/'],
+    ['IPv6 unspecified', 'http://[::]/'],
+    ['IPv6 unique local (fc)', 'http://[fc00::1]/'],
+    ['IPv6 unique local (fd)', 'http://[FD12:3456::1]/'],
+    ['IPv6 link-local', 'http://[fe80::1]/'],
+    ['IPv6 link-local, high end', 'http://[febf::1]/'],
+    ['IPv4-mapped loopback', 'http://[::ffff:127.0.0.1]/'],
+    ['IPv4-mapped private, in hex', 'http://[::ffff:c0a8:101]/'],
+    ['IPv4-mapped link-local', 'http://[::ffff:169.254.169.254]/'],
+  ])('never links a private host: %s', (_name, url) => {
+    expect(safeHref(url), url).toBeNull();
+  });
+
+  it('links public hosts, and these words in a path, an anchor or a value', () => {
+    for (const url of [
+      'https://example.com/',
+      'https://en.wikipedia.org/wiki/Amen_break',
+      'https://example.com/key-points',
+      'https://example.com/password/reset-guide',
+      'https://example.com/docs#auth',
+      'https://example.com/a#code-samples',
+      'https://example.com/search?q=session+musicians',
+      'https://example.com/search?keyword=auth',
+      'http://8.8.8.8/',
+      'http://11.0.0.1/',
+      'http://172.15.0.1/',
+      'http://172.32.0.1/',
+      'http://192.169.0.1/',
+      'http://169.255.0.1/',
+      'http://[2001:db8::1]/',
+      'http://[fe00::1]/',
+      'http://[::ffff:8.8.8.8]/',
+      'https://localhost.example.com/',
+    ]) {
+      expect(safeHref(url), url).toBe(new URL(url).href);
+    }
+  });
 });
 
 describe('sourceTier', () => {

@@ -27,7 +27,7 @@ import { resultModeOf } from '../utils/recording';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
-import { kindLabel, linkContext, shownLinks } from './genealogy/links';
+import { kindLabel, linkContext, relationLabelsByClaim, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
   AudioStats,
@@ -206,15 +206,29 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   ).length;
   // How the shown links are known: the panel's label says "model inference" only when every one
   // is the model's (each link says its own kind in the graph, its legend and its list).
-  const linkKinds = useMemo(() => {
-    const context = linkContext(track.evidence, claims, { releaseYear: track.releaseYear });
-    const links = shownLinks(genealogy, context);
-    return {
-      sourced: links.some((link) => link.kind === 'sourced'),
-      inferred: links.some((link) => link.kind !== 'sourced'),
-      notSourced: links.some((link) => kindLabel(link) === 'Not sourced'),
-    };
-  }, [genealogy, track.evidence, track.releaseYear, claims]);
+  const graphLinks = useMemo(
+    () =>
+      shownLinks(
+        genealogy,
+        linkContext(track.evidence, claims, { releaseYear: track.releaseYear }),
+      ),
+    [genealogy, track.evidence, track.releaseYear, claims],
+  );
+  const linkKinds = useMemo(
+    () => ({
+      sourced: graphLinks.some((link) => link.kind === 'sourced'),
+      inferred: graphLinks.some((link) => link.kind !== 'sourced'),
+      notSourced: graphLinks.some((link) => kindLabel(link) === 'Not sourced'),
+    }),
+    [graphLinks],
+  );
+  // A claim a shown link states is named as its link is, on a fact's card and in the claims
+  // list: one set of words for one relation.
+  const claimRelations = useMemo(() => relationLabelsByClaim(graphLinks), [graphLinks]);
+  const relationOf = (fact: Factoid) => {
+    const id = claimOf(fact)?.claim.id;
+    return id === undefined ? undefined : claimRelations.get(id);
+  };
   // Cards without a claim of their own are labelled by their section, or each on its own when
   // the cards beside it carry claims.
   const unclaimedFactoids = resultFactoids.some((factoid) => !claimOf(factoid));
@@ -565,6 +579,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     fromSourceData={fromSourceData}
                     readings={readings}
                     audio={measurement}
+                    relation={relationOf(fact)}
                   />
                 </div>
               ))}
@@ -587,6 +602,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                       origin={claimedAdditional ? 'inferred' : undefined}
                       readings={readings}
                       audio={measurement}
+                      relation={relationOf(fact)}
                     />
                   ))}
                 </section>
@@ -697,6 +713,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               claims={otherClaims}
               readings={readings}
               audio={measurement}
+              relations={claimRelations}
             />
             <RejectedClaims
               rejected={claims.rejected}

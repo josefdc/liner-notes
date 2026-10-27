@@ -17,8 +17,9 @@ import {
 // what they say: one cites an id missing from the pack, one cites nothing, one the model marked
 // sourced with no verdict behind it, one whose years contradict its direction, and one whose
 // claim the verifier contradicted (not shown). One model link has a supported claim: sourced.
-// A link is drawn as the relation it states, dashed and named a possible one when it is not
-// sourced (an unsourced sample is a "possible sample", as the fact cards say), named in words,
+// A link that is not sourced is drawn grey and dashed as an influence, whatever relation it
+// states (the sample's amber is the sourced colour), and named in words as the possible
+// relation it states ("possible sample", as the fact cards say),
 // its relation stated as a sentence naming both tracks, and its provenance shown on hover and
 // focus and in a list; the Dashboard names a documented relation only for a sourced link.
 const fixture = loadFixture("genealogy-kinds");
@@ -66,15 +67,15 @@ const DRAWN = [
   ["sourced", "remix", "none", "remix"],
   ["sourced", "producer", "none", "shared producer"],
   ["sourced", "influence", "none", "influence"],
-  ["inferred", "sample", "6 4", "possible sample"],
-  ["inferred", "interpolation", "6 4", "possible interpolation"],
-  ["inferred", "cover", "6 4", "possible cover"],
-  ["inferred", "remix", "6 4", "possible remix"],
+  ["inferred", "influence", "6 4", "possible sample"],
+  ["inferred", "influence", "6 4", "possible interpolation"],
+  ["inferred", "influence", "6 4", "possible cover"],
+  ["inferred", "influence", "6 4", "possible remix"],
   ["inferred", "producer", "6 4", "possible shared producer"],
   ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "sample", "6 4", "possible sample"], // cites an id not in the pack
-  ["inferred", "sample", "6 4", "possible sample"], // says sourced, cites nothing
-  ["inferred", "sample", "6 4", "possible sample"], // the model's "sourced", no verdict
+  ["inferred", "influence", "6 4", "possible sample"], // cites an id not in the pack
+  ["inferred", "influence", "6 4", "possible sample"], // says sourced, cites nothing
+  ["inferred", "influence", "6 4", "possible sample"], // the model's "sourced", no verdict
   ["sourced", "sample", "none", "sample"], // the model's, with a supported claim
   ["inferred", "influence", "6 4", "related"], // its years contradict its direction
 ];
@@ -358,7 +359,7 @@ test.describe("the genealogy graph", () => {
       legend.getByRole("list", { name: "How a link is known" }).getByRole("listitem"),
     ).toHaveText([
       "Solid: Sourced — cites evidence in this result",
-      "Dashed: Not sourced — a model inference, or its evidence is missing or not checked",
+      "Dashed: Not sourced — unchecked or not fully supported; grey for any relation but a shared producer",
     ]);
     await expect(legend.getByRole("list", { name: "Relations" }).getByRole("listitem")).toHaveText([
       "Sample",
@@ -468,7 +469,8 @@ test.describe("the genealogy graph", () => {
       `Sourced Remix - Someone (2015): Sourced Remix - Someone (2015) remixes ${CURRENT} (Sourced).`,
     );
     // The line labels and the tracks' drawn labels are hidden.
-    expect(snapshot).not.toContain("possible sample");
+    // "possible remix" is drawn on a line only (the accessible names say "Possible remix").
+    expect(snapshot).not.toContain("possible remix");
     expect(snapshot).not.toContain("Connected");
     expect(snapshot).not.toContain("Sourced Samp…");
   });

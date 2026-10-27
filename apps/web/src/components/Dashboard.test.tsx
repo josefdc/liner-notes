@@ -416,20 +416,49 @@ describe('Dashboard connected tracks', () => {
     expect(shown[1].querySelector('img, [data-placeholder-note]')).not.toBeNull();
   });
 
-  it('shows no artist for a related track whose node names none, rather than an empty one', async () => {
+  it('invents no artist: a label is read as "Title - Artist (Year)" only when it has that form', async () => {
     const track = connected([sourcedSample('older', 'current')]);
+    const label = (id: string, text: string, fields = {}) => ({ ...node(id, 4, text), ...fields });
     track.genealogy.nodes = [
       track.genealogy.nodes[0],
       node('older', 2, 'Older Record (1984)'),
-      { ...node('bare', 4, 'Bare Title'), trackTitle: 'Bare Title' },
+      // A title with a " - " in it, and no year: no artist.
+      label('live', 'Song - Live at Wembley'),
+      // Two " - ": which part is the artist is not known.
+      label('remaster', 'Bohemian Rhapsody - 2011 Remaster - Queen (1975)'),
     ];
     renderDashboard(track);
-    const shown = await cards();
-    expect(shown.map((card) => card.querySelector('h3')?.textContent)).toEqual([
-      'Older Record',
-      'Bare Title',
+    let shown = await cards();
+    const names = () =>
+      shown.map((card) => [
+        card.querySelector('h3')?.textContent,
+        card.querySelector('h3 + p')?.textContent ?? null,
+      ]);
+    expect(names()).toEqual([
+      ['Older Record', null],
+      ['Song - Live at Wembley', null],
+      ['Bohemian Rhapsody - 2011 Remaster - Queen', null],
     ]);
-    for (const card of shown) expect(card.querySelector('h3 + p')).toBeNull();
+    cleanup();
+
+    const more = connected([sourcedSample('older', 'current')]);
+    more.genealogy.nodes = [
+      more.genealogy.nodes[0],
+      label('older', 'Intro - Outro'),
+      label('bare', 'Bare Title'),
+      // Its own title, and a label naming another track: the label's artist is not taken.
+      label('other', 'Other Title - Other Artist (1990)', { trackTitle: 'Real Title' }),
+      // No label at all (the contract requires one): named by its title, without a crash.
+      { id: 'unlabelled', group: 4, size: 22, trackTitle: 'Unlabelled' },
+    ] as unknown as TrackData['genealogy']['nodes'];
+    renderDashboard(more);
+    shown = await cards();
+    expect(names()).toEqual([
+      ['Intro - Outro', null],
+      ['Bare Title', null],
+      ['Real Title', null],
+      ['Unlabelled', null],
+    ]);
     expect(shown.map((card) => card.textContent).join(' ')).not.toMatch(/Unknown|undefined|null/);
   });
 

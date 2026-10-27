@@ -764,6 +764,50 @@ describe('Player', () => {
       expect(cardOf('Added Partial').textContent).toContain('Partly supported');
     });
 
+    it("names a link's claim as its link is named, on its fact's card and in the claims list", () => {
+      // Two model links, each stating a claim about a sample (the contract files a remix's and an
+      // interpolation's claim so): a remix whose claim a card states, partly supported, and an
+      // interpolation whose claim, not checked, only the claims list shows.
+      const linkTo = (source: string, type: 'remix' | 'interpolation', claimId: string) => ({
+        source,
+        target: 'current',
+        value: 2,
+        type,
+        kind: 'sourced',
+        origin: 'model',
+        evidenceIds: ['ev1'],
+        claimId,
+      });
+      const track = {
+        ...withFacts(
+          [card('f1', 'Remix Card', 'c-remix')],
+          [
+            partialSample('c-remix'),
+            aClaim({ id: 'c-interp', about: 'sample', text: 'It interpolates an old tune.' }),
+          ],
+        ),
+        genealogy: {
+          nodes: [
+            { id: 'current', group: 1, label: 'Quiet Signal', size: 40 },
+            { id: 'a', group: 2, label: 'Old Remix - Someone (1990)', size: 22 },
+            { id: 'b', group: 2, label: 'Old Tune - Someone (1980)', size: 22 },
+          ],
+          links: [linkTo('a', 'remix', 'c-remix'), linkTo('b', 'interpolation', 'c-interp')],
+        },
+      } as unknown as TrackData;
+      render(<Player trackData={track} onBack={() => {}} />);
+      expect(badgeOf('Remix Card')).toBe('POSSIBLE REMIX');
+      // Partly supported: the relation is not confirmed, so the claim is not shown as sourced.
+      expect(
+        cardOf('Remix Card').querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind'),
+      ).toBe('inferred');
+      const more = screen.getByRole('region', { name: 'More claims' });
+      const listed = within(more).getByText('It interpolates an old tune.').closest('li');
+      expect(listed?.querySelector('[data-claim-about]')?.textContent).toBe(
+        'Possible interpolation',
+      );
+    });
+
     it('never reads a sample more facts added as source data, even when the model was unavailable', async () => {
       // A result built without the model: its own cards come from source data, but a card
       // "more facts" added is the model's, with or without a claim.

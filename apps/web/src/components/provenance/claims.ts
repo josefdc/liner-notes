@@ -479,7 +479,7 @@ export interface ShownClaim {
   claim: Claim;
   /** A key unique within the result (claim ids may repeat): its position and id. */
   key: string;
-  /** How it is shown (`claimDisplayKind`). */
+  /** How it is shown (`claimDisplayKind`; a partly supported relation is not sourced). */
   kind: ClaimKind;
   /** The cited items found in the evidence pack, in the claim's order. */
   cited: Evidence[];
@@ -527,6 +527,29 @@ export function claimContextOf(track: TrackData, evidence = readEvidence(track.e
   } satisfies ClaimContext;
 }
 
+/** The ids of the claims a genealogy's links state (`claimId`), however the links read. */
+function linkClaimIds(genealogy: unknown): ReadonlySet<string> {
+  const links = isObject(genealogy) && Array.isArray(genealogy.links) ? genealogy.links : [];
+  return new Set(
+    links.flatMap((link: unknown) => (isObject(link) && isId(link.claimId) ? [link.claimId] : [])),
+  ) as ReadonlySet<string>;
+}
+
+/**
+ * How a claim is shown, with the rule the API's verifier applies to relations: a relation is
+ * stated whole. A model claim that states a relation between two records (a genealogy link
+ * states it, or it is about a sample or a cover) and that the verifier found only partly
+ * supported is not sourced: a source that supports only part of a relation does not confirm it.
+ * Results stored before the API applied the rule may still carry such a claim as sourced; it
+ * reads as a model inference here, as the API now writes it.
+ */
+function shownKind(claim: Claim, kind: ClaimKind, linkClaims: ReadonlySet<string>): ClaimKind {
+  const relation = claim.about === 'sample' || claim.about === 'cover' || linkClaims.has(claim.id);
+  return kind === 'sourced' && claim.origin === 'model' && claim.verdict === 'partial' && relation
+    ? 'inferred'
+    : kind;
+}
+
 const idOf = (item: unknown): string | null =>
   isObject(item) && isId(item.id) ? (item.id as string) : null;
 
@@ -548,6 +571,7 @@ export function resultClaims(track: TrackData, more: readonly unknown[] = []): R
   const readableIds = new Set<string>();
   const unreadableIds = new Set<string>();
   let unreadableRejected = 0;
+  const linkClaims = linkClaimIds(track.genealogy);
   raw.forEach((item, index) => {
     const id = idOf(item);
     const rejected = isObject(item) && claimIsRejected(item);
@@ -564,7 +588,7 @@ export function resultClaims(track: TrackData, more: readonly unknown[] = []): R
     all.push({
       claim,
       key: `${index}:${claim.id}`,
-      kind: claimDisplayKind(claim, context),
+      kind: shownKind(claim, claimDisplayKind(claim, context), linkClaims),
       cited,
       missingCitations: ids.length - cited.length,
       rejected,

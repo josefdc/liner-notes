@@ -26,7 +26,7 @@ import { safeHref, type ShownClaim } from './provenance/claims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import type { MeasuredAudio } from './measured/audio';
 import { ClaimChip } from './provenance/ClaimChip';
-import { relationName } from './genealogy/relationWords';
+import { claimRelationKnown, claimRelationWords } from './genealogy/relationWords';
 
 interface InteractiveFactoidProps {
   factoid: Factoid;
@@ -49,6 +49,8 @@ interface InteractiveFactoidProps {
   readings?: readonly Reading[];
   /** The result's measurement, for the measured side of a conflict. */
   audio?: MeasuredAudio | null;
+  /** The words of the shown genealogy link that states the card's claim, if one does. */
+  relation?: string | null;
 }
 
 // Entity links (to the card's cited source, not provenance) are neutral: the cyan, amber and
@@ -100,41 +102,39 @@ const CLAIM_CATEGORIES: Record<ClaimAbout, { Icon: LucideIcon; label: string }> 
   trivia: { Icon: Info, label: 'TRIVIA' },
 };
 
-// A relation to another record (a sample, a cover) the card names as such only when it is known:
-// its claim is shown as sourced or measured and was not found only partly supported, or, without
-// a claim, the card was taken from source data. A relation is stated whole, as the verifier
-// reads every claim about one, a card's or a link's: a source that supports only part of it does
-// not confirm it (results stored before it did so may still hold a partly supported relation
-// read as sourced). A model's guess reads as possible, in the words the genealogy's links and
-// cards use for the same relation (`relationName`): "POSSIBLE SAMPLE" here, "Possible sample"
-// there.
-const RELATIONS = new Set(['sample', 'cover'] as const);
-type Relation = typeof RELATIONS extends Set<infer T> ? T : never;
-const isRelation = (type: string): type is Relation => RELATIONS.has(type as Relation);
+// A relation to another record the card names as such only when it is known: its claim is shown
+// as sourced or measured and was not found only partly supported, or, without a claim, the card
+// was taken from source data. A relation is stated whole, as the verifier reads every claim about
+// one, a card's or a link's: a source that supports only part of it does not confirm it (results
+// stored before it did so may still hold a partly supported relation read as sourced). A model's
+// guess reads as possible. The words are those the genealogy uses (`claimRelationWords`): the
+// relation of the link that states the claim when a shown link does ("POSSIBLE REMIX"), else the
+// claim's subject when it is a sample or a cover ("POSSIBLE SAMPLE").
 
 /**
- * The badge of a card: what its claim is about when it states one (the card's own type is the
- * model's label), else the card's type. A sample or a cover that is not known reads as possible.
+ * The badge of a card: the relation its claim states, in the genealogy's words, when it states
+ * one; else what its claim is about (the card's own type is the model's label), or the card's
+ * type without a claim. `linked` is the words of the shown link that states the card's claim.
  */
 export function factoidCategory(
   factoid: Factoid,
   claim: ShownClaim | undefined,
   fromSourceData = false,
+  linked?: string | null,
 ): Category {
   const type = claim ? claim.claim.about : factoid.type;
   const category =
     (claim ? CLAIM_CATEGORIES[claim.claim.about] : FACTOID_CATEGORIES[factoid.type]) ??
     FACTOID_CATEGORIES.trivia;
-  const known = claim
-    ? (claim.kind === 'sourced' || claim.kind === 'measured') && claim.claim.verdict !== 'partial'
-    : fromSourceData;
-  if (!isRelation(type)) {
+  const known = claim ? claimRelationKnown(claim.kind, claim.claim.verdict) : fromSourceData;
+  const words = claimRelationWords(type, known, claim ? linked : null);
+  if (words === null) {
     return { key: type, icon: <category.Icon size={14} />, label: category.label };
   }
   return {
-    key: known ? type : `possible-${type}`,
+    key: words.toLowerCase().replace(/[^a-z]+/g, '-'),
     icon: <category.Icon size={14} />,
-    label: relationName(type, known).toUpperCase(),
+    label: words.toUpperCase(),
   };
 }
 
@@ -158,6 +158,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
   fromSourceData = false,
   readings,
   audio,
+  relation,
 }) => {
   // The card's entities link to the source its claim cites, when it is shown as sourced.
   const href = entityHref(claim);
@@ -238,7 +239,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
     return { renderedContent: <>{elements}</>, linked: links };
   }, [factoid.content, factoid.entities, href]);
 
-  const style = factoidCategory(factoid, claim, fromSourceData);
+  const style = factoidCategory(factoid, claim, fromSourceData, relation);
 
   return (
     <div

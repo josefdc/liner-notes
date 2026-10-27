@@ -107,12 +107,17 @@ describe('GenealogyGraph links', () => {
     }));
     expect(drawn).toEqual([
       { kind: 'sourced', type: 'sample', stroke: LINK_COLOR.sample, dash: 'none' },
-      // The model's sample, not sourced: drawn as a sample, dashed, and named a possible one.
-      { kind: 'inferred', type: 'sample', stroke: LINK_COLOR.sample, dash: '6 4' },
+      // The model's sample, not sourced: drawn grey and dashed as an influence (never in the
+      // sample's amber, the sourced colour), and named the possible sample it states.
+      { kind: 'inferred', type: 'influence', stroke: LINK_COLOR.influence, dash: '6 4' },
       { kind: 'inferred', type: 'producer', stroke: LINK_COLOR.producer, dash: '6 4' },
     ]);
     const names = [...container.querySelectorAll('g.link-labels text')].map((t) => t.textContent);
     expect(names).toEqual(['sample', 'possible sample', 'possible shared producer']);
+    const fills = [...container.querySelectorAll('g.link-labels text')].map((t) =>
+      t.getAttribute('fill'),
+    );
+    expect(fills[1]).toBe(LINK_COLOR.influence);
     expect(screen.getByTestId('links-hidden').textContent).toBe(
       '1 link not shown: the claim behind it was rejected or cannot be read.',
     );
@@ -175,7 +180,8 @@ describe('GenealogyGraph links', () => {
       'inferred',
       'inferred',
     ]);
-    expect(lines(container)[0].getAttribute('data-link-type')).toBe('sample');
+    expect(lines(container)[0].getAttribute('data-link-type')).toBe('influence');
+    expect(lines(container)[0].getAttribute('stroke')).toBe(LINK_COLOR.influence);
     expect(container.querySelector('g.link-labels text')?.textContent).toBe('possible sample');
     expect(subLabel(container, 'older')).toBe('Connected');
   });
@@ -308,7 +314,7 @@ describe('GenealogyGraph links', () => {
     expect(screen.getByText('Links as a list (3)').closest('details')?.open).toBe(false);
     const legend = screen.getByRole('group', { name: 'Link legend' });
     expect(within(legend).getByRole('list', { name: 'Relations' }).textContent).toBe(
-      'SampleShared producer',
+      'SampleShared producerInfluence',
     );
   });
 

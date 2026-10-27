@@ -98,17 +98,24 @@ function getRelatedTracks(
     .map((node) => ({ node, relation: reader.relationToTrack(links, node.id, currentId) }))
     .sort((a, b) => strength(b.relation) - strength(a.relation))
     .slice(0, 4)
-    .map(({ node, relation }) => ({
-      id: node.id,
-      ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-      query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
-      ...nodeTrack(node),
-      relation,
-      sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
-      provenance: relation.link ? reader.provenanceText(relation.link) : null,
-      chip: relation.link ? reader.linkProvenanceKind(relation.link) : null,
-      img: isValidImageUrl(node.img) ? node.img : null,
-    }));
+    .map(({ node, relation }) => {
+      const track = nodeTrack(node);
+      return {
+        id: node.id,
+        ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
+        // A node without a label (the contract requires one) is searched by its title.
+        query:
+          [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') ||
+          (typeof node.label === 'string' && node.label) ||
+          track.title,
+        ...track,
+        relation,
+        sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
+        provenance: relation.link ? reader.provenanceText(relation.link) : null,
+        chip: relation.link ? reader.linkProvenanceKind(relation.link) : null,
+        img: isValidImageUrl(node.img) ? node.img : null,
+      };
+    });
 }
 
 /**

@@ -49,8 +49,10 @@ export const LINK_TYPES: readonly LinkType[] = [
 
 /**
  * Relations that state a documented fact about a recording. Without evidence they are not
- * shown as such: a sample that is not sourced is a possible sample (dashed, and hedged in words
- * by `relationName`), never a documented one, and it marks no track as an origin.
+ * shown as such: a sample that is not sourced is drawn as an inferred influence (the contract's
+ * rule, which the API applies to the links the model proposes: grey and dashed, never in a
+ * relation's colour), named in words as the possible sample it states (`relationName`), and it
+ * marks no track as an origin.
  */
 const DOCUMENTED = new Set<LinkType>(['sample', 'interpolation', 'cover', 'remix']);
 
@@ -75,11 +77,17 @@ export interface ShownLink {
   /** The relation the link states (null when it states none: older results). */
   statedType: LinkType | null;
   /**
-   * The relation it is drawn and named as: the stated one (an influence when it states none,
-   * or when the years contradict its direction). It is named as known only when the link is
-   * sourced: "Sample", else "Possible sample" (`relationLabel`).
+   * The relation it is drawn as (its colour): the stated one, except that a sample,
+   * interpolation, cover or remix that is not sourced is an influence, and a link that states
+   * no relation is an influence.
    */
   type: LinkType;
+  /**
+   * The relation it is named as: the stated one (an influence when it states none, or when the
+   * years contradict its direction), named as known only when the link is sourced: "Sample",
+   * else "Possible sample" (`relationLabel`).
+   */
+  named: LinkType;
   /** False when the release years contradict the link's direction: it is only "related". */
   directionKnown: boolean;
   /** The evidence ids the link cites, in its order. */
@@ -310,7 +318,11 @@ export function readLink(
     if (link.claimId && !claim) reasons.push('its claim is not in this result');
   }
 
-  const type: LinkType = directionKnown ? (statedType ?? 'influence') : 'influence';
+  const type: LinkType =
+    statedType === null || (kind !== 'sourced' && DOCUMENTED.has(statedType))
+      ? 'influence'
+      : statedType;
+  const named: LinkType = directionKnown ? (statedType ?? 'influence') : 'influence';
   return {
     link: {
       source: link.source,
@@ -321,6 +333,7 @@ export function readLink(
       origin,
       statedType,
       type,
+      named,
       directionKnown,
       citations,
       claim,
@@ -439,14 +452,14 @@ export function relationSentence(link: ShownLink, nameOf: (id: string) => string
   const to = nameOf(link.target);
   if (!link.directionKnown) return `${from} and ${to} are related (direction unknown)`;
   if (link.kind !== 'sourced') {
-    switch (link.type) {
+    switch (link.named) {
       case 'producer':
         return `${from} and ${to} may share a producer`;
       case 'influence':
         return `Possible influence between ${from} and ${to}`;
       default:
         // "Possible sample: Bright Lines (2011) may sample X (1984)", in relationLabel's words.
-        return `${relationLabel(link)}: ${to} may ${VERB[link.type]} ${from}`;
+        return `${relationLabel(link)}: ${to} may ${VERB[link.named]} ${from}`;
     }
   }
   switch (link.type) {
@@ -479,7 +492,27 @@ const VERB: Record<'sample' | 'interpolation' | 'cover' | 'remix', string> = {
  */
 export function relationLabel(link: ShownLink): string {
   if (!link.directionKnown) return 'Related, direction unknown';
-  return relationName(link.type, link.kind === 'sourced');
+  return relationName(link.named, link.kind === 'sourced');
+}
+
+/**
+ * The words of the relation each claim states through a shown link, by claim id: the claim is
+ * named as its link is (`relationLabel`), on a fact's card and in the claims list. A claim two
+ * links state with different words is left out: it is named by its own subject.
+ */
+export function relationLabelsByClaim(links: readonly ShownLink[]): ReadonlyMap<string, string> {
+  const labels = new Map<string, string>();
+  const mixed = new Set<string>();
+  for (const link of links) {
+    const id = link.claim?.id;
+    if (id === undefined || mixed.has(id)) continue;
+    const label = relationLabel(link);
+    if (labels.has(id) && labels.get(id) !== label) {
+      labels.delete(id);
+      mixed.add(id);
+    } else labels.set(id, label);
+  }
+  return labels;
 }
 
 /** A link in one line: the relation as a sentence, then where it comes from. */

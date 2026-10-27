@@ -32,13 +32,25 @@ const firstRun = [
   { type: "done" },
 ];
 
-/** The connected track's run, held after its first lines until the test releases it. */
+/**
+ * The connected track's run, held after its first lines until the test releases it. Its result
+ * is another track's (Older Record), so a restore that showed it instead of the earlier result
+ * would be seen.
+ */
 const heldRun = [
   { type: "connected", threadId: "t-held" },
   status("scout", "Reading the track from Spotify", "NET-100"),
   { $wait: "held" },
   status("historian", "A line after the stop", "RESEARCH-FOUND"),
-  { type: "complete", data: fullResultData() },
+  {
+    type: "complete",
+    data: {
+      ...(fullResultData() as Record<string, unknown>),
+      id: "4iV5W9uYEdYUVa79Axb7Rh",
+      title: "Older Record",
+      artist: "Someone",
+    },
+  },
   { type: "done" },
 ];
 
@@ -91,6 +103,7 @@ test("a connected track's card analyses it with no undo toast; Stop and the last
   await expect(back).toBeVisible();
   await back.click();
   await expect(dashboardHeading(page)).toHaveText("Bright Lines");
+  await expect(page.getByRole("heading", { level: 1, name: "Older Record" })).toHaveCount(0);
   await expect(page.getByText("A line after the stop")).toHaveCount(0);
   expect(await undoIsTaken(page)).toBe(false);
   await expect(page.getByRole("button", { name: /undo/i })).toHaveCount(0);

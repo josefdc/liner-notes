@@ -6,7 +6,10 @@ import { LINK_COLOR, LINK_DASH } from './linkStyle';
 
 const KIND_NOTE: Record<LinkKind, string> = {
   sourced: 'cites evidence in this result',
-  inferred: 'a model inference, or its evidence is missing or not checked',
+  // Every dashed line, whatever relation it states and however it was judged: a model inference,
+  // evidence missing or not checked, or checked and found unsupported or only partly supported.
+  // All but a shared producer are drawn grey, as an influence; the line names the relation.
+  inferred: 'unchecked or not fully supported; grey for any relation but a shared producer',
 };
 const KIND_NAME: Record<LinkKind, string> = { sourced: 'Sourced', inferred: 'Not sourced' };
 

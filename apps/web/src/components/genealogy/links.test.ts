@@ -81,10 +81,16 @@ describe('readLink', () => {
     expect(provenanceText(shs)).toBe('Sourced · cites ev-shs-1 (SecondHandSongs · primary record)');
   });
 
-  it('shows an inferred sample, interpolation, cover or remix as a possible one', () => {
+  it('draws an inferred sample, interpolation, cover or remix as an influence, named a possible one', () => {
     for (const type of DOCUMENTED) {
       const shown = read(link('a', 'b', { type, kind: 'inferred', evidenceIds: [] }));
-      expect(shown).toMatchObject({ kind: 'inferred', type, statedType: type });
+      // Drawn grey as an influence (the contract's rule), named as the relation it states.
+      expect(shown).toMatchObject({
+        kind: 'inferred',
+        type: 'influence',
+        named: type,
+        statedType: type,
+      });
       expect(relationLabel(shown)).toBe(`Possible ${LINK_TYPE_LABEL[type].toLowerCase()}`);
       expect(provenanceText(shown)).toBe('Model inference · no evidence cited');
       // It marks no track as the analysed one's origin.
@@ -102,11 +108,11 @@ describe('readLink', () => {
 
   it('does not take "sourced" on trust: no citation, or one missing from the pack', () => {
     const none = read(sourced({ evidenceIds: [], origin: 'code' }));
-    expect(none).toMatchObject({ kind: 'inferred', type: 'sample' });
+    expect(none).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(relationLabel(none)).toBe('Possible sample');
     expect(provenanceText(none)).toBe('Not sourced · says sourced but cites no evidence');
     const ghost = read(sourced({ type: 'cover', evidenceIds: ['ev-mb-1', 'ev-ghost'] }));
-    expect(ghost).toMatchObject({ kind: 'inferred', type: 'cover' });
+    expect(ghost).toMatchObject({ kind: 'inferred', type: 'influence', named: 'cover' });
     expect(relationLabel(ghost)).toBe('Possible cover');
     expect(ghost.citations).toEqual([
       { id: 'ev-mb-1', evidence: evidencePack(PACK).get('ev-mb-1') },
@@ -136,7 +142,7 @@ describe('readLink', () => {
   it('shows a model link as sourced only when its claim has a supporting verdict', () => {
     // Citing is not support: a model link that says sourced, with no claim, is an inference.
     const unjudged = read(sourced({ origin: 'model' }));
-    expect(unjudged).toMatchObject({ kind: 'inferred', type: 'sample' });
+    expect(unjudged).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(unjudged)).toBe(
       'Model inference · proposed by the model; no ' +
         `verifier verdict supports it; cites ${MB}, not checked by a verifier`,
@@ -145,7 +151,7 @@ describe('readLink', () => {
       sourced({ origin: 'model', claimId: 'cl-1' }),
       context([claim('cl-1', { verdict: 'supported', kind: 'sourced', evidenceIds: ['ev-mb-1'] })]),
     );
-    expect(supported).toMatchObject({ kind: 'sourced', type: 'sample' });
+    expect(supported).toMatchObject({ kind: 'sourced', type: 'sample', named: 'sample' });
     expect(relationLabel(supported)).toBe('Sample');
     const unsupported = read(
       sourced({ origin: 'model', claimId: 'cl-1' }),
@@ -397,13 +403,13 @@ describe('readLink', () => {
       sourced({ origin: 'model', claimId: 'cl-1' }),
       context([supported({ evidenceIds: ['ev-shs-1'] })]),
     );
-    expect(elsewhere).toMatchObject({ kind: 'inferred', type: 'sample' });
+    expect(elsewhere).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(elsewhere)).toContain('its claim does not cite "ev-mb-1"');
     const credit = read(
       sourced({ origin: 'code', claimId: 'cl-1' }),
       context([supported({ about: 'credit' })]),
     );
-    expect(credit).toMatchObject({ kind: 'inferred', type: 'sample' });
+    expect(credit).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(credit)).toContain('its claim is about credit, not this sample relation');
     const cover = read(
       sourced({ origin: 'model', type: 'cover', claimId: 'cl-1' }),
@@ -459,8 +465,8 @@ describe('readGenealogy', () => {
       context([supported]),
     );
     expect(two.links.map((l) => [l.kind, l.type, relationLabel(l)])).toEqual([
-      ['inferred', 'sample', 'Possible sample'],
-      ['inferred', 'sample', 'Possible sample'],
+      ['inferred', 'influence', 'Possible sample'],
+      ['inferred', 'influence', 'Possible sample'],
     ]);
     for (const shown of two.links) {
       expect(provenanceText(shown)).toContain('its claim is also stated by another link');
@@ -529,7 +535,11 @@ describe('readGenealogy', () => {
       ],
     };
     expect(shownLinks(genealogy, context())[0]).toMatchObject({ kind: 'sourced' });
-    expect(shownLinks(genealogy)[0]).toMatchObject({ kind: 'inferred', type: 'sample' });
+    expect(shownLinks(genealogy)[0]).toMatchObject({
+      kind: 'inferred',
+      type: 'influence',
+      named: 'sample',
+    });
     expect(shownLinks(genealogy, context([], null))[0]).toMatchObject({ kind: 'inferred' });
   });
 });

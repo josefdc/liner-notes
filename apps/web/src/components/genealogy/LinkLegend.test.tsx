@@ -13,7 +13,7 @@ describe('LinkLegend', () => {
     const items = within(kinds).getAllByRole('listitem');
     expect(items.map((item) => item.textContent)).toEqual([
       'Solid: Sourced — cites evidence in this result',
-      'Dashed: Not sourced — a model inference, or its evidence is missing or not checked',
+      'Dashed: Not sourced — unchecked or not fully supported; grey for any relation but a shared producer',
     ]);
     // The swatches draw what the words say: a solid line, then a dashed one.
     const dashes = items.map((item) =>

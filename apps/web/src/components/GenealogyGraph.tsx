@@ -23,7 +23,6 @@ import {
   describeLink,
   isDocumentedSource,
   kindLabel,
-  LINK_TYPE_LABEL,
   nodeName,
   nodesById,
   provenanceText,
@@ -31,6 +30,7 @@ import {
   linkContext,
   readGenealogy,
   yearFrom,
+  relationLabel,
   relationSentence,
   relationToTrack,
   type ShownLink,
@@ -55,11 +55,13 @@ const sameItem = (a: Item | null, b: Item | null) =>
     ? b.kind === 'node' && a.id === b.id
     : b.kind === 'link' && a.index === b.index);
 
-/** The words on a link's line: its relation, hedged when it is not sourced. */
+/** True for a link that states an influence, or no relation (an influence too). */
+const isStatedInfluence = (link: ShownLink) =>
+  link.statedType === null || link.statedType === 'influence';
+
+/** The words on a link's line: its relation as the cards name it, hedged when it is not sourced. */
 function lineLabel(link: ShownLink): string {
-  if (!link.directionKnown) return 'related';
-  const label = LINK_TYPE_LABEL[link.type].toLowerCase();
-  return link.kind === 'sourced' ? label : `possible ${label}`;
+  return link.directionKnown ? relationLabel(link).toLowerCase() : 'related';
 }
 
 /** Where along its line a line's label may go, the middle first. */
@@ -1101,7 +1103,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
         <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
           {(links.length > 0 || hidden > 0) && (
-            <LinkLegend types={links.map((link) => link.type)} />
+            <LinkLegend
+              types={links.map((link) => link.type)}
+              grey={{
+                influence: links.some(
+                  (link) => link.type === 'influence' && isStatedInfluence(link),
+                ),
+                notSourced: links.some(
+                  (link) => link.type === 'influence' && !isStatedInfluence(link),
+                ),
+              }}
+            />
           )}
           {hidden > 0 && (
             <p className="text-chrome font-mono text-text-chip" data-testid="links-hidden">

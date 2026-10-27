@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, Suspense } from 'react';
 const SonicFingerprint = React.lazy(() => import('./SonicFingerprint'));
 import ActivityLog from './ActivityLog';
 import { Music, ArrowRight, ExternalLink, Search } from 'lucide-react';
@@ -14,6 +14,7 @@ import { isValidImageUrl } from '../utils/image';
 import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
+import { nodeTrack, UNTITLED_TRACK } from './genealogy/nodeTrack';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE, placeholderBackground } from '../styles/placeholder';
@@ -28,8 +29,6 @@ interface DashboardProps {
   onNewSearch?: () => void;
   // UX: Focus management on phase transition
   headingRef?: React.Ref<HTMLHeadingElement>;
-  // UX: Undo analysis callback
-  onUndoAnalysis?: () => void;
   // UX: Hide activity log when restoring a previous session (logs are cleared)
   isRestoredSession?: boolean;
 }
@@ -42,8 +41,10 @@ interface RelatedTrack {
   spotifyId?: string;
   /** The text a click searches (or sends with the id): the node's track title and artist. */
   query: string;
+  /** The track's own title, from its node. */
   title: string;
-  artist: string;
+  /** Its artist, from its node; null when the node does not name one (nothing is shown). */
+  artist: string | null;
   relation: TrackRelation;
   /** The relation as a sentence naming both tracks (null when no link joins them). */
   sentence: string | null;
@@ -97,25 +98,32 @@ function getRelatedTracks(
     .map((node) => ({ node, relation: reader.relationToTrack(links, node.id, currentId) }))
     .sort((a, b) => strength(b.relation) - strength(a.relation))
     .slice(0, 4)
-    .map(({ node, relation }) => ({
-      id: node.id,
-      ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-      query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
-      title: node.label,
-      artist: '', // Genealogy nodes don't have separate artist field
-      relation,
-      sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
-      provenance: relation.link ? reader.provenanceText(relation.link) : null,
-      chip: relation.link ? reader.linkProvenanceKind(relation.link) : null,
-      img: isValidImageUrl(node.img) ? node.img : null,
-    }));
+    .map(({ node, relation }) => {
+      const track = nodeTrack(node);
+      return {
+        id: node.id,
+        ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
+        // A node without a label (the contract requires one) is searched by its title; one with
+        // nothing to search by is not searched at all.
+        query:
+          [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') ||
+          (typeof node.label === 'string' && node.label.trim()) ||
+          (track.title === UNTITLED_TRACK ? '' : track.title),
+        ...track,
+        relation,
+        sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
+        provenance: relation.link ? reader.provenanceText(relation.link) : null,
+        chip: relation.link ? reader.linkProvenanceKind(relation.link) : null,
+        img: isValidImageUrl(node.img) ? node.img : null,
+      };
+    });
 }
 
 /**
- * A connected track's relation, as the badge of its card. A documented relation is named only
- * for a sourced link. The badge is the link's provenance chip (sourced: amber and a book; a
- * model inference: violet and sparkles; not sourced: neutral), as in the graph's list; without a
- * link it is a neutral badge. A neutral chip's text is raised to secondary: on a hovered card its
+ * A connected track's relation, as the badge of its card. A documented relation is named as
+ * known only for a sourced link; otherwise it is hedged ("Possible sample"). The badge is the
+ * link's provenance chip (sourced: amber and a book; a model inference: violet and sparkles; not
+ * sourced: neutral), as in the graph's list; without a link it is a neutral badge. A neutral chip's text is raised to secondary: on a hovered card its
  * chip grey is under 4.5:1.
  */
 const RelationBadge: React.FC<{ rec: RelatedTrack }> = ({ rec }) => {
@@ -168,7 +176,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   isComplete = true,
   onNewSearch,
   headingRef,
-  onUndoAnalysis,
   isRestoredSession = false,
 }) => {
   // Missing lists default to empty so a partial result renders instead of throwing.
@@ -207,80 +214,19 @@ const Dashboard: React.FC<DashboardProps> = ({
     fingerprint?.styles.state === 'shown' || fingerprint?.tags.state === 'shown';
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
-  // UX: Undo toast state (replaces confirm dialog)
-  const [undoToast, setUndoToast] = useState<{
-    trackTitle: string;
-    timeout: ReturnType<typeof setTimeout>;
-  } | null>(null);
-  const undoToastRef = useRef(undoToast);
-  undoToastRef.current = undoToast;
-
-  const clearUndoToast = useCallback(() => {
-    setUndoToast((prev) => {
-      if (prev) clearTimeout(prev.timeout);
-      return null;
-    });
-  }, []);
-
-  const startUndoTimeout = useCallback((trackTitle: string) => {
-    const timeout = setTimeout(() => {
-      setUndoToast(null);
-    }, 5000);
-    setUndoToast({ trackTitle, timeout });
-  }, []);
-
-  const handleUndo = useCallback(() => {
-    clearUndoToast();
-    onUndoAnalysis?.();
-  }, [clearUndoToast, onUndoAnalysis]);
-
-  // Pause-on-hover for undo toast
-  const handleToastMouseEnter = useCallback(() => {
-    setUndoToast((prev) => {
-      if (prev) {
-        clearTimeout(prev.timeout);
-        return { ...prev, timeout: setTimeout(() => {}, 999999) }; // paused
-      }
-      return prev;
-    });
-  }, []);
-
-  const handleToastMouseLeave = useCallback(() => {
-    setUndoToast((prev) => {
-      if (prev) {
-        clearTimeout(prev.timeout);
-        const timeout = setTimeout(() => setUndoToast(null), 5000);
-        return { ...prev, timeout };
-      }
-      return prev;
-    });
-  }, []);
-
-  // Global Ctrl+Z / Cmd+Z undo handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoToastRef.current) {
-        e.preventDefault();
-        handleUndo();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo]);
-
   const handleCardClick = useCallback(
-    (rec: { id: string; spotifyId?: string; query: string; title: string; artist: string }) => {
+    (rec: { spotifyId?: string; query: string }) => {
       if (onAnalyzeTrack) {
+        if (!rec.query) return;
         // The node's own id is the graph's, not Spotify's: the track is searched by its text
         // unless the node was matched to a Spotify track. The text is the node's track title
         // and artist, which the matched track's own title and artist match.
         onAnalyzeTrack(rec.spotifyId ?? 'search', rec.query, '');
-        startUndoTimeout(rec.title);
       } else {
         onNavigate(AppPhase.PLAYER);
       }
     },
-    [onAnalyzeTrack, onNavigate, startUndoTimeout],
+    [onAnalyzeTrack, onNavigate],
   );
 
   return (
@@ -351,8 +297,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {trackData.title}
               </h1>
               <p className="text-lg text-text-tertiary font-mono mb-1">{trackData.artist}</p>
+              {/* Centred under the title on phones, as the rows above and below it */}
               {trackData.album && (
-                <div className="flex items-center gap-2 mb-4 text-sm text-text-tertiary">
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4 text-sm text-text-tertiary">
                   <span>{trackData.album}</span>
                   {trackData.releaseYear && (
                     <>
@@ -573,33 +520,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
           )}
         </div>
-      </div>
-
-      {/* UX: Undo toast (replaces confirm dialog) */}
-      {undoToast && (
-        <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-5 py-3 bg-surface-overlay backdrop-blur-lg border border-cyber/30 rounded-md shadow-elevated-lg animate-slide-up-fade"
-          onMouseEnter={handleToastMouseEnter}
-          onMouseLeave={handleToastMouseLeave}
-        >
-          <span className="text-sm font-mono text-text-secondary">
-            Analyzing <span className="text-white font-bold">{undoToast.trackTitle}</span>
-          </span>
-          <button
-            type="button"
-            onClick={handleUndo}
-            className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none px-2 py-1"
-          >
-            UNDO
-          </button>
-        </div>
-      )}
-
-      {/* UX: ARIA live region for undo toast announcements */}
-      <div aria-live="assertive" className="sr-only">
-        {undoToast
-          ? `Analyzing ${undoToast.trackTitle}. Press Ctrl+Z or activate the undo button to cancel.`
-          : ''}
       </div>
     </div>
   );

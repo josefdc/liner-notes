@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentLog } from '../types';
 import { Terminal, LoaderCircle, CircleCheck } from 'lucide-react';
+import { formatElapsed } from './console/elapsed';
 import { logStyle } from './console/logCodes';
 import { droppedLines, writtenLines } from '../hooks/agent/runLog';
 
@@ -48,29 +49,43 @@ function lineAtTop(box: HTMLElement): { id: string; offset: number } | null {
   return covering;
 }
 
-// One log line: the time, the step in words (with its icon), and the message.
-const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ log, isLatest }) => {
-  const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
-  const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
+/**
+ * One log line: the time, the step in words (with its icon), and the message. The time of a
+ * line of a replay (`recorded`) is when the recorded run sent it, since that run started, when
+ * the line has one; any other line's is when it came, on this page's clock.
+ */
+const LogLine: React.FC<{ log: AgentLog; isLatest: boolean; recorded: boolean }> = React.memo(
+  ({ log, isLatest, recorded }) => {
+    const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
+    const time =
+      recorded && log.elapsedMs !== undefined
+        ? formatElapsed(log.elapsedMs)
+        : new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
 
-  return (
-    <div
-      data-log-id={log.id}
-      data-log-code={log.code}
-      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
-    >
-      <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums">{time}</span>
-      <span
-        data-log-label
-        className={`${tone} mr-2 shrink-0 inline-flex items-center gap-1 font-bold sm:w-32`}
+    return (
+      <div
+        data-log-id={log.id}
+        data-log-code={log.code}
+        className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
       >
-        <Icon size={12} aria-hidden="true" className="shrink-0" />
-        {label}
-      </span>
-      <span className="text-text-secondary tracking-tight">{log.message}</span>
-    </div>
-  );
-});
+        <span
+          data-log-time
+          className="text-text-tertiary mr-3 shrink-0 min-w-16 whitespace-nowrap tabular-nums"
+        >
+          {time}
+        </span>
+        <span
+          data-log-label
+          className={`${tone} mr-2 shrink-0 inline-flex items-center gap-1 font-bold sm:w-32`}
+        >
+          <Icon size={12} aria-hidden="true" className="shrink-0" />
+          {label}
+        </span>
+        <span className="text-text-secondary tracking-tight">{log.message}</span>
+      </div>
+    );
+  },
+);
 
 const SystemConsole: React.FC<SystemConsoleProps> = ({
   logs,
@@ -205,7 +220,12 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
               </p>
             )}
             {logs.map((log, idx) => (
-              <LogLine key={log.id} log={log} isLatest={idx === logs.length - 1 && !isComplete} />
+              <LogLine
+                key={log.id}
+                log={log}
+                isLatest={idx === logs.length - 1 && !isComplete}
+                recorded={isReplay}
+              />
             ))}
 
             {/* Still running */}

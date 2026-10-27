@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { Activity, CircleCheck, ChevronDown, LoaderCircle } from 'lucide-react';
 import type { AgentLog } from '../types';
+import { formatElapsed } from './console/elapsed';
 import { logStyle } from './console/logCodes';
 import { writtenLines } from '../hooks/agent/runLog';
 
@@ -34,19 +35,6 @@ export function formatRelativeTime(timestamp: string, now: number): string {
   if (diff < 60) return `${Math.floor(diff / 10) * 10} s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   return `${Math.floor(diff / 3600)} h ago`;
-}
-
-/**
- * A time since the run started, as an entry of a recorded run shows it: "+12.4 s" under a
- * minute, then "+1 min 15 s", then "+1 h 2 min". Cut, never rounded up: an entry never reads
- * later than it was sent.
- */
-export function formatElapsed(ms: number): string {
-  const tenths = Math.floor(ms / 100);
-  if (tenths < 600) return `+${Math.floor(tenths / 10)}.${tenths % 10} s`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 3600) return `+${Math.floor(seconds / 60)} min ${seconds % 60} s`;
-  return `+${Math.floor(seconds / 3600)} h ${Math.floor((seconds % 3600) / 60)} min`;
 }
 
 /**

@@ -1,12 +1,8 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLog } from '../types';
-import ActivityLog, {
-  FRESH_TICK_MS,
-  formatElapsed,
-  formatRelativeTime,
-  SETTLED_TICK_MS,
-} from './ActivityLog';
+import ActivityLog, { FRESH_TICK_MS, formatRelativeTime, SETTLED_TICK_MS } from './ActivityLog';
+import { formatElapsed } from './console/elapsed';
 
 afterEach(() => {
   cleanup();

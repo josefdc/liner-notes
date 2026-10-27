@@ -355,9 +355,12 @@ export function useAgent(): UseAgentReturn {
     [],
   );
 
-  /** Ends the run with an error the user can retry. */
+  /**
+   * Ends the run with an error the user can retry. `elapsedMs`: the time since the run started
+   * that the server's event the error comes from was sent with, when it sent one.
+   */
   const fail = useCallback(
-    (run: Run, message: string, code?: string) => {
+    (run: Run, message: string, code?: string, elapsedMs?: number) => {
       if (runRef.current !== run || run.phase === 'failed') return;
       run.phase = 'failed';
       setState((prev) => ({
@@ -369,7 +372,7 @@ export function useAgent(): UseAgentReturn {
         candidates: null,
         isLoading: false,
       }));
-      addLog(`Error: ${message}`, 'SYS-ERROR');
+      addLog(`Error: ${message}`, 'SYS-ERROR', undefined, elapsedMs);
     },
     [addLog],
   );
@@ -403,7 +406,7 @@ export function useAgent(): UseAgentReturn {
             ...prev,
             threadId: run.threadId,
           }));
-          addLog('Connected to the analysis server', 'SYS-INIT');
+          addLog('Connected to the analysis server', 'SYS-INIT', undefined, data.elapsedMs);
           break;
 
         case 'status':
@@ -414,7 +417,8 @@ export function useAgent(): UseAgentReturn {
             setState((prev) => ({ ...prev, isReplay: true }));
           }
           // The server's own words, with its code and the time since the run started (a
-          // replay's is the recorded run's); a status without words adds no line.
+          // replay's is the recorded run's), as on every line a server event writes; a status
+          // without words adds no line.
           if (data.message) {
             addLog(data.message, data.code as LogCode | undefined, data.node, data.elapsedMs);
           }
@@ -451,7 +455,7 @@ export function useAgent(): UseAgentReturn {
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog(question, undefined, 'scout');
+          addLog(question, undefined, 'scout', data.elapsedMs);
           break;
         }
 
@@ -484,6 +488,8 @@ export function useAgent(): UseAgentReturn {
               ? 'Recorded analysis replayed. Nothing was analyzed live.'
               : 'Analysis complete.',
             'SYS-READY',
+            undefined,
+            data.elapsedMs,
           );
           break;
         }
@@ -518,7 +524,7 @@ export function useAgent(): UseAgentReturn {
               });
             break;
           }
-          fail(run, data.error || 'The analysis failed.', data.code);
+          fail(run, data.error || 'The analysis failed.', data.code, data.elapsedMs);
           break;
         }
 
@@ -531,7 +537,12 @@ export function useAgent(): UseAgentReturn {
           close();
           // A stream that ends without a result, an error or a picker has nothing to show.
           if (run.phase === 'running')
-            fail(run, 'The analysis ended without a result.', CLIENT_ERROR_CODES.noResult);
+            fail(
+              run,
+              'The analysis ended without a result.',
+              CLIENT_ERROR_CODES.noResult,
+              data.elapsedMs,
+            );
           break;
       }
     },

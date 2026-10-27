@@ -178,4 +178,29 @@ describe('SystemConsole', () => {
     rerender(<SystemConsole logs={lines(24)} isComplete={false} />);
     expect(box.scrollTop).toBe(800);
   });
+
+  describe('times', () => {
+    const at = '2026-01-01T09:41:07.000Z';
+    const clock = new Date(at).toLocaleTimeString('en-US', { hour12: false });
+    const lines: AgentLog[] = [
+      { id: 'a', message: 'Searching for "Bright Lines"', timestamp: at },
+      { id: 'b', message: 'Found it', timestamp: at, code: 'SPOTIFY-FOUND', elapsedMs: 316 },
+      { id: 'c', message: 'Measured', timestamp: at, code: 'AUDIO-COMPLETE', elapsedMs: 75_900 },
+    ];
+    const timeOf = (container: HTMLElement, id: string) =>
+      container.querySelector(`[data-log-id="${id}"] [data-log-time]`)?.textContent;
+
+    it("shows a replayed line's recorded time since the run started, and its arrival time when it has none", () => {
+      const { container } = render(<SystemConsole logs={lines} isComplete={false} isReplay />);
+      expect(timeOf(container, 'b')).toBe('+0.3 s');
+      expect(timeOf(container, 'c')).toBe('+1 min 15 s');
+      // No recorded time: when the line came, on this viewer's clock, which is true.
+      expect(timeOf(container, 'a')).toBe(clock);
+    });
+
+    it('shows the arrival time on every line of a live run', () => {
+      const { container } = render(<SystemConsole logs={lines} isComplete={false} />);
+      for (const id of ['a', 'b', 'c']) expect(timeOf(container, id), id).toBe(clock);
+    });
+  });
 });

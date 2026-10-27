@@ -1942,6 +1942,25 @@ describe("REPLAY_MODE", () => {
     expect(sent.find((body) => body.node === "replay")).not.toHaveProperty("elapsedMs");
   });
 
+  it("leaves out a recording whose time since the run started goes back, and loads the committed ones", () => {
+    expect(loadReplays(DEFAULT_REPLAY_DIR).problems).toEqual([]);
+    const [file] = readdirSync(DEFAULT_REPLAY_DIR).filter((name) => name.endsWith(".json"));
+    const raw = JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, file), "utf8")) as {
+      events: Array<{ event: Record<string, unknown> }>;
+    };
+    // Hand-edited: times that fall from one event to the next.
+    raw.events.forEach(({ event }, i) => {
+      event.elapsedMs = (raw.events.length - i) * 1_000;
+    });
+    const edited = join(dir, "falling-replays");
+    mkdirSync(edited, { recursive: true });
+    writeFileSync(join(edited, file), JSON.stringify(raw));
+
+    const set = loadReplays(edited);
+    expect(set.records).toEqual([]);
+    expect(set.problems).toEqual([expect.stringContaining("events.1.event.elapsedMs: goes back")]);
+  });
+
   it("sends a recorded event's own time since the run started over its atMs", async () => {
     const dev = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
     // Times that differ from the stream's: the event's own is what the run measured.

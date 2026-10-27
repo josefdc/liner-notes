@@ -1147,10 +1147,14 @@ describe("analyze routes", () => {
     });
 
     it("goes on from the paused stream's time on a resume, leaving out the wait for the choice", async () => {
+      // The paused stream takes a while itself, so its time counted twice, or not at all, shows.
+      stub.scoutStep = () => wait(150);
       const paused = await sse(streamPath("ambiguous timed"));
+      stub.scoutStep = null;
       const pausedAt = paused.events.at(-1)?.elapsedMs as number;
       expect(paused.events.at(-1)?.type).toBe("done");
       expect(Number.isInteger(pausedAt)).toBe(true);
+      expect(pausedAt).toBeGreaterThanOrEqual(145);
       const threadId = ofType(paused.events, "interrupt")[0].threadId as string;
       // Stored with each event, as it was sent: the resume goes on from there.
       const stored = listRunEvents(getDb(), threadId).map((item) => item.event as Event);
@@ -1164,8 +1168,10 @@ describe("analyze routes", () => {
       const times = elapsed(resumed.events) as number[];
       expect(times.every((ms) => Number.isInteger(ms))).toBe(true);
       expect(times).toEqual([...times].sort((a, b) => a - b));
+      // Right where the paused stream ended: the resume's own checks take a few ms, never the
+      // wait for the choice (500 ms) nor the paused stream's time again (150 ms or more).
       expect(times[0]).toBeGreaterThanOrEqual(pausedAt);
-      expect(times[0]).toBeLessThan(pausedAt + 500);
+      expect(times[0]).toBeLessThan(pausedAt + 100);
     });
 
     it("sends no time on a resume when the run's earlier stream left none to go on from", async () => {

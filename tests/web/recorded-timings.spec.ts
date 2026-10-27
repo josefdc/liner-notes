@@ -8,9 +8,9 @@ import {
 } from "./mock";
 
 // A replayed run's activity log shows when each line was sent in the recorded run: the time
-// since that run started, carried by its events (`elapsedMs`). A line the recording gives no
-// time (the replay's own notice, the page's own lines) shows none, and no line says "Just now"
-// or how long ago the replay sent it.
+// since that run started, carried by its events (`elapsedMs`). A line with no recorded time
+// (the replay's own notice, the page's own lines) shows none, and no line says "Just now" or
+// how long ago the replay sent it.
 
 test("a replayed run's activity log shows the recorded time since the run started", async ({
   page,
@@ -29,9 +29,8 @@ test("a replayed run's activity log shows the recorded time since the run starte
   await expect(timeOf("Writing the liner notes")).toHaveText("+13.8 s");
   await expect(timeOf("Measured 105 BPM in A minor")).toHaveText("+12.4 s");
   await expect(timeOf("Found the track on Spotify")).toHaveText("+0.3 s");
-  // The page's own line about the replay was not sent by the recorded run: it has no time.
-  await expect(entries.getByText("Recorded analysis replayed")).toBeVisible();
-  await expect(timeOf("Recorded analysis replayed")).toHaveCount(0);
+  // The line the recorded result writes, at the time the recorded run sent it.
+  await expect(timeOf("Recorded analysis replayed")).toHaveText("+1 min 16 s");
   await expect(entries).not.toContainText("Just now");
   await expect(entries).not.toContainText(/\bago\b/);
   expect(problems).toEqual([]);
@@ -85,4 +84,33 @@ test("the committed recording replays with each line at the time its recording m
   await expect(entries).not.toContainText("Just now");
   await expect(entries).not.toContainText(/\bago\b/);
   expect(problems).toEqual([]);
+});
+
+test("the progress log shows a replayed line's recorded time, and its arrival time without one", async ({
+  page,
+}) => {
+  await page.route("https://coverartarchive.org/**", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>',
+    }),
+  );
+  const { events } = replayedRecording();
+  await useMockApi(page, {
+    suggestions: [],
+    eventGapMs: 10,
+    streams: { "/api/analyze/stream": events },
+  });
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("One More Time Daft Punk");
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+
+  const log = page.getByRole("log");
+  const timeOf = (message: string) =>
+    log.locator("[data-log-id]", { hasText: message }).locator("[data-log-time]");
+  await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+19.6 s");
+  await expect(timeOf("Reading the track from Spotify")).toHaveText("+0.0 s");
+  // The page's own line has no recorded time: it shows when it came, on the viewer's clock.
+  await expect(timeOf("Searching for")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
 });

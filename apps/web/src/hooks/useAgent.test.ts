@@ -368,8 +368,39 @@ describe('useAgent progress', () => {
     const untimed = logs.find((log) => log.message === 'Measuring tempo and key');
     expect(untimed).toBeDefined();
     expect(untimed).not.toHaveProperty('elapsedMs');
-    // The page's own lines were not sent by the server: they carry no time of the run.
-    expect(logs.find((log) => log.message.startsWith('Connected'))).not.toHaveProperty('elapsedMs');
+    // The page's own line, written before the stream opened, carries no time of the run.
+    expect(logs.find((log) => log.message.startsWith('Searching for'))).not.toHaveProperty(
+      'elapsedMs',
+    );
+  });
+
+  it('gives every line a server event writes the time that event was sent with', () => {
+    const timeOf = (logs: Array<{ message: string; elapsedMs?: number }>, start: string) =>
+      logs.find((log) => log.message.startsWith(start))?.elapsedMs;
+
+    const { hook, analysis } = openPicker();
+    expect(timeOf(hook.result.current.logs, 'Connected')).toBeUndefined();
+    analysis.send({ type: 'done' });
+
+    const timed = startAnalysis();
+    const stream = lastStream();
+    stream.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    stream.send({ ...interrupt(), elapsedMs: 312 });
+    expect(timeOf(timed.result.current.logs, 'Connected')).toBe(0);
+    expect(timed.result.current.logs.at(-1)?.elapsedMs).toBe(312);
+
+    const done = startAnalysis();
+    const result = lastStream();
+    result.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    result.send({ type: 'complete', data: track, elapsedMs: 20_167 });
+    expect(timeOf(done.result.current.logs, 'Analysis complete')).toBe(20_167);
+    expect(timeOf(done.result.current.logs, 'Searching for')).toBeUndefined();
+
+    const failed = startAnalysis();
+    const errored = lastStream();
+    errored.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    errored.send({ type: 'error', code: 'timeout', error: 'Took too long.', elapsedMs: 90_000 });
+    expect(timeOf(failed.result.current.logs, 'Error: ')).toBe(90_000);
   });
 
   it('logs a neutral picker line when the server sends no words', () => {

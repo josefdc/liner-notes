@@ -660,14 +660,17 @@ def test_a_run_on_the_spacing_but_off_the_beat_is_left_out():
     assert reported_over(pad_then_band(), [*intro, *band]) == [round(t, 3) for t in band]
 
 
-@pytest.mark.parametrize(("phase", "kept"), [(0.0, True), (0.2, True), (0.3, False), (0.45, False)])
+@pytest.mark.parametrize(
+    ("phase", "kept"),
+    [(0.0, True), (0.2, True), (0.23, True), (0.27, False), (0.3, False), (0.45, False)],
+)
 def test_a_long_run_on_the_spacing_is_left_out_off_the_grid_phase(phase, kept):
     """
     Fourteen beats under an 8 s pad at the band's spacing, `phase` of a period early against
     its grid. Spread over the run, the phase leaves its spacing within EDGE_RUN_TOLERANCE (3.2 %
     off at 45 %), so the run is judged on its phase too: its beats are more than
     EDGE_RUN_PHASE_TOLERANCE (a quarter of a period) from the grid counted back from the band's
-    first beat, and it is left out; at 0 or 20 % of a period it stays.
+    first beat, and it is left out; at 0 to 23 % of a period it stays.
     """
     band = list(np.arange(8.0, 30.0, 0.5))
     intro = [8.0 - 0.5 * (1 + phase) - 0.5 * k for k in range(13, -1, -1)]
@@ -733,6 +736,16 @@ def test_a_pickup_before_the_band_does_not_start_the_grid_in_the_pad(pickups):
     assert reported == [round(float(t), 3) for t in [*on_the_pickup, *band]]
 
 
+def with_kicks(y: np.ndarray, times, amplitude: float = 1.0) -> np.ndarray:
+    """`y` with the 120 BPM band's kick (its first 0.2 s) added at each of `times`."""
+    y = y.copy()
+    kick = amplitude * signals.drum_pattern(120)[: round(0.2 * FIXTURE_SR)]
+    for t in times:
+        a = round(t * FIXTURE_SR)
+        y[a : a + kick.size] += kick[: max(0, y.size - a)]
+    return y
+
+
 @pytest.mark.parametrize(
     "kicks",
     [
@@ -750,14 +763,97 @@ def test_a_band_whose_first_beats_are_not_all_on_onsets_starts_the_grid(kicks):
     the pad's ticks before it are left out. (The first beats of two Ballroom clips are on and
     off onsets like these.)
     """
-    y = pad_then_band(8.0)
-    kick = signals.drum_pattern(120)[: round(0.2 * FIXTURE_SR)]
-    for t in kicks:
-        a = round(t * FIXTURE_SR)
-        y[a : a + kick.size] += kick
+    y = with_kicks(pad_then_band(8.0), kicks)
     intro = [4.0 - 0.6 * k for k in range(6, 0, -1)]
     band = list(np.arange(4.0, 30.0, 0.5))
     assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize(
+    "kicks", [pytest.param([6.0], id="one-hit"), pytest.param([6.0, 8.0], id="two-downbeats")]
+)
+def test_a_band_whose_first_bars_have_only_a_downbeat_keeps_them(kicks):
+    """
+    Ten ticks 10 % slow under a pad, then a 120 BPM band whose first two bars (6-10 s) are only
+    a kick on the downbeat, before the groove at 10 s. The measured grid starts at 10 s, but the
+    band's sparse bars, from their first onset, are on its spacing and phase and stay; the
+    ticks before that onset are judged on their own and left out. (Judged as one run with the
+    ticks, the band's first eight beats were left out with them.)
+    """
+    y = with_kicks(pad_then_band(10.0), kicks)
+    intro = [6.0 - 0.55 * k for k in range(10, 0, -1)]
+    band = list(np.arange(6.0, 30.0, 0.5))
+    assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
+
+
+def test_sparse_kicks_after_the_band_do_not_keep_the_ticks_after_them():
+    """
+    The band to 20 s, then a pad with two kicks on its grid (22 and 24 s), then six ticks 10 %
+    slow from 26.55 s. The ticks after the last kick are judged on their own and left out, with
+    the three beats on the grid between that kick and them (no onset under them), as before
+    2.3.4. (Judged as one run with the kicks, the ticks were reported.)
+    """
+    y = with_kicks(pad_then_band(0.0, 10.0), [22.0, 24.0])
+    band = list(np.arange(0.0, 26.0, 0.5))
+    outro = [26.0 + 0.55 * k for k in range(1, 7)]
+    reported = reported_over(y, [*band, *outro])
+    assert reported == [round(float(t), 3) for t in band if t <= 24.0]
+
+
+def test_a_grid_that_ends_on_alternate_beats_ends_on_its_last_onset():
+    """
+    The band to 20 s, then a pad with kicks on every other beat to 23 s, then eight ticks 20 %
+    slow. Read backward, the kicks alternate on and off onsets (GRID_START_ALTERNATE), so the
+    grid ends at the last kick: the band's beats to 23 s stay and the ticks are left out.
+    """
+    y = with_kicks(pad_then_band(0.0, 10.0), [21.0, 22.0, 23.0])
+    band = list(np.arange(0.0, 23.5, 0.5))
+    outro = [23.0 + 0.6 * k for k in range(1, 9)]
+    assert reported_over(y, [*band, *outro]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize(
+    ("every", "offbeats"),
+    [
+        pytest.param(4, False, id="downbeats"),
+        pytest.param(3, False, id="waltz-downbeats"),
+        pytest.param(4, True, id="one-drop"),
+    ],
+)
+def test_a_band_with_no_two_beats_on_onsets_in_a_row_still_has_its_intro_judged(every, offbeats):
+    """
+    A pad throughout, fourteen ticks 10 % slow under it to 8 s, then a 120 BPM band whose only
+    onsets on its beats are kicks on every `every`th beat (with offbeat skanks for a one-drop).
+    No beat starts the measured grid (_measured_span), so it runs from the first beat on an
+    onset to the last, as before 2.3.4, and the ticks before it are left out.
+    """
+    band = list(np.arange(8.0, 30.0, 0.5))
+    y = 0.5 * pad_then_band(30.0)
+    if offbeats:
+        y = with_kicks(y, [t + 0.25 for t in band])
+        y = with_kicks(y, band[::every], 0.5)
+    else:
+        y = with_kicks(y, band[::every])
+    intro = [8.0 - 0.55 * k for k in range(14, 0, -1)]
+    assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize(
+    ("pattern", "span"),
+    [
+        ("0010101111", (2, 9)),
+        ("1111010100", (0, 7)),
+        ("0110", (1, 2)),
+        ("0100100", None),
+    ],
+)
+def test_the_measured_span_starts_and_ends_where_the_onsets_do(pattern, span):
+    """
+    Beats on onsets (1) or not (0): the measured grid starts at the first two in a row or the
+    first five that alternate, starting on an onset, and ends at the last, read backward.
+    """
+    on = np.array([c == "1" for c in pattern])
+    assert signal_features._measured_span(on) == span
 
 
 def test_a_run_is_compared_with_the_grid_next_to_it():

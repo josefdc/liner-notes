@@ -18,6 +18,7 @@ import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors } from '../styles/theme';
 import { placeholderImage } from '../styles/placeholder';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
+import { previewTracksOf } from './genealogy/previewTracks';
 import { useAudioPreview } from './genealogy/useAudioPreview';
 import {
   describeLink,
@@ -43,6 +44,7 @@ import { LinkList } from './genealogy/LinkList';
 import { PreviewList } from './genealogy/PreviewList';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
+import { useNoHover } from '../utils/layout';
 import type { TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -99,6 +101,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   releaseYear,
   hiddenLinks = 0,
   onNodeClick,
+  wheelZoom = 'plain',
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
   const [focused, setFocused] = useState<Item | null>(null);
+  // The item whose detail box Escape closed: the box stays closed until the pointer or the focus
+  // moves to another item (and the next Escape is the Player's).
+  const [dismissed, setDismissed] = useState<Item | null>(null);
+  // Closes the open detail box; false when none is open. Read by the drawing's key handler.
+  const dismissRef = useRef<() => boolean>(() => false);
+  // Another item under the pointer or the focus (or the same one again) shows its box again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when what is pointed at changes
+  useEffect(() => {
+    setDismissed(null);
+  }, [hovered, focused]);
 
   // Audio preview (extracted hook)
   const {
@@ -139,6 +152,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // Clip ids for the tracks' pictures: this graph's own prefix (an id may hold only letters,
   // digits, - and _) and the track's index, never the track's id, which may hold any character.
   const clipPrefix = `genealogy${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
+
+  // What the wheel does, read by the zoom's filter at each event: a change does not draw the
+  // graph again.
+  const wheelZoomRef = useRef(wheelZoom);
+  useEffect(() => {
+    wheelZoomRef.current = wheelZoom;
+  }, [wheelZoom]);
 
   // The analysis callback, read when a track is chosen: a new one does not draw the graph again.
   const onNodeClickRef = useRef(onNodeClick);
@@ -232,6 +252,31 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
+      // Where the page scrolls past the graph ('modifier'), the graph takes no gesture the page
+      // needs: the wheel zooms only with Ctrl or ⌘ held, and on a touch screen one finger
+      // scrolls the page while two pinch and pan the graph (the svg's touch-action lets the
+      // browser have the one-finger vertical pan). Elsewhere the wheel zooms, one finger pans,
+      // and a drag pans and a touch pinch zooms as before (d3's own rule: no Ctrl-drag, primary
+      // button only).
+      .filter((event: Event) => {
+        const modifier = wheelZoomRef.current === 'modifier';
+        if (event.type === 'wheel') {
+          const wheel = event as WheelEvent;
+          return !modifier || wheel.ctrlKey || wheel.metaKey;
+        }
+        if (event.type === 'touchstart' && modifier) {
+          return (event as TouchEvent).touches.length >= 2;
+        }
+        const pointer = event as MouseEvent;
+        return !pointer.ctrlKey && !pointer.button;
+      })
+      // d3 speeds a wheel with Ctrl up tenfold, for a trackpad pinch's small steps: a mouse
+      // wheel's notch (a step of 50 px or more) keeps the plain rate.
+      .wheelDelta((event: WheelEvent) => {
+        const rate = event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002;
+        const pinch = event.ctrlKey && event.deltaMode === 0 && Math.abs(event.deltaY) < 50;
+        return -event.deltaY * rate * (pinch ? 10 : 1);
+      })
       // A double click zooms in a glide, or at once under reduced motion.
       .duration(reducedMotion ? 0 : 250)
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
@@ -734,6 +779,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       if (items.length === 0) return;
       const at = items.findIndex(({ element }) => element === event.target);
       if (at === -1) return;
+      // Escape closes the focused item's detail box first; with none open it is the Player's.
+      if (event.key === 'Escape') {
+        if (dismissRef.current()) event.preventDefault();
+        return;
+      }
       const last = items.length - 1;
       const next =
         event.key === 'ArrowRight' || event.key === 'ArrowDown'
@@ -956,7 +1006,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
   const nodeList = graphNodes(data);
   const related = nodeList.filter((node) => node.group !== 1);
-  const active = hovered ?? focused;
+  // The gestures, in words, as the graph takes them here (see the zoom's filter).
+  const touch = useNoHover();
+  const hints =
+    wheelZoom === 'modifier'
+      ? touch
+        ? [
+            'Pinch with two fingers to zoom',
+            'Drag with two fingers to pan',
+            'Tap a track to analyze it',
+          ]
+        : ['Ctrl or ⌘ + scroll to zoom', 'Drag to pan', 'Click a track to analyze it']
+      : touch
+        ? ['Pinch to zoom', 'Drag to pan', 'Tap a track to analyze it']
+        : ['Scroll to zoom', 'Drag to pan', 'Click a track to analyze it'];
+  const pointed = hovered ?? focused;
+  const active = sameItem(pointed, dismissed) ? null : pointed;
+  useEffect(() => {
+    dismissRef.current = () => {
+      if (active === null) return false;
+      setDismissed(active);
+      return true;
+    };
+  }, [active]);
   const activeLink = active?.kind === 'link' ? (links[active.index] ?? null) : null;
   const activeNode =
     active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
@@ -964,11 +1036,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
   // Every drawn related track with a clip, whether or not a shown link names it: each has its
   // preview button (PreviewList).
-  const previewTracks = nodeList.flatMap((node) =>
-    node.group !== 1 && typeof node.previewUrl === 'string' && node.previewUrl
-      ? [{ id: node.id, url: node.previewUrl }]
-      : [],
-  );
+  const previewTracks = previewTracksOf(data);
 
   return (
     <div className="relative w-full h-full flex flex-col">
@@ -979,6 +1047,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <svg
           ref={svgRef}
           className="w-full h-full overflow-visible"
+          // One finger scrolls the page (vertically) and two pinch the graph, where the page
+          // scrolls past it
+          style={wheelZoom === 'modifier' ? { touchAction: 'pan-y pinch-zoom' } : undefined}
           aria-label="Connections graph"
         ></svg>
 
@@ -1078,30 +1149,34 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           </div>
         )}
 
-        {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
+        {/* The gestures, in words, from md up: not on a short screen (a landscape phone),
+            where three lines would cover the drawing and the panel's heading */}
         {!active && (
-          <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
+          <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block [@media(max-height:32rem)]:hidden">
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
-              <span>Scroll to zoom</span>
-              <span>Drag to pan</span>
-              <span className="flex items-center gap-1">
-                <MousePointerClick size={12} />
-                Click a track to analyze it
-              </span>
+              {hints.map((hint, index) => (
+                <span key={hint} className={index === 2 ? 'flex items-center gap-1' : undefined}>
+                  {index === 2 && <MousePointerClick size={12} />}
+                  {hint}
+                </span>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
-        <div className="absolute top-2 right-2 pointer-events-none md:hidden">
+        {/* Phones: a short hint in the bottom-right corner, clear of the panel's heading and
+            label along the top (a track's detail box covers it while shown) */}
+        <div className="absolute bottom-2 right-2 pointer-events-none md:hidden">
           <div className="text-chrome font-mono text-text-tertiary">Pinch, drag or tap</div>
         </div>
       </div>
 
       {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
       {(links.length > 0 || hidden > 0 || previewTracks.length > 0) && (
-        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
-        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Its
+        // extra space below is the xl column's only: in the md-to-xl row, on a short landscape
+        // screen, every pixel of the row's height goes to the drawing.
+        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 xl:pb-14 bg-void">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}

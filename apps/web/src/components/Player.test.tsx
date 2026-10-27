@@ -810,8 +810,8 @@ describe('Player', () => {
       expect(
         cardOf('Remix Card').querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind'),
       ).toBe('inferred');
-      const more = screen.getByRole('region', { name: 'More claims' });
-      const listed = within(more).getByText('It interpolates an old tune.').closest('li');
+      const relations = screen.getByRole('region', { name: 'Samples and covers' });
+      const listed = within(relations).getByText('It interpolates an old tune.').closest('li');
       expect(listed?.querySelector('[data-claim-about]')?.textContent).toBe(
         'Possible interpolation',
       );

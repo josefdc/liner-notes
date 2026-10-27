@@ -82,6 +82,8 @@ test.describe("a result with claims", () => {
     const problems = collectProblems(page);
     const more = page.getByRole("region", { name: "More claims" });
     const credits = page.getByRole("region", { name: "Credits" });
+    // History claims are listed in a section of their own, before "More claims".
+    const history = page.getByRole("region", { name: "History" });
 
     // measured: the value as measured, with its confidence and basis
     const tempo = claimItem(more, "The preview was measured at 123 BPM.");
@@ -121,7 +123,7 @@ test.describe("a result with claims", () => {
       "Not supported by its sources: The release credits list no mastering engineer.",
     );
     // A web search result labelled a primary record is shown as a web page.
-    const blog = claimItem(more, "A blog calls it the band's breakthrough.");
+    const blog = claimItem(history, "A blog calls it the band's breakthrough.");
     await expect(blog).toContainText("Web search · web page");
     await expect(blog).not.toContainText("primary record");
     const card = page
@@ -133,16 +135,27 @@ test.describe("a result with claims", () => {
     ).toBeVisible();
 
     // inferred: model claims, and sourced claims that cannot be shown as sourced
-    for (const [text, label, status] of [
-      ["The song was a club favourite in 2011.", "Model inference", "not checked by the verifier"],
-      ["The single reached the top 40.", "Not sourced", "1 cited source is not in this result"],
+    for (const [section, text, label, status] of [
       [
+        more,
+        "The song was a club favourite in 2011.",
+        "Model inference",
+        "not checked by the verifier",
+      ],
+      [
+        history,
+        "The single reached the top 40.",
+        "Not sourced",
+        "1 cited source is not in this result",
+      ],
+      [
+        more,
         "The song was recorded at Abbey Road.",
         "Model inference",
         "Not supported by its sources: The release record does not name a studio.",
       ],
-    ]) {
-      const item = claimItem(more, text);
+    ] as const) {
+      const item = claimItem(section, text);
       await expect(item.locator("[data-claim-kind]")).toHaveAttribute(
         "data-claim-kind",
         "inferred",

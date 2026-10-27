@@ -1,5 +1,5 @@
 /**
- * Pure async functions wrapping the fetch API for the Sonic Agent API.
+ * Pure async functions wrapping the fetch API for the Liner Notes API.
  * No React, no state — independently testable.
  *
  * The analysis itself runs over event streams (see useAgent); there is deliberately no

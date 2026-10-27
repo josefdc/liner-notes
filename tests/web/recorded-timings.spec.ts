@@ -7,6 +7,13 @@ import {
   replayedRecording,
   useMockApi,
 } from "./mock";
+import { offline } from "./offline";
+
+// The recorded run's cover, and any other outside address, are answered on the page: nothing
+// leaves the machine.
+test.beforeEach(async ({ page }) => {
+  await offline(page);
+});
 
 // A replayed run's activity log shows when each line was sent in the recorded run: the time
 // since that run started, carried by its events (`elapsedMs`). A line with no recorded time

@@ -121,6 +121,30 @@ describe('the Player with claims', () => {
     );
   });
 
+  it('lists the samples and covers, then the history, each claim with its kind', () => {
+    render(<Player trackData={provenanceTrack()} onBack={() => {}} />);
+    const listed = (name: string) =>
+      within(screen.getByRole('region', { name }))
+        .getAllByRole('listitem')
+        .map((item) => [
+          item.querySelector('p')?.textContent,
+          item.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind'),
+        ]);
+    // A sample the model guessed: hedged, as on the graph and on a fact's card.
+    expect(listed('Samples and covers')).toEqual([
+      ['Possible sampleA vocal chop from an older record opens the song.', 'inferred'],
+    ]);
+    // The history claim a card shows is counted, not listed again; the one the verifier
+    // rejected is listed with the rejected claims only.
+    expect(listed('History')).toEqual([
+      ['HistoryThe single reached the top 40.', 'inferred'],
+      ["HistoryA blog calls it the band's breakthrough.", 'sourced'],
+    ]);
+    expect(screen.getByRole('region', { name: 'History' }).textContent).toContain(
+      '1 claim of this section is shown with the facts above.',
+    );
+  });
+
   it('shows every other claim, each with its kind', () => {
     render(<Player trackData={provenanceTrack()} onBack={() => {}} />);
     const more = screen.getByRole('region', { name: 'More claims' });
@@ -136,29 +160,26 @@ describe('the Player with claims', () => {
       // An influence link cites it, but a trivia claim does not state an influence: it keeps its
       // own subject.
       ['TriviaThe song was a club favourite in 2011.', 'inferred'],
-      ['HistoryThe single reached the top 40.', 'inferred'],
       ['ProductionThe song was recorded at Abbey Road.', 'inferred'],
       ['SoundIt runs at roughly 123 BPM.', 'inferred'],
       ['TrackThe sleeve gives the tempo as 246 BPM.', 'sourced'],
       ['SoundIt feels like 61 BPM.', 'inferred'],
       ['ConnectionIt was used in a 2012 short film.', 'sourced'],
-      ["HistoryA blog calls it the band's breakthrough.", 'sourced'],
-      // A sample the model guessed: hedged, as on the graph and on a fact's card.
-      ['Possible sampleA vocal chop from an older record opens the song.', 'inferred'],
       ['SoundThe preview analysis measured the track at 128 BPM.', 'inferred'],
     ]);
     // A model sentence stating a measurement is shown beside the measured value, not compared.
-    const wrong = within(more).getAllByRole('listitem')[11];
+    const wrong = within(more).getAllByRole('listitem')[8];
     expect(wrong?.textContent).toContain(
       'not compared with the measurement · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)',
     );
     expect(wrong?.textContent).not.toContain('128 BPM (');
     // A number the check found consistent: its text has no verdict, its number agrees.
-    const roughly = within(more).getAllByRole('listitem')[5];
+    const roughly = within(more).getAllByRole('listitem')[4];
     expect(roughly?.textContent).toContain('no verifier verdict on its text');
     expect(roughly?.textContent).not.toContain('not checked');
     expect(roughly?.textContent).toContain('agrees with the measurement · measured 123 BPM');
-    const blog = within(more).getAllByRole('listitem')[9];
+    const history = screen.getByRole('region', { name: 'History' });
+    const blog = within(history).getAllByRole('listitem')[1];
     expect(blog?.textContent).toContain('Web search · web page');
     expect(blog?.textContent).not.toContain('primary record');
   });

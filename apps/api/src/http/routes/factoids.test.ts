@@ -763,11 +763,15 @@ describe("each fact's claim", () => {
 
     const first = await openStream(streamQuery(), router);
     await first.waitFor(ofType("done"));
-    expect(first.messages[0]).toMatchObject({ type: "connected", nextRound: 1 });
+    expect(first.messages[0]).toMatchObject({ type: "connected", nextRound: 1, roundsLeft: true });
 
     const second = await openStream(streamQuery({ round: "1" }), router);
     await second.waitFor(ofType("done"));
-    expect(second.messages[0]).toMatchObject({ type: "connected", nextRound: 2 });
+    expect(second.messages[0]).toMatchObject({
+      type: "connected",
+      nextRound: 2,
+      roundsLeft: false,
+    });
     const focuses = fake.calls
       .filter((call) => call.callSite === "factoids")
       .map((call) => focusOf(call));
@@ -778,6 +782,7 @@ describe("each fact's claim", () => {
     const third = await openStream(streamQuery({ round: "2" }), router);
     await third.waitFor(ofType("done"));
     expect(third.messages.map((m) => m.type)).toEqual(["connected", "done"]);
+    expect(third.messages[0]).toMatchObject({ nextRound: 2, roundsLeft: false });
     expect(fake.calls).toHaveLength(calls);
 
     const invalid = await openStream(streamQuery({ round: "x" }), router);
@@ -832,8 +837,6 @@ describe("the routes' old paths (deprecated aliases)", () => {
       expect([path, stream.status]).toEqual([path, 200]);
       await stream.waitFor(ofType("done"));
       answers.push({ status: stream.status, messages: untimed(stream.messages) });
-      const head = await request(app()).head(`${path}?${QUERY}`).timeout(2000);
-      expect(head.headers["content-type"]).toContain("text/event-stream");
     }
 
     expect(answers[0].messages).toEqual([
@@ -846,4 +849,18 @@ describe("the routes' old paths (deprecated aliases)", () => {
     ]);
     expect(answers[1]).toEqual(answers[0]);
   });
+
+  it.each(["/api/factoids/more/stream", "/api/factoids/decrypt/stream"])(
+    "answers HEAD on %s with the stream headers only, and does not call the model",
+    async (path) => {
+      model.invoke.mockResolvedValue(answer("a"));
+      const res = await request(app()).head(`${path}?${QUERY}`).timeout(2000);
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toContain("text/event-stream");
+      expect(res.text ?? "").toBe("");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(model.invoke).not.toHaveBeenCalled();
+    },
+  );
 });

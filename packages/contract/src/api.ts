@@ -127,6 +127,10 @@ export const FactoidsResponse = z.object({
     .min(0)
     .optional()
     .describe("The round to ask for next (FactoidsRequest.round); absent for recorded facts"),
+  roundsLeft: z
+    .boolean()
+    .optional()
+    .describe("Whether asking for nextRound can bring new facts; absent for recorded facts"),
 });
 
 // =============================================================================

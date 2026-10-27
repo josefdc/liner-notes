@@ -75,16 +75,37 @@ export function withFailure(moreFacts: MoreFacts, failure: FailedFact): MoreFact
   return { ...moreFacts, failed: [...moreFacts.failed, failure] };
 }
 
+/** What one answer said and did, as the stream showed it until `done`. */
+export interface MoreFactsAnswer {
+  /** The round to ask for next (`connected`); absent when the answer names none. */
+  nextRound?: number;
+  /** Whether asking for that round can bring new facts (`connected`), when the API says. */
+  roundsLeft?: boolean;
+  /** The run the facts were checked against: the stream's own run id. */
+  runId: string | null;
+  /** How many facts it sent, new or not. */
+  facts: number;
+  /** How many facts it could not write (errors with an index). */
+  failed: number;
+  /**
+   * The API could not write facts now: an error for the whole answer, or a code that says live
+   * calls are unavailable (its rate limit, a paused budget, live calls switched off).
+   */
+  refused: boolean;
+}
+
 /**
- * Once an answer has ended: the round it named comes next (an answer that names none, such as
- * recorded facts or a refusal, leaves the round as it was), and `runId` is the run its facts were
- * checked against.
+ * Once an answer has ended. The API names the next round before it writes anything, so the round
+ * it named comes next only when the answer was not refused and did not fail every fact it tried:
+ * an answer with nothing new and no failure (nothing documented, or only repeats) moves on; one
+ * that could not write its facts leaves the round to ask again. An answer that names no round
+ * (recorded facts) leaves it too. Whether rounds are left is the API's word when it says
+ * (`roundsLeft`), else the contract's count. `runId` is the run the facts were checked against.
  */
-export function withAnswer(
-  moreFacts: MoreFacts,
-  nextRound: number | undefined,
-  runId: string | null,
-): MoreFacts {
-  if (nextRound === undefined) return { ...moreFacts, runId };
-  return { ...moreFacts, nextRound, finished: !factoidRoundsLeft(nextRound), runId };
+export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
+  const { nextRound, runId } = answer;
+  const unwritten = answer.refused || (answer.facts === 0 && answer.failed > 0);
+  if (nextRound === undefined || unwritten) return { ...moreFacts, runId };
+  const roundsLeft = answer.roundsLeft ?? factoidRoundsLeft(nextRound);
+  return { ...moreFacts, nextRound, finished: !roundsLeft, runId };
 }

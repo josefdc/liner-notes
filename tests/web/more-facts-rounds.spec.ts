@@ -5,6 +5,7 @@ import {
   collectProblems,
   loadFixture,
   openPlayer,
+  streamLog,
   useMockApi,
 } from "./mock";
 
@@ -41,12 +42,12 @@ test("two clicks ask for two rounds with the run id, then the control says there
       [MORE]: {
         opens: [
           [
-            { type: "connected", nextRound: 1 },
+            { type: "connected", nextRound: 1, roundsLeft: true },
             fact("fc-aaaaaaaaaaaa", "Tape Echo"),
             { type: "done" },
           ],
           [
-            { type: "connected", nextRound: 2 },
+            { type: "connected", nextRound: 2, roundsLeft: false },
             fact("fc-bbbbbbbbbbbb", "Night Session"),
             { type: "done" },
           ],
@@ -82,11 +83,52 @@ test("two clicks ask for two rounds with the run id, then the control says there
     ["1", RUN],
   ]);
   expect(asked[1].get("existingIds")).toBe("f1,f2,fc-aaaaaaaaaaaa");
+  // Still disabled with its reason once the answers have settled, and nothing more was asked.
+  await expect(more).toBeDisabled();
+  await expect(more).toHaveAttribute("aria-describedby", (await reason.getAttribute("id")) ?? "");
+  expect(await streamLog(page)).not.toContain(`${MORE} reconnect`);
+  expect((await apiRequests(page)).filter((entry) => entry.includes("/factoids/"))).toHaveLength(2);
+  expect(problems).toEqual([]);
+});
 
-  // A click on the disabled control asks for nothing.
-  await more.click({ force: true });
-  expect(
-    (await apiRequests(page)).filter((entry) => entry.startsWith(`stream ${MORE}?`)),
-  ).toHaveLength(2);
+test("a click whose every fact failed does not use up its round", async ({ page }) => {
+  const problems = collectProblems(page);
+  const allFailed = (nextRound: number) => [
+    { type: "connected", nextRound, roundsLeft: nextRound < 2 },
+    ...[0, 1, 2].map((index) => ({
+      type: "error",
+      code: "failed",
+      error: "This fact could not be generated.",
+      index,
+    })),
+    { type: "done" },
+  ];
+  await useMockApi(page, {
+    ...fixture,
+    streams: {
+      "/api/analyze/stream": withRun(fixture.streams["/api/analyze/stream"]),
+      [MORE]: { opens: [allFailed(1), allFailed(2)] },
+    },
+  });
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+
+  const insights = page.locator("#panel-context");
+  const more = insights.getByRole("button", { name: /DECRYPT MORE/ });
+  await more.click();
+  await expect(insights).toContainText("3 facts could not be written.");
+  await expect(more).toBeEnabled();
+  await more.click();
+  await expect
+    .poll(async () => (await streamLog(page)).filter((e) => e === `${MORE} done`))
+    .toHaveLength(2);
+  await expect(more).toBeEnabled();
+  await expect(insights).toContainText("3 facts could not be written.");
+  await expect(insights).not.toContainText("No more facts");
+
+  const rounds = (await apiRequests(page))
+    .filter((entry) => entry.startsWith(`stream ${MORE}?`))
+    .map((entry) => new URLSearchParams(entry.slice(entry.indexOf("?") + 1)).get("round"));
+  expect(rounds).toEqual(["0", "0"]);
   expect(problems).toEqual([]);
 });

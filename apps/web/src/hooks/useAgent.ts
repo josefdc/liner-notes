@@ -45,7 +45,14 @@ import {
   type RunEvents,
   streamGuard,
 } from './agent/events';
-import { moreFactsOf, moreFactsUrl, withAnswer, withFact, withFailure } from './agent/moreFacts';
+import {
+  type MoreFactsAnswer,
+  moreFactsOf,
+  moreFactsUrl,
+  withAnswer,
+  withFact,
+  withFailure,
+} from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
 
 // Re-export types for consumers that import from this file
@@ -716,8 +723,15 @@ export function useAgent(): UseAgentReturn {
    * claims are kept in `moreFacts` as they come, each once by id, and the promise resolves with
    * the facts this answer added. Once every round has been asked no request is made, and it
    * resolves with none. A fact that could not be written is kept in `moreFacts.failed` by its
-   * index; the other facts of the answer are kept. The round moves on only when the answer has
-   * ended, so a stream that broke or was left asks the same round again.
+   * index; the other facts of the answer are kept.
+   *
+   * The round moves on only once an answer has ended (withAnswer): an answer whose every fact
+   * failed, or that the API could not write now (a paused budget, an error for the whole answer),
+   * leaves the round to ask again, and so does a stream that broke or was left before its end.
+   * The API also counts the facts the client already has (each three of its fact ids are one
+   * earlier round), so after an answer that sent some of a round's facts before it failed or
+   * broke, the next click asks about the next round's angles, and the rest of that round's are not
+   * asked again.
    */
   const moreFactoidsStream = useCallback(
     (result: TrackData, { signal, onUnavailable }: MoreFactsOptions = {}): Promise<Factoid[]> => {
@@ -743,7 +757,8 @@ export function useAgent(): UseAgentReturn {
           const events = newRunEvents();
           const accept = streamGuard(events);
           const added: Factoid[] = [];
-          let nextRound: number | undefined;
+          // What the answer says and does until `done` (withAnswer).
+          const answer: Omit<MoreFactsAnswer, 'runId'> = { facts: 0, failed: 0, refused: false };
           let active = true;
 
           const stop = () => {
@@ -776,13 +791,15 @@ export function useAgent(): UseAgentReturn {
 
             switch (data.type) {
               case 'connected':
-                nextRound = data.nextRound;
+                answer.nextRound = data.nextRound;
+                answer.roundsLeft = data.roundsLeft;
                 break;
 
               case 'factoid': {
                 const factoid = data.data as Factoid;
                 const kept = moreFactsOf(result, moreFactsRef.current);
                 const next = withFact(kept, factoid, data.claim);
+                answer.facts++;
                 // A fact already kept (by id) is not added again.
                 if (next.factoids !== kept.factoids) added.push(factoid);
                 setMoreFacts(next);
@@ -795,7 +812,7 @@ export function useAgent(): UseAgentReturn {
 
               case 'done':
                 stop();
-                update((moreFacts) => withAnswer(moreFacts, nextRound, events.runId));
+                update((moreFacts) => withAnswer(moreFacts, { ...answer, runId: events.runId }));
                 resolve(added);
                 break;
 
@@ -803,9 +820,11 @@ export function useAgent(): UseAgentReturn {
                 // One fact that failed (an index) is kept as failed; the stream goes on, and
                 // the other facts are kept. The rate limit, a paused budget, live calls switched
                 // off and a recording no longer served are also reported to the caller, which
-                // says why; other failures of the whole request are logged.
+                // says why; other failures of the whole request are logged. Either way the
+                // answer did not write what it asked for, so its round is asked again.
                 if (data.index !== undefined) {
                   const failure = { index: data.index, code: data.code };
+                  answer.failed++;
                   update((moreFacts) => withFailure(moreFacts, failure));
                 }
                 if (
@@ -814,8 +833,10 @@ export function useAgent(): UseAgentReturn {
                   data.code === 'live_disabled' ||
                   data.code === 'not_found'
                 ) {
+                  answer.refused = true;
                   onUnavailable?.(data.code);
                 } else if (data.index === undefined) {
+                  answer.refused = true;
                   console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;

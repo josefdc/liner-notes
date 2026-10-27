@@ -337,10 +337,14 @@ describe("rounds", () => {
       expect(res.body.factoids).toEqual([]);
       asked.push(focusesAsked(llm));
       round = res.body.nextRound;
-      rounds.push(round);
+      rounds.push([round, res.body.roundsLeft]);
     }
     expect(asked).toEqual([[0, 1, 2], [3, 4, 5], []]);
-    expect(rounds).toEqual([1, 2, 2]);
+    expect(rounds).toEqual([
+      [1, true],
+      [2, false],
+      [2, false],
+    ]);
   });
 
   it("has as many rounds as the contract tells the web, starting from its first", () => {

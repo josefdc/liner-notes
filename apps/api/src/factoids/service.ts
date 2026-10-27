@@ -121,6 +121,12 @@ export function focusesFor(round: number): string[] {
 /** The round the client is to send on its next request: the next one, at most FACTOID_ROUNDS. */
 export const nextRoundAfter = (round: number) => Math.min(round + 1, FACTOID_ROUNDS);
 
+/**
+ * Whether round `round` still has angles to ask about: what an answer tells the client
+ * (`roundsLeft`), so it never needs to count the rounds itself.
+ */
+export const roundsLeftAt = (round: number) => focusesFor(round).length > 0;
+
 /** Why a fact that cites evidence has no verdict when the judge gave none. */
 export const NOT_CHECKED_REASON = "Not checked: the check against its sources could not run.";
 const TOO_LONG_REASON = "Not judged: longer than the judge reads whole.";

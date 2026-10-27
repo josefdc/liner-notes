@@ -1078,6 +1078,91 @@ describe('useAgent factoid stream', () => {
     expect(hook.current.moreFacts?.failed).toEqual([]);
   });
 
+  /** Every fact of an answer failed with this code. */
+  const allFailed = (code: string) =>
+    [0, 1, 2].map((index) => ({ type: 'error', code, error: 'Not written.', index }));
+
+  it('keeps the round when every fact of an answer failed, so the control is not spent', async () => {
+    const { result: hook } = renderHook(() => useAgent());
+    // The API names the next round before it writes anything (as it does).
+    for (const nextRound of [1, 2]) {
+      const pending = ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      answer(lastStream(), nextRound, ...allFailed('failed'));
+      expect(await pending).toEqual([]);
+    }
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
+    expect(hook.current.moreFacts?.failed).toHaveLength(3);
+
+    const third = ask(hook, result());
+    expect(streams()).toHaveLength(3);
+    expect(query(lastStream()).get('round')).toBe('0');
+    answer(lastStream(), 1);
+    await third;
+  });
+
+  it.each([
+    ['a paused budget for every fact', allFailed('budget_exhausted')],
+    [
+      'a paused budget for one fact, beside a fact written',
+      [
+        { type: 'factoid', data: factoid('fc-a') },
+        { type: 'error', code: 'budget_exhausted', error: 'Paused.', index: 1 },
+      ],
+    ],
+    ['an error for the whole answer', [{ type: 'error', code: 'failed', error: 'Not written.' }]],
+    ['live calls switched off', [{ type: 'error', code: 'live_disabled', error: 'Off.' }]],
+  ])('keeps the round after %s', async (_label, events) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result: hook } = renderHook(() => useAgent());
+    for (const nextRound of [1, 2]) {
+      const pending = ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      answer(lastStream(), nextRound, ...events);
+      await pending;
+    }
+    expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, finished: false });
+  });
+
+  it("prefers the API's word on whether rounds are left over its own count", async () => {
+    const early = renderHook(() => useAgent()).result;
+    const first = ask(early, result());
+    lastStream().send({ type: 'connected', nextRound: 1, roundsLeft: false });
+    lastStream().send({ type: 'done' });
+    await first;
+    expect(early.current.moreFacts).toMatchObject({ nextRound: 1, finished: true });
+
+    const late = renderHook(() => useAgent()).result;
+    const second = ask(late, result());
+    lastStream().send({ type: 'connected', nextRound: 2, roundsLeft: true });
+    lastStream().send({ type: 'done' });
+    await second;
+    expect(late.current.moreFacts).toMatchObject({ nextRound: 2, finished: false });
+  });
+
+  it('lets the facts go when a new analysis starts, also for a result with the same run id', async () => {
+    const hook = startAnalysis();
+    const first = ask(hook.result, result());
+    answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') });
+    await first;
+    expect(hook.result.current.moreFacts?.factoids).toHaveLength(1);
+
+    act(() => {
+      hook.result.current.analyze('Hurt');
+    });
+    expect(hook.result.current.moreFacts).toBeNull();
+    lastStream().send({ type: 'complete', data: track });
+    expect(hook.result.current.moreFacts).toBeNull();
+
+    // The same track, with the same run id: nothing of the earlier page is kept or sent.
+    const again = ask(hook.result, result());
+    expect(query(lastStream()).get('round')).toBe('0');
+    expect(query(lastStream()).get('existingIds')).toBe('s1');
+    expect(hook.result.current.moreFacts?.factoids).toEqual([]);
+    answer(lastStream(), 1);
+    await again;
+  });
+
   it('keeps the run whose evidence the facts were checked against, or none', async () => {
     const { result: hook } = renderHook(() => useAgent());
     const checked = ask(hook, result());

@@ -74,12 +74,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.3+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.4+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.3+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.4+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -102,7 +102,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.3+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -186,22 +186,73 @@ times are seconds from the start of the preview. Every block is `null` when it w
   -90.5 dBFS, which is above 16-bit dither): trackers keep counting through silence
   (Essentia put 23 beats in 10 s of digital silence before a band), so the grid can have
   gaps. Trackers also count through an intro or an ending that has sound but no beat (a
-  pad, a drone, hum or hiss): a run of four or more beats with sound under them at either end
-  of the grid, none on an onset, whose spacing is more than 4 % off the grid next to it is
-  left out too (Essentia counted 15 and 23 beats under the pads before two bands, 6.8 and
-  12.8 % off). The gain is in intros. On the evals harness's 30 s clips at seed 1 (100
-  Ballroom and 100 GiantSteps Tempo tracks, Ballroom's beat annotations aligned to each
-  clip's window), it left out 15 beats in three runs: two intros (a fade-in, and a crescendo
-  with three beats before the first annotated beat) and the end of one Ballroom clip, where
-  it removed as many beats on the annotated beat as off it. At clip ends it is about even.
+  pad, a drone, hum or hiss). The measured grid starts where the band's onsets start: at the
+  first two beats on onsets in a row, or five beats that alternate on and off onsets; it ends
+  where they end. With no such beats anywhere, as with onsets only on the downbeats, or when
+  the span between them holds under half of the clip's beats on onsets (a pair of clicks
+  before such a band, when the band has more beats on onsets than the pairs), it runs from
+  the first beat on an onset to the last. So, when the band
+  has a start of its own, one onset in an intro (a click, a breath) does not start it. The run
+  of beats before or after it is left out, as a whole and onsets included, when it has four or
+  more beats with sound under them and its spacing is more than 4 % off the grid next to it
+  (the median interval up to the grid's 8th beat on an onset), or its beats are a median of
+  more than a quarter of a period off the grid's phase. It is also left out as a whole when
+  its part from its first onset on is off the grid on its own (ticks whose drift turns around
+  near a click); when the run stays, the beats before its first onset are judged on their
+  own, so ticks before a few kicks do not stay with them. Essentia
+  counted 15 and 23 beats under the pads before two bands, 6.8 and 12.8 % off; with one click
+  under a pad beat, it reported all or 6 of the 15 again before 2.3.4. In the tests, one click
+  under a pad beat no longer brings an intro back (under the pads before the 85, 97 and
+  132 BPM bands and a one-drop band, and under ticks 3.5 to 10 % off a band's spacing),
+  apart from runs of one to three beats, which are not judged (2 beats with a click under the
+  13th pad beat before the one-drop band); the known limits below are where it still can.
+  The gain is in intros. On the evals harness's 30 s
+  clips at seed 1 (100 Ballroom and 100 GiantSteps Tempo tracks, Ballroom's beat annotations
+  aligned to each clip's window), it left out 68 beats in seven runs, all Essentia's: six
+  intros (a fade-in, a crescendo with three beats before the first annotated beat, and four
+  with one to three isolated onsets, one of them nine beats before the first annotated beat
+  of a Ballroom clip) and the end of one Ballroom clip, where it removed as many beats on the
+  annotated beat as off it. At clip ends it is about even.
   The tempo is still fitted to the tracked beats on onsets, and the
-  steadiness check and the sections still use every tracked beat. Known limits: beats a
-  tracker counts through a beatless intro at the band's own spacing are still reported (a
-  rubato piano intro, and some hum and hiss intros: 3 of 27 tried stayed within 4 % of the
-  band), as are runs of one to three beats, and a long run out of phase with the band. One
-  onset on any beat of an intro (a click, a breath, a pickup note) ends the run there, and
-  the beats before it are reported. Onsets count relative to the clip's own beats, so a band
-  on under a tenth of the window leaves its pad's beats in.
+  steadiness check and the sections still use every tracked beat. Known limits:
+  - Beats a tracker counts through a beatless intro at the band's own spacing and phase are
+    still reported (a rubato piano intro, and some hum and hiss intros: 1 of 27 tried), as
+    are runs of one to three beats. A quiet click (0.03) under the 4th or 6th pad beat of the
+    97 BPM probe makes Essentia track the whole pad again on the band's grid, and its 16
+    beats are reported, as in every version before; so does a click at 0.1 under the 12th
+    pad beat before a one-drop band (15 beats).
+  - Two onsets on adjacent beats of an intro, or three on alternate beats, start the grid
+    there, and one on the beat next to the band joins it, as a pickup does; with Essentia,
+    two clicks two beats apart under the 85 BPM pad also brought back 14 of its 15 beats.
+    Before a band with no start of its own (onsets only on its downbeats, a one-drop), one
+    click under any beat of the intro starts the grid there, as in 2.3.3 (8 of 14 ticks back
+    with a click under the 7th).
+  - Falling back to the first beat on an onset keeps the band's grid only when the band has
+    more beats on onsets than the intro's starts. Three pairs of clicks before a 10 s band
+    with kicks on its downbeats are the span: the band is judged off it and left out, and
+    the ticks are reported (21 ticks kept, 20 band beats lost, as without the fallback). A
+    short band (4 to 6 s) after an intro with isolated onsets on many of its ticks makes the
+    grid start at the first of them, and every tick after it is reported (43 to 47, as in
+    2.3.3). Neither happens in the 421 real grids with beats.
+  - A band whose first bars hold only a downbeat, after a pad's ticks, loses those bars with
+    the ticks (8 beats in the tests): the run is judged whole, and the ticks put it off the
+    grid. So does a band's lone first hit two or more beats before its groove, or a last hit
+    two or more beats after it before ticks over a ringing pad (2 to 8 tried; 2.3.3 kept
+    them). So do a band's first (or last) bars, counted from its first onset, that run more
+    than 4 % off its groove, with the ticks around them, where 2.3.3 kept them: first bars
+    dragging or rushing 4.5 to 5 % lose their 8 beats. On 20,000 random cases (beats and
+    onsets alone: sparse first bars up to 8 % off, after up to 16 pad ticks), this lost 12,576
+    band beats that the version without the check kept, in 2,467 cases, and removed 14,275
+    fake ticks it reported there; no real grid changes. Those beats are missing, not
+    invented: keeping the part of a run from its first onset when it alone was on the grid
+    also kept Essentia's ticks after one click (up to 13 of the 23 before the 132 BPM band),
+    because its ticks come close to the band's grid near it.
+  - An intro whose only onsets are sparse (downbeat kicks) and whose tempo drifts from the
+    band's is left out whole: all 23 to 24 beats of a 24-beat intro at 2.5 to 3 % (none at
+    2 %), and the 14 beats of a 110 BPM intro before a 120 BPM band.
+  - Onsets count relative to the clip's own beats, so a band on under a tenth of the window
+    leaves its pad's beats in.
+
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

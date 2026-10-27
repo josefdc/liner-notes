@@ -133,6 +133,8 @@ describe('the Player with claims', () => {
     expect(kinds).toEqual([
       ['SoundThe preview was measured at 123 BPM.', 'measured'],
       ["SoundThe preview's key, as measured.", 'inferred'],
+      // An influence link cites it, but a trivia claim does not state an influence: it keeps its
+      // own subject.
       ['TriviaThe song was a club favourite in 2011.', 'inferred'],
       ['HistoryThe single reached the top 40.', 'inferred'],
       ['ProductionThe song was recorded at Abbey Road.', 'inferred'],
@@ -141,7 +143,8 @@ describe('the Player with claims', () => {
       ['SoundIt feels like 61 BPM.', 'inferred'],
       ['ConnectionIt was used in a 2012 short film.', 'sourced'],
       ["HistoryA blog calls it the band's breakthrough.", 'sourced'],
-      ['SampleA vocal chop from an older record opens the song.', 'inferred'],
+      // A sample the model guessed: hedged, as on the graph and on a fact's card.
+      ['Possible sampleA vocal chop from an older record opens the song.', 'inferred'],
       ['SoundThe preview analysis measured the track at 128 BPM.', 'inferred'],
     ]);
     // A model sentence stating a measurement is shown beside the measured value, not compared.

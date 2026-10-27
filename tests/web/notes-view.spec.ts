@@ -17,9 +17,10 @@ import { offline } from "./offline";
 // A section with nothing to list says so in a sentence: nothing is made up to fill it.
 //
 // Two showcases: the recorded run (fixtures/replays/one-more-time-daft-punk.json) for samples,
-// covers, connections and the recording label; it has no history claims and its one credit is on
-// a fact card, so the provenance mock stands in for those. The genealogy-kinds mock holds the
-// samples no verdict supports.
+// covers, connections and the recording label. It has no history claims and no real credit: its
+// one "credit" is the album the track appears on, a release fact the model filed as a credit
+// (shown on a fact card; #216 addresses it). So the provenance mock stands in for credits and
+// history. The genealogy-kinds mock holds the samples no verdict supports.
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
@@ -103,8 +104,9 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   // The sample claim on a fact card is counted, not listed twice.
   await expect(samples).toContainText("1 claim of this section is shown with the facts above.");
 
-  // The recording's one credit claim is on a fact card: counted, not listed twice. It has no
-  // history claim: the section says so, and lists nothing.
+  // The recording's one "credit" is a release fact (the album the track appears on) the model
+  // filed as a credit (#216 addresses it); it is on a fact card: counted, not listed twice. It has
+  // no history claim: the section says so, and lists nothing.
   await expect(page.getByRole("region", { name: "Credits" })).toContainText(
     "1 credit is shown with the facts above.",
   );

@@ -7,16 +7,35 @@ import { MIGRATIONS, runMigrations } from "../store/migrations.js";
 import { cleanCommit, DIRTY_REFUSAL, main, recordCommit } from "./record.js";
 
 describe("the commit a record names", () => {
-  it("is the one the run ran at, whatever is checked out now", () => {
+  it("is the one the run ran at", () => {
     expect(recordCommit({ stored: "aaa1111", given: null, checkout: "aaa1111" })).toEqual({
       commit: "aaa1111",
     });
-    const moved = recordCommit({ stored: "aaa1111", given: null, checkout: "bbb2222-dirty" });
-    expect(moved).toMatchObject({ commit: "aaa1111" });
-    expect("warning" in moved && moved.warning).toMatch(/checkout is at bbb2222-dirty/);
+    // Its uncommitted changes aside (cleanCommit judges those), the checkout is at that commit.
+    expect(recordCommit({ stored: "aaa1111", given: null, checkout: "aaa1111-dirty" })).toEqual({
+      commit: "aaa1111",
+    });
     expect(recordCommit({ stored: "aaa1111", given: "aaa1111", checkout: null })).toEqual({
       commit: "aaa1111",
     });
+  });
+
+  it("is refused from a checkout at another commit, unless --allow-moved, then with a warning", () => {
+    for (const checkout of ["bbb2222", "bbb2222-dirty"]) {
+      expect(recordCommit({ stored: "aaa1111", given: null, checkout }), checkout).toMatchObject({
+        refused: expect.stringMatching(
+          new RegExp(`checkout is at ${checkout}, not aaa1111.*--allow-moved`),
+        ),
+      });
+    }
+    const moved = recordCommit({
+      stored: "aaa1111",
+      given: null,
+      checkout: "bbb2222-dirty",
+      allowMoved: true,
+    });
+    expect(moved).toMatchObject({ commit: "aaa1111" });
+    expect("warning" in moved && moved.warning).toMatch(/checkout is at bbb2222-dirty/);
   });
 
   it("refuses a --commit that contradicts the stored one", () => {
@@ -55,7 +74,8 @@ describe("a record from a dirty tree", () => {
     for (const [commit, checkout, why] of [
       ["aaa1111-dirty", "aaa1111", "the run ran from uncommitted changes (aaa1111-dirty)"],
       ["aaa1111", "aaa1111-dirty", "the checkout has uncommitted changes (aaa1111-dirty)"],
-      ["aaa1111-dirty", null, "the run ran from uncommitted changes (aaa1111-dirty)"],
+      ["aaa1111-dirty", "aaa1111-dirty", "the run ran from uncommitted changes (aaa1111-dirty)"],
+      ["aaa1111", null, "the checkout's commit cannot be read"],
     ] as const) {
       const result = cleanCommit({ commit, checkout, allowDirty: false });
       expect(result, `${commit} / ${checkout}`).toMatchObject({
@@ -65,11 +85,8 @@ describe("a record from a dirty tree", () => {
     }
   });
 
-  it("is recorded from a clean run and checkout (or one that cannot be read), unchanged", () => {
+  it("is recorded from a clean run and checkout, unchanged", () => {
     expect(cleanCommit({ commit: "aaa1111", checkout: "aaa1111", allowDirty: false })).toEqual({
-      commit: "aaa1111",
-    });
-    expect(cleanCommit({ commit: "aaa1111", checkout: null, allowDirty: false })).toEqual({
       commit: "aaa1111",
     });
   });
@@ -81,6 +98,10 @@ describe("a record from a dirty tree", () => {
     expect(cleanCommit({ commit: "aaa1111-dirty", checkout: "aaa1111", allowDirty: true })).toEqual(
       { commit: "aaa1111-dirty" },
     );
+    // A checkout whose commit cannot be read counts as dirty.
+    expect(cleanCommit({ commit: "aaa1111", checkout: null, allowDirty: true })).toEqual({
+      commit: "aaa1111-dirty",
+    });
     expect(cleanCommit({ commit: "aaa1111", checkout: "aaa1111", allowDirty: true })).toEqual({
       commit: "aaa1111",
     });

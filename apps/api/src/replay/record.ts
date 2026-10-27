@@ -2,7 +2,7 @@
  * Records a stored live run as a replay record:
  *
  *   npm run replay:record -w apps/api -- --run <run id> --slug <slug> [--commit <sha>]
- *     [--out <dir>] [--force] [--allow-dirty]
+ *     [--out <dir>] [--force] [--allow-dirty] [--allow-moved]
  *
  * Reads the run and its events from the database (SQLITE_DB_PATH, as the API does; read-only),
  * builds the record (recorder.ts: scrubbed, then checked) and writes `<out>/<slug>.json` (default
@@ -12,12 +12,15 @@
  *
  * The record names the commit the run ran at, which the server stored with the run (see
  * recordCommit). --commit is needed only for a run stored without one, and must match otherwise.
+ * It is recorded from a checkout at that commit: one checked out at another commit is refused
+ * unless --allow-moved (recordCommit).
  *
  * A record comes from a clean commit: one whose run ran from a working tree with uncommitted
- * changes (its commit ends in "-dirty"), or made while the checkout has them (the same
- * checkoutCommit the server stamps on its runs), is refused (cleanCommit). --allow-dirty records
- * it anyway for a local experiment, stamped "-dirty", so the committed recording's own check
- * (demo-recording.test.ts) still refuses it.
+ * changes (its commit ends in "-dirty"), or made while the checkout has them or its commit
+ * cannot be read (the same checkoutCommit the server stamps on its runs), is refused
+ * (cleanCommit). --allow-dirty records it anyway for a local experiment, stamped "-dirty", so the
+ * committed recordings' own check (demo-recording.test.ts) still refuses it.
+ *
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -49,8 +52,12 @@ function settingsFileValues(): NodeJS.ProcessEnv {
 
 /**
  * The commit a record names: the one the run ran at, as the server stored it with the run.
- *   - stored: that commit. A checkout now at another commit gets a warning (the record still
- *     names the run's); a --commit that differs is refused, since it would contradict it.
+ *   - stored: that commit. A checkout now at another commit (its "-dirty" aside, which
+ *     cleanCommit judges) is refused unless `allowMoved` (--allow-moved): the record is checked
+ *     and written by the code checked out, and a commit stamped on it names the code that
+ *     produced it only when the two are the same; with the flag it is recorded, with a warning
+ *     (the record still names the run's commit). A --commit that differs is refused, since it
+ *     would contradict it.
  *   - none stored (a run from before commits were kept, or a server that could not read its
  *     own): only an explicit --commit, which the person recording vouches for; never the
  *     checkout's, which may hold other code than the run did.
@@ -59,10 +66,12 @@ export function recordCommit({
   stored,
   given,
   checkout,
+  allowMoved = false,
 }: {
   stored: string | null;
   given: string | null;
   checkout: string | null;
+  allowMoved?: boolean;
 }): { commit: string; warning?: string } | { refused: string } {
   if (given !== null && !COMMIT_PATTERN.test(given)) {
     return {
@@ -77,7 +86,15 @@ export function recordCommit({
           "server stored with it; leave --commit out",
       };
     }
-    if (checkout && checkout !== stored) {
+    if (checkout && withoutDirty(checkout) !== withoutDirty(stored)) {
+      if (!allowMoved) {
+        return {
+          refused:
+            `the checkout is at ${checkout}, not ${stored}, the commit the run ran at: check ` +
+            `out ${withoutDirty(stored)} to record it, or pass --allow-moved to record it from ` +
+            "this checkout (the record still names the run's commit)",
+        };
+      }
       return {
         commit: stored,
         warning: `the checkout is at ${checkout}; the record names ${stored}, the commit the run ran at`,
@@ -100,11 +117,16 @@ export const DIRTY_REFUSAL =
 
 const DIRTY = "-dirty";
 
+/** A commit without its "-dirty" mark. */
+const withoutDirty = (commit: string) =>
+  commit.endsWith(DIRTY) ? commit.slice(0, -DIRTY.length) : commit;
+
 /**
  * The commit a record is stamped with, or why it is refused: `commit` (chosen by recordCommit)
  * ends in "-dirty" when the run ran from uncommitted changes, and `checkout` (the checkout's
- * commit now; null when it cannot be read) when the recorder runs from them. Either is refused
- * unless `allowDirty`; then the stamp says "-dirty" whichever it was.
+ * commit now) when the recorder runs from them. A checkout whose commit cannot be read (null: no
+ * repository, or git failed) may be dirty, and counts as such. Any of these is refused unless
+ * `allowDirty`; then the stamp says "-dirty" whichever it was.
  */
 export function cleanCommit({
   commit,
@@ -117,7 +139,11 @@ export function cleanCommit({
 }): { commit: string } | { refused: string } {
   const where = [
     ...(commit.endsWith(DIRTY) ? [`the run ran from uncommitted changes (${commit})`] : []),
-    ...(checkout?.endsWith(DIRTY) ? [`the checkout has uncommitted changes (${checkout})`] : []),
+    ...(checkout === null
+      ? ["the checkout's commit cannot be read, so it may hold uncommitted changes"]
+      : checkout.endsWith(DIRTY)
+        ? [`the checkout has uncommitted changes (${checkout})`]
+        : []),
   ];
   if (where.length === 0) return { commit };
   if (!allowDirty) {
@@ -145,12 +171,13 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
       out: { type: "string" },
       force: { type: "boolean", default: false },
       "allow-dirty": { type: "boolean", default: false },
+      "allow-moved": { type: "boolean", default: false },
     },
   });
   if (!values.run || !values.slug) {
     console.error(
       "Usage: npm run replay:record -w apps/api -- --run <run id> --slug <slug> " +
-        "[--commit <sha>] [--out <dir>] [--force] [--allow-dirty]",
+        "[--commit <sha>] [--out <dir>] [--force] [--allow-dirty] [--allow-moved]",
     );
     return 2;
   }
@@ -188,6 +215,7 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     stored: run.commit,
     given: values.commit?.trim() || null,
     checkout,
+    allowMoved: values["allow-moved"] ?? false,
   });
   if ("refused" in chosen) {
     console.error(chosen.refused);

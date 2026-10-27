@@ -14,7 +14,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
-import { analysisIssues, runIssues, TrackAnalysis } from "@liner-notes/contract";
+import { analysisIssues, claimIsRejected, runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 
@@ -504,6 +504,11 @@ describe("the analysis graph", () => {
       },
     ]);
     expect(verdicts(replayed.trackData)).toEqual(verdicts(recorded.trackData));
+    // The replayed contradiction is a rejected claim, as the live one was; the supported is not.
+    const replayedClaim = (text: string) =>
+      replayed.trackData?.claims?.find((claim) => claim.text === text);
+    expect(claimIsRejected(replayedClaim(CONTRADICTED)!)).toBe(true);
+    expect(claimIsRejected(replayedClaim(SUPPORTED)!)).toBe(false);
     expect(replayed.trackData?.run?.verifier).toEqual({ judged: 2, unjudged: 0 });
     expect(replayed.trackData?.run?.verifier).toEqual(recorded.trackData?.run?.verifier);
     // The judge's answer came from the cassette, recorded at the recording's commit: no spend.

@@ -403,7 +403,7 @@ function fixtureAsLiveRun(fixture: ReplayRecord, typed: string) {
 }
 
 describe("the recorder", () => {
-  it("replay:record names the commit stored with the run, never the checkout's", async () => {
+  it("replay:record names the commit stored with the run, never the checkout's, and is refused from a moved checkout", async () => {
     const runId = await liveRun("source run");
     vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
     const out = join(dir, "recorded");
@@ -421,7 +421,14 @@ describe("the recorder", () => {
     ];
 
     getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", runId);
-    expect(recordMain(args("stored"), deps)).toBe(0);
+    // From a checkout at another commit: refused, nothing written; --allow-moved records it,
+    // with a warning, and the record names the run's commit.
+    expect(recordMain(args("stored"), deps)).toBe(1);
+    expect(errors.mock.calls.map(([m]) => String(m)).join("\n")).toMatch(
+      /checkout is at bbbbbbbbbbbb, not aaaaaaaaaaaa, the commit the run ran at.*--allow-moved/,
+    );
+    expect(existsSync(join(out, "stored.json"))).toBe(false);
+    expect(recordMain(args("stored", "--allow-moved"), deps)).toBe(0);
     const written = JSON.parse(readFileSync(join(out, "stored.json"), "utf8"));
     expect(written.commit).toBe("aaaaaaaaaaaa");
     expect(written.analysis.run.commit).toBe("aaaaaaaaaaaa");
@@ -454,7 +461,7 @@ describe("the recorder", () => {
       out,
       ...extra,
     ];
-    const withCheckout = (checkout: string) => ({
+    const withCheckout = (checkout: string | null) => ({
       settingsFileValues: () => ({}),
       checkout: () => checkout,
     });
@@ -495,6 +502,13 @@ describe("the recorder", () => {
     const allowed = JSON.parse(readFileSync(written("checkout-dirty"), "utf8"));
     expect(allowed.commit).toBe("aaaaaaaaaaaa-dirty");
     expect(allowed.analysis.run.commit).toBe("aaaaaaaaaaaa-dirty");
+
+    // A checkout whose commit cannot be read counts as dirty: refused, or stamped under the flag.
+    expect(recordMain(args("unread"), withCheckout(null))).toBe(1);
+    expect(refusals()).toMatch(/the checkout's commit cannot be read/);
+    expect(existsSync(written("unread"))).toBe(false);
+    expect(recordMain(args("unread", "--allow-dirty"), withCheckout(null))).toBe(0);
+    expect(JSON.parse(readFileSync(written("unread"), "utf8")).commit).toBe("aaaaaaaaaaaa-dirty");
   });
 
   it("a run resumed by a server at another commit keeps no commit; on the same server it keeps it", async () => {

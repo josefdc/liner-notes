@@ -45,13 +45,7 @@ import { RejectedClaims } from './provenance/RejectedClaims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { moreFactsOf } from '../hooks/agent/moreFacts';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
-import type {
-  TrackData,
-  FactoidEntity,
-  Factoid,
-  FactoidUnavailableCode,
-  GenealogyNode,
-} from '../types';
+import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
 
 interface PlayerProps {
   trackData: TrackData | null;
@@ -141,24 +135,43 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const keyMoments = useMemo(() => measuredKeyMoments(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
   const fromSourceData = Boolean(track.modelUnavailable);
-  // The result's claims, each with how it is shown; the ones the verifier rejected are listed
-  // apart and leave the main view, with the factoid cards, samples and genealogy relations that
-  // state them (and those whose claim this page cannot read).
-  const claims = useMemo(() => resultClaims(track), [track]);
+  // What "more facts" added to this result, and whether a round is left to ask for.
+  const more = useMemo(() => moreFactsOf(track, moreFacts ?? null), [track, moreFacts]);
+  // The result's claims and those of the facts "more facts" added, each with how it is shown;
+  // the ones the verifier rejected are listed apart and leave the main view, with the factoid
+  // cards, samples and genealogy relations that state them (and those whose claim this page
+  // cannot read).
+  const claims = useMemo(
+    () => resultClaims(track, Object.values(more.claims)),
+    [track, more.claims],
+  );
   const readings = useMemo(() => audioReadings(track).signal, [track]);
   const claimOf = useCallback(
     (factoid: Factoid): ShownClaim | undefined =>
       factoid.claimId ? claims.byId.get(factoid.claimId) : undefined,
     [claims],
   );
-  const resultFactoids = useMemo(
-    () => track.factoids.filter((factoid) => !claims.isHidden(factoid.claimId)),
-    [track.factoids, claims],
-  );
-  // Cards left out because the claim they state cannot be read (not rejected: those are listed).
-  const unreadableCards = track.factoids.filter(
-    (factoid) => claims.isUnreadable(factoid.claimId) && !claims.isRejected(factoid.claimId),
-  ).length;
+  const addedFactoids = useMemo(() => displayableFactoids(more.factoids), [more.factoids]);
+  // The result's factoids, then the ones "more facts" added, each once: a card whose id was
+  // shown already is a repeat, and is left out with the cards whose claim is hidden.
+  const [resultFactoids, additionalFactoids] = useMemo(() => {
+    const seen = new Set<string>();
+    const shownOnce = (factoid: Factoid) => {
+      if (claims.isHidden(factoid.claimId) || seen.has(factoid.id)) return false;
+      seen.add(factoid.id);
+      return true;
+    };
+    return [track.factoids.filter(shownOnce), addedFactoids.filter(shownOnce)];
+  }, [track.factoids, addedFactoids, claims]);
+  // Cards left out because the claim they state cannot be read (not rejected: those are listed),
+  // each once by id.
+  const unreadableCards = new Set(
+    [...track.factoids, ...addedFactoids]
+      .filter(
+        (factoid) => claims.isUnreadable(factoid.claimId) && !claims.isRejected(factoid.claimId),
+      )
+      .map((factoid) => factoid.id),
+  ).size;
   const genealogy = useMemo(
     () => withoutHiddenRelations(track.genealogy, claims.isHidden),
     [track.genealogy, claims],
@@ -204,10 +217,15 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => track.samples.filter((sample) => !claims.isHidden(sample.claimId)),
     [track.samples, claims],
   );
+  // The result's factoids first, then the ones added by DECRYPT MORE.
+  const allFactoids = useMemo(
+    () => [...resultFactoids, ...additionalFactoids],
+    [resultFactoids, additionalFactoids],
+  );
   // Claims a card shows are not listed again, as credits or as other claims.
   const onCards = useMemo(
-    () => new Set(resultFactoids.map((factoid) => factoid.claimId)),
-    [resultFactoids],
+    () => new Set(allFactoids.map((factoid) => factoid.claimId)),
+    [allFactoids],
   );
   const creditClaims = useMemo(
     () =>
@@ -232,15 +250,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const recorded = recordingOf(track) !== null;
   // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
-  // What "more facts" added to this result, and whether a round is left to ask for.
-  const more = useMemo(() => moreFactsOf(track, moreFacts ?? null), [track, moreFacts]);
   const noMoreRoundsId = useId();
-  const additionalFactoids = useMemo(() => displayableFactoids(more.factoids), [more.factoids]);
-  // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
-  const allFactoids = useMemo(
-    () => [...resultFactoids, ...additionalFactoids],
-    [resultFactoids, additionalFactoids],
-  );
+  // Facts DECRYPT MORE added are written by the model: each shows its own claim, and when one
+  // does, the others are labelled one by one rather than as a section.
+  const claimedAdditional = additionalFactoids.some((factoid) => claimOf(factoid));
 
   // P2:24 — Visible factoids, split by where they come from so each part carries its label
   const visibleFactoids = showAllFactoids
@@ -254,12 +267,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const isDecryptingRef = useRef(false);
   // The running DECRYPT MORE stream; closed when the Player goes away.
   const decryptControllerRef = useRef<AbortController | null>(null);
+  // The timer that hides the toast; cleared when another toast replaces it or the Player goes.
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       decryptControllerRef.current?.abort();
       decryptControllerRef.current = null;
       isDecryptingRef.current = false;
+      if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
     };
   }, []);
 
@@ -310,12 +327,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     }
   }, [isPlaying, track.previewUrl]);
 
-  // Handle entity click - open external search
-  const handleEntityClick = useCallback((entity: FactoidEntity) => {
-    const query = entity.searchQuery || entity.text;
-    window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
-  }, []);
-
   // Handle decrypt more factoids - streams one-by-one for faster perceived speed
   const handleDecryptMore = useCallback(async () => {
     if (!onMoreFactoidsStream || isDecryptingRef.current) return;
@@ -344,7 +355,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       if (newCount > 0) {
         setDecryptToastCount(newCount);
         setShowDecryptToast(true);
-        setTimeout(() => setShowDecryptToast(false), 1000);
+        if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          toastTimerRef.current = null;
+          setShowDecryptToast(false);
+        }, 1000);
       }
     } catch (error) {
       // Leaving the Player (or starting a new analysis) cancels the stream: not an error.
@@ -469,29 +484,33 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
                   <InteractiveFactoid
                     factoid={fact}
-                    onEntityClick={handleEntityClick}
                     claim={claimOf(fact)}
                     origin={claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined}
+                    fromSourceData={fromSourceData}
                     readings={readings}
                     audio={measurement}
                   />
                 </div>
               ))}
 
-              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result */}
+              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result:
+                  each shows its claim, and the section is labelled only when none has one */}
               {visibleDecryptedFactoids.length > 0 && (
                 <section aria-label="Decrypted insights" className="space-y-6">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
                       Decrypted insights
                     </h4>
-                    <InferenceLabel />
+                    {!claimedAdditional && <InferenceLabel />}
                   </div>
                   {visibleDecryptedFactoids.map((fact) => (
                     <InteractiveFactoid
                       key={fact.id}
                       factoid={fact}
-                      onEntityClick={handleEntityClick}
+                      claim={claimOf(fact)}
+                      origin={claimedAdditional ? 'inferred' : undefined}
+                      readings={readings}
+                      audio={measurement}
                     />
                   ))}
                 </section>

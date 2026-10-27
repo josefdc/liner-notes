@@ -408,13 +408,18 @@ export function claimContextOf(track: TrackData, evidence = readEvidence(track.e
 const idOf = (item: unknown): string | null =>
   isObject(item) && isId(item.id) ? (item.id as string) : null;
 
-/** A result's claims, each with how it is shown, split into shown and rejected. */
-export function resultClaims(track: TrackData): ResultClaims {
+/**
+ * A result's claims, each with how it is shown, split into shown and rejected. `more` are the
+ * claims of the facts "more facts" added (MoreFacts.claims): read and shown as the result's own,
+ * after them, against the result's evidence pack and measurement. A result claim and a later one
+ * with the same id: the first readable one is shown, and a rejected one hides the id.
+ */
+export function resultClaims(track: TrackData, more: readonly unknown[] = []): ResultClaims {
   const evidence = readEvidence(track.evidence);
   const context = claimContextOf(track, evidence);
   const pack = new Map<string, Evidence>();
   for (const item of evidence) if (!pack.has(item.id)) pack.set(item.id, item);
-  const raw: unknown[] = Array.isArray(track.claims) ? track.claims : [];
+  const raw: unknown[] = [...(Array.isArray(track.claims) ? track.claims : []), ...more];
 
   const all: ShownClaim[] = [];
   const rejectedIds = new Set<string>();

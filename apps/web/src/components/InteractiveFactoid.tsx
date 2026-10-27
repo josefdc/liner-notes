@@ -1,7 +1,8 @@
+import type { ClaimAbout } from '@liner-notes/contract';
 import React, { useMemo } from 'react';
 import {
   Info,
-  ChevronRight,
+  ExternalLink,
   MicVocal,
   Music,
   Users,
@@ -15,17 +16,19 @@ import {
   User,
   Disc,
   CalendarDays,
+  History,
+  AudioWaveform,
+  Repeat2,
 } from 'lucide-react';
 import type { Reading } from '../constants';
 import type { Factoid, FactoidEntity } from '../types';
-import type { ShownClaim } from './provenance/claims';
+import { safeHref, type ShownClaim } from './provenance/claims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import type { MeasuredAudio } from './measured/audio';
 import { ClaimChip } from './provenance/ClaimChip';
 
 interface InteractiveFactoidProps {
   factoid: Factoid;
-  onEntityClick?: (entity: FactoidEntity) => void;
   /**
    * The claim this card states (its `claimId`), shown with its kind, sources and verifier
    * status. A card without one is labelled by its section instead.
@@ -36,14 +39,20 @@ interface InteractiveFactoidProps {
    * when the cards beside it carry claims of their own.
    */
   origin?: 'inferred' | 'record';
+  /**
+   * The card was taken from source data by code (a result built without the model), not written
+   * by the model. Only then does a card without a claim name a sample or a cover as such.
+   */
+  fromSourceData?: boolean;
   /** The result's signal readings, for a claim about a measured value. */
   readings?: readonly Reading[];
   /** The result's measurement, for the measured side of a conflict. */
   audio?: MeasuredAudio | null;
 }
 
-// Entity chips (search links, not provenance) are neutral: the cyan, amber and violet that say how
-// a statement is known belong to its provenance chip alone. An icon and a word say the type.
+// Entity links (to the card's cited source, not provenance) are neutral: the cyan, amber and
+// violet that say how a statement is known belong to its provenance chip alone. An icon and a
+// word say the type.
 const ENTITY_CHROME = 'text-text-secondary hover:bg-white/10 border-white/30';
 const ENTITY_TYPES: Record<FactoidEntity['type'], { word: string; Icon: LucideIcon }> = {
   synth: { word: 'synth', Icon: KeyboardMusic },
@@ -60,46 +69,101 @@ const ENTITY_TYPES: Record<FactoidEntity['type'], { word: string; Icon: LucideIc
 // provenance chip alone, and a category says nothing about that.
 const CATEGORY_CHROME = 'text-text-secondary';
 
-// Get the icon and label of a factoid type
-function getFactoidStyle(type: Factoid['type']): {
+interface Category {
+  /** What the badge says, as its data-factoid-type ("possible-sample" for a possible sample). */
+  key: string;
   icon: React.ReactNode;
-  color: string;
   label: string;
-} {
-  const color = CATEGORY_CHROME;
-  switch (type) {
-    case 'production':
-      return { icon: <MicVocal size={14} />, color, label: 'PRODUCTION' };
-    case 'credits':
-      return { icon: <Users size={14} />, color, label: 'CREDITS' };
-    case 'sample':
-      return { icon: <Music size={14} />, color, label: 'SAMPLE' };
-    case 'curiosity':
-      return { icon: <Lightbulb size={14} />, color, label: 'CURIOSITY' };
-    case 'connection':
-      return { icon: <Link2 size={14} />, color, label: 'CONNECTION' };
-    default:
-      return { icon: <Info size={14} />, color, label: 'TRIVIA' };
+}
+
+// A card's own label, for a card without a claim.
+const FACTOID_CATEGORIES: Record<Factoid['type'], { Icon: LucideIcon; label: string }> = {
+  production: { Icon: MicVocal, label: 'PRODUCTION' },
+  credits: { Icon: Users, label: 'CREDITS' },
+  sample: { Icon: Music, label: 'SAMPLE' },
+  curiosity: { Icon: Lightbulb, label: 'CURIOSITY' },
+  connection: { Icon: Link2, label: 'CONNECTION' },
+  trivia: { Icon: Info, label: 'TRIVIA' },
+};
+
+// What a claim is about (the contract's ClaimAbout), for a card that states one.
+const CLAIM_CATEGORIES: Record<ClaimAbout, { Icon: LucideIcon; label: string }> = {
+  track: { Icon: Disc, label: 'TRACK' },
+  credit: { Icon: Users, label: 'CREDITS' },
+  sample: { Icon: Music, label: 'SAMPLE' },
+  cover: { Icon: Repeat2, label: 'COVER' },
+  history: { Icon: History, label: 'HISTORY' },
+  sound: { Icon: AudioWaveform, label: 'SOUND' },
+  production: { Icon: MicVocal, label: 'PRODUCTION' },
+  connection: { Icon: Link2, label: 'CONNECTION' },
+  trivia: { Icon: Info, label: 'TRIVIA' },
+};
+
+// A relation to another record (a sample, a cover) the card names as such only when it is known:
+// its claim is shown as sourced or measured and was not found only partly supported, or, without
+// a claim, the card was taken from source data. A relation is stated whole (as the verifier
+// reads a link's claim): a source that supports only part of it does not confirm it. A model's
+// guess reads as possible.
+const RELATIONS: ReadonlySet<string> = new Set(['sample', 'cover']);
+
+/**
+ * The badge of a card: what its claim is about when it states one (the card's own type is the
+ * model's label), else the card's type. A sample or a cover that is not known reads as possible.
+ */
+export function factoidCategory(
+  factoid: Factoid,
+  claim: ShownClaim | undefined,
+  fromSourceData = false,
+): Category {
+  const type = claim ? claim.claim.about : factoid.type;
+  const category =
+    (claim ? CLAIM_CATEGORIES[claim.claim.about] : FACTOID_CATEGORIES[factoid.type]) ??
+    FACTOID_CATEGORIES.trivia;
+  const known = claim
+    ? (claim.kind === 'sourced' || claim.kind === 'measured') && claim.claim.verdict !== 'partial'
+    : fromSourceData;
+  const possible = RELATIONS.has(type) && !known;
+  return {
+    key: possible ? `possible-${type}` : type,
+    icon: <category.Icon size={14} />,
+    label: possible ? `POSSIBLE ${category.label}` : category.label,
+  };
+}
+
+/**
+ * Where a card's entities link: the first source its claim cites that can be opened, when the
+ * claim is shown as sourced; null otherwise (its entities are plain text).
+ */
+export function entityHref(claim: ShownClaim | undefined): string | null {
+  if (claim?.kind !== 'sourced') return null;
+  for (const item of claim.cited) {
+    const href = safeHref(item.url);
+    if (href) return href;
   }
+  return null;
 }
 
 const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
   factoid,
-  onEntityClick,
   claim,
   origin,
+  fromSourceData = false,
   readings,
   audio,
 }) => {
-  // Memoized content with clickable entities highlighted
-  const renderedContent = useMemo(() => {
+  // The card's entities link to the source its claim cites, when it is shown as sourced.
+  const href = entityHref(claim);
+  // Memoized content with the linked entities highlighted, and how many links it draws (an
+  // entity whose text is not in the content as written is not drawn).
+  const { renderedContent, linked } = useMemo(() => {
     if (!factoid.entities?.length) {
-      return <span>{factoid.content}</span>;
+      return { renderedContent: <span>{factoid.content}</span>, linked: 0 };
     }
 
     const content = factoid.content;
     const elements: React.ReactNode[] = [];
     let lastIndex = 0;
+    let links = 0;
 
     // Sort entities by their position in content to process in order
     const sortedEntities = [...factoid.entities].sort((a, b) => {
@@ -119,28 +183,40 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
         );
       }
 
-      // Add clickable entity: its type as an icon on screen and as a word in its name
+      // An entity links to the cited source: its type as an icon on screen and as a word in its
+      // name. Without a source to open it is plain text.
       const kind = ENTITY_TYPES[entity.type] as
         | (typeof ENTITY_TYPES)[FactoidEntity['type']]
         | undefined;
+      const name = kind ? `${entity.text} (${kind.word})` : entity.text;
+      if (href) links += 1;
       elements.push(
-        <button
-          type="button"
-          key={entity.id}
-          onClick={() => onEntityClick?.(entity)}
-          data-entity-type={entity.type}
-          aria-label={kind ? `${entity.text} (${kind.word})` : undefined}
-          className={`
-            inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-sm
-            border transition-all cursor-pointer
-            ${ENTITY_CHROME}
-          `}
-          title={`Search: ${entity.searchQuery || entity.text}`}
-        >
-          {kind && <kind.Icon size={12} aria-hidden="true" className="mr-1 opacity-70 shrink-0" />}
-          {entity.text}
-          <ChevronRight size={12} className="ml-0.5 opacity-60" />
-        </button>,
+        href ? (
+          <a
+            key={entity.id}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-entity-type={entity.type}
+            aria-label={`${name}, opens the cited source in a new tab`}
+            className={`
+              inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-sm
+              border transition-all
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white
+              ${ENTITY_CHROME}
+            `}
+          >
+            {kind && (
+              <kind.Icon size={12} aria-hidden="true" className="mr-1 opacity-70 shrink-0" />
+            )}
+            {entity.text}
+            <ExternalLink size={12} aria-hidden="true" className="ml-1 opacity-60 shrink-0" />
+          </a>
+        ) : (
+          <span key={entity.id} data-entity-type={entity.type}>
+            {entity.text}
+          </span>
+        ),
       );
 
       lastIndex = entityIndex + entity.text.length;
@@ -151,10 +227,10 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
       elements.push(<span key="text-end">{content.slice(lastIndex)}</span>);
     }
 
-    return <>{elements}</>;
-  }, [factoid.content, factoid.entities, onEntityClick]);
+    return { renderedContent: <>{elements}</>, linked: links };
+  }, [factoid.content, factoid.entities, href]);
 
-  const style = getFactoidStyle(factoid.type);
+  const style = factoidCategory(factoid, claim, fromSourceData);
 
   return (
     <div
@@ -172,7 +248,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
       >
         <div className="flex min-w-0 items-center gap-2">
           <span
-            className={`${style.color} flex shrink-0 items-center justify-center w-6 h-6 rounded-full bg-white/5`}
+            className={`${CATEGORY_CHROME} flex shrink-0 items-center justify-center w-6 h-6 rounded-full bg-white/5`}
           >
             {style.icon}
           </span>
@@ -184,8 +260,8 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
           </span>
         </div>
         <span
-          data-factoid-type
-          className={`ml-auto max-w-full truncate text-chrome font-mono px-2 py-0.5 rounded-full ${style.color} bg-white/5`}
+          data-factoid-type={style.key}
+          className={`ml-auto max-w-full truncate text-chrome font-mono px-2 py-0.5 rounded-full ${CATEGORY_CHROME} bg-white/5`}
         >
           {style.label}
         </span>
@@ -203,15 +279,14 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
         origin && <ProvenanceChip kind={origin} className="relative mt-3" />
       )}
 
-      {/* Entities count indicator */}
-      {factoid.entities && factoid.entities.length > 0 && (
+      {/* Linked entities count indicator */}
+      {linked > 0 && (
         <div
           data-entity-count
           className="relative mt-3 pt-2 border-t border-white/5 text-chrome font-mono text-text-tertiary flex items-center gap-1.5"
         >
           <span className="inline-block w-1 h-1 rounded-full bg-white/30" />
-          {factoid.entities.length} CLICKABLE{' '}
-          {factoid.entities.length === 1 ? 'ENTITY' : 'ENTITIES'}
+          {linked} CLICKABLE {linked === 1 ? 'ENTITY' : 'ENTITIES'}
         </div>
       )}
     </div>

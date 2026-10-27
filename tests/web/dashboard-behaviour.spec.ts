@@ -24,11 +24,21 @@ const status = (node: string, message: string, code?: string) => ({
   ...(code ? { code } : {}),
 });
 
-/** The first run: Bright Lines, with one connected track (Older Record - Someone, 1984). */
+type Result = { genealogy: { nodes: Array<Record<string, unknown>> } };
+
+/**
+ * The first run: Bright Lines, with one connected track, "Older Record - Someone (1984)", whose
+ * node names its title and artist (`trackTitle`, `trackArtist`): a card takes the artist from
+ * there only, never from the label.
+ */
+const firstResult = structuredClone(fullResultData()) as Result;
+firstResult.genealogy.nodes = firstResult.genealogy.nodes.map((node) =>
+  node.id === "origin1" ? { ...node, trackTitle: "Older Record", trackArtist: "Someone" } : node,
+);
 const firstRun = [
   { type: "connected", threadId: "t-first" },
   status("scout", "Found the track on Spotify", "SPOTIFY-FOUND"),
-  { type: "complete", data: fullResultData() },
+  { type: "complete", data: firstResult },
   { type: "done" },
 ];
 

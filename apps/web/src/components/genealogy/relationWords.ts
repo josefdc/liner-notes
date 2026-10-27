@@ -33,12 +33,17 @@ export const isRelationSubject = (about: string): about is 'sample' | 'cover' =>
   RELATION_SUBJECTS.has(about);
 
 /**
- * Whether the relation a claim states is known: shown as sourced (or measured) and supported
- * whole. A relation is stated whole, as the verifier reads every claim about one: a source that
- * supports only part of it does not confirm it.
+ * Whether the relation a claim states is known: shown as sourced (or measured) and, for a model
+ * claim, supported whole. A relation is stated whole, as the verifier reads every claim about
+ * one: a source that supports only part of it does not confirm it. A code-built claim is sourced
+ * by construction, whatever a verdict says (the contract's `claimDisplayKind`).
  */
-export function claimRelationKnown(kind: string, verdict: string | null | undefined): boolean {
-  return (kind === 'sourced' || kind === 'measured') && verdict !== 'partial';
+export function claimRelationKnown(
+  kind: string,
+  claim: { origin?: string; verdict?: string | null },
+): boolean {
+  if (kind !== 'sourced' && kind !== 'measured') return false;
+  return !(claim.origin === 'model' && claim.verdict === 'partial');
 }
 
 /**

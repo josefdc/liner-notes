@@ -133,8 +133,9 @@ describe('the Player with claims', () => {
     expect(kinds).toEqual([
       ['SoundThe preview was measured at 123 BPM.', 'measured'],
       ["SoundThe preview's key, as measured.", 'inferred'],
-      // A genealogy link states it: it is named as its line is, a possible influence.
-      ['Possible influenceThe song was a club favourite in 2011.', 'inferred'],
+      // An influence link cites it, but a trivia claim does not state an influence: it keeps its
+      // own subject.
+      ['TriviaThe song was a club favourite in 2011.', 'inferred'],
       ['HistoryThe single reached the top 40.', 'inferred'],
       ['ProductionThe song was recorded at Abbey Road.', 'inferred'],
       ['SoundIt runs at roughly 123 BPM.', 'inferred'],

@@ -756,12 +756,21 @@ describe('Player', () => {
           ]}
         />,
       );
+      // Not sourced: a model inference, its entity not linked to the source, the verdict said.
+      const notSourced = (title: string) => {
+        const shown = cardOf(title);
+        expect(shown.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind')).toBe(
+          'inferred',
+        );
+        expect(shown.querySelector('a[data-entity-type]')).toBeNull();
+        expect(shown.textContent).toContain('Partly supported');
+      };
       expect(badgeOf('Partial Sample')).toBe('POSSIBLE SAMPLE');
-      expect(cardOf('Partial Sample').textContent).toContain('Partly supported');
+      notSourced('Partial Sample');
       fireEvent.click(moreButton());
       await screen.findByText('Added Partial');
       expect(badgeOf('Added Partial')).toBe('POSSIBLE SAMPLE');
-      expect(cardOf('Added Partial').textContent).toContain('Partly supported');
+      notSourced('Added Partial');
     });
 
     it("names a link's claim as its link is named, on its fact's card and in the claims list", () => {

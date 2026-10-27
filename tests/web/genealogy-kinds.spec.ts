@@ -21,7 +21,8 @@ import {
 // states (the sample's amber is the sourced colour), and named in words as the possible
 // relation it states ("possible sample", as the fact cards say),
 // its relation stated as a sentence naming both tracks, and its provenance shown on hover and
-// focus and in a list; the Dashboard names a documented relation only for a sourced link.
+// focus and in a list; the Dashboard names a documented relation as known only for a sourced
+// link, and as a possible one otherwise.
 const fixture = loadFixture("genealogy-kinds");
 const ANALYZE = "/api/analyze/stream";
 const CURRENT = "Bright Lines (2011)";
@@ -359,7 +360,7 @@ test.describe("the genealogy graph", () => {
       legend.getByRole("list", { name: "How a link is known" }).getByRole("listitem"),
     ).toHaveText([
       "Solid: Sourced — cites evidence in this result",
-      "Dashed: Not sourced — unchecked or not fully supported; grey for any relation but a shared producer",
+      "Dashed: Not sourced — each line's details say why",
     ]);
     await expect(legend.getByRole("list", { name: "Relations" }).getByRole("listitem")).toHaveText([
       "Sample",
@@ -367,7 +368,8 @@ test.describe("the genealogy graph", () => {
       "Cover",
       "Remix",
       "Shared producer",
-      "Influence",
+      // Grey is drawn for the stated influences and for the relations that are not sourced.
+      "Influence, or not sourced (any relation)",
     ]);
   });
 

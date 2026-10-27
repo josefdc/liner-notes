@@ -1,30 +1,39 @@
 import type { GenealogyNode } from '../../types';
 
-/** A label as the API writes a model node's: "Title - Artist (Year)", one " - " and a year. */
-const MODEL_LABEL = /^(.+?) - (.+?)\s*\((\d{4})\)$/;
+/**
+ * A label as the API writes a model node's, "Title - Artist (Year)": one " - " and a year from
+ * 1900 to 2099 at the end.
+ */
+const MODEL_LABEL = /^(.+?) - (.+?)\s*\((?:19|20)\d{2}\)$/;
 /** A year at the end of a label: "Title (1984)". */
-const TRAILING_YEAR = /\s*\(\d{4}\)$/;
+const TRAILING_YEAR = /\s*\((?:19|20)\d{2}\)$/;
+
+/** What a card calls a track whose node names no title at all. */
+export const UNTITLED_TRACK = 'Untitled track';
 
 /**
- * A genealogy node's track, as a card names it: its title and artist from the node's own fields
- * (`trackTitle`, `trackArtist`). Without them, the label is read as "Title - Artist (Year)" only
- * when it has exactly that form (one " - " and a year at the end); any other label is the title
- * (without a year at its end), and the artist is null: nothing is shown rather than a guess. A
- * label such as "Song - Live at Wembley" names no artist, and a code node whose record credits
- * none is labelled with its title alone.
+ * A genealogy node's track, as a card names it.
+ *
+ * The artist comes from the node's own `trackArtist` only, never from its label: a label's part
+ * after " - " is not always an artist ("Song - Live at Wembley (1986)" reads exactly like "Song -
+ * Artist (1986)"), and a code node whose record credits no artist is labelled with its title
+ * alone. Without it the artist is null, and nothing is shown rather than a guess.
+ *
+ * The title is the node's `trackTitle`; without it, the title part of a label of the form
+ * "Title - Artist (Year)" (one " - " and a year at the end), else the whole label without a year
+ * at its end. A node with no title and an empty label is an "Untitled track", never its id.
  */
 export function nodeTrack(
   node: Partial<Pick<GenealogyNode, 'id' | 'label' | 'trackTitle' | 'trackArtist'>>,
 ): { title: string; artist: string | null } {
   const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
   const label = text(node.label);
-  const ownTitle = text(node.trackTitle);
-  const ownArtist = text(node.trackArtist);
   const parts = label.split(' - ').length === 2 ? MODEL_LABEL.exec(label) : null;
-  const parsed = parts ? { title: parts[1].trim(), artist: parts[2].trim() } : null;
   const title =
-    ownTitle || parsed?.title || label.replace(TRAILING_YEAR, '').trim() || label || text(node.id);
-  // The label's artist only for the track the label names: never under another title.
-  const labelArtist = parsed && (!ownTitle || ownTitle === parsed.title) ? parsed.artist : '';
-  return { title, artist: ownArtist || labelArtist || null };
+    text(node.trackTitle) ||
+    parts?.[1].trim() ||
+    label.replace(TRAILING_YEAR, '').trim() ||
+    label ||
+    UNTITLED_TRACK;
+  return { title, artist: text(node.trackArtist) || null };
 }

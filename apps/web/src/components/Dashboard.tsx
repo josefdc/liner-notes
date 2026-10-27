@@ -14,7 +14,7 @@ import { isValidImageUrl } from '../utils/image';
 import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
-import { nodeTrack } from './genealogy/nodeTrack';
+import { nodeTrack, UNTITLED_TRACK } from './genealogy/nodeTrack';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE, placeholderBackground } from '../styles/placeholder';
@@ -103,11 +103,12 @@ function getRelatedTracks(
       return {
         id: node.id,
         ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-        // A node without a label (the contract requires one) is searched by its title.
+        // A node without a label (the contract requires one) is searched by its title; one with
+        // nothing to search by is not searched at all.
         query:
           [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') ||
-          (typeof node.label === 'string' && node.label) ||
-          track.title,
+          (typeof node.label === 'string' && node.label.trim()) ||
+          (track.title === UNTITLED_TRACK ? '' : track.title),
         ...track,
         relation,
         sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
@@ -119,10 +120,10 @@ function getRelatedTracks(
 }
 
 /**
- * A connected track's relation, as the badge of its card. A documented relation is named only
- * for a sourced link. The badge is the link's provenance chip (sourced: amber and a book; a
- * model inference: violet and sparkles; not sourced: neutral), as in the graph's list; without a
- * link it is a neutral badge. A neutral chip's text is raised to secondary: on a hovered card its
+ * A connected track's relation, as the badge of its card. A documented relation is named as
+ * known only for a sourced link; otherwise it is hedged ("Possible sample"). The badge is the
+ * link's provenance chip (sourced: amber and a book; a model inference: violet and sparkles; not
+ * sourced: neutral), as in the graph's list; without a link it is a neutral badge. A neutral chip's text is raised to secondary: on a hovered card its
  * chip grey is under 4.5:1.
  */
 const RelationBadge: React.FC<{ rec: RelatedTrack }> = ({ rec }) => {
@@ -216,6 +217,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleCardClick = useCallback(
     (rec: { spotifyId?: string; query: string }) => {
       if (onAnalyzeTrack) {
+        if (!rec.query) return;
         // The node's own id is the graph's, not Spotify's: the track is searched by its text
         // unless the node was matched to a Spotify track. The text is the node's track title
         // and artist, which the matched track's own title and artist match.

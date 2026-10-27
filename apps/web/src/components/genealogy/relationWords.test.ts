@@ -15,7 +15,7 @@ import {
 } from './links';
 import { LINK_COLOR } from './linkStyle';
 import { relationName } from './relationWords';
-import { claim, link, node, PACK } from './testing';
+import { claim, evidenceItem, link, node, PACK } from './testing';
 
 // One set of words for a relation wherever it is shown. For each relation and each way its
 // claim was judged, one result holds a link that states the claim; the four places the relation
@@ -137,7 +137,179 @@ describe('relation words', () => {
         const words = relationName(about, known);
         expect(factoidCategory(fact, stated).label).toBe(words.toUpperCase());
         expect(claimLabel(stated)).toBe(words);
+        // A partly supported relation is not sourced, with or without a link.
+        expect(stated.kind === 'sourced').toBe(known);
       }
     },
   );
+});
+
+/** The claims and links of one result, and how each claim is named on a fact and in the list. */
+function readResult(claims: unknown[], links: unknown[], evidence: unknown[] = PACK) {
+  const track = {
+    evidence,
+    claims,
+    factoids: [],
+    genealogy: {
+      nodes: [
+        node('current', 1, 'Bright Lines (2011)'),
+        node('old', 2, 'Old Record (1984)'),
+        node('old2', 2, 'Other Record (1985)'),
+      ],
+      links,
+    },
+  } as unknown as TrackData;
+  const shown = resultClaims(track);
+  const read = readGenealogy(track.genealogy, linkContext(evidence, shown)).links;
+  const relations = relationLabelsByClaim(read);
+  const fact = { id: 'f', title: 'A fact', content: 'Old Record', type: 'trivia' } as Factoid;
+  return {
+    links: read.map(relationLabel),
+    of: (id: string) => {
+      const stated = shown.byId.get(id);
+      if (!stated) throw new Error(`no claim ${id}`);
+      return {
+        kind: stated.kind,
+        fact: factoidCategory(fact, stated, false, relations.get(id)).label,
+        listed: claimLabel(stated, relations),
+      };
+    },
+  };
+}
+
+const modelLink = (type: LinkType, from = 'old', claimId = 'cl-1') =>
+  link(from, 'current', {
+    type,
+    kind: 'sourced',
+    origin: 'model',
+    evidenceIds: ['ev-mb-1'],
+    claimId,
+  });
+const supported = (about: string) =>
+  claim('cl-1', { about, kind: 'sourced', evidenceIds: ['ev-mb-1'], verdict: 'supported' });
+
+describe('a claim a link cites but does not state', () => {
+  it('keeps its own subject: a trivia claim on an influence link is trivia', () => {
+    const { links, of } = readResult(
+      [claim('cl-1', { about: 'trivia', text: 'The song was a club favourite in 2011.' })],
+      [
+        link('old', 'current', {
+          type: 'influence',
+          kind: 'inferred',
+          origin: 'model',
+          claimId: 'cl-1',
+        }),
+      ],
+    );
+    expect(links).toEqual(['Possible influence']);
+    expect(of('cl-1')).toEqual({ kind: 'inferred', fact: 'TRIVIA', listed: 'Trivia' });
+  });
+
+  it('keeps its own relation: a supported sample claim on a cover link is a sample', () => {
+    const { links, of } = readResult([supported('sample')], [modelLink('cover')]);
+    // The link is not sourced through a claim about another relation.
+    expect(links).toEqual(['Possible cover']);
+    expect(of('cl-1')).toEqual({ kind: 'sourced', fact: 'SAMPLE', listed: 'Sample' });
+  });
+
+  it('keeps its own subject: a supported history claim on a sample link is history', () => {
+    const { links, of } = readResult([supported('history')], [modelLink('sample')]);
+    expect(links).toEqual(['Possible sample']);
+    expect(of('cl-1')).toEqual({ kind: 'sourced', fact: 'HISTORY', listed: 'History' });
+  });
+});
+
+describe('a claim two links state', () => {
+  it('is named by its subject, hedged, when the links name it differently', () => {
+    // One supported claim behind a remix and a sample link: it backs neither (one claim, one
+    // link), and neither link's words are taken for it, whichever comes first.
+    const { links, of } = readResult(
+      [supported('sample')],
+      [modelLink('remix', 'old'), modelLink('sample', 'old2')],
+    );
+    expect(links).toEqual(['Possible remix', 'Possible sample']);
+    expect(of('cl-1')).toMatchObject({ fact: 'POSSIBLE SAMPLE', listed: 'Possible sample' });
+  });
+
+  it('takes their words when both name it the same way', () => {
+    const { links, of } = readResult(
+      [supported('sample')],
+      [modelLink('sample', 'old'), modelLink('sample', 'old2')],
+    );
+    expect(links).toEqual(['Possible sample', 'Possible sample']);
+    expect(of('cl-1')).toMatchObject({ fact: 'POSSIBLE SAMPLE', listed: 'Possible sample' });
+  });
+});
+
+describe('a partly supported claim that cites a relation record', () => {
+  // A primary record of a sample (its recordRef names the relationship), as the API's verifier
+  // tells one (isRelationRecord, #191).
+  const sampledBy = {
+    ...evidenceItem('ev-rel'),
+    recordRef: 'track/recording/a/sampled-by/recording/b',
+  };
+
+  it('reads as a model inference, whatever the model labelled it', () => {
+    const { of } = readResult(
+      [
+        claim('cl-t', {
+          about: 'trivia',
+          kind: 'sourced',
+          evidenceIds: ['ev-rel'],
+          verdict: 'partial',
+        }),
+      ],
+      [],
+      [...PACK, sampledBy],
+    );
+    expect(of('cl-t').kind).toBe('inferred');
+  });
+
+  it('stays sourced when it cites no relation record, or when the verifier supported it', () => {
+    const { of } = readResult(
+      [
+        claim('cl-p', {
+          about: 'trivia',
+          kind: 'sourced',
+          evidenceIds: ['ev-mb-1'],
+          verdict: 'partial',
+        }),
+        claim('cl-s', {
+          about: 'trivia',
+          kind: 'sourced',
+          evidenceIds: ['ev-rel'],
+          verdict: 'supported',
+        }),
+      ],
+      [],
+      [...PACK, sampledBy],
+    );
+    expect(of('cl-p').kind).toBe('sourced');
+    expect(of('cl-s').kind).toBe('sourced');
+  });
+
+  it('keeps a code-built claim sourced, and its link, as the contract does', () => {
+    const { links, of } = readResult(
+      [
+        claim('cl-1', {
+          about: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+          verdict: 'partial',
+        }),
+      ],
+      [
+        link('old', 'current', {
+          type: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+          claimId: 'cl-1',
+        }),
+      ],
+    );
+    expect(links).toEqual(['Sample']);
+    expect(of('cl-1')).toEqual({ kind: 'sourced', fact: 'SAMPLE', listed: 'Sample' });
+  });
 });

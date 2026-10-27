@@ -5,13 +5,14 @@ import {
   GenealogyLink,
   type LinkKind,
   type LinkType,
+  LINK_CLAIM_ABOUT,
   linkClaimMismatches,
   linkDisplayKind as contractLinkDisplayKind,
   sharedClaimIds,
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
 import { sourceLabel } from '../provenance/SourceLink';
-import { LINK_TYPE_LABEL, relationName } from './relationWords';
+import { isRelationSubject, LINK_TYPE_LABEL, relationName } from './relationWords';
 
 export { LINK_TYPE_LABEL } from './relationWords';
 
@@ -270,9 +271,6 @@ export function readLink(
     if (claimed.kind !== 'sourced') {
       kind = 'inferred';
       if (!claim?.verdict) reasons.push('its claim is not sourced');
-    } else if (claimed.claim.verdict === 'partial') {
-      // A relation is stated whole: a source that supports only part of it does not confirm it.
-      kind = 'inferred';
     } else if (link.claimId && context.sharedClaimIds.has(link.claimId)) {
       kind = 'inferred';
       reasons.push('its claim is also stated by another link');
@@ -497,20 +495,31 @@ export function relationLabel(link: ShownLink): string {
 
 /**
  * The words of the relation each claim states through a shown link, by claim id: the claim is
- * named as its link is (`relationLabel`), on a fact's card and in the claims list. A claim two
- * links state with different words is left out: it is named by its own subject.
+ * named as its link is (`relationLabel`), on a fact's card and in the claims list. Only a link
+ * that states the claim names it: one whose relation the claim is about (the contract's
+ * `LINK_CLAIM_ABOUT`); a claim a link merely cites (a trivia claim on an influence link) keeps
+ * its own subject. A claim two links state in different words is named by its subject, hedged:
+ * no one link confirms it ("Possible sample").
  */
 export function relationLabelsByClaim(links: readonly ShownLink[]): ReadonlyMap<string, string> {
   const labels = new Map<string, string>();
   const mixed = new Set<string>();
   for (const link of links) {
-    const id = link.claim?.id;
-    if (id === undefined || mixed.has(id)) continue;
+    const claim = link.claim;
+    if (claim === null || !LINK_CLAIM_ABOUT[link.statedType ?? 'influence'].includes(claim.about)) {
+      continue;
+    }
     const label = relationLabel(link);
-    if (labels.has(id) && labels.get(id) !== label) {
-      labels.delete(id);
-      mixed.add(id);
-    } else labels.set(id, label);
+    if (mixed.has(claim.id)) continue;
+    const before = labels.get(claim.id);
+    if (before !== undefined && before !== label) {
+      // The links disagree: the relation the claim's subject names, never as known.
+      const subject = isRelationSubject(claim.about)
+        ? claim.about
+        : (link.statedType ?? 'influence');
+      labels.set(claim.id, relationName(subject, false));
+      mixed.add(claim.id);
+    } else labels.set(claim.id, label);
   }
   return labels;
 }

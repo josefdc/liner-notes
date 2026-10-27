@@ -219,7 +219,7 @@ describe('Dashboard connected tracks', () => {
     ).toEqual(PLACEHOLDER_NOTE.circles.map(({ cx, cy, r }) => [cx, cy, r]));
   });
 
-  it('names a documented relation only for a sourced link, as a sentence with both tracks', async () => {
+  it('names a documented relation as known only for a sourced link, else as a possible one', async () => {
     renderDashboard(
       connected([
         link('guess', 'current', { type: 'sample', kind: 'inferred', value: 3 }),
@@ -400,7 +400,8 @@ describe('Dashboard connected tracks', () => {
         trackTitle: 'Older Record (2003 Remaster)',
         trackArtist: 'Someone & The Band',
       },
-      // Only a label, written "Title - Artist (Year)": both read from it, without the year.
+      // Only a label, written "Title - Artist (Year)": its title is read from it, never its
+      // artist ("Song - Live at Wembley (1986)" has the same form).
       node('later', 3, 'Later Track - Someone Else (2015)'),
     ];
     renderDashboard(track);
@@ -411,7 +412,7 @@ describe('Dashboard connected tracks', () => {
     }));
     expect(named).toEqual([
       { title: 'Older Record (2003 Remaster)', artist: 'Someone & The Band' },
-      { title: 'Later Track', artist: 'Someone Else' },
+      { title: 'Later Track', artist: null },
     ]);
     expect(shown[1].querySelector('img, [data-placeholder-note]')).not.toBeNull();
   });

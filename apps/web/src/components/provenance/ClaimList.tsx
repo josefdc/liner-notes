@@ -40,7 +40,7 @@ export function claimLabel(shown: ShownClaim, relations?: ReadonlyMap<string, st
   return (
     claimRelationWords(
       claim.about,
-      claimRelationKnown(shown.kind, claim.verdict),
+      claimRelationKnown(shown.kind, claim),
       relations?.get(claim.id),
     ) ?? ABOUT_TEXT[claim.about]
   );

@@ -1,9 +1,9 @@
 import type { Claim, Evidence } from '@liner-notes/contract';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Factoid } from '../types';
+import type { Factoid, TrackData } from '../types';
 import InteractiveFactoid from './InteractiveFactoid';
-import type { ShownClaim } from './provenance/claims';
+import { resultClaims, type ShownClaim } from './provenance/claims';
 import { claim as aClaim, evidence as anItem } from './provenance/testing';
 
 afterEach(cleanup);
@@ -185,19 +185,33 @@ describe('InteractiveFactoid with its claim', () => {
     ['sample', 'POSSIBLE SAMPLE'],
     ['cover', 'POSSIBLE COVER'],
   ] as const)(
-    'reads a partly supported %s as possible, keeping its chip and link',
+    'reads a partly supported %s as a possible one and a model inference, with no source link',
     (about, badge) => {
       // A relation is stated whole: a source that supports only part of it does not confirm it.
-      const partial = shown(
-        aClaim({ about, kind: 'sourced', evidenceIds: ['ev1'], verdict: 'partial' }),
-        'sourced',
-        [cited()],
-      );
+      // The claim as the Player shows it, read from a result stored before the API wrote such a
+      // claim as inferred (#191): still marked sourced.
+      const partial = resultClaims({
+        evidence: [cited()],
+        claims: [
+          aClaim({
+            id: 'c1',
+            about,
+            kind: 'sourced',
+            evidenceIds: ['ev1'],
+            verdict: 'partial',
+            verdictReason: 'Only the drums are sourced.',
+          }),
+        ],
+        genealogy: { nodes: [], links: [] },
+      } as unknown as TrackData).byId.get('c1');
       const { container } = render(<InteractiveFactoid factoid={sampleCard()} claim={partial} />);
       expect(typeBadge(container)).toBe(badge);
-      expect(container.textContent).toContain('Partly supported');
-      expect(container.querySelector('[data-provenance="sourced"]')).not.toBeNull();
-      expect(container.querySelector('a[data-entity-type]')?.getAttribute('href')).toBe(SOURCE_URL);
+      expect(container.querySelector('[data-provenance="inferred"]')?.textContent).toBe(
+        'Model inference',
+      );
+      expect(container.querySelector('[data-provenance="sourced"]')).toBeNull();
+      expect(container.querySelector('a[data-entity-type]')).toBeNull();
+      expect(container.textContent).toContain('Partly supported: Only the drums are sourced.');
     },
   );
 

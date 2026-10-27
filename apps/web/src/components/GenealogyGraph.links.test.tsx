@@ -314,7 +314,8 @@ describe('GenealogyGraph links', () => {
     expect(screen.getByText('Links as a list (3)').closest('details')?.open).toBe(false);
     const legend = screen.getByRole('group', { name: 'Link legend' });
     expect(within(legend).getByRole('list', { name: 'Relations' }).textContent).toBe(
-      'SampleShared producerInfluence',
+      // The grey is drawn for the model's sample, not sourced: no influence is stated.
+      'SampleShared producerNot sourced (any relation)',
     );
   });
 

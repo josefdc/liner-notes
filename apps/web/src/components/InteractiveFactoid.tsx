@@ -126,7 +126,7 @@ export function factoidCategory(
   const category =
     (claim ? CLAIM_CATEGORIES[claim.claim.about] : FACTOID_CATEGORIES[factoid.type]) ??
     FACTOID_CATEGORIES.trivia;
-  const known = claim ? claimRelationKnown(claim.kind, claim.claim.verdict) : fromSourceData;
+  const known = claim ? claimRelationKnown(claim.kind, claim.claim) : fromSourceData;
   const words = claimRelationWords(type, known, claim ? linked : null);
   if (words === null) {
     return { key: type, icon: <category.Icon size={14} />, label: category.label };

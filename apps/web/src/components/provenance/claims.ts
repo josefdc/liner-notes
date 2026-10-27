@@ -536,18 +536,56 @@ function linkClaimIds(genealogy: unknown): ReadonlySet<string> {
 }
 
 /**
- * How a claim is shown, with the rule the API's verifier applies to relations: a relation is
- * stated whole. A model claim that states a relation between two records (a genealogy link
- * states it, or it is about a sample or a cover) and that the verifier found only partly
- * supported is not sourced: a source that supports only part of a relation does not confirm it.
- * Results stored before the API applied the rule may still carry such a claim as sourced; it
- * reads as a model inference here, as the API now writes it.
+ * The relationship kinds a primary record's recordRef names (the API's RELATION_PHRASE,
+ * apps/api/src/sources/records.ts): a sample, interpolation, cover or remix between two records.
  */
-function shownKind(claim: Claim, kind: ClaimKind, linkClaims: ReadonlySet<string>): ClaimKind {
-  const relation = claim.about === 'sample' || claim.about === 'cover' || linkClaims.has(claim.id);
-  return kind === 'sourced' && claim.origin === 'model' && claim.verdict === 'partial' && relation
-    ? 'inferred'
-    : kind;
+const RELATION_KINDS: ReadonlySet<string> = new Set([
+  'samples',
+  'sampled-by',
+  'interpolates',
+  'interpolated-by',
+  'cover-of',
+  'covered-by',
+  'remix-of',
+  'remixed-by',
+]);
+
+/**
+ * Whether an evidence item is a primary record of a relation between two records, as the API's
+ * verifier reads it (`isRelationRecord`): its recordRef names the relationship's kind
+ * (`track/recording/<mbid>/sampled-by/recording/<mbid>`).
+ */
+export function isRelationRecord(item: Pick<Evidence, 'sourceTier' | 'recordRef'>): boolean {
+  if (item.sourceTier !== 'primary-record' || !item.recordRef) return false;
+  return item.recordRef.split('/').some((segment) => RELATION_KINDS.has(segment));
+}
+
+/**
+ * How a claim is shown, with the rule the API's verifier applies to relations (`relationTest`,
+ * apps/api/src/agent/verifier/index.ts): a relation is stated whole. A model claim that asserts
+ * a relation between two records, whatever the model labelled it (a genealogy link states it,
+ * it is about a sample or a cover, or it cites a relation record of the pack), and that the
+ * verifier found only partly supported is not sourced: a source that supports only part of a
+ * relation does not confirm it. Results stored before the API applied the rule may still carry
+ * such a claim as sourced; it reads as a model inference here, as the API now writes it.
+ */
+function shownKind(
+  claim: Claim,
+  kind: ClaimKind,
+  linkClaims: ReadonlySet<string>,
+  pack: ReadonlyMap<string, Evidence>,
+): ClaimKind {
+  if (kind !== 'sourced' || claim.origin !== 'model' || claim.verdict !== 'partial') return kind;
+  const citesRelation = claim.evidenceIds.some((id) => {
+    const item = pack.get(id);
+    return item !== undefined && isRelationRecord(item);
+  });
+  const relation =
+    claim.about === 'sample' ||
+    claim.about === 'cover' ||
+    linkClaims.has(claim.id) ||
+    citesRelation;
+  return relation ? 'inferred' : kind;
 }
 
 const idOf = (item: unknown): string | null =>
@@ -588,7 +626,7 @@ export function resultClaims(track: TrackData, more: readonly unknown[] = []): R
     all.push({
       claim,
       key: `${index}:${claim.id}`,
-      kind: shownKind(claim, claimDisplayKind(claim, context), linkClaims),
+      kind: shownKind(claim, claimDisplayKind(claim, context), linkClaims, pack),
       cited,
       missingCitations: ids.length - cited.length,
       rejected,

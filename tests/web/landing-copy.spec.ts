@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { apiRequests, loadFixture, useMockApi } from "./mock";
+import { apiRequests, loadFixture, routeRunTokens, useMockApi } from "./mock";
 
 // The landing names the product, offers a search that works from the first click, and explains
 // failures in plain words: the server's own message when it says something true and specific,
@@ -101,6 +101,7 @@ test("a connection lost to the analysis server says so without blaming either si
   await page.route("**/api/search/suggest**", (route) =>
     route.fulfill({ json: { success: true, suggestions: [] } }),
   );
+  await routeRunTokens(page);
   await page.route("**/api/analyze/stream?**", (route) => route.abort("internetdisconnected"));
   await search(page, "Hurt");
 
@@ -244,8 +245,9 @@ test("a page that cannot read the result offers to reload", async ({ page }) => 
 });
 
 test("a failed search clears the note that suggestions are unavailable", async ({ page }) => {
-  // The API is down: the suggestions fail first, then the analysis stream.
+  // The API is down: the suggestions fail first, then the analysis (its run token first).
   await page.route("**/api/search/suggest**", (route) => route.abort("internetdisconnected"));
+  await page.route("**/api/runs", (route) => route.abort("internetdisconnected"));
   await page.route("**/api/analyze/stream?**", (route) => route.abort("internetdisconnected"));
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");

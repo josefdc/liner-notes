@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { type ReplayRecord, SPOTIFY_ID_PATTERN, TrackAnalysis } from "@liner-notes/contract";
 import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
@@ -8,6 +7,7 @@ import { choiceMessage } from "../../agent/trackMatch.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import type { PickedBy, ScoutFailure } from "../../agent/state.js";
 import { runningCommit } from "../../config/checkoutCommit.js";
+import { sseHoldMs } from "../../config/settings.js";
 import { llm } from "../../llm/invoke.js";
 import { logger, withRun } from "../../logger.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
@@ -30,8 +30,15 @@ import {
   storeRunResult,
   updateRun,
 } from "../../store/runs.js";
-import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
-import { nodeEvent, openAnalysisStream } from "../sse.js";
+import {
+  asyncRoute,
+  eventStreamHead,
+  HTTP_ERRORS,
+  markFailed,
+  sendError,
+} from "../middleware/errors.js";
+import { claimRunToken, refuseToken, requireTokenFor } from "../middleware/requireRunToken.js";
+import { nodeEvent, openAnalysisStream, refuseStream } from "../sse.js";
 
 const router = Router();
 const log = logger("Run");
@@ -164,6 +171,50 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
   }
 }
 
+/** True for the error SQLite raises when a row's key is taken. */
+const isDuplicateKey = (err: unknown) =>
+  typeof (err as { code?: unknown })?.code === "string" &&
+  ((err as { code: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    (err as { code: string }).code === "SQLITE_CONSTRAINT_UNIQUE");
+
+/**
+ * Whether a new run may go on: `started` once its row is written; `used` when a run with its id
+ * is recorded already (its run token has started one); `unrecorded` when the row could not be
+ * written. A run without its row would let its token start another after a restart, or on
+ * another process, so it does not start either.
+ */
+type RunStart = "started" | "used" | "unrecorded";
+
+/** Records a new run's row (see RunStart). */
+function recordNewRun(action: string, write: (db: ReturnType<typeof getDb>) => void): RunStart {
+  try {
+    write(getDb());
+    return "started";
+  } catch (err) {
+    if (isDuplicateKey(err)) {
+      logger("Runs").warn(`Could not ${action}: the run is recorded already; not started`);
+      return "used";
+    }
+    logger("Runs").error(`Could not ${action}; not started`, { err });
+    return "unrecorded";
+  }
+}
+
+/**
+ * Refuses a run that did not start: its token used, with a 401 JSON (requireRunToken.ts); its
+ * row not written, with `internal_error`, inside a stream on a stream route (`stream`).
+ */
+function refuseStart(res: Response, start: Exclude<RunStart, "started">, stream: boolean): void {
+  if (start === "used") {
+    refuseToken(res, "already used");
+  } else if (stream) {
+    markFailed(res);
+    refuseStream(res, "/api/analyze/stream", "internal_error", HTTP_ERRORS.internal_error.message);
+  } else {
+    sendError(res, "internal_error");
+  }
+}
+
 /** Reads from the runs store; a failure is logged and reads as null. */
 function readRun<T>(action: string, read: (db: ReturnType<typeof getDb>) => T): T | null {
   try {
@@ -192,12 +243,16 @@ function logRunStart(runId: string, how: string, query: string): void {
   log.debug(`${how}: query`, { runId, query });
 }
 
-/** Starts a new analysis: a fresh thread, claimed and recorded as an open run. */
-function startAnalysis(threadId: string, query: string): void {
-  activeThreads.add(threadId);
-  recordRun("record a run", (db) =>
+/**
+ * Starts a new analysis: a fresh thread, claimed and recorded as an open run. Anything but
+ * `started` claims nothing, and the run must not go on (recordNewRun).
+ */
+function startAnalysis(threadId: string, query: string): RunStart {
+  const start = recordNewRun("record a run", (db) =>
     startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
   );
+  if (start === "started") activeThreads.add(threadId);
+  return start;
 }
 
 /**
@@ -842,14 +897,15 @@ const replayOf = (record: ReplayRecord) => ({
  * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
  * (storeReplayOf), so it never reads as live whatever its outcome.
  */
-function startReplay(runId: string, query: string, record: ReplayRecord): void {
-  activeThreads.add(runId);
-  recordRun("record a replay", (db) =>
+function startReplay(runId: string, query: string, record: ReplayRecord): RunStart {
+  const start = recordNewRun("record a replay", (db) =>
     db.transaction(() => {
       startRun(db, { runId, threadId: runId, query, commit: SERVER_COMMIT });
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );
+  if (start === "started") activeThreads.add(runId);
+  return start;
 }
 
 /**
@@ -869,12 +925,33 @@ function recordReplay(runId: string, status: RunStatus, record: ReplayRecord): v
 }
 
 /**
- * Serves a recorded run as a new run, with its own run id (startReplay, recordReplay). The events
- * the stream sends are not stored.
+ * Serves a recorded run as a new run, with its own run id: the thread id of the request's run
+ * token (startReplay, recordReplay). The events the stream sends are not stored.
  */
-async function replayStreamRun(res: Response, query: string, record: ReplayRecord): Promise<void> {
-  const runId = randomUUID();
+async function replayStreamRun(
+  res: Response,
+  runId: string,
+  query: string,
+  record: ReplayRecord,
+): Promise<void> {
   await asRun(res, runId, () => replayStream(res, runId, query, record));
+}
+
+/**
+ * Waits `ms` (SSE_HOLD_MS) before a replayed stream sends its first event; the stream's
+ * heartbeats keep it open meanwhile. Ends early when the client goes away.
+ */
+function holdStream(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
 }
 
 async function replayStream(
@@ -883,12 +960,21 @@ async function replayStream(
   query: string,
   record: ReplayRecord,
 ): Promise<void> {
-  startReplay(runId, query, record);
+  const start = startReplay(runId, query, record);
+  if (start !== "started") {
+    refuseStart(res, start, true);
+    return;
+  }
   const stream = openEventStream(res, runId, { replay: true });
   logRunStart(runId, "Streaming a replay", query);
   log.info(`Replaying the recorded run ${record.slug}`, { runId, replay: record.slug });
   await guardStream(stream, async () => {
     try {
+      const holdMs = sseHoldMs();
+      if (holdMs > 0) {
+        log.info(`Holding the stream for ${holdMs} ms (SSE_HOLD_MS)`, { runId });
+        await holdStream(holdMs, stream.stream.signal);
+      }
       const analysis = await playRecord(
         record,
         runId,
@@ -913,11 +999,17 @@ async function replayStream(
   });
 }
 
-/** POST /api/analyze for a recorded track: the recorded result as a new, completed run. */
-function replayJsonRun(res: Response, query: string, record: ReplayRecord): void {
-  const runId = randomUUID();
+/**
+ * POST /api/analyze for a recorded track: the recorded result as a new, completed run, whose id
+ * is the thread id of the request's run token.
+ */
+function replayJsonRun(res: Response, runId: string, query: string, record: ReplayRecord): void {
   asRun(res, runId, () => {
-    startReplay(runId, query, record);
+    const start = startReplay(runId, query, record);
+    if (start !== "started") {
+      refuseStart(res, start, false);
+      return;
+    }
     try {
       logRunStart(runId, "Analysis of a recorded track", query);
       const analysis = replayedAnalysis(record, runId);
@@ -980,12 +1072,17 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
  * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS. Under
  * REPLAY_MODE (as for the stream below) a recorded track is answered with its recorded result
  * as a new run, and any other query with 503 live_disabled (or budget_exhausted).
+ * Requires a run token (`runToken` query parameter, from POST /api/runs) that has started no run:
+ * the run's thread id is the token's. Without one: 401 auth_expired (middleware/requireRunToken.ts).
  */
 router.post(
   "/api/analyze",
   asyncRoute(async (req: Request, res: Response) => {
     // On the monotonic clock, so a step of the wall clock does not change the run's duration.
     const startTime = pacingClock();
+    // The run's thread id is the one its token was issued for, claimed for this run only.
+    const token = claimRunToken(req, res, { stream: false });
+    if (!token) return;
     const query = parseQuery(req.body?.query);
     const trackId = parseTrackId(req.body?.trackId);
     if (!query || trackId === null) {
@@ -1002,13 +1099,17 @@ router.post(
       return;
     }
     if (replay.kind === "replay") {
-      replayJsonRun(res, query, replay.record);
+      replayJsonRun(res, token.threadId, query, replay.record);
       return;
     }
 
-    const threadId = randomUUID();
+    const { threadId } = token;
     await asRun(res, threadId, async () => {
-      startAnalysis(threadId, query);
+      const start = startAnalysis(threadId, query);
+      if (start !== "started") {
+        refuseStart(res, start, false);
+        return;
+      }
       logRunStart(threadId, "Analysis", query);
       const control = new RunControl(req, res, threadId);
       try {
@@ -1032,7 +1133,8 @@ router.post(
 /**
  * Stream analysis with Server-Sent Events
  *
- * GET /api/analyze/stream?query=Song+Name[&trackId=<Spotify track id>] (as POST /api/analyze)
+ * GET /api/analyze/stream?query=Song+Name[&trackId=<Spotify track id>]&runToken=<token> (as POST
+ * /api/analyze, run token included; a token that has expired is refused inside the stream)
  *
  * Always answers 200. Messages: each a `data:` line holding one AnalyzeStreamEvent of
  * @liner-notes/contract, with the run id (the thread id) and `seq` (0, 1, 2…; heartbeats have none):
@@ -1057,6 +1159,9 @@ router.post(
 router.get(
   "/api/analyze/stream",
   asyncRoute(async (req: Request, res: Response) => {
+    // The run's thread id is the one its token was issued for, claimed for this run only.
+    const token = claimRunToken(req, res, { stream: true });
+    if (!token) return;
     const query = parseQuery(req.query.query);
     const trackId = parseTrackId(req.query.trackId);
     if (!query || trackId === null) {
@@ -1076,14 +1181,18 @@ router.get(
       return;
     }
     if (replay.kind === "replay") {
-      await replayStreamRun(res, query, replay.record);
+      await replayStreamRun(res, token.threadId, query, replay.record);
       return;
     }
 
-    // The run id is the thread id.
-    const threadId = randomUUID();
+    // The run id is the thread id: the one the run's token was issued for.
+    const { threadId } = token;
     await asRun(res, threadId, async () => {
-      startAnalysis(threadId, query);
+      const start = startAnalysis(threadId, query);
+      if (start !== "started") {
+        refuseStart(res, start, true);
+        return;
+      }
       const stream = openEventStream(res, threadId);
       stream.startClock();
       stream.storeEvents();
@@ -1114,6 +1223,8 @@ router.get(
  * POST /api/analyze/resume
  * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id", "pickedBy"?: "click" | "countdown" }
  * (`pickedBy`: how the track was picked; a deliberate click is not warned about a loose match)
+ * Requires the run token the run started with (`runToken` query parameter); another run's is a
+ * 401 auth_expired.
  * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
  * 400 invalid_selection or invalid_input; 503 live_disabled or budget_exhausted when live services
  * may not be used (REPLAY_MODE).
@@ -1130,6 +1241,8 @@ router.post(
       });
       return;
     }
+    // Only the token that started the run resumes it.
+    if (!requireTokenFor(res, threadId)) return;
     // A recorded run never pauses; a paused live run cannot go on without live services.
     const refused = await liveRefused();
     if (refused) {
@@ -1150,9 +1263,10 @@ router.post(
 /**
  * Resume streaming after selection
  *
- * GET /api/analyze/stream/resume?threadId=...&selectedTrackId=...[&pickedBy=click|countdown]
+ * GET /api/analyze/stream/resume?threadId=...&selectedTrackId=...[&pickedBy=click|countdown]&runToken=...
  *
- * The messages of /api/analyze/stream, starting with `resuming`. A resume that cannot run gets
+ * The run token is the one the run started with, as on POST /api/analyze/resume. The messages of
+ * /api/analyze/stream, starting with `resuming`. A resume that cannot run gets
  * one error message (codes as on POST /api/analyze/resume), then done.
  */
 router.get(
@@ -1160,6 +1274,8 @@ router.get(
   asyncRoute(async (req: Request, res: Response) => {
     const threadId = parseId(req.query.threadId);
     const selectedTrackId = parseId(req.query.selectedTrackId);
+    // Only the token that started the run resumes it: refused with a 401 before any stream.
+    if (threadId && selectedTrackId && !requireTokenFor(res, threadId)) return;
     // A resume continues the thread's run, under the same run id.
     const stream = openEventStream(res, threadId ?? undefined);
     if (!threadId || !selectedTrackId) {

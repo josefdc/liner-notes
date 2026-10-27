@@ -8,6 +8,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../../config/settings.js";
 import { createApp } from "../app.js";
+import { testAuth, withRunToken } from "../testApp.js";
 import analyzeRouter from "./analyze.js";
 
 vi.mock("../../agent/graph.js", () => ({
@@ -40,6 +41,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("POST /api/analyze", () => {
   it("answers an error thrown inside the handler with a generic JSON 500", async () => {
     const app = createApp({
+      ...testAuth,
       http: {
         corsOrigins: [],
         trustProxy: 0,
@@ -51,7 +53,7 @@ describe("POST /api/analyze", () => {
     });
 
     const res = await request(app)
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .send({ query: "Midnight City M83" })
       .timeout(3000);
 

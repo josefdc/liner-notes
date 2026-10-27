@@ -31,6 +31,7 @@ import {
 } from "../logger.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { createApp } from "./app.js";
+import { testAuth, withRunToken } from "./testApp.js";
 
 const SECRETS = vi.hoisted(() => ({
   key: "dummy-azure-key-0123456789",
@@ -145,7 +146,7 @@ afterEach(() => {
 /** Runs one analysis stream and returns its run id. */
 async function analyze(app: ReturnType<typeof createApp>): Promise<string> {
   const res = await request(app)
-    .get(`/api/analyze/stream?query=${encodeURIComponent(QUERY)}`)
+    .get(withRunToken(`/api/analyze/stream?query=${encodeURIComponent(QUERY)}`))
     .buffer(true)
     .parse((response, callback) => {
       let body = "";
@@ -165,7 +166,7 @@ async function analyze(app: ReturnType<typeof createApp>): Promise<string> {
 
 describe("the log of one analysis", () => {
   it("is JSON lines that all carry the run id, with nothing secret and no client address", async () => {
-    const runId = await analyze(createApp({ http: settings }));
+    const runId = await analyze(createApp({ ...testAuth, http: settings }));
     const lines = logs.lines();
     const entries = logs.entries();
 
@@ -223,7 +224,7 @@ describe("the log of one analysis", () => {
   });
 
   it("compiles the graph once, not for each analysis", async () => {
-    const app = createApp({ http: settings });
+    const app = createApp({ ...testAuth, http: settings });
     await analyze(app);
     logs.clear();
     await analyze(app);
@@ -231,7 +232,7 @@ describe("the log of one analysis", () => {
   });
 
   it("keeps each run's id on its own lines when runs overlap", async () => {
-    const app = createApp({ http: settings });
+    const app = createApp({ ...testAuth, http: settings });
     const runIds = await Promise.all([analyze(app), analyze(app), analyze(app)]);
     expect(new Set(runIds).size).toBe(3);
 

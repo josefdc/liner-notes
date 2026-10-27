@@ -114,15 +114,15 @@ const PROVIDER_HOST =
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>\\`]+/gi;
 /** Credentials written into a URL (`https://user:password@host`). */
 const USERINFO = /^(https?:\/\/)[^/?#@\s]+@/i;
-/** Query parameters that carry a key, a token or a signature. */
+/** Query parameters that carry a key, a token or a signature (run tokens and Turnstile's too). */
 const SECRET_PARAM =
-  /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
+  /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
 /** Authorization values: a Bearer token, Basic credentials, a Discogs token; quoted or not. */
 const AUTH_SCHEME =
   /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
 /** `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. */
 const SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
 
 /** Environment variables whose values are never written: keys, secrets, tokens, endpoints. */
 const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;

@@ -89,7 +89,7 @@ describe('the Player with claims', () => {
     expect(network.textContent).toContain('Unclaimed Influence - Third (1990)');
     expect(network.textContent).not.toContain('Rejected Source');
     // The current track is not counted among the related ones.
-    expect(network.textContent).toContain('with 2 related tracks');
+    expect(network.textContent).toContain('Connections: 2 related tracks.');
     expect(network.textContent).toContain(
       '1 link not shown: the claim behind it was rejected or cannot be read.',
     );

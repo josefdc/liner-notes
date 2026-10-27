@@ -182,6 +182,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
   const cover = useAlbumCover(trackData?.coverUrl);
   const relatedCount = relatedNodes(shown).length;
+  // Relations left out because the verifier rejected their claim (or it cannot be read).
+  const hiddenLinks = (trackData?.genealogy.links ?? []).filter(
+    (link) =>
+      typeof link === 'object' && link !== null && shown?.claims.isHidden(link.claimId) === true,
+  ).length;
   const { reader, failed: readerFailed, retry: retryReader } = useLinkReader(relatedCount > 0);
   const relatedTracks = useMemo(
     () => getRelatedTracks(trackData, shown, reader),
@@ -397,8 +402,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         </section>
       )}
 
-      {/* A replayed result says it is a recording, right after its title (the h1 the focus
-          lands on), so reading on from the title reaches it */}
+      {/* A replayed result says it is a recording after the hero that holds its title (the h1
+          the focus lands on): reading on from the title reaches it, before the panels below */}
       {trackData && <RecordedRunNotice track={trackData} />}
 
       {/* What this result is missing, named (model unavailable, audio not measured) */}
@@ -471,7 +476,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {relatedTracks !== null && relatedTracks.length === 0 && (
             <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
-              No connected tracks found for this song.
+              {/* Relations were found, but every one was rejected */}
+              {hiddenLinks > 0
+                ? 'No connections to show.'
+                : 'No connected tracks found for this song.'}
             </p>
           )}
           {relatedTracks === null && readerFailed && (

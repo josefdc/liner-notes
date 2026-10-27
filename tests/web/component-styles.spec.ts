@@ -446,7 +446,7 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   // Measured only while the module is held: a pattern that no longer matches the chunk's name
   // fails here instead of measuring whatever else is on screen.
   await expect.poll(() => holding).toBe(true);
-  const skeleton = page.locator("div.animate-progress-shimmer").first().locator("xpath=../../..");
+  const skeleton = page.locator("[data-loading-view]");
   await expect(skeleton).toBeVisible();
   const spacing = await skeleton.evaluate((element) => {
     const style = getComputedStyle(element);

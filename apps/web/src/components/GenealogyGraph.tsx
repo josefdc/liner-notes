@@ -977,15 +977,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <svg
           ref={svgRef}
           className="w-full h-full overflow-visible"
-          aria-label="Song genealogy network graph"
+          aria-label="Connections graph"
         ></svg>
 
         {/* P2:22 — Accessible summary for screen readers: each track's relation comes from the
             link that joins it to this one, never from its group. */}
         <div className="sr-only">
-          Genealogy network
+          Connections
           {related.length > 0
-            ? ` with ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
+            ? `: ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
             : ''}
           .
           {nodeList
@@ -1038,7 +1038,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* Audio Preview Indicator */}
         {isPlaying && playingNodeId && (
           <div className="absolute top-4 right-4 pointer-events-none">
-            <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
+            <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10 animate-pulse">
               <Volume2 size={12} className="animate-bounce" />
               <span>Playing preview…</span>
             </div>

@@ -63,7 +63,7 @@ describe('ResultNotices', () => {
     expect(text).toContain('Model unavailable');
     expect(text).toContain('(the model timed out)');
     expect(text).toContain(
-      'Missing: genre profile, song structure (a generic template is shown), insights.',
+      'Missing: genre profile, song structure (a generic template is shown), facts.',
     );
   });
 

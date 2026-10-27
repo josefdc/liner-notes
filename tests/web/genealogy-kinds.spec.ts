@@ -79,7 +79,7 @@ const DRAWN = [
 ];
 
 const graphOf = (page: Page) =>
-  page.locator('#panel-genealogy svg[aria-label="Song genealogy network graph"]');
+  page.locator('#panel-genealogy svg[aria-label="Connections graph"]');
 
 /** The fit's scale of the graph, or NaN before the graph has fitted itself to the panel. */
 const fitScale = (page: Page) =>
@@ -459,7 +459,7 @@ test.describe("the genealogy graph", () => {
     page,
   }) => {
     const snapshot = await page.locator("#panel-genealogy").ariaSnapshot();
-    expect(snapshot).toContain("Genealogy network with 17 related tracks.");
+    expect(snapshot).toContain("Connections: 17 related tracks.");
     expect(snapshot).toContain(
       `Sourced Sample - Someone (1984): ${CURRENT} samples Sourced Sample - Someone (1984) (Sourced).`,
     );

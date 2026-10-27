@@ -313,7 +313,7 @@ describe('GenealogyGraph links', () => {
   it('gives screen readers each track’s relation from its link, not its group', () => {
     const { container } = render(<Graph />);
     const summary = container.querySelector('.sr-only')?.textContent;
-    expect(summary).toContain('Genealogy network with 4 related tracks.');
+    expect(summary).toContain('Connections: 4 related tracks.');
     // Which track uses which, as a sentence naming both.
     expect(summary).toContain(
       'Older Record - Someone (1984): Bright Lines (2011) samples Older Record - Someone (1984) (Sourced).',

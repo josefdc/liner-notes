@@ -44,7 +44,7 @@ import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
-import { moreFactsOf } from '../hooks/agent/moreFacts';
+import { moreFactsKey, moreFactsOf } from '../hooks/agent/moreFacts';
 import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
@@ -286,11 +286,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const visibleDecryptedFactoids = visibleFactoids.slice(resultFactoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
-  // The facts shown when the running round was asked for, and the round that ended (whether the
-  // API said why it could add nothing): what it added is told once its facts are in the list,
-  // as the facts newly shown there (not repeats, nor facts whose claim is hidden).
-  const shownBeforeRef = useRef<ReadonlySet<string>>(new Set());
-  const [roundEnded, setRoundEnded] = useState<{ unavailable: boolean } | null>(null);
+  // A round that ended: the ids shown when it was asked for, the result it was asked about, and
+  // whether the API said why it could add nothing. Each round carries its own, so a click that
+  // starts the next round before this one is told does not change what this one counts. What it
+  // added is told once its facts are in the list, as the facts newly shown there (not repeats,
+  // nor facts whose claim is hidden).
+  const [roundEnded, setRoundEnded] = useState<{
+    unavailable: boolean;
+    before: ReadonlySet<string>;
+    result: string;
+  } | null>(null);
 
   // Refs for transient values in handleDecryptMore
   const isDecryptingRef = useRef(false);
@@ -344,7 +349,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     setIsDecrypting(true);
     setDecryptUnavailable(null);
     setNoMoreRecorded(false);
-    shownBeforeRef.current = new Set(allFactoids.map((factoid) => factoid.id));
+    const before = new Set(allFactoids.map((factoid) => factoid.id));
+    const result = moreFactsKey(track);
     let unavailable = false;
     const controller = new AbortController();
     decryptControllerRef.current = controller;
@@ -358,7 +364,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           setDecryptUnavailable(code);
         },
       });
-      setRoundEnded({ unavailable });
+      setRoundEnded({ unavailable, before, result });
     } catch (error) {
       // Leaving the Player (or starting a new analysis) cancels the stream: not an error.
       if ((error as { name?: unknown } | null)?.name !== 'AbortError') {
@@ -379,7 +385,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   useEffect(() => {
     if (!roundEnded) return;
     setRoundEnded(null);
-    const before = shownBeforeRef.current;
+    // The Player has moved to another result since the round was asked: nothing of it is told.
+    if (roundEnded.result !== moreFactsKey(track)) return;
+    const { before } = roundEnded;
     const newCount = allFactoids.filter((factoid) => !before.has(factoid.id)).length;
     if (resultMode === 'replay' && newCount === 0 && !roundEnded.unavailable) {
       setNoMoreRecorded(true);
@@ -393,7 +401,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         setShowDecryptToast(false);
       }, ADDED_NOTICE_MS);
     }
-  }, [roundEnded, allFactoids, resultMode]);
+  }, [roundEnded, allFactoids, resultMode, track]);
 
   // Extract onNodeClick handler for GenealogyGraph (stable ref for React.memo)
   const handleNodeClick = useCallback(
@@ -461,6 +469,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           <p className="text-sm md:text-base text-text-tertiary font-mono break-words">
             {track.artist}
           </p>
+          {/* From md up a replayed result says so right under its title and artist, before any
+              column (phones show it below, above the tabs' panels) */}
+          {recorded && (
+            <div className="hidden md:block mt-2">
+              <RecordedRunNotice track={track} compact />
+            </div>
+          )}
         </div>
         {/* Measured values in the measured hue; what was not measured, and the separators, in
             a neutral one */}
@@ -490,7 +505,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </p>
       </div>
 
-      {/* On phones only one panel shows at a time: the recording label stays above all of them */}
+      {/* On phones only one panel shows at a time: the recording label stays above all of them,
+          right after the (screen-reader) header, so it is reached before any panel */}
       {recorded && (
         <div className="md:hidden z-20 mx-4 mt-2">
           <RecordedRunNotice track={track} compact />
@@ -585,10 +601,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   disabled={isDecrypting || more.finished}
                   aria-describedby={more.finished ? noMoreRoundsId : undefined}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4
-                               border border-dashed border-cyber/30 rounded-md
-                               text-xs font-mono text-cyber/70 uppercase tracking-wider
-                               hover:border-cyber hover:text-cyber hover:bg-cyber/5
-                               focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none
+                               border border-dashed border-white/20 rounded-md
+                               text-xs font-mono text-text-secondary uppercase tracking-wider
+                               hover:border-white/40 hover:text-white hover:bg-white/5
+                               focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
                                disabled:opacity-50
                                ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
                                transition-all duration-(--duration-fast)`}
@@ -700,11 +716,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
-          {recorded && (
-            <div className="hidden md:block w-full max-w-lg mb-4">
-              <RecordedRunNotice track={track} />
-            </div>
-          )}
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}
@@ -855,7 +866,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                No connected tracks were found for this track.
+                {/* Relations were found, but the verifier rejected every one (they are listed
+                    with the rejected claims) */}
+                {hiddenLinks > 0
+                  ? 'No connections to show.'
+                  : 'No connected tracks were found for this track.'}
               </p>
             </div>
           )}

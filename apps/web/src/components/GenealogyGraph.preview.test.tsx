@@ -81,5 +81,7 @@ describe('GenealogyGraph preview indicator', () => {
     );
     expect(screen.getByText('Playing preview…')).toBeTruthy();
     expect(screen.queryByText(/SAMPLE/)).toBeNull();
+    // A status, not a measured value: not in the measured hue.
+    expect(screen.getByText('Playing preview…').parentElement?.className).not.toMatch(/cyber/);
   });
 });

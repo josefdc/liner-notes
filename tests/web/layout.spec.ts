@@ -1,6 +1,12 @@
 import { expect, type Locator, test } from "@playwright/test";
 import { hoverCard } from "./hover";
-import { analyzeAndOpenDashboard, dashboardHeading, loadFixture, useMockApi } from "./mock";
+import {
+  analyzeAndOpenDashboard,
+  animationsSettled,
+  dashboardHeading,
+  loadFixture,
+  useMockApi,
+} from "./mock";
 
 // The Dashboard's spacing comes from token classes such as `p-(--space-md)`. Written in the
 // Tailwind v3 form (`p-[--space-md]`) they compile to invalid CSS and the padding is dropped, so
@@ -118,5 +124,46 @@ for (const { width, height, page: pagePadding, hero } of [
       return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
     });
     expect(lines).toBe(1);
+  });
+}
+
+// While the Dashboard's code loads, its skeleton holds the same places: the hero card starts
+// where the Dashboard's hero will, so nothing moves when it arrives.
+for (const [width, height] of [
+  [1440, 900],
+  [390, 844],
+]) {
+  test(`the Dashboard's skeleton puts the hero where it loads at ${width}×${height}`, async ({
+    page,
+  }) => {
+    await useMockApi(page, fixture);
+    await page.setViewportSize({ width, height });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = false;
+    await page.route(/\/assets\/Dashboard-[^/]*\.js$/, async (route) => {
+      holding = true;
+      await held;
+      await route.continue();
+    });
+    await page.goto("/");
+    await page.getByPlaceholder(/Song title/).fill("Quiet Signal");
+    await page.getByRole("button", { name: "Analyze", exact: true }).click();
+    await page.getByRole("button", { name: "Open the results" }).click();
+    await expect.poll(() => holding).toBe(true);
+    const skeletonHero = await page
+      .locator("[data-loading-view] > div")
+      .nth(1)
+      .evaluate((element) => element.getBoundingClientRect().top);
+    release();
+    const hero = page
+      .locator("section")
+      .filter({ has: page.getByRole("button", { name: "View full analysis" }) });
+    await expect(hero).toBeVisible();
+    await animationsSettled(page);
+    const loadedHero = await hero.evaluate((element) => element.getBoundingClientRect().top);
+    expect(Math.abs(skeletonHero - loadedHero)).toBeLessThanOrEqual(1);
   });
 }

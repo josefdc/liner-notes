@@ -330,6 +330,24 @@ describe('Dashboard connected tracks', () => {
     );
   });
 
+  it('says there are no connections to show, not that none were found, when every relation was rejected', () => {
+    renderDashboard({
+      ...missingTrack,
+      modelUnavailable: false,
+      evidence: PACK,
+      claims: [claim('cl-bad', { verdict: 'contradicted' })],
+      genealogy: {
+        nodes: [
+          node('current', 1, 'Quiet Signal - Test Artist (2011)'),
+          node('older', 2, 'Older Record - Someone (1984)'),
+        ],
+        links: [{ ...sourcedSample('older', 'current'), claimId: 'cl-bad' }],
+      },
+    } as unknown as TrackData);
+    expect(screen.getByText('No connections to show.')).toBeTruthy();
+    expect(screen.queryByText('No connected tracks found for this song.')).toBeNull();
+  });
+
   it('counts the related tracks it shows, in the singular for one', async () => {
     const one = connected([sourcedSample('older', 'current')]);
     one.genealogy.nodes = one.genealogy.nodes.filter((n) => ['current', 'older'].includes(n.id));

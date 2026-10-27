@@ -111,7 +111,7 @@ describe("oneRowPerRecording", () => {
   });
 
   it("gives the same rows in every order: 200.0 s, 201.5 s and 203.0 s are one recording", () => {
-    // The probe that showed the order mattering: A 2008, B 2002, C 2010, all one ISRC.
+    // Three releases of one ISRC whose middle length (B, released first) is near both ends.
     const a = row("A", { releaseDate: "2008", durationMs: 200_000 });
     const b = row("B", { releaseDate: "2002", durationMs: 201_500 });
     const c = row("C", { releaseDate: "2010", durationMs: 203_000 });
@@ -128,7 +128,7 @@ describe("oneRowPerRecording", () => {
     for (const order of orders([kept, near, far])) {
       expect([...ids(order)].sort()).toEqual(["far", "kept"]);
     }
-    // The reviewer's case: 200.0 s, 201.9 s and 198.1 s, the earliest at 198.1 s.
+    // The earliest release has the shortest length (198.1 s): 201.9 s is 3.8 s from it.
     const early = row("early", { releaseDate: "1999", durationMs: 198_100 });
     const middle = row("middle", { releaseDate: "2004", durationMs: 200_000 });
     const late = row("late", { releaseDate: "2006", durationMs: 201_900 });

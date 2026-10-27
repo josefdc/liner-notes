@@ -403,6 +403,12 @@ for (const viewport of [
     await expect(rows.nth(1)).toHaveAccessibleName(/Hurt Johnny Cash • 2002 • 3:39 Explicit$/);
     await expect(picker(page).getByText("E", { exact: true })).toBeInViewport({ ratio: 1 });
     await expect.poll(() => clippedRows(page)).toEqual([]);
+    // The marker takes no more height than the line it sits in: both rows are one height.
+    const [cleanBox, explicitBox] = [
+      await rows.nth(0).boundingBox(),
+      await rows.nth(1).boundingBox(),
+    ];
+    expect(explicitBox?.height ?? 0).toBeCloseTo(cleanBox?.height ?? 0, 1);
     // The server's question, which counts the two rows shown.
     await expect(progressStatus(page)).toHaveText(question(2));
     await page.keyboard.press("End");

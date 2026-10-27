@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
 import { pickerRows } from './pickerRows';
+import { TrackVersion } from './TrackVersion';
 import { scrollBehavior } from '../../utils/motion';
 
 /** The picker's question: its heading and the name of its list. */
@@ -22,15 +23,6 @@ function rowFor(key: string, current: number, count: number): number | null {
     default:
       return null;
   }
-}
-
-/** A track's length as m:ss, or null when it is not known (never "0:00"). */
-function lengthOf(durationMs: number | undefined): string | null {
-  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) {
-    return null;
-  }
-  const seconds = Math.floor(durationMs / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 /** The visible height of the nearest box that scrolls `element`, or of the window. */
@@ -190,17 +182,7 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
                   <span className="truncate">
                     {candidate.artist} • {candidate.releaseYear || candidate.album}
                   </span>
-                  {lengthOf(candidate.durationMs) && (
-                    <span className="flex-shrink-0 font-mono">
-                      • {lengthOf(candidate.durationMs)}
-                    </span>
-                  )}
-                  {candidate.explicit === true && (
-                    <span className="flex-shrink-0 rounded-sm border border-white/15 bg-white/5 px-1 font-mono text-chrome text-text-chip">
-                      <span aria-hidden="true">E</span>
-                      <span className="sr-only">Explicit</span>
-                    </span>
-                  )}
+                  <TrackVersion durationMs={candidate.durationMs} explicit={candidate.explicit} />
                 </span>
               </div>
               {/* Kept in the layout on every row, so moving the highlight moves nothing */}

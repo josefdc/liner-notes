@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import { Timestamp } from "./common.js";
+import { Claim } from "./evidence.js";
 import { AnalyzeStreamEvent, OpenErrorCode } from "./events.js";
 import { refineNamed } from "./refinements.js";
 import { Factoid, RunMode, RunStatus, RunUsage, SearchCandidate, TrackAnalysis } from "./track.js";
@@ -108,10 +109,24 @@ export const FactoidsRequest = z.object({
   trackArtist: z.string().optional(),
   existingFactoidIds: z.array(z.string()).optional(),
   runId: z.string().optional().describe("The analysis the factoids are for, so they do not repeat"),
+  round: z
+    .int()
+    .min(0)
+    .optional()
+    .describe("The round of facts asked for: the nextRound of the last answer, so each asks anew"),
 });
 
 export const FactoidsResponse = z.object({
   factoids: z.array(Factoid),
+  claims: z
+    .array(Claim)
+    .optional()
+    .describe("Each new factoid's claim (Factoid.claimId), checked against the run's evidence"),
+  nextRound: z
+    .int()
+    .min(0)
+    .optional()
+    .describe("The round to ask for next (FactoidsRequest.round); absent for recorded facts"),
 });
 
 // =============================================================================

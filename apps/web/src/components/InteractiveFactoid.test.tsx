@@ -181,6 +181,41 @@ describe('InteractiveFactoid with its claim', () => {
     expect(typeBadge(asCredit)).toBe('CREDITS');
   });
 
+  it.each([
+    ['sample', 'POSSIBLE SAMPLE'],
+    ['cover', 'POSSIBLE COVER'],
+  ] as const)(
+    'reads a partly supported %s as possible, keeping its chip and link',
+    (about, badge) => {
+      // A relation is stated whole: a source that supports only part of it does not confirm it.
+      const partial = shown(
+        aClaim({ about, kind: 'sourced', evidenceIds: ['ev1'], verdict: 'partial' }),
+        'sourced',
+        [cited()],
+      );
+      const { container } = render(<InteractiveFactoid factoid={sampleCard()} claim={partial} />);
+      expect(typeBadge(container)).toBe(badge);
+      expect(container.textContent).toContain('Partly supported');
+      expect(container.querySelector('[data-provenance="sourced"]')).not.toBeNull();
+      expect(container.querySelector('a[data-entity-type]')?.getAttribute('href')).toBe(SOURCE_URL);
+    },
+  );
+
+  it('counts only the entities drawn as links', () => {
+    const card = {
+      ...sampleCard(),
+      entities: [
+        { id: 'e1', text: 'Old Record', type: 'sample' },
+        // Not in the fact's text as written: neither is drawn.
+        { id: 'e2', text: 'old record', type: 'sample' },
+        { id: 'e3', text: 'Nowhere', type: 'album' },
+      ],
+    } as Factoid;
+    const { container } = render(<InteractiveFactoid factoid={card} claim={sourced()} />);
+    expect(container.querySelectorAll('a[data-entity-type]')).toHaveLength(1);
+    expect(container.querySelector('[data-entity-count]')?.textContent).toBe('1 CLICKABLE ENTITY');
+  });
+
   it('reads a cover the model guessed as a possible cover', () => {
     const cover = shown(aClaim({ about: 'cover' }), 'inferred');
     const { container } = render(<InteractiveFactoid factoid={sampleCard()} claim={cover} />);

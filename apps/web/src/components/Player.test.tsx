@@ -478,6 +478,74 @@ describe('Player', () => {
       ).not.toContain('It samples Old Record.');
     });
 
+    /** A model claim about a sample that its cited source only partly supports. */
+    const partialSample = (id: string) =>
+      aClaim({ id, about: 'sample', kind: 'sourced', evidenceIds: ['ev1'], verdict: 'partial' });
+
+    it('reads a partly supported sample as possible, from the result and from more facts', async () => {
+      const track = withFacts(
+        [card('f1', 'Partial Sample', 'c-partial')],
+        [partialSample('c-partial')],
+      );
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('fc-aaaaaaaaaaaa', 'Added Partial', 'fc-aaaaaaaaaaaa')],
+              claims: [partialSample('fc-aaaaaaaaaaaa')],
+              nextRound: 1,
+            },
+          ]}
+        />,
+      );
+      expect(badgeOf('Partial Sample')).toBe('POSSIBLE SAMPLE');
+      expect(cardOf('Partial Sample').textContent).toContain('Partly supported');
+      fireEvent.click(moreButton());
+      await screen.findByText('Added Partial');
+      expect(badgeOf('Added Partial')).toBe('POSSIBLE SAMPLE');
+      expect(cardOf('Added Partial').textContent).toContain('Partly supported');
+    });
+
+    it('never reads a sample more facts added as source data, even when the model was unavailable', async () => {
+      // A result built without the model: its own cards come from source data, but a card
+      // "more facts" added is the model's, with or without a claim.
+      const track = {
+        ...withFacts([card('f1', 'Record Sample')], []),
+        modelUnavailable: true,
+      } as TrackData;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('fc-aaaaaaaaaaaa', 'Added Sample')], nextRound: 1 }]}
+        />,
+      );
+      expect(badgeOf('Record Sample')).toBe('SAMPLE');
+      fireEvent.click(moreButton());
+      await screen.findByText('Added Sample');
+      expect(badgeOf('Added Sample')).toBe('POSSIBLE SAMPLE');
+    });
+
+    it('counts a card left out for an unreadable claim once when its id repeats', async () => {
+      const unreadable = { ...aClaim({ id: 'c-lyric' }), about: 'lyrics' } as unknown as Claim;
+      const track = withFacts(
+        [card('s1', 'Release Info'), card('f9', 'A Lyric', 'c-lyric')],
+        [unreadable],
+      );
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f9', 'A Lyric', 'c-lyric')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      expect(
+        screen.getByText('1 fact is not shown: this page cannot read the claim it states.'),
+      ).toBeTruthy();
+      expect(screen.queryByText('A Lyric')).toBeNull();
+    });
+
     it('shows a fact once when its id repeats, with no duplicate keys', async () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       const track = withFacts(

@@ -163,10 +163,15 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     };
     return [track.factoids.filter(shownOnce), addedFactoids.filter(shownOnce)];
   }, [track.factoids, addedFactoids, claims]);
-  // Cards left out because the claim they state cannot be read (not rejected: those are listed).
-  const unreadableCards = [...track.factoids, ...addedFactoids].filter(
-    (factoid) => claims.isUnreadable(factoid.claimId) && !claims.isRejected(factoid.claimId),
-  ).length;
+  // Cards left out because the claim they state cannot be read (not rejected: those are listed),
+  // each once by id.
+  const unreadableCards = new Set(
+    [...track.factoids, ...addedFactoids]
+      .filter(
+        (factoid) => claims.isUnreadable(factoid.claimId) && !claims.isRejected(factoid.claimId),
+      )
+      .map((factoid) => factoid.id),
+  ).size;
   const genealogy = useMemo(
     () => withoutHiddenRelations(track.genealogy, claims.isHidden),
     [track.genealogy, claims],

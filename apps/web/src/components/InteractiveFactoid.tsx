@@ -100,8 +100,10 @@ const CLAIM_CATEGORIES: Record<ClaimAbout, { Icon: LucideIcon; label: string }> 
 };
 
 // A relation to another record (a sample, a cover) the card names as such only when it is known:
-// its claim is shown as sourced or measured, or, without a claim, the card was taken from source
-// data. A model's guess reads as possible.
+// its claim is shown as sourced or measured and was not found only partly supported, or, without
+// a claim, the card was taken from source data. A relation is stated whole (as the verifier
+// reads a link's claim): a source that supports only part of it does not confirm it. A model's
+// guess reads as possible.
 const RELATIONS: ReadonlySet<string> = new Set(['sample', 'cover']);
 
 /**
@@ -117,7 +119,9 @@ export function factoidCategory(
   const category =
     (claim ? CLAIM_CATEGORIES[claim.claim.about] : FACTOID_CATEGORIES[factoid.type]) ??
     FACTOID_CATEGORIES.trivia;
-  const known = claim ? claim.kind === 'sourced' || claim.kind === 'measured' : fromSourceData;
+  const known = claim
+    ? (claim.kind === 'sourced' || claim.kind === 'measured') && claim.claim.verdict !== 'partial'
+    : fromSourceData;
   const possible = RELATIONS.has(type) && !known;
   return {
     key: possible ? `possible-${type}` : type,
@@ -149,15 +153,17 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
 }) => {
   // The card's entities link to the source its claim cites, when it is shown as sourced.
   const href = entityHref(claim);
-  // Memoized content with the linked entities highlighted
-  const renderedContent = useMemo(() => {
+  // Memoized content with the linked entities highlighted, and how many links it draws (an
+  // entity whose text is not in the content as written is not drawn).
+  const { renderedContent, linked } = useMemo(() => {
     if (!factoid.entities?.length) {
-      return <span>{factoid.content}</span>;
+      return { renderedContent: <span>{factoid.content}</span>, linked: 0 };
     }
 
     const content = factoid.content;
     const elements: React.ReactNode[] = [];
     let lastIndex = 0;
+    let links = 0;
 
     // Sort entities by their position in content to process in order
     const sortedEntities = [...factoid.entities].sort((a, b) => {
@@ -183,6 +189,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
         | (typeof ENTITY_TYPES)[FactoidEntity['type']]
         | undefined;
       const name = kind ? `${entity.text} (${kind.word})` : entity.text;
+      if (href) links += 1;
       elements.push(
         href ? (
           <a
@@ -220,12 +227,10 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
       elements.push(<span key="text-end">{content.slice(lastIndex)}</span>);
     }
 
-    return <>{elements}</>;
+    return { renderedContent: <>{elements}</>, linked: links };
   }, [factoid.content, factoid.entities, href]);
 
   const style = factoidCategory(factoid, claim, fromSourceData);
-  // Entities that can be opened: those of a card whose claim links a source.
-  const linked = href ? (factoid.entities?.length ?? 0) : 0;
 
   return (
     <div

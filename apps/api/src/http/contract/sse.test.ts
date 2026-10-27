@@ -354,7 +354,7 @@ const streamPath = (query: string) => `/api/analyze/stream?query=${encodeURIComp
 const resumePath = (threadId: string, trackId: string) =>
   `/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${trackId}`;
 const factoidPath = (query: Record<string, string>) =>
-  `/api/factoids/decrypt/stream?${new URLSearchParams(query)}`;
+  `/api/factoids/more/stream?${new URLSearchParams(query)}`;
 const runStatus = (threadId: string) => getRun(getDb(), threadId)?.status;
 
 let server: http.Server;
@@ -703,7 +703,7 @@ describe("event streams follow the contract", () => {
     });
   });
 
-  describe("GET /api/factoids/decrypt/stream", () => {
+  describe("GET /api/factoids/more/stream", () => {
     const expectFactoids = (body: string, options?: { ended?: boolean }) => {
       const events = contractEvents(body, FactoidStreamEvent);
       expectWellFormed(events, options);

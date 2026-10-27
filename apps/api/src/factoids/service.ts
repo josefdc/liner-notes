@@ -43,8 +43,10 @@ import {
   type Claim,
   type ComposerFactoid,
   type Evidence,
+  FACTOID_ROUNDS,
   type Factoid,
   FactoidsOutput,
+  FIRST_FACTOID_ROUND,
   SPOTIFY_ID_PATTERN,
   TrackAnalysis,
 } from "@liner-notes/contract";
@@ -85,21 +87,26 @@ export const FACTOID_FOCUSES = [
   "the other records and artists it is tied to",
 ] as const;
 
-/** The rounds of a track's "more facts": FACTOID_FOCUSES asked FACTOIDS_PER_REQUEST at a time. */
-export const FACTOID_ROUNDS = Math.ceil(FACTOID_FOCUSES.length / FACTOIDS_PER_REQUEST);
+/**
+ * The rounds of a track's "more facts": FACTOID_FOCUSES asked FACTOIDS_PER_REQUEST at a time. The
+ * number is the contract's, which the web reads to stop asking once every round has been asked;
+ * a test keeps it in step with the focuses.
+ */
+export { FACTOID_ROUNDS };
 
 /** An id factId gives. */
 const FACT_ID = /^fc-[0-9a-f]{12}$/;
 
 /**
- * The round of a request: the later of the round the client sends (`round`: the `nextRound` of
- * its last answer, so a click that wrote nothing still moves on) and the one the ids it sends
- * show (each FACTOIDS_PER_REQUEST of the ids factId gave, rounded up, is one earlier round; for a
- * client that sends no round).
+ * The round of a request: the round the client sends (`round`: the `nextRound` of its last
+ * answer, or the same round again when that answer could not write its facts), as it is. A
+ * client that sends no round is placed by the ids it sends: each FACTOIDS_PER_REQUEST of the ids
+ * factId gave, rounded up, is one earlier round, from FIRST_FACTOID_ROUND.
  */
-export function roundFor(existingIds: readonly string[], round = 0): number {
+export function roundFor(existingIds: readonly string[], round?: number): number {
+  if (round !== undefined) return round;
   const written = existingIds.filter((id) => FACT_ID.test(id)).length;
-  return Math.max(round, Math.ceil(written / FACTOIDS_PER_REQUEST));
+  return Math.max(FIRST_FACTOID_ROUND, Math.ceil(written / FACTOIDS_PER_REQUEST));
 }
 
 /**
@@ -114,6 +121,12 @@ export function focusesFor(round: number): string[] {
 
 /** The round the client is to send on its next request: the next one, at most FACTOID_ROUNDS. */
 export const nextRoundAfter = (round: number) => Math.min(round + 1, FACTOID_ROUNDS);
+
+/**
+ * Whether round `round` still has angles to ask about: what an answer tells the client
+ * (`roundsLeft`), so it never needs to count the rounds itself.
+ */
+export const roundsLeftAt = (round: number) => focusesFor(round).length > 0;
 
 /** Why a fact that cites evidence has no verdict when the judge gave none. */
 export const NOT_CHECKED_REASON = "Not checked: the check against its sources could not run.";

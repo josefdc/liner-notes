@@ -1,10 +1,17 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { factoidRoundsLeft } from '@liner-notes/contract/factoids';
+import { useRef, useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { moreFactsOf } from '../hooks/agent/moreFacts';
+import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/types';
 import type { Factoid, TrackData } from '../types';
 import { audioBlock } from './measured/testing';
 import Player from './Player';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const missingTrack = {
   id: 't1',
@@ -174,33 +181,66 @@ describe('Player', () => {
     expect(container.textContent).not.toContain('the audio was not analyzed');
   });
 
-  it('labels decrypted factoids as model inference and counts only the ones shown', async () => {
-    const track = {
-      ...missingTrack,
-      modelUnavailable: true,
-      factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
-    } as unknown as TrackData;
-    const decrypt = async (
-      _title: string,
-      _artist: string,
-      _ids: string[],
-      onFactoid: (f: Factoid) => void,
-    ) => {
-      onFactoid({
-        id: 'm1',
-        title: 'Hidden Sample',
-        content: 'Interpolates a 1972 record.',
-        type: 'sample',
+  /**
+   * The Player with "more facts" kept as useAgent keeps them: `answer` gives each click's facts,
+   * its failures and the round named next, or reports the API unavailable.
+   */
+  function MoreFactsPlayer({
+    track,
+    answers,
+  }: {
+    track: TrackData;
+    answers: Array<{
+      factoids?: Factoid[];
+      failed?: FailedFact[];
+      nextRound?: number;
+      unavailable?: 'rate_limited' | 'budget_exhausted';
+      /** The answer failed as a whole; `broke`: its stream broke, so the request rejects. */
+      answerFailed?: 'error' | 'broke';
+    }>;
+  }) {
+    const [moreFacts, setMoreFacts] = useState<MoreFacts | null>(null);
+    const clicks = useRef(0);
+    const ask = async (result: TrackData, options?: MoreFactsOptions) => {
+      const reply = answers[clicks.current++] ?? {};
+      if (reply.unavailable) options?.onUnavailable?.(reply.unavailable);
+      const before = moreFactsOf(result, moreFacts);
+      const factoids = reply.factoids ?? [];
+      setMoreFacts({
+        ...before,
+        factoids: [...before.factoids, ...factoids],
+        failed: reply.failed ?? [],
+        answerFailed: reply.answerFailed !== undefined,
+        ...(reply.nextRound !== undefined
+          ? { nextRound: reply.nextRound, finished: !factoidRoundsLeft(reply.nextRound) }
+          : {}),
       });
-      onFactoid({
-        id: 'm2',
-        title: 'Lyric Meaning',
-        content: 'About the words.',
-        type: 'lyrics',
-      } as unknown as Factoid);
+      if (reply.answerFailed === 'broke') throw new Error('Factoid stream connection failed');
+      return factoids;
     };
-    render(<Player trackData={track} onBack={() => {}} onDecryptMoreStream={decrypt} />);
-    fireEvent.click(screen.getByRole('button', { name: /DECRYPT MORE/ }));
+    return (
+      <Player
+        trackData={track}
+        onBack={() => {}}
+        moreFacts={moreFacts}
+        onMoreFactoidsStream={ask}
+      />
+    );
+  }
+  const releaseInfo = {
+    ...missingTrack,
+    factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
+  } as unknown as TrackData;
+  const moreButton = () => screen.getByRole('button', { name: /DECRYPT MORE/ });
+
+  it('labels decrypted factoids as model inference and counts only the ones shown', async () => {
+    const track = { ...releaseInfo, modelUnavailable: true } as TrackData;
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+      { id: 'm2', title: 'Lyric Meaning', content: 'About the words.', type: 'lyrics' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={track} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
 
     const decrypted = await screen.findByRole('region', { name: 'Decrypted insights' });
     expect(decrypted.textContent).toContain('Hidden Sample');
@@ -215,24 +255,94 @@ describe('Player', () => {
     ['rate_limited', 'quota or rate limit reached'],
     ['budget_exhausted', 'live model calls are paused, budget reached'],
   ] as const)('says why DECRYPT MORE added nothing: %s', async (code, text) => {
-    const decrypt = async (
-      _title: string,
-      _artist: string,
-      _ids: string[],
-      _onFactoid: (f: Factoid) => void,
-      _signal?: AbortSignal,
-      onUnavailable?: (code: 'rate_limited' | 'budget_exhausted') => void,
-    ) => {
-      onUnavailable?.(code);
-    };
-    const track = {
-      ...missingTrack,
-      factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
-    } as unknown as TrackData;
-    render(<Player trackData={track} onBack={() => {}} onDecryptMoreStream={decrypt} />);
-    fireEvent.click(screen.getByRole('button', { name: /DECRYPT MORE/ }));
+    // Every fact failed for that reason: the reason is said once, not as facts not written.
+    const failed = [0, 1, 2].map((index) => ({ index, code }));
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ unavailable: code, failed }]} />);
+    fireEvent.click(moreButton());
 
     const notice = await screen.findByText(`More facts unavailable: ${text}`);
     expect(notice.getAttribute('role')).toBe('status');
+    expect(screen.queryByText(/could not be written/)).toBeNull();
+  });
+
+  it.each([
+    ['an error for the whole answer', 'error'],
+    ['a stream that broke', 'broke'],
+  ] as const)('says so when more facts failed as a whole: %s', async (_label, how) => {
+    if (how === 'broke') vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ answerFailed: how }, {}]} />);
+    fireEvent.click(moreButton());
+
+    const notice = await screen.findByText('More facts could not be written. Try again.');
+    expect(notice.getAttribute('role')).toBe('status');
+    await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+    fireEvent.click(moreButton());
+    await waitFor(() =>
+      expect(screen.queryByText('More facts could not be written. Try again.')).toBeNull(),
+    );
+  });
+
+  it("shows nothing of another result's more facts", () => {
+    const shown = { ...releaseInfo, run: { id: 'run-a', mode: 'live' } } as TrackData;
+    const foreign = (other: TrackData): MoreFacts => ({
+      ...moreFactsOf(other, null),
+      factoids: [
+        { id: 'fc-x', title: 'Foreign Fact', content: 'Of another result.', type: 'trivia' },
+      ],
+      failed: [{ index: 1, code: 'failed' }],
+      nextRound: 2,
+      finished: true,
+      answerFailed: true,
+    });
+    for (const other of [
+      { ...shown, id: 'another-track' },
+      { ...shown, run: { id: 'run-b', mode: 'live' } },
+    ] as TrackData[]) {
+      render(
+        <Player
+          trackData={shown}
+          onBack={() => {}}
+          moreFacts={foreign(other)}
+          onMoreFactoidsStream={async () => []}
+        />,
+      );
+      expect(screen.queryByText('Foreign Fact')).toBeNull();
+      expect(screen.queryByText(/could not be written/)).toBeNull();
+      expect(screen.queryByText(/No more facts/)).toBeNull();
+      expect(moreButton().hasAttribute('disabled')).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('says how many facts of a click could not be written, and shows the others', async () => {
+    const fact = { id: 'fc-a', title: 'Hidden Sample', content: 'A 1972 record.', type: 'sample' };
+    render(
+      <MoreFactsPlayer
+        track={releaseInfo}
+        answers={[{ factoids: [fact] as Factoid[], failed: [{ index: 1, code: 'failed' }] }]}
+      />,
+    );
+    fireEvent.click(moreButton());
+
+    const notice = await screen.findByText('1 fact could not be written.');
+    expect(notice.getAttribute('role')).toBe('status');
+    expect(screen.getByRole('region', { name: 'Decrypted insights' }).textContent).toContain(
+      'Hidden Sample',
+    );
+  });
+
+  it('disables the control once every round has been asked, and says why', async () => {
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ nextRound: 1 }, { nextRound: 2 }]} />);
+    fireEvent.click(moreButton());
+    await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+    expect(screen.queryByText(/every angle on this track has been asked/)).toBeNull();
+
+    fireEvent.click(moreButton());
+    const reason = await screen.findByText(
+      'No more facts: every angle on this track has been asked.',
+    );
+    expect(reason.getAttribute('role')).toBe('status');
+    await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(true));
+    expect(moreButton().getAttribute('aria-describedby')).toBe(reason.id);
   });
 });

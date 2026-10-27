@@ -73,38 +73,54 @@ function withSpotifyRetry<T>(
   });
 }
 
+/** How far apart two lengths may be for two rows to be one recording (a remaster, a reissue). */
+const SAME_LENGTH_MS = 2000;
+
 /**
- * `date` is before `than`, compared as far as both go: a year alone is as early as any day in
- * it. An unknown date (knownReleaseDate) is before nothing and after nothing.
+ * Whether two rows are one recording listed twice (the album track and its single, a reissue,
+ * a compilation): they share an ISRC, Spotify marks both explicit or both not (or knows
+ * neither), and their lengths are known and within SAME_LENGTH_MS. Labels sometimes reuse an
+ * ISRC for a clean version or an edit; those stay apart. A row without an ISRC or a length is
+ * never one recording with another, even with the same title and artist: two takes may be two
+ * recordings, and the picker is where to tell them apart.
  */
-function releasedBefore(date: string | null | undefined, than: string | null | undefined) {
-  const a = knownReleaseDate(date);
-  const b = knownReleaseDate(than);
-  if (!a || !b) return false;
-  const length = Math.min(a.length, b.length);
-  return a.slice(0, length) < b.slice(0, length);
+function sameRecording(a: SearchCandidate, b: SearchCandidate): boolean {
+  return (
+    !!a.isrc &&
+    a.isrc === b.isrc &&
+    (a.explicit ?? null) === (b.explicit ?? null) &&
+    typeof a.durationMs === "number" &&
+    typeof b.durationMs === "number" &&
+    Math.abs(a.durationMs - b.durationMs) <= SAME_LENGTH_MS
+  );
 }
 
 /**
- * The candidates with each recording offered once. Spotify often lists one recording several
- * times (the album track and its single, a reissue, a compilation), all with its ISRC: of the
- * rows that share an ISRC, the one released first is kept, in the place of the first listed;
- * when a date is unknown, the first listed is kept. Rows with different ISRCs stay apart (a live
- * take, a re-recording), and a row without an ISRC is never merged, even with a row of the same
- * title and artist: two takes may be two recordings, and the picker is where to tell them apart.
+ * Whether `row` is the release to keep rather than `kept`, both of one recording: a release of
+ * a known date (knownReleaseDate) before one of an unknown date, and of two known dates the
+ * earlier, compared as far as both go (a year alone is as early as any day in it). Otherwise
+ * the one listed first is kept.
+ */
+function keptInstead(row: SearchCandidate, kept: SearchCandidate): boolean {
+  const date = knownReleaseDate(row.releaseDate);
+  const than = knownReleaseDate(kept.releaseDate);
+  if (!date) return false;
+  if (!than) return true;
+  const length = Math.min(date.length, than.length);
+  return date.slice(0, length) < than.slice(0, length);
+}
+
+/**
+ * The candidates with each recording offered once (sameRecording): of the rows of one
+ * recording, the earliest known release is kept (keptInstead), in the place of the first
+ * listed.
  */
 function oneRowPerRecording(candidates: SearchCandidate[]): SearchCandidate[] {
   const kept: SearchCandidate[] = [];
-  const places = new Map<string, number>();
   for (const candidate of candidates) {
-    const isrc = candidate.isrc;
-    const place = isrc ? places.get(isrc) : undefined;
-    if (place === undefined) {
-      if (isrc) places.set(isrc, kept.length);
-      kept.push(candidate);
-    } else if (releasedBefore(candidate.releaseDate, kept[place].releaseDate)) {
-      kept[place] = candidate;
-    }
+    const place = kept.findIndex((row) => sameRecording(row, candidate));
+    if (place === -1) kept.push(candidate);
+    else if (keptInstead(candidate, kept[place])) kept[place] = candidate;
   }
   return kept;
 }
@@ -308,6 +324,12 @@ export async function scoutNode(
                 : null,
             ...(releaseYear ? { releaseYear } : {}),
             isrc: normalizeIsrc(t.isrc),
+            // Which version this is (explicit or clean, and its length), so that two versions
+            // under one ISRC are not merged; none when Spotify did not say.
+            ...(typeof t.explicit === "boolean" ? { explicit: t.explicit } : {}),
+            ...(Number.isInteger(t.durationMs) && t.durationMs > 0
+              ? { durationMs: t.durationMs }
+              : {}),
             // Only a score Spotify gave; none is invented when it is missing.
             ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
           };

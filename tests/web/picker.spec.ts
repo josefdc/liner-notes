@@ -16,6 +16,8 @@ type Candidate = {
   releaseYear: string;
   isrc?: string | null;
   releaseDate?: string | null;
+  explicit?: boolean | null;
+  durationMs?: number;
 };
 
 const hitl = loadFixture("hitl");
@@ -363,7 +365,8 @@ test("every track the server counts gets a row: a studio and a live take with on
 test("rows sharing an ISRC show as one, other ISRCs stay apart, and the question counts the rows shown", async ({
   page,
 }) => {
-  // An older server sends one recording twice (its single and its album) and counts both.
+  // A server that does not merge sends one recording twice (its single and its album: one
+  // ISRC, both clean, one length) and counts both.
   const single = {
     id: "m-single",
     title: "Midnight City",
@@ -373,6 +376,8 @@ test("rows sharing an ISRC show as one, other ISRCs stay apart, and the question
     releaseYear: "2012",
     isrc: "GB55H1100002",
     releaseDate: "2012-01-17",
+    explicit: false,
+    durationMs: 243_000,
   };
   const album = {
     ...single,

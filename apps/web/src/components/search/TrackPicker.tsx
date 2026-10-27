@@ -50,10 +50,11 @@ interface TrackPickerProps {
  *
  * Nothing is chosen for the user: the run waits until a row is picked or the picker is left.
  *
- * The rows are `pickerRows`: each track id once, and the rows that share an ISRC as one. Rows
- * without an ISRC are never merged, as two rows with one title and artist can be two takes (a
- * studio and a live one), of which the picker is the last place to choose. When this leaves
- * fewer rows than the server counted, the question counts the rows shown (useAgent).
+ * The rows are `pickerRows`: each track id once, and the rows of one recording (one ISRC, one
+ * explicit value, one length) as one. Rows without an ISRC are never merged, as two rows with
+ * one title and artist can be two takes (a studio and a live one), of which the picker is the
+ * last place to choose. When this leaves fewer rows than the server counted, the question
+ * counts the rows shown (useAgent).
  */
 export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerProps) {
   const id = useId();

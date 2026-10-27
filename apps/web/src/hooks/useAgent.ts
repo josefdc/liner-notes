@@ -411,12 +411,13 @@ export function useAgent(): UseAgentReturn {
           // Keep the same list object when nothing changed, so the picker is not reset.
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
-          // The server counts the candidates ("One possible track…"): its words are the line,
-          // unless the picker shows fewer rows (pickerRows merges the rows of one recording, a
-          // guard for older servers and recordings), when the line counts the rows shown.
+          // The server counts the candidates it sent ("One possible track…"): its words are the
+          // line, unless the picker shows another number of rows, for any reason (a candidate
+          // this page could not read; rows of one recording that pickerRows merges, a guard
+          // for a server that does not), when the line counts the rows shown.
           const shown = pickerRows(candidates).length;
           const question =
-            shown === candidates.length ? data.message || PICK_FALLBACK : pickerQuestion(shown);
+            shown === data.sentCount ? data.message || PICK_FALLBACK : pickerQuestion(shown);
           setState((prev) => ({
             ...prev,
             status: 'disambiguation',

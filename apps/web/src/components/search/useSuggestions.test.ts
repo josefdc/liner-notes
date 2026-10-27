@@ -257,18 +257,6 @@ describe('mergeDuplicates', () => {
     ).toEqual(['a', 'c', 'd']);
   });
 
-  it("never merges rows without an ISRC in the picker's mode ('apart'), but still merges one ISRC", () => {
-    const rows = [
-      song('a', 'Midnight City', 'M83'),
-      song('b', ' midnight  city ', 'm83'),
-      record('e', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2012-01-17' }),
-      record('f', 'Midnight City', { isrc: 'gb55h1100002', releaseDate: '2011-10-18' }),
-      record('g', 'Midnight City', { isrc: 'GB55H1300009' }),
-      song('a', 'Midnight City', 'M83'),
-    ];
-    expect(mergeDuplicates(rows, 'apart').map((row) => row.id)).toEqual(['a', 'b', 'f', 'g']);
-  });
-
   /** Every order of `list`. */
   const orders = <T>(list: T[]): T[][] =>
     list.length <= 1

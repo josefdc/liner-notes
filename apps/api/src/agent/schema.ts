@@ -438,6 +438,12 @@ export const SearchCandidateSchema = z.object({
       "The album's release date as Spotify sent it ('2011', '2011-10', '2011-10-18', '0000')",
     ),
   isrc: z.string().nullable().optional().describe("The recording's ISRC, when Spotify gave one"),
+  explicit: z
+    .boolean()
+    .nullable()
+    .optional()
+    .describe("Whether Spotify marks the track explicit, when it says"),
+  durationMs: z.number().int().min(0).optional().describe("The track's length in ms, when known"),
   popularity: z
     .number()
     .min(0)

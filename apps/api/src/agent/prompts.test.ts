@@ -18,10 +18,11 @@ import {
   JUDGE_SYSTEM_PROMPT,
   judgeMessages,
   plannerMessages,
+  promptTrack,
   RESEARCH_PLANNER_SYSTEM_PROMPT,
   sourceBlock,
 } from "./prompts.js";
-import type { ResearchData } from "./state.js";
+import type { ResearchData, SpotifyData } from "./state.js";
 import { audioV2, gatedV2, measurementOf } from "./testing/measuredAudio.js";
 
 const research: ResearchData = {
@@ -83,6 +84,30 @@ describe("measured audio in the composer's prompt", () => {
         "(not measured)",
       );
     }
+  });
+});
+
+describe("the track in the prompts", () => {
+  const spotify = (releaseDate: string | null): SpotifyData => ({
+    id: "x",
+    title: "Ice Ice Baby",
+    artist: "Vanilla Ice",
+    artistIds: [],
+    album: "To the Extreme",
+    releaseDate,
+    coverUrl: "",
+    isrc: null,
+    duration: "4:30",
+    durationMs: 270_000,
+    explicit: false,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    previewUrl: null,
+  });
+
+  it('gives the year of a known release date, and none for "0000" or no date', () => {
+    expect(promptTrack(spotify("1990-09-10")).year).toBe("1990");
+    expect(promptTrack(spotify("0000")).year).toBeNull();
+    expect(promptTrack(spotify(null)).year).toBeNull();
   });
 });
 

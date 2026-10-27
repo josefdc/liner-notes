@@ -155,6 +155,8 @@ describe('parseAnalysisEvent', () => {
     };
     expect(parseAnalysisEvent(json(event))).toEqual({
       ...event,
+      // Three were sent; the one without an id cannot be read.
+      sentCount: 3,
       // A wider bound is kept as sent; a field of the wrong type reads as missing.
       candidates: [
         { ...candidate, popularity: 120 },
@@ -163,7 +165,7 @@ describe('parseAnalysisEvent', () => {
     });
   });
 
-  it("keeps a candidate's ISRC and release date, by which the picker merges rows", () => {
+  it("keeps a candidate's ISRC, release date, explicit flag and length, by which the picker merges rows", () => {
     const candidate = { id: 'c1', title: 'Hurt', artist: 'NIN', album: 'A', coverUrl: '' };
     const event = {
       type: 'interrupt',
@@ -173,15 +175,28 @@ describe('parseAnalysisEvent', () => {
       threadId: 'run-1',
       message: 'Pick one',
       candidates: [
-        { ...candidate, isrc: 'USIR19400001', releaseDate: '1994-03-08' },
-        { ...candidate, id: 'c2', isrc: null, releaseDate: null },
-        { ...candidate, id: 'c3', isrc: 7, releaseDate: 1994 },
+        {
+          ...candidate,
+          isrc: 'USIR19400001',
+          releaseDate: '1994-03-08',
+          explicit: true,
+          durationMs: 218_000,
+        },
+        { ...candidate, id: 'c2', isrc: null, releaseDate: null, explicit: null },
+        { ...candidate, id: 'c3', isrc: 7, releaseDate: 1994, explicit: 'yes', durationMs: '218' },
       ],
     };
     expect(parseAnalysisEvent(json(event))).toEqual({
       ...event,
+      sentCount: 3,
       candidates: [
-        { ...candidate, isrc: 'USIR19400001', releaseDate: '1994-03-08' },
+        {
+          ...candidate,
+          isrc: 'USIR19400001',
+          releaseDate: '1994-03-08',
+          explicit: true,
+          durationMs: 218_000,
+        },
         { ...candidate, id: 'c2' },
         { ...candidate, id: 'c3' },
       ],

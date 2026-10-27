@@ -358,7 +358,13 @@ describe('useAgent progress', () => {
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     // An older server: one recording sent twice (its album and a compilation), counted as two.
-    const cash = { ...candidates[0], isrc: 'USUM70207211', releaseDate: '2002-11-05' };
+    const cash = {
+      ...candidates[0],
+      isrc: 'USUM70207211',
+      releaseDate: '2002-11-05',
+      explicit: false,
+      durationMs: 218_000,
+    };
     const compilation = { ...cash, id: 'c3', album: 'C', releaseDate: '2008' };
     analysis.send({
       ...interrupt(),
@@ -367,6 +373,45 @@ describe('useAgent progress', () => {
     });
 
     const question = '2 possible tracks from Spotify; choose one';
+    expect(hook.result.current.statusNote).toBe(question);
+    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
+  });
+
+  it('asks about one track when the picker merges every row into one', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    const cash = {
+      ...candidates[0],
+      isrc: 'USUM70207211',
+      releaseDate: '2002-11-05',
+      explicit: false,
+      durationMs: 218_000,
+    };
+    analysis.send({
+      ...interrupt(),
+      candidates: [cash, { ...cash, id: 'c3', album: 'C', releaseDate: '2008' }],
+      message: '2 possible tracks from Spotify; choose one',
+    });
+
+    const question = 'One possible track from Spotify; confirm it or search again';
+    expect(hook.result.current.statusNote).toBe(question);
+    expect(hook.result.current.logs.at(-1)?.message).toBe(question);
+  });
+
+  it('counts the rows shown when the page cannot read one of the candidates sent', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      ...interrupt(),
+      // The third has no id: it cannot be shown or picked.
+      candidates: [...candidates, { title: 'Hurt', artist: 'Leona Lewis' }],
+      message: '3 possible tracks from Spotify; choose one',
+    });
+
+    const question = '2 possible tracks from Spotify; choose one';
+    expect(hook.result.current.candidates).toHaveLength(2);
     expect(hook.result.current.statusNote).toBe(question);
     expect(hook.result.current.logs.at(-1)?.message).toBe(question);
   });

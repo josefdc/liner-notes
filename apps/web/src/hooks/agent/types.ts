@@ -13,6 +13,10 @@ export interface SearchCandidate {
   isrc?: string | null;
   /** Spotify's release date as sent ("0000" when unknown); null or absent when not known. */
   releaseDate?: string | null;
+  /** Whether Spotify marks the track explicit; null or absent when not known. */
+  explicit?: boolean | null;
+  /** The track's length in milliseconds; absent when not known. */
+  durationMs?: number;
 }
 
 export type AgentStatus =

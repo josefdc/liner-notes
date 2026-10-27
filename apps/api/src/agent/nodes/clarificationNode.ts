@@ -106,8 +106,9 @@ export async function clarificationNode(
   let detailed = true;
   // Set when the details could not be read, with Spotify's typed error: the run goes on with
   // the candidate's fields, and its result is not stored (the composer stores nothing built
-  // without the details), so a later run with the track's full details (its ISRC and duration,
-  // which the audio lookup needs) is never served this one.
+  // without the details), so a later run with the track's full details is never served this
+  // one. The candidate's ISRC is the one Spotify's search gave for the track (the same value
+  // the details carry), so the sources keyed by it are still read.
   let sourceErrors: SourceError[] = [];
   try {
     config.signal?.throwIfAborted();
@@ -116,9 +117,9 @@ export async function clarificationNode(
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     // Fallback: minimal SpotifyData from the candidate, with the ISRC and release date Spotify's
-    // search gave for it. What the candidate does not carry is left unknown rather than
-    // guessed: the duration (0, shown as missing), whether the track is explicit (null), its
-    // popularity, and its ISRC or date when the search gave none.
+    // search gave for it. The rest is left unknown rather than guessed: the duration (0, shown
+    // as missing), whether the track is explicit (null), its popularity, and its ISRC or date
+    // when the search gave none.
     detailed = false;
     sourceErrors = [errorRecord("spotify", error)];
     log.warn(`Track details not read; using the candidate: ${selectedId}`);

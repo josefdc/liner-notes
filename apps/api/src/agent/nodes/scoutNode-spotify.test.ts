@@ -744,15 +744,101 @@ describe("the picker's candidates: ISRC, release date, and one row per recording
     expect(sent[0].message).toBe("3 possible tracks from Spotify; choose one");
   });
 
-  it("keeps the first listed of one recording when a release date is unknown", async () => {
-    const first = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
-    const second = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
+  it('prefers a dated release to one dated "0000" or not at all; of two undated, keeps the first', async () => {
+    const unknown = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
+    const dated = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
     const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([unknown, dated, nin]);
+    expect(ids((await scout("Hurt")).candidates)).toEqual([dated.id, nin.id]);
+
+    const first = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
+    const second = spotifyTrack("Hurt", ["Johnny Cash"], released("0000", "USUM70207211"));
     spotifySearch([first, second, nin]);
+    expect(ids((await scout("Hurt")).candidates)).toEqual([first.id, nin.id]);
+  });
+
+  it("keeps the earliest release when it is listed first, not the one listed last", async () => {
+    const album = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
+    const compilation = spotifyTrack("Hurt", ["Johnny Cash"], released("2008", "USUM70207211"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([album, compilation, nin]);
+
+    expect(ids((await scout("Hurt")).candidates)).toEqual([album.id, nin.id]);
+  });
+
+  it("compares dates as far as both go: a year is not before a day in it", async () => {
+    const day = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", "USUM70207211"));
+    const year = spotifyTrack("Hurt", ["Johnny Cash"], released("2002", "USUM70207211"));
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([day, year, nin]);
+
+    expect(ids((await scout("Hurt")).candidates)).toEqual([day.id, nin.id]);
+  });
+
+  it("keeps an explicit and a clean version apart, though they share an ISRC", async () => {
+    const isrc = "USUM70207211";
+    const clean = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", isrc));
+    const explicit = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2003", isrc),
+      explicit: true,
+    });
+    spotifySearch([clean, explicit]);
 
     const out = await scout("Hurt");
 
-    expect(ids(out.candidates)).toEqual([first.id, nin.id]);
+    expect(ids(out.candidates)).toEqual([clean.id, explicit.id]);
+    expect(out.candidates?.map((row) => row.explicit)).toEqual([false, true]);
+  });
+
+  it("keeps two edits apart (3:30 and 5:10), though they share an ISRC", async () => {
+    const isrc = "USUM70207211";
+    const edit = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2002-11-05", isrc),
+      duration_ms: 210_000,
+    });
+    const full = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2002-11-05", isrc),
+      duration_ms: 310_000,
+    });
+    spotifySearch([edit, full]);
+
+    const out = await scout("Hurt");
+
+    expect(ids(out.candidates)).toEqual([edit.id, full.id]);
+    expect(out.candidates?.map((row) => row.durationMs)).toEqual([210_000, 310_000]);
+  });
+
+  it("merges a remaster with the same ISRC, explicit value and a length within 2 s", async () => {
+    const isrc = "USUM70207211";
+    const album = spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", isrc));
+    const remaster = spotifyTrack("Hurt", ["Johnny Cash"], {
+      ...released("2014", isrc),
+      duration_ms: 219_900,
+    });
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08"));
+    spotifySearch([remaster, album, nin]);
+
+    expect(ids((await scout("Hurt")).candidates)).toEqual([album.id, nin.id]);
+  });
+
+  it("offers as many recordings as it may once the rows of one recording are merged", async () => {
+    // Six results, the first two one recording: five recordings, all offered (the cap is 5).
+    const isrc = "USUM70207211";
+    const items = [
+      spotifyTrack("Hurt", ["Johnny Cash"], released("2002-11-05", isrc)),
+      spotifyTrack("Hurt", ["Johnny Cash"], released("2008", isrc)),
+      spotifyTrack("Hurt", ["Nine Inch Nails"], released("1994-03-08")),
+      spotifyTrack("Hurt", ["Christina Aguilera"], released("2006")),
+      spotifyTrack("Hurt", ["Leona Lewis"], released("2011")),
+      spotifyTrack("Hurt", ["Thousand Foot Krutch"], released("2003")),
+    ];
+    spotifySearch(items);
+
+    const { state, sent } = await scoutStream("Hurt");
+
+    expect(state.candidates).toHaveLength(5);
+    expect(ids(state.candidates as { id: string }[])).not.toContain(items[1].id);
+    expect(sent[0].message).toBe("5 possible tracks from Spotify; choose one");
   });
 
   it("never merges rows without an ISRC, even with the same title and artist", async () => {

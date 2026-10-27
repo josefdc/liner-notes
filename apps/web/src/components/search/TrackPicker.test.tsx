@@ -135,6 +135,8 @@ describe('TrackPicker', () => {
       title: 'Midnight City',
       isrc: 'GB55H1100002',
       releaseDate: '2012-01-17',
+      explicit: false,
+      durationMs: 243_000,
     };
     const album = { ...single, id: 'm-album', releaseYear: '2011', releaseDate: '2011-10-18' };
     // Another recording of the song (a live take): another ISRC, its own row.

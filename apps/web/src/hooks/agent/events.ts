@@ -71,6 +71,11 @@ export type AnalysisEvent =
       reason: string;
       threadId: string;
       candidates: SearchCandidate[];
+      /**
+       * How many candidates the server sent, read or not: more than `candidates` when this page
+       * could not read some of them. The server's question counts these.
+       */
+      sentCount: number;
       message: string;
     } & Envelope)
   | UnreadableOutcome;
@@ -117,7 +122,8 @@ function envelopeOf(value: Record<string, unknown>): Envelope | null {
  */
 function readCandidate(value: unknown): SearchCandidate | null {
   if (!isObject(value)) return null;
-  const { id, title, artist, releaseYear, popularity, isrc, releaseDate } = value;
+  const { id, title, artist, releaseYear, popularity, isrc, releaseDate, explicit, durationMs } =
+    value;
   if (typeof id !== 'string' || id === '') return null;
   if (typeof title !== 'string' || typeof artist !== 'string') return null;
   return {
@@ -128,10 +134,15 @@ function readCandidate(value: unknown): SearchCandidate | null {
     coverUrl: text(value.coverUrl),
     ...(typeof releaseYear === 'string' ? { releaseYear } : {}),
     ...(typeof popularity === 'number' && Number.isFinite(popularity) ? { popularity } : {}),
-    // The recording's ISRC, by which the picker merges rows of one recording, and the date by
-    // which it keeps the earliest of them; left out when not text.
+    // What the picker merges rows of one recording by (pickerRows): the ISRC, whether the
+    // track is explicit and its length, and the date by which it keeps the earliest release.
+    // Left out when of another type.
     ...(typeof isrc === 'string' && isrc ? { isrc } : {}),
     ...(typeof releaseDate === 'string' && releaseDate ? { releaseDate } : {}),
+    ...(typeof explicit === 'boolean' ? { explicit } : {}),
+    ...(typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+      ? { durationMs }
+      : {}),
   };
 }
 
@@ -190,6 +201,7 @@ function readOutcome(
     reason: text(value.reason),
     threadId: text(value.threadId) || envelope.runId,
     candidates,
+    sentCount: value.candidates.length,
     message: text(value.message),
   };
 }
@@ -210,6 +222,10 @@ function parse(kind: Kind, data: string): unknown {
     // result's measurement.
     if (kind === 'analysis' && type === 'complete' && isObject(value) && isObject(value.data)) {
       return { ...value, data: withContractAudio(value.data, readContractAudio) };
+    }
+    // Every candidate of a checked interrupt is read: the count sent is the count read.
+    if (kind === 'analysis' && type === 'interrupt' && isObject(value)) {
+      return { ...value, sentCount: Array.isArray(value.candidates) ? value.candidates.length : 0 };
     }
     return value;
   }

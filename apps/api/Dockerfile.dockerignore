@@ -15,7 +15,8 @@
 !packages/contract
 !fixtures/replays
 
-# Never send these, even inside allowed directories (env comes from compose env_file)
+# Never send these, even inside allowed directories (the settings come from the environment that
+# deploy/compose.prod.yml sets, never from a file in the image)
 **/node_modules
 **/dist
 **/.env*

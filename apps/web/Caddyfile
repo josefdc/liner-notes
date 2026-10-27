@@ -1,0 +1,159 @@
+# Liner Notes web server (the web image's Caddy): serves the built app from /srv and forwards
+# /api/* to the API. The API and the audio service are reachable only through it.
+#
+# Settings from the environment (deploy/compose.prod.yml passes the first two):
+#   SITE_ADDRESS     the site's address. Default ":80", plain HTTP on port 80 (local use). A
+#                    hostname such as "liner-notes.example" makes Caddy serve HTTPS on 443 and
+#                    redirect port 80 to it (README, "Certificates", for the certificate).
+#   TRUSTED_PROXIES  more proxy ranges to trust besides Cloudflare's (default: none).
+#   API_UPSTREAM     the API's address on the compose network (default api:3001).
+#
+# Files /etc/caddy/site.d/*.caddy, when mounted (deploy/compose.prod.yml mounts deploy/site.d), are
+# read into the site: for example a `tls` line naming a Cloudflare Origin CA certificate
+# (deploy/site.d/origin-ca.caddy.example).
+{
+	# The configuration is baked into the image: nothing needs Caddy's admin endpoint.
+	admin off
+
+	# Caddy's other log lines (warnings and errors, such as a stream the visitor left before the
+	# API ended it, and the access lines of requests for another host) carry the request too:
+	# only its path is kept, with the track in /t/<id> and /api/runs/by-track/<id> left out, and
+	# no query, no request headers, no redirect target (Location repeats the query), and
+	# addresses shortened to their network. The site's own access log is below.
+	log default {
+		output stderr
+		format filter {
+			request>uri regexp "(?i)^([^?]*?/(?:t|by-track)/).*$|\?.*$" "${1}…"
+			request>headers delete
+			resp_headers>Location delete
+			request>remote_ip ip_mask 16 32
+			request>client_ip ip_mask 16 32
+		}
+	}
+
+	servers {
+		# HTTP/1.1 and HTTP/2 only. Behind Cloudflare the visitor's HTTP/3 ends at Cloudflare's
+		# edge, which reaches this server over TCP, so HTTP/3 here (UDP 443, which compose does
+		# not publish) would only advertise a port nothing answers on.
+		protocols h1 h2
+
+		# The visitor's address (client_ip, which the API's rate limits and logs key on) comes
+		# from CF-Connecting-IP only when the request arrives from one of these ranges; from any
+		# other peer the header is ignored and the peer's own address is used.
+		#
+		# Cloudflare's published ranges (https://www.cloudflare.com/ips-v4 and /ips-v6), copied
+		# 2026-10-27. Compare them with those lists before each deploy (README, "Cloudflare's
+		# addresses").
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32 {$TRUSTED_PROXIES}
+		client_ip_headers CF-Connecting-IP
+		trusted_proxies_strict
+	}
+}
+
+# Sent on every response of the site: pages, assets, the API's answers, and errors (imported
+# again in handle_errors). Deferred, so they replace any value an upstream sent. Not on Caddy's
+# automatic redirect from HTTP to HTTPS (a 308 with no body, made outside this site's routes,
+# which take no headers).
+(security_headers) {
+	header {
+		defer
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data: https://i.scdn.co https://mosaic.scdn.co https://coverartarchive.org https://archive.org https://*.archive.org; media-src 'self' https://p.scdn.co https://*.dzcdn.net; connect-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-Via
+	}
+}
+
+# Container health check (the image's HEALTHCHECK): loopback only, and never logged.
+http://:2020 {
+	bind 127.0.0.1
+	respond /health "ok" 200
+	respond 404
+}
+
+{$SITE_ADDRESS::80} {
+	# Access log, one JSON line per request on stdout, the automatic redirect to HTTPS included.
+	# The typed text and the run token are not written: the query's runToken is left out, and
+	# query, q, trackTitle, trackArtist, trackId and selectedTrackId read REDACTED. Ids stay:
+	# those that follow one run (threadId, runId) and any in a path (/t/<id>, /api/runs/<id>,
+	# /api/runs/by-track/<id>). Request
+	# headers (cookies, CF-Connecting-IP) and the redirect target (Location repeats the query)
+	# are left out, and addresses are shortened to their network.
+	#
+	# One filter per field: a second one on request>uri (a regexp after the query filter) is
+	# accepted by Caddy and silently replaces the first.
+	log access {
+		output stdout
+		format filter {
+			request>uri query {
+				delete runToken
+				replace query REDACTED
+				replace q REDACTED
+				replace trackId REDACTED
+				replace selectedTrackId REDACTED
+				replace trackTitle REDACTED
+				replace trackArtist REDACTED
+			}
+			request>headers delete
+			resp_headers>Location delete
+			request>remote_ip ip_mask 16 32
+			request>client_ip ip_mask 16 32
+		}
+	}
+
+	# Site settings of the deployment (deploy/site.d/*.caddy); none by default.
+	import /etc/caddy/site.d/*.caddy
+
+	import security_headers
+
+	# The API. Only /api/... is forwarded: /api itself and /apifoo are the app's paths. Event
+	# streams are flushed at once, and nothing here is compressed.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3001} {
+			# The API trusts one proxy (TRUST_PROXY=1): this one, which sends only the address
+			# it settled on, never a list a client started.
+			header_up X-Forwarded-For {client_ip}
+			flush_interval -1
+		}
+	}
+
+	# Vite puts a content hash in these names: cached for a year. A missing one is a 404, never
+	# the app's page under a year-long cache.
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		encode zstd gzip
+		file_server
+	}
+
+	# Files copied from public/ keep their names from one release to the next: cached for a
+	# day, then revalidated. A missing one is a 404 too. OFL.txt is UTF-8 (IBM's notice has a ©).
+	@public path /fonts/* /favicon.svg
+	handle @public {
+		root * /srv
+		header Cache-Control "public, max-age=86400"
+		@notice path /fonts/OFL.txt
+		header @notice Content-Type "text/plain; charset=utf-8"
+		encode zstd gzip
+		file_server
+	}
+
+	# Everything else is the app: index.html, which routes in the browser, revalidated every time
+	# so a release shows at once.
+	handle {
+		root * /srv
+		header Cache-Control "no-cache"
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Caddy's own errors (a missing asset, the API unreachable): plain text, never cached.
+	handle_errors {
+		import security_headers
+		header Cache-Control "no-store"
+		respond "{err.status_code} {err.status_text}"
+	}
+}

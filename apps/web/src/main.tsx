@@ -1,3 +1,5 @@
+// First: Zod's settings apply before any schema parses.
+import './zodConfig';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

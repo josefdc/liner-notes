@@ -10,7 +10,7 @@
  * TURNSTILE_ERROR_CODES, or with an AbortError when its signal aborts. Nothing here tries again by
  * itself: a script that could not be loaded is asked for again by the next check only.
  *
- * Content-Security-Policy, for the proxy that will send one: the widget needs
+ * Content-Security-Policy (the web image's, apps/web/Caddyfile): the widget needs
  * `script-src https://challenges.cloudflare.com` (this script) and
  * `frame-src https://challenges.cloudflare.com` (the challenge's iframe).
  */

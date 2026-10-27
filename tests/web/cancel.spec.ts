@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   apiRequests,
   collectProblems,
+  dashboardHeading,
   fullResultData,
   releaseStream,
   replayedRecording,
@@ -101,7 +102,7 @@ test("Stop closes the run's stream, brings the search back, and a new search run
   await expect(page.getByRole("log")).toContainText("Found the track on Spotify");
   await expect(page.getByRole("log")).not.toContainText("A line after the stop");
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   expect(problems).toEqual([]);
 });
 

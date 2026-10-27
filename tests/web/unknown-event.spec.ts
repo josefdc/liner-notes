@@ -1,5 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
-import { collectProblems, fullResultData, loadFixture, streamLog, useMockApi } from "./mock";
+import {
+  collectProblems,
+  dashboardHeading,
+  fullResultData,
+  loadFixture,
+  streamLog,
+  useMockApi,
+} from "./mock";
 
 // The app reads the API's streams with the contract's event union: an event of a type it does
 // not know, or one that does not fit the contract, is skipped (and logged once); repeats of an
@@ -27,7 +34,7 @@ async function search(page: Page, query: string) {
 
 async function openDashboard(page: Page) {
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
 }
 
 test("an unknown event type is ignored, logged once, and the run goes on to its result", async ({

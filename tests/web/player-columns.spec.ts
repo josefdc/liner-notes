@@ -10,14 +10,17 @@ import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./
 test.use({ reducedMotion: "reduce" });
 
 /**
- * Every line of text in the Player's panels that reaches past the sides of the box that clips it
+ * Every line of text in the Player's panels (and its header above them) that reaches past the sides of the box that clips it
  * (its nearest ancestor whose overflow is not visible), with the amount. Text that is meant to be
  * cut (an ellipsis, a line clamp), text hidden at rest and screen-reader-only text are skipped.
  */
-function clippedLines(page: Page) {
-  return page.evaluate(() => {
+function clippedLines(
+  page: Page,
+  ids = ["player-header", "panel-context", "panel-player", "panel-genealogy"],
+) {
+  return page.evaluate((ids) => {
     const clipped: string[] = [];
-    const panels = ["panel-context", "panel-player", "panel-genealogy"]
+    const panels = ids
       .map((id) => document.getElementById(id))
       .filter((panel): panel is HTMLElement => panel !== null);
     for (const panel of panels) {
@@ -50,7 +53,7 @@ function clippedLines(page: Page) {
       }
     }
     return clipped;
-  });
+  }, ids);
 }
 
 for (const width of [768, 1024]) {
@@ -130,4 +133,108 @@ for (const width of [768, 900, 1024, 1280]) {
       });
     }
   });
+}
+
+// The keyboard follows the page's order: the three columns are in the page in the order they are
+// drawn, left to right (WCAG 2.4.3), so Tab never jumps from the centre column back to the left.
+test("at 1440 px the Player's columns are in the page in the order they are drawn", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, loadFixture("full-result"));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const panels = page.getByRole("tabpanel", { includeHidden: true });
+  await expect(panels).toHaveCount(3);
+  const columns = await panels.evaluateAll((list) =>
+    list.map((panel, index) => ({ id: panel.id, index, x: panel.getBoundingClientRect().x })),
+  );
+  const drawn = [...columns].sort((a, b) => a.x - b.x).map((column) => column.id);
+  expect(drawn).toEqual(columns.map((column) => column.id));
+  expect(drawn).toEqual(["panel-context", "panel-player", "panel-genealogy"]);
+});
+
+const ANALYZE = "/api/analyze/stream";
+
+/** The full-result fixture with the result's title and artist replaced. */
+function withTrack(track: { title: string; artist: string }) {
+  const fixture = loadFixture("full-result");
+  const events = fixture.streams[ANALYZE] as Array<{ type: string; data?: object }>;
+  fixture.streams[ANALYZE] = events.map((event) =>
+    event.type === "complete" ? { ...event, data: { ...event.data, ...track } } : event,
+  );
+  return fixture;
+}
+
+// A title with a word longer than any column, and a long artist.
+const LONG = {
+  title: `${"Superlongunbrokenwordtitle".repeat(4)} (Extended Club Mix)`,
+  artist: "Somebody Featuring Somebody Else and the Rest of the Band",
+};
+
+// The track's title and artist wrap rather than run past the window, even a word longer than the
+// line, and the audio line (from md up) stays on one line beside them, from phone to desktop.
+for (const width of [390, 768, 1024, 1440]) {
+  test(`at ${width} px the Player's title is whole`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await useMockApi(page, withTrack(LONG));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(LONG.title);
+    // Below md the header is for screen readers only, and the Player tab shows the title.
+    const shown = width >= 768 ? ["player-header", "panel-player"] : ["panel-player"];
+    if (width < 768) {
+      const header = await page.locator("#player-header").boundingBox();
+      expect(header?.width ?? 0).toBeLessThanOrEqual(1);
+      await expect(page.locator("#panel-player")).toContainText(LONG.title);
+    }
+    expect(await clippedLines(page, shown)).toEqual([]);
+    const overflowing = await page.evaluate(
+      (shown) =>
+        shown.filter((id) => {
+          const element = document.getElementById(id);
+          return (
+            element !== null &&
+            element.getClientRects().length > 0 &&
+            element.clientWidth > 1 &&
+            element.scrollWidth > element.clientWidth
+          );
+        }),
+      shown,
+    );
+    expect(overflowing).toEqual([]);
+    const line = page.getByTestId("player-audio-line");
+    if (width >= 768) {
+      const lines = await line.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      });
+      expect(lines).toBe(1);
+    } else {
+      await expect(line).toBeHidden();
+    }
+  });
+}
+
+// On phones the track's title takes no fixed band above the tabs: the Player tab keeps the
+// height it had with the title inside it (446 px at 320×568, 214 px at 568×320), for a short
+// title and a long one.
+for (const [width, height, least] of [
+  [320, 568, 440],
+  [568, 320, 208],
+]) {
+  for (const track of [{ title: "Bright Lines", artist: "Test Artist" }, LONG]) {
+    test(`on a ${width}×${height} phone the Player tab keeps its height (${track.title.length} characters)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await useMockApi(page, withTrack(track));
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      await openPlayer(page);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(track.title);
+      const box = await page.locator("#panel-player").boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(least);
+    });
+  }
 }

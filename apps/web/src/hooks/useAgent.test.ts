@@ -1,10 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RunTokenError, requestRunToken } from './agent/apiClient';
+import { MAX_RETRY_WAIT_MS, RunTokenError, requestRunToken } from './agent/apiClient';
 import { loadEventSchemas, resetSkippedReports } from './agent/events';
 import { LOG_LIMIT } from './agent/runLog';
 import type { TrackData } from '../types';
 import {
+  CHECK_NOTE,
   eitherSignal,
   OUTDATED_ERROR,
   STREAM_INACTIVITY_TIMEOUT_MS,
@@ -126,7 +127,9 @@ beforeAll(() => loadEventSchemas());
 
 beforeEach(() => {
   tokensIssued = 0;
-  vi.mocked(requestRunToken).mockClear();
+  // Reset, not only cleared: an answer a test queued and left unused (a ...Once that a failing
+  // test never reached) would otherwise answer the next test's request.
+  vi.mocked(requestRunToken).mockReset();
   FakeEventSource.instances = [];
   resetSkippedReports();
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -1979,16 +1982,273 @@ describe('useAgent run tokens', () => {
     });
   });
 
-  it('says a build with a site key but no Turnstile check cannot start, without asking', async () => {
-    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA');
-    try {
-      const { result } = await startAnalysis('Hurt');
-      expect(streams()).toHaveLength(0);
-      expect(requestRunToken).not.toHaveBeenCalled();
-      expect(result.current.errorCode).toBe('verification_unavailable');
-    } finally {
-      vi.unstubAllEnvs();
+  describe('with a Turnstile site key', () => {
+    /** A window.turnstile whose every widget answers at once with its own token. */
+    function fakeWidget() {
+      const rendered: string[] = [];
+      window.turnstile = {
+        render: (_container, options) => {
+          const token = `widget-token-${rendered.length + 1}`;
+          rendered.push(token);
+          queueMicrotask(() => options.callback(token));
+          return `widget-${rendered.length}`;
+        },
+        remove: () => {},
+      };
+      return rendered;
     }
+    beforeEach(() => vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '1x00000000000000000000AA'));
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      delete window.turnstile;
+    });
+
+    it('says the check is running on the progress line, and only while it runs', async () => {
+      let answer!: () => void;
+      window.turnstile = {
+        render: (_container, options) => {
+          answer = () => options.callback('widget-token-1');
+          return 'widget-1';
+        },
+        remove: () => {},
+      };
+      const hook = renderHook(() => useAgent());
+      act(() => {
+        void hook.result.current.analyze('Hurt');
+      });
+      await tokenSettled();
+      expect(hook.result.current.status).toBe('connecting');
+      expect(hook.result.current.statusNote).toBe(CHECK_NOTE);
+      act(() => answer());
+      await tokenSettled();
+      expect(hook.result.current.statusNote).toBeNull();
+      expect(tokenOf(lastStream())).toBe('token-1');
+    });
+
+    it('asks for more facts in its own words when the check needs the visitor', async () => {
+      window.turnstile = {
+        render: (_container, options) => {
+          queueMicrotask(() => options['before-interactive-callback']());
+          return 'widget-1';
+        },
+        remove: () => {},
+      };
+      const { result } = renderHook(() => useAgent());
+      await askMore(result);
+      expect(document.getElementById('turnstile-check-caption')?.textContent).toBe(
+        'Confirm that you are a person to get more facts.',
+      );
+      expect(streams()).toHaveLength(0);
+      // Leaving ends the check.
+      act(() => result.current.reset());
+      await tokenSettled();
+      expect(document.getElementById('turnstile-check-caption')?.textContent).toBe('');
+    });
+
+    it("asks for the run token with the widget's token", async () => {
+      const rendered = fakeWidget();
+      await startAnalysis('Hurt');
+      await tokenSettled();
+      expect(rendered).toEqual(['widget-token-1']);
+      expect(requestRunToken).toHaveBeenCalledTimes(1);
+      expect(requestRunToken).toHaveBeenLastCalledWith('widget-token-1', expect.any(AbortSignal));
+      expect(tokenOf(lastStream())).toBe('token-1');
+    });
+
+    it('checks again once, on the next action, after the API refused the run token', async () => {
+      vi.useFakeTimers();
+      const rendered = fakeWidget();
+      const { result } = await startAnalysis('Hurt');
+      await tokenSettled();
+      lastStream().send({ type: 'error', code: 'auth_expired', error: 'Check again.' });
+      expect(result.current.errorCode).toBe('auth_expired');
+      // Nothing is asked for by itself, however long the page waits.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+      });
+      expect(rendered).toHaveLength(1);
+      expect(requestRunToken).toHaveBeenCalledTimes(1);
+      expect(streams()).toHaveLength(1);
+
+      // The retry: one new check, one new run token, one new stream.
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(rendered).toHaveLength(2);
+      expect(requestRunToken).toHaveBeenLastCalledWith('widget-token-2', expect.any(AbortSignal));
+      expect(requestRunToken).toHaveBeenCalledTimes(2);
+      expect(streams()).toHaveLength(2);
+      expect(tokenOf(lastStream())).toBe('token-2');
+
+      // More facts after a refused stream: the token it held is not sent again.
+      lastStream().refuse();
+      expect(result.current.errorCode).toBe('stream_refused');
+      const more = await askMore(result);
+      expect(rendered).toHaveLength(3);
+      expect(tokenOf(more.stream)).toBe('token-3');
+    });
+
+    it('runs one new check in the same action when POST /api/runs refuses the widget token', async () => {
+      vi.useFakeTimers();
+      const rendered = fakeWidget();
+      const refused = () => new RunTokenError('Check again.', 'auth_expired');
+      vi.mocked(requestRunToken).mockRejectedValueOnce(refused());
+      const { result } = await startAnalysis('Hurt');
+      await tokenSettled();
+      expect(rendered).toHaveLength(2);
+      expect(requestRunToken).toHaveBeenCalledTimes(2);
+      expect(tokenOf(lastStream())).toBe('token-1');
+
+      // Refused twice: the run ends there, and nothing more is asked for by itself.
+      vi.mocked(requestRunToken).mockRejectedValueOnce(refused());
+      vi.mocked(requestRunToken).mockRejectedValueOnce(refused());
+      await act(async () => {
+        await result.current.analyze('Hurt');
+      });
+      await tokenSettled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+      });
+      expect(result.current.errorCode).toBe('auth_expired');
+      expect(rendered).toHaveLength(4);
+      expect(requestRunToken).toHaveBeenCalledTimes(4);
+      expect(streams()).toHaveLength(1);
+    });
+
+    it('ends the run with the reason when the check gives no token', async () => {
+      window.turnstile = {
+        render: (_container, options) => {
+          queueMicrotask(() => options['error-callback']('600010'));
+          return 'widget-1';
+        },
+        remove: () => {},
+      };
+      const { result } = await startAnalysis('Hurt');
+      await tokenSettled();
+      expect(result.current.errorCode).toBe('verification_failed');
+      expect(requestRunToken).not.toHaveBeenCalled();
+      expect(streams()).toHaveLength(0);
+    });
+  });
+
+  describe('a refusal that says how long to wait', () => {
+    const NOW = Date.parse('2026-10-27T12:00:00.000Z');
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    it('reads the stream refusal, and sends nothing before the wait is over', async () => {
+      const { result } = await startAnalysis('Hurt');
+      lastStream().send({
+        type: 'error',
+        code: 'rate_limited',
+        error: 'Too many requests. Please try again later.',
+        retryAfterMs: 42_000,
+      });
+      expect(result.current.errorCode).toBe('rate_limited');
+      expect(result.current.retryAt).toBe(NOW + 42_000);
+
+      // A retry, or another search, before then: no request, the same refusal and wait.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(41_000);
+      });
+      act(() => result.current.retry());
+      await act(async () => {
+        await result.current.analyze('Another song');
+      });
+      await tokenSettled();
+      expect(requestRunToken).toHaveBeenCalledTimes(1);
+      expect(streams()).toHaveLength(1);
+      expect(result.current.status).toBe('error');
+      expect(result.current.errorCode).toBe('rate_limited');
+      expect(result.current.error).toBe('Too many requests. Please try again later.');
+      expect(result.current.retryAt).toBe(NOW + 42_000);
+
+      // Once it is over, the retry goes out.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(requestRunToken).toHaveBeenCalledTimes(2);
+      expect(streams()).toHaveLength(2);
+      expect(result.current.status).toBe('connecting');
+      expect(result.current.retryAt).toBeNull();
+    });
+
+    it('keeps no wait longer than an hour, whatever the refusal says', async () => {
+      const { result } = await startAnalysis('Hurt');
+      lastStream().send({
+        type: 'error',
+        code: 'rate_limited',
+        error: 'Too many requests.',
+        retryAfterMs: 86_400_000_000,
+      });
+      expect(result.current.retryAt).toBe(NOW + MAX_RETRY_WAIT_MS);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MAX_RETRY_WAIT_MS);
+      });
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(streams()).toHaveLength(2);
+    });
+
+    it("reads POST /api/runs' Retry-After", async () => {
+      vi.mocked(requestRunToken).mockRejectedValueOnce(
+        new RunTokenError('Too many requests. Please try again later.', 'rate_limited', 90_000),
+      );
+      const { result } = await startAnalysis('Hurt');
+      expect(result.current.errorCode).toBe('rate_limited');
+      expect(result.current.retryAt).toBe(NOW + 90_000);
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(requestRunToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds more facts back too, and says why', async () => {
+      const { result } = renderHook(() => useAgent());
+      const first = await askMore(result);
+      first.stream.send({
+        type: 'error',
+        code: 'rate_limited',
+        error: 'Too many requests.',
+        retryAfterMs: 30_000,
+      });
+      first.stream.send({ type: 'done' });
+      await act(() => first.pending);
+
+      const onUnavailable = vi.fn();
+      let added: unknown;
+      await act(async () => {
+        added = await result.current.moreFactoidsStream(moreFactsOf(), { onUnavailable });
+      });
+      expect(added).toEqual([]);
+      expect(onUnavailable).toHaveBeenCalledWith('rate_limited');
+      expect(streams()).toHaveLength(1);
+
+      // The analysis waits for it as well: the limits count both.
+      await act(async () => {
+        await result.current.analyze('Hurt');
+      });
+      expect(result.current.retryAt).toBe(NOW + 30_000);
+      expect(streams()).toHaveLength(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      const second = await askMore(result);
+      expect(streams()).toHaveLength(2);
+      expect(second.stream.url).toContain('/factoids/');
+    });
+
+    it('waits for nothing when a refusal names no time', async () => {
+      const { result } = await startAnalysis('Hurt');
+      lastStream().send({ type: 'error', code: 'rate_limited', error: 'Too many requests.' });
+      expect(result.current.retryAt).toBeNull();
+      act(() => result.current.retry());
+      await tokenSettled();
+      expect(streams()).toHaveLength(2);
+    });
   });
 
   it('says more facts could not be asked for when no token is given', async () => {
@@ -2046,5 +2306,20 @@ describe('useAgent before the stream reader is loaded', () => {
     expect(streams()).toHaveLength(0);
     expect(result.current.status).toBe('error');
     expect(result.current.errorCode).toBe('outdated_client');
+  });
+});
+
+describe('useAgent test isolation', () => {
+  // A token answer queued by one test and never used must not answer the next test.
+  it('leaves an answer queued and unused', () => {
+    vi.mocked(requestRunToken).mockResolvedValueOnce({
+      runToken: 'left-over',
+      expiresAt: Date.now() + 60_000,
+    });
+  });
+
+  it('gets the default answer in the next test', async () => {
+    await startAnalysis('Hurt');
+    expect(new URL(lastStream().url, 'http://x').searchParams.get('runToken')).toBe('token-1');
   });
 });

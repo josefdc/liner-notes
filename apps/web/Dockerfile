@@ -1,3 +1,6 @@
+# check=skip=SecretsUsedInArgOrEnv
+# (The only build setting named like a secret, VITE_TURNSTILE_SITE_KEY, is a public site key that
+# ships in the bundle; the web image holds no secret.)
 # =============================================================================
 # Sonic Agent Web - Multi-stage Production Build
 # React/Vite Frontend with Nginx
@@ -35,6 +38,11 @@ ENV VITE_API_URL=$VITE_API_URL
 # Empty: the footer's "Source" link points to the public repository.
 ARG VITE_SOURCE_URL=
 ENV VITE_SOURCE_URL=$VITE_SOURCE_URL
+# The Cloudflare Turnstile site key (public, see apps/web/.env.example): the widget runs before
+# each analysis. Empty: no widget, and the page sends the development bypass's token, which an
+# API in production refuses.
+ARG VITE_TURNSTILE_SITE_KEY=
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 RUN npm run build -w packages/contract && npm run build -w apps/web
 
 # Stage 2: Nginx Production

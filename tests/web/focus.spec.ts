@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   collectProblems,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   useMockApi,
@@ -10,7 +11,7 @@ import {
 // Where the keyboard focus goes when the screen changes under it: never to the page itself
 // (BODY), where a keyboard or screen-reader user would have to start over from the top.
 const fullResult = loadFixture("full-result");
-const resultHeading = (page: Page) => page.getByRole("heading", { name: "Command Center" });
+const resultHeading = (page: Page) => dashboardHeading(page);
 const progressStatus = (page: Page) => page.locator("[data-progress-status]");
 
 /** Starts noting, on every frame, whether the focus is on the page itself. */
@@ -56,6 +57,26 @@ test("the results that open by themselves take the focus, even when their code i
   await expect(resultHeading(page)).toBeFocused({ timeout: 10_000 });
   expect(await focusFellToPage(page)).toBe(false);
   expect(problems).toEqual([]);
+});
+
+test("each result screen gives the focus to its h1, the track's title", async ({ page }) => {
+  await useMockApi(page, fullResult);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  const title = page.getByRole("heading", { level: 1 });
+  await expect(title).toHaveCount(1);
+  await expect(title).toHaveText("Bright Lines");
+  await expect(title).toBeFocused();
+  await watchFocus(page);
+
+  await openPlayer(page);
+  await expect(title).toHaveCount(1);
+  await expect(title).toHaveText("Bright Lines");
+  await expect(title).toBeFocused();
+
+  await page.getByRole("button", { name: /Back to summary/ }).click();
+  await expect(resultHeading(page)).toBeFocused();
+  await expect(resultHeading(page)).toHaveText("Bright Lines");
+  expect(await focusFellToPage(page)).toBe(false);
 });
 
 test("a run started from the Dashboard moves the focus to its progress", async ({ page }) => {

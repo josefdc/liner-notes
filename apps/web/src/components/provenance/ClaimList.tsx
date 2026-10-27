@@ -40,9 +40,9 @@ export const ClaimList: React.FC<ClaimListProps> = ({
   if (claims.length === 0) return null;
   return (
     <section aria-labelledby={headingId} className={`space-y-3 ${className}`}>
-      <h4 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
+      <h2 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
         {title}
-      </h4>
+      </h2>
       <ul className="space-y-4">
         {claims.map((shown) => (
           <li key={shown.key} className="space-y-1.5">

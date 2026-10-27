@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Claim } from '@liner-notes/contract';
 import { factoidRoundsLeft } from '@liner-notes/contract/factoids';
 import { useRef, useState } from 'react';
@@ -8,7 +8,7 @@ import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/typ
 import type { Factoid, TrackData } from '../types';
 import { audioBlock, measuredTrack } from './measured/testing';
 import Player from './Player';
-import { claim as aClaim, evidence as anItem } from './provenance/testing';
+import { claim as aClaim, evidence as anItem, provenanceTrack } from './provenance/testing';
 
 afterEach(() => {
   cleanup();
@@ -190,7 +190,18 @@ describe('Player', () => {
     expect(screen.getByRole('list', { name: 'Audio values' }).textContent).toContain(
       'BPM not measured',
     );
-    expect(container.textContent).toContain('DEEP_DIVE_MODE // BPM not measured');
+    const line = screen.getByTestId('player-audio-line');
+    expect(line.textContent).toBe('BPM not measured');
+    // Not measured: not in the measured hue (cyber), from the words up to the line.
+    const hues: string[] = [];
+    for (
+      let element: HTMLElement | null = within(line).getByText('BPM not measured');
+      element && element !== line.parentElement;
+      element = element.parentElement
+    ) {
+      hues.push(element.className);
+    }
+    expect(hues.join(' ')).not.toMatch(/cyber/);
     expect(container.textContent).toContain(
       'The analysis ran but could not detect the tempo or key.',
     );
@@ -327,9 +338,9 @@ describe('Player', () => {
     ...missingTrack,
     factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
   } as unknown as TrackData;
-  const moreButton = () => screen.getByRole('button', { name: /DECRYPT MORE/ });
+  const moreButton = () => screen.getByRole('button', { name: 'Find more facts' });
 
-  it('labels decrypted factoids as model inference and counts only the ones shown', async () => {
+  it('labels the facts "More facts" added as model inference and counts only the ones shown', async () => {
     const track = { ...releaseInfo, modelUnavailable: true } as TrackData;
     const facts = [
       { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
@@ -338,19 +349,93 @@ describe('Player', () => {
     render(<MoreFactsPlayer track={track} answers={[{ factoids: facts, nextRound: 1 }]} />);
     fireEvent.click(moreButton());
 
-    const decrypted = await screen.findByRole('region', { name: 'Decrypted insights' });
+    const decrypted = await screen.findByRole('region', { name: 'More facts' });
     expect(decrypted.textContent).toContain('Hidden Sample');
     expect(decrypted.textContent).toContain('Model inference');
     expect(decrypted.textContent).not.toContain('From source data');
     expect(screen.getAllByText('From source data')).toHaveLength(1);
     expect(screen.queryByText('Lyric Meaning')).toBeNull();
-    expect(await screen.findByText('1 NEW INTEL DECODED')).toBeTruthy();
+    expect(await screen.findByText('1 more fact added')).toBeTruthy();
+  });
+
+  it('draws the "Find more facts" control in a neutral hue: its facts are not measured', () => {
+    render(<MoreFactsPlayer track={releaseInfo} answers={[]} />);
+    expect(moreButton().className).not.toMatch(/cyber/);
+  });
+
+  it('announces the facts a click added, in a neutral status message', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+
+    const toast = await screen.findByText('1 more fact added');
+    const status = toast.closest('[role="status"]');
+    expect(status).not.toBeNull();
+    // The facts are written by the model: never in the measured hue (cyber).
+    expect(`${toast.className} ${status?.className ?? ''}`).not.toMatch(/cyber/);
+  });
+
+  it('counts the facts a click added, in the plural for more than one', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+      { id: 'm2', title: 'Tape Echo', content: 'Mixed through a tape echo.', type: 'production' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    expect(await screen.findByText(/^2 more facts? added$/)).toBeTruthy();
+    expect(screen.getByText(/^2 more facts? added$/).textContent).toBe('2 more facts added');
+  });
+
+  it('keeps the notice outside the tab panels, on screen for a few seconds', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    const toast = await screen.findByText('1 more fact added');
+    // On phones a panel is hidden while another tab is open: the status is announced from any.
+    expect(toast.closest('[role="tabpanel"]')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(screen.queryByText('1 more fact added')).not.toBeNull();
+  });
+
+  it('offers to show the facts past the first three, in the singular for one', () => {
+    const fact = (index: number) => ({
+      id: `s${index}`,
+      title: `Fact ${index}`,
+      content: `Fact number ${index}.`,
+      type: 'trivia',
+    });
+    const withFour = { ...missingTrack, factoids: [1, 2, 3, 4].map(fact) } as TrackData;
+    const { unmount } = render(<Player trackData={withFour} onBack={() => {}} />);
+    expect(screen.getByRole('button', { name: /^Show \d+ more facts?$/ }).textContent).toBe(
+      'Show 1 more fact',
+    );
+    unmount();
+    const withFive = { ...missingTrack, factoids: [1, 2, 3, 4, 5].map(fact) } as TrackData;
+    render(<Player trackData={withFive} onBack={() => {}} />);
+    expect(screen.getByRole('button', { name: /^Show \d+ more facts?$/ }).textContent).toBe(
+      'Show 2 more facts',
+    );
+  });
+
+  it('heads the facts a click added with an h3 under the Facts h2', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    await screen.findByRole('region', { name: 'More facts' });
+    expect(screen.getByRole('heading', { name: 'Facts' }).tagName).toBe('H2');
+    expect(screen.getByRole('heading', { name: 'More facts' }).tagName).toBe('H3');
   });
 
   it.each([
     ['rate_limited', 'quota or rate limit reached'],
     ['budget_exhausted', 'live model calls are paused, budget reached'],
-  ] as const)('says why DECRYPT MORE added nothing: %s', async (code, text) => {
+  ] as const)('says why "More facts" added nothing: %s', async (code, text) => {
     // Every fact failed for that reason: the reason is said once, not as facts not written.
     const failed = [0, 1, 2].map((index) => ({ index, code }));
     render(<MoreFactsPlayer track={releaseInfo} answers={[{ unavailable: code, failed }]} />);
@@ -422,7 +507,7 @@ describe('Player', () => {
 
     const notice = await screen.findByText('1 fact could not be written.');
     expect(notice.getAttribute('role')).toBe('status');
-    expect(screen.getByRole('region', { name: 'Decrypted insights' }).textContent).toContain(
+    expect(screen.getByRole('region', { name: 'More facts' }).textContent).toContain(
       'Hidden Sample',
     );
   });
@@ -469,6 +554,90 @@ describe('Player', () => {
       screen.getAllByText(title)[0].closest('[data-factoid-category]') as HTMLElement;
     const badgeOf = (title: string) =>
       cardOf(title).querySelector('[data-factoid-type]')?.textContent;
+
+    it('says no fact was added when a click brings back one already shown', async () => {
+      const track = withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]);
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f1', 'Known Sample', 'c-known')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getAllByText('Known Sample')).toHaveLength(1);
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it('says no fact was added when the verifier rejected the one a click brought', async () => {
+      const track = withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]);
+      const bad = { ...sourcedSample('fc-bbbbbbbbbbbb'), verdict: 'contradicted' } as Claim;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('fc-bbbbbbbbbbbb', 'Bad Sample', 'fc-bbbbbbbbbbbb')],
+              claims: [bad],
+              nextRound: 1,
+            },
+          ]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByRole('region', { name: 'More facts' })).toBeNull();
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it('says a recording has no more facts when a click brings back only shown ones', async () => {
+      const track = {
+        ...withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]),
+        run: {
+          id: 'r1',
+          mode: 'replay',
+          replayed: 'run',
+          recordedAt: '2026-10-24T10:00:00.000Z',
+          commit: 'abc1234',
+        },
+      } as unknown as TrackData;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f1', 'Known Sample', 'c-known')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      expect(
+        await screen.findByText(
+          'No more facts: this result is a recording, and every fact recorded with it is shown.',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it.each([
+      ['cannot be read', 'lyrics'],
+      ['was rejected', 'rejected'],
+    ] as const)(
+      'says there are no facts to show, not that none were found, when every fact %s',
+      (_label, how) => {
+        const hidden =
+          how === 'lyrics'
+            ? ({ ...aClaim({ id: 'c-x' }), about: 'lyrics' } as unknown as Claim)
+            : ({ ...sourcedSample('c-x'), verdict: 'contradicted' } as Claim);
+        render(
+          <Player
+            trackData={withFacts([card('f1', 'A Fact', 'c-x')], [hidden])}
+            onBack={() => {}}
+          />,
+        );
+        expect(screen.queryByText('No facts were found for this track.')).toBeNull();
+        expect(screen.getByText('No facts to show.')).toBeTruthy();
+      },
+    );
 
     it("shows each fact's claim: a sourced sample links its source, a guessed one is possible", () => {
       const track = withFacts(
@@ -558,7 +727,7 @@ describe('Player', () => {
       expect(badgeOf('First Round')).toBe('POSSIBLE SAMPLE');
       expect(within(first).queryByRole('link', { name: /Old Record/ })).toBeNull();
       // Each card shows its own claim: the section is not labelled model inference as a whole.
-      const decrypted = screen.getByRole('region', { name: 'Decrypted insights' });
+      const decrypted = screen.getByRole('region', { name: 'More facts' });
       expect(decrypted.querySelectorAll('[data-claim-kind]')).toHaveLength(2);
       // A claim a card shows is not listed again.
       expect(
@@ -649,9 +818,304 @@ describe('Player', () => {
       fireEvent.click(moreButton());
       await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
       expect(screen.getAllByText('Known Sample')).toHaveLength(1);
-      expect(screen.getByText('1 insights decoded')).toBeTruthy();
+      expect(screen.getByText('1 fact')).toBeTruthy();
       const keyWarnings = error.mock.calls.filter((call) => /same key/.test(String(call[0])));
       expect(keyWarnings).toEqual([]);
     });
+  });
+});
+
+describe('the Player headings', () => {
+  /** The provenance result with a connected track, so every section of the Player is drawn. */
+  const everySection = (): TrackData => ({
+    ...provenanceTrack(),
+    genealogy: {
+      nodes: [
+        { id: 'current', group: 1, label: 'Paper Lanterns - Test Artist (2011)', size: 40 },
+        { id: 'peer', group: 4, label: 'Peer - Someone (2001)', size: 22 },
+      ],
+      links: [
+        {
+          source: 'peer',
+          target: 'current',
+          value: 1,
+          type: 'influence',
+          kind: 'inferred',
+          origin: 'model',
+        },
+      ],
+    },
+  });
+  const headings = () =>
+    [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((heading) => ({
+      level: Number(heading.tagName.slice(1)),
+      text: heading.textContent?.trim() ?? '',
+    }));
+
+  it('opens with the track title as its one h1, then names each section with an h2', () => {
+    const track = everySection();
+    render(<Player trackData={track} onBack={() => {}} />);
+    const all = headings();
+    // The first heading in the page's order is the track's h1: no section heading before it.
+    expect(all[0]).toEqual({ level: 1, text: track.title });
+    expect(all.filter((heading) => heading.level === 1)).toHaveLength(1);
+    for (const name of ['Facts', 'Credits', 'More claims', 'Connections']) {
+      expect(all.find((heading) => heading.text === name)?.level, name).toBe(2);
+    }
+    // No heading skips a level: each sits under the section it belongs to.
+    all.slice(1).forEach((heading, index) => {
+      expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
+    });
+  });
+
+  it('names the graph section "Connections" everywhere, and adds no page banner', () => {
+    render(<Player trackData={everySection()} onBack={() => {}} />);
+    expect(screen.getByRole('tab', { name: 'Connections' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connections' }).tagName).toBe('H2');
+    expect(screen.queryByRole('banner')).toBeNull();
+  });
+
+  it('gives the h1 to the focus code', () => {
+    const track = everySection();
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(<Player trackData={track} onBack={() => {}} headingRef={ref} />);
+    expect(ref.current?.tagName).toBe('H1');
+    expect(ref.current?.textContent).toBe(track.title);
+  });
+});
+
+describe('the rounds of "Find more facts"', () => {
+  const base = {
+    ...missingTrack,
+    factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
+  } as unknown as TrackData;
+  const replay = {
+    ...base,
+    run: {
+      id: 'r1',
+      mode: 'replay',
+      replayed: 'run',
+      recordedAt: '2026-10-24T10:00:00.000Z',
+      commit: 'abc1234',
+    },
+  } as unknown as TrackData;
+  const fact = (id: string, title: string) =>
+    ({ id, title, content: `${title}.`, type: 'production' }) as unknown as Factoid;
+  const NO_MORE_RECORDED = /No more facts: this result is a recording/;
+
+  /**
+   * Each round asked, held: `commit` keeps its facts as useAgent does while they stream in,
+   * `finish` ends the round (committing them first if that was not done yet).
+   */
+  let rounds: Array<{ commit: () => void; finish: () => void }> = [];
+
+  function Harness({
+    track,
+    answers,
+    unavailable,
+  }: {
+    track: TrackData;
+    answers: Factoid[][];
+    unavailable?: 'rate_limited';
+  }) {
+    const [moreFacts, setMoreFacts] = useState<MoreFacts | null>(null);
+    const kept = useRef<MoreFacts | null>(null);
+    const clicks = useRef(0);
+    const ask = (result: TrackData, options?: MoreFactsOptions) =>
+      new Promise<Factoid[]>((resolve) => {
+        const index = clicks.current++;
+        const added = answers[index] ?? [];
+        let committed = false;
+        const commit = () => {
+          if (committed) return;
+          committed = true;
+          const before = moreFactsOf(result, kept.current);
+          const next = { ...before, factoids: [...before.factoids, ...added] };
+          kept.current = next;
+          setMoreFacts(next);
+        };
+        rounds.push({
+          commit,
+          finish: () => {
+            if (unavailable) options?.onUnavailable?.(unavailable);
+            commit();
+            resolve(added);
+          },
+        });
+      });
+    return (
+      <Player
+        trackData={track}
+        onBack={() => {}}
+        moreFacts={moreFacts}
+        onMoreFactoidsStream={ask}
+      />
+    );
+  }
+
+  const button = () =>
+    screen.getByRole('button', {
+      name: /^(Find more facts|Finding more facts…)$/,
+    }) as HTMLButtonElement;
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
+  const notice = () => screen.queryByText(/more facts? added/)?.textContent ?? null;
+
+  /** Clicks again the moment the button is enabled: after React's commit, before its effects. */
+  function clickAgainWhenEnabled() {
+    const element = button();
+    const observer = new MutationObserver(() => {
+      if (!element.disabled) {
+        observer.disconnect();
+        element.click();
+      }
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ['disabled'] });
+  }
+
+  afterEach(() => {
+    rounds = [];
+  });
+
+  it('tells the first round of a live result even when the next click comes at once', async () => {
+    render(<Harness track={base} answers={[[fact('m1', 'Tape Echo')], []]} />);
+    fireEvent.click(button());
+    clickAgainWhenEnabled();
+    // Outside act: the round ends as a stream's message does.
+    rounds[0].finish();
+    await settle();
+    expect(rounds).toHaveLength(2);
+    expect(notice()).toBe('1 more fact added');
+  });
+
+  it('tells the first round of a recording, and no "no more facts", when the next click comes at once', async () => {
+    render(
+      <Harness
+        track={replay}
+        answers={[[fact('m1', 'Tape Echo')], [fact('m2', 'Night Session')]]}
+      />,
+    );
+    fireEvent.click(button());
+    clickAgainWhenEnabled();
+    rounds[0].finish();
+    await settle();
+    expect(rounds).toHaveLength(2);
+    expect(notice()).toBe('1 more fact added');
+    expect(screen.queryByText(NO_MORE_RECORDED)).toBeNull();
+
+    await act(async () => rounds[1].finish());
+    await settle();
+    expect(screen.getAllByText('Night Session')).toHaveLength(1);
+    expect(notice()).toBe('1 more fact added');
+    expect(screen.queryByText(NO_MORE_RECORDED)).toBeNull();
+  });
+
+  it('counts nothing for a round that ends after the Player moved to another result', async () => {
+    const other = {
+      ...base,
+      id: 't2',
+      title: 'Other Song',
+      factoids: [fact('o1', 'Other One'), fact('o2', 'Other Two')],
+    } as unknown as TrackData;
+    const { rerender } = render(<Harness track={base} answers={[[]]} />);
+    fireEvent.click(button());
+    rerender(<Harness track={other} answers={[[]]} />);
+    await act(async () => rounds[0].finish());
+    await settle();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other Song');
+    expect(notice()).toBeNull();
+  });
+
+  it('tells a round only once it has ended, not as the next one streams its facts', async () => {
+    render(
+      <Harness track={base} answers={[[fact('m1', 'Tape Echo')], [fact('m2', 'Night Session')]]} />,
+    );
+    fireEvent.click(button());
+    await act(async () => rounds[0].finish());
+    await settle();
+    expect(notice()).toBe('1 more fact added');
+
+    fireEvent.click(button());
+    // The second round's fact is in the list; the round has not ended.
+    await act(async () => rounds[1].commit());
+    await settle();
+    expect(screen.getAllByText('Night Session')).toHaveLength(1);
+    expect(notice()).toBe('1 more fact added');
+  });
+
+  it('says why a refused round of a recording added nothing, not that the recording has no more', async () => {
+    render(<Harness track={replay} answers={[[]]} unavailable="rate_limited" />);
+    fireEvent.click(button());
+    await act(async () => rounds[0].finish());
+    await settle();
+    expect(screen.getByText('More facts unavailable: quota or rate limit reached')).toBeTruthy();
+    expect(screen.queryByText(NO_MORE_RECORDED)).toBeNull();
+  });
+});
+
+describe('the Connections panel with no connection shown', () => {
+  it('says there are none to show, not that none were found, when every relation was rejected', () => {
+    const evidence = [anItem({ id: 'ev1', source: 'tavily', sourceTier: 'web' })];
+    const rejected = {
+      ...aClaim({
+        id: 'c-x',
+        about: 'sample',
+        kind: 'sourced',
+        evidenceIds: ['ev1'],
+        verdict: 'supported',
+        text: 'It samples Old Record.',
+      }),
+      verdict: 'contradicted',
+    } as Claim;
+    const track = {
+      ...missingTrack,
+      evidence,
+      claims: [rejected],
+      genealogy: {
+        nodes: [
+          { id: 'current', group: 1, label: 'Quiet Signal', size: 40 },
+          { id: 'old', group: 2, label: 'Old Record - Someone (1972)', size: 22 },
+        ],
+        links: [{ source: 'current', target: 'old', value: 2, type: 'sample', claimId: 'c-x' }],
+      },
+    } as unknown as TrackData;
+    render(<Player trackData={track} onBack={() => {}} />);
+    const panel = document.getElementById('panel-genealogy') as HTMLElement;
+    expect(panel.textContent).toContain('No connections to show.');
+    expect(panel.textContent).not.toContain('No connected tracks were found');
+  });
+});
+
+describe('the recording notice in the Player', () => {
+  const replayed = {
+    ...missingTrack,
+    run: {
+      id: 'r1',
+      mode: 'replay',
+      replayed: 'run',
+      recordedAt: '2026-10-24T10:00:00.000Z',
+      commit: 'abc1234',
+    },
+  } as unknown as TrackData;
+
+  it('sits in the header under the artist from md up, and before the panels on phones', () => {
+    render(<Player trackData={replayed} onBack={() => {}} />);
+    const header = document.getElementById('player-header') as HTMLElement;
+    const title = screen.getByRole('heading', { level: 1 });
+    const notices = [...document.querySelectorAll('section[aria-label="Recorded run"]')];
+    // From md up: in the header, after the artist.
+    const inHeader = notices.find((notice) => header.contains(notice));
+    expect(inHeader).toBeTruthy();
+    const artist = within(header).getByText('Test Artist');
+    expect(
+      artist.compareDocumentPosition(inHeader as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Every copy of it comes after the h1 and before the panels' content.
+    const firstPanel = document.getElementById('panel-context') as HTMLElement;
+    for (const notice of notices) {
+      expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(
+        notice.compareDocumentPosition(firstPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
   });
 });

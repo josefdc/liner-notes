@@ -409,7 +409,7 @@ describe("composerNode", () => {
     const out = await analyse(testRuntime(succeeding()))(stateWith(measured), config());
 
     const { nodes, links } = out.trackData?.genealogy ?? { nodes: [], links: [] };
-    // Group 2 is "Sampled in this track" / [ORIGIN] in the web: no unjudged model guess gets it.
+    // Group 2 is "Sampled in this track" / "Origin" in the web: no unjudged model guess gets it.
     expect(nodes.map((n) => [n.id, n.group])).toEqual([
       ["current", 1],
       ["n1", 4],

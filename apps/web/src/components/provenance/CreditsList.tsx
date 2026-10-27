@@ -55,9 +55,9 @@ export const CreditsList: React.FC<CreditsListProps> = ({
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className={`space-y-3 ${className}`}>
-      <h4 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
+      <h2 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
         Credits
-      </h4>
+      </h2>
       {onCards > 0 && (
         <p className={LINE}>
           {onCards === 1

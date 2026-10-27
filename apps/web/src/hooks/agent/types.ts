@@ -63,6 +63,12 @@ export interface AgentState {
   statusNote: string | null;
   /** The facts "more facts" added to the result shown last, with their claims; null before. */
   moreFacts: MoreFacts | null;
+  /**
+   * When the error's refusal said how long to wait (a rate limit's Retry-After): the time, in
+   * milliseconds since the epoch, before which a retry would be refused again. The hook sends no
+   * request before then. Null for any other error, and while no run has failed.
+   */
+  retryAt: number | null;
 }
 
 /** A fact "more facts" asked for but could not write: its place in the answer, and why. */

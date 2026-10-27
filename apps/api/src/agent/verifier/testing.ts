@@ -118,9 +118,12 @@ export function stateFor(
   } as unknown as SonicAgentStateType;
 }
 
-/** The statements a judge call was sent, as the prompt lists them. */
-export function sentStatements(call: StubCall): Array<{ claimId: string; text: string }> {
-  const user = (call.input as ReadonlyArray<{ role: string; content: string }>).find(
+/**
+ * The statements a judge prompt lists, from its messages (a model layer's input, or the `input`
+ * of a provider request).
+ */
+export function statementsIn(messages: unknown): Array<{ claimId: string; text: string }> {
+  const user = (messages as ReadonlyArray<{ role: string; content: string }>).find(
     (message) => message.role === "user",
   )?.content;
   const block = user?.split("<<<SOURCE statements>>>\n")[1]?.split("\n<<<END SOURCE>>>")[0];
@@ -128,6 +131,11 @@ export function sentStatements(call: StubCall): Array<{ claimId: string; text: s
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+/** The statements a judge call was sent, as the prompt lists them. */
+export function sentStatements(call: StubCall): Array<{ claimId: string; text: string }> {
+  return statementsIn(call.input);
 }
 
 /** A model layer whose judge answers `verdicts(sent)` for the statements it was sent. */

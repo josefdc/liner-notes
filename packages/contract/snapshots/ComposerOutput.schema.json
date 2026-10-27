@@ -93,7 +93,7 @@
           "properties": {
             "id": {
               "type": "string",
-              "description": "Short unique id; 'current' for the analysed track"
+              "description": "Short unique id; 'current' for the analyzed track"
             },
             "role": { "type": "string", "enum": ["current", "source", "derived", "influence"] },
             "label": { "type": "string", "description": "'Title - Artist (Year)'" },
@@ -235,7 +235,7 @@
           "properties": {
             "id": {
               "type": "string",
-              "description": "Short unique id; 'current' for the analysed track"
+              "description": "Short unique id; 'current' for the analyzed track"
             },
             "role": { "type": "string", "enum": ["current", "source", "derived", "influence"] },
             "label": { "type": "string", "description": "'Title - Artist (Year)'" },

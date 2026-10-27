@@ -1,10 +1,11 @@
 /**
  * The committed demo recording (fixtures/replays/one-more-time-daft-punk.json) is what a
  * first-time visitor sees without any key configured. These checks pin what it is for: a run of
- * today's analyzer that shows its measured key or why the key was withheld, the release's cover
- * from the Cover Art Archive, source errors in words, web evidence without social pages, forum
- * comment threads or private handles, and the app's own messages without the prototype's copy or emoji. A recording that
- * falls short is re-recorded (npm run replay:record -w apps/api), never edited by hand.
+ * today's analyzer, recorded from a committed tree, that shows its measured key or why the key
+ * was withheld, the release's cover from the Cover Art Archive, source errors in words, web
+ * evidence without social pages, forum comment threads or private handles, and the app's own
+ * messages without the prototype's copy or emoji. A recording that falls short is re-recorded
+ * (npm run replay:record -w apps/api), never edited by hand.
  */
 
 import { readFileSync } from "node:fs";
@@ -56,6 +57,11 @@ describe("the demo recording (one-more-time-daft-punk)", () => {
     expect(record.analyzerVersion).not.toBeNull();
     expect(atLeast23(versionOf(record.analyzerVersion))).toBe(true);
     expect(analysis.audio?.analyzerVersion).toBe(record.analyzerVersion);
+  });
+
+  it("was recorded from a committed tree, so its commit names the code that made it", () => {
+    expect(record.commit).not.toBeNull();
+    expect(record.commit).not.toMatch(/-dirty$/);
   });
 
   it("shows the tempo measured from the signal, and copies of measured values that match it", () => {

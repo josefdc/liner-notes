@@ -89,7 +89,13 @@ for _client_logger in ("httpx", "httpcore"):
 # (signal_features.audible_beats); tempo, confidence and sections are unchanged.
 # 2.3.3: so are runs of beats counted through an intro or an ending without a beat
 # (signal_features.beats_on_the_grid); tempo, confidence and sections are unchanged.
-ANALYZER_VERSION = "2.3.3"
+# 2.3.4: the measured grid starts where the band's onsets start, so in the tests one onset (a
+# click, a breath) under a beat of an intro of a band with such a start no longer keeps the
+# intro's beats (known limits in signal_features.py), and a run on the grid's spacing but off
+# its phase is left out too. A run off the grid, or whose part from its first onset is off it,
+# is left out as a whole, so a band's sparse or drifting first or last beats in such a run are
+# missing with it; tempo, confidence and sections are unchanged.
+ANALYZER_VERSION = "2.3.4"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -137,7 +143,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.3.3+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.4+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)

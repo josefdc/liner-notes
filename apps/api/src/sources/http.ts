@@ -64,13 +64,15 @@ function knownSecrets(): string[] {
   );
 }
 
+/** Names of a `name=value` pair whose value is a secret (a query parameter, an attribute). */
+const SECRET_PARAM_NAMES =
+  "api_?key|key|token|access_token|refresh_token|client_secret|password|secret";
+
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   // Case-sensitive and token-shaped, so prose such as "the basic track" is left alone.
   [/\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g, "$1 [redacted]"],
-  [
-    /\b(api_?key|key|token|access_token|refresh_token|client_secret|password|secret)=([^&\s"'<>]+)/gi,
-    "$1=[redacted]",
-  ],
+  // An unquoted value; a quoted one is read by quotedParamSpans.
+  [new RegExp(`\\b(${SECRET_PARAM_NAMES})=([^&\\s"'<>]+)`, "gi"), "$1=[redacted]"],
   [/\btvly-[A-Za-z0-9_-]+/g, "tvly-[redacted]"],
   // Spotify access tokens (any other long mixed-case token-like run: redactTokenRuns).
   [/\bBQ[A-Za-z0-9_-]{40,}/g, "[redacted]"],
@@ -97,20 +99,225 @@ export function redactTokenRuns(text: string): string {
 
 /** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
 function redactSecrets(text: string): string {
-  let out = text;
+  let out = maskSpans(text, quotedParamSpans(text));
   for (const secret of knownSecrets()) out = out.split(secret).join("[redacted]");
   for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
   return redactTokenRuns(out);
 }
 
+/** A key as it is compared: lower case, without "_" or "-" (`accessToken` is `access_token`). */
+const keyForm = (key: string) => key.toLowerCase().replace(/[-_]/g, "");
+
 /**
- * Removes credentials from an error message or log line. Besides `redactSecrets`, a quoted value
- * in a message about a header is removed: fetch echoes an invalid header value, which is the
- * credential.
+ * Keys whose value is redacted whatever it holds, in a parsed body and quoted in text: compared
+ * in any case and with or without "_" and "-" (isSecretKey), so `clientSecret`, `CLIENT-SECRET`
+ * and `client_secret` are one key.
+ */
+const SECRET_KEYS: ReadonlySet<string> = new Set(
+  [
+    "x-api-key",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "auth_token",
+    "api_key",
+    "client_secret",
+    "private_key",
+    "password",
+    "token",
+    "secret",
+    "authorization",
+  ].map(keyForm),
+);
+
+/** True for a key whose value is a secret (SECRET_KEYS); the parsed path and text use this. */
+export const isSecretKey = (key: string) => SECRET_KEYS.has(keyForm(key));
+
+/**
+ * A quoted key and its colon: `"password":`, `'token' :`, or `\"api_key\":` inside a JSON string.
+ * Group 1 is the backslash before each quote, if any; group 3 the key, which isSecretKey judges.
+ * A key is at most 64 characters, so each quote is read on for at most that many.
+ */
+const QUOTED_KEY = /(\\?)(["'])([A-Za-z0-9_-]{1,64})\1\2\s*:\s*/g;
+
+/**
+ * Where a quoted value whose content starts at `start` ends (the index of its closing quote, or
+ * the end of the text when it has none). `escaped`: the quotes are written `\"` (a JSON string
+ * inside a JSON string), where a backslash of the inner string is written `\\`.
+ */
+function quotedValueEnd(text: string, start: number, quote: string, escaped: boolean): number {
+  let i = start;
+  while (i < text.length) {
+    const char = text.charAt(i);
+    if (!escaped) {
+      if (char === quote) return i;
+      i += char === "\\" ? 2 : 1;
+    } else if (char !== "\\") {
+      i += 1;
+    } else if (text.charAt(i + 1) === quote) {
+      return i;
+    } else if (text.charAt(i + 1) === "\\") {
+      // An escaped backslash of the inner string: the inner character after it is skipped too.
+      i += text.charAt(i + 2) === "\\" ? 4 : 3;
+    } else {
+      i += 2;
+    }
+  }
+  return text.length;
+}
+
+/** A span of text, [start, end): where a value's content lies. */
+type Span = [start: number, end: number];
+
+/**
+ * Where each quoted value of a quoted secret key lies (its content, without the quotes): in either
+ * quote, escapes included, up to its closing quote or the end of the text. Reads the text once.
+ */
+function quotedKeySpans(text: string): Span[] {
+  const spans: Span[] = [];
+  QUOTED_KEY.lastIndex = 0;
+  for (let key = QUOTED_KEY.exec(text); key; key = QUOTED_KEY.exec(text)) {
+    if (!isSecretKey(key[3] ?? "")) continue;
+    const at = key.index + key[0].length;
+    const backslash = key[1] ?? "";
+    const quote = text.charAt(at + backslash.length);
+    if (!text.startsWith(backslash, at) || (quote !== '"' && quote !== "'")) continue;
+    const start = at + backslash.length + 1;
+    const end = quotedValueEnd(text, start, quote, backslash !== "");
+    if (end === start) continue;
+    spans.push([start, end]);
+    QUOTED_KEY.lastIndex = Math.max(end, QUOTED_KEY.lastIndex);
+  }
+  return spans;
+}
+
+/** A secret `name=` pair whose value is quoted: `password="…"`, `token='…'`, `key=\"…\"`. */
+const QUOTED_PARAM = new RegExp(`\\b(?:${SECRET_PARAM_NAMES})=(\\\\?)(["'])`, "gi");
+
+/** Where each quoted value of a secret `name=` pair lies, as quotedKeySpans reads it. */
+function quotedParamSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  QUOTED_PARAM.lastIndex = 0;
+  for (let pair = QUOTED_PARAM.exec(text); pair; pair = QUOTED_PARAM.exec(text)) {
+    const start = pair.index + pair[0].length;
+    const end = quotedValueEnd(text, start, pair[2] ?? '"', pair[1] === "\\");
+    if (end === start) continue;
+    // An escaped opening quote goes with the value: the rule for an unquoted value would
+    // otherwise take its backslash for one.
+    spans.push([pair[1] ? start - 2 : start, end]);
+    QUOTED_PARAM.lastIndex = Math.max(end, QUOTED_PARAM.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * The content of each pair of double quotes, paired as /"[^"]*"/g pairs them; a quote inside one
+ * of `skip` (sorted, not overlapping) is not a quote here.
+ */
+function doubleQuotedSpans(text: string, skip: readonly Span[] = []): Span[] {
+  const spans: Span[] = [];
+  let next = 0;
+  let open = -1;
+  for (let i = text.indexOf('"'); i !== -1; i = text.indexOf('"', i + 1)) {
+    while (next < skip.length && (skip[next] as Span)[1] <= i) next++;
+    const inside = skip[next];
+    if (inside && inside[0] <= i) {
+      i = inside[1] - 1;
+      continue;
+    }
+    if (open === -1) {
+      open = i;
+    } else {
+      spans.push([open + 1, i]);
+      open = -1;
+    }
+  }
+  return spans;
+}
+
+/** Two lists of spans, each sorted by start, as one list sorted by start. */
+function mergeSpans(a: readonly Span[], b: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    const first = a[i];
+    const second = b[j];
+    if (first && (!second || first[0] <= second[0])) {
+      out.push(first);
+      i++;
+    } else if (second) {
+      out.push(second);
+      j++;
+    }
+  }
+  return out;
+}
+
+/** `text` with each span (sorted by start; spans that overlap or touch as one) as "[redacted]". */
+function maskSpans(text: string, spans: readonly Span[]): string {
+  let out = "";
+  let kept = 0;
+  for (let i = 0; i < spans.length; ) {
+    let [start, end] = spans[i] as Span;
+    for (i++; i < spans.length && (spans[i] as Span)[0] <= end; i++) {
+      end = Math.max(end, (spans[i] as Span)[1]);
+    }
+    out += `${text.slice(kept, start)}[redacted]`;
+    kept = end;
+  }
+  return out + text.slice(kept);
+}
+
+/** Where each quoted secret value lies: of a quoted secret key, or of a secret `name=` pair. */
+const quotedSecretSpans = (text: string) =>
+  maskableUnion(quotedKeySpans(text), quotedParamSpans(text));
+
+/** Two lists of spans as one sorted list in which no two spans overlap. */
+function maskableUnion(a: readonly Span[], b: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  for (const [start, end] of mergeSpans(a, b)) {
+    const last = out.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+
+/**
+ * Each quoted value of a quoted secret key, or of a secret `name=` pair, in text that was not
+ * parsed (an HTML page, a JSON body that does not parse, a message) as "[redacted]", as the parsed
+ * path redacts it by key (`"client_secret": "…"` → `"client_secret": "[redacted]"`,
+ * `password="…"` → `password="[redacted]"`). Reads the text once.
+ *
+ * Known limits, left to the other rules:
+ * - a value that is not a quoted string (a number, an object, a list): where it ends is not plain
+ *   from the text;
+ * - quotes written as HTML entities (`&quot;`), and keys escaped more than once
+ *   (`\\\"password\\\":`);
+ * - a key and its value at different escape levels (`\"token\":"v"`);
+ * - links escaped twice (`https:\\\/\\\/…`) or written with `/` for "/".
+ */
+export function redactQuotedSecrets(text: string): string {
+  return maskSpans(text, quotedSecretSpans(text));
+}
+
+/**
+ * Removes credentials from an error message or log line: each quoted secret value
+ * (redactQuotedSecrets); in a text that mentions a header, every double-quoted value, since fetch
+ * echoes an invalid header value, which is the credential; then `redactSecrets`.
+ *
+ * The header rule pairs quotes without reading escapes. It is measured on the text as it came,
+ * both as it pairs quotes there and as it pairs them once the secret values are gone, and what
+ * any of these hides is hidden: so a quote inside a secret value cannot move a later pair and
+ * show what the rule hid before. Text without a quoted secret value reads as it always did.
  */
 export function redactText(text: string): string {
-  const out = /header/i.test(text) ? text.replace(/"[^"]*"/g, '"[redacted]"') : text;
-  return redactSecrets(out);
+  const secrets = quotedSecretSpans(text);
+  const spans = /header/i.test(text)
+    ? mergeSpans(secrets, mergeSpans(doubleQuotedSpans(text), doubleQuotedSpans(text, secrets)))
+    : secrets;
+  return redactSecrets(maskSpans(text, spans));
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
@@ -189,6 +396,18 @@ export function replacePhoneLike(text: string, replace: (match: string) => strin
 const withoutMediaUrls = (text: string) =>
   text.replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url));
 
+/** A URL whose slashes are JSON-escaped (`https:\/\/host\/path`), absolute or protocol-relative. */
+const ESCAPED_URL_IN_TEXT = /(?:https?:)?\\\/\\\/[^\s"'<>()[\]{}]+/gi;
+
+/**
+ * Each media URL written with JSON-escaped slashes as "[media]", as withoutMediaUrls removes the
+ * same URL written plainly: a signed preview link in a body that was not parsed.
+ */
+export const withoutEscapedMediaUrls = (text: string) =>
+  text.replace(ESCAPED_URL_IN_TEXT, (url) =>
+    isMediaUrl(url.replaceAll("\\/", "/")) ? "[media]" : url,
+  );
+
 /**
  * A string the pipeline reads, for a cassette: secrets redacted and media URLs removed, capped
  * well above what consumers read. Nothing else changes, so replay reproduces the recorded run;
@@ -201,12 +420,14 @@ export function scrubReadText(text: string): string {
 }
 
 /**
- * An error or text body for a cassette: secrets, media URLs, e-mails and phone numbers removed,
- * capped. These bodies only feed error handling and the debug log.
+ * An error or text body for a cassette: secrets (quoted secret keys included), media URLs (also
+ * written with JSON-escaped slashes), e-mails and phone numbers removed, capped. These bodies
+ * only feed error handling and the debug log.
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = replacePhoneLike(withoutEmails(withoutMediaUrls(redactText(text))), (match) => {
+  const urls = withoutEscapedMediaUrls(withoutMediaUrls(redactText(text)));
+  const out = replacePhoneLike(withoutEmails(urls), (match) => {
     const digits = match.replace(/\D/g, "").length;
     const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
     return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
@@ -257,7 +478,7 @@ export class SourceError extends Error {
   override readonly name = "SourceError";
   readonly status?: number;
   readonly retryAfterMs?: number;
-  /** The error body: parsed JSON, or capped text. */
+  /** The error body: parsed JSON, or text that was not parsed, scrubbed (scrubText) and capped. */
   readonly body?: unknown;
 
   constructor(
@@ -399,18 +620,6 @@ export function pick(value: unknown, shape: Shape): unknown {
   return out;
 }
 
-const SECRET_KEYS = new Set([
-  "x-api-key",
-  "access_token",
-  "refresh_token",
-  "api_key",
-  "apikey",
-  "client_secret",
-  "password",
-  "token",
-  "secret",
-  "authorization",
-]);
 const MEDIA_KEY =
   /^(?:preview|images?|picture|cover|thumbnail|artwork|favicon|avatar)(?:[_-]?\w*)$/i;
 
@@ -422,7 +631,7 @@ function scrubWith(text: (value: string) => string) {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
       if (MEDIA_KEY.test(key)) continue;
-      out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "[redacted]" : scrub(inner);
+      out[key] = isSecretKey(key) ? "[redacted]" : scrub(inner);
     }
     return out;
   };
@@ -895,7 +1104,9 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
         // Falls through: kept as text, reported as a parse error.
       }
     }
-    recorded.text = text.slice(0, MAX_TEXT * 4);
+    // A body that is not parsed is kept scrubbed from here on: the error's body, the debug log
+    // and the cassette all hold this text, so a replay gives the same error.
+    recorded.text = scrubText(text.slice(0, MAX_TEXT * 4));
     return recorded;
   } catch (error) {
     if (isSourceError(error)) throw error;
@@ -980,7 +1191,8 @@ function forCassette(req: SourceRequest, answer: Recorded): Recorded {
       ? scrubReadPayload(req.scrub ? pick(kept, req.scrub) : kept)
       : scrubPayload(answer.json);
   } else {
-    entry.text = scrubText(answer.text ?? "");
+    // Scrubbed when it was read (fetchLive), so the replayed error is the recorded one.
+    entry.text = answer.text ?? "";
   }
   return entry;
 }

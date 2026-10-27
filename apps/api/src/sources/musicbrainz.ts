@@ -1432,6 +1432,44 @@ export async function browseWorkRecordings(
   return { recordings, total };
 }
 
+const RECORDING_DATES_SHAPE: Shape = {
+  count: true,
+  recordings: [{ id: true, "first-release-date": true }],
+};
+
+/** The most recordings one date search asks for (MusicBrainz's largest search page). */
+export const RECORDING_DATES_MAX = 100;
+
+/**
+ * The first release dates MusicBrainz files for `mbids`, in one search request by recording id
+ * (at most RECORDING_DATES_MAX). A recording the answer leaves out, or files without a known
+ * date (`knownReleaseDate`), is not in the map: its date stays unknown. No request without ids.
+ */
+export async function recordingReleaseDates(
+  mbids: readonly string[],
+  signal?: AbortSignal,
+): Promise<Map<string, string>> {
+  const ids = [...new Set(mbids.filter(isMbid).map((id) => id.toLowerCase()))].slice(
+    0,
+    RECORDING_DATES_MAX,
+  );
+  const dates = new Map<string, string>();
+  if (ids.length === 0) return dates;
+  const data = await mbFetch<{ recordings?: MbRecordingSummary[] }>(
+    "recording",
+    { query: `rid:(${ids.join(" OR ")})`, limit: String(ids.length) },
+    RECORDING_DATES_SHAPE,
+    signal,
+  );
+  const wanted = new Set(ids);
+  for (const recording of Array.isArray(data?.recordings) ? data.recordings : []) {
+    const id = typeof recording?.id === "string" ? recording.id.toLowerCase() : "";
+    const date = knownReleaseDate(recording?.["first-release-date"]);
+    if (wanted.has(id) && date) dates.set(id, date);
+  }
+  return dates;
+}
+
 /** The credit as MusicBrainz prints it: "Queen & David Bowie". */
 export function creditString(credits: MbCredit[] | undefined): string {
   return (Array.isArray(credits) ? credits : [])
@@ -1449,19 +1487,36 @@ export type MbRelationshipKind =
   | "cover-of"
   | "covered-by";
 
+/** A recording at the other end of a relationship, as MusicBrainz names it. */
+export interface MbRelatedRecording {
+  mbid: string;
+  title: string;
+  artist: string;
+  lengthMs: number | null;
+  /**
+   * Its first release date as MusicBrainz files it (`knownReleaseDate`); null or absent when
+   * not known. Nested relationships carry none, so the identity chain dates them apart.
+   */
+  firstReleaseDate?: string | null;
+}
+
 export interface MbRelationship {
   kind: MbRelationshipKind;
   /**
    * "track": a fact about the matched recording. "work": a fact about the song it performs (a
-   * cover of the work), not claimed for this recording.
+   * cover of the work), not claimed for this recording. "hop": a fact about two other
+   * recordings (`via`, one the matched recording samples, and `recording`), read for the
+   * relations map only: never claimed, and about neither this recording nor its song.
    */
-  about: "track" | "work";
+  about: "track" | "work" | "hop";
   /** The Evidence item that states this relationship; its recordRef carries the scope. */
   evidenceId: string;
   /** The related recording; null when the relationship is to a work. */
-  recording: { mbid: string; title: string; artist: string; lengthMs: number | null } | null;
+  recording: MbRelatedRecording | null;
   work: { mbid: string; title: string } | null;
   attributes: string[];
+  /** A "hop" record's own subject: the recording whose relationship it is (`kind` reads from it). */
+  via?: MbRelatedRecording;
 }
 
 /**
@@ -1481,11 +1536,15 @@ class UniqueRelationships {
   }
 }
 
-const relatedRecording = (r: MbRecordingSummary): MbRelationship["recording"] => ({
+const relatedRecording = (r: MbRecordingSummary): MbRelatedRecording => ({
   mbid: r.id,
   title: r.title,
   artist: creditString(r["artist-credit"]),
   lengthMs: typeof r.length === "number" ? r.length : null,
+  // Only when MusicBrainz dates it (nested relationships do not).
+  ...(knownReleaseDate(r["first-release-date"])
+    ? { firstReleaseDate: knownReleaseDate(r["first-release-date"]) }
+    : {}),
 });
 
 /**
@@ -1530,6 +1589,59 @@ export function recordingRelationships(details: MbRecordingDetails): MbRelations
     }
   }
   return out.list;
+}
+
+/** What the relations map keeps of a recording read for its second hop (and caches). */
+export interface MbSampleHop {
+  /** The recording read, with its own first release date. */
+  recording: MbRelatedRecording;
+  /** Its sample relationships, read from its side, at most MB_HOP_KEPT_PER_KIND of each kind. */
+  samples: Array<{
+    kind: "samples" | "sampled-by";
+    recording: MbRelatedRecording;
+    attributes: string[];
+  }>;
+}
+
+/** The most sample relationships of each direction a second hop keeps of one recording. */
+export const MB_HOP_KEPT_PER_KIND = 25;
+
+/**
+ * A recording's sample relationships for the second hop, from its details: what it samples and
+ * what samples it, each direction in MusicBrainz's order and capped; null when the details are
+ * not a recording.
+ */
+export function sampleHopOf(details: MbRecordingDetails): MbSampleHop | null {
+  if (!details || !isMbid(details.id) || typeof details.title !== "string") return null;
+  const samples: MbSampleHop["samples"] = [];
+  const counts = { samples: 0, "sampled-by": 0 };
+  for (const r of recordingRelationships(details)) {
+    if ((r.kind !== "samples" && r.kind !== "sampled-by") || !r.recording) continue;
+    if (r.recording.mbid === details.id || counts[r.kind] >= MB_HOP_KEPT_PER_KIND) continue;
+    counts[r.kind]++;
+    samples.push({ kind: r.kind, recording: r.recording, attributes: r.attributes });
+  }
+  return { recording: relatedRecording(details), samples };
+}
+
+/**
+ * The second hop from a recording the matched one samples (`hop`, read by `sampleHopOf`): what
+ * that source samples ("samples", read from its side) and the other recordings that sample it
+ * ("sampled-by": the matched recording's siblings), never `ownRecording` itself. Each is a
+ * "hop" record whose `via` is the source, in MusicBrainz's order.
+ */
+export function secondHopRelationships(hop: MbSampleHop, ownRecording: string): MbRelationship[] {
+  return hop.samples
+    .filter((r) => r.recording.mbid !== ownRecording)
+    .map((r) => ({
+      kind: r.kind,
+      about: "hop" as const,
+      evidenceId: "",
+      recording: { ...r.recording },
+      work: null,
+      attributes: [...r.attributes],
+      via: { ...hop.recording },
+    }));
 }
 
 /**

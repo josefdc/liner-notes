@@ -19,7 +19,7 @@ import type {
 } from "@liner-notes/contract";
 import type { LlmMessage } from "../llm/invoke.js";
 import { releaseYearOf } from "../sources/musicbrainz.js";
-import { type EvidenceScope, evidenceScope } from "../sources/records.js";
+import { type EvidenceScope, evidenceScope, isMapRecord } from "../sources/records.js";
 import { followUpChoices, type RanStep } from "./research/plan.js";
 import { loudnessDbfs, measuredAudioFields, moodScore } from "./finalize.js";
 import type { AudioMeasurement, ResearchData, SpotifyData } from "./state.js";
@@ -258,11 +258,22 @@ export function researchBlocks(research: ResearchData | null, max = SOURCE_MATER
 }
 
 /**
+ * The items of the pack a model may read: all but the relations map's (`isMapRecord`), which
+ * are about two other recordings, support no claim and only draw the map.
+ */
+const forModel = (evidence: readonly Evidence[]) => evidence.filter((e) => !isMapRecord(e));
+
+/**
  * The evidence pack as the model reads it: ids, source, title, link and excerpt, one item per
  * line, and what an item is about when it is not this recording (its recordRef's scope). Whole
- * items are added until EVIDENCE_PACK_MAX characters; how many were left out is said.
+ * items are added until EVIDENCE_PACK_MAX characters; how many were left out is said. The
+ * relations map's items are never shown (`forModel`).
  */
-export function evidenceForPrompt(evidence: readonly Evidence[], max = EVIDENCE_PACK_MAX): string {
+export function evidenceForPrompt(
+  allEvidence: readonly Evidence[],
+  max = EVIDENCE_PACK_MAX,
+): string {
+  const evidence = forModel(allEvidence);
   if (evidence.length === 0) return "(empty: there is nothing to cite)";
   const { lines } = promptEvidence(evidence, max);
   const left = evidence.length - lines.length;
@@ -275,9 +286,10 @@ export function evidenceForPrompt(evidence: readonly Evidence[], max = EVIDENCE_
  * characters): the only ones its answer may cite.
  */
 export function shownEvidence(
-  evidence: readonly Evidence[],
+  allEvidence: readonly Evidence[],
   max = EVIDENCE_PACK_MAX,
 ): readonly Evidence[] {
+  const evidence = forModel(allEvidence);
   return evidence.slice(0, promptEvidence(evidence, max).lines.length);
 }
 

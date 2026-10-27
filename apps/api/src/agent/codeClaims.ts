@@ -49,9 +49,22 @@
  * track before the same one on the whole release, at most CODE_CREDITS_MAX, the track's before
  * the whole release's. Every other record stays in the evidence pack only.
  *
+ * The map. A node made from a record carries the record's MusicBrainz id (`mbid`) and, when
+ * MusicBrainz dates the recording, the year of its first release (`year`); a node MusicBrainz
+ * does not date has none, and no node built from a record ever takes the model's year. The
+ * analysed track's node takes its own recording's (`CodeBuilt.current`). The second hop (a
+ * `hop` relation: what a recording this one samples samples, and the other recordings that
+ * sample it, its siblings) gives code links between two other records, sourced on their item
+ * alone: no claim (the contract's `linkClaimProblem` lets a code link stand on its evidence), and
+ * only from a node already drawn, at most CODE_HOP_NODES new nodes, what the source samples
+ * before its siblings. The whole map holds at most GENEALOGY_NODES_MAX nodes: the analysed
+ * track, then the records this one draws on, then those that draw on it (CODE_NODES_MAX for the
+ * two, in that order; a relation past it gets no claim either), then the model's own nodes, then
+ * the second hop's; a link to a node left out is left out too.
+ *
  * Artwork. Each node made from a recording may be searched for its cover, but only the first
- * CODE_ARTWORK_PER_KIND of each relationship kind (`noArtwork` lists the rest), so one run never
- * sends a burst of searches that a rate limit would cut short.
+ * CODE_ARTWORK_PER_KIND of each relationship kind (`noArtwork` lists the rest, and every node of
+ * the second hop), so one run never sends a burst of searches that a rate limit would cut short.
  */
 
 import {
@@ -69,7 +82,13 @@ import {
   quoted,
   titlesMatch,
 } from "../sources/records.js";
-import type { CreditRelation, PrimaryRelation, RecordingRelation } from "./research/relations.js";
+import { releaseYearOf } from "../sources/musicbrainz.js";
+import type {
+  CreditRelation,
+  HopRelation,
+  PrimaryRelation,
+  RecordingRelation,
+} from "./research/relations.js";
 import type { Genealogy, GenealogyLink, GenealogyNode } from "./schema.js";
 import type { ComposedDraft } from "./state.js";
 import { LINK_VALUE } from "./verifier/links.js";
@@ -82,6 +101,12 @@ export const CODE_DESCENDANTS_PER_KIND = 4;
 export const CODE_CREDITS_MAX = 12;
 /** The nodes of one relationship kind whose cover art is looked up. */
 export const CODE_ARTWORK_PER_KIND = 2;
+/** The most nodes the whole map holds, the analysed track's included (see the module comment). */
+export const GENEALOGY_NODES_MAX = 16;
+/** The most nodes made from this recording's own relations (all but the analysed track's). */
+export const CODE_NODES_MAX = GENEALOGY_NODES_MAX - 1;
+/** The most new nodes the second hop adds (what the source samples, then its siblings). */
+export const CODE_HOP_NODES = 4;
 
 /** How a node made from a record is drawn: a related record, until the verifier groups it. */
 const CODE_NODE_GROUP = 4;
@@ -104,8 +129,11 @@ const LINK_OF: Record<Kind, { type: LinkType; otherEarlier: boolean }> = {
 /** True for a kind this recording draws on: the other record is the earlier one. */
 const drawsOn = (kind: Kind) => LINK_OF[kind].otherEarlier;
 
+/** The relations a claim is made from: all but the second hop's, which state no claim. */
+type ClaimedRelation = Exclude<PrimaryRelation, HopRelation>;
+
 /** The claim scope of a record's recordRef scope. */
-const CLAIM_SCOPE: Record<PrimaryRelation["scope"], ClaimScope> = {
+const CLAIM_SCOPE: Record<ClaimedRelation["scope"], ClaimScope> = {
   track: "recording",
   work: "work",
   release: "release",
@@ -259,6 +287,13 @@ export interface CodeBuilt {
   claims: Claim[];
   /** The nodes made from the records, the analysed track's not included. */
   nodes: GenealogyNode[];
+  /** The ids of `nodes` the second hop added: in the map after the model's own nodes. */
+  hopNodes?: string[];
+  /**
+   * What the analysed track's node takes from its own MusicBrainz recording: its id, and its
+   * first release year when MusicBrainz dates it. Absent without an identified recording.
+   */
+  current?: { mbid: string; year?: number };
   links: GenealogyLink[];
   /** The ids of the nodes whose cover art is not looked up (see the module comment). */
   noArtwork: string[];
@@ -319,20 +354,37 @@ export function curatedCredits(relations: readonly PrimaryRelation[]): CreditRel
     .slice(0, CODE_CREDITS_MAX);
 }
 
+/** The year of a MusicBrainz first release date ("1979" of "1979-06-01"); none when unknown. */
+function yearOf(date: string | null | undefined): { year?: number } {
+  const year = releaseYearOf(date);
+  return year ? { year: Number(year) } : {};
+}
+
+/** The second hop's relations, what a source samples before its siblings, in their order. */
+function hopRelations(relations: readonly PrimaryRelation[]): HopRelation[] {
+  const hops = relations.filter((r): r is HopRelation => r.type === "hop");
+  return [
+    ...hops.filter((r) => r.kind === "samples"),
+    ...hops.filter((r) => r.kind === "sampled-by" && !oddCredit(r.other.artist)),
+  ];
+}
+
 /**
  * The code-built claims, nodes and links of a run, from its relations and its evidence pack. A
  * relation whose item is not in `evidence` gives nothing, and takes no place in the curation.
- * Pure, apart from `newId`.
+ * `recording` is the analysed track's own MusicBrainz recording (its node's id and year). Pure,
+ * apart from `newId`.
  */
 export function buildCodeClaims(
   relations: readonly PrimaryRelation[],
   evidence: readonly Evidence[],
   newId: () => string,
+  recording?: { mbid: string; firstReleaseDate: string | null } | null,
 ): CodeBuilt {
   const items = new Map(evidence.map((item) => [item.id, item]));
   const present = relations.filter((relation) => items.has(relation.evidenceId));
   const claims: Claim[] = [];
-  const claimFor = (relation: PrimaryRelation, about: ClaimAbout, text: string): Claim => {
+  const claimFor = (relation: ClaimedRelation, about: ClaimAbout, text: string): Claim => {
     const claim: Claim = {
       id: newId(),
       text,
@@ -355,14 +407,24 @@ export function buildCodeClaims(
   const links: GenealogyLink[] = [];
   const drawn = new Set<string>();
   const artworkPerKind = new Map<Kind, Set<string>>();
-  /** The node standing for a relation's other record: one per record. */
-  const nodeFor = (relation: RecordingRelation): string => {
-    const { entity, mbid, title, artist } = relation.other;
-    const known = records.find(
+  type Other = {
+    entity: "recording" | "work";
+    mbid: string;
+    title: string;
+    artist: string | null;
+    firstReleaseDate?: string | null;
+  };
+  /** The node already standing for a record, if any: one per record. */
+  const knownNode = (other: Other): string | null =>
+    records.find(
       (record) =>
-        record.mbid === mbid || (entity === "recording" && sameNames(record, relation.other)),
-    );
-    if (known) return known.id;
+        record.mbid === other.mbid || (other.entity === "recording" && sameNames(record, other)),
+    )?.id ?? null;
+  /** The node standing for a relation's other record: one per record. */
+  const nodeFor = (other: Other): string => {
+    const known = knownNode(other);
+    if (known) return known;
+    const { entity, mbid, title, artist } = other;
     const id = `mb-${mbid}`;
     records.push({ id, title, artist: entity === "recording" ? artist : null, mbid });
     if (entity === "work") {
@@ -373,6 +435,7 @@ export function buildCodeClaims(
         group: CODE_NODE_GROUP,
         label: artist ? `${title} (the song by ${artist})` : `${title} (the song)`,
         size: CODE_NODE_SIZE,
+        mbid,
       });
     } else {
       nodes.push({
@@ -382,6 +445,9 @@ export function buildCodeClaims(
         size: CODE_NODE_SIZE,
         // A recording without an artist credit is not searched for as a track.
         ...(artist ? { trackTitle: title, trackArtist: artist } : {}),
+        // Its year from MusicBrainz only, when MusicBrainz dates it; never invented.
+        ...yearOf(other.firstReleaseDate),
+        mbid,
       });
     }
     return id;
@@ -393,10 +459,13 @@ export function buildCodeClaims(
     const { type, otherEarlier } = LINK_OF[relation.kind];
     const text = partOnly(relation) ? partialCoverText(relation, item) : codeClaimText(item);
     if (text === null) continue;
+    const linked = relation.scope === "track" && !partOnly(relation);
+    // The map is full: a relation that would need a node of its own is left out, claim and all.
+    if (linked && nodes.length >= CODE_NODES_MAX && knownNode(relation.other) === null) continue;
     const claim = claimFor(relation, LINK_CLAIM_ABOUT[type][0], text);
     // A link only for a whole relation of this recording (see the module comment).
-    if (relation.scope !== "track" || partOnly(relation)) continue;
-    const id = nodeFor(relation);
+    if (!linked) continue;
+    const id = nodeFor(relation.other);
     const [source, target] = otherEarlier ? [id, "current"] : ["current", id];
     const key = `${type} ${source} ${target}`;
     // A second recording of one record: its claim stands, the link is drawn once.
@@ -416,6 +485,34 @@ export function buildCodeClaims(
       evidenceIds: [...claim.evidenceIds],
     });
   }
+  // The second hop: links between two other records, each from a node already drawn.
+  const hopNodes: string[] = [];
+  for (const hop of hopRelations(present)) {
+    const item = items.get(hop.evidenceId);
+    const via = knownNode({ entity: "recording", ...hop.via });
+    if (!item || via === null) continue;
+    const other = { entity: "recording" as const, ...hop.other };
+    if (knownNode(other) === null && hopNodes.length >= CODE_HOP_NODES) continue;
+    const before = nodes.length;
+    const id = nodeFor(other);
+    if (nodes.length > before) hopNodes.push(id);
+    if (id === via) continue;
+    // "samples": the source samples the other record, the earlier one; "sampled-by": a sibling
+    // samples the source.
+    const [source, target] = hop.kind === "samples" ? [id, via] : [via, id];
+    const key = `sample ${source} ${target}`;
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+    links.push({
+      source,
+      target,
+      value: LINK_VALUE.sample,
+      type: "sample",
+      kind: "sourced",
+      origin: "code",
+      evidenceIds: [item.id],
+    });
+  }
   for (const credit of curatedCredits(present)) {
     const item = items.get(credit.evidenceId);
     if (item) claimFor(credit, "credit", creditText(credit, item));
@@ -428,7 +525,18 @@ export function buildCodeClaims(
   const noArtwork = nodes
     .filter((node) => node.trackTitle && node.trackArtist && !searched.has(node.id))
     .map((node) => node.id);
-  return { claims, nodes, links, noArtwork, works };
+  const current = recording
+    ? { mbid: recording.mbid, ...yearOf(recording.firstReleaseDate) }
+    : null;
+  return {
+    claims,
+    nodes,
+    links,
+    noArtwork,
+    works,
+    ...(hopNodes.length > 0 ? { hopNodes } : {}),
+    ...(current ? { current } : {}),
+  };
 }
 
 // =============================================================================
@@ -495,6 +603,11 @@ const wordsOf = (text: string) =>
  *   claims cite, and states nothing beyond them (its words are theirs, or connectives), folds
  *   into them: it goes. One that says more (a studio, a year, another role) goes to the judge.
  * - `noArtwork` lists the code nodes whose cover is not looked up, but none the model named.
+ * - The analysed track's node takes its recording's MusicBrainz id and year (`code.current`); a
+ *   node of the model's never carries a year or an id (those come from MusicBrainz only), and a
+ *   code node never takes the model's year.
+ * - The map keeps at most GENEALOGY_NODES_MAX nodes (see the module comment), and drops the
+ *   links of the nodes it leaves out; their claims stay.
  * Pure.
  */
 export function withCodeClaims<
@@ -502,7 +615,17 @@ export function withCodeClaims<
     noArtwork?: string[];
   },
 >(draft: T, code: CodeBuilt): T & { noArtwork: string[] } {
-  if (code.claims.length === 0) return { ...draft, noArtwork: draft.noArtwork ?? [] };
+  const { current: own } = code;
+  /** A node of the draft as the map keeps it: only code sets a year or an id. */
+  const asDrawn = (node: GenealogyNode): GenealogyNode => {
+    const { year: _year, mbid: _mbid, ...rest } = node;
+    if (node.id !== "current" || !own) return rest;
+    return { ...rest, mbid: own.mbid, ...(own.year !== undefined ? { year: own.year } : {}) };
+  };
+  if (code.claims.length === 0 && code.links.length === 0) {
+    const nodes = draft.genealogy.nodes.map(asDrawn);
+    return { ...draft, genealogy: { ...draft.genealogy, nodes }, noArtwork: draft.noArtwork ?? [] };
+  }
   const codeIds = new Set(code.nodes.map((node) => node.id));
   const taken = new Set(["current", ...codeIds]);
   const absorbed = new Set<string>();
@@ -531,7 +654,7 @@ export function withCodeClaims<
     while (taken.has(id)) id = `${id}-related`;
     taken.add(id);
     idOf.set(node.id, id);
-    modelNodes.push(id === node.id ? node : { ...node, id });
+    modelNodes.push({ ...asDrawn(node), id });
   }
 
   const codeLinks = new Set(code.links.map(linkKey));
@@ -581,9 +704,22 @@ export function withCodeClaims<
     if (moved && !codeIds.has(moved)) nodeYears[moved] = year;
   }
   const named = new Set(idOf.values());
+  const head = current ? [asDrawn(current)] : [];
+  // Which nodes the map keeps: the analysed track, this recording's own records, the model's
+  // nodes, then the second hop's, up to GENEALOGY_NODES_MAX; links to the others are dropped.
+  const hop = new Set(code.hopNodes ?? []);
+  const ranked = [
+    ...head,
+    ...code.nodes.filter((node) => !hop.has(node.id)),
+    ...modelNodes,
+    ...code.nodes.filter((node) => hop.has(node.id)),
+  ];
+  const cut = new Set(ranked.slice(GENEALOGY_NODES_MAX).map((node) => node.id));
+  const kept = (node: GenealogyNode) => !cut.has(node.id);
+  const linkKept = (link: GenealogyLink) => !cut.has(link.source) && !cut.has(link.target);
   const genealogy: Genealogy = {
-    nodes: [...(current ? [current] : []), ...modelNodes, ...code.nodes],
-    links: [...modelLinks, ...code.links],
+    nodes: [...head, ...modelNodes.filter(kept), ...code.nodes.filter(kept)],
+    links: [...modelLinks.filter(linkKept), ...code.links.filter(linkKept)],
   };
   return {
     ...draft,
@@ -593,6 +729,9 @@ export function withCodeClaims<
     ],
     genealogy,
     nodeYears,
-    noArtwork: [...(draft.noArtwork ?? []), ...code.noArtwork.filter((id) => !named.has(id))],
+    noArtwork: [
+      ...(draft.noArtwork ?? []),
+      ...code.noArtwork.filter((id) => !named.has(id) && !cut.has(id)),
+    ],
   };
 }

@@ -428,7 +428,12 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     /** The run's code-built claims and links, from the whole evidence pack. */
     function codeBuilt() {
-      return buildCodeClaims(state.relations, state.evidence, runtime.newId);
+      return buildCodeClaims(
+        state.relations,
+        state.evidence,
+        runtime.newId,
+        state.isrcRecording ?? null,
+      );
     }
 
     /**

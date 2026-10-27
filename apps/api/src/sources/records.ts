@@ -512,6 +512,23 @@ export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceSc
   return scope === "track" || scope === "work" || scope === "release" ? scope : null;
 }
 
+const MAP_RECORD_REF =
+  /^recording\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(?:samples|sampled-by)\/recording\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * True for an item of the relations map (sources/identity.ts, the second hop): a MusicBrainz
+ * primary record of a relationship between two other recordings, whose recordRef has no scope.
+ * It is about neither this recording, its song nor a release, so it supports no claim and the
+ * model is never shown it; a code-built link rests on it.
+ */
+export function isMapRecord(evidence: Pick<Evidence, "source" | "sourceTier" | "recordRef">) {
+  return (
+    evidence.source === "musicbrainz" &&
+    evidence.sourceTier === "primary-record" &&
+    MAP_RECORD_REF.test(evidence.recordRef ?? "")
+  );
+}
+
 /**
  * The items `primaryEvidence` built. Each source module builds its items from the payload it
  * read, so an item in this set came from a source's answer; a copy, an object parsed from text

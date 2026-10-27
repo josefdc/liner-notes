@@ -22,8 +22,9 @@
  *
  * The pack keeps an id once (the first item wins), lists items by tier (primary records, then
  * editorial, then web; within primary records the recording's own items and the release
- * MusicBrainz names for it, then a release's, then the song's) and keeps at most
- * EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
+ * MusicBrainz names for it, then a release's, then the song's), the relations map's items about
+ * two other recordings last (`isMapRecord`: they support no claim, so the size cap leaves them
+ * out first), and keeps at most EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
  */
 
 import {
@@ -37,6 +38,7 @@ import type { PrimarySources } from "../../sources/identity.js";
 import {
   type EvidenceScope,
   evidenceScope,
+  isMapRecord,
   isPrimaryRecordEvidence,
 } from "../../sources/records.js";
 import {
@@ -104,7 +106,7 @@ export function primaryRecordEvidence(sources: PrimarySources): SourcedEvidence[
       if (item.source !== result.source || item.sourceTier !== "primary-record") {
         throw new EvidenceOriginError(`evidence ${item.id} is not a ${key} primary record`);
       }
-      if (evidenceScope(item) === null) {
+      if (evidenceScope(item) === null && !isMapRecord(item)) {
         throw new EvidenceOriginError(`evidence ${item.id} does not say what it is about`);
       }
       items.push(seal(item));
@@ -265,6 +267,8 @@ const STORED_SHAPES: Record<
       new RegExp(`^work/(${MBID})/(covered-by)/recording/${MBID}$`),
       // The release that stands for the recording (sources/identity.ts, pickCoverRelease).
       new RegExp(`^release/(${MBID})$`),
+      // The relations map's second hop: two other recordings, on the first one's page.
+      new RegExp(`^recording/(${MBID})/(samples|sampled-by)/recording/${MBID}$`),
     ],
     // A cover of the work is stated on the work's page, a release on the release's; any other
     // item on the recording's.
@@ -307,7 +311,7 @@ function storedRecordIssue(item: Evidence, context: StoredContext): string | nul
   if ((source === "discogs" || source === "genius") && !context.configured[source]) {
     return "a source not configured now";
   }
-  if (evidenceScope(item) === null) return "no scope";
+  if (evidenceScope(item) === null && !isMapRecord(item)) return "no scope";
   if (item.id !== `${item.source}:${item.recordRef}`) return "not the source's id";
   const shape = STORED_SHAPES[source];
   const match = shape.refs.map((re) => item.recordRef?.match(re)).find(Boolean);
@@ -398,9 +402,11 @@ const SCOPE_RANK: Record<EvidenceScope, number> = { track: 0, release: 1, work: 
  * Primary records first (the recording's, a release's, the song's), then editorial, then web.
  * The release MusicBrainz names for the recording (sources/identity.ts, at most one) ranks with
  * the recording's own items: a recorded run's cover is derived from it (replay/cover.ts), so the
- * size cap never leaves it out while it keeps any of the recording's items.
+ * size cap never leaves it out while it keeps any of the recording's items. The relations map's
+ * items come after everything else.
  */
 function rank(item: Evidence): number {
+  if (isMapRecord(item)) return 6;
   if (item.sourceTier === "primary-record") {
     const scope = evidenceScope(item);
     if (scope === "release" && item.source === "musicbrainz") return SCOPE_RANK.track;

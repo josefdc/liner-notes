@@ -127,7 +127,10 @@ export interface NamedNode {
   id: string;
   label: string;
   trackTitle?: string;
-  /** Its release year when its label does not end with one (the analysed track's). */
+  /**
+   * Its release year when its label does not end with one: the year of its first release that
+   * the API took from MusicBrainz, or else (the analysed track's) the result's release year.
+   */
   year?: number;
 }
 
@@ -347,10 +350,18 @@ export interface GenealogyReading {
   hidden: number;
 }
 
+/** A node's year as the API sets it (from MusicBrainz): a whole number of four digits, or null. */
+function nodeYear(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1000 && value <= 9999
+    ? value
+    : null;
+}
+
 /**
- * The genealogy's nodes, by id (entries that are not nodes are left out). The analysed track's
- * node (group 1) takes `trackYear` when its label names no year: the API labels it with the
- * title alone.
+ * The genealogy's nodes, by id (entries that are not nodes are left out), each with the year
+ * the API took from MusicBrainz for it (`year`), when it has one. The analysed track's node
+ * (group 1) without one takes `trackYear` when its label names no year: the API labels it with
+ * the title alone.
  */
 export function nodesById(
   nodes: unknown,
@@ -362,11 +373,12 @@ export function nodesById(
     if (node && typeof node === 'object' && typeof (node as NamedNode).id === 'string') {
       const { id, label, trackTitle } = node as NamedNode;
       const isCurrent = (node as { group?: unknown }).group === 1;
+      const year = nodeYear((node as { year?: unknown }).year) ?? (isCurrent ? trackYear : null);
       byId.set(id, {
         id,
         label: typeof label === 'string' ? label : id,
         ...(typeof trackTitle === 'string' ? { trackTitle } : {}),
-        ...(isCurrent && trackYear !== null ? { year: trackYear } : {}),
+        ...(year !== null ? { year } : {}),
       });
     }
   }

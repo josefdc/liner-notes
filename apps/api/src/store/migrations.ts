@@ -428,6 +428,25 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: "musicbrainz_recording_cache",
+    up(db) {
+      // What the relations map reads of one MusicBrainz recording, by its MBID: its sample
+      // relationships ("hop", for the second hop) and its first release date ("date", for a
+      // node's year). JSON in `full_data`, checked when read; a row that does not parse is a
+      // miss. Kept as long as the research cache keeps research.
+      db.exec(`
+        CREATE TABLE musicbrainz_recording_cache (
+          mbid TEXT NOT NULL,
+          part TEXT NOT NULL,
+          full_data TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          PRIMARY KEY (mbid, part)
+        );
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

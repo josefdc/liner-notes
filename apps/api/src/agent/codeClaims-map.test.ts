@@ -1,0 +1,334 @@
+/**
+ * The relations map as code builds it from MusicBrainz's records: each node made from a record
+ * carries its MusicBrainz id and, only when MusicBrainz dates it, its first release year; the
+ * second hop gives links between two other records that rest on their own item, with no claim;
+ * the whole map holds at most GENEALOGY_NODES_MAX nodes, the records this one draws on first,
+ * then those that draw on it, then the model's own nodes, then the second hop's.
+ */
+
+import {
+  type Evidence,
+  type GenealogyLink as ContractLink,
+  linkDisplayKind,
+  linkIssues,
+  type ResultContext,
+} from "@liner-notes/contract";
+import { describe, expect, it } from "vitest";
+import { quoted, RELATION_PHRASE } from "../sources/records.js";
+import {
+  buildCodeClaims,
+  CODE_HOP_NODES,
+  CODE_NODES_MAX,
+  GENEALOGY_NODES_MAX,
+  withCodeClaims,
+} from "./codeClaims.js";
+import type { HopRelation, PrimaryRelation, RecordingRelation } from "./research/relations.js";
+import type { GenealogyNode } from "./schema.js";
+import { draftOf } from "./verifier/testing.js";
+
+const OWN = "00000000-0000-4000-8000-000000000000";
+/** A well-formed MBID, distinct for each `n`. */
+const mbid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const AT = "2026-10-20T12:00:00.000Z";
+
+let ids = 0;
+const newId = () => `claim-${++ids}`;
+
+/** A relation of this recording to recording `n`, with the item that states it. */
+function relation(
+  kind: RecordingRelation["kind"],
+  n: number,
+  date?: string,
+): { relation: RecordingRelation; item: Evidence } {
+  const other = { title: `Record ${n}`, artist: `Artist ${n}` };
+  const item: Evidence = {
+    id: `musicbrainz:track/recording/${OWN}/${kind}/recording/${mbid(n)}`,
+    source: "musicbrainz",
+    sourceTier: "primary-record",
+    url: `https://musicbrainz.org/recording/${OWN}`,
+    title: "Track — MusicBrainz relationships",
+    retrievedAt: AT,
+    excerpt: `MusicBrainz: "Track" by Own ${RELATION_PHRASE[kind]} ${quoted(other.title, other.artist)}.`,
+    recordRef: `track/recording/${OWN}/${kind}/recording/${mbid(n)}`,
+  };
+  return {
+    item,
+    relation: {
+      type: "relation",
+      source: "musicbrainz",
+      evidenceId: item.id,
+      scope: "track",
+      kind,
+      attributes: [],
+      other: {
+        entity: "recording",
+        mbid: mbid(n),
+        ...other,
+        ...(date ? { firstReleaseDate: date } : {}),
+      },
+    },
+  };
+}
+
+/** A second-hop relation of recording `via` to recording `n`, with its item (no scope). */
+function hop(
+  via: number,
+  kind: HopRelation["kind"],
+  n: number,
+  date?: string,
+): { relation: HopRelation; item: Evidence } {
+  const end = (m: number, d?: string) => ({
+    mbid: mbid(m),
+    title: `Record ${m}`,
+    artist: `Artist ${m}`,
+    ...(d ? { firstReleaseDate: d } : {}),
+  });
+  const [a, b] = [end(via), end(n, date)];
+  const ref = `recording/${a.mbid}/${kind}/recording/${b.mbid}`;
+  const item: Evidence = {
+    id: `musicbrainz:${ref}`,
+    source: "musicbrainz",
+    sourceTier: "primary-record",
+    url: `https://musicbrainz.org/recording/${a.mbid}`,
+    title: `${a.title} — MusicBrainz relationships`,
+    retrievedAt: AT,
+    excerpt: `MusicBrainz: ${quoted(a.title, a.artist)} ${RELATION_PHRASE[kind]} ${quoted(b.title, b.artist)}.`,
+    recordRef: ref,
+  };
+  return {
+    item,
+    relation: {
+      type: "hop",
+      source: "musicbrainz",
+      evidenceId: item.id,
+      scope: null,
+      kind,
+      attributes: [],
+      via: a,
+      other: b,
+    },
+  };
+}
+
+function built(
+  parts: Array<{ relation: PrimaryRelation; item: Evidence }>,
+  recording?: { mbid: string; firstReleaseDate: string | null },
+) {
+  const evidence = parts.map((p) => p.item);
+  const code = buildCodeClaims(
+    parts.map((p) => p.relation),
+    evidence,
+    newId,
+    recording,
+  );
+  return { code, evidence };
+}
+
+/** The contract's reading of a link in a result with `evidence` and `claims`. */
+function contextOf(evidence: Evidence[], claims = new Map()): ResultContext {
+  return {
+    evidenceIds: new Set(evidence.map((item) => item.id)),
+    audio: null,
+    claims,
+    rejectedClaimIds: new Set(),
+    sharedLinkClaimIds: new Set(),
+  };
+}
+
+const nodeOf = (nodes: readonly GenealogyNode[], n: number) =>
+  nodes.find((node) => node.id === `mb-${mbid(n)}`);
+
+describe("years and ids on the nodes built from records", () => {
+  it("makes a MusicBrainz sample a sourced sample link, its node dated by MusicBrainz", () => {
+    const { code, evidence } = built([relation("samples", 1, "1979-06-01")]);
+    expect(nodeOf(code.nodes, 1)).toMatchObject({ mbid: mbid(1), year: 1979 });
+    expect(code.links).toEqual([
+      expect.objectContaining({
+        source: `mb-${mbid(1)}`,
+        target: "current",
+        type: "sample",
+        kind: "sourced",
+        origin: "code",
+      }),
+    ]);
+    const claims = new Map(code.claims.map((claim) => [claim.id, claim]));
+    expect(linkDisplayKind(code.links[0] as ContractLink, contextOf(evidence, claims))).toBe(
+      "sourced",
+    );
+  });
+
+  it("gives a node MusicBrainz does not date no year, and invents none", () => {
+    const { code } = built([relation("samples", 1), relation("sampled-by", 2, "2001")]);
+    expect(nodeOf(code.nodes, 1)).not.toHaveProperty("year");
+    expect(nodeOf(code.nodes, 1)).toMatchObject({ mbid: mbid(1) });
+    expect(nodeOf(code.nodes, 2)).toMatchObject({ year: 2001 });
+  });
+
+  it("dates the analysed track's node by its own recording, and never by the model", () => {
+    const { code } = built([relation("samples", 1)], { mbid: OWN, firstReleaseDate: "1990-08-01" });
+    // The model names the sample (absorbed into the code node) and an influence of its own,
+    // each with a year of its own: neither year reaches the map.
+    const draft = draftOf([], [], {
+      genealogy: {
+        nodes: [
+          { id: "current", group: 1, label: "Track", size: 40 },
+          { id: "m1", group: 2, label: "Record 1 - Artist 1 (1975)", size: 28 },
+          { id: "m2", group: 4, label: "Influence - Someone (1960)", size: 20 },
+        ],
+        links: [],
+      },
+      nodeYears: { m1: "1975", m2: "1960" },
+    });
+    const { genealogy } = withCodeClaims(draft, code);
+    const byId = new Map(genealogy.nodes.map((node) => [node.id, node]));
+    expect(byId.get("current")).toMatchObject({ mbid: OWN, year: 1990 });
+    expect(byId.get(`mb-${mbid(1)}`)).not.toHaveProperty("year");
+    expect(byId.get("m1")).toBeUndefined();
+    expect(byId.get("m2")).not.toHaveProperty("year");
+    expect(byId.get("m2")).not.toHaveProperty("mbid");
+  });
+
+  it("leaves a year off a model node that carries one, with or without code records", () => {
+    const draft = draftOf([], [], {
+      genealogy: {
+        nodes: [
+          { id: "current", group: 1, label: "Track", size: 40, year: 1800 },
+          { id: "m2", group: 4, label: "Influence - Someone", size: 20, year: 1960, mbid: "x" },
+        ],
+        links: [],
+      },
+    });
+    for (const code of [built([]).code, built([relation("samples", 1)]).code]) {
+      const nodes = withCodeClaims(draft, code).genealogy.nodes;
+      for (const node of nodes.filter((n) => !n.id.startsWith("mb-"))) {
+        expect(node).not.toHaveProperty("year");
+        expect(node).not.toHaveProperty("mbid");
+      }
+    }
+  });
+});
+
+describe("the second hop", () => {
+  it("links two other records on their own item, sourced with no claim", () => {
+    const { code, evidence } = built([
+      relation("samples", 1, "1981-10-26"),
+      hop(1, "sampled-by", 2, "1999"),
+      hop(1, "samples", 3, "1970"),
+    ]);
+    const hopLinks = code.links.filter((link) => link.target !== "current");
+    expect(hopLinks).toEqual([
+      // What the source samples points at the source; a sibling is pointed at by it.
+      {
+        source: `mb-${mbid(3)}`,
+        target: `mb-${mbid(1)}`,
+        value: expect.any(Number),
+        type: "sample",
+        kind: "sourced",
+        origin: "code",
+        evidenceIds: [`musicbrainz:recording/${mbid(1)}/samples/recording/${mbid(3)}`],
+      },
+      {
+        source: `mb-${mbid(1)}`,
+        target: `mb-${mbid(2)}`,
+        value: expect.any(Number),
+        type: "sample",
+        kind: "sourced",
+        origin: "code",
+        evidenceIds: [`musicbrainz:recording/${mbid(1)}/sampled-by/recording/${mbid(2)}`],
+      },
+    ]);
+    // No claim: one claim, the track's own sample.
+    expect(code.claims).toHaveLength(1);
+    expect(code.hopNodes).toEqual([`mb-${mbid(3)}`, `mb-${mbid(2)}`]);
+    expect(nodeOf(code.nodes, 2)).toMatchObject({ year: 1999, mbid: mbid(2) });
+    // The contract's rule: a code link that states no claim is sourced on its evidence.
+    const context = contextOf(evidence, new Map(code.claims.map((c) => [c.id, c])));
+    for (const link of hopLinks) {
+      expect(linkIssues(link as ContractLink, context)).toEqual([]);
+      expect(linkDisplayKind(link as ContractLink, context)).toBe("sourced");
+    }
+    // Its item missing from the pack, it is not.
+    expect(linkDisplayKind(hopLinks[0] as ContractLink, contextOf([]))).toBe("inferred");
+  });
+
+  it("draws nothing from a source the map does not show, and at most CODE_HOP_NODES nodes", () => {
+    const none = built([relation("samples", 1), hop(9, "sampled-by", 2)]).code;
+    expect(none.links.filter((link) => link.target !== "current")).toEqual([]);
+    expect(nodeOf(none.nodes, 2)).toBeUndefined();
+
+    const siblings = Array.from({ length: CODE_HOP_NODES + 3 }, (_, i) =>
+      hop(1, "sampled-by", 100 + i),
+    );
+    const { code } = built([relation("samples", 1), hop(1, "samples", 99), ...siblings]);
+    expect(code.hopNodes).toHaveLength(CODE_HOP_NODES);
+    // What the source samples comes before its siblings.
+    expect(code.hopNodes?.[0]).toBe(`mb-${mbid(99)}`);
+  });
+});
+
+describe("the map's cap", () => {
+  // Ten of every kind, more than the map holds.
+  const oversized = (["samples", "remix-of", "cover-of", "sampled-by", "remixed-by"] as const)
+    .flatMap((kind, k) => Array.from({ length: 10 }, (_, i) => relation(kind, k * 100 + i)))
+    .reverse();
+
+  it("keeps CODE_NODES_MAX record nodes, what this recording draws on first", () => {
+    const { code } = built([...oversized, ...[1, 2, 3].map((n) => hop(0, "sampled-by", 900 + n))]);
+    const recordNodes = code.nodes.filter((node) => !code.hopNodes?.includes(node.id));
+    expect(recordNodes).toHaveLength(CODE_NODES_MAX);
+    expect(CODE_NODES_MAX + 1).toBe(GENEALOGY_NODES_MAX);
+    expect(GENEALOGY_NODES_MAX).toBeGreaterThanOrEqual(12);
+    expect(GENEALOGY_NODES_MAX).toBeLessThanOrEqual(16);
+    // Six of each kind it draws on, in the order MusicBrainz listed them (here covers, remixes,
+    // then samples), until the 15 places are taken; none of what draws on it.
+    const kindOf = (node: GenealogyNode) => Math.floor(Number(node.mbid?.slice(-12)) / 100);
+    expect(recordNodes.map(kindOf)).toEqual([...Array(6).fill(2), ...Array(6).fill(1), 0, 0, 0]);
+    // A relation past the cap has no claim either.
+    expect(code.claims).toHaveLength(CODE_NODES_MAX);
+  });
+
+  it("holds the whole map to GENEALOGY_NODES_MAX: records, then the model's, then the hop", () => {
+    const parts = [
+      relation("samples", 1),
+      relation("samples", 2),
+      ...Array.from({ length: 10 }, (_, i) => relation("sampled-by", 10 + i)),
+      ...Array.from({ length: 4 }, (_, i) => hop(1, "sampled-by", 50 + i)),
+    ];
+    const { code } = built(parts);
+    expect(code.nodes).toHaveLength(2 + 4 + 4);
+    const modelNodes = Array.from({ length: 12 }, (_, i) => ({
+      id: `model-${i}`,
+      group: 4,
+      label: `Influence ${i} - Someone ${i}`,
+      size: 20,
+    }));
+    const draft = draftOf([], [], {
+      genealogy: {
+        nodes: [{ id: "current", group: 1, label: "Track", size: 40 }, ...modelNodes],
+        links: modelNodes.map((node) => ({
+          source: node.id,
+          target: "current",
+          value: 1,
+          type: "influence" as const,
+          kind: "inferred" as const,
+          origin: "model" as const,
+        })),
+      },
+    });
+    const { genealogy } = withCodeClaims(draft, code);
+    expect(genealogy.nodes).toHaveLength(GENEALOGY_NODES_MAX);
+    const kept = new Set(genealogy.nodes.map((node) => node.id));
+    // Every record of this recording's, then the model's nodes; the hop's left out last.
+    for (const node of code.nodes.filter((n) => !code.hopNodes?.includes(n.id))) {
+      expect(kept.has(node.id)).toBe(true);
+    }
+    expect(modelNodes.filter((node) => kept.has(node.id))).toHaveLength(
+      GENEALOGY_NODES_MAX - 1 - 6,
+    );
+    expect(code.hopNodes?.some((id) => kept.has(id))).toBe(false);
+    // No link names a node the map left out.
+    for (const link of genealogy.links) {
+      expect(kept.has(link.source) && kept.has(link.target)).toBe(true);
+    }
+  });
+});

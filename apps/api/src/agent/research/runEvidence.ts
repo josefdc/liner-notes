@@ -17,13 +17,14 @@
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { SourceError, SourceId } from "@liner-notes/contract";
-import type { CachedEvidence } from "../../store/cache.js";
+import { type CachedEvidence, getCache } from "../../store/cache.js";
 import {
   collectPrimarySources,
   DATES_INCOMPLETE,
   RELEASES_INCOMPLETE,
   type IdentifiedRecording,
   type PrimarySources,
+  type RecordingCache,
 } from "../../sources/identity.js";
 import { SOURCE_NAMES } from "../prompts.js";
 import { trackQuery, uniqueErrors, unreadableStatus } from "../researcherSubgraph.js";
@@ -69,11 +70,21 @@ export interface PrimaryStart {
   recording: Promise<IdentifiedRecording | null>;
 }
 
+/** The per-recording MusicBrainz cache, or null when the store is not open (it is then not used). */
+function recordingCache(): RecordingCache | null {
+  try {
+    return getCache();
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Starts reading the primary sources for the track from its ISRC (none without one). The
- * collection never throws; a cancelled run reads as unavailable sources, and the caller stops
- * on the signal. `isrcUnread`: the track's Spotify details could not be read, so a missing ISRC
- * is unknown rather than absent, and the status says so.
+ * Starts reading the primary sources for the track from its ISRC (none without one), with the
+ * relations map (the second hop and the related recordings' years, through the per-recording
+ * MusicBrainz cache). The collection never throws; a cancelled run reads as unavailable sources,
+ * and the caller stops on the signal. `isrcUnread`: the track's Spotify details could not be
+ * read, so a missing ISRC is unknown rather than absent, and the status says so.
  */
 export function startPrimarySources(
   spotify: SpotifyData,
@@ -99,7 +110,12 @@ export function startPrimarySources(
       durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
       album: spotify.album || null,
     },
-    { signal, now: runtime.now, onRecording: (found) => identified(found) },
+    {
+      signal,
+      now: runtime.now,
+      onRecording: (found) => identified(found),
+      relationsMap: { cache: recordingCache() },
+    },
   ).then(
     (sources) => ({ status: "read" as const, sources }),
     (error: unknown) => ({ status: "threw" as const, error }),

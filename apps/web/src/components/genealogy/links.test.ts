@@ -9,7 +9,8 @@ import {
 } from '@liner-notes/contract';
 import { describe, expect, it } from 'vitest';
 import { colors } from '../../styles/theme';
-import { claimIsRejected } from '../provenance/claims';
+import type { TrackData } from '../../types';
+import { claimIsRejected, resultClaims } from '../provenance/claims';
 import { sourceLabel } from '../provenance/SourceLink';
 import {
   evidencePack,
@@ -541,6 +542,93 @@ describe('readGenealogy', () => {
       named: 'sample',
     });
     expect(shownLinks(genealogy, context([], null))[0]).toMatchObject({ kind: 'inferred' });
+  });
+});
+
+describe('the relations MusicBrainz states', () => {
+  // Hung Up's node as the API writes it: its own recording's MusicBrainz year; the result's
+  // release year is a later reissue's. The sample and a sibling sampling the same record carry
+  // theirs; the sibling's link rests on its item alone (a code link that states no claim).
+  const hopItem = {
+    ...evidenceItem('ev-hop'),
+    recordRef:
+      'recording/00000000-0000-4000-8000-000000000001/sampled-by/recording/00000000-0000-4000-8000-000000000002',
+  };
+  const pack = [...PACK, hopItem];
+  const sampleClaim = claim('c-sample', {
+    kind: 'sourced',
+    origin: 'code',
+    evidenceIds: ['ev-mb-1'],
+    scope: 'recording',
+  });
+  const genealogy = {
+    nodes: [
+      { id: 'current', group: 1, label: 'Hung Up', trackTitle: 'Hung Up', size: 40, year: 2005 },
+      {
+        id: 'mb-1',
+        group: 4,
+        label: 'Gimme! Gimme! Gimme! - ABBA',
+        trackTitle: 'Gimme! Gimme! Gimme!',
+        size: 22,
+        year: 1979,
+        mbid: '00000000-0000-4000-8000-000000000001',
+      },
+      {
+        id: 'mb-2',
+        group: 4,
+        label: 'Sibling Song - Someone',
+        trackTitle: 'Sibling Song',
+        size: 22,
+        year: 2008,
+      },
+    ],
+    links: [
+      link('mb-1', 'current', {
+        type: 'sample',
+        kind: 'sourced',
+        origin: 'code',
+        claimId: 'c-sample',
+        evidenceIds: ['ev-mb-1'],
+      }),
+      link('mb-1', 'mb-2', {
+        type: 'sample',
+        kind: 'sourced',
+        origin: 'code',
+        evidenceIds: ['ev-hop'],
+      }),
+    ],
+  };
+  const ctx = linkContext(
+    pack,
+    resultClaims({ claims: [sampleClaim], evidence: pack } as unknown as TrackData),
+    { releaseYear: '2022-03-04' },
+  );
+
+  it('reads a MusicBrainz sample as a Sample, naming each track by its MusicBrainz year', () => {
+    const named = nodesById(genealogy.nodes, yearFrom('2022-03-04'));
+    const nameOf = (id: string) => nodeName(named.get(id), id);
+    const [sample, sibling] = shownLinks(genealogy, ctx);
+    expect(sample).toMatchObject({ kind: 'sourced', type: 'sample', directionKnown: true });
+    expect(relationLabel(sample)).toBe('Sample');
+    expect(relationSentence(sample, nameOf)).toBe(
+      'Hung Up (2005) samples Gimme! Gimme! Gimme! (1979)',
+    );
+    expect(sibling).toMatchObject({ kind: 'sourced', type: 'sample', claim: null });
+    expect(relationLabel(sibling)).toBe('Sample');
+    expect(relationSentence(sibling, nameOf)).toBe(
+      'Sibling Song (2008) samples Gimme! Gimme! Gimme! (1979)',
+    );
+  });
+
+  it('takes the result’s year for the analysed track only when MusicBrainz gave its node none', () => {
+    const [current, ...rest] = genealogy.nodes;
+    const { year: _year, ...undated } = current;
+    const named = nodesById([undated, ...rest], 2022);
+    expect(named.get('current')?.year).toBe(2022);
+    expect(nodesById(genealogy.nodes, 2022).get('current')?.year).toBe(2005);
+    // A year that is not a whole number of four digits is no year.
+    expect(nodesById([{ ...rest[0], year: '1979' }]).get('mb-1')).not.toHaveProperty('year');
+    expect(nodesById([{ ...rest[0], year: 19.79 }]).get('mb-1')).not.toHaveProperty('year');
   });
 });
 

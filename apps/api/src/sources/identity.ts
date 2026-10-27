@@ -38,17 +38,24 @@ import {
   getRecordingDetails,
   getWorkRecordings,
   isMbid,
+  knownReleaseDate,
   lookupIsrc,
   type MbRecordingDetails,
   type MbRecordingSummary,
+  type MbRelatedRecording,
   type MbRelationship,
   type MbReleaseSummary,
+  type MbSampleHop,
   type MbWork,
   NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
   normalizeName,
+  RECORDING_DATES_MAX,
   RELEASE_DATE,
   recordingRelationships,
+  recordingReleaseDates,
+  sampleHopOf,
+  secondHopRelationships,
   withMusicBrainzPriority,
   workCovers,
 } from "./musicbrainz.js";
@@ -160,6 +167,11 @@ export type IdentityResolution =
       workError: string | null;
       /** The work read's failure, for the run's source errors (its covers are missing). */
       workFailure: SourceErrorRecord | null;
+      /**
+       * The first release dates of the work's recordings, by MBID, when they were read to date
+       * the recording (only the known ones): a cover's year for the relations map.
+       */
+      workDates?: ReadonlyMap<string, string>;
       result: SourceResult<never>;
     }
   | {
@@ -644,6 +656,7 @@ export async function resolveIdentity(
     let original =
       ruledOut(details, links.works) ?? originalPerformance(details, links.works, null);
     const needsDates = ruledOut(details, links.works) === null;
+    const workDates = new Map<string, string>();
     // The covers of the work are read only for a recording that is not itself a cover.
     if (links.works.length === 1 && !links.works[0].cover) {
       const [only] = links.works;
@@ -664,12 +677,12 @@ export async function resolveIdentity(
             .map((r) => r.recording?.id as string),
         );
         try {
-          original = originalPerformance(
-            details,
-            links.works,
-            await browseWorkRecordings(only.mbid, 2, datingSignal),
-            coverIds,
-          );
+          const dated = await browseWorkRecordings(only.mbid, 2, datingSignal);
+          original = originalPerformance(details, links.works, dated, coverIds);
+          for (const r of dated.recordings) {
+            const date = knownReleaseDate(r?.["first-release-date"]);
+            if (date && isMbid(r.id)) workDates.set(r.id, date);
+          }
         } catch (error) {
           workError = `${DATES_INCOMPLETE}the recordings of the work "${only.title}" could not be dated (${describeError(error)}), so its covers are not claimed for this recording`;
         }
@@ -699,6 +712,7 @@ export async function resolveIdentity(
       work,
       workError,
       workFailure,
+      workDates,
       result: found("musicbrainz", [], [], { omitted: pick.omitted }),
     };
   } catch (error) {
@@ -733,15 +747,170 @@ const minutes = (ms: number | null) => {
 };
 
 /**
+ * The matched recording's relationships as MusicBrainz files them: its own samples, remixes and
+ * covers, then the covers of the song it performs (about the track only when it is the song's
+ * original recording). Empty without an identified recording.
+ */
+function relationshipRecords(resolution: IdentityResolution): MbRelationship[] {
+  const { identity, details } = resolution;
+  if (!identity || !details) return [];
+  const records = recordingRelationships(details);
+  const [work] = identity.works;
+  if (resolution.work && work && !work.cover) {
+    const about = identity.original.original ? "track" : "work";
+    for (const cover of workCovers(resolution.work, identity.recording.mbid)) {
+      records.push({ ...cover, about });
+    }
+  }
+  return records;
+}
+
+/**
+ * What the relations map adds to the matched recording's relationships (`readRelationsMap`):
+ * the second hop's records, and the first release dates MusicBrainz files for the recordings
+ * at either end, by MBID (only the known ones).
+ */
+export interface RelationsMap {
+  hops: MbRelationship[];
+  dates: ReadonlyMap<string, string>;
+}
+
+/**
+ * The per-recording MusicBrainz cache the relations map reads through (store/cache.ts
+ * `SonicCache`): a recording's sample relationships and its first release date. A hit makes no
+ * request.
+ */
+export interface RecordingCache {
+  getMbHop(mbid: string): MbSampleHop | null;
+  putMbHop(mbid: string, hop: MbSampleHop): void;
+  getMbDate(mbid: string): { date: string | null } | null;
+  putMbDate(mbid: string, date: string | null): void;
+}
+
+/** The most recordings the map reads a second hop from: one recording lookup each, at most. */
+export const MAP_HOP_SOURCES = 2;
+/** The most second-hop records the map keeps from each of them. */
+export const MAP_HOP_RECORDS = 6;
+
+/** A cache call that cannot fail the map: a broken cache is a miss, and a lost write is lost. */
+function quietly<T>(call: () => T): T | null {
+  try {
+    return call();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads what the relations map adds to the matched recording's relationships, within the
+ * chain's time, through `cache` when given (a hit makes no request; what is read is stored):
+ * - the second hop: the first MAP_HOP_SOURCES recordings it samples are looked up (one request
+ *   each), for what each of them samples and the other recordings that sample it (its
+ *   siblings), at most MAP_HOP_RECORDS of each source;
+ * - the first release dates of the recordings at either end, for the nodes' years: a hop
+ *   source's own, the work's dated recordings (`workDates`), the cache's, and then one search
+ *   by recording id for the rest (`recordingReleaseDates`). A recording MusicBrainz does not
+ *   date stays undated.
+ * A request starts only while `signal` has not aborted and the pacing clock is at most
+ * `notAfter`; one that fails, or that the signal stops, is dropped quietly: no record, no error,
+ * and a later run asks again. Never throws.
+ */
+export async function readRelationsMap(
+  resolution: IdentityResolution,
+  options: { signal?: AbortSignal; notAfter: number; cache?: RecordingCache | null },
+): Promise<RelationsMap> {
+  const dates = new Map<string, string>();
+  const { identity } = resolution;
+  if (!identity) return { hops: [], dates };
+  const { signal, notAfter, cache } = options;
+  const timeLeft = () => !signal?.aborted && pacingClock() <= notAfter;
+  const own = identity.recording.mbid;
+  const records = relationshipRecords(resolution).slice(0, MAX_RECORDS);
+
+  const hops: MbRelationship[] = [];
+  const sources = [
+    ...new Set(
+      records.flatMap((r) =>
+        r.about === "track" && r.kind === "samples" && r.recording ? [r.recording.mbid] : [],
+      ),
+    ),
+  ].slice(0, MAP_HOP_SOURCES);
+  for (const source of sources) {
+    let hop = cache ? quietly(() => cache.getMbHop(source)) : null;
+    if (!hop && timeLeft()) {
+      try {
+        hop = sampleHopOf(await getRecordingDetails(source, signal));
+        const read = hop;
+        if (read && cache) quietly(() => cache.putMbHop(source, read));
+      } catch {
+        hop = null;
+      }
+    }
+    if (!hop) continue;
+    if (hop.recording.firstReleaseDate) dates.set(source, hop.recording.firstReleaseDate);
+    hops.push(...secondHopRelationships(hop, own).slice(0, MAP_HOP_RECORDS));
+  }
+
+  // The recordings a node can stand for: this one's own relations (a cover of the song alone
+  // is never drawn) and the second hop's.
+  const ends = [...records.filter((r) => r.about === "track"), ...hops].flatMap((r) => [
+    ...(r.recording ? [r.recording] : []),
+    ...(r.via ? [r.via] : []),
+  ]);
+  const undated = new Set<string>();
+  for (const end of ends) {
+    const date =
+      knownReleaseDate(end.firstReleaseDate) ?? resolution.workDates?.get(end.mbid) ?? null;
+    if (date && !dates.has(end.mbid)) dates.set(end.mbid, date);
+  }
+  const unknown = [...new Set(ends.map((end) => end.mbid))].filter((mbid) => !dates.has(mbid));
+  for (const mbid of unknown) {
+    const cached = cache ? quietly(() => cache.getMbDate(mbid)) : null;
+    if (!cached) continue;
+    if (cached.date) dates.set(mbid, cached.date);
+    else undated.add(mbid);
+  }
+  const ask = unknown
+    .filter((mbid) => !dates.has(mbid) && !undated.has(mbid))
+    .slice(0, RECORDING_DATES_MAX);
+  if (ask.length > 0 && timeLeft()) {
+    try {
+      const read = await recordingReleaseDates(ask, signal);
+      for (const mbid of ask) {
+        const date = read.get(mbid.toLowerCase()) ?? null;
+        if (date) dates.set(mbid, date);
+        if (cache) quietly(() => cache.putMbDate(mbid, date));
+      }
+    } catch {
+      // Dropped quietly: the nodes stay undated, and a later run asks again.
+    }
+  }
+  return { hops, dates };
+}
+
+/** A related recording with its first release date from the map, when the map dates it. */
+function dated(
+  recording: MbRelatedRecording,
+  dates: ReadonlyMap<string, string> | undefined,
+): MbRelatedRecording {
+  const { firstReleaseDate, ...rest } = recording;
+  const date = knownReleaseDate(firstReleaseDate) ?? dates?.get(recording.mbid) ?? null;
+  return date ? { ...rest, firstReleaseDate: date } : rest;
+}
+
+/**
  * The matched recording's samples and remixes, and the covers of the song it performs, from
  * MusicBrainz, with an Evidence item for the recording itself (its ISRC, title, credit and
  * length) and one per relationship. Covers of the work are phrased as covers of the work and
  * link the work's page; they are claimed for the track (`about: "track"`) only when it is the
- * work's original recording.
+ * work's original recording. With a relations map (`map`), each related recording carries the
+ * first release date MusicBrainz files for it, and the second hop's records follow, each with
+ * an item about two other recordings: `recording/<a>/<kind>/recording/<b>`, with no scope, on
+ * the page of <a> (the recording the matched one samples).
  */
 export async function musicBrainzRelationships(
   resolution: IdentityResolution,
-  options: { now?: Clock } = {},
+  options: { now?: Clock; map?: RelationsMap } = {},
 ): Promise<SourceResult<MbRelationship>> {
   const { identity, details, result } = resolution;
   if (!identity || !details || result.status !== "found") {
@@ -752,7 +921,7 @@ export async function musicBrainzRelationships(
   const now = options.now ?? systemClock;
   const at = now().toISOString();
   const { recording } = identity;
-  const records = recordingRelationships(details);
+  const records = relationshipRecords(resolution);
 
   const notes: string[] = [];
   if (resolution.workError) notes.push(resolution.workError);
@@ -762,16 +931,10 @@ export async function musicBrainzRelationships(
     );
   }
   const [work] = identity.works;
-  if (resolution.work && work && !work.cover) {
-    const about = identity.original.original ? "track" : "work";
-    for (const cover of workCovers(resolution.work, recording.mbid)) {
-      records.push({ ...cover, about });
-    }
-    if (!identity.original.original) {
-      notes.push(
-        `covers are of the work "${work.title}", not this recording: ${identity.original.reason}`,
-      );
-    }
+  if (resolution.work && work && !work.cover && !identity.original.original) {
+    notes.push(
+      `covers are of the work "${work.title}", not this recording: ${identity.original.reason}`,
+    );
   }
 
   const page = `${MB_SITE}/recording/${recording.mbid}`;
@@ -786,7 +949,10 @@ export async function musicBrainzRelationships(
       retrievedAt: at,
     }),
   ];
-  const kept = records.slice(0, MAX_RECORDS);
+  const { map } = options;
+  const kept = records
+    .slice(0, MAX_RECORDS)
+    .map((r) => (map && r.recording ? { ...r, recording: dated(r.recording, map.dates) } : r));
   for (const r of kept) {
     const other = r.recording
       ? quoted(r.recording.title, r.recording.artist)
@@ -801,7 +967,7 @@ export async function musicBrainzRelationships(
       evidence.push(
         primaryEvidence({
           source: "musicbrainz",
-          recordRef: scopedRef(r.about, ref),
+          recordRef: scopedRef(r.about === "track" ? "track" : "work", ref),
           url: `${MB_SITE}/work/${r.work.mbid}`,
           title: `${r.work.title} — MusicBrainz work`,
           excerpt: `MusicBrainz: the work ${quoted(r.work.title)} is covered by ${other}.`,
@@ -842,12 +1008,42 @@ export async function musicBrainzRelationships(
       }),
     );
   }
+  // The second hop: relationships between two other recordings, for the relations map only.
+  const hops: MbRelationship[] = [];
+  const hopRefs = new Set<string>();
+  for (const hop of map?.hops ?? []) {
+    if (hop.about !== "hop" || !hop.via || !hop.recording) continue;
+    const ref = hopRecordRef(hop.via.mbid, hop.kind, hop.recording.mbid);
+    if (hopRefs.has(ref)) continue;
+    hopRefs.add(ref);
+    const via = dated(hop.via, map?.dates);
+    const other = dated(hop.recording, map?.dates);
+    const item = primaryEvidence({
+      source: "musicbrainz",
+      recordRef: ref,
+      url: `${MB_SITE}/recording/${via.mbid}`,
+      title: `${via.title} — MusicBrainz relationships`,
+      excerpt: `MusicBrainz: ${quoted(via.title, via.artist)} ${RELATION_PHRASE[hop.kind]} ${quoted(other.title, other.artist)}.`,
+      retrievedAt: at,
+    });
+    evidence.push(item);
+    hops.push({ ...hop, evidenceId: item.id, via, recording: other });
+  }
   if (records.length > kept.length) notes.push(`${records.length - kept.length} more not listed`);
-  return found("musicbrainz", kept, evidence, {
+  return found("musicbrainz", [...kept, ...hops], evidence, {
     omitted: result.omitted,
     incomplete: notes.length > 0 ? notes.join("; ") : null,
     error: resolution.workFailure,
   });
+}
+
+/**
+ * The recordRef of a second-hop item: a relationship between two recordings other than the
+ * matched one (`a` is one it samples), with no scope (it is about neither the track, its song
+ * nor a release, and supports no claim).
+ */
+export function hopRecordRef(a: string, kind: MbRelationship["kind"], b: string): string {
+  return `recording/${a}/${kind}/recording/${b}`;
 }
 
 /** How the MusicBrainz note starts when the work's recordings could not be dated. */
@@ -922,6 +1118,12 @@ export interface PrimarySourcesOptions {
   signal?: AbortSignal;
   deadlineMs?: number;
   onRecording?: (recording: IdentifiedRecording | null) => void;
+  /**
+   * Reads the relations map too (`readRelationsMap`: the second hop and the related recordings'
+   * first release dates), through `cache` when given, within the time the work's dating has.
+   * Absent: the map is not read.
+   */
+  relationsMap?: { cache?: RecordingCache | null };
 }
 
 async function collectInOrder(
@@ -964,8 +1166,13 @@ async function collectWithin(
   const datingSignal = AbortSignal.any([signal, datingCut]);
   // A paced request (Discogs, SecondHandSongs) must start early enough to be answered within the
   // deadline; a later slot is not taken, and the source is reported as not asked.
-  const notAfter =
-    pacingClock() + deadlineMs - Math.min(REQUEST_MARGIN_MS, Math.floor(deadlineMs / 10));
+  const started = pacingClock();
+  const margin = Math.min(REQUEST_MARGIN_MS, Math.floor(deadlineMs / 10));
+  const notAfter = started + deadlineMs - margin;
+  // The relations map's requests are the chain's last MusicBrainz reads, cut with the work's
+  // dating (`datingSignal`): one starts only early enough to be answered before that cut.
+  const mapNotAfter =
+    started + deadlineMs - Math.min(OTHER_SOURCES_RESERVE_MS, Math.floor(deadlineMs / 4)) - margin;
   const run = { now: options.now, signal, notAfter };
   let told = false;
   const tell = (recording: IdentifiedRecording | null) => {
@@ -1034,7 +1241,15 @@ async function collectWithin(
       if (identity && !discogsConfigured()) {
         await readCoverRelease(identity, track.album, datingSignal);
       }
-      return musicBrainzRelationships(base, run);
+      const map =
+        identity && options.relationsMap
+          ? await readRelationsMap(base, {
+              signal: datingSignal,
+              notAfter: mapNotAfter,
+              cache: options.relationsMap.cache,
+            })
+          : undefined;
+      return musicBrainzRelationships(base, { now: options.now, map });
     }),
     settle("discogs", async () => discogs()),
     settle("genius", async () => genius()),

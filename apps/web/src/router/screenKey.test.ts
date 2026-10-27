@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AppPhase } from '../types';
 import { screenKey } from './screenKey';
 
-// The screen error boundary starts afresh when the key changes.
+// The screen error boundary is cleared when the key changes.
 describe('screenKey', () => {
   it('is one key per result on the Dashboard and the Player', () => {
     for (const phase of [AppPhase.DASHBOARD, AppPhase.PLAYER]) {

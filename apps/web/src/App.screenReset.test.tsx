@@ -7,6 +7,7 @@ import { AppPhase, type TrackData } from './types';
 
 const GOOD = '4uLU6hMCjMI75M1A2tKUQC';
 const BROKEN = '28cnXtME493VX9NOw9cIUh';
+const SECOND = '1aBcDeFgHiJkLmNoPqRsTu';
 
 const resultFor = (id: string) =>
   ({
@@ -24,7 +25,7 @@ vi.mock('./hooks/agent/storedRun', () => ({
 vi.mock('./components/Player', () => ({
   default: ({ trackData }: { trackData: TrackData | null }) => {
     if (trackData?.id === BROKEN) throw new Error('the Player failed');
-    return <h1>Player of {trackData?.title}</h1>;
+    return <h1 tabIndex={-1}>Player of {trackData?.title}</h1>;
   },
 }));
 
@@ -67,5 +68,19 @@ describe('the screen error boundary across results', () => {
     await moveTo(GOOD, 0);
     await screen.findByRole('heading', { name: `Player of Track ${GOOD}` });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps the screen mounted between two results, so its heading keeps the focus', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: `Player of Track ${GOOD}` });
+    await moveTo(SECOND, 1);
+    const heading = await screen.findByRole('heading', { name: `Player of Track ${SECOND}` });
+    heading.focus();
+
+    // Back to the first result, shown on this page already: the same screen shows it.
+    await moveTo(GOOD, 0);
+    await screen.findByRole('heading', { name: `Player of Track ${GOOD}` });
+    expect(screen.getByRole('heading', { level: 1 })).toBe(heading);
+    expect(document.activeElement).toBe(heading);
   });
 });

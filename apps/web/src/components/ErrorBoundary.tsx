@@ -9,11 +9,18 @@ interface ErrorBoundaryProps {
   action: { label: string; onClick?: () => void };
   /** Classes for the fallback's box, so it fills the place of what failed. */
   className?: string;
+  /**
+   * What is shown: when it changes, a failed boundary tries its children again. Its children are
+   * not mounted afresh for it, so what keeps the focus (a heading) keeps it.
+   */
+  resetKey?: string;
   children: ReactNode;
 }
 
 interface ErrorBoundaryState {
   failed: boolean;
+  /** The `resetKey` the state is for. */
+  resetKey?: string;
 }
 
 /**
@@ -28,11 +35,18 @@ interface ErrorBoundaryState {
  * and zoom handlers, a ResizeObserver's callback.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { failed: false };
+  state: ErrorBoundaryState = { failed: false, resetKey: this.props.resetKey };
   private actionRef = createRef<HTMLButtonElement>();
 
-  static getDerivedStateFromError(): ErrorBoundaryState {
+  static getDerivedStateFromError(): Partial<ErrorBoundaryState> {
     return { failed: true };
+  }
+
+  static getDerivedStateFromProps(
+    props: ErrorBoundaryProps,
+    state: ErrorBoundaryState,
+  ): Partial<ErrorBoundaryState> | null {
+    return props.resetKey === state.resetKey ? null : { failed: false, resetKey: props.resetKey };
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo) {

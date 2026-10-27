@@ -605,9 +605,10 @@ const App: React.FC = () => {
     <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
       <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
         {/* A screen that throws (or whose code cannot be loaded) says so in its place, with a
-            way back to the search; the next screen starts afresh. */}
+            way back to the search; another screen or result is tried afresh (resetKey), without
+            mounting the screen again, so its heading keeps the focus on Back and Forward. */}
         <ErrorBoundary
-          key={screenKey(phase, link !== null, effectiveTrackData?.id)}
+          resetKey={screenKey(phase, link !== null, effectiveTrackData?.id)}
           message="This screen could not be shown"
           action={{ label: 'New search', onClick: handleNewSearch }}
           className="flex-1 min-h-0 w-full bg-void"

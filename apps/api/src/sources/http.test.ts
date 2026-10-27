@@ -489,6 +489,9 @@ describe("scrubbing", () => {
     // Inside a JSON string, its escapes included.
     ["an object key", '{"error":"{ password: \\"sv-6 \\\\\\" b\\" }"}', 'sv-6 \\\\\\" b'],
     ["an object key", "{ refresh_token: `sv-7` }", "sv-7"],
+    ["an object key", "{ token : sv-16 }", "sv-16"],
+    // A quoted value is a value whatever it says, a status word too.
+    ["an object key", "{ token: 'invalid' }", "invalid"],
     // An XML or HTML element named after a secret key, in any case, with attributes.
     ["an element", "<access_token>sv-8</access_token>", "sv-8"],
     ["an element", '<r><Access_Token type="x">sv 9</ACCESS_TOKEN ></r>', "sv 9"],
@@ -499,6 +502,18 @@ describe("scrubbing", () => {
     ["a header line", "Accept: */*\r\nApi-Key: sv-13\r\nHost: a", "sv-13"],
     ["a header line", "> GET / HTTP/1.1\n> X-Auth-Token: sv-14\n> Host: a", "sv-14"],
     ["a header line", '  password: "sv 15"', "sv 15"],
+    // curl -v writes "> " before a request header and "< " before a response header.
+    ["a header line", "< HTTP/1.1 401\n< X-Api-Key: sv-17\n< Server: a", "sv-17"],
+    // The value runs to the end of its line: a comma does not end it, trailing spaces are kept.
+    ["a header line", "X-Api-Key: sv-18,v2", "sv-18,v2"],
+    ["a header line", "X-Api-Key: sv-19 \nHost: a", "sv-19"],
+    // A text that mentions a header (where the header rule runs) reads every shape too.
+    ["a header line", "Invalid header\nX-Api-Key: sv-20", "sv-20"],
+    // A line that ends in a bare CR, and a space before the colon.
+    ["a header line", "Accept: */*\rX-Api-Key: sv-23", "sv-23"],
+    ["a header line", "X-Api-Key : sv-24", "sv-24"],
+    ["an object key", "header rejected: { token: sv-21 }", "sv-21"],
+    ["an element", "bad header <token>sv-22</token>", "sv-22"],
   ])("redacts the value of a secret key written as %s: %j", (_shape, text, value) => {
     for (const out of [redactText(text), scrubText(text)]) {
       expect(out, text).not.toContain(value);
@@ -506,16 +521,12 @@ describe("scrubbing", () => {
     }
   });
 
-  it("keeps hidden what the other rules hid next to a value without a quoted key", () => {
-    // A `name=` value, a Bearer token or a media link that starts inside the value read on past
-    // it: once the value is masked, the rule that hid the rest no longer sees where it starts.
+  it("never hides less than the other rules next to a value without a quoted key", () => {
+    // What a `name=` value, a Bearer token or the header rule hides around the value stays hidden.
     for (const [text, hidden] of [
       ["{ token: key=a,LEAK-1 }", "LEAK-1"],
       ["{ token: token=a,Bearer LEAK-2abcdefgh }", "LEAK-2"],
-      ["{ token: https://i.scdn.co/a,LEAK-3 }", "LEAK-3"],
-      ["{ token: https:\\/\\/i.scdn.co\\/a,LEAK-4 }", "LEAK-4"],
-      // A plain link inside an escaped one is read as the plain link rule reads it.
-      ["{ token: \\/\\/https://i.scdn.co/a,LEAK-7 }", "LEAK-7"],
+      ["{ token: key=abc//i.scdn.co/a.png(LEAK-8),z }", "LEAK-8"],
       // The header rule pairs quotes as it always did, as it does once the quoted secret values
       // are gone, and as it does once every secret value is gone: a quote inside an element's
       // content neither shows a later pair (LEAK-5) nor moves one the quoted values kept (LEAK-6).
@@ -525,6 +536,32 @@ describe("scrubbing", () => {
       expect(redactText(text), text).not.toContain(hidden);
       expect(scrubText(text), text).not.toContain(hidden);
     }
+    // A media link around or inside the value is hidden whole, as before: its host, its path and
+    // what follows the value (a signature) included.
+    for (const [text, hidden] of [
+      ["{ token: https://i.scdn.co/a,LEAK-3 }", "LEAK-3"],
+      ["{ token: https:\\/\\/i.scdn.co\\/a,LEAK-4 }", "LEAK-4"],
+      ["{ token: \\/\\/https://i.scdn.co/a,LEAK-7 }", "LEAK-7"],
+      ["{ token: https://i.scdn.co/a,LEAK-9 } { token: key=b }", "LEAK-9"],
+      ["https://cdns-preview-1.dzcdn.net/stream/c-abc,token:SEC2,hdnea=exp=1~hmac=SIG2", "SIG2"],
+      ["https://x.y/p,token:SEC1,rest/img.png", "rest"],
+      ["http:\\/\\/QzaaQ,token:/images/", "QzaaQ"],
+    ]) {
+      expect(scrubText(text), text).not.toContain(hidden);
+    }
+    expect(scrubText("https://cdns-preview-1.dzcdn.net/s/c,token:SEC2,hdnea=exp=1~hmac=SIG2")).toBe(
+      "[redacted]",
+    );
+    // One mask in place of the link and the value, whatever follows them.
+    expect(scrubText("see https://i.scdn.co/a,token:SEC3,b tail")).toBe("see [redacted] tail");
+    // The values without quotes and the header rule's pairs are masked together, in order.
+    expect(redactText('header: { token: LEAK-10 } "q"')).toBe(
+      'header: { token: [redacted] } "[redacted]"',
+    );
+    // An escaped backquote is not a quote: the run is the value, backslashes and all.
+    expect(redactText("{ token: \\`x\\` }")).toBe("{ token: [redacted] }");
+    // A quoted header value is read once: a line inside it is not read again.
+    expect(redactText('password: "a\nToken: b"\nnext')).toBe('password: "[redacted]"\nnext');
   });
 
   it("tells each shape from its near-misses and from prose", () => {
@@ -540,11 +577,30 @@ describe("scrubbing", () => {
       ["Password: must be at least 8 characters", "Password: hunter22"],
       ["usage: login --token <token>\nthen go on", "<token>v</token>"],
       ["<token />v</token>", "<token >v</token>"],
+      ["<token a<b>v</token>", "<token a=b>v</token>"],
       // A quote, "<", ">" or "&" in a run is not a value without quotes: they end a `name=` value.
       ["{ token: x<y> }", "{ token: xy }"],
       ["{ token: a&b, c: 1 }", "{ token: ab, c: 1 }"],
       ["{ token: { type: 'kept' } }", "{ token: 'v' }"],
       ["{ my_token: 'kept', tokenType: kept }", "{ authToken: 'v' }"],
+      ["(token: kept)", "{token: kept}"],
+      // A status word in place of a value is a reason a person reads, in any case.
+      ["token: invalid", "token: invalid1"],
+      ["Token: expired.", "Token: expiry"],
+      ["Unauthorized\nToken: EXPIRED", "Unauthorized\nToken: e1"],
+      ["Bad Request\nPassword: required", "Bad Request\nPassword: r1"],
+      ["audio: HTTP 422: Validation failed, token: invalid", "audio: HTTP 422: x, token: in"],
+      ["lastfm: rejected, api_key: missing", "lastfm: rejected, api_key: m1"],
+      ["{ token: null, password: undefined, secret: none }", "{ token: n1 }"],
+      ["{ token: true, apiKey: False, secret: unknown, id_token: revoked }", "{ token: t1 }"],
+      ["{ token: empty }", "{ token: e1 }"],
+      ["<error><token>expired</token></error>", "<error><token>expires</token></error>"],
+      // Only "," or "}" ends a value without quotes.
+      ["[a, token: x ]", "[a, token: x }"],
+      // An empty value has nothing to hide.
+      ["<token></token>", "<token>v</token>"],
+      ["{ token: '' }", "{ token: 'v' }"],
+      ['token: ""', 'token: "v"'],
     ];
     for (const [near, shape] of pairs) {
       expect(scrubText(near), near).toBe(near);
@@ -1191,6 +1247,21 @@ describe("what an error message keeps", () => {
     expect(reasonIssue(text)).toBe(issue);
   });
 
+  it("redacts a message while its lines are still lines, before it is one line", () => {
+    // A header line inside a source's reason: read as a line, then flattened.
+    expect(plainMessage("Unauthorized\nX-Api-Key: msg-secret-1")).toBe(
+      "Unauthorized X-Api-Key: [redacted]",
+    );
+    expect(plainReason("Forbidden\r\nAuthorization: msg-secret-2")).toBe(
+      "Forbidden Authorization: [redacted]",
+    );
+    // A status word stays, and a link holding a token is still one "[link]".
+    expect(plainMessage("Unauthorized\nToken: expired.")).toBe("Unauthorized Token: expired.");
+    expect(plainMessage("see https://example.org/x?token=abc123\nnow")).toBe("see [link] now");
+    // What would be left out is left out, though its markup was inside a redacted value.
+    expect(plainMessage("Unauthorized\nX-Api-Key: <b>k</b>")).toBeUndefined();
+  });
+
   it("writes a message as a plain line that never has an issue, or leaves it out", () => {
     expect(plainMessage("connect ECONNREFUSED https://api.example.com/v1/x\n  retrying")).toBe(
       "connect ECONNREFUSED [link] retrying",
@@ -1554,10 +1625,34 @@ describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, 
       () => redactText(`{ token: ${fill("//i.scdn.co/a")} }`),
       "{ token: [redacted] }",
     ],
+    // Every rule masks on a text that earlier rules masked many times over.
+    [
+      "masks after masks",
+      () => scrubText(`{ token: k } ${fill("key=a //i.scdn.co/x x@y.co ")}`).length,
+      500,
+    ],
+    [
+      "values without quotes among masks",
+      () => redactText(fill("{ token: k } key=a ")).length,
+      size + Math.floor(size / 19) * 18,
+    ],
+    [
+      "empty quote pairs after a header",
+      () => redactText(`header ${fill('"" ')}`).length,
+      7 + size + Math.ceil(size / 3) * 10,
+    ],
   ])("answers quickly on %s", (_name, call, expected) => {
     const { ms, result } = timed(call);
     expect(ms).toBeLessThan(400);
     expect(result).toBe(expected);
+  });
+
+  it("finds where each mask goes once, on 1 MB of masks among masks", () => {
+    // About 0.2 s; reading the parts of the text from its start for each mask takes seconds.
+    const big = "key=a a@b.cc ".repeat(80_000);
+    const { ms, result } = timed(() => scrubText(big).length);
+    expect(ms).toBeLessThan(1500);
+    expect(result).toBe(500);
   });
 });
 

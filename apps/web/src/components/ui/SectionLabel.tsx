@@ -24,7 +24,7 @@ export const SectionLabel: React.FC<SectionLabelProps> = ({
 }) => (
   <div className={`flex items-center gap-2 ${className}`}>
     <div className="flex-1 min-w-0">
-      <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">{children}</h3>
+      <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">{children}</h2>
       {subtitle && <p className="text-chrome text-text-tertiary font-mono mt-0.5">{subtitle}</p>}
     </div>
     {indicator !== 'none' && (

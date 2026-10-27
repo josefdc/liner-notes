@@ -44,7 +44,7 @@ import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
-import { moreFactsOf } from '../hooks/agent/moreFacts';
+import { moreFactsKey, moreFactsOf } from '../hooks/agent/moreFacts';
 import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
@@ -67,6 +67,9 @@ interface PlayerProps {
   // UX: Focus management on phase transition
   headingRef?: React.Ref<HTMLHeadingElement>;
 }
+
+/** How long the "N more facts added" notice stays on screen. */
+const ADDED_NOTICE_MS = 4000;
 
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
@@ -94,16 +97,19 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
     <p className="text-xs font-mono text-text-tertiary">Search for a song to see its analysis.</p>
     <div className="flex items-center gap-3">
       <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
-        BACK TO BASE
+        Back to summary
       </Button>
       {onNewSearch && (
         <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
-          NEW SEARCH
+          New search
         </Button>
       )}
     </div>
   </div>
 );
+
+/** "1 fact", "3 facts". */
+const facts = (count: number) => `${count} ${count === 1 ? 'fact' : 'facts'}`;
 
 const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
   track,
@@ -117,9 +123,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'context' | 'player' | 'genealogy'>('player');
   const [isDecrypting, setIsDecrypting] = useState(false);
-  // Why DECRYPT MORE could not add facts (rate limit, budget), shown under the button
+  // Why "More facts" could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
-  // P3:25 — Decrypt complete toast
+  // P3:25 — The "N more facts added" notice
   const [showDecryptToast, setShowDecryptToast] = useState(false);
   const [decryptToastCount, setDecryptToastCount] = useState(0);
   // P2:24 — Factoid collapsing
@@ -185,6 +191,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )
       .map((factoid) => factoid.id),
   ).size;
+  // Facts found but not shown: their claim was rejected or cannot be read.
+  const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
+    claims.isHidden(factoid.claimId),
+  );
   const genealogy = useMemo(
     () => withoutHiddenRelations(track.genealogy, claims.isHidden),
     [track.genealogy, claims],
@@ -230,7 +240,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => track.samples.filter((sample) => !claims.isHidden(sample.claimId)),
     [track.samples, claims],
   );
-  // The result's factoids first, then the ones added by DECRYPT MORE.
+  // The result's factoids first, then the ones added by "More facts".
   const allFactoids = useMemo(
     () => [...resultFactoids, ...additionalFactoids],
     [resultFactoids, additionalFactoids],
@@ -261,10 +271,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
-  // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
+  // "More facts" on a replayed result found no recorded fact that is not shown yet.
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
   const noMoreRoundsId = useId();
-  // Facts DECRYPT MORE added are written by the model: each shows its own claim, and when one
+  // Facts "More facts" added are written by the model: each shows its own claim, and when one
   // does, the others are labelled one by one rather than as a section.
   const claimedAdditional = additionalFactoids.some((factoid) => claimOf(factoid));
 
@@ -276,9 +286,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const visibleDecryptedFactoids = visibleFactoids.slice(resultFactoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
+  // A round that ended: the ids shown when it was asked for, the result it was asked about, and
+  // whether the API said why it could add nothing. Each round carries its own, so a click that
+  // starts the next round before this one is told does not change what this one counts. What it
+  // added is told once its facts are in the list, as the facts newly shown there (not repeats,
+  // nor facts whose claim is hidden).
+  const [roundEnded, setRoundEnded] = useState<{
+    unavailable: boolean;
+    before: ReadonlySet<string>;
+    result: string;
+  } | null>(null);
+
   // Refs for transient values in handleDecryptMore
   const isDecryptingRef = useRef(false);
-  // The running DECRYPT MORE stream; closed when the Player goes away.
+  // The running "More facts" stream; closed when the Player goes away.
   const decryptControllerRef = useRef<AbortController | null>(null);
   // The timer that hides the toast; cleared when another toast replaces it or the Player goes.
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -328,36 +349,26 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     setIsDecrypting(true);
     setDecryptUnavailable(null);
     setNoMoreRecorded(false);
+    const before = new Set(allFactoids.map((factoid) => factoid.id));
+    const result = moreFactsKey(track);
     let unavailable = false;
     const controller = new AbortController();
     decryptControllerRef.current = controller;
     try {
-      // The facts are kept by the hook as they come (`moreFacts`), with their claims.
-      const added = await onMoreFactoidsStream(track, {
+      // The facts are kept by the hook as they come (`moreFacts`), with their claims; what they
+      // add to the list is counted once they are in it (below).
+      await onMoreFactoidsStream(track, {
         signal: controller.signal,
         onUnavailable: (code) => {
           unavailable = true;
           setDecryptUnavailable(code);
         },
       });
-      // Only factoids that are shown count (lyric factoids are dropped).
-      const newCount = displayableFactoids(added).length;
-      if (resultMode === 'replay' && newCount === 0 && !unavailable) setNoMoreRecorded(true);
-
-      // P3:25 — Show completion toast
-      if (newCount > 0) {
-        setDecryptToastCount(newCount);
-        setShowDecryptToast(true);
-        if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = setTimeout(() => {
-          toastTimerRef.current = null;
-          setShowDecryptToast(false);
-        }, 1000);
-      }
+      setRoundEnded({ unavailable, before, result });
     } catch (error) {
       // Leaving the Player (or starting a new analysis) cancels the stream: not an error.
       if ((error as { name?: unknown } | null)?.name !== 'AbortError') {
-        console.error('Decrypt stream error:', error);
+        console.error('More facts stream error:', error);
       }
     } finally {
       if (decryptControllerRef.current === controller) {
@@ -366,7 +377,31 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         setIsDecrypting(false);
       }
     }
-  }, [onMoreFactoidsStream, track, resultMode]);
+  }, [onMoreFactoidsStream, track, allFactoids]);
+
+  // P3:25 — A round has ended: the facts it newly shows are counted in the list itself, so a
+  // repeat, a lyric fact or a fact whose claim was rejected is not called added. A recording
+  // with nothing new to show says it has no more.
+  useEffect(() => {
+    if (!roundEnded) return;
+    setRoundEnded(null);
+    // The Player has moved to another result since the round was asked: nothing of it is told.
+    if (roundEnded.result !== moreFactsKey(track)) return;
+    const { before } = roundEnded;
+    const newCount = allFactoids.filter((factoid) => !before.has(factoid.id)).length;
+    if (resultMode === 'replay' && newCount === 0 && !roundEnded.unavailable) {
+      setNoMoreRecorded(true);
+    }
+    if (newCount > 0) {
+      setDecryptToastCount(newCount);
+      setShowDecryptToast(true);
+      if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => {
+        toastTimerRef.current = null;
+        setShowDecryptToast(false);
+      }, ADDED_NOTICE_MS);
+    }
+  }, [roundEnded, allFactoids, resultMode, track]);
 
   // Extract onNodeClick handler for GenealogyGraph (stable ref for React.memo)
   const handleNodeClick = useCallback(
@@ -401,28 +436,77 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )}
 
       {/* Navigation (P0:3 — New Search button) */}
-      <div className="z-20 px-6 py-4 flex items-center justify-between border-b border-white/5 bg-void/50 backdrop-blur-sm">
+      <div className="z-20 px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
-            BACK TO BASE
+            Back to summary
             <span className="hidden lg:inline text-text-muted text-chrome ml-1">Esc</span>
           </Button>
           {onNewSearch && (
             <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
-              NEW SEARCH
+              New search
             </Button>
           )}
         </div>
-        <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
-          <span>
-            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${formatBpm(bpm)} BPM` : 'BPM not measured'}
-            {key !== null && ` // ${key}`}
-            {measurement && ` // ${formatSeconds(measurement.windowSeconds)} s preview`}
-          </span>
-        </div>
       </div>
 
-      {/* On phones only one panel shows at a time: the recording label stays above all of them */}
+      {/* The track, above the three columns from md up: the page's h1 (first of its headings,
+          before the columns' section headings), its artist, and the audio line. On phones it is
+          kept for screen readers only, and the Player tab shows the title and artist where they
+          scroll with it: no fixed band takes the phone's height. A div, not a page banner. */}
+      <div
+        id="player-header"
+        className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only"
+      >
+        <div className="min-w-0">
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark outline-none break-words"
+          >
+            {track.title}
+          </h1>
+          <p className="text-sm md:text-base text-text-tertiary font-mono break-words">
+            {track.artist}
+          </p>
+          {/* From md up a replayed result says so right under its title and artist, before any
+              column (phones show it below, above the tabs' panels) */}
+          {recorded && (
+            <div className="hidden md:block mt-2">
+              <RecordedRunNotice track={track} compact />
+            </div>
+          )}
+        </div>
+        {/* Measured values in the measured hue; what was not measured, and the separators, in
+            a neutral one */}
+        <p
+          data-testid="player-audio-line"
+          className="hidden md:block shrink-0 whitespace-nowrap text-xs font-mono text-text-tertiary"
+        >
+          {bpm !== null ? (
+            <span className="text-cyber">{formatBpm(bpm)} BPM</span>
+          ) : (
+            'BPM not measured'
+          )}
+          {key !== null && (
+            <>
+              {' · '}
+              <span className="text-cyber">{key}</span>
+            </>
+          )}
+          {measurement && (
+            <>
+              {' · '}
+              <span className="text-cyber">
+                {formatSeconds(measurement.windowSeconds)} s preview
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* On phones only one panel shows at a time: the recording label stays above all of them,
+          right after the (screen-reader) header, so it is reached before any panel */}
       {recorded && (
         <div className="md:hidden z-20 mx-4 mt-2">
           <RecordedRunNotice track={track} compact />
@@ -442,9 +526,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         `}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-              Agent Analysis
-            </h3>
+            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+              Facts
+            </h2>
             {unclaimedFactoids && !claimedFactoids && (
               <ResultOriginLabel fromSourceData={fromSourceData} />
             )}
@@ -461,14 +545,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </p>
           )}
           {allFactoids.length > 0 && (
-            <p className="text-xs text-text-tertiary font-mono mb-8">
-              {allFactoids.length} insights decoded
-            </p>
+            <p className="text-xs text-text-tertiary font-mono mb-8">{facts(allFactoids.length)}</p>
           )}
           {allFactoids.length === 0 ? (
             <div className="flex-1 flex items-center justify-center py-12">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                AWAITING INTEL... No insights decoded for this track.
+                {/* Facts were found but none is shown: the lines around say why */}
+                {hiddenFacts ? 'No facts to show.' : 'No facts were found for this track.'}
               </p>
             </div>
           ) : (
@@ -486,14 +569,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 </div>
               ))}
 
-              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result:
+              {/* Factoids added by "More facts" are written by the model, whatever the result:
                   each shows its claim, and the section is labelled only when none has one */}
               {visibleDecryptedFactoids.length > 0 && (
-                <section aria-label="Decrypted insights" className="space-y-6">
+                <section aria-label="More facts" className="space-y-6">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-                      Decrypted insights
-                    </h4>
+                    <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                      More facts
+                    </h3>
                     {!claimedAdditional && <InferenceLabel />}
                   </div>
                   {visibleDecryptedFactoids.map((fact) => (
@@ -509,7 +592,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 </section>
               )}
 
-              {/* Standalone Decrypt More card */}
+              {/* The "More facts" button */}
               {onMoreFactoidsStream && (
                 <button
                   type="button"
@@ -518,10 +601,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   disabled={isDecrypting || more.finished}
                   aria-describedby={more.finished ? noMoreRoundsId : undefined}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4
-                               border border-dashed border-cyber/30 rounded-md
-                               text-xs font-mono text-cyber/70 uppercase tracking-wider
-                               hover:border-cyber hover:text-cyber hover:bg-cyber/5
-                               focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none
+                               border border-dashed border-white/20 rounded-md
+                               text-xs font-mono text-text-secondary uppercase tracking-wider
+                               hover:border-white/40 hover:text-white hover:bg-white/5
+                               focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
                                disabled:opacity-50
                                ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
                                transition-all duration-(--duration-fast)`}
@@ -529,11 +612,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   {isDecrypting ? (
                     <>
                       <Lock size={12} className="animate-pulse" />
-                      DECRYPTING...
+                      Finding more facts…
                     </>
                   ) : (
                     <>
-                      <LockOpen size={12} />[ DECRYPT MORE ]
+                      <LockOpen size={12} />
+                      Find more facts
                     </>
                   )}
                 </button>
@@ -582,7 +666,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
                   >
                     <ChevronDown size={14} />
-                    Reveal {hiddenCount} hidden insights
+                    Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
                   </button>
                 </div>
               )}
@@ -620,13 +704,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               audio={measurement}
             />
           </div>
-
-          {/* P3:25 — Decrypt complete toast */}
-          {showDecryptToast && (
-            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-cyber/10 border border-cyber/30 rounded-sm text-cyber text-xs font-mono tracking-widest animate-slide-up-fade shadow-glow-cyber-subtle">
-              {decryptToastCount} NEW INTEL DECODED
-            </div>
-          )}
         </div>
 
         {/* Panel B: Artifact/Player (Desktop: Center, Mobile: Tab) — P1:12 ARIA */}
@@ -639,11 +716,6 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
-          {recorded && (
-            <div className="hidden md:block w-full max-w-lg mb-4">
-              <RecordedRunNotice track={track} />
-            </div>
-          )}
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}
@@ -659,16 +731,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-(--duration-dramatic)"></div>
           </AlbumCover>
 
-          {/* Meta */}
+          {/* Meta. The title and artist are the page's header from md up; on phones they are
+              shown here, where they scroll with the tab (the header's h1 is read instead). A
+              word longer than the column breaks anywhere, so it never widens the column. */}
           <div className="text-center mb-6">
-            <h1
-              ref={headingRef}
-              tabIndex={-1}
-              className="text-3xl md:text-4xl font-light leading-tight text-white tracking-tight mb-2 text-shadow-dark outline-none"
-            >
-              {track.title}
-            </h1>
-            <p className="text-lg text-text-tertiary font-mono">{track.artist}</p>
+            <div aria-hidden="true" className="md:hidden">
+              <p className="text-3xl font-light leading-tight text-white tracking-tight mb-2 text-shadow-dark wrap-anywhere">
+                {track.title}
+              </p>
+              <p className="text-lg text-text-tertiary font-mono wrap-anywhere">{track.artist}</p>
+            </div>
             {track.album && (
               <div className="flex items-center justify-center gap-2 text-sm text-text-tertiary mt-1">
                 <span>{track.album}</span>
@@ -750,9 +822,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         `}
         >
           <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
-              Genealogy Network
-            </h3>
+            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
+              Connections
+            </h2>
             {/* How the shown links are known, in the words and chips the legend, the list and
                 the connected-track cards use: sourced, not sourced, or (every link) the model's */}
             {genealogy.nodes.length > 1 && (
@@ -794,15 +866,26 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                NO CONNECTIONS MAPPED. This track's network is still uncharted.
+                {/* Relations were found, but the verifier rejected every one (they are listed
+                    with the rejected claims) */}
+                {hiddenLinks > 0
+                  ? 'No connections to show.'
+                  : 'No connected tracks were found for this track.'}
               </p>
             </div>
           )}
-          <div className="absolute bottom-4 right-4 z-10 text-right pointer-events-none hidden md:block">
-            <p className="text-chrome text-text-tertiary font-mono">D3.JS FORCE SIMULATION</p>
-            <p className="text-chrome text-cyber font-mono">INTERACTIVE: ENABLED</p>
-          </div>
         </div>
+      </div>
+
+      {/* P3:25 — How many facts a click added. Outside the tab panels, so it is shown and
+          announced whichever phone tab is open; the status region stays in the page, so the
+          message put in it is announced. Neutral, as the facts are the model's, not measured. */}
+      <div role="status">
+        {showDecryptToast && (
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-surface-overlay backdrop-blur-lg border border-white/10 rounded-sm text-text-secondary text-xs font-mono animate-slide-up-fade shadow-elevated-lg">
+            {decryptToastCount} more {decryptToastCount === 1 ? 'fact' : 'facts'} added
+          </div>
+        )}
       </div>
 
       {/* Mobile Tab Bar (P1:12 — ARIA roles) */}
@@ -842,7 +925,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           onClick={() => setActiveTab('genealogy')}
           className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${activeTab === 'genealogy' ? 'text-analog border-t-2 border-analog' : 'text-text-tertiary'}`}
         >
-          Network
+          Connections
         </button>
       </div>
     </div>

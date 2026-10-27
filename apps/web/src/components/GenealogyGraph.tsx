@@ -255,6 +255,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       n,
       shown,
     }));
+    // Tracks at an end of a drawn link (the shown ones; a rejected link is not drawn).
+    const linked = new Set(links.flatMap((shown) => [shown.source, shown.target]));
     // Each track's relation to the analysed one, from the link that joins them.
     const relations = new Map(nodes.map((n) => [n.id, relationToTrack(links, n.id, currentId)]));
     // Tracks a sourced sample, interpolation, cover or remix says the analysed track uses.
@@ -501,9 +503,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const maxLen = isMobile ? 12 : 30;
       return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
     };
-    // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
+    // "Origin" only for a track a sourced link says this one uses, never from the group;
+    // "Connected" only for a track a drawn link joins to another, and no tag for one with none.
     const tagText = (d: CustomNode) =>
-      d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]';
+      d.group === 1 ? 'This track' : isOrigin(d) ? 'Origin' : linked.has(d.id) ? 'Connected' : '';
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
@@ -822,7 +825,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )
           .style('opacity', 1);
 
-        // An origin says a click explores it (it analyses the track), whether or not it has a
+        // An origin says a click analyses the track, whether or not it has a
         // clip. No hint names a preview: previews play from their own buttons (PreviewList).
         if (isOrigin(d)) {
           select(this)
@@ -833,8 +836,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
             .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
-            .attr('fill', colors.analog)
-            .text('⚡ CLICK TO EXPLORE')
+            .attr('fill', colors.gray[400])
+            .text('Analyze this track')
             .call(fadeIn);
         }
       })
@@ -974,15 +977,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <svg
           ref={svgRef}
           className="w-full h-full overflow-visible"
-          aria-label="Song genealogy network graph"
+          aria-label="Connections graph"
         ></svg>
 
         {/* P2:22 — Accessible summary for screen readers: each track's relation comes from the
             link that joins it to this one, never from its group. */}
         <div className="sr-only">
-          Genealogy network
+          Connections
           {related.length > 0
-            ? ` with ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
+            ? `: ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
             : ''}
           .
           {nodeList
@@ -1035,9 +1038,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {/* Audio Preview Indicator */}
         {isPlaying && playingNodeId && (
           <div className="absolute top-4 right-4 pointer-events-none">
-            <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
+            <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10 animate-pulse">
               <Volume2 size={12} className="animate-bounce" />
-              <span>PREVIEWING TRACK...</span>
+              <span>Playing preview…</span>
             </div>
           </div>
         )}
@@ -1057,7 +1060,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
-              <span>AUDIO BLOCKED</span>
+              <span>Audio blocked</span>
             </div>
           </div>
         )}
@@ -1068,7 +1071,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
-              <span>PREVIEW UNAVAILABLE</span>
+              <span>Preview unavailable</span>
             </div>
           </div>
         )}
@@ -1077,11 +1080,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {!active && (
           <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
-              <span>SCROLL TO ZOOM</span>
-              <span>DRAG TO PAN</span>
-              <span className="text-cyber flex items-center gap-1">
+              <span>Scroll to zoom</span>
+              <span>Drag to pan</span>
+              <span className="flex items-center gap-1">
                 <MousePointerClick size={12} />
-                CLICK NODE TO EXPLORE
+                Click a track to analyze it
               </span>
             </div>
           </div>
@@ -1089,7 +1092,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
         {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
         <div className="absolute top-2 right-2 pointer-events-none md:hidden">
-          <div className="text-chrome font-mono text-text-tertiary">PINCH • DRAG • TAP</div>
+          <div className="text-chrome font-mono text-text-tertiary">Pinch, drag or tap</div>
         </div>
       </div>
 

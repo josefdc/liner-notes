@@ -48,7 +48,7 @@ describe('the genealogy graph error boundary', () => {
       'The connections graph could not be drawn',
     );
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(track.title);
-    expect(screen.getAllByRole('button', { name: /BACK TO BASE/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /Back to summary/ }).length).toBeGreaterThan(0);
 
     // Logged with the error's name only: neither the result's data nor the error's message,
     // which can carry it.

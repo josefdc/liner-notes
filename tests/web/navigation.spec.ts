@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   apiRequests,
+  dashboardHeading,
   fullResultData,
   loadFixture,
   releaseStream,
@@ -33,12 +34,12 @@ test("back from the result returns to the search without re-running the analysis
   // The search does not move on to the result by itself (it used to after 3.5 s).
   await page.waitForTimeout(4500);
   await expect(page.getByRole("combobox", { name: "Song title and artist" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
+  await expect(dashboardHeading(page)).toHaveCount(0);
   expect(await apiRequests(page)).toEqual(requestsAtResult);
 
   // Forward shows the same result again, still without a new request.
   await page.goForward();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   await expect(page.getByText("Bright Lines").first()).toBeVisible();
   expect(await apiRequests(page)).toEqual(requestsAtResult);
 });
@@ -53,7 +54,7 @@ test("back while the track picker is open keeps the picker", async ({ page }) =>
     },
   });
   await analyzeAndOpenDashboard(page, "Bright Lines");
-  await page.getByRole("button", { name: "NEW SEARCH" }).click();
+  await page.getByRole("button", { name: "New search" }).click();
   await page.getByRole("combobox", { name: "Song title and artist" }).fill("Hurt");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   const picker = page.getByText("Is this the right track?");
@@ -62,7 +63,7 @@ test("back while the track picker is open keeps the picker", async ({ page }) =>
   await page.goBack();
   await page.waitForTimeout(500);
   await expect(picker).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
+  await expect(dashboardHeading(page)).toHaveCount(0);
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${RESUME}`))).toEqual([]);
 });
@@ -120,7 +121,7 @@ test("back on the first search after arriving keeps the running analysis", async
   // The run goes on and its result is shown, in a single history entry after the search.
   await releaseStream(page, "result");
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("combobox", { name: "Song title and artist" })).toBeVisible();
   expect(page.url()).not.toMatch(/^data:/);

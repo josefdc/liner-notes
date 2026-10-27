@@ -959,7 +959,7 @@ export function missingModelOutput(track: TrackData): string[] {
   if (track.segmentsSource === 'template') {
     missing.push('song structure (a generic template is shown)');
   }
-  if (!track.factoids?.length) missing.push('insights');
+  if (!track.factoids?.length) missing.push('facts');
   if (!track.genealogy?.nodes?.some((node) => node.group !== 1)) missing.push('connected tracks');
   return missing;
 }

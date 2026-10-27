@@ -295,54 +295,63 @@ export function scopeText(evidence: Pick<Evidence, 'recordRef'>): string | null 
 // of results; a link to one would expire, or carry a credential.
 const PREVIEW_HOST =
   /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
-const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
+// The lookahead checks once that the rest holds no whitespace, so a long run of candidate
+// parameters before a space is not rescanned for each one.
+const SIGNED_URL = /^https?:\/\/(?=\S*$)\S*?[?&;~](?:hdnea|hdnts|x-amz-signature)=/i;
+/** A parameter name as compared: lower case, without `-` or `_` (`accessToken`, `access-token`). */
+const paramKey = (name: string) => name.toLowerCase().replace(/[-_]/g, '');
 // Query (or fragment) parameters that carry a credential or sign a URL: tokens, keys,
 // secrets, passwords, OAuth codes and signatures, session ids, S3 (X-Amz-*), Google Cloud
 // Storage, Azure SAS (sig, se), CloudFront (Policy, Signature, Key-Pair-Id) and Akamai (hdnea,
-// hdnts).
-const CREDENTIAL_PARAMS = new Set([
-  'access_token',
-  'id_token',
-  'refresh_token',
-  'auth_token',
-  'oauth_token',
-  'oauth_signature',
-  'jwt',
-  'key',
-  'api_key',
-  'api-key',
-  'apikey',
-  'x-api-key',
-  'secret',
-  'client_secret',
-  'password',
-  'passwd',
-  'pwd',
-  'auth',
-  'code',
-  'session',
-  'sessionid',
-  'jsessionid',
-  'phpsessid',
-  'sid',
-  'token',
-  'signature',
-  'sig',
-  'se',
-  'policy',
-  'key-pair-id',
-  'x-amz-credential',
-  'x-amz-signature',
-  'x-amz-security-token',
-  'x-goog-credential',
-  'x-goog-signature',
-  'hdnea',
-  'hdnts',
-]);
+// hdnts). Compared by paramKey, so one spelling of each is enough. `sid` is left out: it also
+// names public story ids (Slashdot, PHP-Nuke); as a path parameter it is refused (SESSION_PATH).
+const CREDENTIAL_PARAMS = new Set(
+  [
+    'access_token',
+    'id_token',
+    'refresh_token',
+    'auth_token',
+    'x_auth_token',
+    'api_token',
+    'oauth_token',
+    'oauth_signature',
+    'jwt',
+    'bearer',
+    'key',
+    'api_key',
+    'x_api_key',
+    'private_key',
+    'secret',
+    'client_secret',
+    'password',
+    'passwd',
+    'pwd',
+    'auth',
+    'code',
+    'session',
+    'session_id',
+    'sessid',
+    'jsessionid',
+    'phpsessid',
+    'token',
+    'signature',
+    'sig',
+    'se',
+    'policy',
+    'key-pair-id',
+    'x-amz-credential',
+    'x-amz-signature',
+    'x-amz-security-token',
+    'x-goog-credential',
+    'x-goog-signature',
+    'hdnea',
+    'hdnts',
+  ].map(paramKey),
+);
 
-// A parameter name before `=`, after any separator a server or a client-side router may read:
-// `&`, `;` (which also drops the `amp` of an HTML-escaped `&amp;`), and `!`, `/` or `?` in a
-// fragment (`#!key=…`, `#/route?code=…`).
+// A parameter name before `=`, in a query or a fragment, after any separator a server or a
+// client-side router may read: `&`, `;` (which also drops the `amp` of an HTML-escaped `&amp;`),
+// `!`, `/` and `?` (`#!key=…`, `#/route?code=…`, `?next=https://app.example/cb/?code=…`).
 const PARAM_NAME = /(?:^|[?#&;!/])([^=?#&;!/]+)=/g;
 // Path parameters that carry a session id or a token (`/a;jsessionid=…`).
 const SESSION_PATH = /;(?:jsessionid|phpsessid|sid|token)=/i;
@@ -351,10 +360,10 @@ const SESSION_PATH = /;(?:jsessionid|phpsessid|sid|token)=/i;
 function carriesCredential(params: string): boolean {
   const names = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
   for (const [, name] of params.matchAll(PARAM_NAME)) names.push(decodeName(name));
-  return names.some((name) => CREDENTIAL_PARAMS.has(name.toLowerCase()));
+  return names.some((name) => CREDENTIAL_PARAMS.has(paramKey(name)));
 }
 
-/** A percent-encoded parameter name, decoded as a query string would be; as written if malformed. */
+/** A percent-encoded parameter name, decoded as a query string would be; as is if malformed. */
 function decodeName(name: string): string {
   try {
     return decodeURIComponent(name.replace(/\+/g, ' '));
@@ -390,12 +399,16 @@ function embeddedIPv4(g: number[]): [number, number] | null {
 
 /**
  * True for a host that is not on the public internet: localhost, and loopback, private, shared,
- * link-local, site-local, multicast, reserved or unspecified addresses, IPv6 forms that embed an
- * IPv4 one included. `hostname` is the parsed URL's, so it is lower case, a numeric, hex or octal
- * IPv4 spelling is already dotted decimal, and IPv6 is compressed hex.
+ * link-local, site-local, multicast (IPv4 and IPv6), reserved or unspecified addresses, IPv6
+ * forms that embed an IPv4 one included. `hostname` is the parsed URL's, so it is lower case, a
+ * numeric, hex or octal IPv4 spelling is already dotted decimal, and IPv6 is compressed hex.
  */
 function isPrivateHost(hostname: string): boolean {
-  const host = hostname.replace(/\.+$/, '');
+  // Trailing dots are stripped with a loop: `/\.+$/` is quadratic on a long run of dots that is
+  // not at the end, and `URL` keeps empty labels.
+  let end = hostname.length;
+  while (end > 0 && hostname[end - 1] === '.') end--;
+  const host = hostname.slice(0, end);
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
   if (host === 'localhost.localdomain') return true;
   let v4 = host
@@ -405,8 +418,12 @@ function isPrivateHost(hostname: string): boolean {
   if (host.startsWith('[')) {
     const groups = ipv6Groups(host.slice(1, -1));
     v4 = embeddedIPv4(groups) ?? undefined;
-    // fc00::/7 (unique local), fe80::/10 (link-local) and fec0::/10 (site-local).
-    if (!v4) return (groups[0] & 0xfe00) === 0xfc00 || (groups[0] & 0xff80) === 0xfe80;
+    // fc00::/7 (unique local), fe80::/10 (link-local), fec0::/10 (site-local), ff00::/8
+    // (multicast).
+    if (!v4) {
+      const first = groups[0];
+      return (first & 0xfe00) === 0xfc00 || (first & 0xff80) === 0xfe80 || first >> 8 === 0xff;
+    }
   }
   if (!v4) return false;
   const [a, b] = v4;

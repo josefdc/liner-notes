@@ -170,8 +170,20 @@ describe('safeHref', () => {
     'secret',
     'x-api-key',
     'phpsessid',
-    'sid',
     'jwt',
+    'access-token',
+    'accessToken',
+    'refreshToken',
+    'client-secret',
+    'session_id',
+    'sessionId',
+    'private_key',
+    'privateKey',
+    'api_token',
+    'x_auth_token',
+    'X-Auth-Token',
+    'sessid',
+    'bearer',
   ])('never links a URL whose query or fragment names %s, in any case', (name) => {
     for (const url of [
       `https://example.org/a?q=1&${name}=abc`,
@@ -191,6 +203,7 @@ describe('safeHref', () => {
     'https://example.org/a#!/x?token=abc',
     'https://example.org/a#/access_token=abc',
     'https://example.org/a?q=1;%6Bey=abc',
+    'https://example.org/a?redirect=https://app.example/cb/?code=abc',
   ])('never links a credential behind another separator: %s', (url) => {
     expect(safeHref(url), url).toBeNull();
   });
@@ -238,6 +251,10 @@ describe('safeHref', () => {
     ['6to4 private', 'http://[2002:c0a8:101::1]/'],
     ['IPv6 site-local', 'http://[fec0::1]/'],
     ['IPv6 site-local, high end', 'http://[feff::1]/'],
+    ['IPv6 multicast, link scope', 'http://[ff02::1]/'],
+    ['IPv6 multicast, site scope', 'http://[FF05::FB]/'],
+    ['IPv6 multicast, global scope', 'http://[ff0e::1]/'],
+    ['IPv6 unique local, uncompressed', 'http://[fd00:1:2:3:4:5:6:7]/'],
     ['shared address space, low end', 'http://100.64.0.1/'],
     ['shared address space, high end', 'http://100.127.255.255/'],
     ['shared address space (cloud metadata)', 'http://100.100.100.200/'],
@@ -285,8 +302,55 @@ describe('safeHref', () => {
       'https://example.com/#!/search?q=key',
       'https://example.com/a?next=/session/new&x=1',
       'https://example.com/a;v=1/keys',
+      'https://slashdot.org/article.pl?sid=03/05/12/1234',
+      'https://web.archive.org/web/2004/http://slashdot.org/article.pl?sid=03/05/12/1234',
+      'https://example.org/a?%E0%A4%A=1',
+      'http://[2001:db8:1:2:3:4:5:6]/',
+      'http://[fe7f:ffff::1]/',
     ]) {
       expect(safeHref(url), url).toBe(new URL(url).href);
+    }
+  });
+
+  it.each([
+    ['dots in the middle of the host', `http://a${'.'.repeat(200_000)}b/`],
+    ['dots at the end of the host', `http://a${'.'.repeat(200_000)}/`],
+    ['signed-looking parameters before a space', `http://x/${'~hdnea='.repeat(30_000)} b`],
+  ])('answers quickly on a long run of %s', (_name, url) => {
+    const start = performance.now();
+    safeHref(url);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it('never throws, whatever the input', () => {
+    for (const url of [
+      '%',
+      '\uD800',
+      'http://[',
+      'http:///',
+      'http://./',
+      'http://.../',
+      'http://4294967296/',
+      'http://[1:2:3:4:5:6:7::]/',
+      'http://[1::]/',
+      'http://[::]/',
+      'http://example\uFF0Ecom/',
+      'http://127\u30020\u30020\u30021/',
+      'http://x/\uD800',
+      'http://x/?\uD800=1',
+      'http://x/?q=1;\uDC00=1',
+      'http://x/\u0000',
+      'http://x/?\u0000=1',
+      'http://x/?%',
+      'http://x/?%=',
+      'http://x/?q=1;%=',
+      'http://x/?q=1;%E0%A4%A=1',
+      'http://x/#!%E0%A4%A=1',
+      'http://x/;%=',
+      `http://x/?${'&'.repeat(1000)}`,
+      `http://x/#=${'%'.repeat(1000)}`,
+    ]) {
+      expect(() => safeHref(url), JSON.stringify(url)).not.toThrow();
     }
   });
 });

@@ -219,7 +219,7 @@ describe('Dashboard connected tracks', () => {
     ).toEqual(PLACEHOLDER_NOTE.circles.map(({ cx, cy, r }) => [cx, cy, r]));
   });
 
-  it('names a documented relation only for a sourced link, as a sentence with both tracks', async () => {
+  it('names a documented relation as known only for a sourced link, else as a possible one', async () => {
     renderDashboard(
       connected([
         link('guess', 'current', { type: 'sample', kind: 'inferred', value: 3 }),
@@ -231,7 +231,7 @@ describe('Dashboard connected tracks', () => {
     expect(await badges()).toEqual([
       'Relation: Sample',
       'Relation: Sample',
-      'Relation: Possible influence',
+      'Relation: Possible sample',
       'Relation: No direct link to this track',
     ]);
     const [older, later, guess, lonely] = await cards();
@@ -243,11 +243,9 @@ describe('Dashboard connected tracks', () => {
     );
     expect(older.textContent).toContain('Sourced · cites ev-mb-1 (MusicBrainz · primary record)');
     expect(guess.querySelector('[data-link-relation]')?.textContent).toBe(
-      'Possible influence between Guessed Sample - Someone (1990) and Quiet Signal (2011)',
+      'Possible sample: Quiet Signal (2011) may sample Guessed Sample - Someone (1990)',
     );
-    expect(guess.textContent).toContain(
-      'Model inference · stated as a sample, shown as an influence; no evidence cited',
-    );
+    expect(guess.textContent).toContain('Model inference · no evidence cited');
     expect(lonely.textContent).not.toMatch(/Sourced|Model inference/);
     // The heading names every kind a card can show.
     expect(
@@ -271,7 +269,7 @@ describe('Dashboard connected tracks', () => {
 
   it('labels every relation as inferred when the result has no evidence pack', async () => {
     renderDashboard(connected([sourcedSample('older', 'current')], { withPack: false }));
-    expect((await badges())[0]).toBe('Relation: Possible influence');
+    expect((await badges())[0]).toBe('Relation: Possible sample');
     expect((await cards())[0].textContent).toContain(
       'cites ev-mb-1; this result has no evidence pack',
     );
@@ -295,7 +293,7 @@ describe('Dashboard connected tracks', () => {
     const shown = await cards();
     const byTitle = (title: string) => shown.find((card) => card.textContent?.includes(title));
     expect(byTitle('Older Record')?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'Relation: Possible influence',
+      'Relation: Possible sample',
     );
     expect(byTitle('Older Record')?.textContent).toContain('no verifier verdict supports it');
     // The rejected link is not used at all, and the track only it related is left out.
@@ -390,6 +388,100 @@ describe('Dashboard connected tracks', () => {
     } finally {
       setReaderImport(real);
     }
+  });
+
+  it("shows each related track's own title and artist, from its node", async () => {
+    const track = connected([sourcedSample('older', 'current')]);
+    track.genealogy.nodes = [
+      track.genealogy.nodes[0],
+      // The node's own fields, over its label.
+      {
+        ...node('older', 2, 'Older Record - Someone (1984)'),
+        trackTitle: 'Older Record (2003 Remaster)',
+        trackArtist: 'Someone & The Band',
+      },
+      // Only a label, written "Title - Artist (Year)": its title is read from it, never its
+      // artist ("Song - Live at Wembley (1986)" has the same form).
+      node('later', 3, 'Later Track - Someone Else (2015)'),
+    ];
+    renderDashboard(track);
+    const shown = await cards();
+    const named = shown.map((card) => ({
+      title: card.querySelector('h3')?.textContent,
+      artist: card.querySelector('h3 + p')?.textContent ?? null,
+    }));
+    expect(named).toEqual([
+      { title: 'Older Record (2003 Remaster)', artist: 'Someone & The Band' },
+      { title: 'Later Track', artist: null },
+    ]);
+    expect(shown[1].querySelector('img, [data-placeholder-note]')).not.toBeNull();
+  });
+
+  it('invents no artist: a label is read as "Title - Artist (Year)" only when it has that form', async () => {
+    const track = connected([sourcedSample('older', 'current')]);
+    const label = (id: string, text: string, fields = {}) => ({ ...node(id, 4, text), ...fields });
+    track.genealogy.nodes = [
+      track.genealogy.nodes[0],
+      node('older', 2, 'Older Record (1984)'),
+      // A title with a " - " in it, and no year: no artist.
+      label('live', 'Song - Live at Wembley'),
+      // Two " - ": which part is the artist is not known.
+      label('remaster', 'Bohemian Rhapsody - 2011 Remaster - Queen (1975)'),
+    ];
+    renderDashboard(track);
+    let shown = await cards();
+    const names = () =>
+      shown.map((card) => [
+        card.querySelector('h3')?.textContent,
+        card.querySelector('h3 + p')?.textContent ?? null,
+      ]);
+    expect(names()).toEqual([
+      ['Older Record', null],
+      ['Song - Live at Wembley', null],
+      ['Bohemian Rhapsody - 2011 Remaster - Queen', null],
+    ]);
+    cleanup();
+
+    const more = connected([sourcedSample('older', 'current')]);
+    more.genealogy.nodes = [
+      more.genealogy.nodes[0],
+      label('older', 'Intro - Outro'),
+      label('bare', 'Bare Title'),
+      // Its own title, and a label naming another track: the label's artist is not taken.
+      label('other', 'Other Title - Other Artist (1990)', { trackTitle: 'Real Title' }),
+      // No label at all (the contract requires one): named by its title, without a crash.
+      { id: 'unlabelled', group: 4, size: 22, trackTitle: 'Unlabelled' },
+    ] as unknown as TrackData['genealogy']['nodes'];
+    renderDashboard(more);
+    shown = await cards();
+    expect(names()).toEqual([
+      ['Intro - Outro', null],
+      ['Bare Title', null],
+      ['Real Title', null],
+      ['Unlabelled', null],
+    ]);
+    expect(shown.map((card) => card.textContent).join(' ')).not.toMatch(/Unknown|undefined|null/);
+  });
+
+  it('analyses a track from its card with no undo toast, and leaves Ctrl+Z to the browser', async () => {
+    const analyzed: string[] = [];
+    render(
+      <Dashboard
+        trackData={connected([sourcedSample('older', 'current')])}
+        onNavigate={() => {}}
+        onAnalyzeTrack={(_id, query) => analyzed.push(query)}
+        isRestoredSession
+      />,
+    );
+    const [older] = await cards();
+    fireEvent.click(older);
+    expect(analyzed).toEqual(['Older Record - Someone (1984)']);
+    // Stop on the progress screen, then "Back to the last result", is the way back.
+    expect(screen.queryByRole('button', { name: /undo/i })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Ctrl\+Z|Analyzing Older Record/);
+    const undo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true });
+    window.dispatchEvent(undo);
+    expect(undo.defaultPrevented).toBe(false);
   });
 
   it('never takes a relation from the node group', async () => {

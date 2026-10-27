@@ -6,7 +6,10 @@ import { LINK_COLOR, LINK_DASH } from './linkStyle';
 
 const KIND_NOTE: Record<LinkKind, string> = {
   sourced: 'cites evidence in this result',
-  inferred: 'a model inference, or its evidence is missing or not checked',
+  // True of every dashed line, whatever relation it states and however it was judged (a model
+  // inference, evidence missing or not checked, a claim found unsupported or only partly
+  // supported, years against its direction): each line's details and the list give its reason.
+  inferred: "each line's details say why",
 };
 const KIND_NAME: Record<LinkKind, string> = { sourced: 'Sourced', inferred: 'Not sourced' };
 
@@ -26,11 +29,34 @@ const Swatch: React.FC<{ color: string; kind: LinkKind }> = ({ color, kind }) =>
 );
 
 /**
- * What the lines of the genealogy graph mean, in words: solid or dashed for how a link is
- * known, and a colour for each relation the graph shows (only those it shows).
+ * What the grey of the influence stands for: a sample, interpolation, cover or remix that is not
+ * sourced is drawn grey too (as an influence), its line naming the relation it states.
  */
-export const LinkLegend: React.FC<{ types: readonly LinkType[] }> = ({ types }) => {
+export interface GreyLines {
+  /** A link that states an influence (or no relation) is shown. */
+  influence: boolean;
+  /** A link that states another relation is drawn grey because it is not sourced. */
+  notSourced: boolean;
+}
+
+/** The words beside the grey swatch. */
+function greyLabel(grey: GreyLines | undefined): string {
+  if (!grey?.notSourced) return LINK_TYPE_LABEL.influence;
+  return grey.influence ? 'Influence, or not sourced (any relation)' : 'Not sourced (any relation)';
+}
+
+/**
+ * What the lines of the genealogy graph mean, in words: solid or dashed for how a link is
+ * known, and a colour for each relation the graph shows (only those it shows). The grey is named
+ * for what it is drawn for (`grey`): an influence, a relation that is not sourced, or both.
+ */
+export const LinkLegend: React.FC<{ types: readonly LinkType[]; grey?: GreyLines }> = ({
+  types,
+  grey,
+}) => {
   const shown = LINK_TYPES.filter((type) => types.includes(type));
+  // Only relations that are not sourced are drawn grey: their swatch is dashed.
+  const greyKind: LinkKind = grey?.notSourced && !grey.influence ? 'inferred' : 'sourced';
   if (shown.length === 0) return null;
   return (
     // biome-ignore lint/a11y/useSemanticElements: a legend is not a form, so not a fieldset
@@ -55,8 +81,8 @@ export const LinkLegend: React.FC<{ types: readonly LinkType[] }> = ({ types }) 
       <ul className="flex flex-wrap gap-x-3 gap-y-0.5" aria-label="Relations">
         {shown.map((type) => (
           <li key={type} className="flex items-center gap-1.5" data-link-type={type}>
-            <Swatch color={LINK_COLOR[type]} kind="sourced" />
-            <span>{LINK_TYPE_LABEL[type]}</span>
+            <Swatch color={LINK_COLOR[type]} kind={type === 'influence' ? greyKind : 'sourced'} />
+            <span>{type === 'influence' ? greyLabel(grey) : LINK_TYPE_LABEL[type]}</span>
           </li>
         ))}
       </ul>

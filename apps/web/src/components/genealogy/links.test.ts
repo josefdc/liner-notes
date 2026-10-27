@@ -25,6 +25,7 @@ import {
   readLink,
   relationLabel,
   relationSentence,
+  rank,
   relationToTrack,
   type ShownLink,
   shownLinks,
@@ -80,13 +81,20 @@ describe('readLink', () => {
     expect(provenanceText(shs)).toBe('Sourced · cites ev-shs-1 (SecondHandSongs · primary record)');
   });
 
-  it('shows an inferred sample, interpolation, cover or remix as an influence', () => {
+  it('draws an inferred sample, interpolation, cover or remix as an influence, named a possible one', () => {
     for (const type of DOCUMENTED) {
       const shown = read(link('a', 'b', { type, kind: 'inferred', evidenceIds: [] }));
-      expect(shown).toMatchObject({ kind: 'inferred', type: 'influence', statedType: type });
-      expect(provenanceText(shown)).toMatch(
-        /^Model inference · stated as an? [a-z]+, shown as an influence; no evidence cited$/,
-      );
+      // Drawn grey as an influence (the contract's rule), named as the relation it states.
+      expect(shown).toMatchObject({
+        kind: 'inferred',
+        type: 'influence',
+        named: type,
+        statedType: type,
+      });
+      expect(relationLabel(shown)).toBe(`Possible ${LINK_TYPE_LABEL[type].toLowerCase()}`);
+      expect(provenanceText(shown)).toBe('Model inference · no evidence cited');
+      // It marks no track as the analysed one's origin.
+      expect(rank(shown)).toBe(shown.value);
     }
   });
 
@@ -100,18 +108,18 @@ describe('readLink', () => {
 
   it('does not take "sourced" on trust: no citation, or one missing from the pack', () => {
     const none = read(sourced({ evidenceIds: [], origin: 'code' }));
-    expect(none).toMatchObject({ kind: 'inferred', type: 'influence' });
-    expect(provenanceText(none)).toBe(
-      'Not sourced · stated as a sample, shown as an influence; says sourced but cites no evidence',
-    );
+    expect(none).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
+    expect(relationLabel(none)).toBe('Possible sample');
+    expect(provenanceText(none)).toBe('Not sourced · says sourced but cites no evidence');
     const ghost = read(sourced({ type: 'cover', evidenceIds: ['ev-mb-1', 'ev-ghost'] }));
-    expect(ghost).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(ghost).toMatchObject({ kind: 'inferred', type: 'influence', named: 'cover' });
+    expect(relationLabel(ghost)).toBe('Possible cover');
     expect(ghost.citations).toEqual([
       { id: 'ev-mb-1', evidence: evidencePack(PACK).get('ev-mb-1') },
       { id: 'ev-ghost', evidence: null },
     ]);
     expect(provenanceText(ghost)).toBe(
-      'Not sourced · stated as a cover, shown as an influence; cites ev-ghost, not in the ' +
+      'Not sourced · cites ev-ghost, not in the ' +
         `evidence pack; cites ${MB}, not checked by a verifier`,
     );
   });
@@ -134,26 +142,24 @@ describe('readLink', () => {
   it('shows a model link as sourced only when its claim has a supporting verdict', () => {
     // Citing is not support: a model link that says sourced, with no claim, is an inference.
     const unjudged = read(sourced({ origin: 'model' }));
-    expect(unjudged).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(unjudged).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(unjudged)).toBe(
-      'Model inference · stated as a sample, shown as an influence; proposed by the model; no ' +
+      'Model inference · proposed by the model; no ' +
         `verifier verdict supports it; cites ${MB}, not checked by a verifier`,
     );
-    for (const verdict of ['supported', 'partial'] as const) {
-      const shown = read(
-        sourced({ origin: 'model', claimId: 'cl-1' }),
-        context([claim('cl-1', { verdict, kind: 'sourced', evidenceIds: ['ev-mb-1'] })]),
-      );
-      expect(shown).toMatchObject({ kind: 'sourced', type: 'sample' });
-    }
+    const supported = read(
+      sourced({ origin: 'model', claimId: 'cl-1' }),
+      context([claim('cl-1', { verdict: 'supported', kind: 'sourced', evidenceIds: ['ev-mb-1'] })]),
+    );
+    expect(supported).toMatchObject({ kind: 'sourced', type: 'sample', named: 'sample' });
+    expect(relationLabel(supported)).toBe('Sample');
     const unsupported = read(
       sourced({ origin: 'model', claimId: 'cl-1' }),
       context([claim('cl-1', { verdict: 'unsupported' })]),
     );
     expect(unsupported.kind).toBe('inferred');
     expect(provenanceText(unsupported)).toBe(
-      'Model inference · stated as a sample, shown as an influence; the verifier found its ' +
-        `claim unsupported; cites ${MB}`,
+      `Model inference · the verifier found its claim unsupported; cites ${MB}`,
     );
     const dangling = read(sourced({ origin: 'model', claimId: 'cl-gone' }));
     expect(dangling.kind).toBe('inferred');
@@ -397,13 +403,13 @@ describe('readLink', () => {
       sourced({ origin: 'model', claimId: 'cl-1' }),
       context([supported({ evidenceIds: ['ev-shs-1'] })]),
     );
-    expect(elsewhere).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(elsewhere).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(elsewhere)).toContain('its claim does not cite "ev-mb-1"');
     const credit = read(
       sourced({ origin: 'code', claimId: 'cl-1' }),
       context([supported({ about: 'credit' })]),
     );
-    expect(credit).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(credit).toMatchObject({ kind: 'inferred', type: 'influence', named: 'sample' });
     expect(provenanceText(credit)).toContain('its claim is about credit, not this sample relation');
     const cover = read(
       sourced({ origin: 'model', type: 'cover', claimId: 'cl-1' }),
@@ -458,9 +464,9 @@ describe('readGenealogy', () => {
       { nodes, links: [toCurrent('a'), toCurrent('b')] },
       context([supported]),
     );
-    expect(two.links.map((l) => [l.kind, l.type])).toEqual([
-      ['inferred', 'influence'],
-      ['inferred', 'influence'],
+    expect(two.links.map((l) => [l.kind, l.type, relationLabel(l)])).toEqual([
+      ['inferred', 'influence', 'Possible sample'],
+      ['inferred', 'influence', 'Possible sample'],
     ]);
     for (const shown of two.links) {
       expect(provenanceText(shown)).toContain('its claim is also stated by another link');
@@ -529,7 +535,11 @@ describe('readGenealogy', () => {
       ],
     };
     expect(shownLinks(genealogy, context())[0]).toMatchObject({ kind: 'sourced' });
-    expect(shownLinks(genealogy)[0]).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(shownLinks(genealogy)[0]).toMatchObject({
+      kind: 'inferred',
+      type: 'influence',
+      named: 'sample',
+    });
     expect(shownLinks(genealogy, context([], null))[0]).toMatchObject({ kind: 'inferred' });
   });
 });
@@ -577,13 +587,27 @@ describe('relations in words', () => {
     );
   });
 
-  it('hedges an inferred relation and gives it no direction', () => {
+  it('hedges an inferred relation: a possible sample, cover or remix, or a possible influence', () => {
     const inferred = read(
       link('old', 'current', { type: 'sample', kind: 'inferred' }),
       context(),
       nodes,
     );
+    expect(relationLabel(inferred)).toBe('Possible sample');
     expect(relationSentence(inferred, nameOf)).toBe(
+      'Possible sample: Bright Lines (2011) may sample Older Record - Someone (1984)',
+    );
+    const sentences = (['interpolation', 'cover', 'remix'] as const).map((type) =>
+      relationSentence(read(link('old', 'current', { type }), context(), nodes), nameOf),
+    );
+    expect(sentences).toEqual([
+      'Possible interpolation: Bright Lines (2011) may interpolate Older Record - Someone (1984)',
+      'Possible cover: Bright Lines (2011) may cover Older Record - Someone (1984)',
+      'Possible remix: Bright Lines (2011) may remix Older Record - Someone (1984)',
+    ]);
+    const influence = read(link('old', 'current', { type: 'influence' }), context(), nodes);
+    expect(relationLabel(influence)).toBe('Possible influence');
+    expect(relationSentence(influence, nameOf)).toBe(
       'Possible influence between Older Record - Someone (1984) and Bright Lines (2011)',
     );
     const producer = read(link('old', 'current', { type: 'producer' }), context(), nodes);

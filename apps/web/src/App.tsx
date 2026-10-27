@@ -219,10 +219,10 @@ const App: React.FC = () => {
     [takeWaitingFocus],
   );
 
-  // ─── UX: Previous result, for undo and "Back to the last result" (Items 2, 8) ──
+  // ─── UX: Previous result, for "Back to the last result" (Item 8) ──────────
   const [previousTrackData, setPreviousTrackData] = useState<TrackData | null>(null);
 
-  // ─── UX: Session restore / undo override (Items 2, 8) ──────────────────
+  // ─── UX: Session restore override (Item 8) ─────────────────────────────
   // A result that is not the hook's current run (a restored one, or the stored one a link
   // loaded): the hook's trackData is null then. Cleared on the next analysis.
   const [overrideTrackData, setOverrideTrackData] = useState<TrackData | null>(null);
@@ -344,7 +344,7 @@ const App: React.FC = () => {
   // progress screen is up from its first frame and its status line takes the focus.
   const handleAnalyzeTrack = useCallback(
     (trackId: string, title: string, artist: string) => {
-      // Save current trackData for undo (Item 2)
+      // The result on screen stays available: Stop, then "Back to the last result", shows it.
       setPreviousTrackData(effectiveTrackData);
       setOverrideTrackData(null);
       setIsRestoredSession(false);
@@ -358,19 +358,6 @@ const App: React.FC = () => {
   const handleBackToDashboard = useCallback(() => {
     setPhase(AppPhase.DASHBOARD);
   }, []);
-
-  // UX: Undo analysis — abort SSE, restore previous state (Item 2)
-  const handleUndoAnalysis = useCallback(() => {
-    reset();
-    if (previousTrackData) {
-      setOverrideTrackData(previousTrackData);
-      setIsRestoredSession(true);
-      setPhase(AppPhase.DASHBOARD);
-      setPreviousTrackData(null);
-    } else {
-      setPhase(AppPhase.ONBOARDING);
-    }
-  }, [reset, previousTrackData]);
 
   // UX: Restore previous session (Item 8)
   const handleRestorePrevious = useCallback(() => {
@@ -565,7 +552,6 @@ const App: React.FC = () => {
             isComplete={isComplete}
             onNewSearch={handleNewSearch}
             headingRef={setDashboardHeading}
-            onUndoAnalysis={handleUndoAnalysis}
             isRestoredSession={isRestoredSession}
           />
         );

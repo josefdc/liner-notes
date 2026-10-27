@@ -10,14 +10,17 @@ import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./
 test.use({ reducedMotion: "reduce" });
 
 /**
- * Every line of text in the Player's panels that reaches past the sides of the box that clips it
+ * Every line of text in the Player's panels (and its header above them) that reaches past the sides of the box that clips it
  * (its nearest ancestor whose overflow is not visible), with the amount. Text that is meant to be
  * cut (an ellipsis, a line clamp), text hidden at rest and screen-reader-only text are skipped.
  */
-function clippedLines(page: Page) {
-  return page.evaluate(() => {
+function clippedLines(
+  page: Page,
+  ids = ["player-header", "panel-context", "panel-player", "panel-genealogy"],
+) {
+  return page.evaluate((ids) => {
     const clipped: string[] = [];
-    const panels = ["panel-context", "panel-player", "panel-genealogy"]
+    const panels = ids
       .map((id) => document.getElementById(id))
       .filter((panel): panel is HTMLElement => panel !== null);
     for (const panel of panels) {
@@ -50,7 +53,7 @@ function clippedLines(page: Page) {
       }
     }
     return clipped;
-  });
+  }, ids);
 }
 
 for (const width of [768, 1024]) {
@@ -128,6 +131,63 @@ for (const width of [768, 900, 1024, 1280]) {
         chipInside: true,
         chipWhole: true,
       });
+    }
+  });
+}
+
+// The keyboard follows the page's order: the three columns are in the page in the order they are
+// drawn, left to right (WCAG 2.4.3), so Tab never jumps from the centre column back to the left.
+test("at 1440 px the Player's columns are in the page in the order they are drawn", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, loadFixture("full-result"));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const panels = page.getByRole("tabpanel", { includeHidden: true });
+  await expect(panels).toHaveCount(3);
+  const columns = await panels.evaluateAll((list) =>
+    list.map((panel, index) => ({ id: panel.id, index, x: panel.getBoundingClientRect().x })),
+  );
+  const drawn = [...columns].sort((a, b) => a.x - b.x).map((column) => column.id);
+  expect(drawn).toEqual(columns.map((column) => column.id));
+  expect(drawn).toEqual(["panel-context", "panel-player", "panel-genealogy"]);
+});
+
+const ANALYZE = "/api/analyze/stream";
+
+// The track's header spans the three columns: its title and artist wrap rather than run past the
+// window, and the audio line (from md up) stays on one line beside them, from phone to desktop.
+for (const width of [390, 768, 1024, 1440]) {
+  test(`at ${width} px the Player's header is whole`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const long = {
+      title: "A Very Long Song Title That Keeps Going Well Past One Line (Extended Club Mix)",
+      artist: "Somebody Featuring Somebody Else and the Rest of the Band",
+    };
+    const fixture = loadFixture("full-result");
+    const events = fixture.streams[ANALYZE] as Array<{ type: string; data?: object }>;
+    fixture.streams[ANALYZE] = events.map((event) =>
+      event.type === "complete" ? { ...event, data: { ...event.data, ...long } } : event,
+    );
+    await useMockApi(page, fixture);
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const header = page.locator("#player-header");
+    await expect(header.getByRole("heading", { level: 1 })).toHaveText(long.title);
+    expect(await clippedLines(page, ["player-header"])).toEqual([]);
+    const fits = await header.evaluate((element) => element.scrollWidth <= element.clientWidth);
+    expect(fits).toBe(true);
+    const line = page.getByTestId("player-audio-line");
+    if (width >= 768) {
+      const lines = await line.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      });
+      expect(lines).toBe(1);
+    } else {
+      await expect(line).toBeHidden();
     }
   });
 }

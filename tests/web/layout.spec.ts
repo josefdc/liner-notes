@@ -1,6 +1,6 @@
 import { expect, type Locator, test } from "@playwright/test";
 import { hoverCard } from "./hover";
-import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
+import { analyzeAndOpenDashboard, dashboardHeading, loadFixture, useMockApi } from "./mock";
 
 // The Dashboard's spacing comes from token classes such as `p-(--space-md)`. Written in the
 // Tailwind v3 form (`p-[--space-md]`) they compile to invalid CSS and the padding is dropped, so
@@ -8,7 +8,7 @@ import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
 // hero must keep its full height (it clips what overflows it) and the panels below must not
 // collapse onto the Spotify button. These checks read computed styles and positions, not pixels.
 const fixture = loadFixture("missing-states");
-// Has a connected track, whose card shows the "CLICK TO ANALYZE" overlay on hover.
+// Has a connected track, whose card shows the "Analyze this track" overlay on hover.
 const withConnections = loadFixture("full-result");
 
 // Animations end at once, so positions are final when they are read.
@@ -37,8 +37,8 @@ for (const { width, height, page: pagePadding, hero } of [
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Quiet Signal");
 
-    const heading = page.getByRole("heading", { name: "Command Center" });
-    const dashboard = heading.locator("xpath=ancestor::header[1]/..");
+    const heading = dashboardHeading(page);
+    const dashboard = heading.locator("xpath=ancestor::section[1]/..");
     const [top, right, bottom, left] = pagePadding;
     expect(await padding(dashboard)).toEqual({ top, right, bottom, left });
 
@@ -46,7 +46,7 @@ for (const { width, height, page: pagePadding, hero } of [
     const headingBox = await heading.boundingBox();
     expect(headingBox?.x).toBeGreaterThanOrEqual(Number.parseFloat(left));
 
-    const heroSection = page.locator("section").filter({ has: page.getByText("NOW PLAYING") });
+    const heroSection = page.locator("section").filter({ has: page.getByText("Analyzed track") });
     expect(await padding(heroSection)).toEqual({
       top: hero,
       right: hero,
@@ -60,8 +60,8 @@ for (const { width, height, page: pagePadding, hero } of [
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Quiet Signal");
 
-    const heading = page.getByRole("heading", { name: "Command Center" });
-    const dashboard = heading.locator("xpath=ancestor::header[1]/..");
+    const heading = dashboardHeading(page);
+    const dashboard = heading.locator("xpath=ancestor::section[1]/..");
     const spotify = page.getByRole("link", { name: "SPOTIFY" });
     const hero = page.locator("section").filter({ has: spotify });
 
@@ -100,14 +100,16 @@ for (const { width, height, page: pagePadding, hero } of [
     }
   });
 
-  test(`the card's CLICK TO ANALYZE label stays on one line at ${width} px`, async ({ page }) => {
+  test(`the card's "Analyze this track" label stays on one line at ${width} px`, async ({
+    page,
+  }) => {
     await useMockApi(page, withConnections);
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Bright Lines");
 
     const card = page.getByRole("button", { name: /Older Record/ });
     await hoverCard(page, card);
-    const label = card.getByText("CLICK TO ANALYZE", { exact: true });
+    const label = card.getByText("Analyze this track", { exact: true });
     await expect(label).toBeVisible();
     const lines = await label.evaluate((element) => {
       const range = document.createRange();

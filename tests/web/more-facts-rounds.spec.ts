@@ -59,13 +59,13 @@ test("two clicks ask for two rounds with the run id, then the control says there
   await openPlayer(page);
 
   const insights = page.locator("#panel-context");
-  const more = insights.getByRole("button", { name: /DECRYPT MORE/ });
+  const more = insights.getByRole("button", { name: "More facts", exact: true });
   await more.click();
   await expect(insights).toContainText("Tape Echo");
   await expect(more).toBeEnabled();
   await more.click();
   // Three cards show at first; the second round's fact is behind the reveal control.
-  await insights.getByRole("button", { name: /Reveal 1 hidden/ }).click();
+  await insights.getByRole("button", { name: /Show 1 more fact/ }).click();
   await expect(insights).toContainText("Night Session");
 
   const reason = insights.getByText("No more facts: every angle on this track has been asked.");
@@ -114,7 +114,7 @@ test("a click whose every fact failed does not use up its round", async ({ page 
   await openPlayer(page);
 
   const insights = page.locator("#panel-context");
-  const more = insights.getByRole("button", { name: /DECRYPT MORE/ });
+  const more = insights.getByRole("button", { name: "More facts", exact: true });
   await more.click();
   await expect(insights).toContainText("3 facts could not be written.");
   await expect(more).toBeEnabled();

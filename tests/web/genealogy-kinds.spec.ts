@@ -224,7 +224,7 @@ test.describe("the genealogy graph", () => {
     // The track only the rejected link related is left out with it.
     await expect(graph.locator('g.nodes > g[data-node-id="rejected"]')).toHaveCount(0);
     // A track is marked as an origin (amber halo) only when a sourced link says this one uses
-    // it: group 2 is not enough. (The panel is too narrow for the [ORIGIN] sub-label.)
+    // it: group 2 is not enough. (The panel is too narrow for the "Origin" sub-label.)
     const halo = (id: string) =>
       graph.locator(`g.nodes > g[data-node-id="${id}"] > circle`).first();
     await expect(halo("sample-sourced")).toHaveAttribute("style", /glow-amber/);
@@ -468,7 +468,7 @@ test.describe("the genealogy graph", () => {
     );
     // The line labels and the tracks' drawn labels are hidden.
     expect(snapshot).not.toContain("possible influence");
-    expect(snapshot).not.toContain("[LINK]");
+    expect(snapshot).not.toContain("Connected");
     expect(snapshot).not.toContain("Sourced Samp…");
   });
 
@@ -592,7 +592,7 @@ test.describe("a related track's preview", () => {
     await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
-    await expect(graphOf(page).locator(".preview-indicator")).toHaveText(/CLICK TO EXPLORE/);
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveText(/Analyze this track/);
     await expect(graphOf(page)).not.toContainText(/PREVIEW/);
     await track.dispatchEvent("mouseleave");
 
@@ -627,12 +627,12 @@ test.describe("connected tracks on the Dashboard", () => {
     await analyzeAndOpenDashboard(page, "Bright Lines");
     // Four cards out of the 17 related tracks (the one only a rejected link related is left out).
     await expect(page.getByText("4 OF 17 RELATED TRACKS")).toBeVisible();
-    const cards = page.getByRole("button").filter({ hasText: "LOGIC:" });
+    const cards = page.getByRole("button").filter({ hasText: "Relation:" });
     await expect(cards.locator("[data-link-kind]")).toHaveText([
-      "LOGIC: Sample",
-      "LOGIC: Interpolation",
-      "LOGIC: Sample",
-      "LOGIC: Cover",
+      "Relation: Sample",
+      "Relation: Interpolation",
+      "Relation: Sample",
+      "Relation: Cover",
     ]);
     await expect(cards.locator("[data-link-relation]")).toHaveText([
       `${CURRENT} samples Sourced Sample - Someone (1984)`,
@@ -661,11 +661,11 @@ test.describe("connected tracks on the Dashboard", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Bright Lines");
     await expect(page.locator("#root")).not.toContainText(" samples ");
-    const cards = page.getByRole("button").filter({ hasText: "LOGIC:" });
+    const cards = page.getByRole("button").filter({ hasText: "Relation:" });
     await expect(cards.locator("[data-link-kind]")).toHaveText([
-      "LOGIC: Possible influence",
-      "LOGIC: Possible influence",
-      "LOGIC: Related, direction unknown",
+      "Relation: Possible influence",
+      "Relation: Possible influence",
+      "Relation: Related, direction unknown",
     ]);
     await expect(page.locator("#root")).not.toContainText("Rejected Sample");
     await expect(cards.locator("[data-link-provenance]")).toHaveText([

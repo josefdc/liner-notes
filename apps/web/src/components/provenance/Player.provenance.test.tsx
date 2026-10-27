@@ -30,8 +30,8 @@ describe('the Player with claims', () => {
     // "Studio Intel" has no claim: it is labelled model inference, and the section is not.
     const other = screen.getByText('Studio Intel').closest('.group') as HTMLElement;
     expect(other.textContent).toContain('Model inference');
-    const header = analysis().querySelector('h3')?.parentElement as HTMLElement;
-    expect(header.textContent).toBe('Agent Analysis');
+    const header = analysis().querySelector('h2')?.parentElement as HTMLElement;
+    expect(header.textContent).toBe('Facts');
   });
 
   it('keeps contradicted claims, and their cards, out of the main view', () => {

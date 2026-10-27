@@ -162,7 +162,7 @@ test.describe("a measured result", () => {
       new RegExp(`left: ${((18.6 / 29.75) * 100).toFixed(2)}`),
     );
     await expect(timeline).not.toContainText("about 30 s");
-    await expect(page.getByText("DEEP_DIVE_MODE")).toContainText("29.8 s preview");
+    await expect(page.getByTestId("player-audio-line")).toContainText("29.8 s preview");
     await expect(valueItem(page.getByRole("list", { name: "Audio values" }), "BPM")).toContainText(
       "Measured · estimator confidence 3.30 of 5.32, not calibrated",
     );
@@ -318,9 +318,7 @@ test("a partly measured result says what was not measured and why", async ({ pag
     .getByRole("group", { name: "Song structure" })
     .getByRole("group", { name: "Preview window (22.4 s, measured)" });
   await expect(lane.getByRole("img")).toHaveCount(2);
-  await expect(page.getByText("DEEP_DIVE_MODE")).toHaveText(
-    "DEEP_DIVE_MODE // 123 BPM // 22.4 s preview",
-  );
+  await expect(page.getByTestId("player-audio-line")).toHaveText("123 BPM · 22.4 s preview");
   await screenshot(page, testInfo, "partly-player");
   await screenshot(page, testInfo, "partly-timeline", lane);
 });
@@ -511,7 +509,7 @@ test.describe("a result without the audio block", () => {
     await expect(timeline).toContainText("No key moments — no audio preview");
     await expect(timeline).not.toContainText("key moments measured");
     await expect(timeline.getByRole("img", { name: /Energy peak/ })).toHaveCount(0);
-    await expect(page.getByText("DEEP_DIVE_MODE")).toHaveText("DEEP_DIVE_MODE // BPM not measured");
+    await expect(page.getByTestId("player-audio-line")).toHaveText("BPM not measured");
     await screenshot(page, testInfo, "unavailable-player");
   });
 

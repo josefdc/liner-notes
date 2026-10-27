@@ -195,8 +195,10 @@ describe('Dashboard connected tracks', () => {
 
   /** The cards, once the link reader has loaded. */
   const cards = async () => {
-    await screen.findAllByText(/LOGIC:/);
-    return screen.getAllByRole('button').filter((button) => button.textContent?.includes('LOGIC:'));
+    await screen.findAllByText(/Relation:/);
+    return screen
+      .getAllByRole('button')
+      .filter((button) => button.textContent?.includes('Relation:'));
   };
   const badges = async () =>
     (await cards()).map((card) => card.querySelector('[data-link-kind]')?.textContent);
@@ -226,10 +228,10 @@ describe('Dashboard connected tracks', () => {
     );
     // Sourced relations first; a track with no link to this one says so.
     expect(await badges()).toEqual([
-      'LOGIC: Sample',
-      'LOGIC: Sample',
-      'LOGIC: Possible influence',
-      'LOGIC: No direct link to this track',
+      'Relation: Sample',
+      'Relation: Sample',
+      'Relation: Possible influence',
+      'Relation: No direct link to this track',
     ]);
     const [older, later, guess, lonely] = await cards();
     expect(older.querySelector('[data-link-relation]')?.textContent).toBe(
@@ -268,7 +270,7 @@ describe('Dashboard connected tracks', () => {
 
   it('labels every relation as inferred when the result has no evidence pack', async () => {
     renderDashboard(connected([sourcedSample('older', 'current')], { withPack: false }));
-    expect((await badges())[0]).toBe('LOGIC: Possible influence');
+    expect((await badges())[0]).toBe('Relation: Possible influence');
     expect((await cards())[0].textContent).toContain(
       'cites ev-mb-1; this result has no evidence pack',
     );
@@ -292,7 +294,7 @@ describe('Dashboard connected tracks', () => {
     const shown = await cards();
     const byTitle = (title: string) => shown.find((card) => card.textContent?.includes(title));
     expect(byTitle('Older Record')?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: Possible influence',
+      'Relation: Possible influence',
     );
     expect(byTitle('Older Record')?.textContent).toContain('no verifier verdict supports it');
     // The rejected link is not used at all, and the track only it related is left out.
@@ -304,7 +306,7 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(connected([sourcedSample('later', 'current')]));
     const later = (await cards()).find((card) => card.textContent?.includes('Later Track'));
     expect(later?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: Related, direction unknown',
+      'Relation: Related, direction unknown',
     );
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) and Quiet Signal (2011) are related (direction unknown)',
@@ -317,13 +319,13 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(track);
     const shown = await cards();
     const later = shown.find((card) => card.textContent?.includes('Later Track'));
-    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('LOGIC: Sample');
+    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('Relation: Sample');
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) samples Older Record - Someone (1984)',
     );
     const lonely = shown.find((card) => card.textContent?.includes('Lonely Node'));
     expect(lonely?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: No link to another track',
+      'Relation: No link to another track',
     );
   });
 
@@ -357,14 +359,14 @@ describe('Dashboard connected tracks', () => {
       renderDashboard(connected([sourcedSample('older', 'current')]));
       const alert = await screen.findByRole('alert');
       expect(alert.textContent).toBe('Connected tracks could not be loaded.TRY AGAIN');
-      expect(screen.queryByText(/LOGIC:/)).toBeNull();
+      expect(screen.queryByText(/Relation:/)).toBeNull();
       // Not busy for ever: the row says it is done (with nothing).
       expect(document.querySelector('[aria-busy="true"]')).toBeNull();
       fail = false;
       await act(async () => {
         fireEvent.click(within(alert).getByRole('button', { name: 'TRY AGAIN' }));
       });
-      expect(await badges()).toContain('LOGIC: Sample');
+      expect(await badges()).toContain('Relation: Sample');
       expect(screen.queryByRole('alert')).toBeNull();
     } finally {
       setReaderImport(real);
@@ -373,7 +375,7 @@ describe('Dashboard connected tracks', () => {
 
   it('never takes a relation from the node group', async () => {
     renderDashboard(connected([]));
-    expect(await badges()).toEqual(Array(4).fill('LOGIC: No direct link to this track'));
+    expect(await badges()).toEqual(Array(4).fill('Relation: No direct link to this track'));
     expect(screen.queryByText(/samples/)).toBeNull();
   });
 
@@ -416,5 +418,48 @@ describe('Dashboard connected tracks', () => {
       expect(entries.queryByText('+12.4 s')).toBeNull();
       expect(entries.getAllByText(/ago|Just now/).length).toBe(2);
     });
+  });
+});
+
+describe('the Dashboard headings', () => {
+  const logs: AgentLog[] = [
+    { id: 'l1', message: 'Found the track on Spotify', timestamp: '2026-01-01T00:00:00.000Z' },
+  ];
+  const headings = () =>
+    [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((heading) => ({
+      level: Number(heading.tagName.slice(1)),
+      text: heading.textContent?.trim() ?? '',
+    }));
+
+  it("has one h1, the analysed track's title, first, and gives it to the focus code", () => {
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(
+      <Dashboard
+        trackData={missingTrack}
+        onNavigate={() => {}}
+        logs={logs}
+        isComplete
+        headingRef={ref}
+      />,
+    );
+    const all = headings();
+    expect(all.filter((heading) => heading.level === 1)).toEqual([
+      { level: 1, text: 'Quiet Signal' },
+    ]);
+    expect(all[0]).toEqual({ level: 1, text: 'Quiet Signal' });
+    expect(ref.current?.textContent).toBe('Quiet Signal');
+    // No heading skips a level: each sits under the section it belongs to.
+    all.slice(1).forEach((heading, index) => {
+      expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
+    });
+  });
+
+  it('says no analysis is loaded, as its h1, when there is no result', () => {
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(<Dashboard trackData={null} onNavigate={() => {}} isRestoredSession headingRef={ref} />);
+    expect(headings().filter((heading) => heading.level === 1)).toEqual([
+      { level: 1, text: 'No analysis loaded' },
+    ]);
+    expect(ref.current?.textContent).toBe('No analysis loaded');
   });
 });

@@ -331,7 +331,9 @@ describe('GenealogyGraph previews', () => {
         .querySelector('g.nodes > g[data-node-id="older"]')
         ?.dispatchEvent(new MouseEvent('mouseenter'));
     });
-    expect(container.querySelector('.preview-indicator')?.textContent).toMatch(/CLICK TO EXPLORE/);
+    expect(container.querySelector('.preview-indicator')?.textContent).toMatch(
+      /Analyze this track/,
+    );
     expect(played).toEqual([]);
   });
 

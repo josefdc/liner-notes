@@ -1,5 +1,5 @@
 import { type CDPSession, expect, type Page, type Request, test } from "@playwright/test";
-import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
+import { analyzeAndOpenDashboard, dashboardHeading, loadFixture, useMockApi } from "./mock";
 
 // Inter and IBM Plex Mono are served with the app (apps/web/public/fonts, styles/fonts.css), so
 // the page renders in its own fonts without asking a third party for them. Each script is a
@@ -89,7 +89,7 @@ test("a Latin page loads Inter and IBM Plex Mono from the app, and only their La
   const cdp = await openCdp(page);
   expect(await platformFonts(cdp, "[data-font-probe]")).toEqual(["IBMPlexMono"]);
   // Headings and body text are set in Inter.
-  const heading = page.getByRole("heading", { name: "Command Center" });
+  const heading = dashboardHeading(page);
   expect(await heading.evaluate((element) => getComputedStyle(element).fontFamily)).toMatch(
     /^Inter\b/,
   );

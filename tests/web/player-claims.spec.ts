@@ -186,10 +186,10 @@ test("a fact more facts added shows the claim it came with", async ({ page }) =>
 
   await page
     .locator("#panel-context")
-    .getByRole("button", { name: /DECRYPT MORE/ })
+    .getByRole("button", { name: "More facts", exact: true })
     .click();
   const added = page
-    .getByRole("region", { name: "Decrypted insights" })
+    .getByRole("region", { name: "More facts" })
     .locator("[data-factoid-category]")
     .filter({ hasText: "Added Sample" });
   await expect(added).toBeVisible();

@@ -92,11 +92,11 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
         className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <h3 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
+          <h2 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
             <Activity size={12} aria-hidden="true" className="text-text-tertiary" />
             Activity log
             <span className="text-chrome text-text-muted">({written})</span>
-          </h3>
+          </h2>
           {/* P3:27 — Collapsed preview snippet */}
           {!isExpanded && logs.length > 0 && (
             <span className="text-chrome font-mono text-text-muted truncate ml-2 hidden sm:inline">

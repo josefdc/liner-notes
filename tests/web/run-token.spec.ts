@@ -29,7 +29,7 @@ test("an analysis asks for a run token first, and its facts reuse it", async ({ 
   await openPlayer(page);
   await page
     .locator("#panel-context")
-    .getByRole("button", { name: /DECRYPT MORE/ })
+    .getByRole("button", { name: "More facts", exact: true })
     .click();
   await expect.poll(async () => (await apiRequests(page)).some((r) => r.includes(MORE))).toBe(true);
 

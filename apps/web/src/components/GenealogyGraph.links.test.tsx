@@ -119,10 +119,10 @@ describe('GenealogyGraph links', () => {
 
   it('marks as an origin only a track a sourced link says this one samples', () => {
     const { container } = render(<Graph />);
-    expect(subLabel(container, 'older')).toBe('[ORIGIN]');
-    expect(subLabel(container, 'guess')).toBe('[LINK]');
+    expect(subLabel(container, 'older')).toBe('Origin');
+    expect(subLabel(container, 'guess')).toBe('Connected');
     // A track whose link was rejected is no origin either.
-    expect(subLabel(container, 'disputed')).toBe('[LINK]');
+    expect(subLabel(container, 'disputed')).toBe('Connected');
   });
 
   it('marks no origin for a track that samples or remixes this one, sourced as it is', () => {
@@ -153,12 +153,12 @@ describe('GenealogyGraph links', () => {
     const kinds = lines(container).map((line) => line.getAttribute('data-link-kind'));
     expect(kinds.slice(-2)).toEqual(['sourced', 'sourced']);
     for (const id of ['later', 'remix']) {
-      expect(subLabel(container, id)).toBe('[LINK]');
+      expect(subLabel(container, id)).toBe('Connected');
       expect((nodeGroup(container, id).querySelector('circle') as SVGElement).style.filter).toBe(
         'none',
       );
     }
-    expect(subLabel(container, 'older')).toBe('[ORIGIN]');
+    expect(subLabel(container, 'older')).toBe('Origin');
   });
 
   it('shows every link as inferred without the evidence pack', () => {
@@ -169,7 +169,7 @@ describe('GenealogyGraph links', () => {
       'inferred',
     ]);
     expect(lines(container)[0].getAttribute('data-link-type')).toBe('influence');
-    expect(subLabel(container, 'older')).toBe('[LINK]');
+    expect(subLabel(container, 'older')).toBe('Connected');
   });
 
   it('shows a link’s relation and provenance while it is pointed at', async () => {

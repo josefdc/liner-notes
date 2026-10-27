@@ -8,7 +8,7 @@ import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/typ
 import type { Factoid, TrackData } from '../types';
 import { audioBlock, measuredTrack } from './measured/testing';
 import Player from './Player';
-import { claim as aClaim, evidence as anItem } from './provenance/testing';
+import { claim as aClaim, evidence as anItem, provenanceTrack } from './provenance/testing';
 
 afterEach(() => {
   cleanup();
@@ -190,7 +190,7 @@ describe('Player', () => {
     expect(screen.getByRole('list', { name: 'Audio values' }).textContent).toContain(
       'BPM not measured',
     );
-    expect(container.textContent).toContain('DEEP_DIVE_MODE // BPM not measured');
+    expect(screen.getByTestId('player-audio-line').textContent).toBe('BPM not measured');
     expect(container.textContent).toContain(
       'The analysis ran but could not detect the tempo or key.',
     );
@@ -327,9 +327,9 @@ describe('Player', () => {
     ...missingTrack,
     factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
   } as unknown as TrackData;
-  const moreButton = () => screen.getByRole('button', { name: /DECRYPT MORE/ });
+  const moreButton = () => screen.getByRole('button', { name: 'More facts' });
 
-  it('labels decrypted factoids as model inference and counts only the ones shown', async () => {
+  it('labels the facts "More facts" added as model inference and counts only the ones shown', async () => {
     const track = { ...releaseInfo, modelUnavailable: true } as TrackData;
     const facts = [
       { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
@@ -338,19 +338,33 @@ describe('Player', () => {
     render(<MoreFactsPlayer track={track} answers={[{ factoids: facts, nextRound: 1 }]} />);
     fireEvent.click(moreButton());
 
-    const decrypted = await screen.findByRole('region', { name: 'Decrypted insights' });
+    const decrypted = await screen.findByRole('region', { name: 'More facts' });
     expect(decrypted.textContent).toContain('Hidden Sample');
     expect(decrypted.textContent).toContain('Model inference');
     expect(decrypted.textContent).not.toContain('From source data');
     expect(screen.getAllByText('From source data')).toHaveLength(1);
     expect(screen.queryByText('Lyric Meaning')).toBeNull();
-    expect(await screen.findByText('1 NEW INTEL DECODED')).toBeTruthy();
+    expect(await screen.findByText('1 more fact added')).toBeTruthy();
+  });
+
+  it('announces the facts a click added, in a neutral status message', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+
+    const toast = await screen.findByText('1 more fact added');
+    const status = toast.closest('[role="status"]');
+    expect(status).not.toBeNull();
+    // The facts are written by the model: never in the measured hue (cyber).
+    expect(`${toast.className} ${status?.className ?? ''}`).not.toMatch(/cyber/);
   });
 
   it.each([
     ['rate_limited', 'quota or rate limit reached'],
     ['budget_exhausted', 'live model calls are paused, budget reached'],
-  ] as const)('says why DECRYPT MORE added nothing: %s', async (code, text) => {
+  ] as const)('says why "More facts" added nothing: %s', async (code, text) => {
     // Every fact failed for that reason: the reason is said once, not as facts not written.
     const failed = [0, 1, 2].map((index) => ({ index, code }));
     render(<MoreFactsPlayer track={releaseInfo} answers={[{ unavailable: code, failed }]} />);
@@ -422,7 +436,7 @@ describe('Player', () => {
 
     const notice = await screen.findByText('1 fact could not be written.');
     expect(notice.getAttribute('role')).toBe('status');
-    expect(screen.getByRole('region', { name: 'Decrypted insights' }).textContent).toContain(
+    expect(screen.getByRole('region', { name: 'More facts' }).textContent).toContain(
       'Hidden Sample',
     );
   });
@@ -558,7 +572,7 @@ describe('Player', () => {
       expect(badgeOf('First Round')).toBe('POSSIBLE SAMPLE');
       expect(within(first).queryByRole('link', { name: /Old Record/ })).toBeNull();
       // Each card shows its own claim: the section is not labelled model inference as a whole.
-      const decrypted = screen.getByRole('region', { name: 'Decrypted insights' });
+      const decrypted = screen.getByRole('region', { name: 'More facts' });
       expect(decrypted.querySelectorAll('[data-claim-kind]')).toHaveLength(2);
       // A claim a card shows is not listed again.
       expect(
@@ -649,9 +663,61 @@ describe('Player', () => {
       fireEvent.click(moreButton());
       await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
       expect(screen.getAllByText('Known Sample')).toHaveLength(1);
-      expect(screen.getByText('1 insights decoded')).toBeTruthy();
+      expect(screen.getByText('1 fact')).toBeTruthy();
       const keyWarnings = error.mock.calls.filter((call) => /same key/.test(String(call[0])));
       expect(keyWarnings).toEqual([]);
     });
+  });
+});
+
+describe('the Player headings', () => {
+  /** The provenance result with a connected track, so every section of the Player is drawn. */
+  const everySection = (): TrackData => ({
+    ...provenanceTrack(),
+    genealogy: {
+      nodes: [
+        { id: 'current', group: 1, label: 'Paper Lanterns - Test Artist (2011)', size: 40 },
+        { id: 'peer', group: 4, label: 'Peer - Someone (2001)', size: 22 },
+      ],
+      links: [
+        {
+          source: 'peer',
+          target: 'current',
+          value: 1,
+          type: 'influence',
+          kind: 'inferred',
+          origin: 'model',
+        },
+      ],
+    },
+  });
+  const headings = () =>
+    [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((heading) => ({
+      level: Number(heading.tagName.slice(1)),
+      text: heading.textContent?.trim() ?? '',
+    }));
+
+  it('opens with the track title as its one h1, then names each section with an h2', () => {
+    const track = everySection();
+    render(<Player trackData={track} onBack={() => {}} />);
+    const all = headings();
+    // The first heading in the page's order is the track's h1: no section heading before it.
+    expect(all[0]).toEqual({ level: 1, text: track.title });
+    expect(all.filter((heading) => heading.level === 1)).toHaveLength(1);
+    for (const name of ['Facts', 'Credits', 'More claims', 'Connections']) {
+      expect(all.find((heading) => heading.text === name)?.level, name).toBe(2);
+    }
+    // No heading skips a level: each sits under the section it belongs to.
+    all.slice(1).forEach((heading, index) => {
+      expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
+    });
+  });
+
+  it('gives the h1 to the focus code', () => {
+    const track = everySection();
+    const ref = { current: null as HTMLHeadingElement | null };
+    render(<Player trackData={track} onBack={() => {}} headingRef={ref} />);
+    expect(ref.current?.tagName).toBe('H1');
+    expect(ref.current?.textContent).toBe(track.title);
   });
 });

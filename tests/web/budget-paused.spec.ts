@@ -3,6 +3,7 @@ import {
   animationsSettled,
   apiRequests,
   collectProblems,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   releaseStream,
@@ -77,7 +78,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   await animationsSettled(page);
 
   const dashboardLabel = page.getByRole("region", { name: "Recorded run" });
@@ -92,7 +93,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   // "More facts" of a replayed result ask for its recording only; every recorded fact is
   // already shown, so the API sends none, and the Player says why.
   const insights = page.locator("#panel-context");
-  await insights.getByRole("button", { name: /DECRYPT MORE/ }).click();
+  await insights.getByRole("button", { name: "More facts", exact: true }).click();
   await expect(insights).toContainText(
     "No more facts: this result is a recording, and every fact recorded with it is shown.",
   );
@@ -130,12 +131,12 @@ test("live_disabled is explained, and a live result carries no recording label",
   await page.getByRole("button", { name: "or try a different song" }).click();
   await search(page, "Bright Lines");
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   await openPlayer(page);
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   const insights = page.locator("#panel-context");
-  await insights.getByRole("button", { name: /DECRYPT MORE/ }).click();
+  await insights.getByRole("button", { name: "More facts", exact: true }).click();
   await expect(insights).toContainText(
     "More facts unavailable: live model calls are paused, budget reached",
   );

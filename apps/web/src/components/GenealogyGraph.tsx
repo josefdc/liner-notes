@@ -501,9 +501,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const maxLen = isMobile ? 12 : 30;
       return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
     };
-    // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
+    // "Origin" only for a track a sourced link says this one uses, never from the group.
     const tagText = (d: CustomNode) =>
-      d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]';
+      d.group === 1 ? 'This track' : isOrigin(d) ? 'Origin' : 'Connected';
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
@@ -822,7 +822,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )
           .style('opacity', 1);
 
-        // An origin says a click explores it (it analyses the track), whether or not it has a
+        // An origin says a click analyses the track, whether or not it has a
         // clip. No hint names a preview: previews play from their own buttons (PreviewList).
         if (isOrigin(d)) {
           select(this)
@@ -834,7 +834,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('font-family', 'IBM Plex Mono')
             .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.analog)
-            .text('⚡ CLICK TO EXPLORE')
+            .text('Analyze this track')
             .call(fadeIn);
         }
       })
@@ -1037,7 +1037,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           <div className="absolute top-4 right-4 pointer-events-none">
             <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
               <Volume2 size={12} className="animate-bounce" />
-              <span>PREVIEWING TRACK...</span>
+              <span>Playing preview…</span>
             </div>
           </div>
         )}
@@ -1057,7 +1057,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
-              <span>AUDIO BLOCKED</span>
+              <span>Audio blocked</span>
             </div>
           </div>
         )}
@@ -1068,7 +1068,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           <div className="absolute top-4 right-4 pointer-events-none" aria-hidden="true">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
               <VolumeX size={12} />
-              <span>PREVIEW UNAVAILABLE</span>
+              <span>Preview unavailable</span>
             </div>
           </div>
         )}
@@ -1077,11 +1077,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {!active && (
           <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
-              <span>SCROLL TO ZOOM</span>
-              <span>DRAG TO PAN</span>
+              <span>Scroll to zoom</span>
+              <span>Drag to pan</span>
               <span className="text-cyber flex items-center gap-1">
                 <MousePointerClick size={12} />
-                CLICK NODE TO EXPLORE
+                Click a track to analyze it
               </span>
             </div>
           </div>
@@ -1089,7 +1089,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
         {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
         <div className="absolute top-2 right-2 pointer-events-none md:hidden">
-          <div className="text-chrome font-mono text-text-tertiary">PINCH • DRAG • TAP</div>
+          <div className="text-chrome font-mono text-text-tertiary">Pinch, drag or tap</div>
         </div>
       </div>
 

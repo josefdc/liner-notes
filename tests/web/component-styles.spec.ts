@@ -3,6 +3,7 @@ import { hoverCard } from "./hover";
 import {
   analyzeAndOpenDashboard,
   animationsSettled,
+  dashboardHeading,
   loadFixture,
   openPlayer,
   useMockApi,
@@ -26,7 +27,7 @@ test("buttons transition colour, glow, lift and press, the focus ring fastest", 
 }) => {
   await useMockApi(page, loadFixture("full-result"));
   await analyzeAndOpenDashboard(page, "Bright Lines");
-  const button = page.getByRole("button", { name: "VIEW FULL ANALYSIS" });
+  const button = page.getByRole("button", { name: "View full analysis" });
   const transition = await button.evaluate((element) => {
     const style = getComputedStyle(element);
     return { property: style.transitionProperty, duration: style.transitionDuration };
@@ -58,7 +59,7 @@ test.describe("the connected-track card", () => {
       x: box.x + box.width / 2,
       y: box.y + box.height - 2,
     }));
-    await expect(card.getByText("CLICK TO ANALYZE", { exact: true })).toBeVisible();
+    await expect(card.getByText("Analyze this track", { exact: true })).toBeVisible();
     // The lift (4 px) must not move the card out from under the pointer: nudge the pointer
     // sideways, as a resting hand does, and check the hover each time.
     const samples: boolean[] = [];
@@ -452,10 +453,8 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
     return { padding: style.padding, gap: style.rowGap };
   });
   release();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
-  const dashboard = page
-    .getByRole("heading", { name: "Command Center" })
-    .locator("xpath=ancestor::header[1]/..");
+  await expect(dashboardHeading(page)).toBeVisible();
+  const dashboard = dashboardHeading(page).locator("xpath=ancestor::section[1]/..");
   const loaded = await dashboard.evaluate((element) => {
     const style = getComputedStyle(element);
     return { left: style.paddingLeft, top: style.paddingTop, gap: style.rowGap };
@@ -598,7 +597,7 @@ const CLAIM_TEXT = [
   "[data-claim-kind] > p",
   "#panel-context section li > p",
   "#panel-context section > p.text-chrome",
-  "#panel-context section > h4",
+  "#panel-context section > h2",
   "#panel-context > p.text-chrome",
   'section[aria-label="Rejected claims"] p',
   'section[aria-label="Rejected claims"] button',
@@ -839,8 +838,8 @@ test("the Dashboard's focus rings reach 3:1 against what is beside them", async 
     await focusRingContrast(page, page.getByRole("button", { name: /^Measured.*: how BPM/ })),
   ]);
   rings.push([
-    "VIEW FULL ANALYSIS",
-    await focusRingContrast(page, page.getByRole("button", { name: "VIEW FULL ANALYSIS" })),
+    "View full analysis",
+    await focusRingContrast(page, page.getByRole("button", { name: "View full analysis" })),
   ]);
   rings.push([
     "the hero's Spotify link",
@@ -865,8 +864,8 @@ test("the Player's focus rings reach 3:1 against what is beside them", async ({ 
   await analyzeAndOpenDashboard(page, "Track");
   await openPlayer(page);
   rings.push([
-    "DECRYPT MORE",
-    await focusRingContrast(page, page.getByRole("button", { name: /DECRYPT MORE/ })),
+    "More facts",
+    await focusRingContrast(page, page.getByRole("button", { name: "More facts", exact: true })),
   ]);
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });

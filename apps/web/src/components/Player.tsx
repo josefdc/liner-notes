@@ -94,16 +94,19 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
     <p className="text-xs font-mono text-text-tertiary">Search for a song to see its analysis.</p>
     <div className="flex items-center gap-3">
       <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
-        BACK TO BASE
+        Back to summary
       </Button>
       {onNewSearch && (
         <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
-          NEW SEARCH
+          New search
         </Button>
       )}
     </div>
   </div>
 );
+
+/** "1 fact", "3 facts". */
+const facts = (count: number) => `${count} ${count === 1 ? 'fact' : 'facts'}`;
 
 const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
   track,
@@ -117,9 +120,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'context' | 'player' | 'genealogy'>('player');
   const [isDecrypting, setIsDecrypting] = useState(false);
-  // Why DECRYPT MORE could not add facts (rate limit, budget), shown under the button
+  // Why "More facts" could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
-  // P3:25 — Decrypt complete toast
+  // P3:25 — The "N more facts added" notice
   const [showDecryptToast, setShowDecryptToast] = useState(false);
   const [decryptToastCount, setDecryptToastCount] = useState(0);
   // P2:24 — Factoid collapsing
@@ -230,7 +233,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => track.samples.filter((sample) => !claims.isHidden(sample.claimId)),
     [track.samples, claims],
   );
-  // The result's factoids first, then the ones added by DECRYPT MORE.
+  // The result's factoids first, then the ones added by "More facts".
   const allFactoids = useMemo(
     () => [...resultFactoids, ...additionalFactoids],
     [resultFactoids, additionalFactoids],
@@ -261,10 +264,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
-  // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
+  // "More facts" on a replayed result found no recorded fact that is not shown yet.
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
   const noMoreRoundsId = useId();
-  // Facts DECRYPT MORE added are written by the model: each shows its own claim, and when one
+  // Facts "More facts" added are written by the model: each shows its own claim, and when one
   // does, the others are labelled one by one rather than as a section.
   const claimedAdditional = additionalFactoids.some((factoid) => claimOf(factoid));
 
@@ -278,7 +281,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
   // Refs for transient values in handleDecryptMore
   const isDecryptingRef = useRef(false);
-  // The running DECRYPT MORE stream; closed when the Player goes away.
+  // The running "More facts" stream; closed when the Player goes away.
   const decryptControllerRef = useRef<AbortController | null>(null);
   // The timer that hides the toast; cleared when another toast replaces it or the Player goes.
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -357,7 +360,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     } catch (error) {
       // Leaving the Player (or starting a new analysis) cancels the stream: not an error.
       if ((error as { name?: unknown } | null)?.name !== 'AbortError') {
-        console.error('Decrypt stream error:', error);
+        console.error('More facts stream error:', error);
       }
     } finally {
       if (decryptControllerRef.current === controller) {
@@ -401,26 +404,52 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )}
 
       {/* Navigation (P0:3 — New Search button) */}
-      <div className="z-20 px-6 py-4 flex items-center justify-between border-b border-white/5 bg-void/50 backdrop-blur-sm">
+      <div
+        className={`z-20 px-6 pt-4 pb-2 flex items-center bg-void/50 backdrop-blur-sm ${activeTab === 'player' ? '' : 'max-md:pb-4 max-md:border-b max-md:border-white/5'}`}
+      >
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
-            BACK TO BASE
+            Back to summary
             <span className="hidden lg:inline text-text-muted text-chrome ml-1">Esc</span>
           </Button>
           {onNewSearch && (
             <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
-              NEW SEARCH
+              New search
             </Button>
           )}
         </div>
-        <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
-          <span>
-            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${formatBpm(bpm)} BPM` : 'BPM not measured'}
-            {key !== null && ` // ${key}`}
-            {measurement && ` // ${formatSeconds(measurement.windowSeconds)} s preview`}
-          </span>
-        </div>
       </div>
+
+      {/* The track, above the three columns: the page's h1 (first of its headings, before the
+          columns' section headings), its artist, and the audio line from md up (phones show the
+          audio values in the Player tab). On phones it is shown with the Player tab, as the
+          title was before, and kept for screen readers on the others: the graph and the facts
+          keep the phone's height. */}
+      <header
+        id="player-header"
+        className={`z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm ${activeTab === 'player' ? '' : 'max-md:sr-only'}`}
+      >
+        <div className="min-w-0">
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark outline-none break-words"
+          >
+            {track.title}
+          </h1>
+          <p className="text-sm md:text-base text-text-tertiary font-mono break-words">
+            {track.artist}
+          </p>
+        </div>
+        <p
+          data-testid="player-audio-line"
+          className="hidden md:block shrink-0 whitespace-nowrap text-xs font-mono text-cyber"
+        >
+          {bpm !== null ? `${formatBpm(bpm)} BPM` : 'BPM not measured'}
+          {key !== null && ` · ${key}`}
+          {measurement && ` · ${formatSeconds(measurement.windowSeconds)} s preview`}
+        </p>
+      </header>
 
       {/* On phones only one panel shows at a time: the recording label stays above all of them */}
       {recorded && (
@@ -442,9 +471,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         `}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-              Agent Analysis
-            </h3>
+            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+              Facts
+            </h2>
             {unclaimedFactoids && !claimedFactoids && (
               <ResultOriginLabel fromSourceData={fromSourceData} />
             )}
@@ -461,14 +490,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </p>
           )}
           {allFactoids.length > 0 && (
-            <p className="text-xs text-text-tertiary font-mono mb-8">
-              {allFactoids.length} insights decoded
-            </p>
+            <p className="text-xs text-text-tertiary font-mono mb-8">{facts(allFactoids.length)}</p>
           )}
           {allFactoids.length === 0 ? (
             <div className="flex-1 flex items-center justify-center py-12">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                AWAITING INTEL... No insights decoded for this track.
+                No facts were found for this track.
               </p>
             </div>
           ) : (
@@ -486,14 +513,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 </div>
               ))}
 
-              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result:
+              {/* Factoids added by "More facts" are written by the model, whatever the result:
                   each shows its claim, and the section is labelled only when none has one */}
               {visibleDecryptedFactoids.length > 0 && (
-                <section aria-label="Decrypted insights" className="space-y-6">
+                <section aria-label="More facts" className="space-y-6">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-                      Decrypted insights
-                    </h4>
+                    <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                      More facts
+                    </h3>
                     {!claimedAdditional && <InferenceLabel />}
                   </div>
                   {visibleDecryptedFactoids.map((fact) => (
@@ -509,7 +536,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 </section>
               )}
 
-              {/* Standalone Decrypt More card */}
+              {/* The "More facts" button */}
               {onMoreFactoidsStream && (
                 <button
                   type="button"
@@ -529,11 +556,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   {isDecrypting ? (
                     <>
                       <Lock size={12} className="animate-pulse" />
-                      DECRYPTING...
+                      Finding more facts…
                     </>
                   ) : (
                     <>
-                      <LockOpen size={12} />[ DECRYPT MORE ]
+                      <LockOpen size={12} />
+                      More facts
                     </>
                   )}
                 </button>
@@ -582,7 +610,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
                   >
                     <ChevronDown size={14} />
-                    Reveal {hiddenCount} hidden insights
+                    Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
                   </button>
                 </div>
               )}
@@ -621,12 +649,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             />
           </div>
 
-          {/* P3:25 — Decrypt complete toast */}
-          {showDecryptToast && (
-            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-cyber/10 border border-cyber/30 rounded-sm text-cyber text-xs font-mono tracking-widest animate-slide-up-fade shadow-glow-cyber-subtle">
-              {decryptToastCount} NEW INTEL DECODED
-            </div>
-          )}
+          {/* P3:25 — How many facts a click added. The status region stays in the page, so the
+              message put in it is announced; neutral, as the facts are the model's, not
+              measured. */}
+          <div role="status">
+            {showDecryptToast && (
+              <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-surface-overlay backdrop-blur-lg border border-white/10 rounded-sm text-text-secondary text-xs font-mono animate-slide-up-fade shadow-elevated-lg">
+                {decryptToastCount} more {decryptToastCount === 1 ? 'fact' : 'facts'} added
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Panel B: Artifact/Player (Desktop: Center, Mobile: Tab) — P1:12 ARIA */}
@@ -659,16 +691,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-(--duration-dramatic)"></div>
           </AlbumCover>
 
-          {/* Meta */}
+          {/* Meta (the title and artist are the page's header) */}
           <div className="text-center mb-6">
-            <h1
-              ref={headingRef}
-              tabIndex={-1}
-              className="text-3xl md:text-4xl font-light leading-tight text-white tracking-tight mb-2 text-shadow-dark outline-none"
-            >
-              {track.title}
-            </h1>
-            <p className="text-lg text-text-tertiary font-mono">{track.artist}</p>
             {track.album && (
               <div className="flex items-center justify-center gap-2 text-sm text-text-tertiary mt-1">
                 <span>{track.album}</span>
@@ -750,9 +774,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         `}
         >
           <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
-              Genealogy Network
-            </h3>
+            <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
+              Connections
+            </h2>
             {/* How the shown links are known, in the words and chips the legend, the list and
                 the connected-track cards use: sourced, not sourced, or (every link) the model's */}
             {genealogy.nodes.length > 1 && (
@@ -794,14 +818,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                NO CONNECTIONS MAPPED. This track's network is still uncharted.
+                No connected tracks were found for this track.
               </p>
             </div>
           )}
-          <div className="absolute bottom-4 right-4 z-10 text-right pointer-events-none hidden md:block">
-            <p className="text-chrome text-text-tertiary font-mono">D3.JS FORCE SIMULATION</p>
-            <p className="text-chrome text-cyber font-mono">INTERACTIVE: ENABLED</p>
-          </div>
         </div>
       </div>
 

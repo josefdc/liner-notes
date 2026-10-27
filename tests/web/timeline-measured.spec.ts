@@ -19,9 +19,9 @@ test.beforeEach(async ({ page }) => {
 
 // The Player's preview lane draws what the audio service measured on the preview: the beat
 // grid, the energy contour and the neutral sections, in the measured colour, on the preview's
-// own time axis. The song's sections above stay as the result gives them (a template here,
-// the model's elsewhere), never in the measured colour. A layer that was not measured draws
-// nothing.
+// own time axis. The song's sections above are drawn only when the model wrote them, in the
+// inferred colour; a template's (this recording's) are not drawn at all. A layer that was not
+// measured draws nothing.
 
 const MEASURED = "rgb(0, 240, 255)";
 
@@ -113,14 +113,14 @@ for (const width of [390, 1440]) {
     await expect(lane.locator('[data-measured-layer="legend"]')).toContainText("Measured");
     await expect(lane.locator('[data-measured-layer="legend"]')).toContainText("61 beats");
 
-    // The song's sections (a template in this recording) are not drawn as measured.
-    const song = timeline.getByRole("list").first();
-    const tints = await song
-      .getByRole("listitem")
-      .evaluateAll((items) => items.map((item) => item.getAttribute("data-segment-tint")));
-    expect(tints.length).toBeGreaterThan(0);
-    expect(new Set(tints)).toEqual(new Set(["neutral"]));
-    expect(await song.locator('[class*="prov-measured"]').count()).toBe(0);
+    // The song's sections are a template in this recording: none is drawn or named. The only
+    // list in the timeline is the measured sections of the preview.
+    await expect(timeline.getByRole("list")).toHaveCount(1);
+    await expect(timeline.locator("[data-segment-tint]")).toHaveCount(0);
+    await expect(timeline.locator('[data-structure="not-analyzed"]')).toHaveText(
+      "Sections not analyzed",
+    );
+    await expect(timeline).not.toContainText(/Intro|Verse|Chorus|Bridge|Outro|Template/);
 
     // Nothing is cut off: every layer inside the lane, the lane inside the window, no
     // horizontal scroll, and each section's label inside its band.

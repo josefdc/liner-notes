@@ -9,7 +9,10 @@ import type { MeasuredAudio, MeasuredWithheld } from './measured/audio';
 
 interface SmartTimelineProps {
   segments?: SongSegment[];
-  /** Where the segments come from; neither source is a measurement of the audio. */
+  /**
+   * Where the segments come from; neither source is a measurement of the audio. Only the
+   * model's are drawn (as inferred): a template's, or ones of unknown origin, are not.
+   */
   segmentsSource?: TrackData['segmentsSource'];
   /** Song duration in seconds; undefined when it is not known. */
   durationSeconds?: number;
@@ -97,29 +100,18 @@ const SHAPE_PATH: Record<Shape, React.ReactNode> = {
   ),
 };
 
-// The song's structure is never measured: the model's sections are drawn in the inferred colour,
-// a template's (or one of unknown origin) in neutral greys. The colour a result sends with each
-// section (chosen by the model) is not used: it would put the measured or sourced colours on an
-// inference. Neighbouring sections alternate two tints and are drawn apart. Each section is
-// focusable, so its boundary reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the
-// solid inferred violet, or a light grey for a template, around the tint.
-const SEGMENT_TINTS: Record<'inferred' | 'other', [string, string]> = {
-  inferred: [
-    'bg-prov-inferred/60 border border-prov-inferred',
-    'bg-prov-inferred/35 border border-prov-inferred',
-  ],
-  other: ['bg-white/25 border border-white/55', 'bg-white/10 border border-white/55'],
-};
-
-/** The chip that says where the structure comes from: a model, a template, or nobody knows. */
-const SegmentsChip: React.FC<{ source: TrackData['segmentsSource'] }> = ({ source }) =>
-  source === 'inferred' ? (
-    <InferenceLabel />
-  ) : source === 'template' ? (
-    <ProvenanceChip kind="missing">Template — not analyzed</ProvenanceChip>
-  ) : (
-    <ProvenanceChip kind="unconfirmed">Not measured</ProvenanceChip>
-  );
+// The song's structure is never measured. The model's sections are drawn, in the inferred
+// colour, with the model's chip. A template's sections (a generic default the result carries
+// when nobody wrote a structure), or ones of unknown origin, are not drawn at all: a line says
+// the song's sections were not analysed. The colour a result sends with each section (chosen by
+// the model) is not used: it would put the measured or sourced colours on an inference.
+// Neighbouring sections alternate two tints and are drawn apart. Each section is focusable, so
+// its boundary reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the solid inferred
+// violet around the tint.
+const SEGMENT_TINTS: [string, string] = [
+  'bg-prov-inferred/60 border border-prov-inferred',
+  'bg-prov-inferred/35 border border-prov-inferred',
+];
 
 const EMPTY_SEGMENTS: SongSegment[] = [];
 const EMPTY_SAMPLES: { time: number; description: string }[] = [];
@@ -368,6 +360,8 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   withheld,
 }) => {
   const duration = positiveSeconds(durationSeconds);
+  // Only the model's sections are drawn; a template's, or ones of unknown origin, are not.
+  const sections = segmentsSource === 'inferred' ? segments : EMPTY_SEGMENTS;
   const measuredPreview = positiveSeconds(previewSeconds);
   // Drawn only over the window they were measured in, so only when its length is known.
   const layers = useMemo(
@@ -429,7 +423,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
           Structure
         </span>
-        {segments.length > 0 && <SegmentsChip source={segmentsSource} />}
+        {sections.length > 0 && <InferenceLabel />}
       </div>
 
       {/* Time labels: the end label only when the duration is known */}
@@ -438,18 +432,18 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         <span>{duration !== null ? formatTime(duration) : 'Duration unknown'}</span>
       </div>
 
-      {/* Structure Bar */}
-      {segments.length > 0 ? (
+      {/* Structure Bar: the model's sections, or a line saying there are none to draw */}
+      {sections.length > 0 ? (
         <div className="h-3 w-full flex gap-px rounded-xs overflow-hidden relative" role="list">
-          {segments.map((seg, index) => (
+          {sections.map((seg, index) => (
             <div
               // Labels repeat (two choruses); a segment's span is unique.
               key={`${seg.start}-${seg.end}-${seg.label}`}
               role="listitem"
               aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
               tabIndex={0}
-              data-segment-tint={segmentsSource === 'inferred' ? 'inferred' : 'neutral'}
-              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[segmentsSource === 'inferred' ? 'inferred' : 'other'][index % 2]}`}
+              data-segment-tint="inferred"
+              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[index % 2]}`}
               style={{ width: `${Math.max(seg.end - seg.start, 0)}%` }}
             >
               {/* Tooltip */}
@@ -460,10 +454,8 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
           ))}
         </div>
       ) : (
-        <div className="h-3 w-full rounded-xs bg-white/5 flex items-center justify-center">
-          <span className="text-chrome leading-none font-mono text-text-tertiary uppercase tracking-widest">
-            STRUCTURE DATA UNAVAILABLE
-          </span>
+        <div data-structure="not-analyzed" className="flex">
+          <ProvenanceChip kind="missing">Sections not analyzed</ProvenanceChip>
         </div>
       )}
 

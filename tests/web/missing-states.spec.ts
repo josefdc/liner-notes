@@ -69,7 +69,12 @@ test("the Player shows not-measured and template states instead of numbers", asy
   await expect(page.getByRole("list", { name: "Audio values" })).toContainText("BPM not measured");
 
   const timeline = page.getByRole("group", { name: "Song structure" });
-  await expect(timeline).toContainText("Template — not analyzed");
+  // The result's structure is a template: no section of it is drawn or named.
+  await expect(timeline).toContainText("Sections not analyzed");
+  await expect(timeline.getByRole("list")).toHaveCount(0);
+  await expect(timeline.getByRole("listitem")).toHaveCount(0);
+  await expect(timeline.locator("[data-segment-tint]")).toHaveCount(0);
+  await expect(timeline).not.toContainText(/Intro|Main|Outro|Template/);
   await expect(timeline).toContainText("Duration unknown");
   await expect(timeline).not.toContainText("3:45");
   // No fake marker: nothing was detected, so nothing is drawn on the timeline.

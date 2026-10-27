@@ -62,9 +62,7 @@ describe('ResultNotices', () => {
     const text = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(text).toContain('Model unavailable');
     expect(text).toContain('(the model timed out)');
-    expect(text).toContain(
-      'Missing: genre profile, song structure (a generic template is shown), facts.',
-    );
+    expect(text).toContain('Missing: genre profile, song structure, facts.');
   });
 
   it.each(Object.entries(AUDIO_UNAVAILABLE_TEXT) as [AudioUnavailableReason, string][])(

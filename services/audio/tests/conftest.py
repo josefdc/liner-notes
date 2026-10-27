@@ -34,7 +34,10 @@ class _Handler(BaseHTTPRequestHandler):
         if path in self.server.files:
             body = self.server.files[path]
             content_type = self.server.types.get(path, "audio/mpeg")
-            self._send(200, {"Content-Type": content_type, "Content-Length": str(len(body))}, body)
+            headers = {"Content-Length": str(len(body))}
+            if content_type is not None:
+                headers["Content-Type"] = content_type
+            self._send(200, headers, body)
         elif path == "/audio.mp3":
             self._send(
                 200,
@@ -104,7 +107,7 @@ def cdn():
     """
     Yields (base_url, server). server.hits lists requested paths, server.sent counts bytes
     streamed by /endless.mp3, server.files maps extra paths to bodies, served as audio/mpeg
-    unless server.types names another content type for the path.
+    unless server.types names another content type for the path (None: no Content-Type).
     """
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.hits = []

@@ -34,7 +34,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, BinaryIO
 
 # Keep TensorFlow's C++ logging to warnings and errors.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -185,10 +185,11 @@ class InvalidAudioError(ValueError):
     output) and is returned with the 422."""
 
 
-# Why an MP4 (M4A) or AAC preview is refused, whether the host declared it as such or its first
-# bytes show it (sniff.py). Never the generic decode failure, and never a decode: under an .mp3
-# name, libsndfile's MP3 decoder can find spurious frames in an ADTS stream (a tenth of a second
-# of the 1 s test fixture, which the gate then calls too short).
+# Why an MP4 (M4A) or AAC preview is refused, when the host declared it as such or sniff.py
+# recognises its first bytes. Those forms never get the generic decode failure and are never
+# decoded: under an .mp3 name, libsndfile's MP3 decoder can find spurious frames in an ADTS
+# stream (a tenth of a second of the 1 s test fixture, which the gate then calls too short).
+# A form sniff.py does not recognise gets the generic reason.
 UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does not decode"
 
 
@@ -354,16 +355,17 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     return {"v2": v2}
 
 
-def decode(file_path: str) -> Signals:
+def decode(file_path: str | BinaryIO) -> Signals:
     """
-    Decode a file once (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own
-    rate; the analysis resamples it once per rate it needs. Previews are 30 s; never decode
-    more than MAX_DECODE_SECONDS, whatever the file claims.
+    Decode a file (a path, or a binary file object such as the evals' in-memory clips) once
+    (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own rate; the analysis
+    resamples it once per rate it needs. Previews are 30 s; never decode more than
+    MAX_DECODE_SECONDS, whatever the file claims.
 
     Raises InvalidAudioError (a 422) for a file sniff.py recognises as MP4 (M4A) or AAC
-    (UNSUPPORTED_FORMAT, before any decoding), when the file cannot be decoded, or when it holds non-finite or absurd sample
-    values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the downmix (antiphase
-    stereo), the loudest channel is analysed instead.
+    (UNSUPPORTED_FORMAT, before any decoding), when the file cannot be decoded, or when it
+    holds non-finite or absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels
+    cancel in the downmix (antiphase stereo), the loudest channel is analysed instead.
     """
     if sniff.is_mp4_or_aac(file_path):
         raise InvalidAudioError(UNSUPPORTED_FORMAT)

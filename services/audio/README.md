@@ -300,19 +300,24 @@ The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. 
 refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
 does not decode`, in these cases only:
 
-- the host declares one of these types: `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/aac`,
-  `audio/aacp`, `audio/x-aac`, `audio/x-hx-aac-adts`, `audio/vnd.dlna.adts`, `audio/mp4a-latm`,
+- the host declares one of these types: `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/m4b`,
+  `audio/x-m4b`, `audio/mpeg4`, `application/mp4`, `audio/aac`, `audio/aacp`, `audio/x-aac`,
+  `audio/aac-adts`, `audio/x-hx-aac-adts`, `audio/vnd.dlna.adts`, `audio/mp4a-latm`,
   `audio/mpeg4-generic`, `audio/3gpp`, `audio/3gpp2` or `video/mp4`. The preview is refused
   before its body is read.
-- the first bytes show the format (`sniff.py`), after any ID3v2 tags:
-  - an MP4 file: a `ftyp` box naming an MP4, QuickTime or 3GPP brand, either first or behind
-    `free`, `skip` or `wide` boxes. HEIC and AVIF images do not count.
+- the first bytes show the format (`sniff.py`), after up to four ID3v2 tags:
+  - an MP4 file: a `ftyp` box naming an MP4, QuickTime or 3GPP brand, either first or behind up
+    to three `free`, `skip` or `wide` boxes. HEIC and AVIF images do not count.
   - an ADIF stream (the `ADIF` magic).
-  - an ADTS or LOAS stream: frame headers starting within the first 4 kB, each next header
-    where the frame length puts it.
+  - an ADTS stream: a frame header within the first 4 kB, then more headers with the same
+    stream parameters, each where the previous frame's length puts it. At the start, two
+    frames are enough; further in, four are needed.
+  - a LOAS stream: three frames in a row, the first within the first 4 kB.
 
-A file that starts with an MP3 frame, `RIFF`, `RF64`, `FORM`, `fLaC` or `OggS` is never
-refused this way. Any other file that cannot be decoded gets the generic reason.
+A file that starts with an MP3 frame, or with the magic of a container `libsndfile` reads, is
+never refused this way. Those containers are WAV (`RIFF`, `RIFX`, `RF64`, W64), AIFF, CAF, FLAC,
+Ogg, AU, IRCAM, NIST, PARIS, AVR, PVF, VOC and MATLAB 5. Any other file that cannot be decoded
+gets the generic reason.
 
 The API has no reason code for this refusal yet. The user still sees "the audio analysis
 failed", and the precise reason is only in the API's error detail.
@@ -342,19 +347,21 @@ only written to the service log.
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a
-`200` response with an MP3, WAV, FLAC or Ogg content type and no content encoding, and stops at
-2 MB (previews are about 0.5 MB). Connect and read timeouts are 5 s and 10 s, and the whole
-download must finish within 20 s. The temporary file is removed after the analysis, whatever the
-outcome.
+`200` response with an MP3, WAV, FLAC or Ogg content type, or none (the first bytes and the
+decoder then decide), and no content encoding. It stops at 2 MB (previews are about 0.5 MB).
+Connect and read timeouts are 5 s and 10 s, and the whole download must finish within 20 s. The
+temporary file is removed after the analysis, whatever the outcome.
 
 ## How it works
 
 1. **Download** the preview as described above.
-2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. Each step that
-   needs another rate gets a resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1
-   kHz for RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the
-   models, as `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The
-   STFT, the onset envelope, the harmonic part and its chromagram are computed once and shared.
+2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. An MP4 (M4A) or
+   AAC file that `sniff.py` recognises by its first bytes is refused first (see the error
+   statuses above), since `libsndfile` reads neither. Each step that needs another rate gets a
+   resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1 kHz for
+   RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the models, as
+   `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The STFT, the
+   onset envelope, the harmonic part and its chromagram are computed once and shared.
 3. **Gate** (`signal_features.py`): duration, the 95th percentile of the frame RMS, and for
    noise the onset periodicity (a tempogram peak, tolerant of human timing), the share of
    energy in spectral lines and whether they form one harmonic series, and a pYIN pitch track

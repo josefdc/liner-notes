@@ -108,13 +108,30 @@ jobs:
             web.cache-from=type=gha,scope=web
             api.cache-from=type=gha,scope=api
             audio.cache-from=type=gha,scope=audio
-      # Checks how the audio image runs: as a non-root user, without ffmpeg or wget, analysing a
-      # generated band offline (as MP3 and as WAV) with the Essentia estimators
-      # (RhythmExtractor2013 and KeyExtractor), refusing M4A and AAC as a format it does not
-      # decode, and serving /health as "degraded" when the models are not downloaded.
+      # Checks how the audio image runs: no larger than its size budget (services/audio/README.md,
+      # "Image size"), as a non-root user, without ffmpeg or wget, analysing a generated band
+      # offline (as MP3 and as WAV) with the Essentia estimators (RhythmExtractor2013 and
+      # KeyExtractor), refusing M4A and AAC as a format it does not decode, and serving /health as
+      # "degraded" when the models are not downloaded.
       - name: Check the audio image
+        env:
+          # Bytes, of the image's unpacked layers (services/audio/README.md, "Image size").
+          AUDIO_IMAGE_BUDGET: "1500000000"
         run: |
-          echo "audio image size: $(docker image inspect -f '{{.Size}}' liner-notes-audio:latest | numfmt --to=iec)"
+          # The image's unpacked layers, summed. Unlike `docker image inspect`'s Size, which the
+          # containerd store makes larger by the compressed layers, this is about the same on every
+          # image store (the containerd store rounds files up to whole disk blocks, a few per
+          # cent). Anything but one size in bytes per layer fails here.
+          layers=$(docker history -H=false --format '{{.Size}}' liner-notes-audio:latest)
+          if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
+            echo "::error title=Audio image size unknown::docker history did not print the audio image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"
+            exit 1
+          fi
+          if [ "$size" -gt "$AUDIO_IMAGE_BUDGET" ]; then
+            echo "::error title=Audio image over budget::audio image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), over its budget of $AUDIO_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$AUDIO_IMAGE_BUDGET")): see services/audio/README.md, \"Image size\""
+            exit 1
+          fi
+          echo "audio image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), within its budget of $AUDIO_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$AUDIO_IMAGE_BUDGET"))"
           uid=$(docker run --rm liner-notes-audio:latest id -u)
           echo "audio image runs as uid $uid"
           test "$uid" -ne 0
@@ -234,13 +251,31 @@ jobs:
           done
           cat offline-health.json
           grep -q '"status":"degraded"' offline-health.json
-      # Checks how the API image runs: Node 24, as a non-root user, without wget, with the native
-      # SQLite module loading (/api/ready), the recorded replays served (/api/replays), the run
-      # report reading the API's database, and Docker's health check (Node's fetch) turning
-      # healthy.
+      # Checks how the API image runs: no larger than its size budget, Node 24, as a non-root
+      # user, without wget, with the native SQLite module loading (/api/ready), the recorded
+      # replays served (/api/replays), the run report reading the API's database, and Docker's
+      # health check (Node's fetch) turning healthy.
       - name: Check the API image
+        env:
+          # Bytes, of the image's unpacked layers as for the audio image: about 26 % above the
+          # 388.5 MB the image measured when the budget was set. Raise it in the change that makes
+          # the image larger, and say why.
+          API_IMAGE_BUDGET: "490000000"
         run: |
-          echo "API image size: $(docker image inspect -f '{{.Size}}' liner-notes-api:latest | numfmt --to=iec)"
+          # The image's unpacked layers, summed. Unlike `docker image inspect`'s Size, which the
+          # containerd store makes larger by the compressed layers, this is about the same on every
+          # image store (the containerd store rounds files up to whole disk blocks, a few per
+          # cent). Anything but one size in bytes per layer fails here.
+          layers=$(docker history -H=false --format '{{.Size}}' liner-notes-api:latest)
+          if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
+            echo "::error title=API image size unknown::docker history did not print the API image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"
+            exit 1
+          fi
+          if [ "$size" -gt "$API_IMAGE_BUDGET" ]; then
+            echo "::error title=API image over budget::API image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), over its budget of $API_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$API_IMAGE_BUDGET"))"
+            exit 1
+          fi
+          echo "API image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), within its budget of $API_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$API_IMAGE_BUDGET"))"
           docker run --rm liner-notes-api:latest node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
           uid=$(docker run --rm liner-notes-api:latest id -u)
           echo "API image runs as uid $uid"

@@ -103,11 +103,13 @@ const SHAPE_PATH: Record<Shape, React.ReactNode> = {
 // The song's structure is never measured. The model's sections are drawn, in the inferred
 // colour, with the model's chip. A template's sections (a generic default the result carries
 // when nobody wrote a structure), or ones of unknown origin, are not drawn at all: a line says
-// the song's sections were not analysed. The colour a result sends with each section (chosen by
-// the model) is not used: it would put the measured or sourced colours on an inference.
-// Neighbouring sections alternate two tints and are drawn apart. Each section is focusable, so
-// its boundary reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the solid inferred
-// violet around the tint.
+// the song's sections were not analysed. The contract also allows a "measured" source, which the
+// web's type leaves out, so such sections count as of unknown origin and are not drawn either:
+// nothing sends that source today. The colour a result sends with each section (chosen by the
+// model) is not used: it would put the measured or sourced colours on an inference. Neighbouring
+// sections alternate two tints and are drawn apart. Each section is focusable, so its boundary
+// reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the solid inferred violet around
+// the tint.
 const SEGMENT_TINTS: [string, string] = [
   'bg-prov-inferred/60 border border-prov-inferred',
   'bg-prov-inferred/35 border border-prov-inferred',
@@ -458,7 +460,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       {songAxis && (
         <div className="flex justify-between mb-2 text-xs font-mono text-text-tertiary uppercase tracking-widest">
           <span>0:00</span>
-          <span>{duration !== null ? formatTime(duration) : 'Duration unknown'}</span>
+          <span>{duration !== null ? formatTime(duration) : 'Song length unknown'}</span>
         </div>
       )}
 
@@ -485,7 +487,9 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       )}
 
-      {/* Samples on the song timeline (times inferred by the model) */}
+      {/* Samples on the song timeline (times inferred by the model), over a faint baseline
+          when no section bar is drawn under the axis */}
+      {sections.length === 0 && songAxis && <div className="h-px w-full bg-white/10" />}
       {duration !== null && sampleMarkers.inside.length > 0 && (
         <MarkerLane markers={sampleMarkers.inside} length={duration} />
       )}
@@ -493,7 +497,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       {sampleMarkers.outside > 0 && (
         <Note>
           {duration === null
-            ? `Duration unknown: ${plural(sampleMarkers.outside, 'sample')} not placed`
+            ? `Song length unknown: ${plural(sampleMarkers.outside, 'sample')} not placed`
             : `${plural(sampleMarkers.outside, 'sample time')} outside the song, not drawn`}
         </Note>
       )}

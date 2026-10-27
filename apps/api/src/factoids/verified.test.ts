@@ -9,7 +9,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenealogyLink } from "../agent/schema.js";
 import { stubLlm } from "../agent/testing/stubLlm.js";
-import { applyVerdicts, checkClaims, RELATION_ABOUT } from "../agent/verifier/index.js";
+import { applyVerdicts, checkClaims } from "../agent/verifier/index.js";
 import { draftOf, modelClaim } from "../agent/verifier/testing.js";
 import { createTestApp } from "../http/testApp.js";
 import { createFactoidsRouter } from "../http/routes/factoids.js";
@@ -231,14 +231,15 @@ describe("a relation from more facts is stated whole, as the analysis states it"
   });
 
   /**
-   * The kind and verdict the analysis gives a claim citing ev-1 that the judge found `verdict`:
-   * a model sample link's own claim (`about: "sample"`), or a plain production claim.
+   * The kind and verdict the analysis gives a model claim about `about` citing ev-1 that the judge
+   * found `verdict`: a fact card's claim, or, with `linked`, the claim a sample link states.
    */
-  function fromAnalysis(verdict: Verdict, relation: boolean) {
+  function fromAnalysis(verdict: Verdict, about: "sample" | "production", linked = false) {
     const claim = modelClaim("cl-a", {
-      text: relation ? SAMPLE : SOURCED,
-      about: relation ? "sample" : "production",
+      text: about === "sample" ? SAMPLE : SOURCED,
+      about,
       evidenceIds: ["ev-1"],
+      ...(linked ? {} : { factoid: { title: "A card", type: about, entities: [] } }),
     });
     const link = {
       source: "up",
@@ -250,16 +251,16 @@ describe("a relation from more facts is stated whole, as the analysis states it"
       claimId: "cl-a",
       evidenceIds: ["ev-1"],
     } as GenealogyLink;
-    const checked = checkClaims(draftOf([claim], relation ? [link] : []), PACK, null);
+    const checked = checkClaims(draftOf([claim], linked ? [link] : []), PACK, null);
     const verdicts = new Map([["cl-a", { verdict, reason: "The cited excerpt decides it." }]]);
-    // The verifier node's call (agent/verifier/index.ts, step 4).
-    const [judged] = applyVerdicts(checked, verdicts, { relations: RELATION_ABOUT }).claims;
+    // The verifier node's call (agent/verifier/index.ts, step 4): no `relations` option.
+    const [judged] = applyVerdicts(checked, verdicts).claims;
     return { kind: judged.kind, verdict: judged.verdict };
   }
 
   const provenance = (claim: Claim | undefined) => ({ kind: claim?.kind, verdict: claim?.verdict });
 
-  it("reads a partly supported sample as inferred, as the analysis reads its sample link's claim", async () => {
+  it("reads a partly supported sample as inferred, as the analysis reads its card or link claim", async () => {
     const { claimOf } = await moreFacts({
       cards: [null, sampleCard(SAMPLE, ["ev-1"]), null],
       judge: () => "partial",
@@ -267,7 +268,8 @@ describe("a relation from more facts is stated whole, as the analysis states it"
 
     expect(claimOf(SAMPLE)).toMatchObject({ about: "sample", evidenceIds: ["ev-1"] });
     expect(provenance(claimOf(SAMPLE))).toEqual({ kind: "inferred", verdict: "partial" });
-    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("partial", true));
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("partial", "sample"));
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("partial", "sample", true));
   });
 
   it("keeps a fully supported sample sourced, as the analysis does", async () => {
@@ -277,7 +279,8 @@ describe("a relation from more facts is stated whole, as the analysis states it"
     });
 
     expect(provenance(claimOf(SAMPLE))).toEqual({ kind: "sourced", verdict: "supported" });
-    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("supported", true));
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("supported", "sample"));
+    expect(provenance(claimOf(SAMPLE))).toEqual(fromAnalysis("supported", "sample", true));
   });
 
   it("leaves a partly supported claim that states no relation sourced", async () => {
@@ -288,6 +291,6 @@ describe("a relation from more facts is stated whole, as the analysis states it"
 
     expect(claimOf(SOURCED)).toMatchObject({ about: "production" });
     expect(provenance(claimOf(SOURCED))).toEqual({ kind: "sourced", verdict: "partial" });
-    expect(provenance(claimOf(SOURCED))).toEqual(fromAnalysis("partial", false));
+    expect(provenance(claimOf(SOURCED))).toEqual(fromAnalysis("partial", "production"));
   });
 });

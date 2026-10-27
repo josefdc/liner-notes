@@ -7,8 +7,10 @@
 import {
   analysisIssues,
   type Claim,
+  ClaimAbout,
   claimIsRejected,
   type Evidence,
+  LinkType,
   linkDisplayKind,
   resultContext,
   TrackAnalysis,
@@ -40,21 +42,20 @@ vi.mock(
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
-import { writeFactoids } from "../../factoids/service.js";
-import {
-  card as factCard,
-  evidenceItem,
-  fakeModel,
-  storedRun,
-  DEMO_TRACK,
-} from "../../factoids/testing/fakes.js";
 import { JUDGE_STATEMENT_MAX, JUDGE_SYSTEM_PROMPT } from "../prompts.js";
 import { heldTextIssue, UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import type { GenealogyLink } from "../schema.js";
 import type { SonicAgentStateType } from "../state.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
 import { withRun } from "../../logger.js";
-import { applyVerdicts, checkClaims, createVerifierNode, setJudgeTimingForTests } from "./index.js";
+import {
+  applyVerdicts,
+  checkClaims,
+  createVerifierNode,
+  LINK_IS_RELATION,
+  RELATION_ABOUT,
+  setJudgeTimingForTests,
+} from "./index.js";
 import { draftOf, judging, modelClaim, sentStatements, stateFor, trackRecord } from "./testing.js";
 import { audioV2 } from "../testing/measuredAudio.js";
 
@@ -337,7 +338,7 @@ describe("kinds after the verifier", () => {
   });
 });
 
-describe("a fact card about a relation is stated whole, on both paths", () => {
+describe("a claim about a relation is stated whole, with or without a link", () => {
   const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
   const PRODUCTION = "The synth line was played on a Roland Juno-106 at home.";
   type CardType = "sample" | "production";
@@ -351,54 +352,26 @@ describe("a fact card about a relation is stated whole, on both paths", () => {
       factoid: { title: `About ${id}`, type, entities: [] },
     });
 
-  /** The kind and verdict more facts gives a card of `type` the judge finds `verdict`. */
-  async function fromMoreFacts(type: CardType, text: string, verdict: "supported" | "partial") {
-    const { outcomes } = await writeFactoids(
-      {
-        track: { title: DEMO_TRACK.trackTitle, artist: DEMO_TRACK.trackArtist },
-        runId: "run-more-facts-1",
-        existingIds: [],
-      },
-      {
-        llm: fakeModel({
-          cards: [{ ...factCard(text, ["ev-1"]), type }, null, null],
-          judge: () => verdict,
-        }),
-        purpose: "dev",
-        signal: new AbortController().signal,
-        loadRun: () => storedRun([evidenceItem("ev-1", "MusicBrainz: a record.")]),
-      },
-    );
-    const written = outcomes.find((outcome) => outcome.status === "written");
-    const claim = written?.status === "written" ? written.claim : undefined;
-    return { kind: claim?.kind, verdict: claim?.verdict };
-  }
-
   const provenance = (claims: Claim[] | undefined, id: string) => {
     const claim = claims?.find((each) => each.id === id);
     return { kind: claim?.kind, verdict: claim?.verdict };
   };
 
-  it("reads a partly supported sample card as inferred, as more facts reads one", async () => {
+  // More facts gives a card the same kind and verdict for each of these (factoids/verified.test).
+  it("reads a partly supported sample card as inferred", async () => {
     const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "partial");
 
     expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
-    expect(provenance(result.claims, "card")).toEqual(
-      await fromMoreFacts("sample", SAMPLE, "partial"),
-    );
     expect(analysisIssues(result)).toEqual([]);
   });
 
-  it("keeps a fully supported sample card sourced, as more facts does", async () => {
+  it("keeps a fully supported sample card sourced", async () => {
     const { result } = await verify([cardClaim("card", "sample", SAMPLE)], [], () => "supported");
 
     expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
-    expect(provenance(result.claims, "card")).toEqual(
-      await fromMoreFacts("sample", SAMPLE, "supported"),
-    );
   });
 
-  it("leaves a partly supported production card sourced, as more facts does", async () => {
+  it("leaves a partly supported production card sourced", async () => {
     const { result } = await verify(
       [cardClaim("card", "production", PRODUCTION)],
       [],
@@ -406,9 +379,55 @@ describe("a fact card about a relation is stated whole, on both paths", () => {
     );
 
     expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
-    expect(provenance(result.claims, "card")).toEqual(
-      await fromMoreFacts("production", PRODUCTION, "partial"),
+  });
+
+  it("reads a partly supported cover claim as inferred, and keeps a supported one sourced", async () => {
+    const cover = (id: string) =>
+      modelClaim(id, { text: id, about: "cover", evidenceIds: ["ev-track"] });
+    const { result } = await verify([cover("partly"), cover("whole")], [], (text) =>
+      text === "partly" ? "partial" : "supported",
     );
+
+    expect(provenance(result.claims, "partly")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(provenance(result.claims, "whole")).toEqual({ kind: "sourced", verdict: "supported" });
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
+  it("states a relation for a sample or a cover and for nothing else", () => {
+    expect([...RELATION_ABOUT].sort()).toEqual(["cover", "sample"]);
+  });
+
+  it("demotes a partly supported claim by default only when it is about a sample or a cover", () => {
+    // Written out, not derived: whether a claim about each subject states a relation.
+    const isRelation: Record<ClaimAbout, boolean> = {
+      track: false,
+      credit: false,
+      sample: true,
+      cover: true,
+      history: false,
+      sound: false,
+      production: false,
+      connection: false,
+      trivia: false,
+    };
+    expect(Object.keys(isRelation).sort()).toEqual([...ClaimAbout.options].sort());
+    for (const about of ClaimAbout.options) {
+      const claim = modelClaim("c", { about, evidenceIds: ["ev-track"] });
+      const verdicts = new Map([["c", { verdict: "partial" as const, reason: "" }]]);
+      // No `relations` option: what a caller that names none gets.
+      const [judged] = applyVerdicts(draftOf([claim]), verdicts).claims;
+      expect(judged.kind, about).toBe(isRelation[about] ? "inferred" : "sourced");
+    }
+  });
+
+  it("classifies every link type as a relation or not", () => {
+    expect(Object.keys(LINK_IS_RELATION).sort()).toEqual([...LinkType.options].sort());
+    expect(LinkType.options.filter((type) => LINK_IS_RELATION[type])).toEqual([
+      "sample",
+      "interpolation",
+      "cover",
+      "remix",
+    ]);
   });
 });
 

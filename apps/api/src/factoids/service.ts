@@ -30,8 +30,8 @@
  *    the judge found its cited excerpts supporting it; never measured. A fact about a relation
  *    (RELATION_ABOUT: a sample or a cover) is stated whole, as the analysis states its own cards
  *    and links' claims: only a supported one is sourced, a partly supported one reads as
- *    inferred. When the judge fails or the budget refuses it, the facts are kept
- *    with no verdict, read as inferred, and say they were not checked.
+ *    inferred. When the judge fails or the budget refuses it, the facts are kept with no
+ *    verdict, read as inferred, and say they were not checked.
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
  *    names, the focus and the normalised text, never a count, and it is never one the client or
  *    the run already has, nor another fact's of the batch.
@@ -56,7 +56,7 @@ import { FACTOID_ABOUT, modelClaim } from "../agent/nodes/composerNode.js";
 import type { PromptTrack } from "../agent/prompts.js";
 import { agentRuntime } from "../agent/runtime.js";
 import { heldTextIssue } from "../agent/storedResults.js";
-import { applyVerdicts, checkClaims, judgeable, RELATION_ABOUT } from "../agent/verifier/index.js";
+import { applyVerdicts, checkClaims, judgeable } from "../agent/verifier/index.js";
 import { judgeClaims } from "../agent/verifier/judge.js";
 import type { LlmPurpose } from "../config/settings.js";
 import { resultOf } from "../http/routes/runs.js";
@@ -576,12 +576,9 @@ export async function writeFactoids(
     if (judged.failure !== null) {
       log.warn(`The facts could not be checked against their sources (${failure(judged.failure)})`);
     }
-    // A fact about a sample or a cover is stated whole, as the analysis's are.
-    const verified = applyVerdicts(
-      { claims: checked.claims, genealogy: noGraph },
-      judged.verdicts,
-      { relations: RELATION_ABOUT },
-    );
+    // A fact about a sample or a cover is stated whole, as the analysis's are (applyVerdicts'
+    // default relations, RELATION_ABOUT).
+    const verified = applyVerdicts({ claims: checked.claims, genealogy: noGraph }, judged.verdicts);
     const sent = new Set(toJudge.map((claim) => claim.id));
     const tooLong = new Set(judged.tooLong);
     const claimsById = new Map(

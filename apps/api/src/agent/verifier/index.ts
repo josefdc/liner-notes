@@ -34,8 +34,9 @@
  *    `supported` sources it (a `partial` one usually means a weaker or another relation). So
  *    does every other claim about a relation between two records (RELATION_ABOUT: a sample or a
  *    cover), such as a fact card, which no link states: a partly supported one reads as
- *    inferred, on this path as on more facts (factoids/service.ts). A code-built claim is sourced by construction and gets no verdict; one left citing nothing
- *    by the deterministic step reads as not sourced (inferred), and so does its link. A
+ *    inferred, on this path as on more facts (factoids/service.ts). A code-built claim is
+ *    sourced by construction and gets no verdict; one left citing nothing by the deterministic
+ *    step reads as not sourced (inferred), and so does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
@@ -57,6 +58,7 @@ import {
   claimIsRejected,
   type Evidence,
   LINK_CLAIM_ABOUT,
+  type LinkType,
   linkClaimMismatches,
   type RunInfo,
   runIssues,
@@ -247,27 +249,41 @@ const SAMPLED_IN_TRACK = 2;
 const SAMPLES_TRACK = 3;
 
 /**
- * What a claim states as a relation between two records when no link states it: a sample, an
- * interpolation, a remix or a cover, the subjects LINK_CLAIM_ABOUT gives those links' claims. A
- * producer or influence link's claim is about a credit, production, a connection or history,
- * which claims that state no relation are about too: those are judged as any other claim.
+ * Whether each link type states a relation between two records (one takes from or remakes the
+ * other: a sample, an interpolation, a remix, a cover). A producer or influence link does not:
+ * its claim is about a credit, production, a connection or history, which claims that state no
+ * relation are about too. Every link type is listed, so a new one must be classified here.
+ */
+export const LINK_IS_RELATION: Readonly<Record<LinkType, boolean>> = {
+  sample: true,
+  interpolation: true,
+  remix: true,
+  cover: true,
+  producer: false,
+  influence: false,
+};
+
+/**
+ * What a claim states as a relation between two records, whether a link states it or not (a
+ * fact card): the subjects LINK_CLAIM_ABOUT gives the claims of the link types that state one
+ * (LINK_IS_RELATION). Those claims are stated whole; any other claim is judged as before.
  */
 export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
-  (["sample", "interpolation", "remix", "cover"] as const).flatMap(
-    (type) => LINK_CLAIM_ABOUT[type],
-  ),
+  (Object.keys(LINK_IS_RELATION) as LinkType[])
+    .filter((type) => LINK_IS_RELATION[type])
+    .flatMap((type) => LINK_CLAIM_ABOUT[type]),
 );
 
 /**
  * The claims with the judge's verdicts and their kinds, and the genealogy with each link's kind
  * from its own claim (see the module comment). A claim a link states is a relation, stated whole;
- * so is one about a subject in `relations`, which no link need state (the verifier node and more
- * facts both pass RELATION_ABOUT). Pure.
+ * so is one about a subject in `relations` (RELATION_ABOUT unless a caller says otherwise), which
+ * no link need state. The verifier node and more facts both rely on that default. Pure.
  */
 export function applyVerdicts(
   checked: Pick<CheckedDraft, "claims" | "genealogy">,
   verdicts: ReadonlyMap<string, { verdict: Claim["verdict"]; reason: string }>,
-  { relations = new Set() }: { relations?: ReadonlySet<ClaimAbout> } = {},
+  { relations = RELATION_ABOUT }: { relations?: ReadonlySet<ClaimAbout> } = {},
 ): { claims: Claim[]; genealogy: Genealogy } {
   const stated = linkClaimIds(checked.genealogy);
   const isRelation = (claim: Claim) => stated.has(claim.id) || relations.has(claim.about);
@@ -594,11 +610,10 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const calls = judged.call ? [judged.call] : [];
 
     // 4. Kinds, then 5. masked text. A card about a sample or a cover is stated whole, as a
-    // link's claim is.
+    // link's claim is (applyVerdicts' default relations, RELATION_ABOUT).
     const verified = applyVerdicts(
       { claims: checked.claims, genealogy: enriched.genealogy },
       judged.verdicts,
-      { relations: RELATION_ABOUT },
     );
     const tooLong = new Set(judged.tooLong);
     const { claims, factoids } = maskedText(

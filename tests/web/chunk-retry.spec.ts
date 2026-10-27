@@ -12,11 +12,19 @@ const budgetPaused = loadFixture("budget-paused");
 
 /**
  * Refuses the chunk whose address matches `pattern` until `allow()`: the browser reports it as
- * not arriving, as with a dropped connection. Counts the requests for it.
+ * not arriving, as with a dropped connection. Counts the requests for it. Between `hold()` and
+ * `release()` its requests wait unanswered (`waiting()` counts them), as on a slow connection.
  */
 async function failChunk(page: Page, pattern: RegExp) {
-  const state = { blocked: true, refused: 0, served: 0 };
-  await page.route(pattern, (route) => {
+  const state = { blocked: true, refused: 0, served: 0, waiting: 0 };
+  let gate: Promise<void> | null = null;
+  let open = () => {};
+  await page.route(pattern, async (route) => {
+    if (gate) {
+      state.waiting++;
+      await gate;
+      state.waiting--;
+    }
     if (state.blocked) {
       state.refused++;
       return route.abort("internetdisconnected");
@@ -28,9 +36,40 @@ async function failChunk(page: Page, pattern: RegExp) {
     allow: () => {
       state.blocked = false;
     },
+    hold: () => {
+      gate = new Promise((resolve) => {
+        open = resolve;
+      });
+    },
+    release: () => {
+      gate = null;
+      open();
+    },
+    waiting: () => state.waiting,
     counts: () => ({ refused: state.refused, served: state.served }),
   };
 }
+
+/** Counts the promise rejections no code handled, from the page's first script on. */
+async function countUnhandledRejections(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __unhandled: string[] };
+    w.__unhandled = [];
+    window.addEventListener("unhandledrejection", (event) =>
+      w.__unhandled.push(String(event.reason)),
+    );
+  });
+  return () => page.evaluate(() => (window as unknown as { __unhandled: string[] }).__unhandled);
+}
+
+/** The element that has the focus, by what a test can name it. */
+const focused = (page: Page) =>
+  page.evaluate(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body) return "the page";
+    if (active.hasAttribute("data-loading-view")) return "the loading view";
+    return active.getAttribute("aria-label") ?? active.tagName;
+  });
 
 /** Marks the document: the mark is gone after a reload. */
 const markDocument = (page: Page) =>
@@ -47,14 +86,18 @@ async function search(page: Page, query: string) {
 
 /**
  * The console errors and page errors other than those of the refused chunk: the browser's line
- * for the refused request, and the failed import, which the boundary and React report (and the
- * app's preloads of the result views, which do not catch it).
+ * for the refused request, and the failed import as the boundary and React log it. A page error
+ * (an uncaught error or an unhandled rejection, such as a preload's) is always one.
  */
 const otherProblems = (problems: string[], chunk: string) =>
   problems.filter(
     (line) =>
-      !line.endsWith("net::ERR_INTERNET_DISCONNECTED") &&
-      !(line.includes("Failed to fetch dynamically imported module") && line.includes(chunk)),
+      line !== "error: Failed to load resource: net::ERR_INTERNET_DISCONNECTED" &&
+      !(
+        line.startsWith("error: ") &&
+        line.includes("Failed to fetch dynamically imported module") &&
+        line.includes(chunk)
+      ),
   );
 
 const screenFallback = (page: Page) =>
@@ -64,6 +107,7 @@ test("a Dashboard whose code failed to load is shown on Try again, without a rel
   page,
 }) => {
   const problems = collectProblems(page);
+  const unhandled = await countUnhandledRejections(page);
   await offline(page);
   await useMockApi(page, full);
   const chunk = await failChunk(page, /\/assets\/Dashboard-[\w-]+\.js$/);
@@ -79,15 +123,22 @@ test("a Dashboard whose code failed to load is shown on Try again, without a rel
   await expect(fallback.getByRole("button", { name: "Reload the page" })).toBeVisible();
   expect(chunk.counts().served).toBe(0);
 
-  // The connection is back: "Try again" loads the code and shows the Dashboard, whose heading
-  // takes the focus as on opening it.
+  // The connection is back, and slow: "Try again" loads the code again. Meanwhile the loading
+  // view holds the focus, as on opening the result; the Dashboard's heading takes it once in.
   chunk.allow();
+  chunk.hold();
   await fallback.getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => chunk.waiting()).toBe(1);
+  expect(await focused(page)).toBe("the loading view");
+  chunk.release();
   await expect(dashboardHeading(page)).toBeFocused();
   await expect(fallback).toHaveCount(0);
   expect(chunk.counts().served).toBe(1);
   expect(await sameDocument(page)).toBe(true);
   expect(otherProblems(problems, "Dashboard-")).toEqual([]);
+  // The preload of the refused chunk failed too, and was caught.
+  expect(chunk.counts().refused).toBeGreaterThan(1);
+  expect(await unhandled()).toEqual([]);
 });
 
 test("a new search that reaches the Dashboard shows it once its code can be loaded", async ({
@@ -121,6 +172,7 @@ test("a Player whose code failed to load is shown on Try again, without a reload
   page,
 }) => {
   const problems = collectProblems(page);
+  const unhandled = await countUnhandledRejections(page);
   await offline(page);
   await useMockApi(page, full);
   const chunk = await failChunk(page, /\/assets\/Player-[\w-]+\.js$/);
@@ -144,6 +196,10 @@ test("a Player whose code failed to load is shown on Try again, without a reload
   expect(chunk.counts().served).toBe(1);
   expect(await sameDocument(page)).toBe(true);
   expect(otherProblems(problems, "Player-")).toEqual([]);
+  // The Player's preloads (as the analysis ends, and on the Dashboard) failed too, and were
+  // caught.
+  expect(chunk.counts().refused).toBe(3);
+  expect(await unhandled()).toEqual([]);
 });
 
 test("Reload the page reloads it", async ({ page }) => {
@@ -185,10 +241,44 @@ test("a Sonic Fingerprint whose code failed to load leaves the Dashboard, and lo
 
   chunk.allow();
   await fallback.getByRole("button", { name: "Try again" }).click();
+  // The panel takes the focus from the button that is gone, not the page.
+  expect(await focused(page)).toBe("Sonic Fingerprint");
   await expect(region.getByRole("alert")).toHaveCount(0);
   await expect(region.locator(".recharts-wrapper")).toBeVisible();
+  await expect(region).toBeFocused();
   // One import that failed (not repeated while the Dashboard came in), and one that loaded.
   expect(chunk.counts()).toEqual({ refused: 1, served: 1 });
+  expect(otherProblems(problems, "SonicFingerprint-")).toEqual([]);
+});
+
+test("a Sonic Fingerprint whose code fails after the Dashboard is in leaves the focus on its heading", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await offline(page);
+  await useMockApi(page, full);
+  const chunk = await failChunk(page, /\/assets\/SonicFingerprint-[\w-]+\.js$/);
+  // A slow connection: the chart's code is still on its way when the Dashboard is in.
+  chunk.hold();
+  await page.goto("/");
+  await search(page, "Bright Lines");
+  await page.getByRole("button", { name: "Open the results" }).click();
+  await expect(dashboardHeading(page)).toBeFocused();
+  await expect.poll(() => chunk.waiting()).toBe(1);
+
+  // Then it fails: the panel says so, and the focus stays on the Dashboard's heading.
+  chunk.release();
+  const region = page.getByRole("region", { name: "Sonic Fingerprint" });
+  await expect(region.getByRole("alert")).toContainText(
+    "The Sonic Fingerprint could not be loaded",
+  );
+  await expect(dashboardHeading(page)).toBeFocused();
+  expect(chunk.counts()).toEqual({ refused: 1, served: 0 });
+
+  chunk.allow();
+  await region.getByRole("button", { name: "Try again" }).click();
+  await expect(region.locator(".recharts-wrapper")).toBeVisible();
+  await expect(region).toBeFocused();
   expect(otherProblems(problems, "SonicFingerprint-")).toEqual([]);
 });
 

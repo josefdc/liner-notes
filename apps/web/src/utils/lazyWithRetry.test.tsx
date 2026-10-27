@@ -164,6 +164,10 @@ describe('isChunkLoadError', () => {
       isChunkLoadError(new TypeError("Cannot read properties of undefined (reading 'x')")),
     ).toBe(false);
     expect(isChunkLoadError(new Error('Failed to fetch'))).toBe(false);
+    // Errors that name a module or a preload, but are no failed load of a chunk.
+    expect(isChunkLoadError(new Error("Cannot find module './x'"))).toBe(false);
+    expect(isChunkLoadError(new TypeError('module.default is not a function'))).toBe(false);
+    expect(isChunkLoadError(new Error('The cover could not be preloaded'))).toBe(false);
     expect(isChunkLoadError('Failed to fetch dynamically imported module')).toBe(false);
     expect(isChunkLoadError(null)).toBe(false);
   });

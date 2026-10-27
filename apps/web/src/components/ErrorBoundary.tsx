@@ -25,8 +25,9 @@ interface ErrorBoundaryProps {
    */
   loadFailedMessage?: string;
   /**
-   * Called once "Try again" after a chunk-load error has put the part back (or the loading view
-   * that stands in for it while its code loads), to move the focus there.
+   * Called once a way back (the action, or "Try again" after a chunk-load error) has put the
+   * part back, or the loading view that stands in for it while its code loads: the button that
+   * had the focus is gone, and this moves the focus to what stands in its place.
    */
   onRetried?: () => void;
   /**
@@ -77,7 +78,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   private actionRef = createRef<HTMLButtonElement>();
-  /** "Try again" after a chunk-load error put the part back: `onRetried` is due. */
+  /** A way back put the part back: `onRetried` is due. */
   private retried = false;
 
   static getDerivedStateFromError(error: unknown): Partial<ErrorBoundaryState> {
@@ -120,6 +121,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   private retry = () => {
     this.props.action.onClick?.();
+    this.retried = true;
     this.setState({ failed: false, chunk: false, attempt: {} });
   };
 

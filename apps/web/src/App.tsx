@@ -97,6 +97,13 @@ const PlayerSkeleton = (
 /** The loading view on the page, if any (see LOADING_VIEW_PROPS). */
 const loadingView = () => document.querySelector<HTMLElement>('[data-loading-view]');
 
+/**
+ * A result view's code fetched ahead of time could not be loaded: nothing to do. Preloading is
+ * best effort, and the view imports its code again when it is shown (utils/lazyWithRetry.ts),
+ * where a failure has its fallback. Caught, it is not an unhandled rejection.
+ */
+const preloadFailed = () => {};
+
 /** The API's limit on the length of an analysis query (the contract's MAX_QUERY_LENGTH). */
 const MAX_QUERY_LENGTH = 200;
 
@@ -301,22 +308,22 @@ const App: React.FC = () => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: the screen the page opened on
   useEffect(() => {
     if (!opening.link) return;
-    if (opening.phase === AppPhase.PLAYER) import('./components/Player');
-    else import('./components/Dashboard');
+    if (opening.phase === AppPhase.PLAYER) import('./components/Player').catch(preloadFailed);
+    else import('./components/Dashboard').catch(preloadFailed);
   }, []);
 
   // Preload lazy chunks when analysis nears completion
   useEffect(() => {
     if (preloadsResults(status)) {
-      import('./components/Dashboard');
-      import('./components/Player');
+      import('./components/Dashboard').catch(preloadFailed);
+      import('./components/Player').catch(preloadFailed);
     }
   }, [status]);
 
   // UX: Eager preload Player when entering Dashboard (Item 11)
   useEffect(() => {
     if (phase === AppPhase.DASHBOARD) {
-      import('./components/Player');
+      import('./components/Player').catch(preloadFailed);
     }
   }, [phase]);
 

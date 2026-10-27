@@ -117,6 +117,37 @@ describe('the error boundary and a chunk that could not be loaded', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it('keeps the focus where it is when the part fails after it was shown, when asked to', () => {
+    const tree = (focusOnFail?: boolean) => (
+      <>
+        <button type="button">Elsewhere</button>
+        <ErrorBoundary
+          message="The chart could not be drawn"
+          action={{ label: 'Try again' }}
+          focusOnFail={focusOnFail}
+        >
+          <Part />
+        </ErrorBoundary>
+      </>
+    );
+    const { rerender } = render(tree(false));
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+    // The chart's code fails after the view around it is in (a slow connection).
+    failure = chunkError();
+    rerender(tree(false));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(elsewhere);
+
+    // By default the fallback's first way back takes it.
+    cleanup();
+    failure = null;
+    const again = render(tree());
+    failure = chunkError();
+    again.rerender(tree());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' }));
+  });
+
   it('logs the line it shows, with the error name only in the production build', () => {
     vi.stubEnv('DEV', false);
     failure = chunkError();
@@ -159,5 +190,23 @@ describe('the error boundary and any other error', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New search' }));
     expect(onWayBack).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: 'The part' })).toBeTruthy();
+  });
+
+  it('calls onRetried once its way back has put the part back', () => {
+    failure = new Error('the chart failed');
+    const onRetried = vi.fn(() => screen.queryByRole('heading', { name: 'The part' }));
+    render(
+      <ErrorBoundary
+        message="The chart could not be drawn"
+        action={{ label: 'Try again' }}
+        onRetried={onRetried}
+      >
+        <Part />
+      </ErrorBoundary>,
+    );
+    failure = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetried).toHaveBeenCalledTimes(1);
+    expect(onRetried.mock.results[0].value).toBeTruthy();
   });
 });

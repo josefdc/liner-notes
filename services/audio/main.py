@@ -2,7 +2,9 @@
 Audio analysis service for Liner Notes.
 
 Downloads a 30-second Deezer or Spotify preview and analyses it. The preview is decoded once
-(soundfile, libsndfile) and every step shares that signal.
+(soundfile, libsndfile) and every step shares that signal. MP4 (M4A) and AAC previews are
+refused as a format the service does not decode (libsndfile cannot read them; the preview hosts
+serve MP3).
 
 The response is `{"v2": ...}`: AudioFeatures v2 from packages/contract (camelCase, as the
 contract names them). It holds a gate for too-short, silent and noise-like input, tempo and key
@@ -55,7 +57,12 @@ from estimators import (  # noqa: E402
     select_estimator,
 )
 from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
-from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
+from preview import (  # noqa: E402
+    PreviewDownloadError,
+    PreviewURLError,
+    UnsupportedFormatError,
+    download_preview,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("audio")
@@ -172,8 +179,16 @@ class HealthResponse(BaseModel):
 
 
 class InvalidAudioError(ValueError):
-    """The preview cannot be analysed: not decodable, or non-finite or absurd samples. The
-    message is one of a fixed set (no paths or decoder output) and is returned with the 422."""
+    """The preview cannot be analysed: in a format the service does not decode, not decodable,
+    or non-finite or absurd samples. The message is one of a fixed set (no paths or decoder
+    output) and is returned with the 422."""
+
+
+# Why an MP4 (M4A) or AAC preview is refused, whether the host declared it as such or it is
+# recognised by its first bytes. Never the generic decode failure, and never a decode: under an
+# .mp3 name, libsndfile's MP3 decoder can find spurious frames in an ADTS stream (a tenth of a
+# second of the 1 s test fixture, which the gate then calls too short).
+UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does not decode"
 
 
 # Why the gate measured nothing, for each block it leaves null (v2.withheld).
@@ -338,16 +353,36 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     return {"v2": v2}
 
 
+def _is_mp4_or_aac(file_path: str) -> bool:
+    """
+    Whether the file starts like an MP4 (M4A) file (an ISO BMFF `ftyp` box) or an ADTS AAC
+    stream (a 12-bit sync word with layer 0, which MPEG audio leaves reserved). No format the
+    service decodes starts like either: MP3 starts with an ID3 tag or a frame of layer 1-3, WAV
+    with RIFF, FLAC with fLaC, Ogg with OggS.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(8)
+    except OSError:
+        return False
+    if head[4:8] == b"ftyp":
+        return True
+    return len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xF6) == 0xF0
+
+
 def decode(file_path: str) -> Signals:
     """
     Decode a file once (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own
     rate; the analysis resamples it once per rate it needs. Previews are 30 s; never decode
     more than MAX_DECODE_SECONDS, whatever the file claims.
 
-    Raises InvalidAudioError (a 422) when the file cannot be decoded, or holds non-finite or
-    absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the
-    downmix (antiphase stereo), the loudest channel is analysed instead.
+    Raises InvalidAudioError (a 422) for an MP4 (M4A) or AAC file (UNSUPPORTED_FORMAT, before
+    any decoding), when the file cannot be decoded, or when it holds non-finite or absurd sample
+    values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the downmix (antiphase
+    stereo), the loudest channel is analysed instead.
     """
+    if _is_mp4_or_aac(file_path):
+        raise InvalidAudioError(UNSUPPORTED_FORMAT)
     try:
         with sf.SoundFile(file_path) as f:
             frames = min(f.frames, int(MAX_DECODE_SECONDS * f.samplerate)) if f.frames >= 0 else -1
@@ -383,7 +418,12 @@ class AnalysisTimeoutError(Exception):
 
 async def analyze_preview_url(url: str) -> dict:
     """Download a validated preview, analyse it in the thread pool and remove the file."""
-    file_path = await download_preview(url)
+    try:
+        file_path = await download_preview(url)
+    except UnsupportedFormatError as e:
+        # Refused by its declared type before the body was read: a format, not a download,
+        # failure.
+        raise InvalidAudioError(UNSUPPORTED_FORMAT) from e
     try:
         loop = asyncio.get_running_loop()
         work = loop.run_in_executor(executor, analyze_audio_file, file_path)

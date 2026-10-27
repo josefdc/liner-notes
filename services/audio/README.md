@@ -294,7 +294,11 @@ drum loop as of a dense mix whose key a listener would name. The codes (the cont
 | any | `estimate_failed` | the estimator raised (logged), or gave a non-finite tempo |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
-times full scale, is refused with `422`.
+times full scale, is refused with `422`. An MP4 (M4A) or AAC preview is refused with `422` and
+its own reason, `it is an MP4 (M4A) or AAC file, a format the service does not decode`, whether
+the host declares it (`audio/mp4`, `audio/aac` and their aliases, refused before the body is
+read) or its first bytes show it: the service decodes only through `libsndfile`, which does not
+read these formats.
 
 Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
 only written to the service log.
@@ -304,7 +308,7 @@ only written to the service log.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (not decodable, non-finite or absurd samples) |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, non-finite or absurd samples) |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
@@ -321,9 +325,10 @@ only written to the service log.
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a
-`200` response with an `audio/*` content type and no content encoding, and stops at 2 MB
-(previews are about 0.5 MB). Connect and read timeouts are 5 s and 10 s, and the whole download
-must finish within 20 s. The temporary file is removed after the analysis, whatever the outcome.
+`200` response with an MP3, WAV, FLAC or Ogg content type and no content encoding, and stops at
+2 MB (previews are about 0.5 MB). Connect and read timeouts are 5 s and 10 s, and the whole
+download must finish within 20 s. The temporary file is removed after the analysis, whatever the
+outcome.
 
 ## How it works
 
@@ -408,8 +413,8 @@ suite that way.
 
 - **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
   needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
-  platform without a bundled library and an old system `libsndfile`. AAC and M4A cannot be
-  decoded at all: the service decodes only through `libsndfile`, which does not read them (the
-  preview hosts the service accepts serve MP3).
+  platform without a bundled library and an old system `libsndfile`. AAC and M4A are not
+  decoded at all: the service decodes only through `libsndfile`, which does not read them, so it
+  refuses them with their own `422` reason (the preview hosts the service accepts serve MP3).
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

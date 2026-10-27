@@ -35,17 +35,21 @@ const LOADING_VIEW_PROPS = {
   'aria-label': 'Loading the results',
 } as const;
 
-// Same padding and gaps as the Dashboard (components/Dashboard.tsx), so nothing shifts when it loads.
+// Same padding and gaps as the Dashboard (components/Dashboard.tsx), and a top row of the "New
+// search" button's height (the Dashboard's h1 is the track's title, in the hero), so the hero
+// card and everything below it stay where they are when the Dashboard loads.
 const DashboardSkeleton = (
   <div
     {...LOADING_VIEW_PROPS}
     className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in focus:outline-none"
   >
-    {/* Header skeleton */}
-    <div className="flex justify-between items-center">
-      <div className="space-y-2">
-        <div className={`h-7 w-48 ${shimmerClass} rounded-sm`} />
-        <div className={`h-3 w-64 ${shimmerClass} rounded-sm`} />
+    {/* Top row: the "New search" button (a small Button: its padding, line and border) */}
+    <div className="flex md:justify-end">
+      <div
+        className={`w-36 py-1.5 text-xs border border-white/10 rounded-sm ${shimmerClass}`}
+        aria-hidden="true"
+      >
+        &nbsp;
       </div>
     </div>
     {/* Hero card skeleton */}

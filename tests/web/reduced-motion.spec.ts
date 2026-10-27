@@ -179,7 +179,7 @@ async function openGraph(
   await page.route("https://p.scdn.co/**", () => {});
   await useMockApi(page, fixture);
   await analyzeAndOpenDashboard(page, "Bright Lines");
-  await page.getByRole("button", { name: "VIEW FULL ANALYSIS" }).click();
+  await page.getByRole("button", { name: "View full analysis" }).click();
   const graph = graphOf(page);
   await expect(graph.locator("g.nodes > g")).toHaveCount(2);
   const drawnAt = await page.evaluate(() => (window as unknown as { __drawnAt: number }).__drawnAt);

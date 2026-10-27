@@ -46,8 +46,8 @@ describe('GenealogyGraph preview indicator', () => {
       unavailableNodeId: 'n1',
     };
     render(<GenealogyGraph data={data} />);
-    expect(screen.getByText('PREVIEW UNAVAILABLE')).toBeTruthy();
-    expect(screen.queryByText('AUDIO BLOCKED')).toBeNull();
+    expect(screen.getByText('Preview unavailable')).toBeTruthy();
+    expect(screen.queryByText('Audio blocked')).toBeNull();
   });
 
   it('says audio is blocked when the browser refuses to play', () => {
@@ -59,8 +59,8 @@ describe('GenealogyGraph preview indicator', () => {
       blockedNodeId: 'n1',
     };
     render(<GenealogyGraph data={data} />);
-    expect(screen.getByText('AUDIO BLOCKED')).toBeTruthy();
-    expect(screen.queryByText('PREVIEW UNAVAILABLE')).toBeNull();
+    expect(screen.getByText('Audio blocked')).toBeTruthy();
+    expect(screen.queryByText('Preview unavailable')).toBeNull();
     // Which track's preview, in the live region.
     expect(screen.getByRole('status').textContent).toBe(
       'Preview of Other - Artist was blocked by the browser.',
@@ -79,7 +79,9 @@ describe('GenealogyGraph preview indicator', () => {
         }}
       />,
     );
-    expect(screen.getByText('PREVIEWING TRACK...')).toBeTruthy();
+    expect(screen.getByText('Playing preview…')).toBeTruthy();
     expect(screen.queryByText(/SAMPLE/)).toBeNull();
+    // A status, not a measured value: not in the measured hue.
+    expect(screen.getByText('Playing preview…').parentElement?.className).not.toMatch(/cyber/);
   });
 });

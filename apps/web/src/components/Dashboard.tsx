@@ -135,7 +135,7 @@ const RelationBadge: React.FC<{ rec: RelatedTrack }> = ({ rec }) => {
       className="flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <span className="text-chrome font-mono font-bold uppercase tracking-widest text-text-secondary">
-        LOGIC:
+        Relation:
       </span>{' '}
       {rec.chip ? (
         <ProvenanceChip kind={rec.chip} glow={rec.chip === 'sourced'}>
@@ -182,6 +182,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
   const cover = useAlbumCover(trackData?.coverUrl);
   const relatedCount = relatedNodes(shown).length;
+  // Relations left out because the verifier rejected their claim (or it cannot be read).
+  const hiddenLinks = (trackData?.genealogy.links ?? []).filter(
+    (link) =>
+      typeof link === 'object' && link !== null && shown?.claims.isHidden(link.claimId) === true,
+  ).length;
   const { reader, failed: readerFailed, retry: retryReader } = useLinkReader(relatedCount > 0);
   const relatedTracks = useMemo(
     () => getRelatedTracks(trackData, shown, reader),
@@ -280,32 +285,26 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-y-auto overflow-x-hidden pb-20 md:pb-10">
-      {/* Top Bar (P0:3 — New Search button, P0:5 — removed date slider) */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-stagger-in stagger-1">
-        <div>
-          <h2
+      {/* Top Bar (P0:3 — New Search button, P0:5 — removed date slider). The page's h1 is the
+          track's title, in the hero below; without a result it says so here. */}
+      <header
+        className={`flex flex-col md:flex-row items-start md:items-center gap-4 animate-stagger-in stagger-1 ${trackData ? 'md:justify-end' : 'justify-between'}`}
+      >
+        {!trackData && (
+          <h1
             ref={headingRef}
             tabIndex={-1}
             className="text-2xl font-medium tracking-tight text-white outline-none"
           >
-            Command Center
-          </h2>
-          <p className="text-xs font-mono text-text-tertiary mt-1">
-            AGENT_ID: X9-ALPHA {'//'} STATUS: ONLINE
-          </p>
-        </div>
+            No analysis loaded
+          </h1>
+        )}
         {onNewSearch && (
           <Button variant="ghost" size="sm" leftIcon={<Search size={14} />} onClick={onNewSearch}>
-            NEW SEARCH
+            New search
           </Button>
         )}
       </header>
-
-      {/* A replayed result says it is a recording, before anything else about it */}
-      {trackData && <RecordedRunNotice track={trackData} />}
-
-      {/* What this result is missing, named (model unavailable, audio not measured) */}
-      {trackData && <ResultNotices track={trackData} />}
 
       {/* Now Playing Hero Section (P2:17 — stagger animation) */}
       {trackData && (
@@ -338,15 +337,19 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="text-chrome font-mono text-cyber/80 uppercase tracking-widest">
-                  NOW PLAYING
+                <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
+                  Analyzed track
                 </span>
-                <div className="w-1.5 h-1.5 rounded-full bg-cyber/60"></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-white/30"></div>
               </div>
 
-              <h2 className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1">
+              <h1
+                ref={headingRef}
+                tabIndex={-1}
+                className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1 outline-none"
+              >
                 {trackData.title}
-              </h2>
+              </h1>
               <p className="text-lg text-text-tertiary font-mono mb-1">{trackData.artist}</p>
               {trackData.album && (
                 <div className="flex items-center gap-2 mb-4 text-sm text-text-tertiary">
@@ -357,7 +360,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <span>{trackData.releaseYear}</span>
                     </>
                   )}
-                  {trackData.explicit && <Badge variant="neutral">EXPLICIT</Badge>}
+                  {trackData.explicit && <Badge variant="neutral">Explicit</Badge>}
                 </div>
               )}
 
@@ -380,7 +383,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   rightIcon={<ArrowRight size={16} />}
                   onClick={() => onNavigate(AppPhase.PLAYER)}
                 >
-                  VIEW FULL ANALYSIS
+                  View full analysis
                 </Button>
                 {trackData.spotifyUrl && (
                   <a
@@ -390,7 +393,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                   >
                     <ExternalLink size={14} />
-                    SPOTIFY
+                    Spotify
                   </a>
                 )}
               </div>
@@ -398,6 +401,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </section>
       )}
+
+      {/* A replayed result says it is a recording after the hero that holds its title (the h1
+          the focus lands on): reading on from the title reaches it, before the panels below */}
+      {trackData && <RecordedRunNotice track={trackData} />}
+
+      {/* What this result is missing, named (model unavailable, audio not measured) */}
+      {trackData && <ResultNotices track={trackData} />}
 
       {/* Main Grid (P2:17 — stagger animations). It fills spare height but never shrinks below its
           content, and the hero above never shrinks: the page scrolls instead of clipping them. */}
@@ -447,7 +457,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           {/* The count moves below the heading when the two do not fit side by side */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>
-              <h3 className="text-lg font-medium tracking-tight text-white">Connected Tracks</h3>
+              <h2 className="text-lg font-medium tracking-tight text-white">Connections</h2>
               <p className="text-chrome font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
@@ -458,15 +468,18 @@ const Dashboard: React.FC<DashboardProps> = ({
               <span className="text-xs font-mono text-analog whitespace-nowrap">
                 {/* What the cards show, out of how many connected tracks there are */}
                 {relatedTracks.length < relatedCount
-                  ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`
-                  : `${relatedCount} RELATED ${relatedCount === 1 ? 'TRACK' : 'TRACKS'}`}
+                  ? `${relatedTracks.length} of ${relatedCount} related tracks`
+                  : `${relatedCount} related ${relatedCount === 1 ? 'track' : 'tracks'}`}
               </span>
             )}
           </div>
 
           {relatedTracks !== null && relatedTracks.length === 0 && (
             <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
-              No connected tracks found for this song.
+              {/* Relations were found, but every one was rejected */}
+              {hiddenLinks > 0
+                ? 'No connections to show.'
+                : 'No connected tracks found for this song.'}
             </p>
           )}
           {relatedTracks === null && readerFailed && (
@@ -476,7 +489,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             >
               <span>Connected tracks could not be loaded.</span>
               <Button variant="ghost" size="sm" onClick={retryReader}>
-                TRY AGAIN
+                Try again
               </Button>
             </div>
           )}
@@ -525,7 +538,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <h4 className="font-semibold text-white truncate">{rec.title}</h4>
+                    <h3 className="font-semibold text-white truncate">{rec.title}</h3>
                     {rec.artist && (
                       <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
                     )}

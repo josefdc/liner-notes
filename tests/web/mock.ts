@@ -235,6 +235,17 @@ export async function animationsSettled(page: Page) {
   );
 }
 
+/**
+ * The Dashboard's heading: its h1, the analysed track's title, in the hero beside "View full
+ * analysis" (the Player's h1 is the same title, without that button).
+ */
+export function dashboardHeading(page: Page) {
+  return page
+    .locator("section")
+    .filter({ has: page.getByRole("button", { name: "View full analysis" }) })
+    .getByRole("heading", { level: 1 });
+}
+
 /** Runs a search against the mocked stream and continues to the Dashboard. */
 export async function analyzeAndOpenDashboard(
   page: Page,
@@ -245,7 +256,7 @@ export async function analyzeAndOpenDashboard(
   await page.getByPlaceholder(/Song title/).fill(query);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await page.getByRole("button", { name: "Open the results" }).click();
-  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await expect(dashboardHeading(page)).toBeVisible();
   // The connected tracks follow once the link reader has loaded.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
   await animationsSettled(page);
@@ -253,7 +264,7 @@ export async function analyzeAndOpenDashboard(
 
 /** Opens the Player from the Dashboard. */
 export async function openPlayer(page: Page) {
-  await page.getByRole("button", { name: "VIEW FULL ANALYSIS" }).click();
-  await expect(page.getByRole("button", { name: /BACK TO BASE/ })).toBeVisible();
+  await page.getByRole("button", { name: "View full analysis" }).click();
+  await expect(page.getByRole("button", { name: /Back to summary/ })).toBeVisible();
   await animationsSettled(page);
 }

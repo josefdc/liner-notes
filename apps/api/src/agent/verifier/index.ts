@@ -30,14 +30,20 @@
  *    still served, not the fallback.
  * 4. Kinds (`applyVerdicts`, pure): a model claim is sourced when the judge found its cited
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
- *    inferred otherwise. A link's claim states one relation, whole or not at all: only
- *    `supported` sources it (a `partial` one usually means a weaker or another relation). So
- *    does every other claim about a relation between two records (RELATION_ABOUT: a sample or a
- *    cover) that no link states: sample fact cards and any claim about a cover. A partly
- *    supported one reads as inferred, on this path as on more facts (factoids/service.ts). A
- *    code-built claim is
- *    sourced by construction and gets no verdict; one left citing nothing by the deterministic
- *    step reads as not sourced (inferred), and so does its link. A
+ *    inferred otherwise. Every link's claim states one relation, whole or not at all, whatever
+ *    its link's type and whatever it cites: only `supported` sources it (a `partial` one usually
+ *    means a weaker or another relation). So does every other claim that asserts a relation
+ *    between two records, whatever the model labelled it (`relationTest`): one about a sample or
+ *    a cover (RELATION_ABOUT), and one whose own citations, as the model gave them, include a
+ *    primary record of a sample, interpolation, remix or cover (isRelationRecord,
+ *    `citesRelation`), such as a connection card on a record that samples the track. The model
+ *    asserted the relation by citing it, so such a claim counts even when the deterministic step
+ *    dropped that record for its scope (a cover of the song cited for a claim about this
+ *    recording). A cited id that is not in the pack is no record, and counts for nothing. A
+ *    partly supported one reads as inferred, on this path as on more facts
+ *    (factoids/service.ts). A code-built claim is sourced by construction and gets no verdict;
+ *    one left citing nothing by the deterministic step reads as not sourced (inferred), and so
+ *    does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
@@ -68,6 +74,7 @@ import {
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { releaseYearOf } from "../../sources/musicbrainz.js";
+import { RELATION_PHRASE } from "../../sources/records.js";
 import { maskHandles } from "../../sources/search.js";
 import { plainSourceError } from "../../sources/toolResult.js";
 import { replayedRecording, runUsage } from "../callRecords.js";
@@ -149,6 +156,11 @@ function droppedCitationsReason(outOfScope: number): string {
 export interface CheckedDraft {
   claims: Claim[];
   genealogy: Genealogy;
+  /**
+   * The ids of the claims whose own citations, before the scope check, include a relation record
+   * of the pack (isRelationRecord): they assert that relation, whatever the check kept.
+   */
+  citesRelation: ReadonlySet<string>;
 }
 
 /**
@@ -180,8 +192,10 @@ export function checkClaims(
       return recordTitle ? [{ title: recordTitle, artist: recordArtist }] : [];
     });
   const claims: Claim[] = [];
+  const citesRelation = new Set<string>();
   for (const claim of draft.claims) {
     const inPack = claim.evidenceIds.filter((id) => pack.has(id));
+    if (inPack.some((id) => isRelationRecord(pack.get(id)!))) citesRelation.add(claim.id);
     const supporting = inPack.filter((id) => {
       const item = pack.get(id);
       return item !== undefined && scopeSupports(claim.scope, item);
@@ -226,7 +240,7 @@ export function checkClaims(
     const claim = link.claimId ? byId.get(link.claimId) : undefined;
     return claim ? { ...link, evidenceIds: [...claim.evidenceIds] } : link;
   });
-  return { claims, genealogy: { nodes: draft.genealogy.nodes, links } };
+  return { claims, genealogy: { nodes: draft.genealogy.nodes, links }, citesRelation };
 }
 
 /**
@@ -267,7 +281,8 @@ export const LINK_IS_RELATION: Readonly<Record<LinkType, boolean>> = {
 /**
  * What a claim states as a relation between two records, whether a link states it or not: the
  * subjects LINK_CLAIM_ABOUT gives the claims of the link types that state one (LINK_IS_RELATION).
- * Those claims are stated whole; any other claim is judged as before.
+ * Those claims are stated whole, and so is a claim about another subject that cites a relation
+ * record (relationTest).
  */
 export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
   (Object.keys(LINK_IS_RELATION) as LinkType[])
@@ -275,17 +290,46 @@ export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
     .flatMap((type) => LINK_CLAIM_ABOUT[type]),
 );
 
+/** The relationship kinds a primary record's recordRef names (sources/records.ts). */
+const RELATION_KINDS: ReadonlySet<string> = new Set(Object.keys(RELATION_PHRASE));
+
+/**
+ * Whether an evidence item is a primary record of a relation between two records: a sample,
+ * interpolation, remix or cover, as MusicBrainz, Genius or SecondHandSongs file it. Its recordRef
+ * names the relationship's kind (`track/recording/<mbid>/sampled-by/recording/<mbid>`), and the
+ * relation is the one fact it states. A web page has no recordRef; a recording, release or
+ * credit record names no kind.
+ */
+export function isRelationRecord(item: Evidence): boolean {
+  if (item.sourceTier !== "primary-record" || !item.recordRef) return false;
+  return item.recordRef.split("/").some((segment) => RELATION_KINDS.has(segment));
+}
+
+/**
+ * Whether a claim asserts a relation between two records, whatever the model labelled it: a
+ * claim a link states, one about a subject in RELATION_ABOUT, or one whose own citations include
+ * a relation record of the pack (`citesRelation`, from checkClaims). The model's label is its own
+ * choice (a sample statement may come as trivia or a connection, and no card type is about a
+ * cover); the record it cites is the source's.
+ */
+function relationTest(
+  checked: Pick<CheckedDraft, "genealogy" | "citesRelation">,
+): (claim: Claim) => boolean {
+  const stated = linkClaimIds(checked.genealogy);
+  return (claim) =>
+    stated.has(claim.id) || RELATION_ABOUT.has(claim.about) || checked.citesRelation.has(claim.id);
+}
+
 /**
  * The claims with the judge's verdicts and their kinds, and the genealogy with each link's kind
- * from its own claim (see the module comment). A claim a link states is a relation, stated whole;
- * so is one about a subject in RELATION_ABOUT, which no link need state. Pure.
+ * from its own claim (see the module comment). A claim that asserts a relation (a link's, one
+ * about a subject in RELATION_ABOUT, one in `citesRelation`) is stated whole. Pure.
  */
 export function applyVerdicts(
-  checked: Pick<CheckedDraft, "claims" | "genealogy">,
+  checked: Pick<CheckedDraft, "claims" | "genealogy" | "citesRelation">,
   verdicts: ReadonlyMap<string, { verdict: Claim["verdict"]; reason: string }>,
 ): { claims: Claim[]; genealogy: Genealogy } {
-  const stated = linkClaimIds(checked.genealogy);
-  const isRelation = (claim: Claim) => stated.has(claim.id) || RELATION_ABOUT.has(claim.about);
+  const isRelation = relationTest(checked);
   const claims = checked.claims.map((claim): Claim => {
     // A code claim is sourced by construction, while it still cites the item that states it.
     if (claim.origin !== "model") {
@@ -296,7 +340,7 @@ export function applyVerdicts(
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link, and a
-    // partly supported claim about a relation in RELATION_ABOUT is not sourced either.
+    // partly supported claim that asserts a relation otherwise is not sourced either.
     const supported = verdict === "supported" || (verdict === "partial" && !isRelation(claim));
     return {
       ...claim,
@@ -608,10 +652,15 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
     const calls = judged.call ? [judged.call] : [];
 
-    // 4. Kinds, then 5. masked text. Sample fact cards and any claim about a cover are stated
-    // whole, as a link's claim is (applyVerdicts, RELATION_ABOUT).
+    // 4. Kinds, then 5. masked text. A claim about a sample or a cover, or one that cites a
+    // sample, interpolation, remix or cover record, whatever its label, is stated whole, as a
+    // link's claim is (applyVerdicts).
     const verified = applyVerdicts(
-      { claims: checked.claims, genealogy: enriched.genealogy },
+      {
+        claims: checked.claims,
+        genealogy: enriched.genealogy,
+        citesRelation: checked.citesRelation,
+      },
       judged.verdicts,
     );
     const tooLong = new Set(judged.tooLong);

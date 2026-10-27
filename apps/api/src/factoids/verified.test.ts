@@ -19,6 +19,7 @@ import { writeFactoids } from "./service.js";
 import {
   card,
   DEMO_TRACK,
+  demoRecord,
   evidenceItem,
   type FakeModel,
   fakeModel,
@@ -292,5 +293,128 @@ describe("a relation from more facts is stated whole, as the analysis states it"
     expect(claimOf(SOURCED)).toMatchObject({ about: "production" });
     expect(provenance(claimOf(SOURCED))).toEqual({ kind: "sourced", verdict: "partial" });
     expect(provenance(claimOf(SOURCED))).toEqual(fromAnalysis("partial", "production"));
+  });
+});
+
+describe("a statement from more facts that asserts a relation is stated whole, whatever its label", () => {
+  // The recorded run's own relation records: Circo Loco samples the track; a string quartet
+  // covers the song.
+  const recorded = demoRecord().analysis.evidence ?? [];
+  const recordOf = (part: string) => {
+    const item = recorded.find((each) => each.recordRef?.includes(part));
+    if (!item) throw new Error(`the recording has no ${part} record`);
+    return item;
+  };
+  const sampledBy = recordOf("/sampled-by/recording/1da61e7a");
+  const coveredBy = recordOf("/covered-by/recording/29df9c62");
+  // The album the recording is on: a release-wide record, which states no relation.
+  const album = recordOf("release/bd3bb36e");
+  const pack = [...PACK, sampledBy, coveredBy, album];
+  const SAMPLES = "Drake and 21 Savage's Circo Loco samples One More Time.";
+  const COVER = "Vitamin String Quartet recorded its own version of the song.";
+  const TRIVIA = "The synth was bought second-hand in Paris.";
+  const labelled = (
+    text: string,
+    type: "trivia" | "curiosity" | "connection",
+    evidenceIds: string[],
+    scope: "recording" | "work" = "recording",
+  ) => ({ ...card(text, evidenceIds), type, scope });
+  const provenance = (claim: Claim | undefined) => ({ kind: claim?.kind, verdict: claim?.verdict });
+
+  it.each(["trivia", "curiosity", "connection"] as const)(
+    "reads a partly supported sample statement labelled %s as inferred",
+    async (type) => {
+      const { claimOf } = await moreFacts(
+        { cards: [null, labelled(SAMPLES, type, [sampledBy.id]), null], judge: () => "partial" },
+        { runId: RUN_ID },
+        pack,
+      );
+
+      expect(claimOf(SAMPLES)).toMatchObject({ evidenceIds: [sampledBy.id] });
+      expect(claimOf(SAMPLES)?.about).not.toBe("sample");
+      expect(provenance(claimOf(SAMPLES))).toEqual({ kind: "inferred", verdict: "partial" });
+    },
+  );
+
+  it("keeps a fully supported sample statement labelled trivia sourced", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(SAMPLES, "trivia", [sampledBy.id]), null],
+        judge: () => "supported",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(provenance(claimOf(SAMPLES))).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  it("leaves a partly supported trivia statement that asserts no relation sourced", async () => {
+    const { claimOf } = await moreFacts(
+      { cards: [labelled(TRIVIA, "trivia", ["ev-1"]), null, null], judge: () => "partial" },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(TRIVIA)).toMatchObject({ about: "trivia", evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(TRIVIA))).toEqual({ kind: "sourced", verdict: "partial" });
+  });
+
+  it("reads a partly supported cover statement labelled connection as inferred", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(COVER, "connection", [coveredBy.id], "work"), null],
+        judge: () => "partial",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(COVER)).toMatchObject({ about: "connection", evidenceIds: [coveredBy.id] });
+    expect(provenance(claimOf(COVER))).toEqual({ kind: "inferred", verdict: "partial" });
+  });
+
+  it("reads a partly supported cover statement as inferred when its cover record was dropped for scope", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(COVER, "connection", [coveredBy.id, "ev-1"]), null],
+        judge: () => "partial",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    // Scoped to the recording, the card keeps ev-1 only; it still asserts the cover.
+    expect(claimOf(COVER)).toMatchObject({ scope: "recording", evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(COVER))).toEqual({ kind: "inferred", verdict: "partial" });
+  });
+
+  it("keeps the same cover statement sourced when supported after the drop", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(COVER, "connection", [coveredBy.id, "ev-1"]), null],
+        judge: () => "supported",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(COVER)).toMatchObject({ evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(COVER))).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  it("leaves a fact that cites no relation record, before or after the check, as before", async () => {
+    // The release-wide record is dropped for scope; ev-1 is kept.
+    const { claimOf } = await moreFacts(
+      {
+        cards: [labelled(TRIVIA, "trivia", [album.id, "ev-1"]), null, null],
+        judge: () => "partial",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(TRIVIA)).toMatchObject({ scope: "recording", evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(TRIVIA))).toEqual({ kind: "sourced", verdict: "partial" });
   });
 });

@@ -72,8 +72,10 @@ COPY fixtures/replays ./fixtures/replays
 RUN groupadd --system --gid 1001 nodejs \
     && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin app
 
-# Create persistent data directory
-RUN mkdir -p /app/data && chown app:nodejs /app/data
+# Persistent directories: the database (/app/data) and the spend log (/app/spend, LLM_SPEND_LOG in
+# deploy/compose.prod.yml), each a volume in production. A new named volume takes its owner from
+# here.
+RUN mkdir -p /app/data /app/spend && chown app:nodejs /app/data /app/spend
 
 WORKDIR /app/apps/api
 

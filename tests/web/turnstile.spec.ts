@@ -54,7 +54,7 @@ type FakeState = { renders: Array<{ sitekey: string; appearance: string }>; remo
  * Serves the stand-in for Cloudflare's script, refuses anything else on Cloudflare's host, and
  * returns every request the page made to another host than its own.
  */
-async function fakeTurnstile(page: Page, { interactive = false } = {}) {
+async function fakeTurnstile(page: Page, { interactive = false, stallFirst = false } = {}) {
   const outside: string[] = [];
   page.on("request", (request) => {
     const { hostname } = new URL(request.url());
@@ -63,11 +63,14 @@ async function fakeTurnstile(page: Page, { interactive = false } = {}) {
   await page.addInitScript((asked) => {
     (window as unknown as { __fakeTurnstile: object }).__fakeTurnstile = { interactive: asked };
   }, interactive);
-  await page.route("https://challenges.cloudflare.com/**", (route) =>
-    route.request().url() === SCRIPT
-      ? route.fulfill({ contentType: "text/javascript", body: FAKE_TURNSTILE })
-      : route.abort(),
-  );
+  let scriptRequests = 0;
+  await page.route("https://challenges.cloudflare.com/**", (route) => {
+    // Cloudflare's script, at its URL or (asked for again after a stalled request) one of its own.
+    if (!route.request().url().startsWith(SCRIPT)) return route.abort();
+    // `stallFirst`: the first request for the script is never answered (no load, no error).
+    if (stallFirst && ++scriptRequests === 1) return;
+    return route.fulfill({ contentType: "text/javascript", body: FAKE_TURNSTILE });
+  });
   return outside;
 }
 
@@ -234,19 +237,43 @@ test("a rate-limited refusal keeps the retry disabled, with the time left, until
       },
     ],
   });
+  // What the error heading is described by at the moment it takes the focus, as a screen
+  // reader reads it then (the parts hidden from it left out).
+  await page.addInitScript(() => {
+    const read: string[] = [];
+    (window as unknown as { __focusDescriptions: string[] }).__focusDescriptions = read;
+    document.addEventListener("focusin", (event) => {
+      const target = event.target as Element;
+      const ids = target.getAttribute?.("aria-describedby");
+      if (!ids) return;
+      const text = ids.split(" ").map((id) => {
+        const copy = document.getElementById(id)?.cloneNode(true) as Element | undefined;
+        for (const hidden of copy?.querySelectorAll('[aria-hidden="true"]') ?? []) hidden.remove();
+        return copy?.textContent ?? "";
+      });
+      read.push(text.join(" "));
+    });
+  });
   await page.goto("/");
+  // The page has been up a while before the refusal: a wait read from the time the page loaded
+  // would be several seconds too long.
+  await page.waitForTimeout(4_000);
   await search(page, "Bright Lines");
   await expect(page.getByText("Too many requests. Please try again later.")).toBeVisible();
   const retry = page.getByRole("button", { name: "Try again", exact: true });
   const timeLeft = page.getByText(/^You can try again in [1-3] s\.$/);
   await expect(retry).toBeDisabled();
   await expect(timeLeft).toBeVisible();
-  // The heading that takes the focus is described by the time left too.
-  await expect(
-    page.getByRole("heading", { name: "The analysis did not finish" }),
-  ).toHaveAccessibleDescription(
-    /Too many requests\. Please try again later\. You can try again in [1-3] s\./,
-  );
+  // The heading that takes the focus is described by the time left too, in words.
+  const focusDescriptions = () =>
+    page.evaluate(
+      () => (window as unknown as { __focusDescriptions: string[] }).__focusDescriptions,
+    );
+  expect(await focusDescriptions()).toEqual([
+    expect.stringMatching(
+      /^Too many requests\. Please try again later\. You can try again in [1-3] seconds?\.$/,
+    ),
+  ]);
   expect(await postsToRuns(page)).toBe(1);
 
   // Another search before then sends nothing either: the same refusal, the same wait.
@@ -254,6 +281,10 @@ test("a rate-limited refusal keeps the retry disabled, with the time left, until
   await expect(retry).toBeDisabled();
   await expect(timeLeft).toBeVisible();
   expect(await postsToRuns(page)).toBe(1);
+  expect(await focusDescriptions()).toEqual([
+    expect.stringMatching(/You can try again in [1-3] seconds?\.$/),
+    expect.stringMatching(/You can try again in [1-3] seconds?\.$/),
+  ]);
 
   await expect(retry).toBeEnabled({ timeout: 5_000 });
   await expect(timeLeft).toHaveCount(0);
@@ -297,5 +328,38 @@ test("a rate limit refused inside the stream waits for its retryAfterMs", async 
   await retry.click();
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   expect(await postsToRuns(page)).toBe(2);
+  expect(unexpected(problems)).toEqual([]);
+});
+
+test("a script request that stalls is made again, and the user can get through", async ({
+  page,
+}) => {
+  // Two checks wait out the script timeout (15 s each) before the third asks again.
+  test.setTimeout(120_000);
+  const problems = collectProblems(page);
+  const outside = await fakeTurnstile(page, { stallFirst: true });
+  await useMockApi(page, loadFixture("full-result"));
+  await page.goto("/");
+  await search(page, "Bright Lines");
+  const unavailable = page.getByText(/The check that protects the analysis could not be loaded/);
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  const reload = page.getByRole("button", { name: "Reload the page" });
+  await expect(unavailable).toBeVisible({ timeout: 20_000 });
+  await expect(reload).toHaveCount(0);
+
+  // Right after, the check waits for the same request a while longer, then fails again: the
+  // page now offers a reload beside "Try again".
+  await retry.click();
+  await expect(unavailable).toBeVisible({ timeout: 20_000 });
+  await expect(reload).toBeVisible();
+  expect(outside.filter((url) => url === SCRIPT)).toHaveLength(1);
+
+  // The stalled request is given up: the next check asks again, and gets through.
+  await retry.click();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible({
+    timeout: 20_000,
+  });
+  expect(outside.filter((url) => url.startsWith(SCRIPT))).toEqual([SCRIPT, `${SCRIPT}&retry=1`]);
+  expect(await sentTurnstileTokens(page)).toEqual(["fake-turnstile-token-1"]);
   expect(unexpected(problems)).toEqual([]);
 });

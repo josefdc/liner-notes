@@ -97,19 +97,43 @@ const abortError = () => new DOMException('The check was aborted', 'AbortError')
 
 let loading: Promise<TurnstileApi> | null = null;
 /**
- * The script element still loading, if any: kept past a check's timeout (the browser may still
- * fetch and run it), so a later check waits for it instead of adding a second copy.
+ * The script element still loading, if any, and since when: kept past a check's timeout (the
+ * browser may still fetch and run it), so a check soon after waits for it instead of adding a
+ * second copy. One loading for longer than PENDING_TRUST_FACTOR times the script timeout is
+ * taken as stalled: it is dropped, and the check asks for the script again.
  */
-let pending: HTMLScriptElement | null = null;
+let pending: { script: HTMLScriptElement; since: number } | null = null;
+const PENDING_TRUST_FACTOR = 2;
+/** Stalled requests given up so far: each new request after one gets a URL of its own. */
+let stalled = 0;
 
 /** The script element to wait for: the one still loading, or a new one added to the page. */
-function scriptElement(): HTMLScriptElement {
-  if (pending) return pending;
+function scriptElement(timeoutMs: number): HTMLScriptElement {
+  if (pending && Date.now() - pending.since < PENDING_TRUST_FACTOR * timeoutMs) {
+    return pending.script;
+  }
+  // Stalled (neither loaded nor failed in all that time): a fresh request may get through. The
+  // browser would join a request for the same URL still in flight (Chromium does), so the new
+  // one is asked for at a URL of its own.
+  if (pending) {
+    pending.script.remove();
+    pending = null;
+    stalled++;
+  }
   const script = document.createElement('script');
   const settled = () => {
-    if (pending === script) pending = null;
+    if (pending?.script === script) pending = null;
   };
-  script.addEventListener('load', settled, { once: true });
+  script.addEventListener(
+    'load',
+    () => {
+      settled();
+      // Loaded without defining window.turnstile (a blocker's empty stand-in): the next check
+      // asks again, and this copy does not stay in the page.
+      if (!window.turnstile) script.remove();
+    },
+    { once: true },
+  );
   script.addEventListener(
     'error',
     () => {
@@ -118,9 +142,9 @@ function scriptElement(): HTMLScriptElement {
     },
     { once: true },
   );
-  script.src = TURNSTILE_SCRIPT_URL;
+  script.src = stalled === 0 ? TURNSTILE_SCRIPT_URL : `${TURNSTILE_SCRIPT_URL}&retry=${stalled}`;
   script.async = true;
-  pending = script;
+  pending = { script, since: Date.now() };
   document.head.appendChild(script);
   return script;
 }
@@ -129,14 +153,15 @@ function scriptElement(): HTMLScriptElement {
  * Cloudflare's script, loaded once (it sets window.turnstile); checks that start while it loads
  * wait for the same load. Rejects with `verification_unavailable` when it cannot be loaded, or
  * is not loaded within `timeoutMs`. Nothing asks for it again by itself: the next call waits
- * for a script still loading, or asks for a new one once the last one failed.
+ * for a script still loading (unless it has stalled), or asks for a new one once the last one
+ * failed.
  */
 export function loadTurnstile(
   timeoutMs: number = TURNSTILE_TIMEOUTS.scriptMs,
 ): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   loading ??= new Promise<TurnstileApi>((resolve, reject) => {
-    const script = scriptElement();
+    const script = scriptElement(timeoutMs);
     const end = (api: TurnstileApi | undefined) => {
       clearTimeout(timer);
       script.removeEventListener('load', onLoad);

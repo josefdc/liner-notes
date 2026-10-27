@@ -33,11 +33,17 @@ function fakeTurnstile() {
 }
 
 // Scripts the page asked for: kept out of the document, so nothing is fetched.
+// `removed`: those the page took out again; the others would still be in the page.
 let scripts: HTMLScriptElement[];
+let removed: Set<HTMLScriptElement>;
+const inPage = () => scripts.filter((script) => !removed.has(script));
 beforeEach(() => {
   scripts = [];
+  removed = new Set();
   vi.spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
-    scripts.push(node as unknown as HTMLScriptElement);
+    const script = node as unknown as HTMLScriptElement;
+    scripts.push(script);
+    script.remove = () => removed.add(script);
     return node;
   });
 });
@@ -110,6 +116,56 @@ describe('the Turnstile check', () => {
     expect(scripts).toHaveLength(2);
     scripts[1].dispatchEvent(new Event('error'));
     await expect(next).rejects.toMatchObject({ code: 'verification_unavailable' });
+  });
+
+  it('takes no Turnstile script out of the page that failed to load', async () => {
+    const pending = turnstileToken('k');
+    pending.catch(() => {});
+    await settle();
+    scripts[0].dispatchEvent(new Event('error'));
+    await expect(pending).rejects.toMatchObject({ code: 'verification_unavailable' });
+    expect(inPage()).toEqual([]);
+  });
+
+  it('drops a script that loads without defining Turnstile (a blocker stand-in)', async () => {
+    for (let check = 1; check <= 3; check++) {
+      const pending = turnstileToken('k');
+      pending.catch(() => {});
+      await settle();
+      expect(scripts).toHaveLength(check);
+      // Loads, but window.turnstile stays undefined.
+      scripts[check - 1].dispatchEvent(new Event('load'));
+      await expect(pending).rejects.toMatchObject({ code: 'verification_unavailable' });
+      // No copy stays in the page, so none piles up from one check to the next.
+      expect(inPage()).toEqual([]);
+    }
+  });
+
+  it('asks for the script again once the one loading has stalled', async () => {
+    vi.useFakeTimers();
+    const { api, last } = fakeTurnstile();
+    const check = async () => {
+      const pending = turnstileToken('k');
+      pending.catch(() => {});
+      await vi.advanceTimersByTimeAsync(TURNSTILE_TIMEOUTS.scriptMs);
+      await expect(pending).rejects.toMatchObject({ code: 'verification_unavailable' });
+    };
+    // The request never loads and never fails. The second check, right after the first, waits
+    // for it; the third finds it stalled and asks again.
+    await check();
+    await check();
+    expect(scripts).toHaveLength(1);
+    const third = turnstileToken('k');
+    await settle();
+    expect(scripts).toHaveLength(2);
+    expect(inPage()).toEqual([scripts[1]]);
+    // At a URL of its own: a browser would join the stalled request for the same URL.
+    expect(scripts[1].src).toBe(`${TURNSTILE_SCRIPT_URL}&retry=1`);
+    window.turnstile = api;
+    scripts[1].dispatchEvent(new Event('load'));
+    await settle();
+    last().options.callback('tt-fresh');
+    await expect(third).resolves.toBe('tt-fresh');
   });
 
   it('gives up on a script that does not load in time', async () => {

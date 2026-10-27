@@ -25,7 +25,7 @@ import type { SuggestionFetcher } from './search/useSuggestions';
 import { TrackPicker } from './search/TrackPicker';
 import { ANALYZING_STATUSES } from './console/progress';
 import { ProgressScreen, type ShownTrack } from './ProgressScreen';
-import { useTimeLeft, waitText } from '../hooks/useTimeLeft';
+import { spokenWait, useTimeLeft, waitText } from '../hooks/useTimeLeft';
 
 // Loaded only when live analysis turns out to be unavailable.
 const BudgetBanner = lazy(() => import('./BudgetBanner'));
@@ -113,6 +113,21 @@ function BannerLoading({ code }: { code: LiveUnavailableCode }) {
     </p>
   );
 }
+
+/** The code of a Turnstile check whose script could not be loaded (agent/turnstile.ts). */
+const VERIFICATION_UNAVAILABLE = 'verification_unavailable';
+
+/** The steps a run reaches only once it has passed the Turnstile check. */
+const PAST_THE_CHECK = new Set<AgentStatus>([
+  'searching',
+  'analyzing',
+  'measuring',
+  'researching',
+  'composing',
+  'checking',
+  'disambiguation',
+  'complete',
+]);
 
 /** The heading of the error block. */
 const ERROR_TITLE = 'The analysis did not finish';
@@ -397,6 +412,27 @@ const Onboarding: React.FC<OnboardingProps> = ({
   // as it counts down; the heading's description says it when the block takes the focus).
   const retryReady = shownError?.action === 'retry' && retryAt !== null && retryWait === 0;
 
+  // Failures in a row in which the Turnstile check could not be loaded, counted once per failure
+  // (failureId) during render, so the block shows its buttons in the commit that shows it. A run
+  // that got past the check (any step after connecting) starts the count again.
+  const [unavailable, setUnavailable] = useState<{ last: string | null; count: number }>({
+    last: null,
+    count: 0,
+  });
+  if (failureId !== null && failureId !== unavailable.last) {
+    setUnavailable({
+      last: failureId,
+      count: errorCode === VERIFICATION_UNAVAILABLE ? unavailable.count + 1 : 0,
+    });
+  } else if (unavailable.count > 0 && PAST_THE_CHECK.has(status)) {
+    setUnavailable({ last: unavailable.last, count: 0 });
+  }
+  // The check failed to load twice in a row: reloading the page loads it afresh.
+  const offerReload =
+    shownError?.action === 'retry' &&
+    errorCode === VERIFICATION_UNAVAILABLE &&
+    unavailable.count >= 2;
+
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
   // ─── P1:14 Track picker ───────────────────────────────────────────────────
@@ -575,32 +611,51 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   {line}
                 </p>
               ))}
+              {/* Not a live region: read with the heading's description, never as it counts down.
+                  Screen readers get the units in words ("42 seconds"). */}
               {retryWait > 0 && (
                 <p id="error-wait" className="text-xs font-mono text-center text-text-tertiary">
-                  {`You can try again in ${waitText(retryWait)}.`}
+                  <span aria-hidden="true">{`You can try again in ${waitText(retryWait)}.`}</span>
+                  <span className="sr-only">{`You can try again in ${spokenWait(retryWait)}.`}</span>
                 </p>
               )}
               <div id="error-retry-ready" role="status" className="sr-only">
                 {retryReady ? 'You can try again now.' : ''}
               </div>
               <div className="flex flex-col items-center gap-3">
-                <Button
-                  variant="cyber"
-                  size="md"
-                  leftIcon={
-                    shownError.action === 'search' ? <Search size={14} /> : <RotateCcw size={14} />
-                  }
-                  disabled={retryWait > 0}
-                  onClick={
-                    shownError.action === 'retry'
-                      ? handleRetry
-                      : shownError.action === 'search'
-                        ? handleSearchAgain
-                        : () => window.location.reload()
-                  }
-                >
-                  {ERROR_ACTION_LABEL[shownError.action]}
-                </Button>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Button
+                    variant="cyber"
+                    size="md"
+                    leftIcon={
+                      shownError.action === 'search' ? (
+                        <Search size={14} />
+                      ) : (
+                        <RotateCcw size={14} />
+                      )
+                    }
+                    disabled={retryWait > 0}
+                    onClick={
+                      shownError.action === 'retry'
+                        ? handleRetry
+                        : shownError.action === 'search'
+                          ? handleSearchAgain
+                          : () => window.location.reload()
+                    }
+                  >
+                    {ERROR_ACTION_LABEL[shownError.action]}
+                  </Button>
+                  {offerReload && (
+                    <Button
+                      variant="neutral"
+                      size="md"
+                      leftIcon={<RotateCcw size={14} />}
+                      onClick={() => window.location.reload()}
+                    >
+                      {ERROR_ACTION_LABEL.reload}
+                    </Button>
+                  )}
+                </div>
                 {/* "Search again" already leads to a different song: no second link beside it */}
                 {shownError.action !== 'search' && (
                   <button

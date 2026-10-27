@@ -1,7 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
 // Browser tests run the web app alone; the API is replaced by tests/mock-sse/mock-api.js.
-// Outside the ports the dev setup uses (3000-3002 and the 31x0-31x2 worktree slots).
+// They use two ports, PLAYWRIGHT_WEB_PORT and the one after it (3290 and 3291 by default; both
+// must be free): outside the ports the dev setup uses (3000-3002 and the 31x0-31x2 worktree
+// slots).
 const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 3290);
 // A second build, served on the next port, made with Cloudflare's always-passing test site key:
 // the Turnstile specs run against it, with Cloudflare's script replaced by a route. Every other

@@ -385,9 +385,7 @@ describe("the analysis and factoid routes", () => {
       ["POST", "/api/analyze"],
       ["POST", "/api/analyze/resume"],
       ["GET", "/api/factoids/more/stream?trackTitle=x"],
-      ["GET", "/api/factoids/decrypt/stream?trackTitle=x"],
       ["POST", "/api/factoids/more"],
-      ["POST", "/api/factoids/decrypt"],
       ["GET", "/API/Factoids/More/Stream/?trackTitle=x"],
       ["GET", "/api/factoids/anything-else"],
     ] as const) {
@@ -427,7 +425,6 @@ describe("the analysis and factoid routes", () => {
       streamPath(),
       resumePath("thread-a"),
       "/api/factoids/more/stream?trackTitle=x",
-      "/api/factoids/decrypt/stream?trackTitle=x",
     ]) {
       const res = await request(app).head(path).timeout(2000);
       expect(res.status, path).toBe(200);
@@ -588,17 +585,13 @@ describe("the analysis and factoid routes", () => {
     await sse(app, withToken(streamPath(), runToken));
     const another = tokens.mint("some-other-run").runToken;
     for (const token of [runToken, another]) {
-      for (const path of ["/api/factoids/more", "/api/factoids/decrypt"]) {
-        const res = await request(app).post(withToken(path, token)).send({});
-        // Past the token check: the body is what is refused.
-        expect(res.status, path).toBe(400);
-        expect(res.body).toMatchObject({ code: "invalid_input" });
-      }
-      for (const path of ["/api/factoids/more/stream", "/api/factoids/decrypt/stream"]) {
-        const { res, body } = await sse(app, withToken(`${path}?trackTitle=`, token));
-        expect(res.status, path).toBe(200);
-        expect(body).toContain('"code":"invalid_input"');
-      }
+      const res = await request(app).post(withToken("/api/factoids/more", token)).send({});
+      // Past the token check: the body is what is refused.
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: "invalid_input" });
+      const stream = await sse(app, withToken("/api/factoids/more/stream?trackTitle=", token));
+      expect(stream.res.status).toBe(200);
+      expect(stream.body).toContain('"code":"invalid_input"');
     }
   });
 

@@ -1,5 +1,5 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
-import { DEPRECATED_FACTOIDS_STREAM_PATH, FACTOIDS_STREAM_PATH } from "../routes/factoidPaths.js";
+import { FACTOIDS_STREAM_PATH } from "../routes/factoidPaths.js";
 import { refuseStream } from "../sse.js";
 import { logger } from "../../logger.js";
 
@@ -70,7 +70,6 @@ const EVENT_STREAM_PATHS = new Set([
   "/api/analyze/stream",
   "/api/analyze/stream/resume",
   FACTOIDS_STREAM_PATH,
-  DEPRECATED_FACTOIDS_STREAM_PATH,
 ]);
 
 /**

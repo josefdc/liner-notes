@@ -95,26 +95,34 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  // Also when a test on the fake clock timed out before its helper could restore the timers.
+  vi.useRealTimers();
 });
 
 /**
- * Runs the graph run that `start` begins on a fake clock (setTimeout and Date.now), moving it
- * 100 ms a step until the run settles. Its waits take no real time and their lengths are exact,
- * however busy the machine is: the clock moves only between steps. Returns what the run resolved
- * to and how far the clock moved.
+ * Runs the graph run that `start` begins on a fake clock (setTimeout, clearTimeout and
+ * Date.now), moving it 100 ms a step until the run settles. Its waits take no real time and
+ * their lengths are exact, however busy the machine is: timers fire at their own time on the
+ * clock. Returns what the run resolved to and the clock time at which it settled.
  */
 async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapsed: number }> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   try {
     const started = Date.now();
-    let settled = false;
+    let settledAt: number | undefined;
     const run = start().finally(() => {
-      settled = true;
+      settledAt = Date.now();
     });
     run.catch(() => {});
-    for (let step = 0; step < 2000 && !settled; step++) await vi.advanceTimersByTimeAsync(100);
-    expect(settled, "the run settles within 200 s on the clock").toBe(true);
-    return { out: await run, elapsed: Date.now() - started };
+    // Stops if the timers were restored under it (the test timed out and the next one began).
+    for (let step = 0; step < 2000 && settledAt === undefined && vi.isFakeTimers(); step++) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(
+      settledAt,
+      "the run settles within 200 s on the fake clock (a wait not on setTimeout never would)",
+    ).toBeDefined();
+    return { out: await run, elapsed: (settledAt as number) - started };
   } finally {
     vi.useRealTimers();
   }
@@ -558,8 +566,8 @@ describe("scoutNode's Spotify failures", () => {
 
     const { out, elapsed } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
 
-    // Gives up at once: well under the 1 s backoff, let alone the 60 s asked for.
-    expect(elapsed).toBeLessThan(1000);
+    // Gives up at once, not after any wait (the 60 s asked for, or the 1 s backoff).
+    expect(elapsed).toBeLessThan(50);
     expect(spotify.calls).toBe(1);
     expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 60_000 });
   });
@@ -568,6 +576,8 @@ describe("scoutNode's Spotify failures", () => {
     spotify.answer = async () => {
       throw new SourceError("spotify", "http", "HTTP 503", { status: 503 });
     };
+    // The backoff's random part is half its most: a tenth of the wait, times 0.5.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     const statuses: string[] = [];
     const { graph } = scoutGraph();
 
@@ -582,14 +592,43 @@ describe("scoutNode's Spotify failures", () => {
     );
 
     expect(spotify.calls).toBe(3);
-    // The 1 s, then 2 s backoff, each with up to a tenth more at random.
+    // The 1 s, then 2 s backoff, each with a twentieth more (the random part above).
     const waits = [1, 2].map((i) => spotify.startedAt[i] - spotify.startedAt[i - 1]);
-    expect(waits[0]).toBeGreaterThanOrEqual(1000);
-    expect(waits[0]).toBeLessThanOrEqual(1100);
-    expect(waits[1]).toBeGreaterThanOrEqual(2000);
-    expect(waits[1]).toBeLessThanOrEqual(2200);
+    expect(waits).toEqual([1050, 2100]);
     expect(out.scoutFailure).toEqual({ kind: "upstream_unavailable" });
-    expect(statuses.filter((m) => m.startsWith("Spotify did not answer"))).toHaveLength(2);
+    expect(statuses.filter((m) => m.startsWith("Spotify did not answer"))).toEqual([
+      "Spotify did not answer; trying again in 1 s",
+      "Spotify did not answer; trying again in 2 s",
+    ]);
+  });
+
+  it("waits out a Retry-After of exactly its 10 s limit", async () => {
+    spotify.answer = async () => {
+      if (spotify.calls === 1) {
+        throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 10_000 });
+      }
+      return JSON.stringify([track]);
+    };
+    const { graph } = scoutGraph();
+
+    const { out } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
+
+    expect(spotify.calls).toBe(2);
+    expect(spotify.startedAt[1] - spotify.startedAt[0]).toBe(10_000);
+    expect(out.spotifyData).toMatchObject({ id: "t1" });
+  });
+
+  it("does not wait out a Retry-After just over its 10 s limit", async () => {
+    spotify.answer = async () => {
+      throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 10_001 });
+    };
+    const { graph } = scoutGraph();
+
+    const { out, elapsed } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
+
+    expect(elapsed).toBeLessThan(50);
+    expect(spotify.calls).toBe(1);
+    expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 10_001 });
   });
 
   it("says each rate-limit wait in a status line", async () => {

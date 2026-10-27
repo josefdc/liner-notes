@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAudioPreview } from './useAudioPreview';
 
@@ -11,6 +11,7 @@ class FakeAudio {
   volume = 1;
   paused = true;
   currentTime = 0;
+  error: { code: number } | null = null;
   onplay: (() => void) | null = null;
   onpause: (() => void) | null = null;
   onended: (() => void) | null = null;
@@ -30,6 +31,10 @@ class FakeAudio {
     this.paused = true;
     this.onpause?.();
   }
+  removeAttribute(name: string) {
+    if (name === 'src') this.src = '';
+  }
+  load() {}
 }
 
 beforeEach(() => {
@@ -38,6 +43,7 @@ beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -45,7 +51,7 @@ afterEach(() => {
 const clip = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
 
 describe('useAudioPreview', () => {
-  it('marks only that node unavailable when its clip cannot be loaded, and retries on the next hover', async () => {
+  it('marks only that node unavailable when its clip cannot be loaded, and retries on the next preview', async () => {
     const { result } = renderHook(() => useAudioPreview());
 
     nextPlay = 'NotSupportedError';
@@ -61,7 +67,7 @@ describe('useAudioPreview', () => {
     expect(result.current.isPlaying).toBe(true);
   });
 
-  it('clears the unavailable node when the preview stops (the pointer leaves)', async () => {
+  it('clears the unavailable node when the preview stops', async () => {
     const { result } = renderHook(() => useAudioPreview());
 
     nextPlay = 'NotSupportedError';
@@ -76,7 +82,11 @@ describe('useAudioPreview', () => {
     const { result } = renderHook(() => useAudioPreview());
 
     await act(async () => result.current.playPreview(clip, 'n2'));
-    await act(async () => lastAudio?.onerror?.());
+    await act(async () => {
+      if (!lastAudio) return;
+      lastAudio.error = { code: 4 };
+      lastAudio.onerror?.();
+    });
 
     expect(result.current.unavailableNodeId).toBe('n2');
     expect(result.current.hasPreviewSupport).toBe(true);
@@ -88,11 +98,13 @@ describe('useAudioPreview', () => {
     nextPlay = 'NotAllowedError';
     await act(async () => result.current.playPreview(clip, 'n1'));
     expect(result.current.hasPreviewSupport).toBe(false);
+    expect(result.current.blockedNodeId).toBe('n1');
     expect(result.current.unavailableNodeId).toBeNull();
 
     nextPlay = 'plays';
     await act(async () => result.current.playPreview(clip, 'n3'));
     expect(result.current.hasPreviewSupport).toBe(true);
+    expect(result.current.blockedNodeId).toBeNull();
   });
 
   it('ignores a play that another preview interrupted', async () => {

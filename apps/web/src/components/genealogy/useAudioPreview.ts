@@ -1,106 +1,109 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { type PreviewEvents, usePreviewAudio } from '../../hooks/usePreviewAudio';
 
 /**
  * Hook to manage audio preview playback for genealogy graph nodes.
  * Separates audio playback concern from graph rendering.
  *
- * `hasPreviewSupport` is false only while the browser refuses to play (autoplay blocked); it
- * comes back with the next clip that plays. A clip that cannot be loaded (preview links are
- * signed and expire within minutes) sets `unavailableNodeId` instead, until the next preview or
- * stop, so the node can be hovered again.
+ * The clips play through the page's one preview element (`usePreviewAudio`): a preview started
+ * here stops the Player's, and one started there stops this one (`playingNodeId` goes back to
+ * null). A preview starts only from an explicit control, never on hover.
+ *
+ * `hasPreviewSupport` is false only while the browser refuses to play (autoplay blocked), and
+ * `blockedNodeId` is the track it refused; both come back with the next clip that plays. A clip
+ * that cannot be loaded (preview links are signed and expire within minutes) sets
+ * `unavailableNodeId` instead, until the next preview or stop, so the preview can be tried again.
  */
 export function useAudioPreview() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingNodeIdRef = useRef<string | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingNodeId, setPlayingNodeId] = useState<string | null>(null);
   const [hasPreviewSupport, setHasPreviewSupport] = useState(true);
+  const [blockedNodeId, setBlockedNodeId] = useState<string | null>(null);
   const [unavailableNodeId, setUnavailableNodeId] = useState<string | null>(null);
 
-  // Initialize audio element once
-  useEffect(() => {
-    audioRef.current = new Audio();
-    audioRef.current.volume = 0.4; // Subtle preview volume
-
-    // Track play state for UI feedback
-    audioRef.current.onplay = () => setIsPlaying(true);
-    audioRef.current.onpause = () => setIsPlaying(false);
-    audioRef.current.onended = () => {
+  // Track play state for UI feedback
+  const events = useMemo<PreviewEvents>(() => {
+    const ended = () => {
       setIsPlaying(false);
       playingNodeIdRef.current = null;
       setPlayingNodeId(null);
     };
-    audioRef.current.onerror = () => {
-      setIsPlaying(false);
-      // The clip could not be loaded: it has expired or is gone.
-      if (playingNodeIdRef.current) setUnavailableNodeId(playingNodeIdRef.current);
-      playingNodeIdRef.current = null;
-      setPlayingNodeId(null);
+    return {
+      onPlay: () => setIsPlaying(true),
+      onPause: () => setIsPlaying(false),
+      onEnded: ended,
+      onError: () => {
+        setIsPlaying(false);
+        // The clip could not be loaded: it has expired or is gone.
+        if (playingNodeIdRef.current) setUnavailableNodeId(playingNodeIdRef.current);
+        playingNodeIdRef.current = null;
+        setPlayingNodeId(null);
+      },
+      // The Player's own preview took the element over.
+      onStopped: ended,
     };
+  }, []);
+  const audio = usePreviewAudio(events);
 
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+  const playPreview = useCallback(
+    (url: string, nodeId: string) => {
+      // If same node, toggle pause/play
+      if (playingNodeIdRef.current === nodeId && audio.playing()) {
+        audio.pause();
+        playingNodeIdRef.current = null;
+        setPlayingNodeId(null);
+        return;
       }
-    };
-  }, []);
 
-  const playPreview = useCallback((url: string, nodeId: string) => {
-    if (!audioRef.current) return;
+      playingNodeIdRef.current = nodeId;
+      setPlayingNodeId(nodeId);
+      setUnavailableNodeId(null);
 
-    // If same node, toggle pause/play
-    if (playingNodeIdRef.current === nodeId && !audioRef.current.paused) {
-      audioRef.current.pause();
-      playingNodeIdRef.current = null;
-      setPlayingNodeId(null);
-      return;
-    }
-
-    audioRef.current.src = url;
-    playingNodeIdRef.current = nodeId;
-    setPlayingNodeId(nodeId);
-    setUnavailableNodeId(null);
-
-    const playPromise = audioRef.current.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => setHasPreviewSupport(true))
-        .catch((error: unknown) => {
-          const name = error instanceof Error ? error.name : '';
-          // Another preview or a stop interrupted this one: nothing went wrong.
-          if (name === 'AbortError') return;
-          if (name === 'NotAllowedError') {
-            console.log('Audio preview blocked by the browser');
-            setHasPreviewSupport(false);
-            return;
-          }
-          // Any other failure is this clip's (an expired link): only it is unavailable.
-          if (playingNodeIdRef.current === nodeId) {
-            playingNodeIdRef.current = null;
-            setPlayingNodeId(null);
-          }
-          setUnavailableNodeId(nodeId);
-        });
-    }
-  }, []);
+      const playPromise = audio.play(url, 0.4); // Subtle preview volume
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setHasPreviewSupport(true);
+            setBlockedNodeId(null);
+          })
+          .catch((error: unknown) => {
+            const name = error instanceof Error ? error.name : '';
+            // Another preview or a stop interrupted this one: nothing went wrong.
+            if (name === 'AbortError') return;
+            if (name === 'NotAllowedError') {
+              console.log('Audio preview blocked by the browser');
+              setHasPreviewSupport(false);
+              setBlockedNodeId(nodeId);
+              return;
+            }
+            // Any other failure is this clip's (an expired link): only it is unavailable.
+            if (playingNodeIdRef.current === nodeId) {
+              playingNodeIdRef.current = null;
+              setPlayingNodeId(null);
+            }
+            setUnavailableNodeId(nodeId);
+          });
+      }
+    },
+    [audio],
+  );
 
   const stopPreview = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
+    // Only a preview of the graph's: the Player's track preview is its own to stop.
+    audio.stop();
     playingNodeIdRef.current = null;
     setPlayingNodeId(null);
     setIsPlaying(false);
     setUnavailableNodeId(null);
-  }, []);
+  }, [audio]);
 
   return {
     isPlaying,
     playingNodeId,
     hasPreviewSupport,
+    blockedNodeId,
     unavailableNodeId,
     playPreview,
     stopPreview,

@@ -11,7 +11,7 @@ import type { GenealogyLink } from "../agent/schema.js";
 import { stubLlm } from "../agent/testing/stubLlm.js";
 import { applyVerdicts, checkClaims } from "../agent/verifier/index.js";
 import { draftOf, modelClaim } from "../agent/verifier/testing.js";
-import { createTestApp } from "../http/testApp.js";
+import { createTestApp, withRunToken } from "../http/testApp.js";
 import { createFactoidsRouter } from "../http/routes/factoids.js";
 import { LlmError } from "../llm/errors.js";
 import { FACTOID_PACK_MAX } from "./prompt.js";
@@ -58,7 +58,7 @@ async function moreFacts(
     createFactoidsRouter({ llm, loadRun: (id) => (id === RUN_ID ? storedRun(pack) : null) }),
   );
   const res = await request(app)
-    .post("/api/factoids/more")
+    .post(withRunToken("/api/factoids/more"))
     .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], ...body })
     .timeout(5000);
   const claims: Claim[] = res.body.claims ?? [];

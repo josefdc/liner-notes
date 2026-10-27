@@ -14,6 +14,7 @@ import {
 } from "../../config/settings.js";
 import { type CapturedLogs, captureLogsForTests, configureLogger, ipHash } from "../../logger.js";
 import { createApp } from "../app.js";
+import { testAuth, withRunToken } from "../testApp.js";
 
 vi.mock("../../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/spotify.js")>()),
@@ -55,7 +56,7 @@ describe("the request log", () => {
     echo.get("/api/echo", (_req, res) => {
       res.json({ ok: true });
     });
-    await request(createApp({ http: settings(), routers: [echo] }))
+    await request(createApp({ ...testAuth, http: settings(), routers: [echo] }))
       .get("/api/echo?query=what+the+visitor+typed&limit=5")
       .set("X-Forwarded-For", CLIENT)
       .set("User-Agent", "Secret-Agent/1.0 (visitor@example.com)")
@@ -82,9 +83,12 @@ describe("the request log", () => {
   });
 
   it("logs the full path of a request refused inside a mounted limit", async () => {
-    const app = createApp({ http: settings({ rateLimit: { windowMs: 60_000, max: 1 } }) });
-    await request(app).post("/api/factoids/more").send({});
-    await request(app).post("/api/factoids/more").send({});
+    const app = createApp({
+      ...testAuth,
+      http: settings({ rateLimit: { windowMs: 60_000, max: 1 } }),
+    });
+    await request(app).post(withRunToken("/api/factoids/more")).send({});
+    await request(app).post(withRunToken("/api/factoids/more")).send({});
     expect(requestLines().map((line) => [line.path, line.status])).toEqual([
       ["/api/factoids/more", 400],
       ["/api/factoids/more", 429],
@@ -96,13 +100,15 @@ describe("the request log", () => {
     failing.get("/api/boom", () => {
       throw new Error("boom");
     });
-    const app = createApp({ http: settings() });
+    const app = createApp({ ...testAuth, http: settings() });
     await request(app).get("/api/health");
     await request(app).get("/api/ready");
     await request(app).head("/api/analyze/stream");
     await request(app).options("/api/health");
     await request(app).get("/api/nowhere");
-    await request(createApp({ http: settings(), routers: [failing] })).get("/api/boom");
+    await request(createApp({ ...testAuth, http: settings(), routers: [failing] })).get(
+      "/api/boom",
+    );
 
     expect(requestLines().map((line) => [line.method, line.path, line.status, line.level])).toEqual(
       [
@@ -121,7 +127,7 @@ describe("the request log", () => {
     hanging.post("/api/hang", () => {
       // never answers
     });
-    await request(createApp({ http: settings(), routers: [hanging] }))
+    await request(createApp({ ...testAuth, http: settings(), routers: [hanging] }))
       .post("/api/hang")
       .send({})
       .timeout(100)
@@ -139,7 +145,7 @@ describe("the request log", () => {
   it("is not written at info level for probes", async () => {
     logs.restore();
     logs = captureLogsForTests({ level: "info" });
-    await request(createApp({ http: settings() })).get("/api/health");
+    await request(createApp({ ...testAuth, http: settings() })).get("/api/health");
     expect(requestLines()).toEqual([]);
   });
 });

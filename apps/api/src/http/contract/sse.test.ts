@@ -31,6 +31,7 @@ import type { Llm } from "../../llm/invoke.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { getRun } from "../../store/runs.js";
 import { createApp } from "../app.js";
+import { testAuth, withRunToken } from "../testApp.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "../routes/analyze.js";
 import { createFactoidsRouter } from "../routes/factoids.js";
 import { droppedEventCount } from "../sse.js";
@@ -331,7 +332,7 @@ const settings = (max = 10_000) => ({
   searchRateLimit: DEFAULT_SEARCH_RATE_LIMIT,
 });
 const factoidsRouter = createFactoidsRouter({ llm: model as unknown as Llm });
-const app = createApp({ http: settings(), routers: [analyzeRouter, factoidsRouter] });
+const app = createApp({ ...testAuth, http: settings(), routers: [analyzeRouter, factoidsRouter] });
 
 async function sse(path: string, target = app) {
   const res = await request(target)
@@ -350,11 +351,16 @@ async function sse(path: string, target = app) {
   return res.body as string;
 }
 
-const streamPath = (query: string) => `/api/analyze/stream?query=${encodeURIComponent(query)}`;
+// Each analysis with a run token of its own; a resume with the token its run started with.
+const streamPath = (query: string) =>
+  withRunToken(`/api/analyze/stream?query=${encodeURIComponent(query)}`);
 const resumePath = (threadId: string, trackId: string) =>
-  `/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${trackId}`;
+  withRunToken(
+    `/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${trackId}`,
+    threadId,
+  );
 const factoidPath = (query: Record<string, string>) =>
-  `/api/factoids/more/stream?${new URLSearchParams(query)}`;
+  withRunToken(`/api/factoids/more/stream?${new URLSearchParams(query)}`);
 const runStatus = (threadId: string) => getRun(getDb(), threadId)?.status;
 
 let server: http.Server;
@@ -504,7 +510,7 @@ describe("event streams follow the contract", () => {
     });
 
     it("reports invalid input as an error with a run id of its own, then done", async () => {
-      for (const path of ["/api/analyze/stream", streamPath("x".repeat(201))]) {
+      for (const path of [withRunToken("/api/analyze/stream"), streamPath("x".repeat(201))]) {
         const events = expectAnalysis(await sse(path));
         expect(types(events)).toEqual(["error", "done"]);
         expect(events[0].code).toBe("invalid_input");
@@ -619,7 +625,11 @@ describe("event streams follow the contract", () => {
     });
 
     it("a refusal by the rate limit is a typed error, then done", async () => {
-      const limited = createApp({ http: settings(1), routers: [analyzeRouter, factoidsRouter] });
+      const limited = createApp({
+        ...testAuth,
+        http: settings(1),
+        routers: [analyzeRouter, factoidsRouter],
+      });
       await sse(streamPath("plain one"), limited);
 
       for (const path of [
@@ -650,7 +660,10 @@ describe("event streams follow the contract", () => {
     });
 
     it.each([
-      ["invalid_input", () => "/api/analyze/stream/resume?threadId=a%2Fb&selectedTrackId=x"],
+      [
+        "invalid_input",
+        () => withRunToken("/api/analyze/stream/resume?threadId=a%2Fb&selectedTrackId=x"),
+      ],
       ["choice_expired", () => resumePath("unknown-thread", "track-a")],
       ["invalid_selection", async () => resumePath(await pausedThread(), "track-zzz")],
       [

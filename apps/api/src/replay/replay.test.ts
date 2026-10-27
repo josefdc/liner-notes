@@ -69,6 +69,7 @@ import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/setting
 import { runningCommit } from "../config/checkoutCommit.js";
 import { main as recordMain } from "./record.js";
 import { createApp } from "../http/app.js";
+import { testAuth, withRunToken } from "../http/testApp.js";
 import { resolveSpendLogPath } from "../llm/budget.js";
 import { resetBudgetStateForTests } from "../llm/budgetState.js";
 import { acquireLock } from "../llm/fileLock.js";
@@ -235,6 +236,7 @@ vi.mock("../agent/nodes/index.js", async () => {
 type Event = { type: string; seq?: number; runId?: string; [key: string]: unknown };
 
 const app = createApp({
+  ...testAuth,
   http: {
     corsOrigins: ["http://localhost:3110"],
     trustProxy: 0,
@@ -244,9 +246,21 @@ const app = createApp({
   },
 });
 
+/**
+ * `path` with a run token, unless it has one: a resume's is the token its run started with, any
+ * other request's a token of its own.
+ */
+const tokened = (path: string) =>
+  path.includes("runToken=")
+    ? path
+    : withRunToken(
+        path,
+        new URLSearchParams(path.split("?")[1] ?? "").get("threadId") ?? undefined,
+      );
+
 async function sse(path: string): Promise<Event[]> {
   const res = await request(app)
-    .get(path)
+    .get(tokened(path))
     .buffer(true)
     .parse((response, callback) => {
       let body = "";
@@ -1696,7 +1710,9 @@ describe("REPLAY_MODE", () => {
       ["error", "live_disabled"],
       ["done", undefined],
     ]);
-    const post = await request(app).post("/api/analyze").send({ query: "Another Song" });
+    const post = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "Another Song" });
     expect(post.status).toBe(503);
     expect(post.body.code).toBe("live_disabled");
     noLiveCalls();
@@ -1710,7 +1726,7 @@ describe("REPLAY_MODE", () => {
 
     // The text names the recording, but the id asks for another track.
     const other = await request(app)
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .send({ query: "Recorded Song The Recorders", trackId: CHOICE_A });
     expect(other.status).toBe(503);
     expect(other.body.code).toBe("live_disabled");
@@ -1719,11 +1735,13 @@ describe("REPLAY_MODE", () => {
 
   it("only: POST /api/analyze answers with the recorded result as a new run", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
-    const res = await request(app).post("/api/analyze").send({ query: "Recorded Song" });
+    const res = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "Recorded Song" });
     // The title alone does not name a recording: only title and artist do.
     expect(res.status).toBe(503);
     const full = await request(app)
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .send({ query: "Recorded Song The Recorders" });
     expect(full.status).toBe(200);
     expect(full.body.data.run).toMatchObject({ id: full.body.threadId, mode: "replay" });
@@ -1734,7 +1752,7 @@ describe("REPLAY_MODE", () => {
   it("only: refuses resumes, a paused live run cannot go on", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
     const post = await request(app)
-      .post("/api/analyze/resume")
+      .post(withRunToken("/api/analyze/resume", "some-thread"))
       .send({ threadId: "some-thread", selectedTrackId: CHOICE_A });
     expect(post.body.code).toBe("live_disabled");
     const events = await sse(
@@ -1765,7 +1783,7 @@ describe("REPLAY_MODE", () => {
   it("only: more facts are the recorded ones the client does not have, or live_disabled", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
     const more = await request(app)
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({
         trackId: TRACK_ID,
         trackTitle: "Recorded Song",
@@ -1778,7 +1796,7 @@ describe("REPLAY_MODE", () => {
     ]);
 
     const other = await request(app)
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ trackId: "other", trackTitle: "Other", existingFactoidIds: [] });
     expect(other.status).toBe(503);
     expect(other.body.code).toBe("live_disabled");
@@ -1811,7 +1829,7 @@ describe("REPLAY_MODE", () => {
       const { port } = server.address() as AddressInfo;
       const runId = await new Promise<string>((resolve, reject) => {
         const req = http.get(
-          `http://127.0.0.1:${port}${streamPath("Recorded Song The Recorders")}`,
+          `http://127.0.0.1:${port}${tokened(streamPath("Recorded Song The Recorders"))}`,
           (res) => {
             res.setEncoding("utf8");
             res.once("data", (chunk: string) => {
@@ -2031,7 +2049,7 @@ describe("REPLAY_MODE", () => {
     vi.stubEnv("REPLAY_MODE", "only");
     const post = (body: Record<string, unknown>) =>
       request(app)
-        .post("/api/factoids/more")
+        .post(withRunToken("/api/factoids/more"))
         .send({ existingFactoidIds: [], ...body });
     // The id alone names the recording, whatever the title says.
     expect((await post({ trackId: TRACK_ID, trackTitle: "Something else" })).status).toBe(200);
@@ -2135,18 +2153,20 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
     expect(String(refused[0].error)).toMatch(/paused/i);
     expect(refused.some((e) => e.type === "complete")).toBe(false);
 
-    const post = await request(app).post("/api/analyze").send({ query: "Something else" });
+    const post = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "Something else" });
     expect(post.status).toBe(503);
     expect(post.body).toMatchObject({ success: false, code: "budget_exhausted" });
     const postReplay = await request(app)
-      .post("/api/analyze")
+      .post(withRunToken("/api/analyze"))
       .send({ query: "Recorded Song The Recorders" });
     expect(postReplay.status).toBe(200);
     expect(postReplay.body.data.run).toMatchObject({ mode: "replay" });
 
     // A paused run cannot go on either.
     const resume = await request(app)
-      .post("/api/analyze/resume")
+      .post(withRunToken("/api/analyze/resume", "some-thread"))
       .send({ threadId: "some-thread", selectedTrackId: CHOICE_A });
     expect(resume.body.code).toBe("budget_exhausted");
     const resumed = await sse(
@@ -2158,12 +2178,12 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
     const suggest = await request(app).get("/api/search/suggest?query=recorded");
     expect(suggest.body.suggestions.map((c: { id: string }) => c.id)).toEqual([TRACK_ID]);
     const facts = await request(app)
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ trackId: TRACK_ID, trackTitle: "Recorded Song", existingFactoidIds: [] });
     expect(facts.status).toBe(200);
     expect(facts.body.meta).toMatchObject({ mode: "replay" });
     const otherFacts = await request(app)
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
     expect(otherFacts.status).toBe(503);
     expect(otherFacts.body.code).toBe("budget_exhausted");
@@ -2222,7 +2242,7 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
       "done",
     ]);
     const facts = await request(app)
-      .post("/api/factoids/more")
+      .post(withRunToken("/api/factoids/more"))
       .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
     expect(facts.body.code).toBe("budget_exhausted");
     expect(live.scout).toBe(1);

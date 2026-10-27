@@ -11,6 +11,8 @@
 import { settings } from "./config/env.js";
 import { createServer } from "node:http";
 import { createApp } from "./http/app.js";
+import { runTokensFor } from "./http/runToken.js";
+import { turnstileVerifierFor } from "./http/turnstile.js";
 import {
   createShutdown,
   installProcessHandlers,
@@ -68,7 +70,11 @@ async function settleRuns(when: string): Promise<void> {
 // Server
 // =============================================================================
 
-const app = createApp({ http: settings.http });
+const app = createApp({
+  http: settings.http,
+  runTokens: runTokensFor(settings.runTokens),
+  verifyTurnstile: turnstileVerifierFor(settings.runTokens),
+});
 let stopRetention = () => {};
 
 // Requests wait while startup settles the runs left open. Settling reads the open runs at once,
@@ -99,6 +105,9 @@ server.listen(settings.port, settings.host, () => {
     `CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
   );
   if (settings.replayMode !== "off") log.info(`REPLAY_MODE=${settings.replayMode}`);
+  if (settings.runTokens.bypass) {
+    log.warn('Turnstile is bypassed (no TURNSTILE_SECRET_KEY): the token "dev-bypass" passes');
+  }
 
   // Runs left "running" by a process that stopped are not running any more.
   void gate.until(

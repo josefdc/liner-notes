@@ -51,7 +51,9 @@
 }
 
 # Sent on every response of the site: pages, assets, the API's answers, and errors (imported
-# again in handle_errors). Deferred, so they replace any value an upstream sent.
+# again in handle_errors). Deferred, so they replace any value an upstream sent. Not on Caddy's
+# automatic redirect from HTTP to HTTPS (a 308 with no body, made outside this site's routes,
+# which take no headers).
 (security_headers) {
 	header {
 		defer
@@ -74,8 +76,9 @@ http://:2020 {
 {$SITE_ADDRESS::80} {
 	# Access log, one JSON line per request on stdout, the automatic redirect to HTTPS included.
 	# The typed text and the run token are not written: the query's runToken is left out, and
-	# query, q, trackTitle, trackArtist, trackId and selectedTrackId read REDACTED. Ids that
-	# follow one run (threadId, runId) and the track id in a path (/t/<id>) stay. Request
+	# query, q, trackTitle, trackArtist, trackId and selectedTrackId read REDACTED. Ids stay:
+	# those that follow one run (threadId, runId) and any in a path (/t/<id>, /api/runs/<id>,
+	# /api/runs/by-track/<id>). Request
 	# headers (cookies, CF-Connecting-IP) and the redirect target (Location repeats the query)
 	# are left out, and addresses are shortened to their network.
 	#

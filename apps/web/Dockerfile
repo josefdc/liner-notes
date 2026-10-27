@@ -60,6 +60,7 @@ RUN setcap -r /usr/bin/caddy \
     && chown app:app /data /config
 
 COPY apps/web/Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=755 apps/web/caddy-start.sh /usr/local/bin/caddy-start
 COPY --from=builder /app/apps/web/dist /srv
 
 # The configuration must parse with the defaults it is shipped with.
@@ -73,4 +74,5 @@ EXPOSE 80 443
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2020/health"]
 
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+# Caddy, after checking that a mounted site.d can be read (caddy-start.sh).
+CMD ["/usr/local/bin/caddy-start"]

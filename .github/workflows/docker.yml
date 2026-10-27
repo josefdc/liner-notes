@@ -303,7 +303,8 @@ jobs:
       # (SSE_HOLD_MS): a stream the visitor leaves puts no token, query or full address in
       # Caddy's log, and a held stream passes through Caddy and ends with "done". The production
       # project's API must be the same container afterwards.
-      # The development stack's own web image: the page built without a site key.
+      # The development stack's own web image: the page built without a site key. Its API and
+      # audio services use the production images loaded above, which it never builds or retags.
       - name: Load the development web image
         uses: docker/bake-action@v7
         with:
@@ -323,8 +324,10 @@ jobs:
         run: |
           trap 'docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml down -v; docker compose -f deploy/compose.prod.yml down -v' EXIT
           api=$(docker compose -f deploy/compose.prod.yml ps -q api)
+          images=$(docker image inspect -f '{{.Id}}' liner-notes-api:latest liner-notes-audio:latest liner-notes-web:latest)
           docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d --no-build \
             --wait --wait-timeout 300
           deploy/check-stack.sh long-stream
           test "$(docker compose -f deploy/compose.prod.yml ps -q api)" = "$api"
+          test "$(docker image inspect -f '{{.Id}}' liner-notes-api:latest liner-notes-audio:latest liner-notes-web:latest)" = "$images"
           docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$api" | grep -qx NODE_ENV=production

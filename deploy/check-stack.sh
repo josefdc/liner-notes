@@ -223,10 +223,20 @@ echo "untrusted peer: plain $plain, CF-Connecting-IP $cf, X-Forwarded-For $xff (
   fail "a forged client address reached the API"
 echo "ok: forged client addresses ignored"
 
-# From a trusted peer (a second Caddy from the web image that trusts its own loopback, asked
-# from inside its container), CF-Connecting-IP is the address the API sees; X-Forwarded-For
-# still is not.
-probe=$("${compose[@]}" run -d --rm --no-deps -e SITE_ADDRESS=:80 -e TRUSTED_PROXIES=127.0.0.1/32 web)
+# The probes below are second Caddys from the running web image, each with its own temporary
+# state and no site.d, so they leave the stack's volumes and settings alone.
+web=$("${compose[@]}" ps -q web)
+image=$(docker inspect -f '{{.Config.Image}}' "$web")
+network=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$web")
+run_probe() {
+  docker run -d --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --tmpfs /data:uid=10001,gid=10001 --tmpfs /config:uid=10001,gid=10001 --tmpfs /tmp "$@" "$image"
+}
+
+# From a trusted peer (a probe on the stack's network that trusts its own loopback, asked from
+# inside its container), CF-Connecting-IP is the address the API sees; X-Forwarded-For still is
+# not.
+probe=$(run_probe --network "$network" -e SITE_ADDRESS=:80 -e TRUSTED_PROXIES=127.0.0.1/32)
 trap 'docker rm -f "$probe" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 25); do
   docker exec "$probe" wget -q -O /dev/null http://127.0.0.1:2020/health 2>/dev/null && break
@@ -262,13 +272,10 @@ grep -q '"uri":"/api/factoids?trackArtist=REDACTED&trackId=REDACTED&trackTitle=R
   fail "the factoid request's track fields are not REDACTED"
 echo "ok: the typed text and the run token are kept out of Caddy's access log"
 
-# Over HTTPS (SITE_ADDRESS=localhost: Caddy's own local certificate), from inside a second Caddy
-# of the same image, with its own temporary state: neither the redirect from HTTP (whose
-# Location repeats the query) nor any other line writes the typed text or the run token.
-image=$(docker inspect -f '{{.Config.Image}}' "$("${compose[@]}" ps -q web)")
-https_probe=$(docker run -d --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-  --tmpfs /data:uid=10001,gid=10001 --tmpfs /config:uid=10001,gid=10001 --tmpfs /tmp \
-  -e SITE_ADDRESS=localhost "$image")
+# Over HTTPS (SITE_ADDRESS=localhost: Caddy's own local certificate), from inside a probe:
+# neither the redirect from HTTP (whose Location repeats the query) nor the HTTPS request's
+# access line nor any other line writes the typed text or the run token.
+https_probe=$(run_probe -e SITE_ADDRESS=localhost)
 trap 'docker rm -f "$https_probe" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 50); do
   docker exec "$https_probe" wget -q -O /dev/null http://127.0.0.1:2020/health 2>/dev/null && break
@@ -284,6 +291,7 @@ sleep 1
 https_logs=$(docker logs "$https_probe" 2>&1)
 docker rm -f "$https_probe" >/dev/null
 grep -q '"status":308' <<<"$https_logs" || fail "no redirect to HTTPS was logged"
+grep -q '"tls":{' <<<"$https_logs" || fail "no access line for the HTTPS request"
 for secret in check-https-token check-https-typed; do
   if grep -q "$secret" <<<"$https_logs"; then
     fail "Caddy's log over HTTPS holds $secret"

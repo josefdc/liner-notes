@@ -210,10 +210,16 @@ a certificate and stores it on the `caddy-data` volume. Behind Cloudflare's prox
   `/.well-known/acme-challenge/` to port 80 of the server: "Always Use HTTPS" must not redirect
   them (turn it off, or exempt that path), also for the renewals every 60 days. The TLS-ALPN
   challenge does not pass the proxy; Caddy tries the HTTP challenge as well.
-- **A Cloudflare Origin CA certificate** (SSL/TLS mode "Full (strict)"). Copy
-  `deploy/site.d/origin-ca.caddy.example` to `deploy/site.d/origin-ca.caddy` and put the
-  certificate and key next to it, as that file says; compose mounts `deploy/site.d` read-only
-  and Caddy reads its `*.caddy` files into the site. Caddy then asks no certificate authority.
+- **A Cloudflare Origin CA certificate** (SSL/TLS mode "Full (strict)"). With `SITE_ADDRESS`
+  set to the hostname, copy `deploy/site.d/origin-ca.caddy.example` to
+  `deploy/site.d/origin-ca.caddy` and put the certificate and key next to it, as that file says;
+  compose mounts `deploy/site.d` read-only and Caddy reads its `*.caddy` files into the site. The
+  web container runs as uid 10001 and must read them: the directory stays 755, `origin-ca.caddy`
+  and `origin.pem` 644, and only the key goes to that user (`chmod 600 origin.key && sudo chown
+  10001 origin.key`); on an SELinux host the mount also needs `:Z`. The container stops at start,
+  naming the file, when it cannot read one. Then confirm that Caddy serves this certificate and
+  asks no certificate authority:
+  `docker compose -f deploy/compose.prod.yml logs web | grep 'skipping automatic certificate management'`.
   The certificate is trusted by Cloudflare only, so the site is reachable through the proxy only.
 - **A DNS challenge.** It needs a web image built with Caddy's Cloudflare DNS module, which the
   shipped image does not have, and an API token for the zone: not set up here.
@@ -224,7 +230,7 @@ Strict-Transport-Security is not sent here; it is set at Cloudflare (runbook, #3
 
 | Service | Reached at | Notes |
 |---------|------------|-------|
-| `web`   | `PROXY_BIND:PROXY_PORT` (default 127.0.0.1:3180) and `PROXY_TLS_PORT` | Caddy; security headers and a Content-Security-Policy on every response |
+| `web`   | `PROXY_BIND:PROXY_PORT` (default 127.0.0.1:3180) and `PROXY_TLS_PORT` | Caddy; security headers and a Content-Security-Policy on every response but Caddy's own redirect from HTTP to HTTPS (a 308 with no body) |
 | `api`   | `/api/*` through Caddy only | `NODE_ENV=production`, `TRUST_PROXY=1`, `REPLAY_MODE=fallback` by default; database on the `sonic-data` volume (`/app/data/sonic-agent.db`), spend log on `llm-spend` |
 | `audio` | the API only | `linux/amd64`; models on the `audio-models` volume, fetched at the first start (up to 90 s) |
 
@@ -263,14 +269,16 @@ always pass, which is how to try the production stack with a real check; leave
 **Without Cloudflare.** `deploy/compose.dev.yml` runs the production API and audio images as a
 project of its own, `liner-notes-dev`, with its own containers, volumes and database, on
 http://127.0.0.1:3182 (`DEV_PROXY_PORT`): starting it never touches the `liner-notes` project
-(do not rename it with `-p`). Its web image (`liner-notes-web-dev`) is built without a site key,
+(do not rename it to that with `-p`). It uses the API and audio images as they are, never
+building, pulling or retagging them, so build them with the production file first; `--build`
+builds only its web image (`liner-notes-web-dev`), which has no site key,
 so the page sends the development bypass, which its API, in development, accepts; only recorded
 runs are served by default (`DEV_REPLAY_MODE`). `deploy/check-stack.sh` checks a running stack
 through Caddy, as CI does (`.github/workflows/docker.yml`). Its checks need `LOG_IP_SALT`, set
 here for the run, and the local origin in `CORS_ORIGINS` (`http://127.0.0.1:3180`):
 
 ```bash
-LOG_IP_SALT=check-stack docker compose -f deploy/compose.prod.yml up -d --build
+LOG_IP_SALT=check-stack docker compose -f deploy/compose.prod.yml up -d --build   # builds all three
 deploy/check-stack.sh
 LOG_IP_SALT=check-stack SSE_HOLD_MS=130000 \
   docker compose -f deploy/compose.prod.yml -f deploy/compose.dev.yml up -d --build
@@ -285,8 +293,8 @@ from any other peer the header is ignored. It sends the API that one address in
 its hashed log addresses. Caddy's logs leave out the typed text and the run token: the access
 log writes the query's `runToken` nowhere and `query`, `q`, `trackId`, `selectedTrackId`,
 `trackTitle` and `trackArtist` as `REDACTED`, and Caddy's other lines (such as a stream the
-visitor left) keep only the path. Ids stay: `threadId` and `runId` in queries and the track id in
-`/t/<id>` in Caddy's log, and the API's own log writes paths such as `/api/runs/by-track/<id>`.
+visitor left) keep only the path. Ids stay, in Caddy's log and the API's: `threadId` and `runId`
+in queries, and any in a path (`/t/<id>`, `/api/runs/<id>`, `/api/runs/by-track/<id>`).
 No request headers or redirect targets are written, and addresses are shortened to their network.
 
 **Content-Security-Policy.** The policy allows scripts from the site and Turnstile only. Cloudflare

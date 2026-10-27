@@ -126,6 +126,11 @@ test.describe("a measured result", () => {
       "Electronic / Dream Pop 0.22",
       "Pop / Indie Pop 0.09",
     ]);
+    // How often this style model agrees with Discogs, from the audio eval report.
+    await expect(styles).toContainText(
+      "Against the release's Discogs styles, on 31 previews (audio eval report of 2026-10-25): " +
+        "the top style matched for 14 of 31, a top-5 style for 21 of 31.",
+    );
     await expect(fingerprint.getByRole("region", { name: "Tags (model estimate)" })).toContainText(
       "electronic 0.70",
     );

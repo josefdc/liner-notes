@@ -5,6 +5,7 @@ import { colors } from '../styles/theme';
 import { InferenceLabel } from './EstimatedWarning';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { formatSeconds } from '../constants';
+import type { MeasuredAudio } from './measured/audio';
 
 interface SmartTimelineProps {
   segments?: SongSegment[];
@@ -29,6 +30,14 @@ interface SmartTimelineProps {
    * `audio.window.durationSeconds`); undefined when the result does not send it.
    */
   previewSeconds?: number;
+  /**
+   * What the audio service measured on the preview (`audio.beats`, `audio.energyContour`,
+   * `audio.sections`), timed from the start of the preview window; null or undefined when it
+   * was not measured. Drawn on the preview lane only when its measured length is known.
+   */
+  beats?: MeasuredAudio['beats'];
+  energyContour?: MeasuredAudio['energyContour'];
+  measuredSections?: MeasuredAudio['sections'];
 }
 
 // The preview lane. When the result carries its measurement, the lane spans the measured
@@ -159,6 +168,150 @@ const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, 
   </div>
 );
 
+// The measured layers of the preview: the beat grid, the energy contour and the neutral
+// sections, all timed in seconds from the start of the decoded preview (the service decodes the
+// clip from its first sample, so a time here is a time in the clip). They are drawn in the
+// measured colour on the preview lane's own axis, each only when it was measured: a missing
+// layer draws nothing. The model's song sections stay on the song timeline above, inferred.
+
+/** Times of 4 decimals at most, so the SVG holds the measured times without float noise. */
+const svgNumber = (value: number) => String(Math.round(value * 10_000) / 10_000);
+
+/** The measured beats inside the window, as ticks over its length. */
+const BeatTicks: React.FC<{ times: number[]; length: number; method: string }> = ({
+  times,
+  length,
+  method,
+}) => (
+  <svg
+    data-measured-layer="beats"
+    role="img"
+    aria-label={`Beat grid: ${plural(times.length, 'beat')} measured in the preview (${method})`}
+    viewBox={`0 0 ${svgNumber(length)} 1`}
+    preserveAspectRatio="none"
+    className="block h-3 w-full"
+    stroke={colors.prov.measured}
+    strokeWidth={1}
+  >
+    {times.map((time) => (
+      <line
+        key={time}
+        x1={svgNumber(time)}
+        x2={svgNumber(time)}
+        y1="0"
+        y2="1"
+        vectorEffect="non-scaling-stroke"
+      />
+    ))}
+  </svg>
+);
+
+/**
+ * The energy contour inside the window: one point per hop at the middle of its frame (the
+ * frames do not overlap and start at 0), scaled to the loudest point drawn.
+ */
+const EnergyLine: React.FC<{ points: [number, number][]; length: number; hop: number }> = ({
+  points,
+  length,
+  hop,
+}) => {
+  const line = points.map(([x, y]) => `${svgNumber(x)},${svgNumber(y)}`).join(' ');
+  return (
+    <svg
+      data-measured-layer="energy"
+      role="img"
+      aria-label={`Energy (RMS) every ${formatSeconds(hop)} s, measured in the preview, relative to its loudest frame`}
+      viewBox={`0 0 ${svgNumber(length)} 1`}
+      preserveAspectRatio="none"
+      className="block h-8 w-full overflow-visible"
+    >
+      <polygon
+        points={`${svgNumber(points[0][0])},1 ${line} ${svgNumber(points[points.length - 1][0])},1`}
+        fill={colors.prov.measured}
+        fillOpacity={0.15}
+        stroke="none"
+      />
+      <polyline
+        points={line}
+        fill="none"
+        stroke={colors.prov.measured}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+};
+
+type MeasuredSection = { label: string; start: number; end: number };
+
+/**
+ * The neutral sections inside the window, as bands of the measured colour, labelled, each placed
+ * at its own start (a gap between sections stays a gap).
+ */
+const SectionBands: React.FC<{ sections: MeasuredSection[]; length: number }> = ({
+  sections,
+  length,
+}) => (
+  <div
+    data-measured-layer="sections"
+    role="list"
+    aria-label="Sections measured in the preview"
+    className="relative h-4 w-full"
+  >
+    {sections.map((section, index) => (
+      <div
+        // A section's span is unique; labels repeat (A, B, A).
+        key={`${section.start}-${section.end}`}
+        role="listitem"
+        aria-label={`Section ${section.label}, ${formatTime(section.start)} to ${formatTime(section.end)} (measured)`}
+        className={`absolute inset-y-0 overflow-hidden rounded-xs border border-prov-measured flex items-center px-1 text-chrome leading-none font-mono text-text-secondary ${index % 2 === 0 ? 'bg-prov-measured/25' : 'bg-prov-measured/10'}`}
+        style={{
+          left: `${svgNumber((section.start / length) * 100)}%`,
+          width: `${svgNumber(((section.end - section.start) / length) * 100)}%`,
+        }}
+      >
+        <span aria-hidden="true">{section.label}</span>
+      </div>
+    ))}
+  </div>
+);
+
+/** The measured layers that can be drawn over a window of `length` seconds; empty ones drop. */
+function measuredLayers(
+  beats: MeasuredAudio['beats'] | undefined,
+  energyContour: MeasuredAudio['energyContour'] | undefined,
+  sections: MeasuredAudio['sections'] | undefined,
+  length: number | null,
+) {
+  if (length === null) return { beats: null, energy: null, sections: null, beatsOutside: 0 };
+  const inWindow = (time: number) => Number.isFinite(time) && time >= 0 && time <= length;
+  const beatTimes = beats ? [...new Set(beats.times.filter(inWindow))].sort((a, b) => a - b) : [];
+  const hop = energyContour?.hopSeconds ?? 0;
+  const frames = (energyContour?.values ?? [])
+    .map((value, i) => [(i + 0.5) * hop, value] as [number, number])
+    .filter(([time, value]) => inWindow(time) && Number.isFinite(value) && value >= 0);
+  const loudest = frames.reduce((max, [, value]) => Math.max(max, value), 0);
+  const bands = (sections?.segments ?? [])
+    .map((s) => ({ label: s.label, start: s.start, end: Math.min(s.end, length) }))
+    .filter((s) => Number.isFinite(s.start) && s.start >= 0 && s.end > s.start)
+    .sort((a, b) => a.start - b.start);
+  return {
+    beats: beats && beatTimes.length > 0 ? { times: beatTimes, method: beats.method } : null,
+    energy:
+      energyContour && frames.length > 0
+        ? {
+            hop,
+            points: frames.map(
+              ([time, value]) => [time, loudest > 0 ? 1 - value / loudest : 1] as [number, number],
+            ),
+          }
+        : null,
+    sections: bands.length > 0 ? bands : null,
+    beatsOutside: beats ? beats.times.length - beats.times.filter(inWindow).length : 0,
+  };
+}
+
 const Note: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="mt-2 text-chrome font-mono text-text-chip uppercase tracking-widest">{children}</p>
 );
@@ -172,9 +325,24 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   audioAnalyzed,
   noMomentsReason,
   previewSeconds,
+  beats,
+  energyContour,
+  measuredSections,
 }) => {
   const duration = positiveSeconds(durationSeconds);
   const measuredPreview = positiveSeconds(previewSeconds);
+  // Drawn only over the window they were measured in, so only when its length is known.
+  const layers = useMemo(
+    () => measuredLayers(beats, energyContour, measuredSections, measuredPreview),
+    [beats, energyContour, measuredSections, measuredPreview],
+  );
+  const hasLayers = layers.beats !== null || layers.energy !== null || layers.sections !== null;
+  const layerNames = [
+    layers.sections &&
+      `sections ${[...new Set(layers.sections.map((section) => section.label))].join(', ')} (by harmony, not verse or chorus)`,
+    layers.energy && 'energy (RMS)',
+    layers.beats && plural(layers.beats.times.length, 'beat'),
+  ].filter(Boolean) as string[];
 
   // Sample times are written by the model: drawn on the song timeline, labelled as inferred,
   // and only when they fall inside the song.
@@ -274,12 +442,14 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </Note>
       )}
 
-      {/* Key moments on their own lane, scaled to the preview they were measured in */}
-      {momentMarkers.inside.length > 0 ? (
+      {/* The preview lane: what was measured on the preview, scaled to it. Its times say
+          nothing about where the preview falls in the song. */}
+      {momentMarkers.inside.length > 0 || hasLayers ? (
         <div className="mt-6" role="group" aria-label={previewLabel}>
           <div className="flex justify-between gap-3 text-chrome font-mono text-text-chip uppercase tracking-widest">
             <span>
-              {previewLabel} — key moments measured
+              {previewLabel}
+              {momentMarkers.inside.length > 0 && ' — key moments measured'}
               {measuredPreview !== null && ', position in the song unknown'}
             </span>
             <span className="shrink-0 whitespace-nowrap">
@@ -288,10 +458,44 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
                 : formatTime(previewLength)}
             </span>
           </div>
-          <div className="h-1 w-full mt-2 rounded-full bg-white/10" />
-          <MarkerLane markers={momentMarkers.inside} length={previewLength} />
+          {hasLayers ? (
+            <div className="mt-2 flex flex-col gap-1">
+              {layers.sections && (
+                <SectionBands sections={layers.sections} length={previewLength} />
+              )}
+              {layers.energy && (
+                <EnergyLine
+                  points={layers.energy.points}
+                  length={previewLength}
+                  hop={layers.energy.hop}
+                />
+              )}
+              {layers.beats && (
+                <BeatTicks
+                  times={layers.beats.times}
+                  length={previewLength}
+                  method={layers.beats.method}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="h-1 w-full mt-2 rounded-full bg-white/10" />
+          )}
+          {momentMarkers.inside.length > 0 && (
+            <MarkerLane markers={momentMarkers.inside} length={previewLength} />
+          )}
+          {hasLayers && (
+            <div
+              data-measured-layer="legend"
+              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-chrome font-mono text-text-chip"
+            >
+              <ProvenanceChip kind="measured" />
+              <span>{layerNames.join(' · ')}</span>
+            </div>
+          )}
         </div>
-      ) : (
+      ) : null}
+      {momentMarkers.inside.length === 0 && (
         <Note>
           {audioAnalyzed === false
             ? `No key moments — ${noMomentsReason ?? 'the audio was not analyzed'}`
@@ -299,6 +503,9 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               ? 'No key moments detected'
               : 'No key moments'}
         </Note>
+      )}
+      {layers.beatsOutside > 0 && (
+        <Note>{`${plural(layers.beatsOutside, 'beat')} outside the preview, not drawn`}</Note>
       )}
       {momentMarkers.outside > 0 && (
         <Note>{`${plural(momentMarkers.outside, 'key moment')} outside the preview, not drawn`}</Note>

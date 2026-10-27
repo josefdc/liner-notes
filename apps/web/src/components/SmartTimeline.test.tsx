@@ -197,3 +197,205 @@ describe('SmartTimeline', () => {
     expect(timeline.textContent).toContain('1 sample time outside the song, not drawn');
   });
 });
+
+// What the audio service measured on the preview (AudioFeatures v2 `beats`, `energyContour`,
+// `sections`), timed in seconds from the start of the preview window.
+const grid = {
+  times: [0.5, 5, 10, 25],
+  method: 'essentia.RhythmExtractor2013',
+  basis: 'signal' as const,
+};
+const contour = {
+  hopSeconds: 1,
+  values: Array.from({ length: 22 }, (_, i) => (i % 4) / 4),
+  method: 'frame RMS',
+  basis: 'signal' as const,
+};
+const neutralSections = {
+  segments: [
+    { label: 'A', start: 0, end: 8 },
+    { label: 'B', start: 8, end: 20 },
+    { label: 'A', start: 20, end: 24 },
+  ],
+  method: 'novelty-on-beat-chroma',
+  basis: 'signal' as const,
+};
+const layer = (root: HTMLElement, name: string) =>
+  root.querySelector(`[data-measured-layer="${name}"]`) as HTMLElement | null;
+
+describe('the measured layers of the preview', () => {
+  it('draws the measured beats, energy and sections on the preview lane, in the measured colour', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="inferred"
+        durationSeconds={240}
+        previewSeconds={20}
+        beats={grid}
+        energyContour={contour}
+        measuredSections={neutralSections}
+        audioAnalyzed
+      />,
+    );
+    const lane = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
+
+    // Beat ticks at the preview's own times; the beat past the window is not drawn.
+    const beats = within(lane).getByRole('img', { name: /^Beat grid/ });
+    expect(beats.getAttribute('aria-label')).toBe(
+      'Beat grid: 3 beats measured in the preview (essentia.RhythmExtractor2013)',
+    );
+    expect(beats.getAttribute('viewBox')).toBe('0 0 20 1');
+    const ticks = [...beats.querySelectorAll('line')];
+    expect(ticks.map((tick) => tick.getAttribute('x1'))).toEqual(['0.5', '5', '10']);
+    expect(beats.getAttribute('stroke')).toBe('#00f0ff');
+
+    // The energy line: one point per hop, at the middle of its frame, up to the window's end.
+    const energy = within(lane).getByRole('img', { name: /^Energy/ });
+    expect(energy.getAttribute('viewBox')).toBe('0 0 20 1');
+    const points = (energy.querySelector('polyline')?.getAttribute('points') ?? '').split(' ');
+    expect(points).toHaveLength(20);
+    expect(points[0]).toBe('0.5,1');
+    expect(points[2]).toBe('2.5,0.3333');
+    expect(energy.querySelector('polyline')?.getAttribute('stroke')).toBe('#00f0ff');
+
+    // Neutral sections, cut at the window's end, in tints of the measured colour.
+    const sections = within(lane).getByRole('list', { name: 'Sections measured in the preview' });
+    const items = within(sections).getAllByRole('listitem');
+    expect(items.map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Section A, 0:00 to 0:08 (measured)',
+      'Section B, 0:08 to 0:20 (measured)',
+    ]);
+    expect(items.map((item) => [item.style.left, item.style.width])).toEqual([
+      ['0%', '40%'],
+      ['40%', '60%'],
+    ]);
+    for (const item of items) {
+      expect(item.className).toContain('prov-measured');
+      expect(item.className).not.toContain('prov-inferred');
+    }
+
+    // Labelled measured, in words and with the measured chip.
+    const legend = layer(lane, 'legend') as HTMLElement;
+    expect(legend.querySelector('[data-provenance]')?.getAttribute('data-provenance')).toBe(
+      'measured',
+    );
+    expect(legend.textContent).toContain('not verse or chorus');
+    expect(legend.textContent).toContain('sections A, B (by harmony, not verse or chorus)');
+    expect(screen.getByRole('group', { name: 'Song structure' }).textContent).toContain(
+      '1 beat outside the preview, not drawn',
+    );
+  });
+
+  it("keeps the model's sections inferred beside the measured ones", () => {
+    render(
+      <SmartTimeline
+        segments={[
+          { label: 'Verse', start: 0, end: 40, color: '#00F0FF' },
+          { label: 'Chorus', start: 40, end: 100, color: '#00F0FF' },
+        ]}
+        segmentsSource="inferred"
+        previewSeconds={20}
+        measuredSections={neutralSections}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    const [structure] = within(timeline).getAllByRole('list');
+    const model = within(structure).getAllByRole('listitem');
+    expect(model.map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Verse, 40% of track',
+      'Chorus, 60% of track',
+    ]);
+    for (const item of model) {
+      expect(item.dataset.segmentTint).toBe('inferred');
+      expect(item.className).toContain('bg-prov-inferred/');
+      expect(item.className).not.toContain('prov-measured');
+      expect(item.closest('[data-measured-layer]')).toBeNull();
+    }
+    expect((timeline.querySelector('[data-provenance]') as HTMLElement).dataset.provenance).toBe(
+      'inferred',
+    );
+    // The measured sections are the only ones in the preview lane.
+    const lane = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
+    expect(within(lane).getAllByRole('listitem')).toHaveLength(2);
+    expect(lane.textContent).not.toMatch(/Verse|Chorus/);
+  });
+
+  it.each([
+    ['beats', { energyContour: contour, measuredSections: neutralSections }],
+    ['energy', { beats: grid, measuredSections: neutralSections }],
+    ['sections', { beats: grid, energyContour: contour }],
+  ] as const)('draws nothing for a missing %s layer', (missing, present) => {
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        beats={null}
+        energyContour={null}
+        measuredSections={null}
+        {...present}
+      />,
+    );
+    const lane = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
+    expect(layer(lane, missing)).toBeNull();
+    expect(lane.querySelectorAll('[data-measured-layer]').length).toBeGreaterThan(1);
+    const legend = layer(lane, 'legend') as HTMLElement;
+    expect(legend.textContent?.toLowerCase()).not.toContain(
+      { beats: 'beat', energy: 'energy', sections: 'section' }[missing],
+    );
+  });
+
+  it('draws no lane, grid or placeholder when no layer was measured', () => {
+    // The same timeline with its layers draws them (so their absence below is the layers').
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        previewSeconds={20}
+        beats={grid}
+        energyContour={contour}
+        measuredSections={neutralSections}
+        audioAnalyzed
+      />,
+    );
+    expect(document.querySelectorAll('[data-measured-layer]').length).toBeGreaterThan(0);
+    cleanup();
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        previewSeconds={20}
+        beats={null}
+        energyContour={null}
+        measuredSections={null}
+        audioAnalyzed
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.querySelector('[data-measured-layer]')).toBeNull();
+    expect(timeline.querySelector('svg line, svg polyline')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Preview window/ })).toBeNull();
+    expect(timeline.textContent).not.toMatch(/beat|energy|measured/i);
+    cleanup();
+    // Empty layers, and layers without the preview's measured length, are not drawn either.
+    render(
+      <SmartTimeline
+        segments={template}
+        beats={grid}
+        energyContour={contour}
+        measuredSections={neutralSections}
+      />,
+    );
+    expect(document.querySelector('[data-measured-layer]')).toBeNull();
+    cleanup();
+    render(
+      <SmartTimeline
+        segments={template}
+        previewSeconds={20}
+        beats={{ ...grid, times: [] }}
+        energyContour={{ ...contour, values: [] }}
+        measuredSections={{ ...neutralSections, segments: [] }}
+      />,
+    );
+    expect(document.querySelector('[data-measured-layer]')).toBeNull();
+  });
+});

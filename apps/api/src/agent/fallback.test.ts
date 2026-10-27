@@ -225,8 +225,13 @@ describe("createFallbackTrackData", () => {
     });
 
     const card = (title: string) => td.factoids.find((f) => f.title === title)?.content;
-    expect(card("Sample DNA")).toBe('This track samples: "Under Pressure" by Queen.');
+    expect(card("Samples")).toBe('This track samples: "Under Pressure" by Queen.');
     expect(card("Sampled By")).toBe('Sampled by: "Later Track" by Later Artist.');
+    // Plain titles, like the other cards: no prototype wording.
+    expect(td.factoids.filter((f) => f.type === "sample").map((f) => f.title)).toEqual([
+      "Samples",
+      "Sampled By",
+    ]);
     expect(allText(td.factoids)).not.toContain("No Direction");
   });
 

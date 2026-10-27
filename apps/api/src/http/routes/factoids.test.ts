@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { type Claim, FactoidsOutput, FactoidsResponse } from "@liner-notes/contract";
 import type { Router } from "express";
 import { FACTOIDS_SYSTEM_PROMPT } from "../../factoids/prompt.js";
+import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
@@ -700,7 +701,8 @@ describe("each fact's claim", () => {
       data: { claimId: string };
       claim: Claim;
     }>;
-    expect(streamed).toHaveLength(record.analysis.factoids.length);
+    // At most one request's worth: the recording may hold more facts than one request serves.
+    expect(streamed).toHaveLength(Math.min(record.analysis.factoids.length, FACTOIDS_PER_REQUEST));
     for (const { data, claim } of streamed) {
       expect(claim).toEqual(recordedClaim(data.claimId));
     }

@@ -511,10 +511,14 @@ describe("the recorder", () => {
   it("keeps the time since the run started that each event was sent with, and records events without one", () => {
     const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
     const { run, events } = fixtureAsLiveRun(fixture, "One More Time Daft Punk");
-    // Every event but the first two was sent with its time since the run started.
-    const timed = events.map((item, i) =>
-      i < 2 ? item : { ...item, event: { ...item.event, elapsedMs: item.sentAt - 1_000 } },
-    );
+    // Every event but the first two was sent with its time since the run started (the
+    // recording's own times are taken off the first two).
+    const timed = events.map((item, i) => {
+      const { elapsedMs: _recorded, ...event } = item.event as Event;
+      return i < 2
+        ? { ...item, event }
+        : { ...item, event: { ...event, elapsedMs: item.sentAt - 1_000 } };
+    });
 
     const { record: built } = buildRecord(run, timed, {
       slug: fixture.slug,
@@ -1140,7 +1144,9 @@ describe("the recorder", () => {
       fixture.events.findIndex(
         ({ event }) => event.type === "status" && event.message.startsWith(prefix),
       );
-    const found = at("Found the track");
+    // The line that names the track: the first status line (a run picked at the track picker
+    // has no "Found the track" line; this one stands in for it).
+    const found = fixture.events.findIndex(({ event }) => event.type === "status");
     const other = at("Measuring tempo");
     expect(found).toBeGreaterThan(0);
     expect(other).toBeGreaterThan(0);
@@ -1203,9 +1209,9 @@ describe("the recorder", () => {
 
   it("records and loads a track whose title or artist holds < or >, and still refuses markup in a status line", () => {
     const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
-    const found = fixture.events.findIndex(
-      ({ event }) => event.type === "status" && event.message.startsWith("Found the track"),
-    );
+    // The line that names the track: the first status line (a run picked at the track picker
+    // has no "Found the track" line; this one stands in for it).
+    const found = fixture.events.findIndex(({ event }) => event.type === "status");
     expect(found).toBeGreaterThan(0);
     const retitled = (id: string, title: string, artist: string): ReplayRecord => ({
       ...fixture,

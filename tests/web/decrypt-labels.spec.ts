@@ -12,7 +12,7 @@ test('factoids added by "More facts" are labelled as model inference', async ({ 
   await expect(insights).toContainText("Release Info");
   await expect(insights.getByText("From source data")).toHaveCount(1);
 
-  await insights.getByRole("button", { name: "More facts", exact: true }).click();
+  await insights.getByRole("button", { name: "Find more facts", exact: true }).click();
   const decrypted = page.getByRole("region", { name: "More facts" });
   await expect(decrypted).toContainText("Hidden Sample");
   await expect(decrypted).toContainText("Model inference");

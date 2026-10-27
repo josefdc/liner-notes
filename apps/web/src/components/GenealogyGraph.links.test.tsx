@@ -121,8 +121,14 @@ describe('GenealogyGraph links', () => {
     const { container } = render(<Graph />);
     expect(subLabel(container, 'older')).toBe('Origin');
     expect(subLabel(container, 'guess')).toBe('Connected');
-    // A track whose link was rejected is no origin either.
-    expect(subLabel(container, 'disputed')).toBe('Connected');
+    // A track whose only link was rejected is no origin either, and is not called connected:
+    // no link of its own is drawn.
+    expect(subLabel(container, 'disputed') ?? '').toBe('');
+  });
+
+  it('gives its hints in a neutral hue: the measured hue is for measured values', () => {
+    render(<Graph />);
+    expect(screen.getByText('Click a track to analyze it').className).not.toMatch(/cyber/);
   });
 
   it('marks no origin for a track that samples or remixes this one, sourced as it is', () => {

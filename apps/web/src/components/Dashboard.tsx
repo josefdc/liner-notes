@@ -301,12 +301,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </header>
 
-      {/* A replayed result says it is a recording, before anything else about it */}
-      {trackData && <RecordedRunNotice track={trackData} />}
-
-      {/* What this result is missing, named (model unavailable, audio not measured) */}
-      {trackData && <ResultNotices track={trackData} />}
-
       {/* Now Playing Hero Section (P2:17 — stagger animation) */}
       {trackData && (
         <section className="shrink-0 bg-surface border border-border rounded-lg p-(--space-xl) md:p-(--space-2xl) relative overflow-hidden group transition-all duration-(--duration-slow) animate-stagger-in stagger-2">
@@ -338,10 +332,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="text-chrome font-mono text-cyber/80 uppercase tracking-widest">
+                <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
                   Analyzed track
                 </span>
-                <div className="w-1.5 h-1.5 rounded-full bg-cyber/60"></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-white/30"></div>
               </div>
 
               <h1
@@ -361,7 +355,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <span>{trackData.releaseYear}</span>
                     </>
                   )}
-                  {trackData.explicit && <Badge variant="neutral">EXPLICIT</Badge>}
+                  {trackData.explicit && <Badge variant="neutral">Explicit</Badge>}
                 </div>
               )}
 
@@ -394,7 +388,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                   >
                     <ExternalLink size={14} />
-                    SPOTIFY
+                    Spotify
                   </a>
                 )}
               </div>
@@ -402,6 +396,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </section>
       )}
+
+      {/* A replayed result says it is a recording, right after its title (the h1 the focus
+          lands on), so reading on from the title reaches it */}
+      {trackData && <RecordedRunNotice track={trackData} />}
+
+      {/* What this result is missing, named (model unavailable, audio not measured) */}
+      {trackData && <ResultNotices track={trackData} />}
 
       {/* Main Grid (P2:17 — stagger animations). It fills spare height but never shrinks below its
           content, and the hero above never shrinks: the page scrolls instead of clipping them. */}
@@ -451,7 +452,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           {/* The count moves below the heading when the two do not fit side by side */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>
-              <h2 className="text-lg font-medium tracking-tight text-white">Connected Tracks</h2>
+              <h2 className="text-lg font-medium tracking-tight text-white">Connections</h2>
               <p className="text-chrome font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
@@ -462,8 +463,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               <span className="text-xs font-mono text-analog whitespace-nowrap">
                 {/* What the cards show, out of how many connected tracks there are */}
                 {relatedTracks.length < relatedCount
-                  ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`
-                  : `${relatedCount} RELATED ${relatedCount === 1 ? 'TRACK' : 'TRACKS'}`}
+                  ? `${relatedTracks.length} of ${relatedCount} related tracks`
+                  : `${relatedCount} related ${relatedCount === 1 ? 'track' : 'tracks'}`}
               </span>
             )}
           </div>
@@ -480,7 +481,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             >
               <span>Connected tracks could not be loaded.</span>
               <Button variant="ghost" size="sm" onClick={retryReader}>
-                TRY AGAIN
+                Try again
               </Button>
             </div>
           )}

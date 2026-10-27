@@ -14,6 +14,7 @@ const frames = vi.hoisted(() => {
 });
 
 import GenealogyGraph from './GenealogyGraph';
+import { colors } from '../styles/theme';
 import { link, node, PACK } from './genealogy/testing';
 
 const CLIP = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
@@ -333,6 +334,10 @@ describe('GenealogyGraph previews', () => {
     });
     expect(container.querySelector('.preview-indicator')?.textContent).toMatch(
       /Analyze this track/,
+    );
+    // A hint, in a neutral hue: not the amber of a sourced origin.
+    expect(container.querySelector('.preview-indicator')?.getAttribute('fill')).toBe(
+      colors.gray[400],
     );
     expect(played).toEqual([]);
   });

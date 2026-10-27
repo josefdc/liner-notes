@@ -279,7 +279,7 @@ test.describe("the genealogy graph", () => {
         await graphFitted(page);
         const placed = await markDrawing(page);
         await page.setViewportSize({ width, height: 900 });
-        if (width < 768) await page.getByRole("tab", { name: "Network" }).click();
+        if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
         await graphFitted(page);
         await drawingKept(page, placed);
       }
@@ -531,7 +531,7 @@ test.describe("the genealogy graph", () => {
       await graphFitted(page);
       const placed = await markDrawing(page);
       await page.setViewportSize({ width, height });
-      await page.getByRole("tab", { name: "Network" }).click();
+      await page.getByRole("tab", { name: "Connections" }).click();
       const panel = page.locator("#panel-genealogy");
       const tabBar = page.getByRole("tablist", { name: "Player sections" });
       await expect(page.getByRole("group", { name: "Link legend" })).toBeVisible();
@@ -626,7 +626,7 @@ test.describe("connected tracks on the Dashboard", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Bright Lines");
     // Four cards out of the 17 related tracks (the one only a rejected link related is left out).
-    await expect(page.getByText("4 OF 17 RELATED TRACKS")).toBeVisible();
+    await expect(page.getByText("4 of 17 related tracks")).toBeVisible();
     const cards = page.getByRole("button").filter({ hasText: "Relation:" });
     await expect(cards.locator("[data-link-kind]")).toHaveText([
       "Relation: Sample",

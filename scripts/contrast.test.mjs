@@ -131,7 +131,6 @@ describe("contrast report", () => {
       "--color-spotify",
       // Text by use in the source, not by name:
       "--color-cyber/70",
-      "--color-cyber/80",
     ]) {
       expect(out).toMatch(new RegExp(`^ok {3}${name.replace("/", "\\/")} +needs 4\\.5:1 `, "m"));
     }

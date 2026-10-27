@@ -186,7 +186,7 @@ test("a fact more facts added shows the claim it came with", async ({ page }) =>
 
   await page
     .locator("#panel-context")
-    .getByRole("button", { name: "More facts", exact: true })
+    .getByRole("button", { name: "Find more facts", exact: true })
     .click();
   const added = page
     .getByRole("region", { name: "More facts" })

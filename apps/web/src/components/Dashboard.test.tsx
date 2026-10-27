@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentLog, TrackData } from '../types';
 import Dashboard from './Dashboard';
+import TargetScanOverlay from './TargetScanOverlay';
 import { claim, link, node, PACK } from './genealogy/testing';
 import { setReaderImport } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE } from '../styles/placeholder';
@@ -334,13 +335,13 @@ describe('Dashboard connected tracks', () => {
     one.genealogy.nodes = one.genealogy.nodes.filter((n) => ['current', 'older'].includes(n.id));
     const { unmount } = renderDashboard(one);
     await cards();
-    expect(screen.getByText('1 RELATED TRACK')).toBeTruthy();
+    expect(screen.getByText('1 related track')).toBeTruthy();
     unmount();
 
     // Four related tracks, all shown.
     const four = renderDashboard(connected([]));
     await cards();
-    expect(screen.getByText('4 RELATED TRACKS')).toBeTruthy();
+    expect(screen.getByText('4 related tracks')).toBeTruthy();
     four.unmount();
 
     // Five related, four cards: the count says so.
@@ -348,7 +349,7 @@ describe('Dashboard connected tracks', () => {
     five.genealogy.nodes = [...five.genealogy.nodes, node('fifth', 4, 'Fifth - Someone (2000)')];
     renderDashboard(five);
     expect(await cards()).toHaveLength(4);
-    expect(screen.getByText('4 OF 5 RELATED TRACKS')).toBeTruthy();
+    expect(screen.getByText('4 of 5 related tracks')).toBeTruthy();
   });
 
   it('says when the link reader cannot be loaded, and tries again when asked', async () => {
@@ -358,13 +359,13 @@ describe('Dashboard connected tracks', () => {
     try {
       renderDashboard(connected([sourcedSample('older', 'current')]));
       const alert = await screen.findByRole('alert');
-      expect(alert.textContent).toBe('Connected tracks could not be loaded.TRY AGAIN');
+      expect(alert.textContent).toBe('Connected tracks could not be loaded.Try again');
       expect(screen.queryByText(/Relation:/)).toBeNull();
       // Not busy for ever: the row says it is done (with nothing).
       expect(document.querySelector('[aria-busy="true"]')).toBeNull();
       fail = false;
       await act(async () => {
-        fireEvent.click(within(alert).getByRole('button', { name: 'TRY AGAIN' }));
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
       });
       expect(await badges()).toContain('Relation: Sample');
       expect(screen.queryByRole('alert')).toBeNull();
@@ -452,6 +453,54 @@ describe('the Dashboard headings', () => {
     all.slice(1).forEach((heading, index) => {
       expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
     });
+  });
+
+  it('names each section with an h2: the fingerprint, the connections and the activity log', () => {
+    render(<Dashboard trackData={missingTrack} onNavigate={() => {}} logs={logs} isComplete />);
+    const all = headings();
+    expect(all.find((heading) => heading.text === 'Sonic Fingerprint')?.level).toBe(2);
+    expect(all.find((heading) => heading.text === 'Connections')?.level).toBe(2);
+    expect(all.find((heading) => heading.text.startsWith('Activity log'))?.level).toBe(2);
+  });
+
+  it("puts the result's notices after its h1, so reading on from the focused title reaches them", () => {
+    const replay = {
+      ...missingTrack,
+      run: {
+        id: 'r1',
+        mode: 'replay',
+        replayed: 'run',
+        recordedAt: '2026-10-24T10:00:00.000Z',
+        commit: 'abc1234',
+      },
+    } as unknown as TrackData;
+    renderDashboard(replay);
+    const title = screen.getByRole('heading', { level: 1 });
+    for (const name of ['Recorded run', 'Missing data']) {
+      const notice = screen.getByRole('region', { name });
+      expect(
+        title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+        name,
+      ).toBeTruthy();
+    }
+  });
+
+  it('says what it shows in sentence case, and keeps the measured hue off its labels', () => {
+    const track = {
+      ...missingTrack,
+      explicit: true,
+      spotifyUrl: 'https://open.spotify.com/track/abc',
+    } as unknown as TrackData;
+    renderDashboard(track);
+    expect(screen.getByRole('link', { name: 'Spotify' }).textContent).toBe('Spotify');
+    expect(screen.getByText('Explicit')).toBeTruthy();
+    const label = screen.getByText('Analyzed track');
+    expect(`${label.className} ${label.nextElementSibling?.className ?? ''}`).not.toMatch(/cyber/);
+  });
+
+  it('labels the hover overlay of a connected track in a neutral hue', () => {
+    render(<TargetScanOverlay isHovered />);
+    expect(screen.getByText('Analyze this track').className).not.toMatch(/cyber/);
   });
 
   it('says no analysis is loaded, as its h1, when there is no result', () => {

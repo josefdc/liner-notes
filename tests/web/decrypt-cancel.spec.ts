@@ -28,7 +28,7 @@ test("leaving the Player closes a running decrypt stream without an error", asyn
   await openPlayer(page);
 
   const insights = page.locator("#panel-context");
-  await insights.getByRole("button", { name: "More facts", exact: true }).click();
+  await insights.getByRole("button", { name: "Find more facts", exact: true }).click();
   await expect(page.getByRole("region", { name: "More facts" })).toContainText("Hidden Sample");
 
   await page.getByRole("button", { name: /Back to summary/ }).click();
@@ -39,7 +39,7 @@ test("leaving the Player closes a running decrypt stream without an error", asyn
   await openPlayer(page);
   await page
     .locator("#panel-context")
-    .getByRole("button", { name: "More facts", exact: true })
+    .getByRole("button", { name: "Find more facts", exact: true })
     .click();
   await expect
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${DECRYPT} open`))

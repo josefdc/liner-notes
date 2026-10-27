@@ -156,28 +156,53 @@ test("at 1440 px the Player's columns are in the page in the order they are draw
 
 const ANALYZE = "/api/analyze/stream";
 
-// The track's header spans the three columns: its title and artist wrap rather than run past the
-// window, and the audio line (from md up) stays on one line beside them, from phone to desktop.
+/** The full-result fixture with the result's title and artist replaced. */
+function withTrack(track: { title: string; artist: string }) {
+  const fixture = loadFixture("full-result");
+  const events = fixture.streams[ANALYZE] as Array<{ type: string; data?: object }>;
+  fixture.streams[ANALYZE] = events.map((event) =>
+    event.type === "complete" ? { ...event, data: { ...event.data, ...track } } : event,
+  );
+  return fixture;
+}
+
+// A title with a word longer than any column, and a long artist.
+const LONG = {
+  title: `${"Superlongunbrokenwordtitle".repeat(4)} (Extended Club Mix)`,
+  artist: "Somebody Featuring Somebody Else and the Rest of the Band",
+};
+
+// The track's title and artist wrap rather than run past the window, even a word longer than the
+// line, and the audio line (from md up) stays on one line beside them, from phone to desktop.
 for (const width of [390, 768, 1024, 1440]) {
-  test(`at ${width} px the Player's header is whole`, async ({ page }) => {
+  test(`at ${width} px the Player's title is whole`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    const long = {
-      title: "A Very Long Song Title That Keeps Going Well Past One Line (Extended Club Mix)",
-      artist: "Somebody Featuring Somebody Else and the Rest of the Band",
-    };
-    const fixture = loadFixture("full-result");
-    const events = fixture.streams[ANALYZE] as Array<{ type: string; data?: object }>;
-    fixture.streams[ANALYZE] = events.map((event) =>
-      event.type === "complete" ? { ...event, data: { ...event.data, ...long } } : event,
-    );
-    await useMockApi(page, fixture);
+    await useMockApi(page, withTrack(LONG));
     await analyzeAndOpenDashboard(page, "Bright Lines");
     await openPlayer(page);
-    const header = page.locator("#player-header");
-    await expect(header.getByRole("heading", { level: 1 })).toHaveText(long.title);
-    expect(await clippedLines(page, ["player-header"])).toEqual([]);
-    const fits = await header.evaluate((element) => element.scrollWidth <= element.clientWidth);
-    expect(fits).toBe(true);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(LONG.title);
+    // Below md the header is for screen readers only, and the Player tab shows the title.
+    const shown = width >= 768 ? ["player-header", "panel-player"] : ["panel-player"];
+    if (width < 768) {
+      const header = await page.locator("#player-header").boundingBox();
+      expect(header?.width ?? 0).toBeLessThanOrEqual(1);
+      await expect(page.locator("#panel-player")).toContainText(LONG.title);
+    }
+    expect(await clippedLines(page, shown)).toEqual([]);
+    const overflowing = await page.evaluate(
+      (shown) =>
+        shown.filter((id) => {
+          const element = document.getElementById(id);
+          return (
+            element !== null &&
+            element.getClientRects().length > 0 &&
+            element.clientWidth > 1 &&
+            element.scrollWidth > element.clientWidth
+          );
+        }),
+      shown,
+    );
+    expect(overflowing).toEqual([]);
     const line = page.getByTestId("player-audio-line");
     if (width >= 768) {
       const lines = await line.evaluate((element) => {
@@ -190,4 +215,26 @@ for (const width of [390, 768, 1024, 1440]) {
       await expect(line).toBeHidden();
     }
   });
+}
+
+// On phones the track's title takes no fixed band above the tabs: the Player tab keeps the
+// height it had with the title inside it (446 px at 320×568, 214 px at 568×320), for a short
+// title and a long one.
+for (const [width, height, least] of [
+  [320, 568, 440],
+  [568, 320, 208],
+]) {
+  for (const track of [{ title: "Bright Lines", artist: "Test Artist" }, LONG]) {
+    test(`on a ${width}×${height} phone the Player tab keeps its height (${track.title.length} characters)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await useMockApi(page, withTrack(track));
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      await openPlayer(page);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(track.title);
+      const box = await page.locator("#panel-player").boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(least);
+    });
+  }
 }

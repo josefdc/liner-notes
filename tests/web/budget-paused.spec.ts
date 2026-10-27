@@ -93,7 +93,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   // "More facts" of a replayed result ask for its recording only; every recorded fact is
   // already shown, so the API sends none, and the Player says why.
   const insights = page.locator("#panel-context");
-  await insights.getByRole("button", { name: "More facts", exact: true }).click();
+  await insights.getByRole("button", { name: "Find more facts", exact: true }).click();
   await expect(insights).toContainText(
     "No more facts: this result is a recording, and every fact recorded with it is shown.",
   );
@@ -136,7 +136,7 @@ test("live_disabled is explained, and a live result carries no recording label",
   await openPlayer(page);
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   const insights = page.locator("#panel-context");
-  await insights.getByRole("button", { name: "More facts", exact: true }).click();
+  await insights.getByRole("button", { name: "Find more facts", exact: true }).click();
   await expect(insights).toContainText(
     "More facts unavailable: live model calls are paused, budget reached",
   );
@@ -223,7 +223,7 @@ test("on a phone, the recording label stays visible on every Player tab", async 
   await page.getByRole("button", { name: /Bright Lines/ }).click();
   await page.getByRole("button", { name: "Open the results" }).click();
   await openPlayer(page);
-  for (const tab of ["Analysis", "Player", "Network"]) {
+  for (const tab of ["Analysis", "Player", "Connections"]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("region", { name: "Recorded run" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(

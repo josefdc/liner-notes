@@ -62,7 +62,7 @@ for (const { width, height, page: pagePadding, hero } of [
 
     const heading = dashboardHeading(page);
     const dashboard = heading.locator("xpath=ancestor::section[1]/..");
-    const spotify = page.getByRole("link", { name: "SPOTIFY" });
+    const spotify = page.getByRole("link", { name: "Spotify" });
     const hero = page.locator("section").filter({ has: spotify });
 
     // The hero shows all of its content: nothing is cut off by its overflow-hidden box.

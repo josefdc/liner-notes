@@ -190,7 +190,18 @@ describe('Player', () => {
     expect(screen.getByRole('list', { name: 'Audio values' }).textContent).toContain(
       'BPM not measured',
     );
-    expect(screen.getByTestId('player-audio-line').textContent).toBe('BPM not measured');
+    const line = screen.getByTestId('player-audio-line');
+    expect(line.textContent).toBe('BPM not measured');
+    // Not measured: not in the measured hue (cyber), from the words up to the line.
+    const hues: string[] = [];
+    for (
+      let element: HTMLElement | null = within(line).getByText('BPM not measured');
+      element && element !== line.parentElement;
+      element = element.parentElement
+    ) {
+      hues.push(element.className);
+    }
+    expect(hues.join(' ')).not.toMatch(/cyber/);
     expect(container.textContent).toContain(
       'The analysis ran but could not detect the tempo or key.',
     );
@@ -327,7 +338,7 @@ describe('Player', () => {
     ...missingTrack,
     factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
   } as unknown as TrackData;
-  const moreButton = () => screen.getByRole('button', { name: 'More facts' });
+  const moreButton = () => screen.getByRole('button', { name: 'Find more facts' });
 
   it('labels the facts "More facts" added as model inference and counts only the ones shown', async () => {
     const track = { ...releaseInfo, modelUnavailable: true } as TrackData;
@@ -359,6 +370,61 @@ describe('Player', () => {
     expect(status).not.toBeNull();
     // The facts are written by the model: never in the measured hue (cyber).
     expect(`${toast.className} ${status?.className ?? ''}`).not.toMatch(/cyber/);
+  });
+
+  it('counts the facts a click added, in the plural for more than one', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+      { id: 'm2', title: 'Tape Echo', content: 'Mixed through a tape echo.', type: 'production' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    expect(await screen.findByText(/^2 more facts? added$/)).toBeTruthy();
+    expect(screen.getByText(/^2 more facts? added$/).textContent).toBe('2 more facts added');
+  });
+
+  it('keeps the notice outside the tab panels, on screen for a few seconds', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    const toast = await screen.findByText('1 more fact added');
+    // On phones a panel is hidden while another tab is open: the status is announced from any.
+    expect(toast.closest('[role="tabpanel"]')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(screen.queryByText('1 more fact added')).not.toBeNull();
+  });
+
+  it('offers to show the facts past the first three, in the singular for one', () => {
+    const fact = (index: number) => ({
+      id: `s${index}`,
+      title: `Fact ${index}`,
+      content: `Fact number ${index}.`,
+      type: 'trivia',
+    });
+    const withFour = { ...missingTrack, factoids: [1, 2, 3, 4].map(fact) } as TrackData;
+    const { unmount } = render(<Player trackData={withFour} onBack={() => {}} />);
+    expect(screen.getByRole('button', { name: /^Show \d+ more facts?$/ }).textContent).toBe(
+      'Show 1 more fact',
+    );
+    unmount();
+    const withFive = { ...missingTrack, factoids: [1, 2, 3, 4, 5].map(fact) } as TrackData;
+    render(<Player trackData={withFive} onBack={() => {}} />);
+    expect(screen.getByRole('button', { name: /^Show \d+ more facts?$/ }).textContent).toBe(
+      'Show 2 more facts',
+    );
+  });
+
+  it('heads the facts a click added with an h3 under the Facts h2', async () => {
+    const facts = [
+      { id: 'm1', title: 'Hidden Sample', content: 'Interpolates a 1972 record.', type: 'sample' },
+    ] as unknown as Factoid[];
+    render(<MoreFactsPlayer track={releaseInfo} answers={[{ factoids: facts, nextRound: 1 }]} />);
+    fireEvent.click(moreButton());
+    await screen.findByRole('region', { name: 'More facts' });
+    expect(screen.getByRole('heading', { name: 'Facts' }).tagName).toBe('H2');
+    expect(screen.getByRole('heading', { name: 'More facts' }).tagName).toBe('H3');
   });
 
   it.each([
@@ -483,6 +549,90 @@ describe('Player', () => {
       screen.getAllByText(title)[0].closest('[data-factoid-category]') as HTMLElement;
     const badgeOf = (title: string) =>
       cardOf(title).querySelector('[data-factoid-type]')?.textContent;
+
+    it('says no fact was added when a click brings back one already shown', async () => {
+      const track = withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]);
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f1', 'Known Sample', 'c-known')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getAllByText('Known Sample')).toHaveLength(1);
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it('says no fact was added when the verifier rejected the one a click brought', async () => {
+      const track = withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]);
+      const bad = { ...sourcedSample('fc-bbbbbbbbbbbb'), verdict: 'contradicted' } as Claim;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('fc-bbbbbbbbbbbb', 'Bad Sample', 'fc-bbbbbbbbbbbb')],
+              claims: [bad],
+              nextRound: 1,
+            },
+          ]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByRole('region', { name: 'More facts' })).toBeNull();
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it('says a recording has no more facts when a click brings back only shown ones', async () => {
+      const track = {
+        ...withFacts([card('f1', 'Known Sample', 'c-known')], [sourcedSample('c-known')]),
+        run: {
+          id: 'r1',
+          mode: 'replay',
+          replayed: 'run',
+          recordedAt: '2026-10-24T10:00:00.000Z',
+          commit: 'abc1234',
+        },
+      } as unknown as TrackData;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[{ factoids: [card('f1', 'Known Sample', 'c-known')], nextRound: 1 }]}
+        />,
+      );
+      fireEvent.click(moreButton());
+      expect(
+        await screen.findByText(
+          'No more facts: this result is a recording, and every fact recorded with it is shown.',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText(/more facts? added/)).toBeNull();
+    });
+
+    it.each([
+      ['cannot be read', 'lyrics'],
+      ['was rejected', 'rejected'],
+    ] as const)(
+      'says there are no facts to show, not that none were found, when every fact %s',
+      (_label, how) => {
+        const hidden =
+          how === 'lyrics'
+            ? ({ ...aClaim({ id: 'c-x' }), about: 'lyrics' } as unknown as Claim)
+            : ({ ...sourcedSample('c-x'), verdict: 'contradicted' } as Claim);
+        render(
+          <Player
+            trackData={withFacts([card('f1', 'A Fact', 'c-x')], [hidden])}
+            onBack={() => {}}
+          />,
+        );
+        expect(screen.queryByText('No facts were found for this track.')).toBeNull();
+        expect(screen.getByText('No facts to show.')).toBeTruthy();
+      },
+    );
 
     it("shows each fact's claim: a sourced sample links its source, a guessed one is possible", () => {
       const track = withFacts(
@@ -711,6 +861,13 @@ describe('the Player headings', () => {
     all.slice(1).forEach((heading, index) => {
       expect(heading.level, heading.text).toBeLessThanOrEqual(all[index].level + 1);
     });
+  });
+
+  it('names the graph section "Connections" everywhere, and adds no page banner', () => {
+    render(<Player trackData={everySection()} onBack={() => {}} />);
+    expect(screen.getByRole('tab', { name: 'Connections' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connections' }).tagName).toBe('H2');
+    expect(screen.queryByRole('banner')).toBeNull();
   });
 
   it('gives the h1 to the focus code', () => {

@@ -255,6 +255,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       n,
       shown,
     }));
+    // Tracks at an end of a drawn link (the shown ones; a rejected link is not drawn).
+    const linked = new Set(links.flatMap((shown) => [shown.source, shown.target]));
     // Each track's relation to the analysed one, from the link that joins them.
     const relations = new Map(nodes.map((n) => [n.id, relationToTrack(links, n.id, currentId)]));
     // Tracks a sourced sample, interpolation, cover or remix says the analysed track uses.
@@ -501,9 +503,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const maxLen = isMobile ? 12 : 30;
       return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
     };
-    // "Origin" only for a track a sourced link says this one uses, never from the group.
+    // "Origin" only for a track a sourced link says this one uses, never from the group;
+    // "Connected" only for a track a drawn link joins to another, and no tag for one with none.
     const tagText = (d: CustomNode) =>
-      d.group === 1 ? 'This track' : isOrigin(d) ? 'Origin' : 'Connected';
+      d.group === 1 ? 'This track' : isOrigin(d) ? 'Origin' : linked.has(d.id) ? 'Connected' : '';
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
@@ -833,7 +836,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
             .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
-            .attr('fill', colors.analog)
+            .attr('fill', colors.gray[400])
             .text('Analyze this track')
             .call(fadeIn);
         }
@@ -1079,7 +1082,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
               <span>Scroll to zoom</span>
               <span>Drag to pan</span>
-              <span className="text-cyber flex items-center gap-1">
+              <span className="flex items-center gap-1">
                 <MousePointerClick size={12} />
                 Click a track to analyze it
               </span>

@@ -99,7 +99,7 @@ test("small badges have one height wherever they sit", async ({ page }) => {
   await useMockApi(page, explicitResult());
   await analyzeAndOpenDashboard(page, "Bright Lines");
   const badges = await smallBadges(page);
-  expect(badges.map((badge) => badge.text)).toContain("EXPLICIT");
+  expect(badges.map((badge) => badge.text)).toContain("Explicit");
   // 16 px of chrome text (12 px type), 4 px padding above and below, a 1 px border.
   for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 26 });
 });
@@ -843,7 +843,7 @@ test("the Dashboard's focus rings reach 3:1 against what is beside them", async 
   ]);
   rings.push([
     "the hero's Spotify link",
-    await focusRingContrast(page, page.getByRole("link", { name: "SPOTIFY" })),
+    await focusRingContrast(page, page.getByRole("link", { name: "Spotify" })),
   ]);
   rings.push([
     "a connected track",
@@ -864,8 +864,11 @@ test("the Player's focus rings reach 3:1 against what is beside them", async ({ 
   await analyzeAndOpenDashboard(page, "Track");
   await openPlayer(page);
   rings.push([
-    "More facts",
-    await focusRingContrast(page, page.getByRole("button", { name: "More facts", exact: true })),
+    "Find more facts",
+    await focusRingContrast(
+      page,
+      page.getByRole("button", { name: "Find more facts", exact: true }),
+    ),
   ]);
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });

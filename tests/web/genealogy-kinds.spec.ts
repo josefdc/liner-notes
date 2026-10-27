@@ -90,18 +90,28 @@ const fitScale = (page: Page) =>
 /** Page time that covers the force layout (about 300 ticks) and the fit's half-second ease. */
 const LAYOUT_MS = 15_000;
 
-/** Marks the graph drawn now, so graphFitted waits for the one a resize draws in its place. */
-async function graphToBeRedrawn(page: Page) {
-  await graphOf(page)
-    .locator(":scope > g")
-    .evaluate((g) => g.setAttribute("data-redraw-pending", ""));
+/**
+ * Marks the graph drawn now and its zoom, before a resize: the resize keeps both (it moves the
+ * layout to the panel's new middle; the graph is drawn again only for new data).
+ */
+async function markDrawing(page: Page) {
+  const zoomed = graphOf(page).locator(":scope > g");
+  await zoomed.evaluate((g) => g.setAttribute("data-kept", ""));
+  return zoomed.getAttribute("transform");
+}
+
+/** The drawing marked before a resize is still the one shown, at the same zoom. */
+async function drawingKept(page: Page, zoom: string | null) {
+  const zoomed = graphOf(page).locator(":scope > g[data-kept]");
+  await expect(zoomed).toHaveCount(1);
+  expect(await zoomed.getAttribute("transform")).toBe(zoom);
 }
 
 /**
  * Waits until the layout has settled and the graph has fitted itself to the panel: the fit's
  * transform is set and holds still (it eases in over half a second). The layout runs on the
  * page's clock (installed in beforeEach), which every check first runs forward through the force
- * ticks and the fit, so a graph drawn again meanwhile (after a resize) settles on it too: on a
+ * ticks and the fit, so a layout moved meanwhile (after a resize) settles on it too: on a
  * loaded machine, waiting for them frame by frame takes most of a minute.
  */
 async function graphFitted(page: Page) {
@@ -110,7 +120,6 @@ async function graphFitted(page: Page) {
     return graphOf(page)
       .locator(":scope > g")
       .evaluate(async (g) => {
-        if (g.hasAttribute("data-redraw-pending")) return null;
         const before = g.getAttribute("transform");
         await new Promise((resolve) => setTimeout(resolve, 400));
         const after = g.getAttribute("transform");
@@ -223,9 +232,12 @@ test.describe("the genealogy graph", () => {
       page,
     }) => {
       if (width !== 1440) {
-        await graphToBeRedrawn(page);
+        await graphFitted(page);
+        const zoom = await markDrawing(page);
         await page.setViewportSize({ width, height: 900 });
         if (width < 768) await page.getByRole("tab", { name: "Network" }).click();
+        await graphFitted(page);
+        await drawingKept(page, zoom);
       }
       await graphFitted(page);
       const labels = await graphLabels(page);
@@ -455,13 +467,15 @@ test.describe("the genealogy graph", () => {
     test(`on a ${width}×${height} phone the graph fills the tab, readable, list above the tab bar`, async ({
       page,
     }, testInfo) => {
-      await graphToBeRedrawn(page);
+      await graphFitted(page);
+      const zoom = await markDrawing(page);
       await page.setViewportSize({ width, height });
       await page.getByRole("tab", { name: "Network" }).click();
       const panel = page.locator("#panel-genealogy");
       const tabBar = page.getByRole("tablist", { name: "Player sections" });
       await expect(page.getByRole("group", { name: "Link legend" })).toBeVisible();
       await graphFitted(page);
+      await drawingKept(page, zoom);
       const [panelBox, barBox, graphBox] = await Promise.all([
         panel.boundingBox(),
         tabBar.boundingBox(),
@@ -484,6 +498,60 @@ test.describe("the genealogy graph", () => {
       await screenshot(page, testInfo, `phone-${width}-list`, panel);
     });
   }
+});
+
+test.describe("a related track's preview", () => {
+  // The clip's request is held unanswered, so the clip neither plays through nor fails.
+  const CLIP = "https://p.scdn.co/mp3-preview/genealogy-kinds-test";
+
+  test("plays from its button in the list of links, by click and from the keyboard, never on hover", async ({
+    page,
+  }) => {
+    const withPreview = loadFixture("genealogy-kinds");
+    const sample = resultOf(withPreview).genealogy.nodes.find(
+      (node) => node.id === "sample-sourced",
+    );
+    if (!sample) throw new Error("no sample-sourced track in the fixture");
+    sample.previewUrl = CLIP;
+    const clipRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().startsWith("https://p.scdn.co/")) clipRequests.push(request.url());
+    });
+    await page.route("https://p.scdn.co/**", () => {});
+    await useMockApi(page, withPreview);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const problems = collectProblems(page);
+
+    // The pointer on the track says it has a preview, and plays nothing.
+    const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
+    await track.dispatchEvent("mouseenter");
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(1);
+    await page.waitForTimeout(500);
+    expect(clipRequests).toEqual([]);
+    await track.dispatchEvent("mouseleave");
+
+    await page.getByText("Links as a list (17)").click();
+    const button = page.getByRole("button", {
+      name: "Play preview of Sourced Sample - Someone (1984)",
+    });
+    await expect(button).toHaveCount(1);
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => clipRequests).toContain(CLIP);
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+
+    // From the keyboard: Enter plays it, Space stops it.
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Space");
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(problems).toEqual([]);
+  });
 });
 
 test.describe("connected tracks on the Dashboard", () => {

@@ -1,8 +1,8 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The hover label a node with a clip shows. The audio hook is stubbed with stable callbacks
-// (as the real one's are); a test says when the clip could not be loaded.
+// The hover label a node with a clip shows (hovering never plays it). The audio hook is stubbed
+// with stable callbacks (as the real one's are); a test says when the clip could not be loaded.
 const audio = vi.hoisted(() => ({
   played: [] as string[],
   setUnavailable: null as null | ((id: string | null) => void),
@@ -77,7 +77,7 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph hover on a node with a clip', () => {
-  it('plays the clip and calls it a preview, never a sample', async () => {
+  it('says the track has a preview, never a sample, and does not play it', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const node = nodeGroup(container, 'Under Pressure');
 
@@ -85,7 +85,8 @@ describe('GenealogyGraph hover on a node with a clip', () => {
       node.dispatchEvent(new MouseEvent('mouseenter'));
     });
 
-    expect(audio.played).toEqual(['n1']);
+    // The preview plays from its button only (GenealogyGraph.robust.test.tsx).
+    expect(audio.played).toEqual([]);
     const label = container.querySelector('.preview-indicator');
     expect(label?.textContent).toBe('♪ PREVIEW');
     expect(container.textContent).not.toMatch(/SAMPL/);

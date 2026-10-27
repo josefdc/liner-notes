@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAudioPreview } from './useAudioPreview';
 
@@ -30,6 +30,10 @@ class FakeAudio {
     this.paused = true;
     this.onpause?.();
   }
+  removeAttribute(name: string) {
+    if (name === 'src') this.src = '';
+  }
+  load() {}
 }
 
 beforeEach(() => {
@@ -38,6 +42,7 @@ beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -45,7 +50,7 @@ afterEach(() => {
 const clip = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
 
 describe('useAudioPreview', () => {
-  it('marks only that node unavailable when its clip cannot be loaded, and retries on the next hover', async () => {
+  it('marks only that node unavailable when its clip cannot be loaded, and retries on the next preview', async () => {
     const { result } = renderHook(() => useAudioPreview());
 
     nextPlay = 'NotSupportedError';
@@ -61,7 +66,7 @@ describe('useAudioPreview', () => {
     expect(result.current.isPlaying).toBe(true);
   });
 
-  it('clears the unavailable node when the preview stops (the pointer leaves)', async () => {
+  it('clears the unavailable node when the preview stops', async () => {
     const { result } = renderHook(() => useAudioPreview());
 
     nextPlay = 'NotSupportedError';

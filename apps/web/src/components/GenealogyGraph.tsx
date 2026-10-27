@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { type Selection, select, selectAll } from 'd3-selection';
-import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type Selection, select } from 'd3-selection';
+import { type D3ZoomEvent, zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   forceSimulation,
   forceLink,
@@ -11,7 +11,7 @@ import {
   forceY,
 } from 'd3-force';
 import type { Simulation } from 'd3-force';
-import { drag } from 'd3-drag';
+import { type D3DragEvent, drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
 import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors } from '../styles/theme';
@@ -38,7 +38,7 @@ import { labelHeight, labelWidth, placeLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
 import { LinkLegend } from './genealogy/LinkLegend';
-import { LinkList } from './genealogy/LinkList';
+import { type LinkPreviews, LinkList } from './genealogy/LinkList';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
 import type { TrackData } from '../types';
@@ -73,6 +73,13 @@ const LINE_LABEL_PLACES = [0.5, 0.58, 0.42, 0.66, 0.34, 0.74, 0.26, 0.82, 0.18, 
 );
 /** A line label's baseline from its line: 0.4 em above, or 1.1 em below. */
 const lineLabelDy = (below: boolean) => (below ? '1.1em' : '-0.4em');
+
+/** A link's end once d3-force has resolved it to its track (an id before that: at 0). */
+const endOf = (end: CustomNode | string): { x: number; y: number } =>
+  typeof end === 'string' ? { x: 0, y: 0 } : { x: end.x ?? 0, y: end.y ?? 0 };
+
+/** The size of the graph's box on screen, in px. */
+type Size = { width: number; height: number };
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
@@ -124,6 +131,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     stopPreview,
   } = useAudioPreview();
 
+  // Clip ids for the tracks' pictures: this graph's own prefix (an id may hold only letters,
+  // digits, - and _) and the track's index, never the track's id, which may hold any character.
+  const clipPrefix = `genealogy${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
+
+  // The analysis callback, read when a track is chosen: a new one does not draw the graph again.
+  const onNodeClickRef = useRef(onNodeClick);
+  useEffect(() => {
+    onNodeClickRef.current = onNodeClick;
+  }, [onNodeClick]);
+
   // A clip that could not be loaded takes its hover label with it.
   useEffect(() => {
     if (!unavailableNodeId || !svgRef.current) return;
@@ -135,26 +152,32 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .remove();
   }, [unavailableNodeId]);
 
-  // State for responsive dimensions (ResizeObserver)
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  // The graph's size on screen (ResizeObserver). The first one draws the graph and fixes its
+  // node scale; a later one moves the layout's middle and keeps the drawing and the zoom
+  // (`resizeRef`, set by the drawing). A hidden panel (the phone tabs) measures 0 by 0: the
+  // graph keeps its last size.
+  const sizeRef = useRef<Size | null>(null);
+  const firstSizeRef = useRef<Size | null>(null);
+  const resizeRef = useRef<((size: Size) => void) | null>(null);
+  const [sized, setSized] = useState(false);
 
-  // ResizeObserver hook: observe wrapper size changes for responsive D3
   useEffect(() => {
-    if (!wrapperRef.current) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
 
     const resizeObserver = new ResizeObserver((entries) => {
-      if (!entries || entries.length === 0) return;
-      const { width, height } = entries[0].contentRect;
-      // Only update if dimensions actually changed to avoid unnecessary re-renders
-      setDimensions((prev) => {
-        if (prev.width !== width || prev.height !== height) {
-          return { width, height };
-        }
-        return prev;
-      });
+      const box = entries[0]?.contentRect;
+      if (!box || box.width === 0 || box.height === 0) return;
+      const { width, height } = box;
+      const last = sizeRef.current;
+      if (last && last.width === width && last.height === height) return;
+      sizeRef.current = { width, height };
+      firstSizeRef.current ??= { width, height };
+      if (resizeRef.current) resizeRef.current({ width, height });
+      else setSized(true);
     });
 
-    resizeObserver.observe(wrapperRef.current);
+    resizeObserver.observe(wrapper);
     return () => resizeObserver.disconnect();
   }, []);
 
@@ -162,12 +185,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!svgRef.current || !wrapperRef.current || dimensions.width === 0 || dimensions.height === 0)
-      return;
+    const size = sizeRef.current;
+    const firstSize = firstSizeRef.current;
+    if (!svgRef.current || !wrapperRef.current || !sized || !size || !firstSize) return;
 
     // 1. Setup & Cleanup
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
+    // Listeners added here outside d3 (focus and blur), removed when the drawing goes.
+    const listening: Array<{ element: SVGElement; type: string; listener: () => void }> = [];
 
     // A hint shown on hover fades in, or appears at once under reduced motion.
     const fadeIn = (hint: Selection<SVGTextElement, unknown, null, undefined>) => {
@@ -175,11 +201,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       else hint.style('opacity', 0).transition().duration(300).style('opacity', 1);
     };
 
-    // Use dimensions from ResizeObserver state
-    const { width, height } = dimensions;
+    // The size now: a resize changes it (see the end of this effect), and the first fit uses it.
+    let { width, height } = size;
+    svg.attr('width', width).attr('height', height);
 
-    // Responsive scaling: detect if mobile (narrow viewport)
-    const isMobile = width < 500;
+    // Responsive scaling: detect if mobile (narrow viewport), from the first size only, so a
+    // resize does not change the tracks' size
+    const isMobile = firstSize.width < 500;
     const nodeScale = isMobile ? 0.6 : 1;
     const linkDistance = isMobile ? 80 : 120;
     const chargeStrength = isMobile ? -300 : -400;
@@ -212,22 +240,21 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .scaleExtent([0.2, 4])
       // A double click zooms in a glide, or at once under reduced motion.
       .duration(reducedMotion ? 0 : 250)
-      .on('zoom', (event) => {
+      .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         transform = event.transform;
-        g.attr('transform', event.transform);
+        g.attr('transform', event.transform.toString());
         fitText();
       });
 
     svg.call(zoomBehavior);
 
     // 4. Force Simulation Setup
-    // Use a deep copy to prevent D3 from mutating the original props reference directly if strict
-    const nodes: CustomNode[] = JSON.parse(JSON.stringify(graphNodes(data))).map(
-      (n: CustomNode) => ({
-        ...n,
-        size: n.size * nodeScale, // Scale node sizes for mobile
-      }),
-    );
+    // d3-force writes each node's place and speed (x, y, vx, vy, fx, fy, index) on the objects
+    // it is given: each node is copied, so the props are never written to.
+    const nodes: CustomNode[] = graphNodes(data).map((n) => ({
+      ...n,
+      size: n.size * nodeScale, // Scale node sizes for mobile
+    }));
     // Copies: d3-force replaces each link's source and target with the node objects.
     const simulationLinks: CustomLink[] = links.map((shown, n) => ({
       source: shown.source,
@@ -250,23 +277,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
 
     // Create simulation centered at viewport center
-    const simulation = forceSimulation(nodes)
+    const center = forceCenter<CustomNode>(width / 2, height / 2); // Center the whole graph
+    // A light pull to the middle: a track with no link shown (its only link rejected, or
+    // none sent) is not pushed off into the distance, taking the fit with it.
+    const pullX = forceX<CustomNode>(width / 2).strength(0.04);
+    const pullY = forceY<CustomNode>(height / 2).strength(0.04);
+    const simulation = forceSimulation<CustomNode, CustomLink>(nodes)
       .force(
         'link',
-        forceLink(simulationLinks)
-          .id((d: any) => d.id)
+        forceLink<CustomNode, CustomLink>(simulationLinks)
+          .id((d) => d.id)
           .distance(linkDistance),
       )
-      .force('charge', forceManyBody().strength(chargeStrength))
-      .force('center', forceCenter(width / 2, height / 2)) // Center the whole graph
+      .force('charge', forceManyBody<CustomNode>().strength(chargeStrength))
+      .force('center', center)
       .force(
         'collide',
-        forceCollide().radius((d: any) => d.size + (isMobile ? 8 : 15)),
+        forceCollide<CustomNode>().radius((d) => d.size + (isMobile ? 8 : 15)),
       )
-      // A light pull to the middle: a track with no link shown (its only link rejected, or
-      // none sent) is not pushed off into the distance, taking the fit with it.
-      .force('x', forceX(width / 2).strength(0.04))
-      .force('y', forceY(height / 2).strength(0.04));
+      .force('x', pullX)
+      .force('y', pullY);
+    /** The ticks a layout takes to settle from `alpha`, played at once under reduced motion. */
+    const ticksToSettle = (alpha: number) =>
+      Math.ceil(Math.log(simulation.alphaMin() / alpha) / Math.log(1 - simulation.alphaDecay()));
     // Under reduced motion the layout is not played out frame by frame: it is computed at once
     // once the graph is built (see the end of this effect), and drawn settled.
     if (reducedMotion) simulation.stop();
@@ -376,7 +409,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const node = g
       .append('g')
       .attr('class', 'nodes')
-      .selectAll('g')
+      .selectAll<SVGGElement, CustomNode>('g')
       .data(nodes)
       .join('g')
       .attr('cursor', 'pointer')
@@ -385,7 +418,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('role', (d) => (d.group === 1 ? 'img' : 'button'))
       .attr('aria-label', (d) => nodeAriaLabel(d))
       .style('outline', 'none')
-      .call(dragBehavior(simulation) as any);
+      .call(dragBehavior(simulation));
 
     function nodeAriaLabel(d: CustomNode): string {
       const name = nameOf(d.id);
@@ -434,9 +467,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // Node - Image Container
     // We use a pattern definition or clipPath. ClipPath is easier for dynamic images per node.
-    node.each(function (d) {
+    node.each(function (d, i) {
       const group = select(this);
-      const uniqueId = `clip-${d.id}`;
+      const uniqueId = `${clipPrefix}-clip-${i}`;
 
       group.append('clipPath').attr('id', uniqueId).append('circle').attr('r', d.size);
 
@@ -445,7 +478,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
       group
         .append('image')
-        .attr('xlink:href', imageUrl)
+        .attr('href', imageUrl)
         .attr('x', -d.size)
         .attr('y', -d.size)
         .attr('width', d.size * 2)
@@ -531,8 +564,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
     const linePriority = (link: ShownLink) => (link.kind === 'sourced' ? 2000 : 0) + rank(link);
     /** Where a line's label is drawn: at its place along the line (graph units). */
-    const labelX = (d: any) => d.source.x + (d.target.x - d.source.x) * (d.labelPlace?.at ?? 0.5);
-    const labelY = (d: any) => d.source.y + (d.target.y - d.source.y) * (d.labelPlace?.at ?? 0.5);
+    const labelX = (d: CustomLink) => {
+      const [from, to] = [endOf(d.source), endOf(d.target)];
+      return from.x + (to.x - from.x) * (d.labelPlace?.at ?? 0.5);
+    };
+    const labelY = (d: CustomLink) => {
+      const [from, to] = [endOf(d.source), endOf(d.target)];
+      return from.y + (to.y - from.y) * (d.labelPlace?.at ?? 0.5);
+    };
 
     /**
      * Keeps text the same size on screen at any zoom, and places the labels in the order
@@ -543,10 +582,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     function fitText() {
       const k = transform.k || 1;
       linkLabel.attr('font-size', `${LINE_LABEL_PX / k}px`);
-      labels.selectAll('text').attr('font-size', function () {
-        const base = (this as Element).classList.contains('sub-label')
-          ? SUB_LABEL_PX
-          : labelFontSize;
+      labels.selectAll<SVGTextElement, unknown>('text').attr('font-size', function () {
+        const base = this.classList.contains('sub-label') ? SUB_LABEL_PX : labelFontSize;
         return `${base / k}px`;
       });
       g.selectAll('.preview-indicator').attr('font-size', `${GRAPH_TEXT_PX / k}px`);
@@ -575,22 +612,23 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
       // A line's label may sit along its line, above or below it (LINE_LABEL_PLACES), clear of
       // the other labels and the tracks' discs where it can be.
-      const lines = simulationLinks.map((d: any) => ({
-        candidates: LINE_LABEL_PLACES.map(({ at, below }) => ({
-          x: ((d.source.x ?? 0) + ((d.target.x ?? 0) - (d.source.x ?? 0)) * at) * k,
-          // The box's centre: 0.7 em above the line for a baseline 0.4 em above it, 0.775 em
-          // below for a baseline 1.1 em below
-          y:
-            ((d.source.y ?? 0) + ((d.target.y ?? 0) - (d.source.y ?? 0)) * at) * k +
-            (below ? 0.775 : -0.7) * LINE_LABEL_PX,
-          width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
-          height: labelHeight(LINE_LABEL_PX),
-        })),
-        priority: linePriority(d.shown),
-        kind: 'line',
-        // Drawn above the names, on a band of the page's colour: still readable over one
-        mayCover: ['name'],
-      }));
+      const lines = simulationLinks.map((d) => {
+        const [from, to] = [endOf(d.source), endOf(d.target)];
+        return {
+          candidates: LINE_LABEL_PLACES.map(({ at, below }) => ({
+            x: (from.x + (to.x - from.x) * at) * k,
+            // The box's centre: 0.7 em above the line for a baseline 0.4 em above it, 0.775 em
+            // below for a baseline 1.1 em below
+            y: (from.y + (to.y - from.y) * at) * k + (below ? 0.775 : -0.7) * LINE_LABEL_PX,
+            width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
+            height: labelHeight(LINE_LABEL_PX),
+          })),
+          priority: linePriority(d.shown),
+          kind: 'line',
+          // Drawn above the names, on a band of the page's colour: still readable over one
+          mayCover: ['name'],
+        };
+      });
       const discs = nodes.map((d) => {
         const side = 2 * (d.size + 4) * k;
         return { x: (d.x ?? 0) * k, y: (d.y ?? 0) * k, width: side, height: side };
@@ -664,14 +702,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
     };
     setRoving(0);
+    const listen = (element: SVGElement, type: string, listener: () => void) => {
+      element.addEventListener(type, listener);
+      listening.push({ element, type, listener });
+    };
     items.forEach(({ item, element }, i) => {
-      element.addEventListener('focus', () => {
+      listen(element, 'focus', () => {
         setRoving(i);
         focusOn = item;
         drawActive();
         setFocused(item);
       });
-      element.addEventListener('blur', () => {
+      listen(element, 'blur', () => {
         if (!sameItem(focusOn, item)) return;
         focusOn = null;
         drawActive();
@@ -734,6 +776,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       stopPreview();
 
       // Trigger navigation callback
+      const onNodeClick = onNodeClickRef.current;
       if (onNodeClick) {
         onNodeClick({
           id: d.id,
@@ -774,11 +817,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )
           .style('opacity', 1);
 
-        // Audio Preview: Play if node has previewUrl (and not the current song)
+        // A track with a preview says so; the preview plays only from its button (in the list
+        // of links), never on hover.
         if (d.previewUrl && d.group !== 1) {
-          playPreview(d.previewUrl, d.id);
-
-          // Add audio indicator (removed again if the clip cannot be loaded, see below)
+          // Add audio indicator (removed again if the clip cannot be loaded, see above)
           select(this)
             .append('text')
             .attr('class', 'preview-indicator')
@@ -813,10 +855,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         // Back to each link's own colour and opacity (its attributes).
         link.style('stroke', null).style('stroke-opacity', null);
         linkLabel.style('opacity', null);
-        selectAll('.preview-indicator').remove();
-
-        // Stop audio preview
-        stopPreview();
+        svg.selectAll('.preview-indicator').interrupt().remove();
       })
       // Click to navigate (infinite exploration)
       .on('click', (event, d) => {
@@ -828,10 +867,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     function draw() {
       for (const line of [link, linkTarget]) {
         line
-          .attr('x1', (d: any) => d.source.x)
-          .attr('y1', (d: any) => d.source.y)
-          .attr('x2', (d: any) => d.target.x)
-          .attr('y2', (d: any) => d.target.y);
+          .attr('x1', (d) => endOf(d.source).x)
+          .attr('y1', (d) => endOf(d.source).y)
+          .attr('x2', (d) => endOf(d.target).x)
+          .attr('y2', (d) => endOf(d.target).y);
       }
       linkLabel.attr('x', labelX).attr('y', labelY);
 
@@ -840,17 +879,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     simulation.on('tick', draw);
 
     // 9. Drag Logic
-    function dragBehavior(simulation: Simulation<CustomNode, undefined>) {
+    type DragEvent = D3DragEvent<SVGGElement, CustomNode, CustomNode>;
+    function dragBehavior(simulation: Simulation<CustomNode, CustomLink>) {
       // Under reduced motion a drag moves the dragged track alone, under the pointer: the
       // others stay where they are instead of drifting into a new layout.
-      function dragstarted(event: any) {
+      function dragstarted(event: DragEvent) {
         if (reducedMotion) return;
         if (!event.active) simulation.alphaTarget(0.3).restart();
         event.subject.fx = event.subject.x;
         event.subject.fy = event.subject.y;
       }
 
-      function dragged(event: any) {
+      function dragged(event: DragEvent) {
         if (reducedMotion) {
           event.subject.x = event.x;
           event.subject.y = event.y;
@@ -861,7 +901,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         event.subject.fy = event.y;
       }
 
-      function dragended(event: any) {
+      function dragended(event: DragEvent) {
         // The labels are placed again for where the track was left, as the layout's end does.
         if (reducedMotion) {
           fitText();
@@ -872,35 +912,53 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         event.subject.fy = null;
       }
 
-      return drag().on('start', dragstarted).on('drag', dragged).on('end', dragended);
+      return drag<SVGGElement, CustomNode, CustomNode>()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended);
     }
 
     // The settled layout, computed in one go: the ticks the simulation would have played.
     if (reducedMotion) {
-      const ticks = Math.ceil(
-        Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()),
-      );
-      simulation.tick(ticks);
+      simulation.tick(ticksToSettle(1));
       draw();
       settle();
     }
 
+    // A resize keeps the drawing, its tracks' size and the zoom: the svg takes the new size and
+    // the layout moves to the new middle (at once under reduced motion).
+    resizeRef.current = (next) => {
+      ({ width, height } = next);
+      svg.attr('width', width).attr('height', height);
+      center.x(width / 2).y(height / 2);
+      pullX.x(width / 2);
+      pullY.y(height / 2);
+      if (reducedMotion) {
+        simulation.alpha(0.3).tick(ticksToSettle(0.3));
+        draw();
+        fitText();
+      } else {
+        simulation.alpha(0.3).restart();
+      }
+    };
+
+    // Everything the drawing started stops with it: the layout, transitions (the fit's glide,
+    // the hints' fade) and their timers, and every listener on the svg and its elements.
     return () => {
-      simulation.stop();
+      resizeRef.current = null;
+      simulation.on('tick', null).on('end', null).stop();
+      svg.interrupt();
+      svg.selectAll('*').interrupt();
+      svg.on('.zoom', null).on('keydown', null);
+      node.on('.drag', null).on('mouseenter', null).on('mouseleave', null).on('click', null);
+      linkTarget.on('mouseenter', null).on('mouseleave', null);
+      for (const { element, type, listener } of listening) {
+        element.removeEventListener(type, listener);
+      }
       setHovered(null);
       setFocused(null);
     };
-  }, [
-    data,
-    links,
-    nameOf,
-    currentId,
-    onNodeClick,
-    dimensions,
-    playPreview,
-    stopPreview,
-    reducedMotion,
-  ]); // Add dimensions to dependency array for responsive redraw
+  }, [data, links, nameOf, currentId, sized, clipPrefix, stopPreview, reducedMotion]);
 
   const nodeList = graphNodes(data);
   const related = nodeList.filter((node) => node.group !== 1);
@@ -910,6 +968,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
   const activeRelation = activeNode ? relationToTrack(links, activeNode.id, currentId) : null;
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
+  // Each related track's preview, played from its button in the list of links.
+  const previewUrls = new Map(
+    nodeList
+      .filter((node) => node.group !== 1 && typeof node.previewUrl === 'string' && node.previewUrl)
+      .map((node) => [node.id, node.previewUrl as string]),
+  );
+  const previews: LinkPreviews = {
+    urlOf: (id) => previewUrls.get(id),
+    playingId: isPlaying ? playingNodeId : null,
+    toggle: (id, url) => playPreview(url, id),
+  };
 
   return (
     <div className="relative w-full h-full flex flex-col">
@@ -998,7 +1067,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           </div>
         )}
 
-        {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
+        {/* A node's clip that could not be loaded (preview links expire); its preview button
+            tries again */}
         {hasPreviewSupport && unavailableNodeId && (
           <div className="absolute top-4 right-4 pointer-events-none" role="status">
             <div className="flex items-center gap-2 text-text-secondary text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
@@ -1040,7 +1110,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 : `${hidden} links not shown: the claims behind them were rejected or cannot be read.`}
             </p>
           )}
-          <LinkList links={links} nameOf={nameOf} />
+          <LinkList links={links} nameOf={nameOf} previews={previews} />
         </div>
       )}
     </div>

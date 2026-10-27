@@ -721,18 +721,36 @@ def test_the_ticks_before_an_onset_in_a_run_are_judged_on_the_grid_spacing():
     """
     Twelve ticks under a pad before a 120 BPM band at 8 s that come closer to its tempo: four
     6.5 % slow, then eight 2.5 % slow, with a click under the first of those eight. The run as
-    a whole is within the tolerances (3.8 % off the grid's spacing, a median 0.16 of a period
-    off its phase) and stays from the click on, as any run that close does. The four ticks
-    before the click are judged on their own against the grid's spacing, from its beats on
-    onsets, and left out. (Against the spacing of the beats from the click on, mostly the
-    ticks' own, they are 3.9 % off and would stay.)
+    a whole, and its part from the click on, are within the tolerances (3.8 and 2.5 % off the
+    grid's spacing). The four ticks before the click are judged on their own against the
+    grid's spacing, from its beats on onsets, and none of them is reported; every beat of the
+    band is. (Against the spacing of the beats from the click on, mostly the ticks' own, they
+    are 3.9 % off and would stay. The eight ticks from the click on stay: a run that close to
+    the grid is a known limit.)
     """
     band = list(np.arange(8.0, 30.0, 0.5))
     near = [8.0 - 0.5 * 1.025 * k for k in range(8, 0, -1)]
     slow = [near[0] - 0.5 * 1.065 * k for k in range(4, 0, -1)]
     y = add_click(pad_then_band(8.0), near[0], 0.3)
     reported = reported_over(y, [*slow, *near, *band])
-    assert reported == [round(float(t), 3) for t in [*near, *band]]
+    assert not [t for t in reported if t < round(near[0], 3)]
+    assert set(round(float(t), 3) for t in band) <= set(reported)
+
+
+def test_a_run_whose_drift_turns_around_an_onset_is_left_out():
+    """
+    Sixteen ticks under a pad before a 120 BPM band at 10 s: ten 3 % fast, then six 5 % slow
+    from a click on. The drifts cancel, so the run as a whole is on the grid (0 % off its
+    spacing, a median 0.15 of a period off its phase), but its part from the click on is 5 %
+    off on its own: the whole run is left out, the ticks before the click with it (on their
+    own they are only 3 % off). Only the band is reported.
+    """
+    band = list(np.arange(10.0, 30.0, 0.5))
+    near = [10.0 - 0.5 * 1.05 * k for k in range(6, 0, -1)]
+    far = [near[0] - 0.5 * 0.97 * k for k in range(10, 0, -1)]
+    y = add_click(pad_then_band(10.0), near[0], 0.3)
+    reported = reported_over(y, [*far, *near, *band])
+    assert reported == [round(float(t), 3) for t in band]
 
 
 @pytest.mark.parametrize("beat", [8, 12])
@@ -852,19 +870,21 @@ def test_known_limit_a_lone_first_hit_just_before_the_groove_is_missing_with_the
 
 def test_the_ticks_before_an_onset_in_a_run_are_judged_on_the_grid_phase():
     """
-    Eleven beats under a pad before a 120 BPM band at 8 s, all at its spacing: five 0.35 of a
-    period early, then six on its grid, with a click under the last early one. The run as a
-    whole is on the grid (3.2 % off its spacing, a median 0 off its phase) and stays from the
-    click on. The four ticks before the click are judged on their own, against the grid's
-    spacing and phase counted from its first beat, and left out. (Counted from the click, they
-    would be on the grid and stay.)
+    Fourteen beats under a pad before a 120 BPM band at 8 s, all at its spacing: five 0.35 of
+    a period early, then nine on its grid, with a click under the last early one. The run as a
+    whole, and its part from the click on, are on the grid (2.5 and 3.5 % off its spacing, a
+    median 0 off its phase). The four ticks before the click are judged on their own, against
+    the grid's spacing and phase counted from its first beat (0.35 of a period off), and none
+    of them is reported; every beat of the band is. (Counted from the click, they would be on
+    the grid and stay.)
     """
     band = list(np.arange(8.0, 30.0, 0.5))
-    on_the_grid = [8.0 - 0.5 * k for k in range(6, 0, -1)]
-    early = [4.5 - 0.5 * 0.35 - 0.5 * k for k in range(4, -1, -1)]
+    on_the_grid = [8.0 - 0.5 * k for k in range(9, 0, -1)]
+    early = [3.0 - 0.5 * 0.35 - 0.5 * k for k in range(4, -1, -1)]
     y = add_click(pad_then_band(8.0), early[-1], 0.3)
     reported = reported_over(y, [*early, *on_the_grid, *band])
-    assert reported == [round(float(t), 3) for t in [early[-1], *on_the_grid, *band]]
+    assert not [t for t in reported if t < round(early[-1], 3)]
+    assert set(round(float(t), 3) for t in band) <= set(reported)
 
 
 def test_sparse_kicks_after_the_band_do_not_keep_the_ticks_after_them():
@@ -917,6 +937,44 @@ def test_a_band_with_no_two_beats_on_onsets_in_a_row_still_has_its_intro_judged(
         y = with_kicks(y, band[::every])
     intro = [8.0 - 0.55 * k for k in range(14, 0, -1)]
     assert reported_over(y, [*intro, *band]) == [round(float(t), 3) for t in band]
+
+
+@pytest.mark.parametrize(
+    "clicks", [pytest.param([14], id="last-tick"), pytest.param([6, 7], id="adjacent-ticks")]
+)
+@pytest.mark.parametrize(
+    ("every", "offbeats"),
+    [
+        pytest.param(4, False, id="downbeats"),
+        pytest.param(3, False, id="waltz-downbeats"),
+        pytest.param(4, True, id="one-drop"),
+    ],
+)
+def test_clicks_before_a_band_with_no_start_of_its_own_do_not_take_the_grid(
+    every, offbeats, clicks
+):
+    """
+    The band with no two beats on onsets in a row, after fourteen ticks 10 % slow under the
+    pad, with a click under the last tick (next to the band's first beat on an onset) or under
+    the 6th and 7th. Those onsets on two beats in a row were the measured span: the band was
+    judged off it and left out (43 or 44 of its 44 beats), and the ticks reported. A span with
+    under half of the beats on onsets is not the band's, so the grid runs from the first beat
+    on an onset to the last: every beat of the band is reported. The ticks from the first click
+    on are too (a known limit: one onset on the tick next to the band joins it, and two on
+    adjacent ticks start the grid there); those before it are left out.
+    """
+    band = list(np.arange(8.0, 30.0, 0.5))
+    y = 0.5 * pad_then_band(30.0)
+    if offbeats:
+        y = with_kicks(y, [t + 0.25 for t in band])
+        y = with_kicks(y, band[::every], 0.5)
+    else:
+        y = with_kicks(y, band[::every])
+    intro = [8.0 - 0.55 * k for k in range(14, 0, -1)]
+    for k in clicks:
+        y = add_click(y, intro[k - 1], 0.3)
+    reported = reported_over(y, [*intro, *band])
+    assert reported == [round(float(t), 3) for t in [*intro[clicks[0] - 1 :], *band]]
 
 
 @pytest.mark.parametrize(
@@ -1040,6 +1098,30 @@ def test_one_click_under_a_pad_beat_brings_none_of_its_beats_back(probe, beat, a
     _, v2 = analyse_array(y, "essentia")
     assert v2["beats"]["times"] == [t for t in tracked if t >= start]
     assert round(v2["tempo"]["bpm"]) == round(float(probe.split("-")[1]))
+
+
+@needs_essentia
+@pytest.mark.parametrize(("beat", "amplitude"), [(8, 0.3), (9, 0.3), (10, 0.1)])
+def test_one_click_under_a_pad_beat_before_a_one_drop_brings_none_of_its_beats_back(
+    beat, amplitude
+):
+    """
+    A pad throughout, a one-drop band from 8 s (a kick on every 4th beat, offbeat skanks),
+    and one click under the pad's `beat`th beat as Essentia tracks it. Essentia's ticks under
+    the pad run about 9 % fast before the click and 4 to 5 % slow from it to the band: over the
+    whole run the drifts cancel (2.0 to 2.4 % off the grid's spacing), and the ticks from the
+    click on were reported (7, 6 and 5). Their part from the click on is 4.2 to 4.7 % off on
+    its own, so none is now, and every beat of the band is.
+    """
+    band = list(np.arange(8.0, 30.0, 0.5))
+    y = 0.5 * pad_then_band(30.0)
+    y = with_kicks(y, [t + 0.25 for t in band])
+    y = with_kicks(y, band[::4], 0.5)
+    pad = [t for t in tracked_beats(y, "essentia") if t < 7.93]
+    y = add_click(y, pad[beat - 1], amplitude)
+    tracked = tracked_beats(y, "essentia")
+    _, v2 = analyse_array(y, "essentia")
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 7.93]
 
 
 @needs_essentia

@@ -188,17 +188,22 @@ times are seconds from the start of the preview. Every block is `null` when it w
   gaps. Trackers also count through an intro or an ending that has sound but no beat (a
   pad, a drone, hum or hiss). The measured grid starts where the band's onsets start: at the
   first two beats on onsets in a row, or five beats that alternate on and off onsets; it ends
-  where they end (with no such beats anywhere, as with onsets only on the downbeats, from the
-  first beat on an onset to the last). So one onset in an intro (a click, a breath) does not
-  start it. The run of beats before or after it is left out, as a whole and onsets included,
-  when it has four or more beats with sound under them and its spacing is more than 4 % off
-  the grid next to it, or its beats are a median of more than a quarter of a period off the
-  grid's phase. When the run stays, the beats before its first onset are also judged on their
-  own against the same grid, so ticks before a few kicks do not stay with them. Essentia
+  where they end. With no such beats anywhere, as with onsets only on the downbeats, or when
+  the span between them holds under half of the clip's beats on onsets (a pair of clicks
+  before such a band), it runs from the first beat on an onset to the last. So, when the band
+  has a start of its own, one onset in an intro (a click, a breath) does not start it. The run
+  of beats before or after it is left out, as a whole and onsets included, when it has four or
+  more beats with sound under them and its spacing is more than 4 % off the grid next to it
+  (the median interval up to the grid's 8th beat on an onset), or its beats are a median of
+  more than a quarter of a period off the grid's phase. It is also left out as a whole when
+  its part from its first onset on is off the grid on its own (ticks whose drift turns around
+  near a click); when the run stays, the beats before its first onset are judged on their
+  own, so ticks before a few kicks do not stay with them. Essentia
   counted 15 and 23 beats under the pads before two bands, 6.8 and 12.8 % off; with one click
   under a pad beat, it reported all or 6 of the 15 again before 2.3.4. In the tests, one click
   under a pad beat no longer brings an intro back (under the pads before the 85, 97 and
-  132 BPM bands, and under ticks 3.5 to 10 % off a band's spacing); the known limits below
+  132 BPM bands and a one-drop band, and under ticks 3.5 to 10 % off a band's spacing); the
+  known limits below
   are where it still can. The gain is in intros. On the evals harness's 30 s
   clips at seed 1 (100 Ballroom and 100 GiantSteps Tempo tracks, Ballroom's beat annotations
   aligned to each clip's window), it left out 68 beats in seven runs, all Essentia's: six
@@ -212,14 +217,19 @@ times are seconds from the start of the preview. Every block is `null` when it w
     still reported (a rubato piano intro, and some hum and hiss intros: 1 of 27 tried), as
     are runs of one to three beats. A quiet click (0.03) under the 4th or 6th pad beat of the
     97 BPM probe makes Essentia track the whole pad again on the band's grid, and its 16
-    beats are reported, as in every version before.
+    beats are reported, as in every version before; so does a click at 0.1 under the 12th
+    pad beat before a one-drop band (15 beats).
   - Two onsets on adjacent beats of an intro, or three on alternate beats, start the grid
     there, and one on the beat next to the band joins it, as a pickup does; with Essentia,
     two clicks two beats apart under the 85 BPM pad also brought back 14 of its 15 beats.
+    Before a band with no start of its own (onsets only on its downbeats, a one-drop), one
+    click under any beat of the intro starts the grid there, as in 2.3.3 (8 of 14 ticks back
+    with a click under the 7th).
   - A band whose first bars hold only a downbeat, after a pad's ticks, loses those bars with
     the ticks (8 beats in the tests): the run is judged whole, and the ticks put it off the
-    grid. So does a band's lone first hit two or three beats before its groove, or a last hit
-    two or three beats after it before a ringing tail (2.3.3 kept them). Those beats are
+    grid. So does a band's lone first hit two or more beats before its groove, or a last hit
+    two or more beats after it before ticks over a ringing pad (2 to 8 tried; 2.3.3 kept
+    them). Those beats are
     missing, not invented: keeping the part of a run from its first onset when it alone was
     on the grid also kept Essentia's ticks after one click (up to 13 of the 23 before the
     132 BPM band), because its ticks come close to the band's grid near it.

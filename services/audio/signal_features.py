@@ -132,34 +132,43 @@ BEAT_MIN_RMS = 3e-5
 # 132 BPM one (tests/signals.py), none on an onset. The measured grid starts where the band's onsets
 # start: at the first two beats on onsets in a row (GRID_START_BEATS), or the first five beats that
 # alternate on and off onsets, starting on one (GRID_START_ALTERNATE: a band whose beat sounds on
-# every other tick). It ends at the last such beats, read backward. So one onset in an intro (a
-# click, a breath) does not start the grid: with one 10 ms click under a pad tick, Essentia's beats
-# under the pad before the 97 BPM band were reported again before 2.3.4 (15, 15 and 6 of 15 for a
-# click under the 4th, 7th and 10th). In the tests, one click no longer brings an intro back (under
-# the pads before the 85, 97 and 132 BPM bands, and under ticks 3.5 to 10 % off a band's spacing);
-# the known limits below are where it still can. A pickup on the beat before the band does start
-# it there, with that beat. With no such start anywhere (a band with onsets only on its
-# downbeats, a one-drop), the grid runs from the first beat on an onset to the last, as before
-# 2.3.4.
+# every other tick). It ends at the last such beats, read backward. So, when the band has such a
+# start, one onset in an intro (a click, a breath) does not start the grid: with one 10 ms click
+# under a pad tick, Essentia's beats under the pad before the 97 BPM band were reported again
+# before 2.3.4 (15, 15 and 6 of 15 for a click under the 4th, 7th and 10th). In the tests, one
+# click no longer brings an intro back (under the pads before the 85, 97 and 132 BPM bands and a
+# one-drop band, and under ticks 3.5 to 10 % off a band's spacing); the known limits below are
+# where it still can.
+# A pickup on the beat before the band does start it there, with that beat. With no such start
+# anywhere (a band with onsets only on its downbeats, a one-drop), or when the span between the
+# first and the last start holds under half of the clip's beats on onsets (a pair of clicks in the
+# intro of such a band, which would otherwise be the span, and the band judged off it and left
+# out), the grid runs from the first beat on an onset to the last, as before 2.3.4.
 # The run of beats before the grid's start, or after its end, onsets included, is left out of the
 # reported grid when it has at least EDGE_RUN_MIN_BEATS beats with sound under them (audible_beats;
 # ticks over silence are left out anyway and do not count) and is off the grid's spacing or phase:
 # - spacing: its spacing is more than EDGE_RUN_TOLERANCE off the grid next to it: the median
-#   interval of the EDGE_RUN_GRID_BEATS beats on onsets nearest to it, inside the grid, against the
-#   mean interval of the run and the beat it meets, over whole periods (a beat the tracker skipped
-#   counts as two periods, a tick less than half a period after the last as one);
+#   interval of the grid's beats from its first beat up to its EDGE_RUN_GRID_BEATS-th beat on an
+#   onset, against the mean interval of the run and the beat it meets, over whole periods (a beat
+#   the tracker skipped counts as two periods, a tick less than half a period after the last as
+#   one);
 # - phase: the median distance of its beats from the grid counted on from that beat, every median
 #   interval, is more than EDGE_RUN_PHASE_TOLERANCE of a period. The spacing alone spreads a phase p
 #   over the run, about p / n off for n beats, so a long run on the spacing but out of phase used to
 #   stay (at 45 % out, runs of 14 beats or more).
 # Both are measured on every tick of the run, and a run off the grid is left out as a whole, its
-# onsets with it: a beat may be missing, never invented. When the run stays and has onsets, the
-# part before its first onset is also judged on its own, against the same grid (its spacing from
-# the beats on onsets inside it, its phase counted from its first beat), so the ticks before a
-# sparse start, or after the last of a few kicks at the end, are left out on their own (as before
-# 2.3.4, when the grid started at that onset). Judged only with two kicks on the grid after the
-# band, six ticks 10 % slow after them were reported. Judged against the spacing and phase of the
-# beats from that onset on, ticks drifting toward the band's tempo are on them and stay.
+# onsets with it: a beat may be missing, never invented. When the run has onsets, two parts of it
+# are also judged on their own, against the same grid (the same median interval, its phase
+# counted from its first beat):
+# - from its first onset to the grid: when this part is off, the whole run is left out. Ticks
+#   whose drift turns around near an onset can cancel over the run: Essentia's ticks under the pad
+#   before a one-drop band ran about 9 % fast before a click and 4 to 5 % slow after it, 2.0 to
+#   2.4 % off over the run, and the 5 to 7 from the click on were reported;
+# - before its first onset, when the run stays: the ticks before a sparse start, or after the last
+#   of a few kicks at the end, are left out on their own (as before 2.3.4, when the grid started
+#   at that onset). Judged only with two kicks on the grid after the band, six ticks 10 % slow
+#   after them were reported. Judged against the spacing and phase of the beats from that onset
+#   on, ticks drifting toward the band's tempo are on them and stay.
 # A run within the spacing tolerance drifts too: 3.5 % off, a six-beat run is a median 0.12 of a
 # period off the grid and stays, a 15-beat run 0.28 and is left out. Onset support is relative to
 # the clip's own beats (at least 0.1 of the 90th percentile of their onset strength), so with only
@@ -199,22 +208,28 @@ BEAT_MIN_RMS = 3e-5
 #   before bands at 97, 120 and 132 BPM, 1 run of 19 beats (hiss at -70 dBFS before the 120 BPM
 #   band, 0.2 % off) stays and is reported; 8 left out were only 5.0 to 5.9 % off.
 # - Two onsets on adjacent ticks of an intro, or three on alternate ticks, start the grid there; one
-#   onset on the tick just before the band (or just after it) joins the grid, as a pickup does. Two
+#   onset on the tick just before the band (or just after it) joins the grid, as a pickup does.
+#   Before a band with no start of its own (onsets only on its downbeats, a one-drop), the grid
+#   starts at the first beat on an onset, as in 2.3.3: one click under any tick of the intro brings
+#   back the ticks after it (8 of 14 with a click under the 7th tick 10 % slow), and so does a
+#   pair of clicks on adjacent ticks (9 with the 6th and 7th; the band stays). Two
 #   onsets two ticks apart can too, through Essentia's own ticks: clicks under the 4th and 6th pad
 #   beats of the 85 BPM probe brought back 14 of its 15 beats (none on the 97 and 132 BPM probes).
 # - A quiet click (0.03) under the 4th or 6th pad beat of the 97 BPM probe makes Essentia track the
 #   whole pad again on the band's own grid: its 16 beats there are on the grid and reported, as in
-#   every version before.
+#   every version before. So does a click at 0.1 under the 12th pad beat before a one-drop band
+#   (15 beats, on the grid of the offbeats Essentia tracks).
 # - A band's sparse first bars after a pad's ticks (a downbeat hit, then the groove) are left out
 #   with the ticks: judged whole, the run is off the grid (ten ticks 10 % slow and two such bars,
-#   5.6 % off; tests/test_v2.py). So is a band's lone first hit two or three beats before its
-#   groove after ticks, or a last hit two or three beats after it before a ringing tail (2.3.3
-#   kept them). Those beats are missing, not invented. Keeping the part of a run from its first
-#   onset when that part alone was on the grid kept Essentia's ticks after one click instead: its
-#   ticks come close to the band's grid near it (with a click at 0.1: 13 and 11 of the 23 before
-#   the 132 BPM band with it under the 12th or 14th, 4 to 10 of the 15 before the 85 BPM band, at
-#   10 of 50 click positions on the three probes; all 15 ticks 3.5 % slow before a synthetic band).
-#   None of these is reported now.
+#   5.6 % off; tests/test_v2.py). So is a band's lone first hit two or more beats before its
+#   groove after ticks, or a last hit two or more beats after it before ticks over a ringing pad
+#   (2 to 8 tried, ten ticks 10 % slow; one beat away, the hit and the groove start the grid and
+#   it stays; 2.3.3 kept them). Those beats are missing, not invented. Keeping the part of a run
+#   from its first onset when that part alone was on the grid kept Essentia's ticks after one
+#   click instead: its ticks come close to the band's grid near it (with a click at 0.1: 13 and 11
+#   of the 23 before the 132 BPM band with it under the 12th or 14th, 4 to 10 of the 15 before the
+#   85 BPM band, at 10 of 50 click positions on the three probes; all 15 ticks 3.5 % slow before a
+#   synthetic band). None of these is reported now.
 # - The phase rule leaves out a whole intro whose only onsets are sparse (kicks on downbeats) when
 #   its tempo drifts from the band's: over 24 beats, all 23 to 24 at 2.5 to 3 % (spacing 2.5 to 3 %
 #   off, phase 0.31 to 0.33 of a period), none at 1 or 2 % (0.13 and 0.24 to 0.25); the 14 beats of
@@ -376,24 +391,27 @@ def _kept_before(
 ) -> np.ndarray:
     """
     Which beats stay at the start of the grid that runs from beats[first] to beats[last] (the
-    measured span). The grid's spacing is the median interval up to its EDGE_RUN_GRID_BEATS-th
-    beat on an onset, and its phase is counted from beats[first]. The run before beats[first]
-    is left out as a whole when it is off that grid (_off_the_grid). When it stays and has
-    onsets, the part before its first onset is judged on its own against the same grid (as
-    before 2.3.4, when the grid started at that onset), so the ticks before a few kicks do not
-    stay with them.
+    measured span). The grid's spacing is the median interval from beats[first] up to its
+    EDGE_RUN_GRID_BEATS-th beat on an onset, and its phase is counted from beats[first]. The
+    run before beats[first] is left out as a whole when it is off that grid (_off_the_grid),
+    and so is it when the part of it from its first onset on is off the grid on its own (ticks
+    whose drift turns around near the grid can put the whole run on it). When the run stays
+    and has onsets, the part before its first onset is also judged on its own against the same
+    grid (as before 2.3.4, when the grid started at that onset), so the ticks before a few
+    kicks do not stay with them.
     """
     keep = np.ones(beats.size, dtype=bool)
     onsets = np.flatnonzero(on[: last + 1])
     inside = onsets[onsets >= first]
     period = float(np.median(np.diff(beats[first : inside[:EDGE_RUN_GRID_BEATS][-1] + 1])))
     origin = float(beats[first])
-    if _off_the_grid(beats, audible, slice(0, first), period, origin):
+    onset = int(onsets[0])
+    if _off_the_grid(beats, audible, slice(0, first), period, origin) or (
+        onset < first and _off_the_grid(beats, audible, slice(onset, first), period, origin)
+    ):
         keep[:first] = False
-    elif onsets[0] < first:
-        onset = int(onsets[0])
-        if _off_the_grid(beats, audible, slice(0, onset), period, origin):
-            keep[:onset] = False
+    elif onset < first and _off_the_grid(beats, audible, slice(0, onset), period, origin):
+        keep[:onset] = False
     return keep
 
 
@@ -402,9 +420,10 @@ def beats_on_the_grid(signals: Signals, beats: np.ndarray, loudness: Levels) -> 
     The beats without a leading or trailing run that a tracker counted through a stretch
     without a beat, in their order. The measured grid starts where the band's onsets start
     and ends where they end (_measured_span), so one onset on a beat of an intro does not
-    start it; every beat between stays. With no such start, it runs from the first beat on an
-    onset to the last. The runs before and after it are judged by _kept_before (the end read
-    backward, with time reversed).
+    start it when the band has such a start; every beat between stays. With no such start, or
+    when the span holds under half of the beats on onsets (a pair of clicks before a band with
+    no start of its own), it runs from the first beat on an onset to the last. The runs before
+    and after it are judged by _kept_before (the end read backward, with time reversed).
     """
     beats = np.asarray(beats, dtype=float)
     on = np.isin(beats, estimators.onset_beats(beats, signals))
@@ -412,6 +431,8 @@ def beats_on_the_grid(signals: Signals, beats: np.ndarray, loudness: Levels) -> 
     if onsets.size < 2:
         return beats
     span = _measured_span(on)
+    if span is not None and 2 * np.count_nonzero(on[span[0] : span[1] + 1]) < onsets.size:
+        span = None  # a pair or an alternation of clicks, not the band (_measured_span)
     first, last = span if span is not None else (int(onsets[0]), int(onsets[-1]))
     audible = beat_levels(signals, beats) >= beat_floor(loudness)
     n = beats.size

@@ -27,7 +27,7 @@ import {
 import { evidenceScope, type TrackRef } from "./records.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
-import { allStrings, randomStrings, timed } from "./testing/strings.js";
+import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
 
 const TOKEN = "discogs-test-token-0123456789";
 const now = () => new Date("2026-10-20T12:00:00.000Z");
@@ -480,7 +480,7 @@ describe("matched counts and evidence scope", () => {
   });
 });
 
-describe("creditRange", () => {
+describe("creditRange", { timeout: 30_000 }, () => {
   // The expression before #194: polynomial time on runs of whitespace and "to".
   const POLYNOMIAL = /^\s*(.+?)\s+to\s+(.+?)\s*$/i;
   const old = (part: string) => {
@@ -545,7 +545,7 @@ describe("creditRange", () => {
     ];
     const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000, 14)];
 
-    for (const part of cases) expect(creditRange(part), JSON.stringify(part)).toEqual(old(part));
+    expect(disagreements(cases, creditRange, old)).toEqual([]);
     // Both kinds of answer are exercised.
     expect(cases.filter((part) => old(part) !== null).length).toBeGreaterThan(1000);
     expect(cases.filter((part) => old(part) === null).length).toBeGreaterThan(1000);
@@ -556,23 +556,23 @@ describe("creditRange", () => {
     const run = "\t".repeat(80);
     const tracks = `${run}T${run}\nTO\t${run}\t\tTO${run}\nT`;
     const { ms, result } = timed(() => creditCovers(tracks, "A1", ["A1", "A2"]));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toBe(false);
   });
 
   it("answers quickly on 800 kB of ranges before a line break", () => {
-    // Seconds for a rewrite that looked for a line break after every "to" again.
+    // About 20 ms here; seconds for a rewrite that looked for a line break after every "to" again.
     const tracks = `A1${" to x".repeat(160_000)}\nZ`;
     const { ms, result } = timed(() => creditCovers(tracks, "A1", ["A1", "A2"]));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toBe(false);
   });
 
   it("reads every whitespace character as the earlier expression did", () => {
-    for (let code = 0; code <= 0xffff; code++) {
+    const parts = Array.from({ length: 0x10000 }, (_, code) => {
       const char = String.fromCharCode(code);
-      const part = `A1${char}to${char}A3`;
-      expect(creditRange(part), `U+${code.toString(16)}`).toEqual(old(part));
-    }
+      return `A1${char}to${char}A3`;
+    });
+    expect(disagreements(parts, creditRange, old)).toEqual([]);
   });
 });

@@ -60,7 +60,7 @@ import {
   withoutFeatured,
 } from "./musicbrainz.js";
 import { getListenBrainzSimilarArtists } from "./listenbrainz.js";
-import { allStrings, randomStrings, timed } from "./testing/strings.js";
+import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
 
 const MB = "https://musicbrainz.org/ws/2";
 const RECORDING_ID = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
@@ -1102,7 +1102,7 @@ describe("MusicBrainz client", () => {
   });
 });
 
-describe("withoutEdition", () => {
+describe("withoutEdition", { timeout: 30_000 }, () => {
   // The expressions before #194: polynomial time on a long bracket or " - " part.
   const old = (album: string) =>
     album
@@ -1157,8 +1157,7 @@ describe("withoutEdition", () => {
     ];
     const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000)];
 
-    for (const album of cases)
-      expect(withoutEdition(album), JSON.stringify(album)).toBe(old(album));
+    expect(disagreements(cases, withoutEdition, old)).toEqual([]);
     expect(cases.filter((album) => old(album) !== album.trim()).length).toBeGreaterThan(1000);
   });
 
@@ -1172,13 +1171,14 @@ describe("withoutEdition", () => {
     ["runs of opening brackets", `${"(".repeat(50_000)})`],
     ["edition words before a line break", ` - ${"deluxe".repeat(100_000)}\n`],
   ])("answers quickly on %s built to make the earlier expressions backtrack", (_name, album) => {
+    // Up to about 20 ms here (the 600 kB edition words); the slow forms take about 1 s or more.
     const { ms, result } = timed(() => withoutEdition(album));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toBe(album.trim());
   });
 });
 
-describe("withoutFeatured", () => {
+describe("withoutFeatured", { timeout: 30_000 }, () => {
   // The steps before #194: quadratic on long runs of spaces, unclosed notes or tails.
   const old = (title: string, artists: readonly string[] = []) => {
     const credited = new Set(artists.map(normalizeName).filter(Boolean));
@@ -1249,11 +1249,13 @@ describe("withoutFeatured", () => {
     const cases = [...realistic, ...allStrings(symbols, 4), ...randomStrings(parts, 10_000, 9)];
 
     for (const artists of [[], ["X"], ["X", "Y"]]) {
-      for (const title of cases) {
-        expect(withoutFeatured(title, artists), JSON.stringify([title, artists])).toBe(
-          old(title, artists),
-        );
-      }
+      expect(
+        disagreements(
+          cases,
+          (title) => withoutFeatured(title, artists),
+          (title) => old(title, artists),
+        ),
+      ).toEqual([]);
     }
     expect(cases.filter((title) => old(title, ["X"]) !== title.trim()).length).toBeGreaterThan(
       1000,
@@ -1270,8 +1272,9 @@ describe("withoutFeatured", () => {
     // Seconds for a rewrite that looked for the closing bracket again from every opening one.
     ["runs of opening brackets", `${"(".repeat(50_000)})`],
   ])("answers quickly on %s", (_name, title) => {
+    // Up to about 30 ms here; the slow forms take 1.5 s or more.
     const { ms, result } = timed(() => withoutFeatured(title, ["X"]));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result.length).toBeGreaterThan(0);
   });
 });

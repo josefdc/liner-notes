@@ -2,9 +2,11 @@
  * Test helper: generated strings for comparing a rewritten text matcher with the expression it
  * replaces, and a clock for the time one call takes.
  *
- *   for (const text of [...allStrings([" ", "to", "A1"], 5), ...randomStrings(parts, 20_000)])
- *     expect(rewritten(text), text).toEqual(old(text));
+ *   const texts = [...allStrings([" ", "to", "A1"], 5), ...randomStrings(parts, 20_000)];
+ *   expect(disagreements(texts, rewritten, old)).toEqual([]);
  */
+
+import { isDeepStrictEqual } from "node:util";
 
 /** Every string of up to `maxParts` parts from `parts` (repeats allowed), the empty one first. */
 export function allStrings(parts: readonly string[], maxParts: number): string[] {
@@ -45,4 +47,24 @@ export function timed<T>(call: () => T): { ms: number; result: T } {
   const start = performance.now();
   const result = call();
   return { ms: performance.now() - start, result };
+}
+
+/**
+ * The inputs on which `now` and `old` give different results, at most `limit` of them with both
+ * results. A test asserts this once over a large corpus instead of once per input, which keeps
+ * the test fast on a loaded machine.
+ */
+export function disagreements<T>(
+  inputs: Iterable<T>,
+  now: (input: T) => unknown,
+  old: (input: T) => unknown,
+  limit = 5,
+): Array<{ input: T; now: unknown; old: unknown }> {
+  const found: Array<{ input: T; now: unknown; old: unknown }> = [];
+  for (const input of inputs) {
+    const [a, b] = [now(input), old(input)];
+    if (!isDeepStrictEqual(a, b)) found.push({ input, now: a, old: b });
+    if (found.length >= limit) break;
+  }
+  return found;
 }

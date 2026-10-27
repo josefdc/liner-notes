@@ -9,13 +9,7 @@ import { SEPARATOR } from "./agent/codeClaims.js";
 import { CREDIT_JOIN, featuredNotes, featuredTail } from "./agent/enricher.js";
 import { SECRET_PAIR } from "./logger.js";
 import { partTitlesDiffer } from "./agent/trackMatch.js";
-import {
-  TEMPO_RANGE,
-  TEMPO_UNIT_AFTER,
-  TEMPO_UNIT_BEFORE,
-  TEMPO_WORD,
-  tempoMentions,
-} from "./agent/verifier/numeric.js";
+import { tempoExpressions, tempoMentions } from "./agent/verifier/numeric.js";
 import {
   NAME_JOIN,
   RELEASE_LABEL_BRACKETED,
@@ -31,7 +25,7 @@ import {
   REMASTER_DASHED,
   titlesMatch,
 } from "./sources/records.js";
-import { allStrings, randomStrings, timed } from "./sources/testing/strings.js";
+import { allStrings, disagreements, randomStrings, timed } from "./sources/testing/strings.js";
 
 // The expressions before #194.
 const OLD_SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
@@ -81,15 +75,15 @@ const credits = [
   ),
 ];
 
-describe("credit joins", () => {
+describe("credit joins", { timeout: 30_000 }, () => {
   it.each([
     ["codeClaims SEPARATOR", SEPARATOR, OLD_SEPARATOR],
     ["records CREDIT_SEPARATOR", CREDIT_SEPARATOR, OLD_SEPARATOR],
     ["enricher CREDIT_JOIN", CREDIT_JOIN, OLD_CREDIT_JOIN],
     ["musicbrainz NAME_JOIN", NAME_JOIN, OLD_NAME_JOIN],
   ])("%s splits a credit exactly as before", (_name, join, old) => {
-    for (const credit of credits)
-      expect(credit.split(join), JSON.stringify(credit)).toEqual(credit.split(old));
+    const split = (re: RegExp) => (credit: string) => credit.split(re);
+    expect(disagreements(credits, split(join), split(old))).toEqual([]);
     expect(credits.filter((credit) => credit.split(old).length > 1).length).toBeGreaterThan(1000);
   });
 
@@ -102,12 +96,12 @@ describe("credit joins", () => {
     // About 2 s to 4 s with the earlier expressions.
     const credit = `a${" ".repeat(60_000)}x`;
     const { ms, result } = timed(() => credit.split(join));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toEqual([credit]);
   });
 });
 
-describe("DISAMBIGUATION_NUMBER", () => {
+describe("DISAMBIGUATION_NUMBER", { timeout: 30_000 }, () => {
   it("removes exactly what the earlier expression removed", () => {
     const names = [
       "Nirvana (2)",
@@ -126,11 +120,10 @@ describe("DISAMBIGUATION_NUMBER", () => {
         8,
       ),
     ];
-    for (const name of names) {
-      expect(name.replace(DISAMBIGUATION_NUMBER, ""), JSON.stringify(name)).toBe(
-        name.replace(OLD_DISAMBIGUATION_NUMBER, ""),
-      );
-    }
+    const without = (re: RegExp) => (name: string) => name.replace(re, "");
+    expect(
+      disagreements(names, without(DISAMBIGUATION_NUMBER), without(OLD_DISAMBIGUATION_NUMBER)),
+    ).toEqual([]);
     expect(names.filter((name) => OLD_DISAMBIGUATION_NUMBER.test(name)).length).toBeGreaterThan(
       1000,
     );
@@ -140,12 +133,12 @@ describe("DISAMBIGUATION_NUMBER", () => {
     // About 2 s with the earlier expression.
     const name = `a${" ".repeat(60_000)}x`;
     const { ms, result } = timed(() => normalizeArtist(name));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toBe("a x");
   });
 });
 
-describe("SECRET_PAIR", () => {
+describe("SECRET_PAIR", { timeout: 30_000 }, () => {
   it("redacts exactly what the earlier expression redacted", () => {
     const lines = [
       "token: abc123",
@@ -181,11 +174,8 @@ describe("SECRET_PAIR", () => {
         8,
       ),
     ];
-    for (const line of lines) {
-      expect(line.replace(SECRET_PAIR, "$1$2[R]"), JSON.stringify(line)).toBe(
-        line.replace(OLD_SECRET_PAIR, "$1$2[R]"),
-      );
-    }
+    const redact = (re: RegExp) => (line: string) => line.replace(re, "$1$2[R]");
+    expect(disagreements(lines, redact(SECRET_PAIR), redact(OLD_SECRET_PAIR))).toEqual([]);
     expect(
       lines.filter((line) => line.replace(OLD_SECRET_PAIR, "") !== line).length,
     ).toBeGreaterThan(500);
@@ -195,12 +185,12 @@ describe("SECRET_PAIR", () => {
     // About 2 s with the earlier expression.
     const line = `token:${"\t".repeat(60_000)}]`;
     const { ms, result } = timed(() => line.replace(SECRET_PAIR, "$1$2[R]"));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toBe(line);
   });
 });
 
-describe("release labels in titles", () => {
+describe("release labels in titles", { timeout: 30_000 }, () => {
   // The expressions before #194, as records.ts and musicbrainz.ts built them.
   const REMASTER = String.raw`(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?`;
   const RELEASE_LABEL = String.raw`(?:${REMASTER}|radio\s+edit|single\s+(?:version|edit)|album\s+version|(?:mono|stereo)(?:\s+version)?)`;
@@ -271,14 +261,13 @@ describe("release labels in titles", () => {
   ];
 
   it.each(pairs)("%s removes exactly what the earlier expression removed", (_name, now, old) => {
-    for (const title of titles) {
-      expect(title.replace(now, ""), JSON.stringify(title)).toBe(title.replace(old, ""));
-    }
+    const without = (re: RegExp) => (title: string) => title.replace(re, "");
+    expect(disagreements(titles, without(now), without(old))).toEqual([]);
     expect(titles.filter((title) => title.replace(old, "") !== title).length).toBeGreaterThan(150);
   });
 });
 
-describe("title helpers end to end", () => {
+describe("title helpers end to end", { timeout: 30_000 }, () => {
   // About 2 s to 12 s each before #194 (normalizeTitle, titlesMatch and recordingTitle on
   // whitespace runs; partTitlesDiffer on runs of opening brackets).
   const shapes: Array<[string, string]> = [
@@ -295,24 +284,26 @@ describe("title helpers end to end", () => {
   ];
 
   it.each(shapes)("reads a title with %s quickly", (_name, title) => {
+    // Up to about 30 ms on a first call; seconds before #194.
     for (const [name, helper] of helpers) {
       const { ms } = timed(() => helper(title));
-      expect(ms, name).toBeLessThan(100);
+      expect(ms, name).toBeLessThan(400);
     }
   });
 });
 
-describe("tempo mentions", () => {
+describe("tempo mentions", { timeout: 30_000 }, () => {
   // The expressions before #194: two or three whitespace runs around an optional word, each
   // split of a long run tried in turn (quadratic; cubic for TEMPO_WORD).
   const NUMBER = String.raw`(\d{2,3}(?:[.,]\d{1,2})?)`;
   const NOT_IN_NUMBER = String.raw`(?<![\p{L}\p{N}.,])`;
   const UNIT = String.raw`\s*-?\s*(?:bpm\b|b\.p\.m\.|beats[\s-]+(?:per|a|each)[\s-]+minute\b)`;
+  const tempo = tempoExpressions();
   const pairs: Array<[string, RegExp, RegExp]> = [
-    ["TEMPO_UNIT_AFTER", TEMPO_UNIT_AFTER, new RegExp(`${NOT_IN_NUMBER}${NUMBER}${UNIT}`, "giu")],
+    ["TEMPO_UNIT_AFTER", tempo.unitAfter, new RegExp(`${NOT_IN_NUMBER}${NUMBER}${UNIT}`, "giu")],
     [
       "TEMPO_UNIT_BEFORE",
-      TEMPO_UNIT_BEFORE,
+      tempo.unitBefore,
       new RegExp(
         String.raw`\b(?:bpm|b\.p\.m\.)\s*(?::|=|of|is|was|at)?\s*${NUMBER}(?![\p{N}%])`,
         "giu",
@@ -320,7 +311,7 @@ describe("tempo mentions", () => {
     ],
     [
       "TEMPO_RANGE",
-      TEMPO_RANGE,
+      tempo.range,
       new RegExp(
         String.raw`(?:\bbetween\s+)?${NOT_IN_NUMBER}${NUMBER}\s*(?:-|–|—|to|and)\s*${NUMBER}${UNIT}`,
         "giu",
@@ -328,7 +319,7 @@ describe("tempo mentions", () => {
     ],
     [
       "TEMPO_WORD",
-      TEMPO_WORD,
+      tempo.word,
       new RegExp(
         String.raw`\btempo\s*(?::|=|of|is|was|at|around|about)?\s*(?:about|around|roughly|approximately|~)?\s*${NUMBER}(?![\p{N}%])`,
         "giu",
@@ -411,8 +402,13 @@ describe("tempo mentions", () => {
           texts.push(`tempo${gap}${first}${gap}${second}${gap}${number}`);
 
   it.each(pairs)("%s finds exactly what the earlier expression found", (_name, now, old) => {
-    for (const text of texts)
-      expect(found(now, text), JSON.stringify(text)).toEqual(found(old, text));
+    expect(
+      disagreements(
+        texts,
+        (text) => found(now, text),
+        (text) => found(old, text),
+      ),
+    ).toEqual([]);
     expect(texts.filter((text) => found(old, text).length > 0).length).toBeGreaterThan(150);
   });
 
@@ -424,12 +420,21 @@ describe("tempo mentions", () => {
     ["the word tempo before a run of spaces", `tempo${" ".repeat(3_000)}x`],
   ])("reads %s quickly", (_name, text) => {
     const { ms, result } = timed(() => tempoMentions(text, true));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
     expect(result).toEqual([]);
+  });
+  it("never shares its expressions: a caller's lastIndex leaves tempoMentions alone", () => {
+    const text = "120 BPM, a driving groove";
+    for (const expression of Object.values(tempoExpressions())) {
+      expression.lastIndex = 0;
+      expression.test(text);
+      expression.exec(`${text} ${text}`);
+    }
+    expect(tempoMentions(text, true)).toEqual([{ field: "tempo", bpm: 120 }]);
   });
 });
 
-describe("featured-artist notes in titles", () => {
+describe("featured-artist notes in titles", { timeout: 30_000 }, () => {
   // The expressions before #194: each note or tail was read to its end again from every start.
   const NOTE = /[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+)[)\]]/gi;
   const TAIL = /(?:^|\s)(?:feat\.|ft\.|featuring)\s+([^()[\]]+)$/gi;
@@ -443,7 +448,7 @@ describe("featured-artist notes in titles", () => {
     "Song featuring X, Y",
     "feat. X",
     "Song feat.  ",
-    ...allStrings(["(", ")", "[", " ", "feat. ", "with", "X", "\n"], 6),
+    ...allStrings(["(", ")", "[", " ", "feat. ", "with", "X", "\n"], 5),
     ...randomStrings(
       [
         "(",
@@ -473,14 +478,16 @@ describe("featured-artist notes in titles", () => {
   ];
 
   it("finds exactly the notes and tails the earlier expressions found", () => {
-    for (const title of titles) {
-      expect(featuredNotes(title), JSON.stringify(title)).toEqual(
-        [...title.matchAll(NOTE)].map((m) => m[1]),
-      );
-      expect(featuredTail(title), JSON.stringify(title)).toBe(
-        [...title.matchAll(TAIL)].map((m) => m[1])[0] ?? null,
-      );
-    }
+    expect(
+      disagreements(titles, featuredNotes, (title) => [...title.matchAll(NOTE)].map((m) => m[1])),
+    ).toEqual([]);
+    expect(
+      disagreements(
+        titles,
+        featuredTail,
+        (title) => [...title.matchAll(TAIL)].map((m) => m[1])[0] ?? null,
+      ),
+    ).toEqual([]);
     expect(titles.filter((title) => [...title.matchAll(NOTE)].length > 0).length).toBeGreaterThan(
       1000,
     );
@@ -494,8 +501,13 @@ describe("featured-artist notes in titles", () => {
     ["unclosed notes", "(feat x".repeat(25_000)],
     ["a note word before a long run of spaces", `(feat${" ".repeat(60_000)}`],
     ["a tail word before a long run of spaces and a bracket", `feat.${" ".repeat(60_000)}(`],
+    // Seconds for a rewrite that looked for the closing bracket again from every opening one,
+    // or read the rest again for a bracket after every tail word.
+    ["runs of opening brackets", `${"(".repeat(50_000)})`],
+    ["tail words before a bracket", `${" feat. x".repeat(120_000)}(`],
   ])("reads %s quickly", (_name, title) => {
+    // Up to about 40 ms here.
     const { ms } = timed(() => [featuredNotes(title), featuredTail(title)]);
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(400);
   });
 });

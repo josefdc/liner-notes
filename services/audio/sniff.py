@@ -94,10 +94,11 @@ _IMAGE_BRANDS = frozenset(
         b"avci",
     }
 )
-# The first four bytes of the containers libsndfile reads: WAV (RIFF, RIFX, RF64, W64), AIFF and
-# 8SVX (FORM), FLAC, Ogg, CAF, AU (both byte orders), IRCAM (its four markers), NIST SPHERE,
-# PARIS (both byte orders), AVR, PVF, VOC and MATLAB 5. Big-endian PCM of a quiet start reads
-# as ADTS sync words (0xFFFx is -16..-1), so these must never reach the frame scan.
+# The first four bytes of these containers libsndfile reads (not all it reads): WAV (RIFF,
+# RIFX, RF64, W64), AIFF and 8SVX (FORM), FLAC, Ogg, CAF, AU (both byte orders), IRCAM
+# (64 A3 01-04 00), NIST SPHERE, PARIS (both byte orders), AVR, PVF, VOC and MATLAB 5.
+# Big-endian PCM of a quiet start reads as ADTS sync words (0xFFFx is -16..-1), so these must
+# never reach the frame scan.
 _DECODABLE_MAGIC = frozenset(
     {
         b"RIFF",
@@ -172,7 +173,11 @@ def _is_mp4_brand(brands: list[bytes]) -> bool:
 
 
 def _starts_decodable(data: bytes) -> bool:
-    """Whether the data starts like a format the service decodes: MP3, WAV, AIFF, FLAC, Ogg."""
+    """
+    Whether the data starts like a format the service decodes: one of the containers in
+    _DECODABLE_MAGIC, or an MPEG audio frame of layer 1-3 with a valid version, bitrate and
+    sample rate (MP3, MP2, MP1).
+    """
     if data[:4] in _DECODABLE_MAGIC:
         return True
     if len(data) < 4 or data[0] != 0xFF or (data[1] & 0xE0) != 0xE0:
@@ -238,12 +243,15 @@ def is_mp4_or_aac(source: str | os.PathLike | BinaryIO) -> bool:
     """
     Whether the file is MP4 (M4A) or AAC by its first bytes (see the module docstring).
     ``source`` is a path or a binary file object, read from its current position and put back
-    there. A file that cannot be read is not called MP4 or AAC: the decoder reports it.
+    there. A file that cannot be read, or anything else (an integer file descriptor), is not
+    called MP4 or AAC: the decoder decides.
     """
     try:
         if isinstance(source, (str, bytes, os.PathLike)):
             with open(source, "rb") as f:
                 data = _head(f)
+        elif not all(hasattr(source, name) for name in ("read", "seek", "tell")):
+            return False
         else:
             position = source.tell()
             try:

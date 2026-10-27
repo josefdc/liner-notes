@@ -4,8 +4,8 @@ Preview URL validation and bounded download.
 The service only fetches 30-second previews from the Deezer and Spotify CDNs. A URL is
 accepted when it is an https URL whose parsed host is one of the preview hosts below, with
 no userinfo, no IP literal and no port other than 443. Downloads never follow redirects,
-must declare an audio content type the service decodes (or none), are capped at
-MAX_PREVIEW_BYTES and must finish within DOWNLOAD_DEADLINE_S.
+must declare an audio content type the service decodes, are capped at MAX_PREVIEW_BYTES and
+must finish within DOWNLOAD_DEADLINE_S.
 """
 
 from __future__ import annotations
@@ -152,15 +152,15 @@ def _check_headers(response: httpx.Response, max_bytes: int) -> str:
     """
     Refuse anything but a 200 audio response within the cap; return a file suffix. A type the
     service does not decode raises UnsupportedFormatError, any other refusal
-    PreviewDownloadError. A response without a content type is accepted as .mp3 (the format
-    the preview hosts serve): its first bytes and the decoder decide, as for a declared type.
+    PreviewDownloadError, as does a missing or empty content type: saved as .mp3, a body that is
+    not audio (a WebM, say) can hold bytes libsndfile's MP3 decoder reads as a few frames.
     """
     if response.status_code != 200:
         raise PreviewDownloadError(f"unexpected status {response.status_code}")
     media_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if media_type in UNSUPPORTED_TYPES:
         raise UnsupportedFormatError(f"content type {media_type!r} is not decoded")
-    if media_type and media_type not in _SUFFIXES:
+    if media_type not in _SUFFIXES:
         raise PreviewDownloadError(f"unexpected content type {media_type!r}")
     encoding = response.headers.get("content-encoding", "identity").strip().lower()
     if encoding not in ("", "identity"):

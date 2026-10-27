@@ -314,10 +314,10 @@ does not decode`, in these cases only:
     frames are enough; further in, four are needed.
   - a LOAS stream: three frames in a row, the first within the first 4 kB.
 
-A file that starts with an MP3 frame, or with the magic of a container `libsndfile` reads, is
-never refused this way. Those containers are WAV (`RIFF`, `RIFX`, `RF64`, W64), AIFF, CAF, FLAC,
-Ogg, AU, IRCAM, NIST, PARIS, AVR, PVF, VOC and MATLAB 5. Any other file that cannot be decoded
-gets the generic reason.
+A file that starts with an MP3 frame, or with the magic of one of the containers listed here,
+is never refused this way: WAV (`RIFF`, `RIFX`, `RF64`, W64), AIFF, CAF, FLAC, Ogg, AU, IRCAM,
+NIST, PARIS, AVR, PVF, VOC and MATLAB 5. Any other file that cannot be decoded gets the generic
+reason.
 
 The API has no reason code for this refusal yet. The user still sees "the audio analysis
 failed", and the precise reason is only in the API's error detail.
@@ -347,10 +347,10 @@ only written to the service log.
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a
-`200` response with an MP3, WAV, FLAC or Ogg content type, or none (the first bytes and the
-decoder then decide), and no content encoding. It stops at 2 MB (previews are about 0.5 MB).
-Connect and read timeouts are 5 s and 10 s, and the whole download must finish within 20 s. The
-temporary file is removed after the analysis, whatever the outcome.
+`200` response with an MP3, WAV, FLAC or Ogg content type (a missing one is refused) and no
+content encoding. It stops at 2 MB (previews are about 0.5 MB). Connect and read timeouts are 5 s
+and 10 s, and the whole download must finish within 20 s. The temporary file is removed after the
+analysis, whatever the outcome.
 
 ## How it works
 

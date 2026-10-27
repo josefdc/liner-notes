@@ -129,13 +129,12 @@ describe('agentReducer', () => {
     expect(agentReducer(INITIAL_PIECES, { type: 'reset' })).toBe(INITIAL_PIECES);
   });
 
-  it('changes only the pieces an action is about', () => {
+  it('a log line changes the log and nothing else the page shows', () => {
     const state = agentReducer(INITIAL_PIECES, { type: 'started' });
-    const logged = agentReducer(state, { type: 'logged', log: log('a') });
-    expect(logged.progress).toBe(state.progress);
-    expect(logged.result).toBe(state.result);
-    expect(logged.failure).toBe(state.failure);
-    expect(logged.logs).not.toBe(state.logs);
+    const { logs: logsBefore, ...before } = agentStateOf(state);
+    const { logs, ...after } = agentStateOf(agentReducer(state, { type: 'logged', log: log('a') }));
+    expect(after).toEqual(before);
+    expect([logsBefore.length, logs.map((line) => line.message)]).toEqual([0, ['a']]);
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * useAgent Hook - Connect Frontend to Sonic Agent Backend
+ * useAgent: connects the page to the Liner Notes API
  *
  * Features:
  * - SSE streaming for real-time status updates

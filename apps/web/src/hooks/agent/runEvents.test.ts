@@ -3,7 +3,8 @@ import type { AnalysisEvent } from './events';
 import { CLIENT_ERROR_CODES, OUTDATED_ERROR } from './failure';
 import { advance, newRun, type Run } from './run';
 import { handleRunEvent } from './runEvents';
-import type { AgentAction } from './state';
+import { newLog } from './runLog';
+import { agentReducer, agentStateOf, INITIAL_PIECES } from './state';
 
 const candidates = [
   { id: 'c1', title: 'Hurt', artist: 'Johnny Cash', album: 'A', coverUrl: '' },
@@ -14,171 +15,236 @@ const token = { runToken: 'token-1', expiresAt: 1 };
 const envelope = { runId: 't1', seq: 0 };
 const event = (data: Record<string, unknown>) => ({ ...envelope, ...data }) as AnalysisEvent;
 
-/** What handling `data` did: the actions, log lines, failures and other calls, in order. */
-function handle(data: AnalysisEvent, run: Run = newRun('Hurt')) {
-  const calls: unknown[] = [];
-  const close = vi.fn(() => calls.push('close'));
-  handleRunEvent(run, data, close, {
-    dispatch: (action: AgentAction) => calls.push(action),
-    log: (message, code, node, elapsedMs) => calls.push({ log: message, code, node, elapsedMs }),
-    fail: (_run, message, code, elapsedMs, retryAfterMs) =>
-      calls.push({ fail: message, code, elapsedMs, retryAfterMs }),
+/**
+ * A page that follows one run as the hook does: every action goes through the hook's reducers,
+ * and `fail` ends the run as the hook's own does (without its wait, which failure.ts covers).
+ * `send` hands it an event; the test then reads the state the page would show.
+ */
+function page(run: Run = newRun('Hurt')) {
+  let pieces = agentReducer(INITIAL_PIECES, { type: 'started' });
+  let closed = false;
+  const failures: Array<{ closedFirst: boolean; elapsedMs?: number; retryAfterMs?: number }> = [];
+  const dropped: unknown[] = [];
+  const analyzed: unknown[] = [];
+  const context = {
+    dispatch: (action: Parameters<typeof agentReducer>[1]) => {
+      pieces = agentReducer(pieces, action);
+    },
+    log: (
+      message: string,
+      code?: Parameters<typeof newLog>[1],
+      node?: string,
+      elapsedMs?: number,
+    ) => context.dispatch({ type: 'logged', log: newLog(message, code, node, elapsedMs) }),
+    fail: (
+      failed: Run,
+      message: string,
+      code?: string,
+      elapsedMs?: number,
+      retryAfterMs?: number,
+    ) => {
+      if (failed.life.phase === 'failed') return;
+      failures.push({ closedFirst: closed, elapsedMs, retryAfterMs });
+      advance(failed, { type: 'failed' });
+      context.dispatch({ type: 'failed', message, code: code ?? null, retryAt: null });
+      context.log(`Error: ${message}`, 'SYS-ERROR', undefined, elapsedMs);
+    },
     isLatest: () => true,
-    dropToken: (dropped) => calls.push({ drop: dropped }),
-    analyze: (query, options) => calls.push({ analyze: query, options }),
-  });
-  return { calls, run };
+    dropToken: (dropped_: unknown) => dropped.push(dropped_),
+    analyze: (query: string, options: unknown) => analyzed.push({ query, options }),
+  };
+  return {
+    run,
+    send(data: AnalysisEvent) {
+      handleRunEvent(run, data, () => (closed = true), context);
+    },
+    get state() {
+      return agentStateOf(pieces);
+    },
+    /** The log as the page shows it: words, code, node and time. */
+    get lines() {
+      return agentStateOf(pieces).logs.map(({ message, code, node, elapsedMs }) => ({
+        message,
+        ...(code !== undefined && { code }),
+        ...(node !== undefined && { node }),
+        ...(elapsedMs !== undefined && { elapsedMs }),
+      }));
+    },
+    get closed() {
+      return closed;
+    },
+    failures,
+    dropped,
+    analyzed,
+  };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('handleRunEvent', () => {
   it('connected: keeps the thread and logs the connection', () => {
-    const { calls, run } = handle(event({ type: 'connected', threadId: 't1', elapsedMs: 3 }));
-    expect(run.life.threadId).toBe('t1');
-    expect(calls).toEqual([
-      { log: 'Connected to the analysis server', code: 'SYS-INIT', node: undefined, elapsedMs: 3 },
+    const p = page();
+    p.send(event({ type: 'connected', threadId: 't1', elapsedMs: 3 }));
+    expect(p.run.life.threadId).toBe('t1');
+    expect(p.lines).toEqual([
+      { message: 'Connected to the analysis server', code: 'SYS-INIT', elapsedMs: 3 },
     ]);
+    expect(p.state.status).toBe('connecting');
   });
 
-  it.each<[string, Record<string, unknown>, unknown[]]>([
+  it.each<[string, Record<string, unknown>, Record<string, unknown>, object[]]>([
     [
       'a step with words',
       { node: 'scout', code: 'NET-100', message: 'Searching' },
-      [
-        { log: 'Searching', code: 'NET-100', node: 'scout', elapsedMs: undefined },
-        { type: 'stepReported', step: { status: 'searching', note: null } },
-      ],
+      { status: 'searching', statusNote: null, isReplay: false },
+      [{ message: 'Searching', code: 'NET-100', node: 'scout' }],
     ],
     [
       'a step without words adds no line',
       { node: 'scout', message: '' },
-      [{ type: 'stepReported', step: { status: 'searching', note: null } }],
+      { status: 'searching', statusNote: null },
+      [],
     ],
     [
       'a line that is no step',
       { node: 'research_tool', message: 'Found' },
-      [{ log: 'Found', code: undefined, node: 'research_tool', elapsedMs: undefined }],
+      { status: 'connecting' },
+      [{ message: 'Found', node: 'research_tool' }],
     ],
     [
       'the replay notice',
       { node: 'replay', code: 'SYS-INIT', message: 'Replaying' },
-      [
-        { type: 'replayNoticed' },
-        { log: 'Replaying', code: 'SYS-INIT', node: 'replay', elapsedMs: undefined },
-      ],
+      { status: 'connecting', isReplay: true },
+      [{ message: 'Replaying', code: 'SYS-INIT', node: 'replay' }],
     ],
-  ])('status: %s', (_name, fields, expected) => {
-    expect(handle(event({ type: 'status', ...fields })).calls).toEqual(expected);
+  ])('status: %s', (_name, fields, state, lines) => {
+    const p = page();
+    p.send(event({ type: 'status', ...fields }));
+    expect(p.state).toMatchObject(state);
+    expect(p.lines).toEqual(lines);
+  });
+
+  it('status: the replay notice marks the run itself as a replay', () => {
+    const p = page();
+    p.send(event({ type: 'status', node: 'replay', code: 'SYS-INIT', message: 'Replaying' }));
+    expect(p.run.life.replay).toBe(true);
   });
 
   it('status: counts what the branches said for the next line', () => {
-    const run = newRun('Hurt');
-    handle(event({ type: 'status', node: 'engineer', code: 'AUDIO-INIT', message: 'm' }), run);
-    expect(run.life.branches.measuring).toBe(true);
-    // The historian does not replace the measurement under way.
-    const { calls } = handle(event({ type: 'status', node: 'historian', message: '' }), run);
-    expect(calls).toEqual([]);
-    expect(run.life.branches.researched).toBe(true);
+    const p = page();
+    p.send(event({ type: 'status', node: 'engineer', code: 'AUDIO-INIT', message: 'm' }));
+    expect(p.state.status).toBe('measuring');
+    // The historian does not replace the measurement under way, but is counted.
+    p.send(event({ type: 'status', node: 'historian', message: '' }));
+    expect(p.state.status).toBe('measuring');
+    expect(p.run.life.branches.researched).toBe(true);
+    // Once the measurement ends, the research beside it is what is left.
+    p.send(event({ type: 'status', node: 'engineer', code: 'AUDIO-DONE', message: '' }));
+    expect(p.state.status).toBe('researching');
   });
 
   it('interrupt: opens the picker with the server question and waits', () => {
-    const { calls, run } = handle(
+    const p = page();
+    p.send(
       event({ type: 'interrupt', threadId: 't1', candidates, sentCount: 2, message: 'Which one?' }),
     );
-    expect(run.life).toMatchObject({ phase: 'awaiting-selection', threadId: 't1', candidates });
-    expect(calls).toEqual([
-      { type: 'pickerOpened', candidates, question: 'Which one?' },
-      { log: 'Which one?', code: undefined, node: 'scout', elapsedMs: undefined },
-    ]);
+    expect(p.run.life).toMatchObject({ phase: 'awaiting-selection', threadId: 't1', candidates });
+    expect(p.state).toMatchObject({
+      status: 'disambiguation',
+      statusNote: 'Which one?',
+      candidates,
+      isLoading: false,
+    });
+    expect(p.lines).toEqual([{ message: 'Which one?', node: 'scout' }]);
   });
 
   it('interrupt: counts the rows shown when the server sent more', () => {
-    const { calls } = handle(
+    const p = page();
+    p.send(
       event({ type: 'interrupt', threadId: 't1', candidates, sentCount: 3, message: 'Which one?' }),
     );
-    expect(calls[0]).toMatchObject({
-      type: 'pickerOpened',
-      question: expect.not.stringMatching('Which one?'),
-    });
+    expect(p.state.statusNote).not.toBe('Which one?');
+    expect(p.lines).toEqual([{ message: p.state.statusNote, node: 'scout' }]);
   });
 
-  it('interrupt: without candidates ends the run with no_match', () => {
-    const { calls } = handle(
-      event({ type: 'interrupt', threadId: 't1', candidates: [], sentCount: 0, message: '' }),
-    );
-    expect(calls).toEqual([
-      'close',
-      {
-        fail: 'No matching songs were found.',
-        code: CLIENT_ERROR_CODES.noMatch,
-        elapsedMs: undefined,
-        retryAfterMs: undefined,
-      },
-    ]);
+  it('interrupt: without candidates ends the run with no_match, its stream closed first', () => {
+    const p = page();
+    p.send(event({ type: 'interrupt', threadId: 't1', candidates: [], sentCount: 0, message: '' }));
+    expect(p.state).toMatchObject({
+      status: 'error',
+      error: 'No matching songs were found.',
+      errorCode: CLIENT_ERROR_CODES.noMatch,
+      candidates: null,
+    });
+    expect(p.failures).toEqual([{ closedFirst: true }]);
   });
 
   it('complete: shows the result and logs it', () => {
-    const { calls, run } = handle(event({ type: 'complete', data: track, elapsedMs: 9 }));
-    expect(run.life.phase).toBe('complete');
-    expect(calls).toEqual([
-      { type: 'completed', trackData: track, replay: false },
-      { log: 'Analysis complete.', code: 'SYS-READY', node: undefined, elapsedMs: 9 },
-    ]);
+    const p = page();
+    p.send(event({ type: 'complete', data: track, elapsedMs: 9 }));
+    expect(p.run.life.phase).toBe('complete');
+    expect(p.state).toMatchObject({
+      status: 'complete',
+      trackData: track,
+      isComplete: true,
+      isReplay: false,
+      isLoading: false,
+    });
+    expect(p.lines).toEqual([{ message: 'Analysis complete.', code: 'SYS-READY', elapsedMs: 9 }]);
   });
 
-  it('complete: a replayed run says nothing was analysed live', () => {
-    const run = newRun('Hurt');
-    advance(run, { type: 'replayNoticed' });
-    const { calls } = handle(event({ type: 'complete', data: track }), run);
-    expect(calls[0]).toEqual({ type: 'completed', trackData: track, replay: true });
-    expect(calls[1]).toMatchObject({
-      log: 'Recorded analysis replayed. Nothing was analyzed live.',
-    });
+  it('complete: after the replay notice, a result that does not say it is a recording is a replay', () => {
+    const p = page();
+    p.send(event({ type: 'status', node: 'replay', code: 'SYS-INIT', message: 'Replaying' }));
+    p.send(event({ type: 'complete', data: track }));
+    expect(p.state.isReplay).toBe(true);
+    expect(p.lines.map((line) => line.message)).toEqual([
+      'Replaying',
+      'Recorded analysis replayed. Nothing was analyzed live.',
+    ]);
   });
 
   it('complete: another track than the one asked for is not shown', () => {
-    const run = newRun('Hurt', { expectedTrackId: 'c1' });
-    const { calls } = handle(event({ type: 'complete', data: track }), run);
-    expect(run.life.phase).toBe('running');
-    expect(calls).toEqual([
-      'close',
-      expect.objectContaining({ code: CLIENT_ERROR_CODES.wrongTrack }),
-    ]);
+    const p = page(newRun('Hurt', { expectedTrackId: 'c1' }));
+    p.send(event({ type: 'complete', data: track }));
+    expect(p.state).toMatchObject({
+      status: 'error',
+      errorCode: CLIENT_ERROR_CODES.wrongTrack,
+      trackData: null,
+    });
+    expect(p.failures).toEqual([{ closedFirst: true }]);
   });
 
-  it.each<[string, Record<string, unknown>, unknown[]]>([
+  it.each<[string, Record<string, unknown>, object, object, unknown[]]>([
     [
       'error: ends the run with its words, code and wait',
       { error: 'Slow down', code: 'rate_limited', retryAfterMs: 5000, elapsedMs: 4 },
-      ['close', { fail: 'Slow down', code: 'rate_limited', elapsedMs: 4, retryAfterMs: 5000 }],
+      { error: 'Slow down', errorCode: 'rate_limited' },
+      { closedFirst: true, elapsedMs: 4, retryAfterMs: 5000 },
+      [],
     ],
     [
       'error without words',
       { error: '', code: 'failed' },
-      [
-        'close',
-        {
-          fail: 'The analysis failed.',
-          code: 'failed',
-          elapsedMs: undefined,
-          retryAfterMs: undefined,
-        },
-      ],
+      { error: 'The analysis failed.', errorCode: 'failed' },
+      { closedFirst: true },
+      [],
     ],
     [
       'auth_expired: the run token is not sent again',
       { error: 'Expired', code: 'auth_expired' },
-      [
-        'close',
-        { drop: token },
-        { fail: 'Expired', code: 'auth_expired', elapsedMs: undefined, retryAfterMs: undefined },
-      ],
+      { error: 'Expired', errorCode: 'auth_expired' },
+      { closedFirst: true },
+      [token],
     ],
-  ])('%s', (_name, fields, expected) => {
+  ])('%s', (_name, fields, state, failure, dropped) => {
     const run = newRun('Hurt');
     advance(run, { type: 'tokenIssued', token });
-    expect(handle(event({ type: 'error', ...fields }), run).calls).toEqual(expected);
+    const p = page(run);
+    p.send(event({ type: 'error', ...fields }));
+    expect(p.state).toMatchObject({ status: 'error', ...state });
+    expect(p.failures).toEqual([failure]);
+    expect(p.dropped).toEqual(dropped);
   });
 
   it('error: a refused resume of a picked track with a recording replays that recording', async () => {
@@ -194,15 +260,14 @@ describe('handleRunEvent', () => {
     advance(run, { type: 'connected', threadId: 't1' });
     advance(run, { type: 'pickerOpened', threadId: 't1', candidates });
     advance(run, { type: 'picked', candidate: candidates[1] });
-    const { calls } = handle(
-      event({ type: 'error', error: 'Paused', code: 'budget_exhausted' }),
-      run,
-    );
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls).toEqual([
-      'close',
+    const p = page(run);
+    p.send(event({ type: 'error', error: 'Paused', code: 'budget_exhausted' }));
+    await vi.waitFor(() => expect(p.analyzed).toHaveLength(1));
+    expect(p.closed).toBe(true);
+    expect(p.failures).toEqual([]);
+    expect(p.analyzed).toEqual([
       {
-        analyze: 'Hurt NIN',
+        query: 'Hurt NIN',
         options: {
           note: 'Live analysis is unavailable: replaying the recording of the selected track.',
           trackId: 'c2',
@@ -213,49 +278,57 @@ describe('handleRunEvent', () => {
   });
 
   it('unreadable: ends the run with the reload hint', () => {
-    const { calls } = handle({ type: 'unreadable', event: 'complete', runId: 't1' });
-    expect(calls).toEqual([
-      'close',
-      {
-        fail: OUTDATED_ERROR.message,
-        code: OUTDATED_ERROR.code,
-        elapsedMs: undefined,
-        retryAfterMs: undefined,
-      },
-    ]);
+    const p = page();
+    p.send({ type: 'unreadable', event: 'complete', runId: 't1' });
+    expect(p.state).toMatchObject({
+      status: 'error',
+      error: OUTDATED_ERROR.message,
+      errorCode: OUTDATED_ERROR.code,
+    });
+    expect(p.failures).toEqual([{ closedFirst: true }]);
   });
 
   it('done: a stream that ends without anything to show is an error', () => {
-    const { calls } = handle(event({ type: 'done', elapsedMs: 7 }));
-    expect(calls).toEqual([
-      'close',
-      {
-        fail: 'The analysis ended without a result.',
-        code: CLIENT_ERROR_CODES.noResult,
-        elapsedMs: 7,
-        retryAfterMs: undefined,
-      },
-    ]);
+    const p = page();
+    p.send(event({ type: 'done', elapsedMs: 7 }));
+    expect(p.state).toMatchObject({ status: 'error', errorCode: CLIENT_ERROR_CODES.noResult });
+    expect(p.lines.at(-1)).toEqual({
+      message: 'Error: The analysis ended without a result.',
+      code: 'SYS-ERROR',
+      elapsedMs: 7,
+    });
+    expect(p.failures).toEqual([{ closedFirst: true, elapsedMs: 7 }]);
   });
 
   it('done: after the picker opened, only closes the stream', () => {
-    const run = newRun('Hurt');
-    advance(run, { type: 'pickerOpened', threadId: 't1', candidates });
-    expect(handle(event({ type: 'done' }), run).calls).toEqual(['close']);
+    const p = page();
+    p.send(event({ type: 'interrupt', threadId: 't1', candidates, sentCount: 2, message: 'Pick' }));
+    const before = p.state;
+    p.send(event({ type: 'done' }));
+    expect(p.closed).toBe(true);
+    expect(p.state).toEqual(before);
   });
 
   it.each(['complete', 'failed'] as const)(
-    'after the run is %s, only done and error close the stream',
+    'after the run is %s, later events change nothing, and only done and error close the stream',
     (phase) => {
       const run = newRun('Hurt');
-      advance(
-        run,
-        phase === 'complete' ? { type: 'completed', wholeRecording: false } : { type: 'failed' },
+      page(run).send(
+        phase === 'complete' ? event({ type: 'complete', data: track }) : event({ type: 'done' }),
       );
-      expect(handle(event({ type: 'status', node: 'scout', message: 'x' }), run).calls).toEqual([]);
-      expect(handle(event({ type: 'complete', data: track }), run).calls).toEqual([]);
-      expect(handle(event({ type: 'done' }), run).calls).toEqual(['close']);
-      expect(handle(event({ type: 'error', error: 'e', code: 'c' }), run).calls).toEqual(['close']);
+      for (const [later, closes] of [
+        [event({ type: 'status', node: 'scout', message: 'x' }), false],
+        [event({ type: 'complete', data: { ...track, id: 'other' } }), false],
+        [event({ type: 'done' }), true],
+        [event({ type: 'error', error: 'e', code: 'c' }), true],
+      ] as const) {
+        const p = page(run);
+        const before = p.state;
+        p.send(later);
+        expect(p.state).toEqual(before);
+        expect(p.closed).toBe(closes);
+        expect(p.failures).toEqual([]);
+      }
     },
   );
 });

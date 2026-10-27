@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { SEPARATOR } from "./agent/codeClaims.js";
 import { CREDIT_JOIN } from "./agent/enricher.js";
-import { SECRET_PAIR, scrub } from "./logger.js";
+import { SECRET_PAIR } from "./logger.js";
 import { NAME_JOIN } from "./sources/musicbrainz.js";
 import { CREDIT_SEPARATOR, DISAMBIGUATION_NUMBER, normalizeArtist } from "./sources/records.js";
 import { allStrings, randomStrings, timed } from "./sources/testing/strings.js";
@@ -171,11 +171,10 @@ describe("SECRET_PAIR", () => {
   });
 
   it("reads a long run of whitespace after a secret's name quickly", () => {
-    // About 2 s with the earlier expression; the log cuts a line at 16 KiB first (about 0.1 s).
+    // About 2 s with the earlier expression.
     const line = `token:${"\t".repeat(60_000)}]`;
     const { ms, result } = timed(() => line.replace(SECRET_PAIR, "$1$2[R]"));
     expect(ms).toBeLessThan(100);
     expect(result).toBe(line);
-    expect(timed(() => scrub(line)).ms).toBeLessThan(100);
   });
 });

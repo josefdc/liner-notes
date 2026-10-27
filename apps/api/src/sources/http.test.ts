@@ -175,10 +175,21 @@ describe("fetchJson", () => {
   it("parses a JSON error body only up to 64 KiB; a success body of any size is parsed", async () => {
     const huge = { message: "Track not found", padding: "x".repeat(70_000) };
     stubFetch(() => json(huge, { status: 400 }));
-    const error = await rejection(fetchJson({ source: "lastfm", url: URL_A }));
+    const logs = captureLogsForTests();
+    let error: SourceError;
+    try {
+      error = await rejection(fetchJson({ source: "lastfm", url: URL_A }));
+    } finally {
+      logs.restore();
+    }
     expect(error).toMatchObject({ kind: "http", status: 400 });
     expect(error.message).toBe("lastfm: HTTP 400 (the source rejected the request)");
     expect(typeof error.body).toBe("string");
+    const logged = logs.entries().map((entry) => JSON.stringify(entry));
+    expect(
+      logged.some((entry) => entry.includes("a JSON body too large to read (over 64 KiB)")),
+    ).toBe(true);
+    expect(logged.some((entry) => entry.includes("not JSON"))).toBe(false);
 
     stubFetch(() => json(huge));
     expect(await fetchJson({ source: "lastfm", url: URL_A })).toEqual(huge);

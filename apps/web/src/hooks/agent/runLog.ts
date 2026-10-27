@@ -1,4 +1,5 @@
-import type { AgentLog } from '../../types';
+import type { AgentLog, LogCode } from '../../types';
+import type { AgentAction } from './state';
 
 // A run's log as the page keeps it: the latest lines only, and a line that repeats the one
 // before it once.
@@ -14,6 +15,21 @@ export const LOG_LIMIT = 100;
 
 /** A line as the hook writes it: its place in the run is given by `appendLog`. */
 export type NewLog = Omit<AgentLog, 'index'>;
+
+/**
+ * A new line with an optional code and node, and the time since the run started that the server
+ * sent it with.
+ */
+export function newLog(message: string, code?: LogCode, node?: string, elapsedMs?: number): NewLog {
+  return {
+    id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    message,
+    timestamp: new Date().toISOString(),
+    code,
+    node,
+    ...(elapsedMs !== undefined && { elapsedMs }),
+  };
+}
 
 /** The same line again: the same words, from the same step, with the same code. */
 function repeats(last: AgentLog | undefined, log: NewLog): boolean {
@@ -46,4 +62,21 @@ export function droppedLines(logs: readonly AgentLog[]): number {
 /** How many lines the run has written, those dropped included. */
 export function writtenLines(logs: readonly AgentLog[]): number {
   return droppedLines(logs) + logs.length;
+}
+
+/** A run's log before its first line. */
+export const NO_LOGS: AgentLog[] = [];
+
+/** The run's log after `action`; the same array when the action does not change it. */
+export function logsReducer(logs: AgentLog[], action: AgentAction): AgentLog[] {
+  switch (action.type) {
+    case 'reset':
+    case 'started':
+      return NO_LOGS;
+    // Bounded, and a repeat of the last line changes nothing (appendLog).
+    case 'logged':
+      return appendLog(logs, action.log);
+    default:
+      return logs;
+  }
 }

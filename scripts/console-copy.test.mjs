@@ -18,6 +18,10 @@ const CONSOLE = "apps/web/src/components/SystemConsole.tsx";
 const ACTIVITY_LOG = "apps/web/src/components/ActivityLog.tsx";
 const LOG_CODES = "apps/web/src/components/console/logCodes.ts";
 const AGENT_HOOK = "apps/web/src/hooks/useAgent.ts";
+// The run log and status sentences the agent hook writes, split out of it.
+const AGENT_COPY = ["runEvents", "progress", "streams", "failure"].map(
+  (name) => `apps/web/src/hooks/agent/${name}.ts`,
+);
 const PROGRESS_SCREEN = "apps/web/src/components/ProgressScreen.tsx";
 const TRACK_PICKER = "apps/web/src/components/search/TrackPicker.tsx";
 const STYLES = "apps/web/src/styles/index.css";
@@ -43,7 +47,7 @@ function from(text, marker) {
 }
 
 describe("console copy", () => {
-  it.each([CONSOLE, ACTIVITY_LOG, LOG_CODES, AGENT_HOOK, TRACK_PICKER])(
+  it.each([CONSOLE, ACTIVITY_LOG, LOG_CODES, AGENT_HOOK, ...AGENT_COPY, TRACK_PICKER])(
     "%s holds no prototype copy or emoji",
     (path) => {
       const text = read(path);

@@ -24,6 +24,12 @@ export interface GenealogyGraphProps {
   hiddenLinks?: number;
   // Callback to trigger analysis of a clicked node (infinite navigation)
   onNodeClick?: (node: GenealogyNode) => void;
+  /**
+   * What the mouse wheel does over the graph: 'plain' zooms it (where nothing around it
+   * scrolls); 'modifier' leaves the wheel to the page and zooms only with Ctrl or ⌘ held (a
+   * trackpad pinch sends that too). A touch pinch zooms either way.
+   */
+  wheelZoom?: 'plain' | 'modifier';
 }
 
 // Extend D3 types for our specific data structure

@@ -69,17 +69,34 @@ function close(disclosure: HTMLElement, active: Element | null) {
   disclosure.click();
 }
 
+/** A disclosure's toggle: the `<summary>` of a `<details>`, or the button itself. */
+function toggleOf(disclosure: HTMLElement): HTMLElement | null {
+  return disclosure instanceof HTMLDetailsElement
+    ? disclosure.querySelector<HTMLElement>(':scope > summary')
+    : disclosure;
+}
+
 /**
  * Closes what is open in `root`: the innermost disclosure that holds the focus, else every one
- * shown. Returns false when nothing was open.
+ * shown. In that second case what closed may be out of view (scrolled away): the focus goes to
+ * the first one's toggle, brought into view, so the key's effect is seen and the reader is where
+ * it happened. Returns false when nothing was open.
  */
 export function closeOpen(root: Element, active: Element | null): boolean {
   const open = openDisclosures(root);
   if (open.length === 0) return false;
   const around = open.filter((disclosure) => holdsFocus(disclosure, active));
   // In the page's order an inner disclosure comes after the one it is in.
-  const targets = around.length > 0 ? [around[around.length - 1]] : open;
-  for (const disclosure of targets) close(disclosure, active);
+  if (around.length > 0) {
+    close(around[around.length - 1], active);
+    return true;
+  }
+  for (const disclosure of open) close(disclosure, active);
+  const toggle = toggleOf(open[0]);
+  if (toggle) {
+    toggle.focus({ preventScroll: true });
+    toggle.scrollIntoView?.({ block: 'nearest' });
+  }
   return true;
 }
 

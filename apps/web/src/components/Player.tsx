@@ -24,10 +24,19 @@ import {
   recordingOf,
 } from '../constants';
 import { resultModeOf } from '../utils/recording';
+import { usePlayerLayout } from '../utils/layout';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
-import { kindLabel, linkContext, relationLabelsByClaim, shownLinks } from './genealogy/links';
+import {
+  kindLabel,
+  linkContext,
+  nodeName,
+  nodesById,
+  relationLabelsByClaim,
+  shownLinks,
+  yearFrom,
+} from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -43,7 +52,7 @@ import { Button } from './ui/Button';
 import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
-import { linerNotes } from './provenance/notes';
+import { linerNotes, relationLinkNotes } from './provenance/notes';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { Attribution, shownProviders } from './provenance/Attribution';
 import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
@@ -291,9 +300,30 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     claims.rejected.some((shown) => about.includes(shown.claim.about));
   // The providers whose data the page shows, each with a link back.
   const providers = useMemo(
-    () => shownProviders(track, claims, graphLinks, genealogy.nodes),
-    [track, claims, graphLinks, genealogy.nodes],
+    () =>
+      shownProviders({
+        track,
+        claims,
+        links: graphLinks,
+        nodes: genealogy.nodes,
+        coverSrc: cover.src,
+        factoids: resultFactoids,
+      }),
+    [track, claims, graphLinks, genealogy.nodes, cover.src, resultFactoids],
   );
+  // The samples, covers, remixes and interpolations the graph draws that no claim about a sample
+  // or cover states: listed with the claims, in the graph's words.
+  const relationLinks = useMemo(() => {
+    const nodes = nodesById(genealogy.nodes, yearFrom(track.releaseYear));
+    return relationLinkNotes(graphLinks, (id) => nodeName(nodes.get(id), id));
+  }, [graphLinks, genealogy.nodes, track.releaseYear]);
+  // The Player's layout at this width: the panels are tab panels only while the tabs show.
+  const layout = usePlayerLayout();
+  const tabbed = layout === 'tabs';
+  // A panel's tab panel role, named by its tab, while the tabs show (none from md up, where the
+  // tabs are hidden and the panels are columns, each headed by its own heading).
+  const panelRole = (tab: Tab) =>
+    tabbed ? { role: 'tabpanel' as const, 'aria-labelledby': `tab-${tab}` } : {};
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
@@ -584,8 +614,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
           id="panel-context"
-          role="tabpanel"
-          aria-labelledby="tab-context"
+          {...panelRole('context')}
           className={`
             min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
@@ -767,10 +796,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               title="Samples and covers"
               claims={notes.relations.claims}
               onCards={notes.relations.onCards}
+              links={relationLinks}
+              // "None" only when no claim, no drawn link and no timeline marker names one
               emptyText={
-                rejectedAbout(['sample', 'cover'])
-                  ? 'The samples and covers found were rejected by the verifier (listed below).'
-                  : 'No samples or covers were found in this result.'
+                samples.length > 0
+                  ? `The timeline marks ${samples.length === 1 ? '1 possible sample' : `${samples.length} possible samples`}; no claim or connection in this result states ${samples.length === 1 ? 'it' : 'them'}.`
+                  : rejectedAbout(['sample', 'cover'])
+                    ? 'The samples and covers found were rejected by the verifier (listed below).'
+                    : 'No samples or covers were found in this result.'
               }
               readings={readings}
               audio={measurement}
@@ -808,8 +841,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         {/* Panel B: the player (md up: the centre or right column; phones: the Player tab) */}
         <div
           id="panel-player"
-          role="tabpanel"
-          aria-labelledby="tab-player"
+          {...panelRole('player')}
           className={`
             min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
             ${activeTab === 'player' ? 'block max-md:h-full' : 'hidden md:flex'}
@@ -826,7 +858,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             cover={cover}
             album={track.album}
             evidence={track.evidence}
-            className="mb-8 mt-4 flex-shrink-0 w-56 md:w-64 lg:w-80"
+            className="mb-8 mt-4 flex-shrink-0 w-56 max-w-full md:w-64 lg:w-80"
             frameClassName="group"
             surfaceClassName={`rounded-lg shadow-elevated-lg transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''} ${isPlaying && cover.src ? 'shadow-[var(--shadow-glow-cyber)]' : ''}`}
             iconSize={56}
@@ -917,8 +949,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             the panels' area, absolute, so it has that area's height for the graph) */}
         <div
           id="panel-genealogy"
-          role="tabpanel"
-          aria-labelledby="tab-genealogy"
+          {...panelRole('genealogy')}
           className={`
             min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(22rem,75dvh,40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
             ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
@@ -964,6 +995,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 releaseYear={track.releaseYear}
                 hiddenLinks={hiddenLinks}
                 onNodeClick={handleNodeClick}
+                // From md up the wheel scrolls the page; Ctrl or ⌘ with it zooms the graph
+                wheelZoom={tabbed ? 'plain' : 'modifier'}
               />
             </ErrorBoundary>
           ) : (

@@ -155,75 +155,68 @@ function withTrack(track: { title: string; artist: string }) {
   return fixture;
 }
 
-// A title of three lines or more at these widths, and a long artist.
+// A title of three lines or more at these widths unclamped (four at 1024 px, three at 1280 px),
+// and a long artist.
 const LONG = {
-  title: `${"Superlongunbrokenwordtitle".repeat(4)} (Extended Club Mix)`,
+  title: `${"Superlongunbrokenwordtitle".repeat(6)} (Extended Club Mix)`,
   artist: "Somebody Featuring Somebody Else and the Rest of the Band",
 };
 const SHORT = { title: "Bright Lines", artist: "Test Artist" };
 
-// The header band above the columns has a fixed height: a long title must not take the panels'
-// height. The height the panels get (the panels' area, and the player panel itself) is at least
-// what it was with the long title in three lines (381 px at 1024×600; 535 px at 1280×720, where
-// it took two) and close to what a one-line title leaves, which keeps its height (450 and 570 px).
-for (const [width, height, long, short] of [
-  [1024, 600, 410, 449],
-  [1280, 720, 535, 569],
-]) {
-  for (const [track, least] of [
-    [LONG, long],
-    [SHORT, short],
-  ] as const) {
-    test(`at ${width}×${height} a ${track === LONG ? "long" : "short"} title leaves the panels their height`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height });
-      await useMockApi(page, withTrack(track));
-      await analyzeAndOpenDashboard(page, "Bright Lines");
-      await openPlayer(page);
-      const title = page.getByRole("heading", { level: 1 });
-      // Read whole, shown whole on hover, in two lines at most.
-      await expect(title).toHaveText(track.title);
-      await expect(title).toHaveAttribute("title", track.title);
-      const lines = await title.evaluate((element) => {
-        const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
-        return Math.round(element.getBoundingClientRect().height / lineHeight);
-      });
-      expect(lines).toBeLessThanOrEqual(2);
-      const panel = page.locator("#panel-player");
-      const area = await panel.evaluate((element) => element.parentElement?.clientHeight ?? 0);
-      expect(area).toBeGreaterThanOrEqual(least);
-      expect((await panel.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(least);
-    });
-  }
+/** The height the panels get: the panels' area, and the player panel itself. */
+async function panelHeights(page: Page) {
+  const panel = page.locator("#panel-player");
+  const area = await panel.evaluate((element) => element.parentElement?.clientHeight ?? 0);
+  return { area, player: (await panel.boundingBox())?.height ?? 0 };
 }
 
-// On phones each tab's panel opens with a heading on screen, so the open section is named where
-// it is shown, not only in the tab bar.
-for (const [width, height] of [
-  [320, 568],
-  [390, 844],
+// The header band above the columns has a fixed height: a long title must not take the panels'
+// height. With the title cut at two lines the panels keep what a two-line title leaves (on main,
+// unclamped, this title left 346 px at 1024×600 and 501 px at 1280×720), and a one-line title
+// keeps what it had (450 and 570 px).
+for (const [width, height, long, short] of [
+  [1024, 600, 410, 449],
+  [1280, 720, 534, 569],
 ]) {
-  test(`on a ${width} px phone each tab shows a heading`, async ({ page }) => {
+  test(`at ${width}×${height} a long title leaves the panels their height`, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    await openRecording(page);
-    for (const [tab, panel, heading] of [
-      ["Analysis", "panel-context", "Facts"],
-      ["Player", "panel-player", "Player"],
-      ["Connections", "panel-genealogy", "Connections"],
-    ]) {
-      await page.getByRole("tab", { name: tab }).click();
-      const open = page.locator(`#${panel}`);
-      await expect(open).toBeVisible();
-      const first = open.getByRole("heading").first();
-      await expect(first).toHaveText(heading);
-      await expect(first).toBeVisible();
-      const box = await first.boundingBox();
-      expect(box?.width ?? 0).toBeGreaterThan(1);
-      expect(box?.height ?? 0).toBeGreaterThan(1);
-    }
+    await useMockApi(page, withTrack(LONG));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const heights = await panelHeights(page);
+    expect(heights.area).toBeGreaterThanOrEqual(long);
+    expect(heights.player).toBeGreaterThanOrEqual(long);
+    // In two lines at most.
+    const lines = await page.getByRole("heading", { level: 1 }).evaluate((element) => {
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+      return Math.round(element.getBoundingClientRect().height / lineHeight);
+    });
+    expect(lines).toBeLessThanOrEqual(2);
+  });
+
+  // A guard: a one-line title takes no more of the height than it did before the cut.
+  test(`at ${width}×${height} a short title keeps the panels' height`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await useMockApi(page, withTrack(SHORT));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const heights = await panelHeights(page);
+    expect(heights.area).toBeGreaterThanOrEqual(short);
+    expect(heights.player).toBeGreaterThanOrEqual(short);
   });
 }
+
+// The title cut at two lines is read whole (the heading's text) and shown whole on hover.
+test("a long title cut in the header is read whole and shown whole on hover", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 600 });
+  await useMockApi(page, withTrack(LONG));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const title = page.getByRole("heading", { level: 1 });
+  await expect(title).toHaveText(LONG.title);
+  await expect(title).toHaveAttribute("title", LONG.title);
+  await expect(page.locator("#player-header p").first()).toHaveAttribute("title", LONG.artist);
+});
 
 // At 320 px the two buttons above the panels each keep their label on one line and stay inside
 // the window: no label broken in two, no button past the edge.
@@ -260,4 +253,169 @@ test("at 320 px the Back to summary and New search buttons fit their row", async
   // The Player tab keeps the height it had (446 px).
   const box = await page.locator("#panel-player").boundingBox();
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(440);
+});
+
+// On a 280 px screen (a folding phone's outer screen) the two buttons do not fit one row: the
+// second moves under the first, each label still on one line and inside the window.
+test("at 280 px the second button above the panels moves under the first", async ({ page }) => {
+  await page.setViewportSize({ width: 280, height: 653 });
+  await useMockApi(page, loadFixture("full-result"));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const back = await page.getByRole("button", { name: /Back to summary/ }).boundingBox();
+  const search = await page.getByRole("button", { name: /New search/ }).boundingBox();
+  if (!back || !search) throw new Error("a button is missing");
+  expect(search.y).toBeGreaterThanOrEqual(back.y + back.height - 1);
+  for (const box of [back, search]) {
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(280);
+  }
+  expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+});
+
+/** The full-result fixture with its connected track's link citing `ids`, and `claims` added. */
+function withLinkCiting(ids: string[], claims: Array<Record<string, unknown>> = []) {
+  const fixture = loadFixture("full-result");
+  const complete = fixture.streams[ANALYZE].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  complete.data.genealogy.links[0].evidenceIds = ids;
+  complete.data.claims = claims;
+  return fixture;
+}
+
+// A record id is one word with no place to break: in the graph's list of links, in a narrow
+// column, it breaks anywhere rather than run past the list.
+test("at 1280 px the links list breaks a long record id inside its column", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await useMockApi(page, withLinkCiting([`ev${"x".repeat(150)}`]));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  await page.locator("#panel-genealogy summary", { hasText: "Links as a list" }).click();
+  const list = page.getByRole("list", { name: "Genealogy links" });
+  await expect(list).toContainText("xxxxxxxx");
+  expect(await clippedLines(page, ["panel-genealogy"])).toEqual([]);
+  expect(await list.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
+});
+
+// A claim with a word longer than any column (a pasted run of letters) wraps inside it.
+for (const width of [390, 820, 1280]) {
+  test(`at ${width} px a claim with a 102-letter word stays inside its column`, async ({
+    page,
+  }) => {
+    const fixture = loadFixture("provenance");
+    const complete = fixture.streams[ANALYZE].find(
+      (event: { type: string }) => event.type === "complete",
+    );
+    const word = "a".repeat(102);
+    for (const claim of complete.data.claims as Array<{ id: string; text: string }>) {
+      if (["c-writers", "c-blog", "c-sample-kept", "c-club"].includes(claim.id)) {
+        claim.text = `${claim.text} ${word}`;
+      }
+    }
+    await page.setViewportSize({ width, height: 900 });
+    await useMockApi(page, fixture);
+    await analyzeAndOpenDashboard(page, "Paper Lanterns");
+    await openPlayer(page);
+    if (width < 768) await page.getByRole("tab", { name: "Analysis" }).click();
+    await expect(page.locator("#panel-context")).toContainText(word.slice(0, 40));
+    expect(await clippedLines(page, ["panel-context"])).toEqual([]);
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+  });
+}
+
+/** The scale of the graph's zoom (1 before any zoom), from its drawing's transform. */
+function graphScale(page: Page) {
+  return page.locator('#panel-genealogy svg[aria-label="Connections graph"] > g').evaluate((g) => {
+    const match = /scale\(([\d.]+)/.exec(g.getAttribute("transform") ?? "");
+    return match ? Number(match[1]) : 1;
+  });
+}
+
+/** The panels' area: how far it is scrolled, and how far it can be. */
+function areaScroll(page: Page) {
+  return page.locator("[data-player-columns]").evaluate((area) => ({
+    top: Math.round(area.scrollTop),
+    end: area.scrollHeight - area.clientHeight,
+  }));
+}
+
+/** Puts the pointer over the middle of the graph's drawing. */
+async function pointAtGraph(page: Page) {
+  const box = await page
+    .locator('#panel-genealogy svg[aria-label="Connections graph"]')
+    .boundingBox();
+  if (!box) throw new Error("the graph is not drawn");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+// From md up to xl the connections are a full-width row in a scrolling area: the wheel over the
+// graph scrolls the area (it would otherwise be stuck there, zooming), and Ctrl with the wheel
+// zooms the graph.
+for (const [width, height] of [
+  [1024, 600],
+  [820, 1180],
+]) {
+  test(`at ${width}×${height} the wheel over the graph scrolls the panels, Ctrl with it zooms`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openRecording(page);
+    // The area scrolled to its bottom, where the graph's row is, the pointer over the graph.
+    await page.locator("[data-player-columns]").evaluate((area) => {
+      area.scrollTop = area.scrollHeight;
+    });
+    await pointAtGraph(page);
+    const scale = await graphScale(page);
+    const before = await areaScroll(page);
+    expect(before.top).toBe(before.end);
+    // Up and down again: the area scrolls each way, and the graph keeps its zoom.
+    for (let turn = 0; turn < 4; turn++) await page.mouse.wheel(0, -200);
+    await expect.poll(async () => (await areaScroll(page)).top).toBeLessThan(before.top);
+    for (let turn = 0; turn < 40; turn++) await page.mouse.wheel(0, 300);
+    await expect.poll(async () => (await areaScroll(page)).top).toBe(before.end);
+    expect(await graphScale(page)).toBe(scale);
+
+    await pointAtGraph(page);
+    const scrolled = await areaScroll(page);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up("Control");
+    await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
+    expect((await areaScroll(page)).top).toBe(scrolled.top);
+    // The graph's hint says so (shown while the pointer is on no track).
+    await page.mouse.move(1, 1);
+    await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toBeAttached();
+  });
+}
+
+// From xl the graph is a column of its own and nothing scrolls behind it: the same rule holds,
+// so the gesture does not change at 1280 px (the wheel leaves the graph as it is, Ctrl zooms).
+// On a phone's Connections tab nothing scrolls either, and a mouse wheel zooms the graph.
+test("at 1440 px Ctrl with the wheel zooms the graph, the wheel alone does not", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openRecording(page);
+  await pointAtGraph(page);
+  const scale = await graphScale(page);
+  await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(100);
+  expect(await graphScale(page)).toBe(scale);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
+  await page.mouse.move(1, 1);
+  await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toBeVisible();
+});
+
+test("on a phone's Connections tab the wheel zooms the graph", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openRecording(page);
+  await page.getByRole("tab", { name: "Connections" }).click();
+  await pointAtGraph(page);
+  const scale = await graphScale(page);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
 });

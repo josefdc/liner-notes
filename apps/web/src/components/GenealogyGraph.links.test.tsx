@@ -317,6 +317,40 @@ describe('GenealogyGraph links', () => {
     expect(screen.getByTestId('link-detail').textContent).toContain('Older Record');
   });
 
+  it.each([
+    ['plain', false, true],
+    ['modifier', false, false],
+    ['modifier', true, true],
+  ] as const)(
+    'with the wheel set to %s, a wheel turn (Ctrl held: %s) zooms the graph: %s',
+    async (wheelZoom, ctrlKey, zooms) => {
+      const { container } = render(<Graph wheelZoom={wheelZoom} />);
+      const svg = container.querySelector('svg[aria-label="Connections graph"]') as SVGSVGElement;
+      // d3 reads the pointer through SVG geometry this test's DOM lacks: it falls back to the
+      // element's box.
+      Object.defineProperty(svg, 'createSVGPoint', { value: undefined });
+      const drawing = svg.querySelector(':scope > g') as SVGGElement;
+      const before = drawing.getAttribute('transform');
+      const wheel = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+      // This test DOM's WheelEvent drops the modifier keys it is given.
+      Object.defineProperty(wheel, 'ctrlKey', { value: ctrlKey });
+      await act(async () => {
+        svg.dispatchEvent(wheel);
+      });
+      // A wheel the graph takes is kept from the page; one it leaves scrolls the page.
+      expect(wheel.defaultPrevented).toBe(zooms);
+      expect(drawing.getAttribute('transform') !== before).toBe(zooms);
+    },
+  );
+
+  it('names the zoom gesture as the wheel works', () => {
+    render(<Graph wheelZoom="modifier" />);
+    expect(screen.getByText('Ctrl or ⌘ + scroll to zoom')).toBeTruthy();
+    cleanup();
+    render(<Graph />);
+    expect(screen.getByText('Scroll to zoom')).toBeTruthy();
+  });
+
   it('hides the drawing’s own words from screen readers', () => {
     const { container } = render(<Graph />);
     expect(container.querySelector('g.link-labels')?.getAttribute('aria-hidden')).toBe('true');

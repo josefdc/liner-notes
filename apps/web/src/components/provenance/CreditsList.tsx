@@ -72,7 +72,7 @@ export const CreditsList: React.FC<CreditsListProps> = ({
         <ul aria-label="Credit claims" className="space-y-3">
           {credits.map((shown) => (
             <li key={shown.key} className="space-y-1.5">
-              <p className="text-sm text-text-secondary">{shown.claim.text}</p>
+              <p className="text-sm text-text-secondary wrap-anywhere">{shown.claim.text}</p>
               <ClaimChip shown={shown} readings={readings} audio={audio} />
             </li>
           ))}
@@ -90,7 +90,7 @@ export const CreditsList: React.FC<CreditsListProps> = ({
                 <dt className="text-text-chip font-mono text-xs uppercase tracking-widest">
                   {role}
                 </dt>
-                <dd className="text-text-secondary">{listed.join(', ')}</dd>
+                <dd className="text-text-secondary min-w-0 wrap-anywhere">{listed.join(', ')}</dd>
               </div>
             ))}
           </dl>

@@ -96,15 +96,21 @@ describe('closeOpen', () => {
     expect(closeOpen(root, document.activeElement)).toBe(false);
   });
 
-  it('closes every open one when the focus is in none of them, and leaves the focus where it is', () => {
+  it('closes every open one when the focus is in none of them, and brings the first one’s toggle into view with the focus', () => {
     const { root, toggle, details, el } = page();
     toggle.setAttribute('aria-expanded', 'true');
     details.open = true;
+    const scrolled: Element[] = [];
+    toggle.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
     el('box').focus();
     expect(openDisclosures(root)).toHaveLength(2);
     expect(closeOpen(root, document.activeElement)).toBe(true);
     expect(openDisclosures(root)).toHaveLength(0);
-    expect(document.activeElement).toBe(el('box'));
+    // What closed may be scrolled out of view: its toggle is shown, and has the focus.
+    expect(document.activeElement).toBe(toggle);
+    expect(scrolled).toEqual([toggle]);
   });
 
   it('leaves alone what is open in a panel that is not shown', () => {

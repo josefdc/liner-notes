@@ -50,7 +50,7 @@ function completeOf(fixture: { streams: Record<string, Array<{ type: string; dat
   };
 }
 
-test("the recorded run credits MusicBrainz, Spotify and Deezer's preview, and no uncited source", async ({
+test("the recorded run credits MusicBrainz, its cover's archive, Spotify and Deezer's preview, and no uncited source", async ({
   page,
 }) => {
   const problems = collectProblems(page);
@@ -60,14 +60,20 @@ test("the recorded run credits MusicBrainz, Spotify and Deezer's preview, and no
   await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
   await openPlayer(page);
 
-  // The claims and links cite MusicBrainz; the track links to Spotify; the audio was measured on
+  // The claims and links cite MusicBrainz; the cover shown is the Cover Art Archive's (answered
+  // on the page here); the track is Spotify's match, linked there; the audio was measured on
   // Deezer's preview (the result's `preview`), so Deezer is credited though no clip plays. The
   // web pages in the evidence pack are cited by no claim: no web search is credited.
   expect(await providers(page)).toEqual([
     { provider: "musicbrainz", text: "MusicBrainz", href: "https://musicbrainz.org" },
     {
+      provider: "coverartarchive",
+      text: "Cover Art Archive (cover art)",
+      href: "https://coverartarchive.org/release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
+    },
+    {
       provider: "spotify",
-      text: "Spotify",
+      text: "Spotify (track details)",
       href: "https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV",
     },
     { provider: "deezer", text: "Deezer (preview)", href: "https://www.deezer.com" },
@@ -122,13 +128,23 @@ test("a Last.fm source a shown claim cites is credited and linked; Discogs and t
   await analyzeAndOpenDashboard(page, "Paper Lanterns");
   await openPlayer(page);
 
-  // No preview plays and none is named as measured's source: Deezer is not credited.
+  // The audio was measured on a preview the result names no provider for: said as such, and no
+  // provider (Deezer) is guessed.
   expect(await providers(page)).toEqual([
     { provider: "musicbrainz", text: "MusicBrainz", href: "https://musicbrainz.org" },
     { provider: "discogs", text: "Discogs", href: "https://www.discogs.com" },
     { provider: "lastfm", text: "Last.fm", href: "https://www.last.fm" },
     { provider: "genius", text: "Genius", href: "https://genius.com" },
-    { provider: "spotify", text: "Spotify", href: "https://open.spotify.com/track/t-provenance" },
+    {
+      provider: "spotify",
+      text: "Spotify (track details)",
+      href: "https://open.spotify.com/track/t-provenance",
+    },
+    {
+      provider: "preview",
+      text: "A preview clip (the audio was measured on it; this result does not name its provider)",
+      href: null,
+    },
     {
       provider: "tavily",
       text: "Web search (each page is linked beside its claim)",
@@ -147,11 +163,13 @@ test("a Last.fm source a shown claim cites is credited and linked; Discogs and t
 test("a provider whose data is not shown is not credited", async ({ page }) => {
   const fixture = loadFixture("provenance");
   const result = completeOf(fixture);
-  // Only the claims citing nothing are left: no source's data is on the page.
+  // Only the claims citing nothing are left, the track names no Spotify page and nothing was
+  // measured: no provider's data is on the page.
   result.claims = result.claims.filter(
     (claim) => Array.isArray(claim.evidenceIds) && claim.evidenceIds.length === 0,
   );
   result.spotifyUrl = undefined;
+  result.audio = null;
   await page.setViewportSize({ width: 1440, height: 900 });
   await useMockApi(page, fixture);
   await analyzeAndOpenDashboard(page, "Paper Lanterns");

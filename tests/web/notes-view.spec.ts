@@ -193,3 +193,44 @@ test("a section whose every claim the verifier rejected says so, and invents not
   );
   await expect(samples.getByRole("listitem")).toHaveCount(0);
 });
+
+// A result with no claims (stored before claims existed) whose graph draws a sample and whose
+// timeline marks one: the samples section lists the drawn relation in the graph's words, hedged
+// as the link is not sourced, and never says that none were found.
+test("a sample the graph draws without a claim is listed, hedged, with where it comes from", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, loadFixture("full-result"));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const samples = page.getByRole("region", { name: "Samples and covers" });
+  expect(await listed(page, "Samples and covers")).toEqual([
+    "Possible sampleBright Lines - Test Artist (2011) may sample Older Record - Someone (1984).",
+  ]);
+  await expect(samples.locator("[data-relation-link]")).toHaveAttribute(
+    "data-relation-link",
+    "inferred",
+  );
+  await expect(samples).toContainText("Drawn in Connections · Model inference");
+  await expect(samples).not.toContainText("No samples or covers were found");
+  // The graph names it the same way.
+  await expect(page.locator("#panel-genealogy")).toContainText("Possible sample");
+});
+
+test("a sample only the timeline marks is said, not denied", async ({ page }) => {
+  const fixture = loadFixture("full-result");
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  complete.data.genealogy.links = [];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  const samples = page.getByRole("region", { name: "Samples and covers" });
+  await expect(samples).toContainText(
+    "The timeline marks 1 possible sample; no claim or connection in this result states it.",
+  );
+  await expect(samples.getByRole("listitem")).toHaveCount(0);
+});

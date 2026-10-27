@@ -6,6 +6,7 @@ import { claimRelationKnown, claimRelationWords } from '../genealogy/relationWor
 import type { MeasuredAudio } from '../measured/audio';
 import type { ShownClaim } from './claims';
 import { ClaimChip, LINE } from './ClaimChip';
+import type { RelationLinkNote } from './notes';
 
 // Claims of a result that no factoid card or credit shows, each with what it is about and where
 // it comes from, so that no statement of the result is left out of view. A claim that states a
@@ -34,6 +35,8 @@ interface ClaimListProps {
   emptyText?: string;
   /** How many claims of the section are shown on the fact cards instead (not listed again). */
   onCards?: number;
+  /** Drawn relations no claim of the section states, listed after its claims. */
+  links?: readonly RelationLinkNote[];
   readings?: readonly Reading[];
   audio?: MeasuredAudio | null;
   /** The words of the shown genealogy link that states a claim, by claim id. */
@@ -58,13 +61,15 @@ export const ClaimList: React.FC<ClaimListProps> = ({
   claims,
   emptyText,
   onCards = 0,
+  links = [],
   readings,
   audio,
   relations,
   className = '',
 }) => {
   const headingId = useId();
-  if (claims.length === 0 && onCards === 0 && emptyText === undefined) return null;
+  const listed = claims.length + links.length;
+  if (listed === 0 && onCards === 0 && emptyText === undefined) return null;
   return (
     <section aria-labelledby={headingId} className={`space-y-3 ${className}`}>
       <h2 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
@@ -77,14 +82,16 @@ export const ClaimList: React.FC<ClaimListProps> = ({
             : `${onCards} claims of this section are shown with the facts above.`}
         </p>
       )}
-      {claims.length === 0 && onCards === 0 && emptyText !== undefined && (
+      {listed === 0 && onCards === 0 && emptyText !== undefined && (
         <p className={LINE}>{emptyText}</p>
       )}
-      {claims.length > 0 && (
+      {listed > 0 && (
         <ul className="space-y-4">
           {claims.map((shown) => (
             <li key={shown.key} className="space-y-1.5">
-              <p className="text-sm text-text-secondary">
+              {/* A word longer than the column (a pasted address, a run of letters) breaks
+                  anywhere rather than run past it */}
+              <p className="text-sm text-text-secondary wrap-anywhere">
                 <span
                   data-claim-about
                   className="text-chrome font-mono text-text-chip uppercase tracking-widest mr-2"
@@ -94,6 +101,20 @@ export const ClaimList: React.FC<ClaimListProps> = ({
                 {shown.claim.text}
               </p>
               <ClaimChip shown={shown} readings={readings} audio={audio} />
+            </li>
+          ))}
+          {links.map((link) => (
+            <li key={link.key} className="space-y-1.5" data-relation-link={link.kind}>
+              <p className="text-sm text-text-secondary wrap-anywhere">
+                <span
+                  data-claim-about
+                  className="text-chrome font-mono text-text-chip uppercase tracking-widest mr-2"
+                >
+                  {link.label}
+                </span>
+                {link.text}
+              </p>
+              <p className={LINE}>Drawn in Connections · {link.detail}</p>
             </li>
           ))}
         </ul>

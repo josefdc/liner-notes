@@ -4,7 +4,7 @@ import type { TrackData } from '../../types';
 import type { ShownLink } from '../genealogy/links';
 import { Attribution, previewHost, previewProvider, shownProviders } from './Attribution';
 import { resultClaims } from './claims';
-import { claim, evidence } from './testing';
+import { claim, evidence, provenanceTrack } from './testing';
 
 afterEach(cleanup);
 
@@ -27,12 +27,14 @@ const track = (fields: Partial<TrackData> = {}): TrackData =>
     ...fields,
   }) as TrackData;
 
-const providersOf = (result: TrackData, links: ShownLink[] = []) =>
-  shownProviders(result, resultClaims(result), links).map((provider) => [
-    provider.source,
-    provider.href,
-    provider.note,
-  ]);
+const providersOf = (
+  result: TrackData,
+  links: ShownLink[] = [],
+  shown: Partial<Parameters<typeof shownProviders>[0]> = {},
+) =>
+  shownProviders({ track: result, claims: resultClaims(result), links, ...shown }).map(
+    (provider) => [provider.source, provider.href, provider.note],
+  );
 
 describe('shownProviders', () => {
   it('lists the sources the shown and rejected claims cite, once each, not the uncited ones', () => {
@@ -68,7 +70,7 @@ describe('shownProviders', () => {
 
   it('links Spotify to the track when the result does, and never to an unsafe address', () => {
     expect(providersOf(track({ spotifyUrl: 'https://open.spotify.com/track/1' }))).toEqual([
-      ['spotify', 'https://open.spotify.com/track/1', null],
+      ['spotify', 'https://open.spotify.com/track/1', 'track details'],
     ]);
     expect(providersOf(track({ spotifyUrl: 'javascript:alert(1)' }))).toEqual([]);
   });
@@ -84,8 +86,10 @@ describe('shownProviders', () => {
     const named = track({ previewUrl: 'https://cdn.example.org/clip.mp3' });
     (named as { preview?: unknown }).preview = { provider: 'deezer', method: 'isrc', score: null };
     expect(providersOf(named)).toEqual([['deezer', 'https://www.deezer.com', 'preview']]);
-    // A clip from a host neither provider uses: not guessed.
-    expect(providersOf(track({ previewUrl: 'https://cdn.example.org/clip.mp3' }))).toEqual([]);
+    // A clip from a host neither provider uses: said as such, never guessed.
+    expect(providersOf(track({ previewUrl: 'https://cdn.example.org/clip.mp3' }))).toEqual([
+      ['preview', null, 'played here; this result does not name its provider'],
+    ]);
     // A provider named, but no preview played or measured.
     const unused = track();
     (unused as { preview?: unknown }).preview = { provider: 'deezer', method: 'isrc', score: null };
@@ -104,7 +108,55 @@ describe('shownProviders', () => {
     });
     expect(providersOf(result)).toEqual([['deezer', 'https://www.deezer.com', 'preview']]);
     // A node the graph does not draw (its relation hidden) plays nothing.
-    expect(shownProviders(result, resultClaims(result), [], [])).toEqual([]);
+    expect(providersOf(result, [], { nodes: [] })).toEqual([]);
+  });
+
+  it('says the audio was measured on a preview clip whose provider the result does not name', () => {
+    const measured = track(provenanceTrack());
+    expect(previewProvider(measured)).toBe('unknown');
+    expect(providersOf(measured).find(([source]) => source === 'preview')).toEqual([
+      'preview',
+      null,
+      'the audio was measured on it; this result does not name its provider',
+    ]);
+  });
+
+  it('credits Spotify for the details of a track it matched, by its id', () => {
+    expect(providersOf(track({ id: '0DiWol3AO6WpXZgp0goxAV' }))).toEqual([
+      ['spotify', 'https://open.spotify.com', 'track details'],
+    ]);
+  });
+
+  it('credits the source of the cover the page shows, and nothing for a cover not shown', () => {
+    const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+    expect(
+      providersOf(track(), [], {
+        coverSrc: `https://coverartarchive.org/release/${MBID}/front-500`,
+      }),
+    ).toEqual([['coverartarchive', `https://coverartarchive.org/release/${MBID}`, 'cover art']]);
+    expect(
+      providersOf(track({ spotifyUrl: 'https://open.spotify.com/track/1' }), [], {
+        coverSrc: 'https://i.scdn.co/image/abc',
+      }),
+    ).toEqual([['spotify', 'https://open.spotify.com/track/1', 'track details, cover art']]);
+    // Not shown (none, failed to load), or from a host the page does not know: not credited.
+    expect(providersOf(track(), [], { coverSrc: null })).toEqual([]);
+    expect(providersOf(track(), [], { coverSrc: 'https://images.example.org/c.jpg' })).toEqual([]);
+  });
+
+  it('credits the records the cards of a result built without the model come from', () => {
+    const factoids = [
+      { title: 'Samples', claimId: undefined },
+      { title: 'Collaboration Network', claimId: undefined },
+      { title: 'Release Info', claimId: undefined },
+      { title: 'Sonic Profile', claimId: undefined },
+    ];
+    expect(providersOf(track({ modelUnavailable: true }), [], { factoids })).toEqual([
+      ['musicbrainz', 'https://musicbrainz.org', 'facts from its records'],
+      ['spotify', 'https://open.spotify.com', 'facts from its records'],
+    ]);
+    // The same titles in a result the model wrote are the model's: no record is credited.
+    expect(providersOf(track(), [], { factoids })).toEqual([]);
   });
 });
 

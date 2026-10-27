@@ -9,6 +9,13 @@ import {
   replayedRecording,
   useMockApi,
 } from "./mock";
+import { offline } from "./offline";
+
+// The recorded run's cover, and any other outside address, are answered on the page: nothing
+// leaves the machine.
+test.beforeEach(async ({ page }) => {
+  await offline(page);
+});
 
 // The Player's preview lane draws what the audio service measured on the preview: the beat
 // grid, the energy contour and the neutral sections, in the measured colour, on the preview's

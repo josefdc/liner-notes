@@ -99,6 +99,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   releaseYear,
   hiddenLinks = 0,
   onNodeClick,
+  wheelZoom = 'plain',
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -149,6 +150,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // Clip ids for the tracks' pictures: this graph's own prefix (an id may hold only letters,
   // digits, - and _) and the track's index, never the track's id, which may hold any character.
   const clipPrefix = `genealogy${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
+
+  // What the wheel does, read by the zoom's filter at each event: a change does not draw the
+  // graph again.
+  const wheelZoomRef = useRef(wheelZoom);
+  useEffect(() => {
+    wheelZoomRef.current = wheelZoom;
+  }, [wheelZoom]);
 
   // The analysis callback, read when a track is chosen: a new one does not draw the graph again.
   const onNodeClickRef = useRef(onNodeClick);
@@ -242,6 +250,24 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
+      // The wheel zooms only when nothing around the graph scrolls, or with Ctrl or ⌘ held:
+      // otherwise it is left to the page, which scrolls past the graph. A drag pans and a touch
+      // pinch zooms as before (d3's own rule: no Ctrl-drag, primary button only).
+      .filter((event: Event) => {
+        if (event.type === 'wheel') {
+          const wheel = event as WheelEvent;
+          return wheelZoomRef.current === 'plain' || wheel.ctrlKey || wheel.metaKey;
+        }
+        const pointer = event as MouseEvent;
+        return !pointer.ctrlKey && !pointer.button;
+      })
+      // d3 speeds a wheel with Ctrl up tenfold, for a trackpad pinch's small steps: a mouse
+      // wheel's notch (a step of 50 px or more) keeps the plain rate.
+      .wheelDelta((event: WheelEvent) => {
+        const rate = event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002;
+        const pinch = event.ctrlKey && event.deltaMode === 0 && Math.abs(event.deltaY) < 50;
+        return -event.deltaY * rate * (pinch ? 10 : 1);
+      })
       // A double click zooms in a glide, or at once under reduced motion.
       .duration(reducedMotion ? 0 : 250)
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
@@ -1105,7 +1131,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         {!active && (
           <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
             <div className="flex flex-col gap-1 text-chrome font-mono text-text-tertiary">
-              <span>Scroll to zoom</span>
+              <span>
+                {wheelZoom === 'modifier' ? 'Ctrl or ⌘ + scroll to zoom' : 'Scroll to zoom'}
+              </span>
               <span>Drag to pan</span>
               <span className="flex items-center gap-1">
                 <MousePointerClick size={12} />

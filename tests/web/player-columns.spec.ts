@@ -99,8 +99,10 @@ test("at 1440 px the Player's columns are in the page in the order they are draw
   await useMockApi(page, loadFixture("full-result"));
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
-  const panels = page.getByRole("tabpanel", { includeHidden: true });
+  // (From md up the tabs are hidden, so the panels are plain columns, not tab panels.)
+  const panels = page.locator("#panel-context, #panel-player, #panel-genealogy");
   await expect(panels).toHaveCount(3);
+  await expect(page.getByRole("tabpanel", { includeHidden: true })).toHaveCount(0);
   const columns = await panels.evaluateAll((list) =>
     list.map((panel, index) => ({ id: panel.id, index, x: panel.getBoundingClientRect().x })),
   );

@@ -7,19 +7,33 @@ import { provenanceTrack } from './provenance/testing';
 // does when a related track is chosen there is tested without drawing it.
 const graph = vi.hoisted(() => ({
   onNodeClick: null as null | ((node: GenealogyNode) => void),
+  wheelZoom: undefined as string | undefined,
 }));
 vi.mock('./GenealogyGraph', () => ({
-  default: (props: { onNodeClick?: (node: GenealogyNode) => void }) => {
+  default: (props: { onNodeClick?: (node: GenealogyNode) => void; wheelZoom?: string }) => {
     graph.onNodeClick = props.onNodeClick ?? null;
+    graph.wheelZoom = props.wheelZoom;
     return <div data-testid="graph" />;
   },
 }));
+
+/** A window `width` px wide, as the layout's media queries read it (16 px to the rem). */
+function windowWidth(width: number) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: width >= Number(/min-width:\s*([\d.]+)rem/.exec(query)?.[1] ?? 0) * 16,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
 
 import Player from './Player';
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   graph.onNodeClick = null;
+  graph.wheelZoom = undefined;
 });
 
 /** The provenance result (it has claims the verifier rejected) with a related track. */
@@ -120,6 +134,7 @@ describe('the phone tabs', () => {
     ]);
 
   it('name the panel each controls, and only the open one is in the Tab order', () => {
+    windowWidth(390);
     render(<Player trackData={track()} onBack={() => {}} />);
     for (const tab of tabs()) {
       const panel = document.getElementById(tab.getAttribute('aria-controls') ?? '');
@@ -164,6 +179,39 @@ describe('the phone tabs', () => {
     expect(document.activeElement).toBe(connections);
     expect(connections.getAttribute('aria-selected')).toBe('true');
   });
+});
+
+describe('the panels and the graph by width', () => {
+  const panels = () =>
+    ['panel-context', 'panel-player', 'panel-genealogy'].map((id) => {
+      const panel = document.getElementById(id);
+      return [panel?.getAttribute('role') ?? null, panel?.getAttribute('aria-labelledby') ?? null];
+    });
+
+  it('on a phone, the panels are tab panels named by their tabs, and the wheel zooms the graph', () => {
+    windowWidth(390);
+    render(<Player trackData={track()} onBack={() => {}} />);
+    expect(panels()).toEqual([
+      ['tabpanel', 'tab-context'],
+      ['tabpanel', 'tab-player'],
+      ['tabpanel', 'tab-genealogy'],
+    ]);
+    expect(graph.wheelZoom).toBe('plain');
+  });
+
+  it.each([820, 1024, 1440])(
+    'at %i px, with the tabs hidden, no panel claims to be a tab panel, and the wheel scrolls the page',
+    (width) => {
+      windowWidth(width);
+      render(<Player trackData={track()} onBack={() => {}} />);
+      expect(panels()).toEqual([
+        [null, null],
+        [null, null],
+        [null, null],
+      ]);
+      expect(graph.wheelZoom).toBe('modifier');
+    },
+  );
 });
 
 describe('choosing a related track in the graph', () => {

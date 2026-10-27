@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense, lazy } from 'react';
 import Layout from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
 import { TrackLinkScreen, type TrackLinkState } from './components/TrackLinkScreen';
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -18,6 +19,7 @@ import {
   routeUrl,
   writeHistoryEntry,
 } from './router/route';
+import { screenKey } from './router/screenKey';
 import { ShownResults } from './router/shownResults';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
@@ -602,9 +604,19 @@ const App: React.FC = () => {
   return (
     <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
       <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
-        <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : DashboardSkeleton}>
-          {renderScreen()}
-        </Suspense>
+        {/* A screen that throws (or whose code cannot be loaded) says so in its place, with a
+            way back to the search; another screen or result is tried afresh (resetKey), without
+            mounting the screen again, so its heading keeps the focus on Back and Forward. */}
+        <ErrorBoundary
+          resetKey={screenKey(phase, link !== null, effectiveTrackData?.id)}
+          message="This screen could not be shown"
+          action={{ label: 'New search', onClick: handleNewSearch }}
+          className="flex-1 min-h-0 w-full bg-void"
+        >
+          <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : DashboardSkeleton}>
+            {renderScreen()}
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </Layout>
   );

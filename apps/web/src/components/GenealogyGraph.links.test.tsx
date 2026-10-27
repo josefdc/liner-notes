@@ -7,6 +7,7 @@ const audio = vi.hoisted(() => ({
   isPlaying: false,
   playingNodeId: null,
   hasPreviewSupport: true,
+  blockedNodeId: null,
   unavailableNodeId: null,
   playPreview: () => {},
   stopPreview: () => {},

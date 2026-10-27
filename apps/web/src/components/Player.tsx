@@ -26,6 +26,7 @@ import {
 import { resultModeOf } from '../utils/recording';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
+import { ErrorBoundary } from './ErrorBoundary';
 import { kindLabel, linkContext, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -44,6 +45,7 @@ import { CreditsList } from './provenance/CreditsList';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { moreFactsOf } from '../hooks/agent/moreFacts';
+import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
 
@@ -123,8 +125,19 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // P2:24 — Factoid collapsing
   const [showAllFactoids, setShowAllFactoids] = useState(false);
 
-  // P0:7 — Audio preview ref
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // P0:7 — The track's preview, through the page's one preview element: the genealogy graph's
+  // previews use it too, so starting one stops the other.
+  const previewEvents = useMemo<PreviewEvents>(() => {
+    const stopped = () => setIsPlaying(false);
+    return {
+      onPlay: () => setIsPlaying(true),
+      onPause: stopped,
+      onEnded: stopped,
+      onError: stopped,
+      onStopped: stopped,
+    };
+  }, []);
+  const preview = usePreviewAudio(previewEvents);
 
   const { bpm, key } = audioValues(track);
   // The measured preview window, when the result carries its measurement.
@@ -291,41 +304,21 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onBack]);
 
-  // P0:7 — Initialize and cleanup audio element
-  useEffect(() => {
-    audioRef.current = new Audio();
-    audioRef.current.volume = 0.5;
-
-    const audio = audioRef.current;
-    audio.onplay = () => setIsPlaying(true);
-    audio.onpause = () => setIsPlaying(false);
-    audio.onended = () => setIsPlaying(false);
-    audio.onerror = () => setIsPlaying(false);
-
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
   // P0:7 — Toggle audio playback
   const handlePlayPause = useCallback(() => {
-    if (!audioRef.current || !track.previewUrl) return;
+    if (!track.previewUrl) return;
 
     if (isPlaying) {
-      audioRef.current.pause();
+      preview.pause();
     } else {
-      if (audioRef.current.src !== track.previewUrl) {
-        audioRef.current.src = track.previewUrl;
-      }
-      audioRef.current.play().catch((err) => {
+      preview.play(track.previewUrl, 0.5)?.catch((err) => {
+        // A graph preview started meanwhile took the element over: nothing went wrong.
+        if ((err as { name?: unknown } | null)?.name === 'AbortError') return;
         console.log('Audio preview blocked:', err);
         setIsPlaying(false);
       });
     }
-  }, [isPlaying, track.previewUrl]);
+  }, [isPlaying, track.previewUrl, preview]);
 
   // Handle decrypt more factoids - streams one-by-one for faster perceived speed
   const handleDecryptMore = useCallback(async () => {
@@ -780,14 +773,24 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             )}
           </div>
           {genealogy.nodes.length > 1 ? (
-            <GenealogyGraph
-              data={genealogy}
-              evidence={track.evidence}
-              claims={claims}
-              releaseYear={track.releaseYear}
-              hiddenLinks={hiddenLinks}
-              onNodeClick={handleNodeClick}
-            />
+            // A graph that throws while it renders leaves the rest of the Player as it is. (A
+            // throw inside d3's ticks or zoom handlers or the ResizeObserver's callback is not
+            // caught here: those run outside React.)
+            <ErrorBoundary
+              key={track.id}
+              message="The connections graph could not be drawn"
+              action={{ label: 'Try again' }}
+              className="h-full"
+            >
+              <GenealogyGraph
+                data={genealogy}
+                evidence={track.evidence}
+                claims={claims}
+                releaseYear={track.releaseYear}
+                hiddenLinks={hiddenLinks}
+                onNodeClick={handleNodeClick}
+              />
+            </ErrorBoundary>
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">

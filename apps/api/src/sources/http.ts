@@ -64,13 +64,15 @@ function knownSecrets(): string[] {
   );
 }
 
+/** Names of a `name=value` pair whose value is a secret (a query parameter, an attribute). */
+const SECRET_PARAM_NAMES =
+  "api_?key|key|token|access_token|refresh_token|client_secret|password|secret";
+
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   // Case-sensitive and token-shaped, so prose such as "the basic track" is left alone.
   [/\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g, "$1 [redacted]"],
-  [
-    /\b(api_?key|key|token|access_token|refresh_token|client_secret|password|secret)=([^&\s"'<>]+)/gi,
-    "$1=[redacted]",
-  ],
+  // An unquoted value; a quoted one is read by quotedParamSpans.
+  [new RegExp(`\\b(${SECRET_PARAM_NAMES})=([^&\\s"'<>]+)`, "gi"), "$1=[redacted]"],
   [/\btvly-[A-Za-z0-9_-]+/g, "tvly-[redacted]"],
   // Spotify access tokens (any other long mixed-case token-like run: redactTokenRuns).
   [/\bBQ[A-Za-z0-9_-]{40,}/g, "[redacted]"],
@@ -97,7 +99,7 @@ export function redactTokenRuns(text: string): string {
 
 /** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
 function redactSecrets(text: string): string {
-  let out = text;
+  let out = maskSpans(text, quotedParamSpans(text));
   for (const secret of knownSecrets()) out = out.split(secret).join("[redacted]");
   for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
   return redactTokenRuns(out);
@@ -164,19 +166,15 @@ function quotedValueEnd(text: string, start: number, quote: string, escaped: boo
   return text.length;
 }
 
+/** A span of text, [start, end): where a value's content lies. */
+type Span = [start: number, end: number];
+
 /**
- * Each quoted value of a quoted secret key in text that was not parsed (an HTML page, a JSON body
- * that does not parse, a message) as "[redacted]", as the parsed path redacts it by key
- * (`"client_secret": "…"` → `"client_secret": "[redacted]"`): in either quote, escapes included,
- * up to its closing quote or the end of the text. Reads the text once.
- *
- * Known limits: a value that is not a quoted string (a number, an object, a list) is left to the
- * other rules, since where it ends is not plain from the text; so are quotes written as HTML
- * entities (`&quot;`) and keys escaped more than once (`\\\"password\\\":`).
+ * Where each quoted value of a quoted secret key lies (its content, without the quotes): in either
+ * quote, escapes included, up to its closing quote or the end of the text. Reads the text once.
  */
-export function redactQuotedSecrets(text: string): string {
-  let out = "";
-  let kept = 0;
+function quotedKeySpans(text: string): Span[] {
+  const spans: Span[] = [];
   QUOTED_KEY.lastIndex = 0;
   for (let key = QUOTED_KEY.exec(text); key; key = QUOTED_KEY.exec(text)) {
     if (!isSecretKey(key[3] ?? "")) continue;
@@ -187,24 +185,139 @@ export function redactQuotedSecrets(text: string): string {
     const start = at + backslash.length + 1;
     const end = quotedValueEnd(text, start, quote, backslash !== "");
     if (end === start) continue;
+    spans.push([start, end]);
+    QUOTED_KEY.lastIndex = Math.max(end, QUOTED_KEY.lastIndex);
+  }
+  return spans;
+}
+
+/** A secret `name=` pair whose value is quoted: `password="…"`, `token='…'`, `key=\"…\"`. */
+const QUOTED_PARAM = new RegExp(`\\b(?:${SECRET_PARAM_NAMES})=(\\\\?)(["'])`, "gi");
+
+/** Where each quoted value of a secret `name=` pair lies, as quotedKeySpans reads it. */
+function quotedParamSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  QUOTED_PARAM.lastIndex = 0;
+  for (let pair = QUOTED_PARAM.exec(text); pair; pair = QUOTED_PARAM.exec(text)) {
+    const start = pair.index + pair[0].length;
+    const end = quotedValueEnd(text, start, pair[2] ?? '"', pair[1] === "\\");
+    if (end === start) continue;
+    // An escaped opening quote goes with the value: the rule for an unquoted value would
+    // otherwise take its backslash for one.
+    spans.push([pair[1] ? start - 2 : start, end]);
+    QUOTED_PARAM.lastIndex = Math.max(end, QUOTED_PARAM.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * The content of each pair of double quotes, paired as /"[^"]*"/g pairs them; a quote inside one
+ * of `skip` (sorted, not overlapping) is not a quote here.
+ */
+function doubleQuotedSpans(text: string, skip: readonly Span[] = []): Span[] {
+  const spans: Span[] = [];
+  let next = 0;
+  let open = -1;
+  for (let i = text.indexOf('"'); i !== -1; i = text.indexOf('"', i + 1)) {
+    while (next < skip.length && (skip[next] as Span)[1] <= i) next++;
+    const inside = skip[next];
+    if (inside && inside[0] <= i) {
+      i = inside[1] - 1;
+      continue;
+    }
+    if (open === -1) {
+      open = i;
+    } else {
+      spans.push([open + 1, i]);
+      open = -1;
+    }
+  }
+  return spans;
+}
+
+/** Two lists of spans, each sorted by start, as one list sorted by start. */
+function mergeSpans(a: readonly Span[], b: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    const first = a[i];
+    const second = b[j];
+    if (first && (!second || first[0] <= second[0])) {
+      out.push(first);
+      i++;
+    } else if (second) {
+      out.push(second);
+      j++;
+    }
+  }
+  return out;
+}
+
+/** `text` with each span (sorted by start; spans that overlap or touch as one) as "[redacted]". */
+function maskSpans(text: string, spans: readonly Span[]): string {
+  let out = "";
+  let kept = 0;
+  for (let i = 0; i < spans.length; ) {
+    let [start, end] = spans[i] as Span;
+    for (i++; i < spans.length && (spans[i] as Span)[0] <= end; i++) {
+      end = Math.max(end, (spans[i] as Span)[1]);
+    }
     out += `${text.slice(kept, start)}[redacted]`;
     kept = end;
-    QUOTED_KEY.lastIndex = Math.max(end, QUOTED_KEY.lastIndex);
   }
   return out + text.slice(kept);
 }
 
+/** Where each quoted secret value lies: of a quoted secret key, or of a secret `name=` pair. */
+const quotedSecretSpans = (text: string) =>
+  maskableUnion(quotedKeySpans(text), quotedParamSpans(text));
+
+/** Two lists of spans as one sorted list in which no two spans overlap. */
+function maskableUnion(a: readonly Span[], b: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  for (const [start, end] of mergeSpans(a, b)) {
+    const last = out.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+
 /**
- * Removes credentials from an error message or log line. The quoted value of a quoted secret key
- * goes first (redactQuotedSecrets), before a rule that does not read escapes can cut it at an
- * escaped quote. Then, in a text that mentions a header, every quoted value: fetch echoes an
- * invalid header value, which is the credential. Then `redactSecrets`.
+ * Each quoted value of a quoted secret key, or of a secret `name=` pair, in text that was not
+ * parsed (an HTML page, a JSON body that does not parse, a message) as "[redacted]", as the parsed
+ * path redacts it by key (`"client_secret": "…"` → `"client_secret": "[redacted]"`,
+ * `password="…"` → `password="[redacted]"`). Reads the text once.
+ *
+ * Known limits, left to the other rules:
+ * - a value that is not a quoted string (a number, an object, a list): where it ends is not plain
+ *   from the text;
+ * - quotes written as HTML entities (`&quot;`), and keys escaped more than once
+ *   (`\\\"password\\\":`);
+ * - a key and its value at different escape levels (`\"token\":"v"`);
+ * - links escaped twice (`https:\\\/\\\/…`) or written with `/` for "/".
+ */
+export function redactQuotedSecrets(text: string): string {
+  return maskSpans(text, quotedSecretSpans(text));
+}
+
+/**
+ * Removes credentials from an error message or log line: each quoted secret value
+ * (redactQuotedSecrets); in a text that mentions a header, every double-quoted value, since fetch
+ * echoes an invalid header value, which is the credential; then `redactSecrets`.
+ *
+ * The header rule pairs quotes without reading escapes. It is measured on the text as it came,
+ * both as it pairs quotes there and as it pairs them once the secret values are gone, and what
+ * any of these hides is hidden: so a quote inside a secret value cannot move a later pair and
+ * show what the rule hid before. Text without a quoted secret value reads as it always did.
  */
 export function redactText(text: string): string {
-  const quoted = redactQuotedSecrets(text);
-  // Asked of the text as it came: "header" inside a redacted value still counts.
-  const out = /header/i.test(text) ? quoted.replace(/"[^"]*"/g, '"[redacted]"') : quoted;
-  return redactSecrets(out);
+  const secrets = quotedSecretSpans(text);
+  const spans = /header/i.test(text)
+    ? mergeSpans(secrets, mergeSpans(doubleQuotedSpans(text), doubleQuotedSpans(text, secrets)))
+    : secrets;
+  return redactSecrets(maskSpans(text, spans));
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */

@@ -6,6 +6,7 @@ import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { timed } from "../sources/testing/strings.js";
 import { MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   appendRunEvent,
@@ -437,11 +438,11 @@ describe("SIGNED_URL", () => {
   });
 
   it("answers quickly on a long run of signed-looking parameters before a space", () => {
+    // A few milliseconds; about 3.5 s with QUADRATIC, so the bound leaves room for a loaded machine.
     const value = `http://x/${"~hdnea=".repeat(30_000)} b`;
-    const start = performance.now();
-    const preview = isPreviewUrl(value);
-    expect(performance.now() - start).toBeLessThan(100);
-    expect(preview).toBe(false);
+    const { ms, result } = timed(() => isPreviewUrl(value));
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(false);
   });
 });
 

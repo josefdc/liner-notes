@@ -239,9 +239,10 @@ test("while the server holds the resume, the status never claims a step it has n
   await option(page, three[1]).click();
   await expect(progressStatus(page)).toHaveText("Reading the track you selected...");
 
-  // Ten seconds of a held resume: the line stays on the pick, sampled every 250 ms.
+  // Ten seconds of a held resume, by the clock: the line stays on the pick, sampled every 250 ms.
+  // (Counting samples instead let a loaded machine stretch the ten seconds to twenty.)
   const seen = new Set<string>();
-  for (let elapsed = 0; elapsed < 10_000; elapsed += 250) {
+  for (const until = Date.now() + 10_000; Date.now() < until; ) {
     seen.add((await progressStatus(page).textContent()) ?? "");
     await page.waitForTimeout(250);
   }

@@ -898,15 +898,16 @@ describe("a slow judge", () => {
   };
 
   it("loses its verdicts, never the result, when it outlasts its share of the run's time", async () => {
-    const restore = setJudgeTimingForTests({ marginMs: 100, minMs: 50 });
+    const restore = setJudgeTimingForTests({ marginMs: 1_700, minMs: 50 });
     try {
       const llm = hanging();
       const writer = vi.fn();
       const started = performance.now();
-      const out = await inRun(llm, 400, writer);
+      const out = await inRun(llm, 2_000, writer);
 
-      // Stopped at its share (400 ms less the 100 ms margin), well before the run's deadline.
-      expect(performance.now() - started).toBeLessThan(400);
+      // Stopped at its share (2 s less the 1.7 s margin), well before the run's deadline: a judge
+      // that waited for the deadline would take 2 s, and the bound leaves room for a loaded machine.
+      expect(performance.now() - started).toBeLessThan(1_000);
       expect(llm.calls).toHaveLength(1);
       expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
       const result = TrackAnalysis.parse(out.trackData);

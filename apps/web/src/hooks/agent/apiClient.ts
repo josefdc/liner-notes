@@ -78,12 +78,14 @@ export interface RunToken {
 
 /**
  * A request the API refused: its code and message (a JSON error), or the app's own code when
- * the API could not be reached or gave no answer this page can read.
+ * the API could not be reached or gave no answer this page can read. `retryAfterMs`: how long
+ * the API said to wait before asking again (its Retry-After header), when it said.
  */
 export class RunTokenError extends Error {
   constructor(
     message: string,
     readonly code: string | null,
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'RunTokenError';
@@ -91,9 +93,35 @@ export class RunTokenError extends Error {
 }
 
 /**
+ * The longest wait this page keeps from a refusal: a longer one (a proxy's or a misconfigured
+ * server's Retry-After, or one too large to read) is taken as this, so the page never locks
+ * itself until a reload. The API's own limits reset within minutes.
+ */
+export const MAX_RETRY_WAIT_MS = 60 * 60_000;
+
+/** `ms` as a wait this page keeps: at most MAX_RETRY_WAIT_MS, which a non-finite value is too. */
+export function boundedWait(ms: number): number {
+  return Number.isFinite(ms) ? Math.min(Math.max(0, ms), MAX_RETRY_WAIT_MS) : MAX_RETRY_WAIT_MS;
+}
+
+/**
+ * A Retry-After header's wait in milliseconds: a number of seconds, or an HTTP date (the time
+ * left until then), at most MAX_RETRY_WAIT_MS. Null without a header or for one this page
+ * cannot read.
+ */
+export function retryAfterMs(header: string | null, now: number = Date.now()): number | null {
+  const value = header?.trim() ?? '';
+  if (/^\d+$/.test(value)) return boundedWait(Number(value) * 1000);
+  // An HTTP date names its day and month ("Tue, 27 Oct 2026 12:00:00 GMT"); Date.parse would
+  // also read "-5" or "1.5" as dates.
+  const at = /[a-z]/i.test(value) ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(at) ? null : boundedWait(at - now);
+}
+
+/**
  * Asks the API for a run token, with the token of a passed Turnstile check (or the development
- * bypass's). Rejects with a RunTokenError carrying the API's code and message when it refuses,
- * and as fetch does when `signal` aborts the request.
+ * bypass's). Rejects with a RunTokenError carrying the API's code and message when it refuses
+ * (and its Retry-After, as `retryAfterMs`), and as fetch does when `signal` aborts the request.
  */
 export async function requestRunToken(
   turnstileToken: string,
@@ -113,6 +141,7 @@ export async function requestRunToken(
         ? fields.error
         : `Run token refused (HTTP ${response.status})`,
       typeof fields.code === 'string' ? fields.code : null,
+      retryAfterMs(response.headers.get('Retry-After')),
     );
   }
   const expiresAt = typeof fields.expiresAt === 'string' ? Date.parse(fields.expiresAt) : NaN;

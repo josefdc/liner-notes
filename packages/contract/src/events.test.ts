@@ -110,6 +110,28 @@ describe("AnalyzeStreamEvent", () => {
     expect(AnalyzeStreamEvent.parse(event)).toEqual(event);
   });
 
+  it("keeps the time since the run started on every numbered event, and reads events without it", () => {
+    const timed = analyzeEvents().map((event, i) =>
+      event.type === "heartbeat" ? event : { ...event, elapsedMs: i * 1_000 },
+    );
+    for (const event of timed) expect(AnalyzeStreamEvent.parse(event)).toEqual(event);
+    expect(decodeSseStream(timed.map(encodeSseEvent).join(""), AnalyzeStreamEvent)).toEqual(timed);
+    const status = { type: "status", runId: "r", seq: 3, message: "m", elapsedMs: 12_400 };
+    expect(AnalyzeStreamEvent.parse(status)).toEqual(status);
+    // Optional: an event without it reads as one with no time, never as time 0.
+    const untimed = AnalyzeStreamEvent.parse({ type: "status", runId: "r", seq: 3, message: "m" });
+    expect("elapsedMs" in untimed).toBe(false);
+  });
+
+  it.each([
+    ["negative", -1],
+    ["fractional", 12.5],
+    ["text", "12400"],
+  ])("rejects a %s time since the run started", (_name, elapsedMs) => {
+    const event = { type: "status", runId: "r", seq: 0, message: "m", elapsedMs };
+    expect(AnalyzeStreamEvent.safeParse(event).success).toBe(false);
+  });
+
   it("decodes two CRLF-terminated events in a row and data split over several lines", () => {
     const [first, second, third] = analyzeEvents();
     const crlf = (event: AnalyzeStreamEvent) => encodeSseEvent(event).replace(/\n\n$/, "\r\n\r\n");

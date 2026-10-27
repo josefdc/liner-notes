@@ -333,26 +333,34 @@ export function useAgent(): UseAgentReturn {
   }, []);
 
   /**
-   * Add a log entry with optional code and node
+   * Add a log entry with optional code and node, and the time since the run started that the
+   * server sent it with
    */
-  const addLog = useCallback((message: string, code?: LogCode, node?: string) => {
-    const log: NewLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      message,
-      timestamp: new Date().toISOString(),
-      code,
-      node,
-    };
-    // Bounded, and a repeat of the last line changes nothing (agent/runLog.ts).
-    setState((prev) => {
-      const logs = appendLog(prev.logs, log);
-      return logs === prev.logs ? prev : { ...prev, logs };
-    });
-  }, []);
+  const addLog = useCallback(
+    (message: string, code?: LogCode, node?: string, elapsedMs?: number) => {
+      const log: NewLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        message,
+        timestamp: new Date().toISOString(),
+        code,
+        node,
+        ...(elapsedMs !== undefined && { elapsedMs }),
+      };
+      // Bounded, and a repeat of the last line changes nothing (agent/runLog.ts).
+      setState((prev) => {
+        const logs = appendLog(prev.logs, log);
+        return logs === prev.logs ? prev : { ...prev, logs };
+      });
+    },
+    [],
+  );
 
-  /** Ends the run with an error the user can retry. */
+  /**
+   * Ends the run with an error the user can retry. `elapsedMs`: the time since the run started
+   * that the server's event the error comes from was sent with, when it sent one.
+   */
   const fail = useCallback(
-    (run: Run, message: string, code?: string) => {
+    (run: Run, message: string, code?: string, elapsedMs?: number) => {
       if (runRef.current !== run || run.phase === 'failed') return;
       run.phase = 'failed';
       setState((prev) => ({
@@ -364,7 +372,7 @@ export function useAgent(): UseAgentReturn {
         candidates: null,
         isLoading: false,
       }));
-      addLog(`Error: ${message}`, 'SYS-ERROR');
+      addLog(`Error: ${message}`, 'SYS-ERROR', undefined, elapsedMs);
     },
     [addLog],
   );
@@ -398,7 +406,7 @@ export function useAgent(): UseAgentReturn {
             ...prev,
             threadId: run.threadId,
           }));
-          addLog('Connected to the analysis server', 'SYS-INIT');
+          addLog('Connected to the analysis server', 'SYS-INIT', undefined, data.elapsedMs);
           break;
 
         case 'status':
@@ -408,8 +416,12 @@ export function useAgent(): UseAgentReturn {
             run.replay = true;
             setState((prev) => ({ ...prev, isReplay: true }));
           }
-          // The server's own words, with its code; a status without words adds no line.
-          if (data.message) addLog(data.message, data.code as LogCode | undefined, data.node);
+          // The server's own words, with its code and the time since the run started (a
+          // replay's is the recorded run's), as on every line a server event writes; a status
+          // without words adds no line.
+          if (data.message) {
+            addLog(data.message, data.code as LogCode | undefined, data.node, data.elapsedMs);
+          }
           {
             const step = stepOf(run.branches, data.node, data.code, data.message);
             if (step) setState((prev) => toStep(prev, step));
@@ -443,7 +455,7 @@ export function useAgent(): UseAgentReturn {
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog(question, undefined, 'scout');
+          addLog(question, undefined, 'scout', data.elapsedMs);
           break;
         }
 
@@ -476,6 +488,8 @@ export function useAgent(): UseAgentReturn {
               ? 'Recorded analysis replayed. Nothing was analyzed live.'
               : 'Analysis complete.',
             'SYS-READY',
+            undefined,
+            data.elapsedMs,
           );
           break;
         }
@@ -510,7 +524,7 @@ export function useAgent(): UseAgentReturn {
               });
             break;
           }
-          fail(run, data.error || 'The analysis failed.', data.code);
+          fail(run, data.error || 'The analysis failed.', data.code, data.elapsedMs);
           break;
         }
 
@@ -523,7 +537,12 @@ export function useAgent(): UseAgentReturn {
           close();
           // A stream that ends without a result, an error or a picker has nothing to show.
           if (run.phase === 'running')
-            fail(run, 'The analysis ended without a result.', CLIENT_ERROR_CODES.noResult);
+            fail(
+              run,
+              'The analysis ended without a result.',
+              CLIENT_ERROR_CODES.noResult,
+              data.elapsedMs,
+            );
           break;
       }
     },

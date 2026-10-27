@@ -117,7 +117,8 @@ export function fullResultData() {
 /**
  * The recorded demo run (fixtures/replays/one-more-time-daft-punk.json) as the API replays it
  * (apps/api/src/replay/player.ts): its events without their run id and `seq` and without the
- * recorded `done`, the replay notice right after `connected`, and the result as a replay of run
+ * recorded `done`, each with its time since the run started (its own `elapsedMs`, else its
+ * `atMs`), the replay notice right after `connected`, and the result as a replay of run
  * `runId`, with the recording's date and commit. Returns the analysis stream's events, ending
  * with `complete` and `done`.
  */
@@ -149,8 +150,12 @@ export function replayedRecording(runId = "replay-run") {
     node: "replay",
   };
   const events: Array<Record<string, unknown>> = [];
-  for (const { event } of record.events as Array<{ event: Record<string, unknown> }>) {
-    const { runId: _run, seq: _seq, ...body } = event;
+  for (const { atMs, event } of record.events as Array<{
+    atMs: number;
+    event: Record<string, unknown>;
+  }>) {
+    const { runId: _run, seq: _seq, ...rest } = event;
+    const body: Record<string, unknown> = { ...rest, elapsedMs: rest.elapsedMs ?? atMs };
     if (body.type === "done") continue;
     if (body.type === "connected") {
       events.push({ ...body, threadId: runId }, notice);

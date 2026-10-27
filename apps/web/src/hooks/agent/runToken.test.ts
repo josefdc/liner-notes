@@ -13,6 +13,7 @@ import {
   isUsable,
   newRunToken,
   RUN_TOKEN_MARGIN_MS,
+  tokenKeeper,
   withRunToken,
 } from './runToken';
 import type { TurnstileApi, TurnstileRenderOptions } from './turnstile';
@@ -218,5 +219,30 @@ describe('a run token on a request', () => {
     expect(url.pathname).toBe('/api/factoids/more/stream');
     expect(url.searchParams.get('runToken')).toBe('v1.a+b/c');
     expect(url.searchParams.get('runId')).toBe('run-1');
+  });
+});
+
+describe('tokenKeeper', () => {
+  const token = (name: string) => ({ runToken: name, expiresAt: 1 });
+
+  it('holds the latest token it was given', () => {
+    const tokens = tokenKeeper();
+    expect(tokens.held()).toBeNull();
+    const first = token('a');
+    tokens.keep(first);
+    expect(tokens.held()).toBe(first);
+  });
+
+  it('stops sending a token the API refused (auth_expired), but not a newer one', () => {
+    const tokens = tokenKeeper();
+    const refused = token('a');
+    const newer = token('b');
+    tokens.keep(refused);
+    tokens.drop(refused);
+    expect(tokens.held()).toBeNull();
+    tokens.keep(newer);
+    tokens.drop(refused);
+    tokens.drop(null);
+    expect(tokens.held()).toBe(newer);
   });
 });

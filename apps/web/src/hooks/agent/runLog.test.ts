@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import recordingRaw from '../../../../../fixtures/replays/one-more-time-daft-punk.json?raw';
 import type { AgentLog } from '../../types';
-import { appendLog, droppedLines, LOG_LIMIT, type NewLog, writtenLines } from './runLog';
+import {
+  appendLog,
+  droppedLines,
+  LOG_LIMIT,
+  logsReducer,
+  NO_LOGS,
+  type NewLog,
+  newLog,
+  writtenLines,
+} from './runLog';
 
 const line = (message: string, code?: AgentLog['code'], node?: string): NewLog => ({
   id: `id-${message}-${Math.random()}`,
@@ -94,5 +103,38 @@ describe('appendLog', () => {
     expect(droppedLines(logs)).toBe(0);
     expect(writtenLines(logs)).toBe(2);
     expect(appendLog(logs, line('c')).at(-1)?.index).toBe(2);
+  });
+});
+
+describe('logsReducer', () => {
+  it('adds a line, once', () => {
+    const logs = logsReducer(NO_LOGS, { type: 'logged', log: line('a') });
+    expect(logs.map((log) => [log.message, log.index])).toEqual([['a', 0]]);
+    expect(logsReducer(logs, { type: 'logged', log: line('a') })).toBe(logs);
+  });
+
+  it.each(['started', 'reset'] as const)('starts a new log on %s', (type) => {
+    const logs = write([line('a'), line('b')]);
+    expect(logsReducer(logs, { type })).toBe(NO_LOGS);
+  });
+
+  it('keeps the log for other actions, the line of a failure included (logged apart)', () => {
+    const logs = write([line('a')]);
+    expect(logsReducer(logs, { type: 'failed', message: 'm', code: null, retryAt: null })).toBe(
+      logs,
+    );
+    expect(logsReducer(logs, { type: 'opened' })).toBe(logs);
+  });
+});
+
+describe('newLog', () => {
+  it('keeps the time since the run started only when the server sent one', () => {
+    expect(newLog('a', 'SYS-INIT', 'scout', 0)).toMatchObject({
+      message: 'a',
+      code: 'SYS-INIT',
+      node: 'scout',
+      elapsedMs: 0,
+    });
+    expect('elapsedMs' in newLog('a')).toBe(false);
   });
 });

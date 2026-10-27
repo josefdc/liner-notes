@@ -2,7 +2,7 @@
   "name": "@liner-notes/api",
   "private": true,
   "version": "0.1.0",
-  "description": "LangGraph backend for The Sonic Agent",
+  "description": "LangGraph backend for Liner Notes",
   "type": "module",
   "scripts": {
     "predev": "npm run build -w @liner-notes/contract",

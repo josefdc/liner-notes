@@ -62,3 +62,24 @@ export function withRunToken(url: string, token: RunToken): string {
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}${RUN_TOKEN_PARAM}=${encodeURIComponent(token.runToken)}`;
 }
+
+/**
+ * The latest run token a page was given: factoid requests send it again until it expires. Once
+ * the API refused it (or a stream sent with it failed) it is not sent again: the next request
+ * that needs one asks for a new one, once. No request is retried here.
+ */
+export function tokenKeeper() {
+  let held: RunToken | null = null;
+  return {
+    held: (): RunToken | null => held,
+    keep(token: RunToken) {
+      held = token;
+    },
+    /** Stops sending `token` again, unless a newer one is held already. */
+    drop(token: RunToken | null) {
+      if (token && held === token) held = null;
+    },
+  };
+}
+
+export type TokenKeeper = ReturnType<typeof tokenKeeper>;

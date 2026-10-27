@@ -9,7 +9,7 @@ import {
 } from "./mock";
 
 // DECRYPT MORE streams factoids from the model. Leaving the Player ends that stream, quietly.
-const DECRYPT = "/api/factoids/decrypt/stream";
+const DECRYPT = "/api/factoids/more/stream";
 const fixture = loadFixture("decrypt-after-model-unavailable");
 const [connected, firstFactoid] = fixture.streams[DECRYPT];
 

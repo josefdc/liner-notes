@@ -1,3 +1,4 @@
+import type { Claim, ErrorCode } from '@liner-notes/contract';
 import type { TrackData, AgentLog, Factoid, FactoidUnavailableCode } from '../../types';
 
 export interface SearchCandidate {
@@ -60,6 +61,61 @@ export interface AgentState {
    * moves to another step.
    */
   statusNote: string | null;
+  /** The facts "more facts" added to the result shown last, with their claims; null before. */
+  moreFacts: MoreFacts | null;
+}
+
+/** A fact "more facts" asked for but could not write: its place in the answer, and why. */
+export interface FailedFact {
+  /** The fact's index in the answer (the stream's `error.index`). */
+  index: number;
+  /**
+   * The stream's error code (`failed`, `rate_limited`, `budget_exhausted`…), or one this page
+   * does not know yet: the stream's codes are open (the contract's OpenErrorCode).
+   */
+  code: ErrorCode | (string & {});
+}
+
+/**
+ * The facts "more facts" added to one result, their claims and the round to ask for next.
+ * The rounds are the contract's (@liner-notes/contract/factoids).
+ */
+export interface MoreFacts {
+  /** The result they add to (moreFactsKey): its run id and track id. */
+  result: string;
+  /** The facts, in the order they came, each once (by id). */
+  factoids: Factoid[];
+  /** Their claims as the API sent them, by claim id: each once, whatever answer sent it. */
+  claims: Record<string, Claim>;
+  /** The round to ask for next: FIRST_FACTOID_ROUND, then each answer's `nextRound`. */
+  nextRound: number;
+  /** Every round has been asked: asking again would give nothing new, so no request is made. */
+  finished: boolean;
+  /** The facts of the latest answer that could not be written, by index; the others are kept. */
+  failed: FailedFact[];
+  /**
+   * The latest answer failed as a whole: an error for the whole answer that is not one of the
+   * reasons the caller is told (onUnavailable), a stream that broke, or one that stopped
+   * responding. Its round is asked again on the next click.
+   */
+  answerFailed: boolean;
+  /**
+   * The analysis run whose evidence the latest answer's facts were checked against: the stream's
+   * own run id. Null when they were written without one (the result names no run, or the API has
+   * no stored result for it), so every one of them reads as inferred.
+   */
+  runId: string | null;
+}
+
+/** How a "more facts" request is made, besides the result it is for. */
+export interface MoreFactsOptions {
+  /** Aborting it closes the stream; the promise then rejects with an AbortError. */
+  signal?: AbortSignal;
+  /**
+   * Called when the API cannot write facts now: its rate limit, a paused budget, live calls
+   * switched off, or a replayed result whose recording is no longer served.
+   */
+  onUnavailable?: (code: FactoidUnavailableCode) => void;
 }
 
 /** How a result was produced: computed live, or a recorded run replayed. */
@@ -87,19 +143,12 @@ export interface UseAgentReturn extends AgentState {
   /** Runs the last analysis again from the start (after an error). */
   retry: () => void;
   /**
-   * Stream factoids one-by-one for faster perceived speed. The stream is closed, and the
-   * promise rejects with an AbortError, when `signal` aborts or a new analysis starts.
+   * Asks for the next round of facts about `result` and keeps them, with their claims, in
+   * `moreFacts`. Resolves with the facts this answer added; once every round has been asked it
+   * resolves with none and makes no request. The stream is closed, and the promise rejects with
+   * an AbortError, when `options.signal` aborts or a new analysis starts.
    */
-  decryptMoreFactoidsStream: (
-    trackTitle: string,
-    trackArtist: string,
-    existingIds: string[],
-    onFactoid: (factoid: Factoid) => void,
-    signal?: AbortSignal,
-    onUnavailable?: (code: FactoidUnavailableCode) => void,
-    /** How the result was produced (its run.mode): more facts stay on that side. */
-    resultMode?: ResultMode,
-  ) => Promise<void>;
+  moreFactoidsStream: (result: TrackData, options?: MoreFactsOptions) => Promise<Factoid[]>;
   /** Rejects when the request fails, or when `signal` aborts it. */
   searchSuggest: (
     query: string,

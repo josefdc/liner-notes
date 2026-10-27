@@ -97,7 +97,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
     "No more facts: this result is a recording, and every fact recorded with it is shown.",
   );
   expect((await apiRequests(page)).filter((r) => r.includes("/factoids/"))).toEqual([
-    expect.stringMatching(/^stream \/api\/factoids\/decrypt\/stream\?.*&mode=replay$/),
+    expect.stringMatching(/^stream \/api\/factoids\/more\/stream\?.*&mode=replay$/),
   ]);
   expect(problems).toEqual([]);
 });
@@ -111,7 +111,7 @@ test("live_disabled is explained, and a live result carries no recording label",
     streams: {
       "/api/analyze/stream": { opens: [liveDisabled, fullResult] },
       // A live result while the budget is spent: the refusal, never recorded facts.
-      "/api/factoids/decrypt/stream": [
+      "/api/factoids/more/stream": [
         { type: "error", code: "budget_exhausted", error: "Live model calls are paused for now." },
         { type: "done" },
       ],

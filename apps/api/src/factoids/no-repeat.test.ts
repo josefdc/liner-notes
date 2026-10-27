@@ -12,10 +12,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { messagesOf } from "../agent/testing/stubLlm.js";
 import { createTestApp } from "../http/testApp.js";
 import { createFactoidsRouter } from "../http/routes/factoids.js";
-import { FACTOID_LIMITS } from "@liner-notes/contract";
+import { FACTOID_LIMITS, FACTOID_ROUNDS, FIRST_FACTOID_ROUND } from "@liner-notes/contract";
 import { LlmError } from "../llm/errors.js";
 import { EXISTING_FACTS_MAX } from "./prompt.js";
-import { nearDuplicate } from "./service.js";
+import {
+  FACTOID_FOCUSES,
+  FACTOIDS_PER_REQUEST,
+  focusesFor,
+  nearDuplicate,
+  nextRoundAfter,
+} from "./service.js";
 import {
   card,
   DEMO_TRACK,
@@ -73,7 +79,7 @@ describe("a run with five stored facts", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ ...DEMO_TRACK, runId: RUN_ID, existingFactoidIds: [] })
       .timeout(5000);
 
@@ -114,7 +120,7 @@ async function streamOf(router: Router, query: string): Promise<Array<Record<str
   const { port } = server.address() as AddressInfo;
   const body = await new Promise<string>((resolve, reject) => {
     http
-      .get(`http://127.0.0.1:${port}/api/factoids/decrypt/stream?${query}`, (res) => {
+      .get(`http://127.0.0.1:${port}/api/factoids/more/stream?${query}`, (res) => {
         let text = "";
         res.setEncoding("utf8");
         res.on("data", (chunk: string) => {
@@ -195,7 +201,7 @@ describe("fact ids and repeats across clicks", () => {
     const answers = texts.map((text) => card(text));
     const post = (router: Router, existingFactoidIds: string[]) =>
       request(createTestApp(router))
-        .post("/api/factoids/decrypt")
+        .post("/api/factoids/more")
         .send({ ...DEMO_TRACK, runId: RUN_ID, existingFactoidIds })
         .timeout(5000);
 
@@ -234,7 +240,7 @@ describe("repeats", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ ...DEMO_TRACK, runId: RUN_ID })
       .timeout(5000);
 
@@ -255,7 +261,7 @@ describe("repeats", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ ...DEMO_TRACK, runId: RUN_ID })
       .timeout(5000);
 
@@ -279,7 +285,7 @@ const THREE = [
 /** A POST for the demo track with these ids (and round, when given). */
 const postMore = (router: Router, existingFactoidIds: string[], extra: object = {}) =>
   request(createTestApp(router))
-    .post("/api/factoids/decrypt")
+    .post("/api/factoids/more")
     .send({ ...DEMO_TRACK, existingFactoidIds, ...extra })
     .timeout(5000);
 
@@ -331,10 +337,62 @@ describe("rounds", () => {
       expect(res.body.factoids).toEqual([]);
       asked.push(focusesAsked(llm));
       round = res.body.nextRound;
-      rounds.push(round);
+      rounds.push([round, res.body.roundsLeft]);
     }
     expect(asked).toEqual([[0, 1, 2], [3, 4, 5], []]);
-    expect(rounds).toEqual([1, 2, 2]);
+    expect(rounds).toEqual([
+      [1, true],
+      [2, false],
+      [2, false],
+    ]);
+  });
+
+  it("asks a round again when the client sends it back after facts that could not be written", async () => {
+    const busy = () => new LlmError("rate_limited", "factoids: 429");
+    // Click 1, round 0: the first angle is written, the other two hit the rate limit.
+    const first = routerFor({ cards: [card(THREE[0]), busy(), busy()] });
+    const one = await postMore(first.router, [], { round: 0 });
+    expect(focusesAsked(first.llm)).toEqual([0, 1, 2]);
+    expect(one.body.factoids).toHaveLength(1);
+    const kept = one.body.factoids.map((factoid: { id: string }) => factoid.id);
+
+    // Click 2: the client keeps round 0, as it does after a refusal (useAgent). The same angles
+    // are asked again, and the fact it already shows, in other case and punctuation, is dropped.
+    const again = THREE.map((text) => card(text));
+    again[0] = card(`${THREE[0].toUpperCase().replace(".", "!")}`);
+    const second = routerFor({ cards: again });
+    const two = await postMore(second.router, kept, { round: 0 });
+    expect(focusesAsked(second.llm)).toEqual([0, 1, 2]);
+    expect(two.body.factoids.map((factoid: { content: string }) => factoid.content)).toEqual([
+      THREE[1],
+      THREE[2],
+    ]);
+    expect(two.body).toMatchObject({ nextRound: 1, roundsLeft: true });
+
+    // Click 3: round 1's angles, and then none are left.
+    const third = routerFor({ cards: [null, null, null, null, null, null] });
+    const shown = [...kept, ...two.body.factoids.map((factoid: { id: string }) => factoid.id)];
+    const three = await postMore(third.router, shown, { round: 1 });
+    expect(focusesAsked(third.llm)).toEqual([3, 4, 5]);
+    expect(three.body).toMatchObject({ nextRound: 2, roundsLeft: false });
+  });
+
+  it("counts the facts the client shows only when it sends no round", async () => {
+    const shown = ["fc-000000000001", "fc-000000000002", "fc-000000000003", "fc-000000000004"];
+    const withRound = routerFor({ cards: [] });
+    await postMore(withRound.router, shown, { round: 0 });
+    expect(focusesAsked(withRound.llm)).toEqual([0, 1, 2]);
+    const withoutRound = routerFor({ cards: [] });
+    await postMore(withoutRound.router, shown);
+    expect(focusesAsked(withoutRound.llm)).toEqual([]);
+  });
+
+  it("has as many rounds as the contract tells the web, starting from its first", () => {
+    expect(Math.ceil(FACTOID_FOCUSES.length / FACTOIDS_PER_REQUEST)).toBe(FACTOID_ROUNDS);
+    expect(focusesFor(FIRST_FACTOID_ROUND)).toEqual(FACTOID_FOCUSES.slice(0, FACTOIDS_PER_REQUEST));
+    expect(focusesFor(FACTOID_ROUNDS - 1)).not.toEqual([]);
+    expect(focusesFor(FACTOID_ROUNDS)).toEqual([]);
+    expect(nextRoundAfter(FACTOID_ROUNDS - 1)).toBe(FACTOID_ROUNDS);
   });
 
   it("refuses a round that is not a whole number from 0 to 99", async () => {
@@ -421,7 +479,7 @@ describe("the prompt", () => {
         id === RUN_ID ? storedRun([evidenceItem("ev-1", "A record.")], stored) : null,
     });
     await request(createTestApp(router))
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ ...DEMO_TRACK, ...track, existingFactoidIds: [], ...extra })
       .timeout(5000);
     return messagesOf(llm.calls[0]).user;
@@ -453,7 +511,7 @@ describe("the prompt", () => {
     });
 
     const res = await request(createTestApp(router))
-      .post("/api/factoids/decrypt")
+      .post("/api/factoids/more")
       .send({ ...withoutArtist, trackId: "local-track-1", runId: RUN_ID })
       .timeout(5000);
 

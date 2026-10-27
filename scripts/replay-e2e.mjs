@@ -377,7 +377,7 @@ try {
   );
 
   // "More facts" from the recording.
-  const more = await json("/api/factoids/decrypt", {
+  const more = await json("/api/factoids/more", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -389,7 +389,7 @@ try {
   });
   console.log(`factoids: ${more.status} ${more.body.factoids?.length} recorded facts`);
   check(more.status === 200 && more.body.factoids?.length > 0, "factoids come from the recording");
-  const other = await json("/api/factoids/decrypt", {
+  const other = await json("/api/factoids/more", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -405,7 +405,7 @@ try {
 
   // The other replay paths, so an outbound call added to any of them is counted below.
   const factoidStream = await sseTypes(
-    "/api/factoids/decrypt/stream?trackTitle=One%20More%20Time&trackArtist=Daft%20Punk",
+    "/api/factoids/more/stream?trackTitle=One%20More%20Time&trackArtist=Daft%20Punk",
   );
   console.log(`factoid stream: ${factoidStream}`);
   check(/^connected( factoid)+ done$/.test(factoidStream), "the factoid stream replays them");

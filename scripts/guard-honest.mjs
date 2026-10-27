@@ -295,8 +295,8 @@ export const PROTOTYPE_PHRASES = {
     "Unexpected interference",
   ],
   exactCase: [
-    // Capitalised or upper case only: the lowercase route `/api/factoids/decrypt` (renamed by
-    // #31) is a path, not copy.
+    // Capitalised or upper case only: a lowercase `decrypt` (the factoid routes' old path, an
+    // alias since #31 renamed them) is a path, not copy.
     "\\b(?:DECRYPT(?:ING|ED)?|Decrypt(?:ing|ed)?)\\b",
     // Upper case only: `logic:` is an ordinary key or word.
     "\\bLOGIC:",

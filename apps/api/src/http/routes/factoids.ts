@@ -1,6 +1,7 @@
 /**
- * "More facts" for a track: POST /api/factoids/decrypt (three at once) and
- * GET /api/factoids/decrypt/stream (one per category, as server-sent events).
+ * "More facts" for a track: POST /api/factoids/more (three at once) and
+ * GET /api/factoids/more/stream (one per category, as server-sent events). Their old paths
+ * (DEPRECATED_FACTOIDS_PATH, ./factoidPaths.ts) answer the same for one more release.
  *
  * Live facts are written and checked by the factoid service (../../factoids/service.ts): one
  * model call per focus through the provider layer, all in one request run (at most
@@ -33,6 +34,7 @@ import {
   type LoadRun,
   nextRoundAfter,
   roundFor,
+  roundsLeftAt,
   runContext,
   writeFactoids,
 } from "../../factoids/service.js";
@@ -44,6 +46,12 @@ import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
+import {
+  DEPRECATED_FACTOIDS_PATH,
+  DEPRECATED_FACTOIDS_STREAM_PATH,
+  FACTOIDS_PATH,
+  FACTOIDS_STREAM_PATH,
+} from "./factoidPaths.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Factoids");
@@ -223,23 +231,25 @@ export function createFactoidsRouter({
   const router = Router();
 
   // =============================================================================
-  // POST /api/factoids/decrypt
+  // POST /api/factoids/more
   // =============================================================================
 
   /**
    * Generate additional obscure facts for a track
    *
-   * POST /api/factoids/decrypt
+   * POST /api/factoids/more (deprecated alias: DEPRECATED_FACTOIDS_PATH, until the next release)
    * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...",
    *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1 }
-   * Returns: { factoids: Factoid[], claims: Claim[], nextRound } - up to 3 new facts with
-   * entities, one per focus, in focus order (fewer when the model knows fewer, or when one only
-   * repeats a fact the client or the run already has), each with its checked claim (`claimId`).
+   * Returns: { factoids: Factoid[], claims: Claim[], nextRound, roundsLeft } - up to 3 new facts
+   * with entities, one per focus, in focus order (fewer when the model knows fewer, or when one
+   * only repeats a fact the client or the run already has), each with its checked claim
+   * (`claimId`).
    * `runId`, optional, names the analysis run the facts add to: its evidence is what they may
    * cite, and its facts are not repeated. Ids are new: never one of the existing ids or the run's.
    * `round`, optional, is the `nextRound` of the last answer: each round asks about three other
    * angles (the client's ids count too, for a client that sends no round), and once every angle
-   * has been asked the answer is an empty list, with no model call: nothing new.
+   * has been asked the answer is an empty list, with no model call: nothing new. `roundsLeft`
+   * says whether asking for `nextRound` can bring new facts.
    * A malformed body is a 400 `invalid_input`. When no fact could be written because every call
    * failed: the model's rate limit a 429 `rate_limited`; the budget or the call cap a 503
    * `budget_exhausted`; any other failure a 500 `failed`. A track with no recording while live
@@ -255,7 +265,7 @@ export function createFactoidsRouter({
    * each call sends.
    */
   router.post(
-    "/api/factoids/decrypt",
+    [FACTOIDS_PATH, DEPRECATED_FACTOIDS_PATH],
     asyncRoute(async (req, res) => {
       const parsed = DecryptBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -336,6 +346,7 @@ export function createFactoidsRouter({
         factoids: written.map((outcome) => outcome.factoid),
         claims: written.map((outcome) => outcome.claim),
         nextRound: result.nextRound,
+        roundsLeft: roundsLeftAt(result.nextRound),
         meta: {
           trackId: parsed.data.trackId,
           ...(result.model ? { model: result.model } : {}),
@@ -346,23 +357,27 @@ export function createFactoidsRouter({
   );
 
   // =============================================================================
-  // GET /api/factoids/decrypt/stream
+  // GET /api/factoids/more/stream
   // =============================================================================
 
+  // The stream's paths: the new one, and the old one for one more release.
+  const streamPaths = [FACTOIDS_STREAM_PATH, DEPRECATED_FACTOIDS_STREAM_PATH];
+
   // HEAD gets the stream's headers only; it never asks the model.
-  router.head("/api/factoids/decrypt/stream", eventStreamHead);
+  router.head(streamPaths, eventStreamHead);
 
   /**
    * Stream factoids via SSE, each with its checked claim
    *
-   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...&round=1
+   * GET /api/factoids/more/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...&round=1
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
    * @liner-notes/contract with `seq` and `runId`: the analysis run the request names when its
    * stored result is what the facts add to (found, and about this track), else null, so a client
    * never ties the facts to a run they did not use:
-   * - { type: "connected", nextRound? }: `nextRound`, for live facts, is the round to ask for
-   *   next (`round`, as on the POST route); once every angle has been asked, nothing follows
-   *   but `done`, and no model is called
+   * - { type: "connected", nextRound?, roundsLeft? }: `nextRound`, for live facts, is the round
+   *   to ask for next (`round`, as on the POST route), and `roundsLeft` whether asking for it can
+   *   bring new facts; once every angle has been asked, nothing follows but `done`, and no model
+   *   is called
    * - { type: "factoid", data: Factoid, claim?: Claim }: one per focus, in focus order, sent
    *   once all of them have been written and checked; `data.claimId` is `claim.id`
    * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
@@ -388,7 +403,7 @@ export function createFactoidsRouter({
    * the client disconnects, the calls in flight are stopped and nothing more is written.
    */
   router.get(
-    "/api/factoids/decrypt/stream",
+    streamPaths,
     asyncRoute(async (req, res) => {
       const parsed = StreamQuerySchema.safeParse(req.query);
       // Read before the stream opens: its envelope names the run only when the facts use it.
@@ -440,7 +455,7 @@ export function createFactoidsRouter({
       stream.send({
         type: "connected",
         timestamp: new Date().toISOString(),
-        ...(nextRound !== undefined ? { nextRound } : {}),
+        ...(nextRound !== undefined ? { nextRound, roundsLeft: roundsLeftAt(nextRound) } : {}),
       });
 
       if (replay.kind === "replay") {

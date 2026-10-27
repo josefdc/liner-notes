@@ -22,6 +22,10 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "roundsLeft": {
+            "description": "Whether asking for nextRound can bring new facts; absent for recorded facts",
+            "type": "boolean"
           }
         },
         "required": ["type", "runId", "seq"]
@@ -150,6 +154,10 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "roundsLeft": {
+            "description": "Whether asking for nextRound can bring new facts; absent for recorded facts",
+            "type": "boolean"
           }
         },
         "required": ["type", "runId", "seq"],

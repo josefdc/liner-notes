@@ -54,7 +54,7 @@ async function moreFacts(
     createFactoidsRouter({ llm, loadRun: (id) => (id === RUN_ID ? storedRun(pack) : null) }),
   );
   const res = await request(app)
-    .post("/api/factoids/decrypt")
+    .post("/api/factoids/more")
     .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], ...body })
     .timeout(5000);
   const claims: Claim[] = res.body.claims ?? [];

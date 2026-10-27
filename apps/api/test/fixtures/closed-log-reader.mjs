@@ -97,7 +97,7 @@ socket.on("data", (chunk) => {
   received += chunk;
 });
 socket.write(
-  "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+  "POST /api/factoids/more HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
     "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
 );
 const interim = await new Promise((resolve) => {

@@ -183,7 +183,7 @@ export type AnalyzeStreamEvent = z.infer<typeof AnalyzeStreamEvent>;
 export type AnalyzeStreamEventType = AnalyzeStreamEvent["type"];
 
 // =============================================================================
-// Factoid stream: GET /api/factoids/decrypt/stream
+// Factoid stream: GET /api/factoids/more/stream
 // =============================================================================
 
 const factoidEnvelope = {
@@ -202,6 +202,10 @@ export const FactoidStreamEvent = z.discriminatedUnion("type", [
       .min(0)
       .optional()
       .describe("The round to ask for next (the round query parameter); absent for recorded facts"),
+    roundsLeft: z
+      .boolean()
+      .optional()
+      .describe("Whether asking for nextRound can bring new facts; absent for recorded facts"),
   }),
   factoidEvent("factoid", { data: Factoid, claim: Claim.optional() }),
   z.object({ type: z.literal("heartbeat"), runId: factoidEnvelope.runId }),

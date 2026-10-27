@@ -102,7 +102,7 @@ export const SearchSuggestResponse = z.object({
     .optional(),
 });
 
-/** POST /api/factoids/decrypt */
+/** POST /api/factoids/more (rounds: ./factoids.ts) */
 export const FactoidsRequest = z.object({
   trackId: z.string().min(1),
   trackTitle: z.string().min(1),
@@ -127,6 +127,10 @@ export const FactoidsResponse = z.object({
     .min(0)
     .optional()
     .describe("The round to ask for next (FactoidsRequest.round); absent for recorded facts"),
+  roundsLeft: z
+    .boolean()
+    .optional()
+    .describe("Whether asking for nextRound can bring new facts; absent for recorded facts"),
 });
 
 // =============================================================================

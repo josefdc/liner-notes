@@ -15,6 +15,10 @@
       "types": "./dist/picker.d.ts",
       "default": "./dist/picker.js"
     },
+    "./factoids": {
+      "types": "./dist/factoids.d.ts",
+      "default": "./dist/factoids.js"
+    },
     "./audio-features.schema.json": "./schemas/audio-features.schema.json"
   },
   "files": [

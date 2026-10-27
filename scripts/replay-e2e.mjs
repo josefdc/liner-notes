@@ -114,6 +114,12 @@ const env = {
   RATE_LIMIT_GLOBAL_MAX: "",
   SEARCH_RATE_LIMIT_WINDOW_MS: "",
   SEARCH_RATE_LIMIT_MAX: "",
+  // Development without a Turnstile secret: run tokens come with the bypass ("dev-bypass").
+  TURNSTILE_SECRET_KEY: "",
+  TURNSTILE_BYPASS: "",
+  TURNSTILE_EXPECTED_HOSTNAME: "",
+  RUN_TOKEN_SECRET: "",
+  SSE_HOLD_MS: "",
   LANGSMITH_TRACING: "",
   LANGSMITH_TRACING_V2: "",
   LANGCHAIN_TRACING_V2: "",
@@ -220,23 +226,52 @@ const base = `http://127.0.0.1:${port}`;
 // Imported once the API's prestart has built the contract.
 const { AnalyzeStreamEvent, RunResponse, runIssues } = await import("@liner-notes/contract");
 
-/** The events of one analysis stream (heartbeats left out). */
-async function stream(query) {
-  const res = await fetch(`${base}/api/analyze/stream?query=${encodeURIComponent(query)}`, {
+/** Every run token the API issued here, so the log can be checked for them. */
+const issuedTokens = [];
+
+/** A run token, as the web page gets one: POST /api/runs with the development bypass. */
+async function runToken() {
+  const res = await fetch(`${base}/api/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ turnstileToken: "dev-bypass" }),
     signal: timeout(),
   });
+  if (res.status !== 200) throw new Error(`POST /api/runs answered ${res.status}`);
+  const { runToken: token } = await res.json();
+  issuedTokens.push(token);
+  return token;
+}
+
+/**
+ * `path` with a run token in its query, on the routes that require one: `token`, or a new one.
+ * A path that has one already is left as it is.
+ */
+async function tokened(path, token) {
+  if (!/^\/api\/(?:analyze|factoids)(?:[/?]|$)/.test(path) || path.includes("runToken=")) {
+    return path;
+  }
+  const value = encodeURIComponent(token ?? (await runToken()));
+  return `${path}${path.includes("?") ? "&" : "?"}runToken=${value}`;
+}
+
+/** The events of one analysis stream (heartbeats left out), and the run token it started with. */
+async function stream(query) {
+  const token = await runToken();
+  const path = await tokened(`/api/analyze/stream?query=${encodeURIComponent(query)}`, token);
+  const res = await fetch(`${base}${path}`, { signal: timeout() });
   const text = await res.text();
   const events = text
     .split("\n")
     .filter((line) => line.startsWith("data:"))
     .map((line) => JSON.parse(line.slice(5)))
     .filter((event) => event.type !== "heartbeat");
-  return { text, events };
+  return { text, events, token };
 }
 
 /** The event types (with error codes) of any event stream, heartbeats left out. */
 async function sseTypes(path) {
-  const text = await (await fetch(`${base}${path}`, { signal: timeout() })).text();
+  const text = await (await fetch(`${base}${await tokened(path)}`, { signal: timeout() })).text();
   return text
     .split("\n")
     .filter((line) => line.startsWith("data:"))
@@ -247,7 +282,7 @@ async function sseTypes(path) {
 }
 
 async function json(path, init) {
-  const res = await fetch(`${base}${path}`, { ...init, signal: timeout() });
+  const res = await fetch(`${base}${await tokened(path)}`, { ...init, signal: timeout() });
   return { status: res.status, text: await res.clone().text(), body: await res.json() };
 }
 
@@ -260,9 +295,8 @@ async function streamThenClose(query, count) {
   const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const events = [];
   try {
-    const res = await fetch(`${base}/api/analyze/stream?query=${encodeURIComponent(query)}`, {
-      signal: controller.signal,
-    });
+    const path = await tokened(`/api/analyze/stream?query=${encodeURIComponent(query)}`);
+    const res = await fetch(`${base}${path}`, { signal: controller.signal });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let text = "";
@@ -430,19 +464,38 @@ try {
     postedOther.status === 503 && postedOther.body.code === "live_disabled",
     "POST /api/analyze refuses a query with no recording",
   );
-  const resumed = await json("/api/analyze/resume", {
+  // A resume of the A4 run, with the token it started with (only that token resumes it).
+  const resumed = await json(await tokened("/api/analyze/resume", typed.token), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ threadId: "some-thread", selectedTrackId: TRACK_ID }),
+    body: JSON.stringify({ threadId: typedRun, selectedTrackId: TRACK_ID }),
   });
   check(
     resumed.status === 503 && resumed.body.code === "live_disabled",
     "POST /api/analyze/resume is refused",
   );
   const resumeStream = await sseTypes(
-    `/api/analyze/stream/resume?threadId=some-thread&selectedTrackId=${TRACK_ID}`,
+    await tokened(
+      `/api/analyze/stream/resume?threadId=${typedRun}&selectedTrackId=${TRACK_ID}`,
+      typed.token,
+    ),
   );
   check(resumeStream === "error:live_disabled done", "the resume stream is refused");
+
+  // Run tokens: none, or one that already started its run, is a 401 before anything runs.
+  const untokened = await fetch(
+    `${base}/api/analyze/stream?query=${encodeURIComponent(SHOWCASE_QUERY)}`,
+    { signal: timeout() },
+  );
+  const reused = await fetch(
+    `${base}${await tokened(`/api/analyze/stream?query=${encodeURIComponent(SHOWCASE_QUERY)}`, typed.token)}`,
+    { signal: timeout() },
+  );
+  console.log(`run tokens: none ${untokened.status}, reused ${reused.status}`);
+  check(
+    untokened.status === 401 && reused.status === 401,
+    "a stream without a run token, or with a used one, is refused",
+  );
 
   // A5: Stop. The replay is closed after connected, the replay notice and its first step.
   const read = await streamThenClose(SHOWCASE_QUERY, 3);
@@ -573,6 +626,11 @@ const dummySecrets = Object.entries(env)
 check(
   dummySecrets.every((secret) => !logText.includes(secret)),
   "log: none of the dummy keys or the endpoint",
+);
+check(
+  issuedTokens.length > 0 && issuedTokens.every((token) => !logText.includes(token)),
+  "log: none of the run tokens",
+  `${issuedTokens.length} issued`,
 );
 
 // The run report over the database the API wrote (two days, in case the runs crossed midnight).

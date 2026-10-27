@@ -6,9 +6,15 @@ import {
   developmentOrigins,
   readSettings,
   type Settings,
+  sseHoldMs,
 } from "./settings.js";
 
 const KEYS = { SPOTIFY_CLIENT_ID: "x", SPOTIFY_CLIENT_SECRET: "x" };
+/** The secrets production cannot start without; fake values, for tests only. */
+const PRODUCTION_SECRETS = {
+  RUN_TOKEN_SECRET: "test-only-run-token-secret-of-at-least-32-bytes",
+  TURNSTILE_SECRET_KEY: "test-only-turnstile-secret",
+};
 
 function settingsOf(env: NodeJS.ProcessEnv): Settings {
   const result = readSettings(env);
@@ -103,7 +109,7 @@ describe("readSettings", () => {
   });
 
   it("allows no origin in production when CORS_ORIGINS is not set, with a warning", () => {
-    const result = readSettings({ ...KEYS, NODE_ENV: "production" });
+    const result = readSettings({ ...KEYS, ...PRODUCTION_SECRETS, NODE_ENV: "production" });
     expect(result.ok && result.settings.http.corsOrigins).toEqual([]);
     expect(result.ok && result.warnings.join(" ")).toContain("CORS_ORIGINS");
   });
@@ -111,6 +117,7 @@ describe("readSettings", () => {
   it("reads CORS_ORIGINS as a comma-separated list of exact origins", () => {
     const env = {
       ...KEYS,
+      ...PRODUCTION_SECRETS,
       CORS_ORIGINS: " https://app.example , http://localhost:3110,",
       NODE_ENV: "production",
     };
@@ -167,6 +174,122 @@ describe("readSettings", () => {
     expect(errorsOf({ ...KEYS, SHS_API_KEY: " abc" })).toContain("SHS_API_KEY");
     // The message names the variable, never its value.
     expect(errorsOf({ ...KEYS, DISCOGS_TOKEN: "secret value" })).not.toContain("secret");
+  });
+});
+
+describe("run token and Turnstile settings", () => {
+  const production = { ...KEYS, NODE_ENV: "production" };
+
+  it("does not start in production without the Turnstile and run token secrets", () => {
+    const errors = errorsOf(production);
+    expect(errors).toContain("RUN_TOKEN_SECRET is required when NODE_ENV=production");
+    expect(errors).toContain("TURNSTILE_SECRET_KEY is required when NODE_ENV=production");
+    expect(errorsOf({ ...production, RUN_TOKEN_SECRET: PRODUCTION_SECRETS.RUN_TOKEN_SECRET })).toBe(
+      "TURNSTILE_SECRET_KEY is required when NODE_ENV=production",
+    );
+    expect(
+      errorsOf({ ...production, TURNSTILE_SECRET_KEY: PRODUCTION_SECRETS.TURNSTILE_SECRET_KEY }),
+    ).toBe("RUN_TOKEN_SECRET is required when NODE_ENV=production");
+    // Blank is unset, and REPLAY_MODE=only needs them too.
+    expect(
+      errorsOf({ NODE_ENV: "production", REPLAY_MODE: "only", RUN_TOKEN_SECRET: " " }),
+    ).toContain("RUN_TOKEN_SECRET is required");
+    expect(settingsOf({ ...production, ...PRODUCTION_SECRETS }).runTokens).toEqual({
+      secret: PRODUCTION_SECRETS.RUN_TOKEN_SECRET,
+      turnstileSecret: PRODUCTION_SECRETS.TURNSTILE_SECRET_KEY,
+      expectedHostname: null,
+      bypass: false,
+    });
+  });
+
+  it("refuses a run token secret shorter than 32 bytes, anywhere", () => {
+    const short = "x".repeat(31);
+    expect(errorsOf({ ...KEYS, RUN_TOKEN_SECRET: short })).toContain(
+      "RUN_TOKEN_SECRET: expected at least 32 bytes",
+    );
+    expect(errorsOf({ ...production, ...PRODUCTION_SECRETS, RUN_TOKEN_SECRET: short })).toContain(
+      "RUN_TOKEN_SECRET: expected at least 32 bytes",
+    );
+    expect(settingsOf({ ...KEYS, RUN_TOKEN_SECRET: "x".repeat(32) }).runTokens.secret).toBe(
+      "x".repeat(32),
+    );
+  });
+
+  it("bypasses Turnstile only outside production and without a Turnstile secret", () => {
+    expect(settingsOf(KEYS).runTokens).toEqual({
+      secret: null,
+      turnstileSecret: null,
+      expectedHostname: null,
+      bypass: true,
+    });
+    expect(settingsOf({ ...KEYS, TURNSTILE_BYPASS: "1" }).runTokens.bypass).toBe(true);
+    expect(
+      settingsOf({ ...KEYS, TURNSTILE_SECRET_KEY: PRODUCTION_SECRETS.TURNSTILE_SECRET_KEY })
+        .runTokens.bypass,
+    ).toBe(false);
+    expect(settingsOf({ ...production, ...PRODUCTION_SECRETS }).runTokens.bypass).toBe(false);
+  });
+
+  it("refuses TURNSTILE_BYPASS=1 in production or with a Turnstile secret", () => {
+    expect(errorsOf({ ...production, ...PRODUCTION_SECRETS, TURNSTILE_BYPASS: "1" })).toBe(
+      "TURNSTILE_BYPASS=1 is not allowed when NODE_ENV=production",
+    );
+    expect(
+      errorsOf({
+        ...KEYS,
+        TURNSTILE_SECRET_KEY: PRODUCTION_SECRETS.TURNSTILE_SECRET_KEY,
+        TURNSTILE_BYPASS: "1",
+      }),
+    ).toContain("TURNSTILE_BYPASS=1 is not allowed with TURNSTILE_SECRET_KEY set");
+    // Production without the secrets is refused whatever TURNSTILE_BYPASS says.
+    expect(errorsOf({ ...production, TURNSTILE_BYPASS: "1" })).toContain(
+      "TURNSTILE_SECRET_KEY is required when NODE_ENV=production",
+    );
+    expect(errorsOf({ ...KEYS, TURNSTILE_BYPASS: "yes" })).toContain("TURNSTILE_BYPASS");
+    expect(
+      settingsOf({ ...production, ...PRODUCTION_SECRETS, TURNSTILE_BYPASS: "0" }),
+    ).toBeTruthy();
+  });
+
+  it("reads TURNSTILE_EXPECTED_HOSTNAME, and warns in production without it", () => {
+    const named = settingsOf({ ...KEYS, TURNSTILE_EXPECTED_HOSTNAME: " Liner.Example " });
+    expect(named.runTokens.expectedHostname).toBe("liner.example");
+    for (const value of ["https://liner.example", "liner.example:443", "liner.example/x"]) {
+      expect(errorsOf({ ...KEYS, TURNSTILE_EXPECTED_HOSTNAME: value })).toContain(
+        "TURNSTILE_EXPECTED_HOSTNAME",
+      );
+    }
+    const result = readSettings({ ...production, ...PRODUCTION_SECRETS });
+    expect(result.ok && result.warnings.join(" ")).toContain("TURNSTILE_EXPECTED_HOSTNAME");
+  });
+
+  it("names the secrets in its errors, never their values", () => {
+    const secret = "short-secret-value";
+    const errors = errorsOf({
+      ...production,
+      RUN_TOKEN_SECRET: secret,
+      TURNSTILE_SECRET_KEY: "has a space",
+    });
+    expect(errors).toContain("RUN_TOKEN_SECRET");
+    expect(errors).toContain("TURNSTILE_SECRET_KEY");
+    expect(errors).not.toContain(secret);
+    expect(errors).not.toContain("has a space");
+  });
+
+  it("refuses SSE_HOLD_MS in production, and reads it as 0 there whatever its value", () => {
+    expect(errorsOf({ ...production, ...PRODUCTION_SECRETS, SSE_HOLD_MS: "130000" })).toBe(
+      "SSE_HOLD_MS is not allowed when NODE_ENV=production: it is for tests",
+    );
+    expect(settingsOf({ ...production, ...PRODUCTION_SECRETS, SSE_HOLD_MS: "0" })).toBeTruthy();
+    expect(sseHoldMs({ NODE_ENV: "production", SSE_HOLD_MS: "130000" })).toBe(0);
+
+    expect(settingsOf({ ...KEYS, SSE_HOLD_MS: "130000" })).toBeTruthy();
+    expect(sseHoldMs({ SSE_HOLD_MS: "130000" })).toBe(130_000);
+    expect(sseHoldMs({})).toBe(0);
+    for (const value of ["-1", "1.5", "600001", "soon"]) {
+      expect(errorsOf({ ...KEYS, SSE_HOLD_MS: value })).toContain("SSE_HOLD_MS");
+      expect(sseHoldMs({ SSE_HOLD_MS: value })).toBe(0);
+    }
   });
 });
 
@@ -264,12 +387,11 @@ describe("language model settings", () => {
   });
 
   it("refuses cassettes in production", () => {
-    expect(errorsOf({ ...KEYS, NODE_ENV: "production", LLM_CASSETTE: "replay" })).toContain(
+    const production = { ...KEYS, ...PRODUCTION_SECRETS, NODE_ENV: "production" };
+    expect(errorsOf({ ...production, LLM_CASSETTE: "replay" })).toContain(
       "LLM_CASSETTE=replay is not allowed",
     );
-    expect(settingsOf({ ...KEYS, NODE_ENV: "production", LLM_CASSETTE: "off" }).llm.cassette).toBe(
-      "off",
-    );
+    expect(settingsOf({ ...production, LLM_CASSETTE: "off" }).llm.cassette).toBe("off");
   });
 
   it("names variables in errors, never their values", () => {

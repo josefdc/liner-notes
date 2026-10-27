@@ -41,6 +41,7 @@ import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun, listRunEvents, withoutPreviewUrls } from "../../store/runs.js";
 import { SqliteStore } from "../../store/store.js";
 import { createApp } from "../app.js";
+import { testAuth, withRunToken } from "../testApp.js";
 import { unstoredStreamCount } from "./analyze.js";
 
 const TRACK_ID = "0RunsRouteTestTrack001";
@@ -186,6 +187,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
 type Event = { type: string; seq?: number; [key: string]: unknown };
 
 const app = createApp({
+  ...testAuth,
   http: {
     corsOrigins: ["http://localhost:3110"],
     trustProxy: 0,
@@ -214,9 +216,14 @@ async function sse(path: string): Promise<Event[]> {
     .map((line) => JSON.parse(line.slice("data: ".length)) as Event);
 }
 
-const streamPath = (query: string) => `/api/analyze/stream?query=${encodeURIComponent(query)}`;
+// Each analysis with a run token of its own; a resume with the token its run started with.
+const streamPath = (query: string) =>
+  withRunToken(`/api/analyze/stream?query=${encodeURIComponent(query)}`);
 const resumePath = (threadId: string, trackId: string) =>
-  `/api/analyze/stream/resume?threadId=${threadId}&selectedTrackId=${trackId}`;
+  withRunToken(
+    `/api/analyze/stream/resume?threadId=${threadId}&selectedTrackId=${trackId}`,
+    threadId,
+  );
 
 /** Runs a streamed analysis to its end; returns its run id and messages. */
 async function analyze(query: string): Promise<{ runId: string; events: Event[] }> {
@@ -516,7 +523,9 @@ describe("runs routes", () => {
   });
 
   it("stores the resume of a run paused by POST as the run's first stream", async () => {
-    const posted = await request(app).post("/api/analyze").send({ query: "ambiguous posted" });
+    const posted = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "ambiguous posted" });
     expect(posted.body.status).toBe("interrupted");
     const runId = posted.body.threadId as string;
     const resumed = await sse(resumePath(runId, CHOICE_B));
@@ -526,7 +535,9 @@ describe("runs routes", () => {
   });
 
   it("stores the result of a POST analysis", async () => {
-    const res = await request(app).post("/api/analyze").send({ query: "posted query" });
+    const res = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "posted query" });
     expect(res.status).toBe(200);
     const stored = await request(app).get(`/api/runs/${res.body.threadId}`);
     expect(stored.status).toBe(200);
@@ -536,7 +547,9 @@ describe("runs routes", () => {
 
   it("fails a POST analysis whose result fails the contract, as the stream does", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await request(app).post("/api/analyze").send({ query: "badresult posted" });
+    const res = await request(app)
+      .post(withRunToken("/api/analyze"))
+      .send({ query: "badresult posted" });
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ success: false, code: "failed" });
     const [run] = getDb().prepare("SELECT run_id FROM runs").pluck().all() as string[];

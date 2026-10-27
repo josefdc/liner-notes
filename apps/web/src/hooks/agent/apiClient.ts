@@ -69,3 +69,55 @@ export async function fetchReplays(): Promise<ReplayTrack[]> {
   const result = await response.json();
   return Array.isArray(result?.replays) ? result.replays.filter(isReplayTrack) : [];
 }
+
+/** A run token (POST /api/runs) and when it expires, in milliseconds since the epoch. */
+export interface RunToken {
+  runToken: string;
+  expiresAt: number;
+}
+
+/**
+ * A request the API refused: its code and message (a JSON error), or the app's own code when
+ * the API could not be reached or gave no answer this page can read.
+ */
+export class RunTokenError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+  ) {
+    super(message);
+    this.name = 'RunTokenError';
+  }
+}
+
+/**
+ * Asks the API for a run token, with the token of a passed Turnstile check (or the development
+ * bypass's). Rejects with a RunTokenError carrying the API's code and message when it refuses,
+ * and as fetch does when `signal` aborts the request.
+ */
+export async function requestRunToken(
+  turnstileToken: string,
+  signal?: AbortSignal,
+): Promise<RunToken> {
+  const response = await fetch(`${API_BASE_URL}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turnstileToken }),
+    signal,
+  });
+  const body: unknown = await response.json().catch(() => null);
+  const fields = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new RunTokenError(
+      typeof fields.error === 'string'
+        ? fields.error
+        : `Run token refused (HTTP ${response.status})`,
+      typeof fields.code === 'string' ? fields.code : null,
+    );
+  }
+  const expiresAt = typeof fields.expiresAt === 'string' ? Date.parse(fields.expiresAt) : NaN;
+  if (typeof fields.runToken !== 'string' || fields.runToken === '' || Number.isNaN(expiresAt)) {
+    throw new RunTokenError('The run token answer could not be read', null);
+  }
+  return { runToken: fields.runToken, expiresAt };
+}

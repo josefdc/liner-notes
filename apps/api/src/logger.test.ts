@@ -95,6 +95,27 @@ describe("scrub", () => {
       "https://ws.audioscrobbler.com/2.0/?method=track.getTopTags&api_key=[redacted]&format=json",
     ],
     ["credentials in a URL", "https://user:pw@db.example/x", "https://[redacted]@db.example/x"],
+    [
+      "a run token in a URL",
+      "GET /api/analyze/stream?query=Hurt&runToken=v1.eyJ0IjoiYSJ9.c2ln_-1 failed",
+      "GET /api/analyze/stream?query=Hurt&runToken=[redacted] failed",
+    ],
+    [
+      "a run token first in a query, in any spelling",
+      "/api/factoids/more?run_token=v1.a.b&x=1 and ?RUN-TOKEN=v1.c.d",
+      "/api/factoids/more?run_token=[redacted]&x=1 and ?RUN-TOKEN=[redacted]",
+    ],
+    ["a run token pair", "runToken: v1.eyJ0IjoiYSJ9.c2ln", "runToken: [redacted]"],
+    [
+      "run and Turnstile tokens in JSON",
+      '{"runToken":"v1.eyJ0IjoiYSJ9.c2ln","turnstileToken":"0.AbC-dEf_123"}',
+      '{"runToken":[redacted],"turnstileToken":[redacted]}',
+    ],
+    [
+      "a Turnstile token in a URL or a pair",
+      "?turnstile_token=0.AbC&a=1 turnstile-token=0.XyZ",
+      "?turnstile_token=[redacted]&a=1 turnstile-token=[redacted]",
+    ],
     ["a configured key", `failed with ${KEY}`, "failed with [redacted]"],
     [
       "the configured endpoint",
@@ -418,6 +439,8 @@ describe("a log call", () => {
       clientPassword: "p-6",
       key: "k-7",
       spotifyPreviewUrl: "https://e.dzcdn.net/x",
+      runToken: "v1.a.b",
+      turnstileToken: "0.x",
       inputTokens: 900,
       tokenCount: 3,
       cacheKey: "track:1",
@@ -432,6 +455,8 @@ describe("a log call", () => {
       "clientPassword",
       "key",
       "spotifyPreviewUrl",
+      "runToken",
+      "turnstileToken",
     ]) {
       expect(entry[name], name).toBe("[redacted]");
     }

@@ -27,9 +27,11 @@ const MAX_LOGGED_KEYS = 1000;
  *   `same-site` request is refused too: a site ignores ports, so any other page on localhost
  *   (or a sibling subdomain) is the same site.
  *
- * A request with neither header (curl, server to server) is allowed. The web app's own requests
- * pass: its cross-origin fetches and EventSources send its listed origin, and same-origin GETs
- * send no Origin and `Sec-Fetch-Site: same-origin`.
+ * A request with neither header (curl, server to server) is allowed, and so is one a browser
+ * marks `Sec-Fetch-Site: same-origin` (a page cannot set that header): the page is served from
+ * the API's own origin, whatever the Origin it sends (a same-origin POST, such as POST
+ * /api/runs, sends one). The web app's own requests pass: its cross-origin fetches and
+ * EventSources send its listed origin, and its same-origin requests are marked so.
  */
 export function listedOriginsOnly(
   allowedOrigins: readonly string[],
@@ -54,9 +56,11 @@ export function listedOriginsOnly(
     const origin = req.headers.origin;
     const site = req.headers["sec-fetch-site"];
     const refused =
-      origin !== undefined
-        ? !allowed.has(origin)
-        : site !== undefined && !SAME_ORIGIN_SITES.has(site);
+      site === "same-origin"
+        ? false
+        : origin !== undefined
+          ? !allowed.has(origin)
+          : site !== undefined && !SAME_ORIGIN_SITES.has(site);
     if (!refused) {
       next();
       return;

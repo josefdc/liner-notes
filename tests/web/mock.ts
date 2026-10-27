@@ -81,6 +81,8 @@ type MockWindow = {
     log: string[];
     streamLog: string[];
     aborted: string[];
+    runTokens: string[];
+    refused: string[];
     release: (name: string) => void;
   };
 };
@@ -88,6 +90,34 @@ type MockWindow = {
 /** API requests the app has made so far ("fetch <path>" or "stream <path>?<query>"). */
 export function apiRequests(page: Page) {
   return page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
+}
+
+/**
+ * The run tokens the mocked API issued so far (POST /api/runs), and the streams it refused for
+ * want of one of them ("<path>?<query>", the token left out).
+ */
+export function runTokens(page: Page) {
+  return page.evaluate(() => {
+    const { runTokens: issued, refused } = (window as unknown as MockWindow).__mockApi;
+    return { issued, refused };
+  });
+}
+
+/**
+ * Answers POST /api/runs with a run token, as the API does, for a test that routes the API's
+ * other requests by hand instead of installing the mocked API.
+ */
+export async function routeRunTokens(page: Page) {
+  let issued = 0;
+  await page.route("**/api/runs", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        runToken: `routed-run-token-${++issued}`,
+        expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      },
+    }),
+  );
 }
 
 /** Suggestion requests the app aborted so far ("<path>?query=<query>"). */

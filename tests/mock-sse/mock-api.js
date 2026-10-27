@@ -35,8 +35,12 @@
 //                                      by listeners added with addEventListener(name)
 //   { "$unchecked": {event} }          sends an event the contract does not accept (an
 //                                      unknown type, an older server's event) as a data message
+// POST /api/runs issues run tokens ("mock-run-token-1", "-2"…, listed in
+// `window.__mockApi.runTokens`), as the API does once Turnstile is passed. A stream on an analysis
+// or factoid path opened without one of them fails as the API's 401 does (the EventSource gives
+// up), and is recorded in `window.__mockApi.refused`.
 // Every API request (any URL whose path starts with /api/) is recorded in
-// `window.__mockApi.log`. What each stream does is recorded in `window.__mockApi.streamLog`
+// `window.__mockApi.log`, without its run token (the token is checked instead). What each stream does is recorded in `window.__mockApi.streamLog`
 // as "<path> open", "<path> <event type>", "<path> closed" (by the app), "<path> ended"
 // (the events ran out) or "<path> reconnect".
 // Like a real EventSource, a stream that ends while the app has not closed it reconnects to
@@ -50,8 +54,19 @@
   config.log = [];
   config.streamLog = [];
   config.aborted = [];
+  config.runTokens = [];
+  config.refused = [];
   const isApi = (url) => new URL(url, location.href).pathname.startsWith("/api/");
   const pathOf = (url) => new URL(url, location.href).pathname;
+  // The routes that require a run token, as the API's gate.
+  const needsToken = (url) => /^\/api\/(?:analyze|factoids)(?:\/|$)/i.test(pathOf(url));
+  const tokenOf = (url) => new URL(url, location.href).searchParams.get("runToken");
+  // The query as logged: the run token left out, every other parameter as sent.
+  const loggedSearch = (url) => {
+    const parts = new URL(url, location.href).search.slice(1).split("&");
+    const kept = parts.filter((part) => part !== "" && !part.startsWith("runToken="));
+    return kept.length > 0 ? `?${kept.join("&")}` : "";
+  };
 
   const released = new Set();
   const waiting = new Map();
@@ -185,6 +200,14 @@
       if (run) return json(run);
       return json({ success: false, code: "not_found", error: "Not found." }, 404);
     }
+    if (pathOf(url) === "/api/runs" && (init?.method ?? "GET").toUpperCase() === "POST") {
+      const runToken = `mock-run-token-${config.runTokens.length + 1}`;
+      config.runTokens.push(runToken);
+      const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
+      return new Response(JSON.stringify({ success: true, runToken, expiresAt }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     if (pathOf(url) === "/api/replays") {
       return new Response(JSON.stringify({ success: true, replays: config.replays ?? [] }), {
         headers: { "Content-Type": "application/json" },
@@ -216,9 +239,12 @@
 
     connect() {
       const { path } = this;
-      config.log.push(`stream ${path}${new URL(this.url, location.href).search}`);
+      config.log.push(`stream ${path}${loggedSearch(this.url)}`);
       config.streamLog.push(`${path} open`);
-      const events = eventsFor(path);
+      // No token the mock issued: the API answers 401, which an EventSource cannot read.
+      const refused = needsToken(this.url) && !config.runTokens.includes(tokenOf(this.url));
+      if (refused) config.refused.push(`${path}${loggedSearch(this.url)}`);
+      const events = refused ? undefined : eventsFor(path);
       let index = 0;
       setTimeout(() => {
         if (this.readyState === 2) return;

@@ -28,6 +28,27 @@ export interface HttpSettings {
 }
 
 /**
+ * Run tokens (http/runToken.ts) and the Turnstile check that issues them (http/turnstile.ts).
+ * The secrets are never logged or printed.
+ */
+export interface RunTokenSettings {
+  /**
+   * RUN_TOKEN_SECRET, the key run tokens are signed with; null when unset (development only: a
+   * random key per process, so tokens do not outlive the process).
+   */
+  secret: string | null;
+  /** TURNSTILE_SECRET_KEY; null when unset (development only). */
+  turnstileSecret: string | null;
+  /** TURNSTILE_EXPECTED_HOSTNAME: the only hostname a solved challenge is accepted from. */
+  expectedHostname: string | null;
+  /**
+   * The development bypass: outside production with no Turnstile secret, the Turnstile token
+   * DEV_BYPASS_TOKEN passes. Run tokens are still issued and checked.
+   */
+  bypass: boolean;
+}
+
+/**
  * REPLAY_MODE: "off" (default) analyses live; "fallback" analyses live and serves recorded runs
  * of the showcase tracks when live analysis is unavailable; "only" serves recorded runs and
  * never calls a live service.
@@ -50,6 +71,7 @@ export interface Settings {
   host: string;
   port: number;
   http: HttpSettings;
+  runTokens: RunTokenSettings;
   llm: LlmSettings;
 }
 
@@ -430,6 +452,98 @@ export const DEFAULT_RATE_LIMIT: RateLimitSettings = { windowMs: 10 * 60_000, ma
 export const DEFAULT_GLOBAL_RATE_LIMIT_MAX = 300;
 export const DEFAULT_SEARCH_RATE_LIMIT: RateLimitSettings = { windowMs: 60_000, max: 60 };
 
+/** Shortest RUN_TOKEN_SECRET, in bytes: an HMAC-SHA256 key is as strong as its 32 bytes. */
+export const MIN_RUN_TOKEN_SECRET_BYTES = 32;
+/** Longest SSE_HOLD_MS: ten minutes. */
+export const MAX_SSE_HOLD_MS = 600_000;
+
+/**
+ * SSE_HOLD_MS: how long a replayed analysis stream is held open, with its heartbeats, before its
+ * first event, so a check can see a long stream pass through a proxy. 0 (the default) holds
+ * nothing. For development and tests only: production refuses to start with it set
+ * (readSettings), and it reads as 0 under NODE_ENV=production whatever its value. Read on every
+ * request, like REPLAY_MODE; a value that is not a whole number in range reads as 0.
+ */
+export function sseHoldMs(env: NodeJS.ProcessEnv = process.env): number {
+  if (env.NODE_ENV === "production") return 0;
+  const raw = env.SSE_HOLD_MS?.trim() ?? "";
+  const value = /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
+  return value <= MAX_SSE_HOLD_MS ? value : 0;
+}
+
+/**
+ * The run token and Turnstile settings. Production needs both secrets; outside production,
+ * without a Turnstile secret, the development bypass applies. TURNSTILE_BYPASS=1 only says so
+ * explicitly: with NODE_ENV=production or a Turnstile secret it is an error, never a way to turn
+ * the check off. Errors name variables, never their values.
+ */
+export function readRunTokenSettings(
+  env: NodeJS.ProcessEnv,
+  production: boolean,
+  errors: string[],
+  warnings: string[],
+): RunTokenSettings {
+  const secret = env.RUN_TOKEN_SECRET?.trim() || null;
+  const turnstileSecret = env.TURNSTILE_SECRET_KEY?.trim() || null;
+
+  if (production && !secret) {
+    errors.push("RUN_TOKEN_SECRET is required when NODE_ENV=production");
+  }
+  if (secret && Buffer.byteLength(secret, "utf8") < MIN_RUN_TOKEN_SECRET_BYTES) {
+    errors.push(
+      `RUN_TOKEN_SECRET: expected at least ${MIN_RUN_TOKEN_SECRET_BYTES} bytes ` +
+        "(e.g. openssl rand -base64 48)",
+    );
+  }
+  if (production && !turnstileSecret) {
+    errors.push("TURNSTILE_SECRET_KEY is required when NODE_ENV=production");
+  }
+  // Sent in a form body: printable ASCII, no space or line break.
+  if (turnstileSecret && !/^[!-~]+$/.test(turnstileSecret)) {
+    errors.push("TURNSTILE_SECRET_KEY: expected printable ASCII with no spaces");
+  }
+
+  const bypassRaw = env.TURNSTILE_BYPASS?.trim() ?? "";
+  if (!["", "0", "1"].includes(bypassRaw)) {
+    errors.push('TURNSTILE_BYPASS: expected "1" or "0"');
+  } else if (bypassRaw === "1" && production) {
+    errors.push("TURNSTILE_BYPASS=1 is not allowed when NODE_ENV=production");
+  } else if (bypassRaw === "1" && turnstileSecret) {
+    errors.push(
+      "TURNSTILE_BYPASS=1 is not allowed with TURNSTILE_SECRET_KEY set: the bypass applies " +
+        "only where no token can be checked",
+    );
+  }
+
+  const hostnameRaw = env.TURNSTILE_EXPECTED_HOSTNAME?.trim() ?? "";
+  let expectedHostname: string | null = null;
+  if (hostnameRaw !== "") {
+    if (/^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(hostnameRaw)) {
+      expectedHostname = hostnameRaw.toLowerCase();
+    } else {
+      errors.push("TURNSTILE_EXPECTED_HOSTNAME: expected a hostname (no scheme, port or path)");
+    }
+  } else if (production) {
+    warnings.push(
+      "TURNSTILE_EXPECTED_HOSTNAME is not set: a challenge solved on any hostname of the " +
+        "Turnstile widget is accepted",
+    );
+  }
+
+  return { secret, turnstileSecret, expectedHostname, bypass: !production && !turnstileSecret };
+}
+
+/** SSE_HOLD_MS checked at startup: a whole number in range, and never set in production. */
+function checkSseHoldMs(env: NodeJS.ProcessEnv, production: boolean, errors: string[]): void {
+  const raw = env.SSE_HOLD_MS?.trim() ?? "";
+  if (raw === "" || raw === "0") return;
+  if (production) {
+    errors.push("SSE_HOLD_MS is not allowed when NODE_ENV=production: it is for tests");
+    return;
+  }
+  parseInteger(env, "SSE_HOLD_MS", 0, 0, MAX_SSE_HOLD_MS, errors);
+}
+
 // The web dev server's ports: 3000, the worktree slots 3100-3190 and Vite's preview port.
 const DEV_WEB_PORTS = [3000, 3100, 3110, 3120, 3130, 3140, 3150, 3160, 3170, 3180, 3190, 4173];
 
@@ -574,6 +688,9 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
     ),
   };
 
+  const runTokens = readRunTokenSettings(env, production, errors, warnings);
+  checkSseHoldMs(env, production, errors);
+
   // Each source reads its credential when it runs; here they are only checked.
   for (const key of Object.values(SOURCE_CREDENTIALS)) {
     const value = env[key] ?? "";
@@ -598,6 +715,7 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
       host,
       port,
       http: { corsOrigins, trustProxy, rateLimit, globalRateLimit, searchRateLimit },
+      runTokens,
       llm: llm.settings,
     },
   };

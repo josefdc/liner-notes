@@ -40,7 +40,7 @@ import type { SonicAgentStateType } from "../../agent/state.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun, listRunEvents, runDurationSql } from "../../store/runs.js";
-import { createTestApp } from "../testApp.js";
+import { createTestApp, withRunToken } from "../testApp.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "./analyze.js";
 
 /** The messages of the warnings logged from now until the test ends. */
@@ -230,11 +230,18 @@ async function sse(path: string) {
 
 const ofType = (events: Event[], type: string) => events.filter((event) => event.type === type);
 const types = (events: Event[]) => events.map((event) => event.type);
-const streamPath = (query: string) => `/api/analyze/stream?query=${encodeURIComponent(query)}`;
+// Each analysis with a run token of its own; a resume with the token its run started with.
+const streamPath = (query: string) =>
+  withRunToken(`/api/analyze/stream?query=${encodeURIComponent(query)}`);
 const resumePath = (threadId: string, trackId: string) =>
-  `/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${trackId}`;
+  withRunToken(
+    `/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${trackId}`,
+    threadId,
+  );
 const postResume = (threadId: string, selectedTrackId: string) =>
-  request(app).post("/api/analyze/resume").send({ threadId, selectedTrackId });
+  request(app)
+    .post(withRunToken("/api/analyze/resume", threadId))
+    .send({ threadId, selectedTrackId });
 
 /** Starts an ambiguous analysis and returns the thread it paused. */
 async function pausedThread(): Promise<string> {
@@ -369,13 +376,17 @@ describe("analyze routes", () => {
       const one = "One possible track from Spotify; confirm it or search again";
       const streamed = ofType((await sse(streamPath("ambiguous-one hurt"))).events, "interrupt");
       expect(streamed.map((event) => event.message)).toEqual([one]);
-      const posted = await request(app).post("/api/analyze").send({ query: "ambiguous-one hurt" });
+      const posted = await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "ambiguous-one hurt" });
       expect(posted.body.interrupt).toMatchObject({ message: one });
       expect(posted.body.interrupt.candidates).toHaveLength(1);
     });
 
     it("POST interrupt: POST /api/analyze returns 200 with the threadId and the candidates", async () => {
-      const res = await request(app).post("/api/analyze").send({ query: "ambiguous hurt" });
+      const res = await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "ambiguous hurt" });
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ status: "interrupted", threadId: expect.any(String) });
@@ -554,10 +565,10 @@ describe("analyze routes", () => {
 
     it("hands POST's track id to the scout, and none for a search by text", async () => {
       const res = await request(app)
-        .post("/api/analyze")
+        .post(withRunToken("/api/analyze"))
         .send({ query: "midnight city m83", trackId: ID });
       expect(res.status).toBe(200);
-      await request(app).post("/api/analyze").send({ query: "midnight city m83" });
+      await request(app).post(withRunToken("/api/analyze")).send({ query: "midnight city m83" });
 
       expect(stub.seen.requestedTrackId).toEqual([ID, null]);
     });
@@ -565,9 +576,11 @@ describe("analyze routes", () => {
     it("hands how a picker row asked for by id was picked to the scout, only with an id", async () => {
       await sse(`${streamPath("midnight city m83")}&trackId=${ID}&pickedBy=countdown`);
       await request(app)
-        .post("/api/analyze")
+        .post(withRunToken("/api/analyze"))
         .send({ query: "midnight city m83", trackId: ID, pickedBy: "click" });
-      await request(app).post("/api/analyze").send({ query: "midnight", pickedBy: "click" });
+      await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "midnight", pickedBy: "click" });
 
       expect(stub.seen.requestPickedBy).toEqual(["countdown", "click", null]);
     });
@@ -578,7 +591,9 @@ describe("analyze routes", () => {
         const { events } = await sse(
           `${streamPath("midnight city")}&trackId=${encodeURIComponent(trackId)}`,
         );
-        const res = await request(app).post("/api/analyze").send({ query: "midnight", trackId });
+        const res = await request(app)
+          .post(withRunToken("/api/analyze"))
+          .send({ query: "midnight", trackId });
 
         expect(events[0]).toMatchObject({ type: "error", code: "invalid_input" });
         expect(res.status).toBe(400);
@@ -607,7 +622,7 @@ describe("analyze routes", () => {
       const threadId = await pausedThread();
 
       const res = await request(app)
-        .post("/api/analyze/resume")
+        .post(withRunToken("/api/analyze/resume", threadId))
         .send({ threadId, selectedTrackId: "track-a", pickedBy: "click" });
 
       expect(res.status).toBe(200);
@@ -617,7 +632,9 @@ describe("analyze routes", () => {
 
   describe("a Spotify rate limit", () => {
     it("is answered with a message naming it, the wait and a Retry-After header", async () => {
-      const res = await request(app).post("/api/analyze").send({ query: "ratelimited hurt" });
+      const res = await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "ratelimited hurt" });
 
       expect(res.status).toBe(502);
       expect(res.headers["retry-after"]).toBe("30");
@@ -632,7 +649,7 @@ describe("analyze routes", () => {
     it("says so on the stream too, and without a wait when Spotify did not say one", async () => {
       const { events } = await sse(streamPath("ratelimited hurt"));
       const unsaid = await request(app)
-        .post("/api/analyze")
+        .post(withRunToken("/api/analyze"))
         .send({ query: "ratelimited-unsaid hurt" });
 
       expect(ofType(events, "error")[0]).toMatchObject({
@@ -676,7 +693,7 @@ describe("analyze routes", () => {
       ["upstream_unavailable", 502, "outage hurt"],
       ["failed", 500, "odd hurt"],
     ])("POST /api/analyze answers %s with status %i", async (code, httpStatus, query) => {
-      const res = await request(app).post("/api/analyze").send({ query });
+      const res = await request(app).post(withRunToken("/api/analyze")).send({ query });
 
       expect(res.status).toBe(httpStatus);
       expect(res.body).toMatchObject({ success: false, code });
@@ -923,7 +940,10 @@ describe("analyze routes", () => {
       [
         "POST",
         (threadId: string) =>
-          open("/api/analyze/resume", "POST", { threadId, selectedTrackId: "track-a" }),
+          open(withRunToken("/api/analyze/resume", threadId), "POST", {
+            threadId,
+            selectedTrackId: "track-a",
+          }),
       ],
     ])(
       "disconnect during the resume check (%s): no run, choice kept, claim released",
@@ -1061,7 +1081,8 @@ describe("analyze routes", () => {
 
   describe("input validation", () => {
     it("POST rejects a missing, blank or overlong query and malformed resume ids with 400", async () => {
-      const post = (query: unknown) => request(app).post("/api/analyze").send({ query });
+      const post = (query: unknown) =>
+        request(app).post(withRunToken("/api/analyze")).send({ query });
       for (const query of [undefined, "", "   ", "x".repeat(201), ["a"], 5]) {
         const res = await post(query);
         expect(res.status).toBe(400);
@@ -1079,7 +1100,9 @@ describe("analyze routes", () => {
       ["only zero-width characters", "​‌﻿"],
       ["201 characters", "😀".repeat(201)],
     ])("rejects a query with %s", async (_what, query) => {
-      expect((await request(app).post("/api/analyze").send({ query })).status).toBe(400);
+      expect((await request(app).post(withRunToken("/api/analyze")).send({ query })).status).toBe(
+        400,
+      );
       // A URL cannot carry a lone surrogate (it decodes to U+FFFD), so only POST sees one.
       if (!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(query)) {
         const stream = await sse(streamPath(query));
@@ -1089,7 +1112,9 @@ describe("analyze routes", () => {
     });
 
     it("accepts tabs and newlines inside a query, collapsed to one space", async () => {
-      const res = await request(app).post("/api/analyze").send({ query: "Hurt\tJohnny\n\n Cash" });
+      const res = await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "Hurt\tJohnny\n\n Cash" });
       expect(res.status).toBe(200);
       expect(getRun(getDb(), res.body.threadId)?.query).toBe("Hurt Johnny Cash");
 
@@ -1100,12 +1125,12 @@ describe("analyze routes", () => {
 
     it("counts characters, not UTF-16 units, and trims before counting", async () => {
       const emoji = await request(app)
-        .post("/api/analyze")
+        .post(withRunToken("/api/analyze"))
         .send({ query: "😀".repeat(200) });
       expect(emoji.status).toBe(200);
 
       const padded = ` ${"a".repeat(200)} `;
-      const res = await request(app).post("/api/analyze").send({ query: padded });
+      const res = await request(app).post(withRunToken("/api/analyze")).send({ query: padded });
       expect(res.status).toBe(200);
       expect(getRun(getDb(), res.body.threadId)?.query).toBe("a".repeat(200));
     });
@@ -1118,7 +1143,7 @@ describe("analyze routes", () => {
         "/api/analyze/stream/resume?threadId=abc",
         "/api/analyze/stream/resume?threadId=a%2Fb&selectedTrackId=x",
       ]) {
-        const res = await sse(path);
+        const res = await sse(path.includes("runToken=") ? path : withRunToken(path));
         expect(res.status).toBe(200);
         expect(types(res.events)).toEqual(["error", "done"]);
         expect(res.events[0]).toMatchObject({ code: "invalid_input", error: expect.any(String) });
@@ -1176,7 +1201,9 @@ describe("analyze routes", () => {
 
     it("sends no time on a resume when the run's earlier stream left none to go on from", async () => {
       // Paused by POST /api/analyze, which stores no stream.
-      const posted = await request(app).post("/api/analyze").send({ query: "ambiguous untimed" });
+      const posted = await request(app)
+        .post(withRunToken("/api/analyze"))
+        .send({ query: "ambiguous untimed" });
       expect(posted.body.status).toBe("interrupted");
 
       const resumed = await sse(resumePath(posted.body.threadId, "track-a"));
@@ -1186,7 +1213,7 @@ describe("analyze routes", () => {
     });
 
     it("sends no time on a stream refused before any run started", async () => {
-      const { events } = await sse("/api/analyze/stream?query=");
+      const { events } = await sse(withRunToken("/api/analyze/stream?query="));
       expect(types(events)).toEqual(["error", "done"]);
       expect(events.filter((event) => "elapsedMs" in event)).toEqual([]);
     });

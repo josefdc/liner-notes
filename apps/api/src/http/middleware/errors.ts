@@ -13,6 +13,12 @@ export const HTTP_ERRORS = {
   invalid_input: { status: 400, message: "The request is not valid." },
   invalid_json: { status: 400, message: "The request body is not valid JSON." },
   bad_request: { status: 400, message: "The request could not be read." },
+  // A run token that is missing, not this server's, used up or expired (middleware/
+  // requireRunToken.ts); the client gets a new one and asks again.
+  auth_expired: {
+    status: 401,
+    message: "This page needs to check the request again. Please try again.",
+  },
   forbidden_origin: { status: 403, message: "Requests from this site are not allowed." },
   not_found: { status: 404, message: "Not found." },
   payload_too_large: { status: 413, message: "The request body is too large." },
@@ -93,21 +99,40 @@ export const eventStreamHead: RequestHandler = (_req, res) => {
 
 const STREAM_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
+/** What a refusal adds to its stream `error` event: how long to wait, when it says. */
+export interface RefusalDetail {
+  retryAfterMs?: number;
+}
+
 /**
  * Answers with a 200 event stream that carries one typed `error` event, then `done` (see
  * ../sse.ts). A refused resume names its run (the thread id), so the refusal carries that id.
  */
-export function sendStreamError(req: Request, res: Response, code: HttpErrorCode): void {
+export function sendStreamError(
+  req: Request,
+  res: Response,
+  code: HttpErrorCode,
+  detail?: RefusalDetail,
+): void {
   if (res.headersSent || res.destroyed) return;
   const path = req.originalUrl.split("?")[0].toLowerCase();
   const threadId = req.query?.threadId;
   const runId = typeof threadId === "string" && STREAM_ID.test(threadId) ? threadId : undefined;
-  refuseStream(res, path, code, HTTP_ERRORS[code].message, runId);
+  refuseStream(res, path, code, HTTP_ERRORS[code].message, runId, detail);
 }
 
-/** Refuses a request: in the stream for event-stream requests, as a JSON error otherwise. */
-export function refuse(req: Request, res: Response, code: HttpErrorCode): void {
-  if (isEventStreamRequest(req)) sendStreamError(req, res, code);
+/**
+ * Refuses a request: in the stream for event-stream requests, as a JSON error otherwise.
+ * `detail` goes with the stream's `error` event; a JSON refusal says the same in its headers
+ * (Retry-After).
+ */
+export function refuse(
+  req: Request,
+  res: Response,
+  code: HttpErrorCode,
+  detail?: RefusalDetail,
+): void {
+  if (isEventStreamRequest(req)) sendStreamError(req, res, code, detail);
   else sendError(res, code);
 }
 
@@ -134,6 +159,12 @@ export function asyncRoute(
 
 /** Answers unknown routes with a JSON 404 instead of Express's HTML page. */
 export const notFound: RequestHandler = (_req, res) => sendError(res, "not_found");
+
+/**
+ * Routes whose body holds a credential (POST /api/runs: a Turnstile token): a body-parser error
+ * there is logged by its code only, since its message can quote the body.
+ */
+const CREDENTIAL_BODY_PATHS = new Set(["/api/runs"]);
 
 // body-parser marks its errors with a `type`; the status alone does not tell them apart.
 const BODY_ERRORS: Record<string, HttpErrorCode> = {
@@ -168,7 +199,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 
   if (bodyCode || clientError) {
     const code = bodyCode ?? "bad_request";
-    log.warn(`${where}: ${code} (${logText(err instanceof Error ? err.message : err)})`);
+    const path = req.path.toLowerCase().replace(/\/+$/, "");
+    if (CREDENTIAL_BODY_PATHS.has(path)) log.warn(`${where}: ${code}`);
+    else log.warn(`${where}: ${code} (${logText(err instanceof Error ? err.message : err)})`);
     sendError(res, code);
     return;
   }

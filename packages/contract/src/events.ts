@@ -170,9 +170,20 @@ export const HeartbeatEvent = z.object({ type: z.literal("heartbeat"), runId: en
 /** The result. Sent exactly once per completed run. */
 export const CompleteEvent = event("complete", { data: TrackAnalysis });
 
+/** How long to wait before asking again, on a refusal that says (`rate_limited`). */
+const retryAfterMs = z
+  .int()
+  .min(0)
+  .optional()
+  .describe(
+    "Milliseconds to wait before asking again, when the refusal says (a rate limit's reset); " +
+      "absent when it is not known",
+  );
+
 export const StreamErrorEvent = event("error", {
   code: OpenErrorCode,
   error: z.string().describe("Short message for the user"),
+  retryAfterMs,
 });
 
 /** The stream is over; always the last event. */
@@ -225,6 +236,7 @@ export const FactoidStreamEvent = z.discriminatedUnion("type", [
     code: OpenErrorCode,
     error: z.string(),
     index: z.int().min(0).optional().describe("Which factoid failed; absent for the stream"),
+    retryAfterMs,
   }),
   factoidEvent("done", { timestamp: Timestamp.optional() }),
 ]);

@@ -34,7 +34,7 @@ import { isWholeRecording } from '../utils/recording';
 import { isSpotifyTrackId } from '../utils/spotify';
 import { pickerQuestion, pickerRows } from '../components/search/pickerRows';
 import { API_BASE_URL } from './agent/types';
-import { fetchReplays, fetchSuggestions } from './agent/apiClient';
+import { fetchReplays, fetchSuggestions, type RunToken, RunTokenError } from './agent/apiClient';
 import {
   type AnalysisEvent,
   eventSchemasLoaded,
@@ -54,6 +54,7 @@ import {
   withFailure,
 } from './agent/moreFacts';
 import { appendLog, type NewLog } from './agent/runLog';
+import { isUsable, newRunToken, withRunToken } from './agent/runToken';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
@@ -236,6 +237,8 @@ interface Run {
   trackId: string | null;
   /** How the picker row the run asked for by id was picked, for a retry. */
   pickedBy: PickedBy | null;
+  /** The run token the run started with; its resume sends it again. */
+  token: RunToken | null;
 }
 
 /** How `analyze` was asked for: the request's own options, and the hook's own ones. */
@@ -260,6 +263,22 @@ function newRun(query: string): Run {
     trackId: null,
     pickedBy: null,
     branches: newBranches(),
+    token: null,
+  };
+}
+
+/**
+ * Why a run token could not be had, as an error the run ends with: the API's refusal (its code
+ * and message), an answer this page cannot read (`unreadableCode`), or no answer at all (the
+ * connection failed).
+ */
+function tokenFailure(error: unknown, unreadableCode: string): { message: string; code: string } {
+  if (error instanceof RunTokenError) {
+    return { message: error.message, code: error.code ?? unreadableCode };
+  }
+  return {
+    message: error instanceof Error ? error.message : 'Connection failed',
+    code: CLIENT_ERROR_CODES.connectionLost,
   };
 }
 
@@ -312,6 +331,8 @@ export function useAgent(): UseAgentReturn {
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
   // `moreFacts` as last set, for the next request (its round) before the state is rendered.
   const moreFactsRef = useRef<MoreFacts | null>(null);
+  // The latest run token this page was given: factoid requests send it again until it expires.
+  const tokenRef = useRef<RunToken | null>(null);
 
   const setMoreFacts = useCallback((moreFacts: MoreFacts | null) => {
     moreFactsRef.current = moreFacts;
@@ -640,13 +661,28 @@ export function useAgent(): UseAgentReturn {
         if (runRef.current !== run) return;
       }
 
+      // Every analysis starts with a token of its own (agent/runToken.ts).
+      try {
+        run.token = await newRunToken(run.controller.signal);
+      } catch (error) {
+        if (runRef.current !== run) return;
+        const { message, code } = tokenFailure(error, CLIENT_ERROR_CODES.streamOpenFailed);
+        fail(run, message, code);
+        return;
+      }
+      if (runRef.current !== run) return;
+      tokenRef.current = run.token;
+
       try {
         // With a track id (a clicked suggestion) the API analyses that very track.
         // An id that is not a Spotify track id (a placeholder) is not sent: the text is searched.
         const byId = isSpotifyTrackId(options.trackId);
         const trackId = byId ? `&trackId=${encodeURIComponent(options.trackId as string)}` : '';
         const how = byId && options.pickedBy ? `&pickedBy=${options.pickedBy}` : '';
-        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}${how}`;
+        const url = withRunToken(
+          `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}${how}`,
+          run.token,
+        );
         openRunStream(url, run, () =>
           setState((prev) =>
             prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
@@ -714,8 +750,14 @@ export function useAgent(): UseAgentReturn {
       }));
 
       try {
+        // The run's own token: only the token a run started with resumes it. One that has
+        // expired is sent all the same, and the API says so in the stream.
+        if (!run.token) throw new Error('The run has no run token');
         const how = pickedBy ? `&pickedBy=${pickedBy}` : '';
-        const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`;
+        const url = withRunToken(
+          `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`,
+          run.token,
+        );
         openRunStream(url, run);
       } catch (error) {
         fail(
@@ -767,10 +809,10 @@ export function useAgent(): UseAgentReturn {
           return;
         }
 
-        const open = () => {
+        const open = (token: RunToken) => {
           // What this result already has; another result's facts are let go.
           const before = moreFactsOf(result, moreFactsRef.current);
-          const url = moreFactsUrl(result, before);
+          const url = moreFactsUrl(result, before, token);
           setMoreFacts({ ...before, failed: [], answerFailed: false });
 
           const eventSource = new EventSource(url);
@@ -874,18 +916,45 @@ export function useAgent(): UseAgentReturn {
           };
         };
 
-        // The stream is opened once the code that reads it is loaded.
+        // The stream is opened once the code that reads it is loaded, with the latest run token
+        // while it may still be sent, or else a new one.
+        const held = tokenRef.current;
+        let tokenFailed = false;
+        const token = isUsable(held)
+          ? held
+          : newRunToken(signal ? AbortSignal.any([runSignal, signal]) : runSignal).then(
+              (fresh) => {
+                tokenRef.current = fresh;
+                return fresh;
+              },
+              (error: unknown) => {
+                tokenFailed = true;
+                throw error;
+              },
+            );
         const ready = readersReady();
-        if (!ready) {
-          open();
+        if (!ready && !(token instanceof Promise)) {
+          open(token);
           return;
         }
-        ready.then(
-          () => {
+        Promise.all([ready, token]).then(
+          ([, usable]) => {
             if (runSignal.aborted || signal?.aborted) reject(abortError());
-            else open();
+            else open(usable);
           },
-          (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
+          (error: unknown) => {
+            if (runSignal.aborted || signal?.aborted) {
+              reject(abortError());
+              return;
+            }
+            // Without a token the answer could not be asked for: the Player says so, and the
+            // round is asked again.
+            if (tokenFailed) {
+              const kept = moreFactsOf(result, moreFactsRef.current);
+              setMoreFacts({ ...kept, failed: [], answerFailed: true });
+            }
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
         );
       });
     },

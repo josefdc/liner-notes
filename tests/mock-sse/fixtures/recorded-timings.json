@@ -1,0 +1,238 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "replayed-run",
+        "seq": 0,
+        "threadId": "replayed-run",
+        "elapsedMs": 0
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 1,
+        "node": "replay",
+        "code": "SYS-INIT",
+        "message": "Replaying an analysis recorded on 2026-10-22T14:03:00.000Z (commit abc1234); nothing below runs live."
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 2,
+        "node": "scout",
+        "code": "NET-100",
+        "message": "Reading the track from Spotify",
+        "elapsedMs": 24
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 3,
+        "node": "scout",
+        "code": "SPOTIFY-FOUND",
+        "message": "Found the track on Spotify: Bright Lines by Test Artist",
+        "elapsedMs": 316
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 4,
+        "node": "historian",
+        "code": "RESEARCH-START",
+        "message": "Starting the research: MusicBrainz and Last.fm",
+        "elapsedMs": 328
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 5,
+        "node": "engineer",
+        "code": "AUDIO-COMPLETE",
+        "message": "Measured 105 BPM in A minor",
+        "elapsedMs": 12400
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 6,
+        "node": "composer",
+        "code": "LLM-CONNECT",
+        "message": "Writing the liner notes",
+        "elapsedMs": 13856
+      },
+      {
+        "type": "status",
+        "runId": "replayed-run",
+        "seq": 7,
+        "node": "composer",
+        "code": "GRAPH-ENRICH",
+        "message": "Looking up cover art on Spotify for the genealogy",
+        "elapsedMs": 75900
+      },
+      {
+        "type": "complete",
+        "runId": "replayed-run",
+        "seq": 8,
+        "data": {
+          "id": "t-full",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-full",
+          "releaseYear": "2011",
+          "bpm": 105,
+          "key": "A Minor",
+          "energy": 0.71,
+          "valence": 0.34,
+          "danceability": 0.62,
+          "acousticness": 0.12,
+          "durationSeconds": 240,
+          "genreProfile": [
+            {
+              "genre": "Synthpop",
+              "value": 80
+            },
+            {
+              "genre": "Electronic",
+              "value": 70
+            },
+            {
+              "genre": "Rock",
+              "value": 20
+            },
+            {
+              "genre": "Pop",
+              "value": 55
+            },
+            {
+              "genre": "Ambient",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [
+            {
+              "time": 12,
+              "type": "energy_peak",
+              "intensity": 0.9,
+              "description": "Energy peak"
+            },
+            {
+              "time": 12,
+              "type": "energy_peak",
+              "intensity": 0.8,
+              "description": "Second energy peak"
+            }
+          ],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist (2011)",
+                "size": 40
+              },
+              {
+                "id": "origin1",
+                "group": 2,
+                "label": "Older Record - Someone (1984)",
+                "size": 30
+              }
+            ],
+            "links": [
+              {
+                "source": "origin1",
+                "target": "current",
+                "value": 3,
+                "type": "sample"
+              }
+            ]
+          },
+          "audioSource": "analyzed",
+          "audioConfidence": "high",
+          "run": {
+            "id": "replayed-run",
+            "mode": "replay",
+            "recordedAt": "2026-10-22T14:03:00.000Z",
+            "commit": "abc1234",
+            "analyzerVersion": null,
+            "replayed": "run"
+          },
+          "evidence": [
+            {
+              "id": "musicbrainz:release/ae103b0a-b932-4009-acb6-388db1cf890b",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/release/ae103b0a-b932-4009-acb6-388db1cf890b",
+              "title": "Test Album — MusicBrainz release",
+              "retrievedAt": "2026-10-22T14:02:00.000Z",
+              "excerpt": "MusicBrainz: \"Bright Lines\" by Test Artist appears on the official album \"Test Album\" (2011-04-04).",
+              "recordRef": "release/ae103b0a-b932-4009-acb6-388db1cf890b"
+            }
+          ]
+        },
+        "elapsedMs": 76000
+      },
+      {
+        "type": "done",
+        "runId": "replayed-run",
+        "seq": 9
+      }
+    ]
+  }
+}

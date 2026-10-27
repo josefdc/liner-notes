@@ -14,7 +14,9 @@
  *   written into the result's `coverUrl` (in the record's result and its complete event) in
  *   place of whatever cover the run showed;
  * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
- *   replay stamps its own id);
+ *   replay stamps its own id); the time since the run started that each event was sent with
+ *   (`elapsedMs`, without the wait for the user's choice) is kept as it was sent, and a replay
+ *   sends it as recorded;
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
  * - status messages about the user's own actions in that run (the clarification node's
  *   "Selected: …", in older runs "User confirmed …", and "Remembered preference …") are left

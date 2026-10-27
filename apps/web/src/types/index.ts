@@ -251,6 +251,12 @@ export interface AgentLog {
   code?: LogCode;
   node?: string;
   /**
+   * The time since the run started that the server sent the line with (a status event's
+   * `elapsedMs`), in milliseconds; absent for the page's own lines and for a server or a
+   * recording that gave none.
+   */
+  elapsedMs?: number;
+  /**
    * The line's place in its run, from 0 (hooks/agent/runLog.ts). The run's log keeps its latest
    * lines only: a first line above 0 says how many were dropped before it.
    */

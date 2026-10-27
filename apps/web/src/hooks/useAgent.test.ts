@@ -349,6 +349,29 @@ describe('useAgent progress', () => {
     );
   });
 
+  it('keeps the time since the run started that a status line was sent with, and none without', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1', elapsedMs: 0 });
+    analysis.send({
+      type: 'status',
+      message: 'Reading the track from Spotify',
+      node: 'scout',
+      elapsedMs: 24,
+    });
+    analysis.send({ type: 'status', message: 'Measuring tempo and key', node: 'engineer' });
+
+    const logs = hook.result.current.logs;
+    expect(logs.find((log) => log.message === 'Reading the track from Spotify')?.elapsedMs).toBe(
+      24,
+    );
+    const untimed = logs.find((log) => log.message === 'Measuring tempo and key');
+    expect(untimed).toBeDefined();
+    expect(untimed).not.toHaveProperty('elapsedMs');
+    // The page's own lines were not sent by the server: they carry no time of the run.
+    expect(logs.find((log) => log.message.startsWith('Connected'))).not.toHaveProperty('elapsedMs');
+  });
+
   it('logs a neutral picker line when the server sends no words', () => {
     const hook = startAnalysis();
     const analysis = lastStream();

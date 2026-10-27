@@ -436,6 +436,14 @@ describe("ReplayRecord", () => {
     expect(issues(back)).toEqual(["events.3.atMs"]);
   });
 
+  it("keeps the recorded time since the run started on its events, and accepts events without it", () => {
+    const value = record();
+    value.events[1].event = event(1, { type: "status", message: "Searching", elapsedMs: 10 });
+    const parsed = ReplayRecord.parse(value);
+    expect(parsed.events[1].event).toMatchObject({ elapsedMs: 10 });
+    expect("elapsedMs" in parsed.events[2].event).toBe(false);
+  });
+
   it("holds events that the stream union accepts", () => {
     for (const { event: streamed } of record().events) {
       expect(ok(AnalyzeStreamEvent, streamed)).toBe(true);

@@ -6,8 +6,11 @@
  * result is the recorded one with the new run's id, still saying `mode: "replay"` with the
  * recording's date, commit and analyzer version, and with this run's own usage (none: a replay
  * calls no model; the recording's cost stays in the record). Every event carries the time it is
- * sent, so a stream's times never go back. The recorded `done` is not sent: the stream sends its
- * own, and its own heartbeats.
+ * sent, so a stream's times never go back, and the time since the recorded run started
+ * (`elapsedMs`): the event's own, or else the time the recording measured for it (`atMs`, since
+ * the recorded stream opened, without the wait at the picker), so a recording made before events
+ * carried one still shows when each step happened. The notice and the stream's own events carry
+ * none. The recorded `done` is not sent: the stream sends its own, and its own heartbeats.
  */
 
 import type { ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
@@ -82,7 +85,7 @@ export function replayNotice(record: ReplayRecord): EventBody {
  * with this run's id and the time it is sent.
  */
 export function replayedEvent(
-  event: ReplayRecord["events"][number]["event"],
+  { atMs, event }: ReplayRecord["events"][number],
   record: ReplayRecord,
   runId: string,
 ): EventBody {
@@ -94,10 +97,13 @@ export function replayedEvent(
     runId?: unknown;
     seq?: unknown;
   };
-  if (event.type === "complete") return { ...body, data: replayedAnalysis(record, runId) };
-  // Event times are this run's, like its notice and `done`: the recording's times stay in the
-  // record (`recordedAt`, and each event's `atMs`).
-  const stamped = "timestamp" in body ? { ...body, timestamp: new Date().toISOString() } : body;
+  // The time since the run started is the recorded run's: the event's own, else its `atMs`.
+  const recorded = { ...body, elapsedMs: (event as { elapsedMs?: number }).elapsedMs ?? atMs };
+  if (event.type === "complete") return { ...recorded, data: replayedAnalysis(record, runId) };
+  // Event times are this run's, like its notice and `done`; when the recording was made stays
+  // in the record (`recordedAt`).
+  const stamped =
+    "timestamp" in recorded ? { ...recorded, timestamp: new Date().toISOString() } : recorded;
   return "threadId" in stamped ? { ...stamped, threadId: runId } : stamped;
 }
 
@@ -131,7 +137,8 @@ export async function playRecord(
   let previousAt = 0;
   let noticed = false;
   let result: TrackAnalysis | null = null;
-  for (const { atMs, event } of record.events) {
+  for (const item of record.events) {
+    const { atMs, event } = item;
     if (event.type === "done") break;
     await wait(Math.min((atMs - previousAt) / speed, maxGapMs), signal);
     previousAt = atMs;
@@ -141,7 +148,7 @@ export async function playRecord(
       send(replayNotice(record));
       noticed = true;
     }
-    const body = replayedEvent(event, record, runId);
+    const body = replayedEvent(item, record, runId);
     const sent = send(body);
     if (event.type === "complete") result = sent ? (body.data as TrackAnalysis) : null;
   }

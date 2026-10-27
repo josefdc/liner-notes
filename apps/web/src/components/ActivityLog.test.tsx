@@ -1,7 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLog } from '../types';
-import ActivityLog, { FRESH_TICK_MS, formatRelativeTime, SETTLED_TICK_MS } from './ActivityLog';
+import ActivityLog, {
+  FRESH_TICK_MS,
+  formatElapsed,
+  formatRelativeTime,
+  SETTLED_TICK_MS,
+} from './ActivityLog';
 
 afterEach(() => {
   cleanup();
@@ -155,5 +160,66 @@ describe('ActivityLog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /activity log/ }));
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('writes a time since the run started in tenths of a second under a minute, never rounded up', () => {
+    expect(formatElapsed(0)).toBe('+0.0 s');
+    expect(formatElapsed(316)).toBe('+0.3 s');
+    expect(formatElapsed(12_400)).toBe('+12.4 s');
+    expect(formatElapsed(59_999)).toBe('+59.9 s');
+    expect(formatElapsed(60_000)).toBe('+1 min 0 s');
+    expect(formatElapsed(75_900)).toBe('+1 min 15 s');
+    expect(formatElapsed(3_725_000)).toBe('+1 h 2 min');
+  });
+
+  describe('of a recorded run', () => {
+    const start = Date.parse('2026-01-01T00:00:00.000Z');
+    // Replayed an hour after the times the entries carry: a relative time would read "1 h ago".
+    const recorded = [
+      { ...log('SPOTIFY-FOUND'), elapsedMs: 316 },
+      { ...log('AUDIO-ERROR'), elapsedMs: 12_400 },
+      log('SYS-INIT'),
+      { ...log('GRAPH-ENRICH'), elapsedMs: 75_900 },
+    ];
+    const timeOf = (container: HTMLElement, code: string) =>
+      container.querySelector(`[data-log-code="${code}"] [data-log-time]`)?.textContent ?? null;
+
+    it('shows each entry at its recorded time since the run started, and no time for an entry without one', () => {
+      vi.useFakeTimers({ now: start + 3_600_000 });
+      const { container } = render(<ActivityLog logs={recorded} isComplete recorded />);
+      fireEvent.click(screen.getByRole('button', { name: /activity log/ }));
+
+      expect(timeOf(container, 'SPOTIFY-FOUND')).toBe('+0.3 s');
+      expect(timeOf(container, 'AUDIO-ERROR')).toBe('+12.4 s');
+      expect(timeOf(container, 'GRAPH-ENRICH')).toBe('+1 min 15 s');
+      // Recorded without a time: none is shown, neither "Just now" nor a made-up one.
+      expect(container.querySelector('[data-log-code="SYS-INIT"]')).not.toBeNull();
+      expect(timeOf(container, 'SYS-INIT')).toBeNull();
+      expect(container.textContent).not.toMatch(/Just now|ago/);
+      // Recorded times do not change: no clock runs for them.
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('shows no time at all for a recording made before events carried one', () => {
+      const untimed = recorded.map(({ elapsedMs: _ms, ...entry }) => entry);
+      const { container } = render(<ActivityLog logs={untimed} isComplete={false} recorded />);
+      fireEvent.click(screen.getByRole('button', { name: /activity log/ }));
+      expect(container.querySelectorAll('[data-log-code]')).toHaveLength(4);
+      expect(container.querySelectorAll('[data-log-time]')).toHaveLength(0);
+      expect(container.textContent).not.toMatch(/Just now|ago|\+\d/);
+    });
+
+    it('keeps the relative clock for a live run, whose entries also carry a time', () => {
+      vi.useFakeTimers({ now: start + 25_000 });
+      const live = recorded.map((entry) => ({
+        ...entry,
+        timestamp: new Date(start).toISOString(),
+      }));
+      const { container } = render(<ActivityLog logs={live} isComplete />);
+      fireEvent.click(screen.getByRole('button', { name: /activity log/ }));
+      expect(timeOf(container, 'AUDIO-ERROR')).toBe('20 s ago');
+      expect(timeOf(container, 'SYS-INIT')).toBe('20 s ago');
+      expect(container.textContent).not.toMatch(/\+\d/);
+    });
   });
 });

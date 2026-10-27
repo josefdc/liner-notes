@@ -5,6 +5,8 @@
  * run's id (`runId`) and the event's position in the stream (`seq`, from 0, one per event sent),
  * so a client can drop repeats and events of an older run. Heartbeats carry no `seq`: they are
  * sent on a timer, and counting them would make the numbering of a run depend on its timing.
+ * Analysis events may also carry the time since their run started (`elapsedMs`), which a
+ * recording keeps, so a replay shows when each step happened in the recorded run.
  * Clients parse each event with `safeParse` and ignore types they do not know.
  *
  * The streams always answer HTTP 200 (EventSource cannot read other statuses): failures are an
@@ -100,6 +102,16 @@ export type LogCode = z.infer<typeof LogCode>;
 const envelope = {
   runId: z.string().min(1),
   seq: z.int().min(0),
+  elapsedMs: z
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Milliseconds since the run started, without the time it waited for the user's choice; " +
+        "absent when not known (a stream refused before a run started). A replay sends the " +
+        "recorded run's: the event's own, or else the time its recording measured for it " +
+        "(the record's atMs), never its own",
+    ),
 };
 
 const event = <T extends string, S extends z.ZodRawShape>(type: T, shape: S) =>

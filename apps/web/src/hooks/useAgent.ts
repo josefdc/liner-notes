@@ -333,22 +333,27 @@ export function useAgent(): UseAgentReturn {
   }, []);
 
   /**
-   * Add a log entry with optional code and node
+   * Add a log entry with optional code and node, and the time since the run started that the
+   * server sent it with
    */
-  const addLog = useCallback((message: string, code?: LogCode, node?: string) => {
-    const log: NewLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      message,
-      timestamp: new Date().toISOString(),
-      code,
-      node,
-    };
-    // Bounded, and a repeat of the last line changes nothing (agent/runLog.ts).
-    setState((prev) => {
-      const logs = appendLog(prev.logs, log);
-      return logs === prev.logs ? prev : { ...prev, logs };
-    });
-  }, []);
+  const addLog = useCallback(
+    (message: string, code?: LogCode, node?: string, elapsedMs?: number) => {
+      const log: NewLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        message,
+        timestamp: new Date().toISOString(),
+        code,
+        node,
+        ...(elapsedMs !== undefined && { elapsedMs }),
+      };
+      // Bounded, and a repeat of the last line changes nothing (agent/runLog.ts).
+      setState((prev) => {
+        const logs = appendLog(prev.logs, log);
+        return logs === prev.logs ? prev : { ...prev, logs };
+      });
+    },
+    [],
+  );
 
   /** Ends the run with an error the user can retry. */
   const fail = useCallback(
@@ -408,8 +413,11 @@ export function useAgent(): UseAgentReturn {
             run.replay = true;
             setState((prev) => ({ ...prev, isReplay: true }));
           }
-          // The server's own words, with its code; a status without words adds no line.
-          if (data.message) addLog(data.message, data.code as LogCode | undefined, data.node);
+          // The server's own words, with its code and the time since the run started (a
+          // replay's is the recorded run's); a status without words adds no line.
+          if (data.message) {
+            addLog(data.message, data.code as LogCode | undefined, data.node, data.elapsedMs);
+          }
           {
             const step = stepOf(run.branches, data.node, data.code, data.message);
             if (step) setState((prev) => toStep(prev, step));

@@ -11,6 +11,7 @@ import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
+import { isWholeRecording } from '../utils/recording';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
@@ -551,7 +552,11 @@ const Dashboard: React.FC<DashboardProps> = ({
           {/* Agent Activity Log - Collapsible (P2:17 — stagger) */}
           {!isRestoredSession && (
             <div className="animate-stagger-in stagger-5">
-              <ActivityLog logs={logs} isComplete={isComplete} />
+              <ActivityLog
+                logs={logs}
+                isComplete={isComplete}
+                recorded={isWholeRecording(trackData?.run)}
+              />
             </div>
           )}
         </div>

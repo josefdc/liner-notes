@@ -52,6 +52,7 @@ import {
   applyVerdicts,
   checkClaims,
   createVerifierNode,
+  isRelationRecord,
   LINK_IS_RELATION,
   RELATION_ABOUT,
   setJudgeTimingForTests,
@@ -357,7 +358,7 @@ describe("kinds after the verifier", () => {
     const verdicts = new Map(
       claims.map((c) => [c.id, { verdict: "supported" as const, reason: "" }]),
     );
-    const { genealogy } = applyVerdicts(draft, verdicts);
+    const { genealogy } = applyVerdicts({ ...draft, citesRelation: new Set() }, verdicts);
     expect(genealogy.nodes.map((node) => [node.id, node.group])).toEqual([
       ["current", 1],
       ["older", 2],
@@ -437,9 +438,42 @@ describe("a claim about a relation is stated whole, with or without a link", () 
     for (const about of ClaimAbout.options) {
       const claim = modelClaim("c", { about, evidenceIds: ["ev-track"] });
       const verdicts = new Map([["c", { verdict: "partial" as const, reason: "" }]]);
-      const [judged] = applyVerdicts(draftOf([claim]), verdicts).claims;
+      const [judged] = applyVerdicts(checkClaims(draftOf([claim]), PACK, null), verdicts).claims;
       expect(judged.kind, about).toBe(isRelation[about] ? "inferred" : "sourced");
     }
+  });
+
+  it("knows a relation record by the kind its recordRef names, from any primary source", () => {
+    const record = (source: Evidence["source"], recordRef: string): Evidence => ({
+      ...trackRecord("r"),
+      source,
+      recordRef,
+    });
+    // Written out, not derived: every kind the sources file (sources/records.ts, RelationKind).
+    for (const kind of [
+      "samples",
+      "sampled-by",
+      "interpolates",
+      "interpolated-by",
+      "cover-of",
+      "covered-by",
+      "remix-of",
+      "remixed-by",
+    ]) {
+      const ref = `track/recording/a/${kind}/recording/b`;
+      expect(isRelationRecord(record("musicbrainz", ref)), kind).toBe(true);
+    }
+    expect(isRelationRecord(record("genius", "track/song/1/samples/2"))).toBe(true);
+    expect(isRelationRecord(workItem)).toBe(true);
+    // The recording itself, a release, a credit and a web page state no relation.
+    expect(isRelationRecord(track)).toBe(false);
+    expect(isRelationRecord(record("musicbrainz", "release/abc"))).toBe(false);
+    expect(isRelationRecord(releaseItem)).toBe(false);
+    expect(isRelationRecord(webItem)).toBe(false);
+    expect(isRelationRecord({ ...webItem, recordRef: "x/samples/y" })).toBe(false);
+    // A kind is a whole segment of the recordRef, never part of one.
+    expect(isRelationRecord(record("genius", "track/song/1/samples-pack/2"))).toBe(false);
+    expect(isRelationRecord(record("musicbrainz", "track/recording/a-remixed-by-b"))).toBe(false);
   });
 
   it("classifies every link type as a relation or not", () => {
@@ -451,6 +485,184 @@ describe("a claim about a relation is stated whole, with or without a link", () 
       "remix",
     ]);
   });
+});
+
+describe("a statement that asserts a relation is stated whole, whatever its label", () => {
+  // The model labels a sample or a cover statement as it likes: the recorded run of One More
+  // Time has "Circo Loco samples One More Time" as a connection card, citing the relation record.
+  const SAMPLES = "Circo Loco by Drake & 21 Savage samples Daft Punk's One More Time.";
+  const COVER = "Vitamin String Quartet recorded a string version of the song.";
+  const TRIVIA = "The single was a club favourite across Europe in 2000.";
+  const samplesRecord: Evidence = {
+    ...trackRecord("ev-sampled-by"),
+    recordRef: "track/recording/ev-sampled-by/sampled-by/recording/r2",
+    excerpt: 'MusicBrainz: "One More Time" by Daft Punk is sampled in "Circo Loco".',
+  };
+  const RELATION_PACK = [...PACK, samplesRecord];
+  type Label = "trivia" | "curiosity" | "connection" | "production" | "credits";
+  const ABOUT: Record<Label, ClaimAbout> = {
+    trivia: "trivia",
+    curiosity: "trivia",
+    connection: "connection",
+    production: "production",
+    credits: "credit",
+  };
+
+  /** An analysis card's claim labelled `type`, citing `evidenceIds` with `scope`. */
+  const labelled = (
+    id: string,
+    type: Label,
+    text: string,
+    evidenceIds: string[],
+    scope: Claim["scope"] = "recording",
+  ) =>
+    modelClaim(id, {
+      text,
+      about: ABOUT[type],
+      evidenceIds,
+      scope,
+      factoid: { title: `About ${id}`, type, entities: [] },
+    });
+  const verifyIn = (claims: Claim[], verdict: () => "supported" | "partial") =>
+    verify(claims, [], verdict, (draft) => stateFor(draft, RELATION_PACK));
+
+  it.each(Object.keys(ABOUT) as Label[])(
+    "reads a partly supported sample statement labelled %s as inferred",
+    async (type) => {
+      const { result } = await verifyIn(
+        [labelled("card", type, SAMPLES, ["ev-sampled-by"])],
+        () => "partial",
+      );
+
+      expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(analysisIssues(result)).toEqual([]);
+    },
+  );
+
+  it("reads a partly supported top-level sample statement about anything else as inferred", async () => {
+    const claims = (["history", "track", "sound", "trivia"] as const).map((about) =>
+      modelClaim(about, { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] }),
+    );
+    const { result } = await verifyIn(claims, () => "partial");
+
+    expect(result.claims?.map((claim) => [claim.id, claim.verdict, claim.kind])).toEqual([
+      ["history", "partial", "inferred"],
+      ["track", "partial", "inferred"],
+      ["sound", "partial", "inferred"],
+      ["trivia", "partial", "inferred"],
+    ]);
+  });
+
+  it("keeps a fully supported sample statement labelled trivia sourced", async () => {
+    const { result } = await verifyIn(
+      [labelled("card", "trivia", SAMPLES, ["ev-sampled-by"])],
+      () => "supported",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  it("leaves a partly supported trivia statement that asserts no relation sourced", async () => {
+    const { result } = await verifyIn(
+      [
+        labelled("card", "trivia", TRIVIA, ["ev-track"]),
+        modelClaim("top", { about: "trivia", evidenceIds: ["ev-web"] }),
+      ],
+      () => "partial",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    expect(provenance(result.claims, "top")).toEqual({ kind: "sourced", verdict: "partial" });
+  });
+
+  it("reads a partly supported cover statement labelled connection or history as inferred", async () => {
+    const { result } = await verifyIn(
+      [
+        labelled("card", "connection", COVER, ["ev-work"], "work"),
+        modelClaim("top", {
+          text: COVER,
+          about: "history",
+          evidenceIds: ["ev-work"],
+          scope: "work",
+        }),
+      ],
+      () => "partial",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(provenance(result.claims, "top")).toEqual({ kind: "inferred", verdict: "partial" });
+    expect(analysisIssues(result)).toEqual([]);
+  });
+
+  it("keeps a fully supported cover statement labelled connection sourced", async () => {
+    const { result } = await verifyIn(
+      [labelled("card", "connection", COVER, ["ev-work"], "work")],
+      () => "supported",
+    );
+
+    expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  // The model asserted the relation by citing its record: that holds when the scope check drops
+  // the record (a cover of the song, cited for a claim about this recording).
+  describe("by the citations the model gave it, before the scope check", () => {
+    const misScoped = () =>
+      labelled("card", "connection", COVER, ["ev-work", "ev-web"], "recording");
+
+    it("reads a partly supported claim whose cover record was dropped for scope as inferred", async () => {
+      const { result } = await verifyIn([misScoped()], () => "partial");
+
+      // The check kept the web page only; the claim still asserts the cover.
+      expect(result.claims?.find((claim) => claim.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(analysisIssues(result)).toEqual([]);
+    });
+
+    it("keeps the same claim sourced when supported: only the partial verdict is read otherwise", async () => {
+      const { result } = await verifyIn([misScoped()], () => "supported");
+
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "supported" });
+    });
+
+    it("leaves a claim that cites no relation record, before or after the check, as before", async () => {
+      // The release-wide credit is dropped for scope; the web page is kept.
+      const claim = labelled("card", "connection", TRIVIA, ["ev-release", "ev-web"], "recording");
+      const { result } = await verifyIn([claim], () => "partial");
+
+      expect(result.claims?.find((each) => each.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    });
+
+    it("counts a cited id that is not in the pack as no record", async () => {
+      const claim = labelled("card", "connection", TRIVIA, ["ev-missing", "ev-web"], "recording");
+      const { result } = await verifyIn([claim], () => "partial");
+
+      expect(result.claims?.find((each) => each.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    });
+  });
+
+  // Behaviour main already had, kept: every link's claim is stated whole through its link,
+  // whatever the link's type and whatever the claim cites (here a relation record).
+  it.each([
+    ["influence", "connection"],
+    ["producer", "credit"],
+  ] as const)(
+    "reads the %s link of a partly supported %s claim as inferred, as every link's claim is",
+    async (type, about) => {
+      const claim = modelClaim("rel", { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] });
+      const { result } = await verify(
+        [claim],
+        [linkTo("rel", ["ev-sampled-by"], { type })],
+        () => "partial",
+        (draft) => stateFor(draft, RELATION_PACK),
+      );
+
+      expect(provenance(result.claims, "rel")).toEqual({ kind: "inferred", verdict: "partial" });
+      expect(result.genealogy.links[0]).toMatchObject({ type, kind: "inferred" });
+      expect(analysisIssues(result)).toEqual([]);
+    },
+  );
 });
 
 describe("the numeric check in the verifier", () => {

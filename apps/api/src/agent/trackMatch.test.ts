@@ -6,8 +6,18 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { allStrings, disagreements, randomStrings, timed } from "../sources/testing/strings.js";
 import type { SpotifyData } from "./state.js";
-import { matchTrack, needsChoice, rankTracks, sameArtistName, words } from "./trackMatch.js";
+import {
+  bracketParts,
+  matchTrack,
+  needsChoice,
+  partTitlesDiffer,
+  quotedSources,
+  rankTracks,
+  sameArtistName,
+  words,
+} from "./trackMatch.js";
 
 function track(title: string, ...artistNames: string[]): SpotifyData {
   return {
@@ -2190,5 +2200,106 @@ describe("the scout's decision", () => {
     expect(words("が")).toEqual(["が"]);
     expect(words("Мой")).toEqual(["мой"]);
     expect(words("Ｆｕｌｌｗｉｄｔｈ")).toEqual(["fullwidth"]);
+  });
+});
+
+describe("quotedSources", { timeout: 30_000 }, () => {
+  // The expression before #194: it looked for the closing quote again from every "from".
+  const QUADRATIC = /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu;
+  const old = (title: string) =>
+    [...title.matchAll(QUADRATIC)].map((m) => [m.index, m.index + m[0].length]);
+
+  it("finds exactly the quoted works the earlier expression found", () => {
+    const realistic = [
+      'Let It Go - From "Frozen"',
+      "Let It Go (From “Frozen”/Soundtrack Version)",
+      'Theme From "Jurassic Park"',
+      "Song (from 'Encanto')",
+      "Song - from ‘Encanto’",
+      "Song (from «Amélie»)",
+      'Song (from "unclosed',
+      "Song (from the Basement)",
+      'Song (fromage "x")',
+      'Song (xfrom "x")',
+      'Song (ſfrom "x")',
+    ];
+    const symbols = ["from", " ", '"', "“", "”", "'", "’", "x"];
+    const parts = [
+      'from "',
+      "From “",
+      "from  '",
+      "FROM ‘",
+      "from «",
+      'from\n"',
+      '"',
+      "”",
+      "'",
+      "’",
+      "»",
+      "x",
+      " ",
+      "xfrom '",
+      '(from "',
+      "é",
+      "ſfrom '",
+      "\u212afrom '",
+    ];
+    const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000, 10)];
+
+    expect(disagreements(cases, quotedSources, old)).toEqual([]);
+    expect(cases.filter((title) => old(title).length > 0).length).toBeGreaterThan(1000);
+  });
+
+  it('answers quickly on a title of unclosed quotes after "from"', () => {
+    // About 1.2 s with the earlier expression.
+    const title = `Song (${"from “".repeat(10_000)})`;
+    const { ms, result } = timed(() => quotedSources(title));
+    expect(ms).toBeLessThan(400);
+    expect(result).toEqual([]);
+    expect(timed(() => partTitlesDiffer({ title }, { title: "Song" })).ms).toBeLessThan(400);
+  });
+});
+
+describe("bracketParts", { timeout: 30_000 }, () => {
+  // The expressions before #194: each "(" or "[" looked for its closing bracket again.
+  const PARTS = /\(([^)]*)\)|\[([^\]]*)\]/g;
+  const old = (text: string) => ({
+    parts: [...text.matchAll(PARTS)].map((m) => m[1] ?? m[2] ?? ""),
+    rest: text.replace(PARTS, " "),
+  });
+
+  it("finds exactly the parts the earlier expressions found, and leaves the same rest", () => {
+    const cases = [
+      "Song (Live) [Remastered 2011]",
+      "Song (feat. X",
+      "Song [a (b] c)",
+      "Song ((x)) [[y]]",
+      "Song )( ][",
+      ...allStrings(["(", ")", "[", "]", "x", " "], 6),
+      ...randomStrings(
+        ["(", ")", "[", "]", "((", "]]", "Live", " ", "\n", "x", "Remix"],
+        20_000,
+        14,
+      ),
+    ];
+    expect(disagreements(cases, bracketParts, old)).toEqual([]);
+    expect(cases.filter((text) => old(text).parts.length > 0).length).toBeGreaterThan(1000);
+  });
+
+  it("answers quickly on runs of opening brackets", () => {
+    // About 2.7 s with the earlier expressions.
+    for (const text of [`Song ${"[".repeat(60_000)}`, `Song ${"(".repeat(60_000)}`]) {
+      const { ms, result } = timed(() => bracketParts(text));
+      expect(ms).toBeLessThan(400);
+      expect(result).toEqual({ parts: [], rest: text });
+    }
+  });
+
+  it("answers quickly on 600 kB of unclosed brackets", () => {
+    // About 10 ms here; about 1 s for a scan that looked for the closing bracket again each time.
+    const text = "[".repeat(600_000);
+    const { ms, result } = timed(() => bracketParts(text));
+    expect(ms).toBeLessThan(400);
+    expect(result).toEqual({ parts: [], rest: text });
   });
 });

@@ -55,8 +55,12 @@ import {
   getMusicBrainzArtist,
   getMusicBrainzRelations,
   MusicBrainzRateLimiter,
+  normalizeName,
+  withoutEdition,
+  withoutFeatured,
 } from "./musicbrainz.js";
 import { getListenBrainzSimilarArtists } from "./listenbrainz.js";
+import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
 
 const MB = "https://musicbrainz.org/ws/2";
 const RECORDING_ID = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
@@ -1095,5 +1099,182 @@ describe("MusicBrainz client", () => {
       const { covers: none } = await relationsOf("Ice Ice Baby", "Vanilla Ice", ICE, iceDetails);
       expect(none).toEqual([]);
     });
+  });
+});
+
+describe("withoutEdition", { timeout: 30_000 }, () => {
+  // The expressions before #194: polynomial time on a long bracket or " - " part.
+  const old = (album: string) =>
+    album
+      .replace(
+        /\s*[([][^)\]]*(?:remaster|deluxe|edition|expanded|anniversary|version)[^)\]]*[)\]]/gi,
+        "",
+      )
+      .replace(/\s+-\s+[^-]*(?:remaster|deluxe|edition|expanded|anniversary|version).*$/i, "")
+      .trim();
+
+  it("leaves out exactly what the earlier expressions left out", () => {
+    const realistic = [
+      "Abbey Road (Remastered 2009)",
+      "Rumours (Super Deluxe)",
+      "Thriller 25 - Deluxe Edition",
+      "Nevermind - 20th Anniversary Edition",
+      "Back in Black (2003 Remaster) - Deluxe",
+      "Kind of Blue (Legacy Edition) [Remastered]",
+      "Blue (Expanded) [Live]",
+      "Hello - Version 2 (Deluxe)",
+      "A - B - Remastered",
+      "Rock-a-Bye - Remastered 2011",
+      "Songs (from the film (Deluxe)",
+      "X [Deluxe) Y",
+      "Album - Deluxe\nEdition",
+      "Album - Deluxe Edition\n",
+      "Album\n - Deluxe",
+      "Live at Leeds",
+      "",
+    ];
+    const symbols = [" ", "\n", "(", ")", "[", "]", "-", "deluxe", "x"];
+    const parts = [
+      " ",
+      "\t",
+      "\n",
+      "(",
+      ")",
+      "[",
+      "]",
+      " - ",
+      "-",
+      "Deluxe",
+      "EDITION",
+      "Remastered",
+      "Version",
+      "versio",
+      "deluxedition",
+      "Abbey Road",
+      "2009",
+      "Live",
+      "\u2028",
+    ];
+    const cases = [...realistic, ...allStrings(symbols, 5), ...randomStrings(parts, 20_000)];
+
+    expect(disagreements(cases, withoutEdition, old)).toEqual([]);
+    expect(cases.filter((album) => old(album) !== album.trim()).length).toBeGreaterThan(1000);
+  });
+
+  it.each([
+    // About 3 s with the earlier expression.
+    ["a long bracket part", `${" ".repeat(1000)}(${"Deluxe".repeat(1000)}`],
+    // About 5 s with the earlier expression.
+    ["a long dash part", `${" ".repeat(200)}- ${" ".repeat(200)}${"Deluxe".repeat(200)}\n`],
+    // Seconds for a rewrite that searched again from inside a bracket part, or looked for a line
+    // break after every edition word.
+    ["runs of opening brackets", `${"(".repeat(50_000)})`],
+    ["edition words before a line break", ` - ${"deluxe".repeat(100_000)}\n`],
+  ])("answers quickly on %s built to make the earlier expressions backtrack", (_name, album) => {
+    // Up to about 20 ms here (the 600 kB edition words); the slow forms take about 1 s or more.
+    const { ms, result } = timed(() => withoutEdition(album));
+    expect(ms).toBeLessThan(400);
+    expect(result).toBe(album.trim());
+  });
+});
+
+describe("withoutFeatured", { timeout: 30_000 }, () => {
+  // The steps before #194: quadratic on long runs of spaces, unclosed notes or tails.
+  const old = (title: string, artists: readonly string[] = []) => {
+    const credited = new Set(artists.map(normalizeName).filter(Boolean));
+    const namesCredited = (text: string) => {
+      const parts = text
+        .split(/\s*(?:,|&|\band\b|\/)\s*/i)
+        .map(normalizeName)
+        .filter(Boolean);
+      return parts.length > 0 && parts.every((p) => credited.has(p));
+    };
+    return title
+      .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring)\s[^)\]]*[)\]]/gi, "")
+      .replace(/\s*[([]\s*with\s([^)\]]*)[)\]]/gi, (all, who: string) =>
+        namesCredited(who) ? "" : all,
+      )
+      .replace(/\s+-\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, "")
+      .replace(/\s+(?:feat\.?|ft\.?|featuring)\s(.*)$/i, (all, who: string) =>
+        namesCredited(who) ? "" : all,
+      )
+      .trim();
+  };
+
+  it("leaves out exactly what the earlier steps left out", () => {
+    const realistic = [
+      "Stay With Me (feat. Mary J. Blige)",
+      "Song [ft. X]",
+      "Song - feat. X",
+      "Stay (With Me)",
+      "Welcome to Ft. Lauderdale",
+      "Song feat. X",
+      "Song (with X & Y)",
+      "Song (with X and Z)",
+      "Song feat. X\nY",
+      "Song (feat. X",
+      "Song ( featuring X) (with Y)",
+    ];
+    const symbols = [" ", "(", ")", "-", "feat", "with", "X", "\n", ","];
+    const parts = [
+      "Song",
+      " ",
+      "  ",
+      "\n",
+      "(feat. X)",
+      "( feat X)",
+      "[ft. Y]",
+      "(featuring X",
+      ")",
+      "]",
+      " - feat. X",
+      " -  ft ",
+      " feat. X",
+      " feat ",
+      " FT. ",
+      "(with X)",
+      "(with X and Y)",
+      "(With Me)",
+      " with ",
+      "X",
+      "Y",
+      " & Y",
+      ", Z",
+      "(",
+      "[",
+      "feat.X",
+      "-",
+      "\u2028",
+    ];
+    const cases = [...realistic, ...allStrings(symbols, 4), ...randomStrings(parts, 10_000, 9)];
+
+    for (const artists of [[], ["X"], ["X", "Y"]]) {
+      expect(
+        disagreements(
+          cases,
+          (title) => withoutFeatured(title, artists),
+          (title) => old(title, artists),
+        ),
+      ).toEqual([]);
+    }
+    expect(cases.filter((title) => old(title, ["X"]) !== title.trim()).length).toBeGreaterThan(
+      1000,
+    );
+  });
+
+  it.each([
+    // About 1.5 s to 3 s each with the earlier steps.
+    ["a long run of spaces", `a${" ".repeat(60_000)}x`],
+    ["unclosed featured-artist notes", "(feat ".repeat(25_000)],
+    ["unclosed notes with an artist", "(with ".repeat(25_000)],
+    ["a credit with a long run of spaces", `Song (with X${" ".repeat(60_000)}x)`],
+    ["featured-artist tails before a line break", `${" - feat x".repeat(30_000)}\ny`],
+    // Seconds for a rewrite that looked for the closing bracket again from every opening one.
+    ["runs of opening brackets", `${"(".repeat(50_000)})`],
+  ])("answers quickly on %s", (_name, title) => {
+    // Up to about 30 ms here; the slow forms take 1.5 s or more.
+    const { ms, result } = timed(() => withoutFeatured(title, ["X"]));
+    expect(ms).toBeLessThan(400);
+    expect(result.length).toBeGreaterThan(0);
   });
 });

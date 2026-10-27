@@ -55,8 +55,16 @@ export const DURATION_TOLERANCE_MS = 3000;
 export const PRINTED_DURATION_TOLERANCE_MS = 5000;
 
 const REMASTER = String.raw`(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?`;
-const REMASTER_BRACKETED = new RegExp(String.raw`\s*[([]\s*${REMASTER}\s*[)\]]`, "gi");
-const REMASTER_DASHED = new RegExp(String.raw`\s+-\s+${REMASTER}\s*$`, "i");
+/**
+ * A remaster label in brackets or after " - ", with the whitespace before it. That whitespace is
+ * read from the start of its run only, so a long run of it is read once: the same matches as
+ * with `\s*` (bracketed) or `\s+` (dashed) in front.
+ */
+export const REMASTER_BRACKETED = new RegExp(
+  String.raw`(?:(?<!\s)\s+)?[([]\s*${REMASTER}\s*[)\]]`,
+  "gi",
+);
+export const REMASTER_DASHED = new RegExp(String.raw`(?<!\s)\s+-\s+${REMASTER}\s*$`, "i");
 
 /**
  * A title without featured-artist and remaster suffixes: "Under Pressure - Remastered 2011".
@@ -80,17 +88,19 @@ export function titlesMatch(a: string, b: string, artists: readonly string[] = [
 }
 
 /**
+ * Discogs' disambiguation number at the end of a name ("Nirvana (2)"), with the whitespace before
+ * it. The whitespace is matched from the start of its run only, so a long run of it is read once.
+ */
+export const DISAMBIGUATION_NUMBER = /(?<!\s)\s+\(\d+\)$/;
+
+/**
  * An artist name for comparison. Besides `normalizeName`, Discogs' disambiguation number
  * ("Nirvana (2)") and variation mark ("*") are dropped and its inverted article ("Persuader,
  * The") put back in front.
  */
 export function normalizeArtist(name: string): string {
   // Discogs marks a name variation with a trailing "*" ("Persuader, The*", "Nirvana (2)*").
-  const trimmed = name
-    .trim()
-    .replace(/\*+$/, "")
-    .trim()
-    .replace(/\s+\(\d+\)$/, "");
+  const trimmed = name.trim().replace(/\*+$/, "").trim().replace(DISAMBIGUATION_NUMBER, "");
   const inverted = trimmed.match(/^(.*),\s*(the|a|an)$/i);
   return normalizeName(inverted ? `${inverted[2]} ${inverted[1]}` : trimmed);
 }
@@ -117,7 +127,12 @@ export function artistsMatch(expected: string[], credited: CreditedArtist[]): bo
   );
 }
 
-const CREDIT_SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
+/**
+ * The joins between the artists of a credit. Whitespace before a join is read from the start of
+ * its run only, so a long run of spaces is read once (the same splits as with `\s*` in front).
+ */
+export const CREDIT_SEPARATOR =
+  /(?:(?<!\s)\s+)?(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
 
 /**
  * True when a credit written as one string ("Queen & David Bowie", "A feat. B") names exactly

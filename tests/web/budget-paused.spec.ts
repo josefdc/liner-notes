@@ -205,7 +205,9 @@ test("the paused state still explains itself when the banner's code cannot be lo
 
   const paused = page.getByRole("region", { name: "Live analysis paused" });
   await expect(paused).toContainText("The budget for live analysis is spent");
-  await expect(paused).toContainText("The recorded tracks could not be loaded. Reload the page");
+  await expect(paused).toContainText(
+    "The recorded tracks could not be loaded. Try again, or reload the page",
+  );
   await expect(page.getByRole("button", { name: "or try a different song" })).toBeVisible();
 
   // The text asks for a reload: the button for it is there, and it brings back a fresh page.

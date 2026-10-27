@@ -1,11 +1,13 @@
 import type React from 'react';
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense, lazy } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense } from 'react';
 import Layout from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
 import { TrackLinkScreen, type TrackLinkState } from './components/TrackLinkScreen';
-const Dashboard = lazy(() => import('./components/Dashboard'));
-const Player = lazy(() => import('./components/Player'));
+import { lazyWithRetry } from './utils/lazyWithRetry';
+// Loaded again on the screen boundary's "Try again" (or another screen) when their code failed.
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard'));
+const Player = lazyWithRetry(() => import('./components/Player'));
 import { AppPhase, type TrackData } from './types';
 import { useAgent } from './hooks/useAgent';
 import { fetchStoredRun } from './hooks/agent/storedRun';
@@ -269,6 +271,18 @@ const App: React.FC = () => {
   // is in (setDashboardHeading, setPlayerHeading); the search box takes it on the search. A
   // link's screen and the progress screen focus their own heading and status line.
   const screen = link ? 'link' : phase;
+  // A result's heading takes the focus, or, while its code loads, the loading view until the
+  // heading is in.
+  const focusResult = useCallback((shown: AppPhase.DASHBOARD | AppPhase.PLAYER) => {
+    const heading =
+      shown === AppPhase.DASHBOARD ? dashboardHeadingRef.current : playerHeadingRef.current;
+    if (heading?.isConnected) {
+      heading.focus();
+      return;
+    }
+    focusWait.current = shown;
+    loadingView()?.focus();
+  }, []);
   useLayoutEffect(() => {
     focusWait.current = null;
     if (screen === 'link') return;
@@ -276,15 +290,12 @@ const App: React.FC = () => {
       searchInputRef.current?.focus();
       return;
     }
-    const heading =
-      screen === AppPhase.DASHBOARD ? dashboardHeadingRef.current : playerHeadingRef.current;
-    if (heading?.isConnected) {
-      heading.focus();
-      return;
-    }
-    focusWait.current = screen;
-    loadingView()?.focus();
-  }, [screen]);
+    focusResult(screen);
+  }, [screen, focusResult]);
+  // "Try again" on a result whose code could not be loaded: the focus moves as on opening it.
+  const handleScreenRetried = useCallback(() => {
+    if (screen === AppPhase.DASHBOARD || screen === AppPhase.PLAYER) focusResult(screen);
+  }, [screen, focusResult]);
 
   // A link to a result: its view's code is fetched while the stored result loads, not after.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the screen the page opened on
@@ -596,13 +607,16 @@ const App: React.FC = () => {
   return (
     <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
       <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
-        {/* A screen that throws (or whose code cannot be loaded) says so in its place, with a
-            way back to the search; another screen or result is tried afresh (resetKey), without
+        {/* A screen that throws says so in its place, with a way back to the search; one whose
+            code cannot be loaded offers to load it again or to reload the page. Another screen
+            or result is tried afresh (resetKey), its code loaded again if it failed, without
             mounting the screen again, so its heading keeps the focus on Back and Forward. */}
         <ErrorBoundary
           resetKey={screenKey(phase, link !== null, effectiveTrackData?.id)}
           message="This screen could not be shown"
           action={{ label: 'New search', onClick: handleNewSearch }}
+          loadFailedMessage="This screen could not be loaded"
+          onRetried={handleScreenRetried}
           className="flex-1 min-h-0 w-full bg-void"
         >
           <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : DashboardSkeleton}>

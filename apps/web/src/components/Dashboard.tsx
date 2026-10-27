@@ -1,5 +1,8 @@
-import React, { useState, useMemo, useCallback, Suspense } from 'react';
-const SonicFingerprint = React.lazy(() => import('./SonicFingerprint'));
+import type React from 'react';
+import { useState, useMemo, useCallback, Suspense } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { ErrorBoundary } from './ErrorBoundary';
+const SonicFingerprint = lazyWithRetry(() => import('./SonicFingerprint'));
 import ActivityLog from './ActivityLog';
 import { Music, ArrowRight, ExternalLink, Search } from 'lucide-react';
 import { AppPhase, type TrackData, type AgentLog } from '../types';
@@ -378,19 +381,30 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">
-                  Loading...
-                </div>
-              }
+            {/* A chart that cannot be loaded or drawn says so in its place, with a retry: the
+                rest of the Dashboard stays, and its heading keeps the focus. */}
+            <ErrorBoundary
+              resetKey={trackData?.id}
+              message="The Sonic Fingerprint could not be drawn"
+              action={{ label: 'Try again' }}
+              loadFailedMessage="The Sonic Fingerprint could not be loaded"
+              focusOnFail={false}
+              className="w-full h-full"
             >
-              <SonicFingerprint
-                genreProfile={trackData?.genreProfile}
-                modelUnavailable={trackData?.modelUnavailable}
-                fingerprint={fingerprint}
-              />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">
+                    Loading...
+                  </div>
+                }
+              >
+                <SonicFingerprint
+                  genreProfile={trackData?.genreProfile}
+                  modelUnavailable={trackData?.modelUnavailable}
+                  fingerprint={fingerprint}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </div>
           {/* Decorative BG */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyber/5 blur-[100px] pointer-events-none"></div>

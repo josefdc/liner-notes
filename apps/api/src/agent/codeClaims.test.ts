@@ -828,7 +828,11 @@ describe("through the verifier", () => {
     const code = buildCodeClaims(relations, evidence, counter());
     const draft = withCodeClaims(draftOf([]), code);
 
-    const kept = applyVerdicts(checkClaims(draft, evidence, null, "Ice Ice Baby"), new Map());
+    const kept = applyVerdicts(
+      checkClaims(draft, evidence, null, "Ice Ice Baby"),
+      new Map(),
+      evidence,
+    );
     const sample = claimCiting(kept.claims, SAMPLES_ID);
     expect(sample).toMatchObject({ kind: "sourced", verdict: null, numericCheck: "n/a" });
     const link = kept.genealogy.links.find((l) => l.claimId === sample?.id);
@@ -838,7 +842,11 @@ describe("through the verifier", () => {
 
     // Without the item it cites, a code claim is not sourced, and neither is its link.
     const without = evidence.filter((item) => item.id !== SAMPLES_ID);
-    const lost = applyVerdicts(checkClaims(draft, without, null, "Ice Ice Baby"), new Map());
+    const lost = applyVerdicts(
+      checkClaims(draft, without, null, "Ice Ice Baby"),
+      new Map(),
+      without,
+    );
     const lostClaim = lost.claims.find((claim) => claim.id === sample?.id);
     expect(lostClaim).toMatchObject({ kind: "inferred", evidenceIds: [] });
     expect(lost.genealogy.links.find((l) => l.claimId === sample?.id)?.kind).toBe("inferred");

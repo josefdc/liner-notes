@@ -32,10 +32,11 @@
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
  *    inferred otherwise. A link's claim states one relation, whole or not at all: only
  *    `supported` sources it (a `partial` one usually means a weaker or another relation). So
- *    does every other claim about a relation between two records (RELATION_ABOUT: a sample or a
- *    cover) that no link states: sample fact cards and any claim about a cover. A partly
- *    supported one reads as inferred, on this path as on more facts (factoids/service.ts). A
- *    code-built claim is
+ *    does every other claim that asserts a relation between two records, whatever the model
+ *    labelled it (`relationTest`): one about a sample or a cover (RELATION_ABOUT), and one
+ *    that cites a primary record of a sample, interpolation, remix or cover (isRelationRecord),
+ *    such as a connection card on a record that samples the track. A partly supported one reads
+ *    as inferred, on this path as on more facts (factoids/service.ts). A code-built claim is
  *    sourced by construction and gets no verdict; one left citing nothing by the deterministic
  *    step reads as not sourced (inferred), and so does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
@@ -68,6 +69,7 @@ import {
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { releaseYearOf } from "../../sources/musicbrainz.js";
+import { RELATION_PHRASE } from "../../sources/records.js";
 import { maskHandles } from "../../sources/search.js";
 import { plainSourceError } from "../../sources/toolResult.js";
 import { replayedRecording, runUsage } from "../callRecords.js";
@@ -267,7 +269,8 @@ export const LINK_IS_RELATION: Readonly<Record<LinkType, boolean>> = {
 /**
  * What a claim states as a relation between two records, whether a link states it or not: the
  * subjects LINK_CLAIM_ABOUT gives the claims of the link types that state one (LINK_IS_RELATION).
- * Those claims are stated whole; any other claim is judged as before.
+ * Those claims are stated whole, and so is a claim about another subject that cites a relation
+ * record (relationTest).
  */
 export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
   (Object.keys(LINK_IS_RELATION) as LinkType[])
@@ -275,17 +278,52 @@ export const RELATION_ABOUT: ReadonlySet<ClaimAbout> = new Set(
     .flatMap((type) => LINK_CLAIM_ABOUT[type]),
 );
 
+/** The relationship kinds a primary record's recordRef names (sources/records.ts). */
+const RELATION_KINDS: ReadonlySet<string> = new Set(Object.keys(RELATION_PHRASE));
+
+/**
+ * Whether an evidence item is a primary record of a relation between two records: a sample,
+ * interpolation, remix or cover, as MusicBrainz, Genius or SecondHandSongs file it. Its recordRef
+ * names the relationship's kind (`track/recording/<mbid>/sampled-by/recording/<mbid>`), and the
+ * relation is the one fact it states. A web page has no recordRef; a recording, release or
+ * credit record names no kind.
+ */
+export function isRelationRecord(item: Evidence): boolean {
+  if (item.sourceTier !== "primary-record" || !item.recordRef) return false;
+  return item.recordRef.split("/").some((segment) => RELATION_KINDS.has(segment));
+}
+
+/**
+ * Whether a claim asserts a relation between two records, whatever the model labelled it: a
+ * claim a link states, one about a subject in RELATION_ABOUT, or one that cites a relation
+ * record of the pack (isRelationRecord). The model's label is its own choice (a sample statement
+ * may come as trivia or a connection, and no card type is about a cover); the record it cites
+ * is the source's.
+ */
+function relationTest(
+  genealogy: Genealogy,
+  evidence: readonly Evidence[],
+): (claim: Claim) => boolean {
+  const stated = linkClaimIds(genealogy);
+  const records = new Set(evidence.filter(isRelationRecord).map((item) => item.id));
+  return (claim) =>
+    stated.has(claim.id) ||
+    RELATION_ABOUT.has(claim.about) ||
+    claim.evidenceIds.some((id) => records.has(id));
+}
+
 /**
  * The claims with the judge's verdicts and their kinds, and the genealogy with each link's kind
- * from its own claim (see the module comment). A claim a link states is a relation, stated whole;
- * so is one about a subject in RELATION_ABOUT, which no link need state. Pure.
+ * from its own claim (see the module comment). A claim that asserts a relation (a link's, one
+ * about a subject in RELATION_ABOUT, one citing a relation record of `evidence`, the pack the
+ * claims were checked against) is stated whole. Pure.
  */
 export function applyVerdicts(
   checked: Pick<CheckedDraft, "claims" | "genealogy">,
   verdicts: ReadonlyMap<string, { verdict: Claim["verdict"]; reason: string }>,
+  evidence: readonly Evidence[],
 ): { claims: Claim[]; genealogy: Genealogy } {
-  const stated = linkClaimIds(checked.genealogy);
-  const isRelation = (claim: Claim) => stated.has(claim.id) || RELATION_ABOUT.has(claim.about);
+  const isRelation = relationTest(checked.genealogy, evidence);
   const claims = checked.claims.map((claim): Claim => {
     // A code claim is sourced by construction, while it still cites the item that states it.
     if (claim.origin !== "model") {
@@ -296,7 +334,7 @@ export function applyVerdicts(
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link, and a
-    // partly supported claim about a relation in RELATION_ABOUT is not sourced either.
+    // partly supported claim that asserts a relation otherwise is not sourced either.
     const supported = verdict === "supported" || (verdict === "partial" && !isRelation(claim));
     return {
       ...claim,
@@ -608,11 +646,12 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
     const calls = judged.call ? [judged.call] : [];
 
-    // 4. Kinds, then 5. masked text. Sample fact cards and any claim about a cover are stated
-    // whole, as a link's claim is (applyVerdicts, RELATION_ABOUT).
+    // 4. Kinds, then 5. masked text. A claim that asserts a sample or a cover, whatever its
+    // label, is stated whole, as a link's claim is (applyVerdicts).
     const verified = applyVerdicts(
       { claims: checked.claims, genealogy: enriched.genealogy },
       judged.verdicts,
+      state.evidence,
     );
     const tooLong = new Set(judged.tooLong);
     const { claims, factoids } = maskedText(

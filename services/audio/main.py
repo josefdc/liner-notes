@@ -2,7 +2,9 @@
 Audio analysis service for Liner Notes.
 
 Downloads a 30-second Deezer or Spotify preview and analyses it. The preview is decoded once
-(soundfile, libsndfile) and every step shares that signal.
+(soundfile, libsndfile) and every step shares that signal. MP4 (M4A) and AAC previews are
+refused as a format the service does not decode (libsndfile cannot read them; the preview hosts
+serve MP3).
 
 The response is `{"v2": ...}`: AudioFeatures v2 from packages/contract (camelCase, as the
 contract names them). It holds a gate for too-short, silent and noise-like input, tempo and key
@@ -32,7 +34,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, BinaryIO
 
 # Keep TensorFlow's C++ logging to warnings and errors.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -45,6 +47,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 import fingerprint  # noqa: E402
 import signal_features  # noqa: E402
+import sniff  # noqa: E402
 from estimators import (  # noqa: E402
     NO_KEY_ESTIMATE,
     STEADY_TEMPO_PARTS,
@@ -55,7 +58,12 @@ from estimators import (  # noqa: E402
     select_estimator,
 )
 from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
-from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
+from preview import (  # noqa: E402
+    PreviewDownloadError,
+    PreviewURLError,
+    UnsupportedFormatError,
+    download_preview,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("audio")
@@ -172,8 +180,17 @@ class HealthResponse(BaseModel):
 
 
 class InvalidAudioError(ValueError):
-    """The preview cannot be analysed: not decodable, or non-finite or absurd samples. The
-    message is one of a fixed set (no paths or decoder output) and is returned with the 422."""
+    """The preview cannot be analysed: in a format the service does not decode, not decodable,
+    or non-finite or absurd samples. The message is one of a fixed set (no paths or decoder
+    output) and is returned with the 422."""
+
+
+# Why an MP4 (M4A) or AAC preview is refused, when the host declared it as such or sniff.py
+# recognises its first bytes. Those forms never get the generic decode failure and are never
+# decoded: under an .mp3 name, libsndfile's MP3 decoder can find spurious frames in an ADTS
+# stream (a tenth of a second of the 1 s test fixture, which the gate then calls too short).
+# A form sniff.py does not recognise gets the generic reason.
+UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does not decode"
 
 
 # Why the gate measured nothing, for each block it leaves null (v2.withheld).
@@ -338,16 +355,20 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     return {"v2": v2}
 
 
-def decode(file_path: str) -> Signals:
+def decode(file_path: str | BinaryIO) -> Signals:
     """
-    Decode a file once (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own
-    rate; the analysis resamples it once per rate it needs. Previews are 30 s; never decode
-    more than MAX_DECODE_SECONDS, whatever the file claims.
+    Decode a file (a path, or a binary file object such as the evals' in-memory clips) once
+    (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own rate; the analysis
+    resamples it once per rate it needs. Previews are 30 s; never decode more than
+    MAX_DECODE_SECONDS, whatever the file claims.
 
-    Raises InvalidAudioError (a 422) when the file cannot be decoded, or holds non-finite or
-    absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the
-    downmix (antiphase stereo), the loudest channel is analysed instead.
+    Raises InvalidAudioError (a 422) for a file sniff.py recognises as MP4 (M4A) or AAC
+    (UNSUPPORTED_FORMAT, before any decoding), when the file cannot be decoded, or when it
+    holds non-finite or absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels
+    cancel in the downmix (antiphase stereo), the loudest channel is analysed instead.
     """
+    if sniff.is_mp4_or_aac(file_path):
+        raise InvalidAudioError(UNSUPPORTED_FORMAT)
     try:
         with sf.SoundFile(file_path) as f:
             frames = min(f.frames, int(MAX_DECODE_SECONDS * f.samplerate)) if f.frames >= 0 else -1
@@ -383,7 +404,12 @@ class AnalysisTimeoutError(Exception):
 
 async def analyze_preview_url(url: str) -> dict:
     """Download a validated preview, analyse it in the thread pool and remove the file."""
-    file_path = await download_preview(url)
+    try:
+        file_path = await download_preview(url)
+    except UnsupportedFormatError as e:
+        # Refused by its declared type before the body was read: a format, not a download,
+        # failure.
+        raise InvalidAudioError(UNSUPPORTED_FORMAT) from e
     try:
         loop = asyncio.get_running_loop()
         work = loop.run_in_executor(executor, analyze_audio_file, file_path)

@@ -296,7 +296,33 @@ drum loop as of a dense mix whose key a listener would name. The codes (the cont
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
 times full scale, is refused with `422`.
 
-Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
+The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
+refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
+does not decode`, in these cases only:
+
+- the host declares one of these types: `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/m4b`,
+  `audio/x-m4b`, `audio/mpeg4`, `application/mp4`, `audio/aac`, `audio/aacp`, `audio/x-aac`,
+  `audio/aac-adts`, `audio/x-hx-aac-adts`, `audio/vnd.dlna.adts`, `audio/mp4a-latm`,
+  `audio/mpeg4-generic`, `audio/3gpp`, `audio/3gpp2` or `video/mp4`. The preview is refused
+  before its body is read.
+- the first bytes show the format (`sniff.py`), after up to four ID3v2 tags:
+  - an MP4 file: a `ftyp` box naming an MP4, QuickTime or 3GPP brand, either first or behind up
+    to three `free`, `skip` or `wide` boxes. HEIC and AVIF images do not count.
+  - an ADIF stream (the `ADIF` magic).
+  - an ADTS stream: a frame header within the first 4 kB, then more headers with the same
+    stream parameters, each where the previous frame's length puts it. At the start, two
+    frames are enough; further in, four are needed.
+  - a LOAS stream: three frames in a row, the first within the first 4 kB.
+
+A file that starts with an MP3 frame, or with the magic of one of the containers listed here,
+is never refused this way: WAV (`RIFF`, `RIFX`, `RF64`, W64), AIFF, CAF, FLAC, Ogg, AU, IRCAM,
+NIST, PARIS, AVR, PVF, VOC and MATLAB 5. Any other file that cannot be decoded gets the generic
+reason.
+
+The API has no reason code for this refusal yet. The user still sees "the audio analysis
+failed", and the precise reason is only in the API's error detail.
+
+Errors carry only a fixed `detail` (no measurements and no `analyzer_version`); the cause is
 only written to the service log.
 
 | Status | Meaning |
@@ -304,7 +330,7 @@ only written to the service log.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (not decodable, non-finite or absurd samples) |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, non-finite or absurd samples) |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
@@ -321,18 +347,21 @@ only written to the service log.
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a
-`200` response with an `audio/*` content type and no content encoding, and stops at 2 MB
-(previews are about 0.5 MB). Connect and read timeouts are 5 s and 10 s, and the whole download
-must finish within 20 s. The temporary file is removed after the analysis, whatever the outcome.
+`200` response with an MP3, WAV, FLAC or Ogg content type (a missing one is refused) and no
+content encoding. It stops at 2 MB (previews are about 0.5 MB). Connect and read timeouts are 5 s
+and 10 s, and the whole download must finish within 20 s. The temporary file is removed after the
+analysis, whatever the outcome.
 
 ## How it works
 
 1. **Download** the preview as described above.
-2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. Each step that
-   needs another rate gets a resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1
-   kHz for RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the
-   models, as `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The
-   STFT, the onset envelope, the harmonic part and its chromagram are computed once and shared.
+2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. An MP4 (M4A) or
+   AAC file that `sniff.py` recognises by its first bytes is refused first (see the error
+   statuses above), since `libsndfile` reads neither. Each step that needs another rate gets a
+   resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1 kHz for
+   RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the models, as
+   `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The STFT, the
+   onset envelope, the harmonic part and its chromagram are computed once and shared.
 3. **Gate** (`signal_features.py`): duration, the 95th percentile of the frame RMS, and for
    noise the onset periodicity (a tempogram peak, tolerant of human timing), the share of
    energy in spectral lines and whether they form one harmonic series, and a pYIN pitch track
@@ -408,8 +437,9 @@ suite that way.
 
 - **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
   needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
-  platform without a bundled library and an old system `libsndfile`. AAC and M4A cannot be
-  decoded at all: the service decodes only through `libsndfile`, which does not read them (the
-  preview hosts the service accepts serve MP3).
+  platform without a bundled library and an old system `libsndfile`. AAC and M4A are not
+  decoded at all: the service decodes only through `libsndfile`, which does not read them. It
+  refuses the forms it recognises with their own `422` reason (see the error statuses above);
+  the preview hosts the service accepts serve MP3.
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

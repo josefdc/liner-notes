@@ -33,7 +33,11 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in self.server.files:
             body = self.server.files[path]
-            self._send(200, {"Content-Type": "audio/mpeg", "Content-Length": str(len(body))}, body)
+            content_type = self.server.types.get(path, "audio/mpeg")
+            headers = {"Content-Length": str(len(body))}
+            if content_type is not None:
+                headers["Content-Type"] = content_type
+            self._send(200, headers, body)
         elif path == "/audio.mp3":
             self._send(
                 200,
@@ -102,12 +106,14 @@ def pytest_configure(config):
 def cdn():
     """
     Yields (base_url, server). server.hits lists requested paths, server.sent counts bytes
-    streamed by /endless.mp3, and server.files maps extra paths to audio/mpeg bodies.
+    streamed by /endless.mp3, server.files maps extra paths to bodies, served as audio/mpeg
+    unless server.types names another content type for the path (None: no Content-Type).
     """
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.hits = []
     server.sent = 0
     server.files = {}
+    server.types = {}
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

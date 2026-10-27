@@ -307,7 +307,9 @@ describe("a statement from more facts that asserts a relation is stated whole, w
   };
   const sampledBy = recordOf("/sampled-by/recording/1da61e7a");
   const coveredBy = recordOf("/covered-by/recording/29df9c62");
-  const pack = [...PACK, sampledBy, coveredBy];
+  // The album the recording is on: a release-wide record, which states no relation.
+  const album = recordOf("release/bd3bb36e");
+  const pack = [...PACK, sampledBy, coveredBy, album];
   const SAMPLES = "Drake and 21 Savage's Circo Loco samples One More Time.";
   const COVER = "Vitamin String Quartet recorded its own version of the song.";
   const TRIVIA = "The synth was bought second-hand in Paris.";
@@ -385,5 +387,34 @@ describe("a statement from more facts that asserts a relation is stated whole, w
     // Scoped to the recording, the card keeps ev-1 only; it still asserts the cover.
     expect(claimOf(COVER)).toMatchObject({ scope: "recording", evidenceIds: ["ev-1"] });
     expect(provenance(claimOf(COVER))).toEqual({ kind: "inferred", verdict: "partial" });
+  });
+
+  it("keeps the same cover statement sourced when supported after the drop", async () => {
+    const { claimOf } = await moreFacts(
+      {
+        cards: [null, labelled(COVER, "connection", [coveredBy.id, "ev-1"]), null],
+        judge: () => "supported",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(COVER)).toMatchObject({ evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(COVER))).toEqual({ kind: "sourced", verdict: "supported" });
+  });
+
+  it("leaves a fact that cites no relation record, before or after the check, as before", async () => {
+    // The release-wide record is dropped for scope; ev-1 is kept.
+    const { claimOf } = await moreFacts(
+      {
+        cards: [labelled(TRIVIA, "trivia", [album.id, "ev-1"]), null, null],
+        judge: () => "partial",
+      },
+      { runId: RUN_ID },
+      pack,
+    );
+
+    expect(claimOf(TRIVIA)).toMatchObject({ scope: "recording", evidenceIds: ["ev-1"] });
+    expect(provenance(claimOf(TRIVIA))).toEqual({ kind: "sourced", verdict: "partial" });
   });
 });

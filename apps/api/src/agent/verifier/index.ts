@@ -30,20 +30,20 @@
  *    still served, not the fallback.
  * 4. Kinds (`applyVerdicts`, pure): a model claim is sourced when the judge found its cited
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
- *    inferred otherwise. A link's claim states one relation, whole or not at all: only
- *    `supported` sources it (a `partial` one usually means a weaker or another relation). So
- *    does every other claim that asserts a relation between two records, whatever the model
- *    labelled it (`relationTest`): one about a sample or a cover (RELATION_ABOUT), and one
- *    whose own citations, as the model gave them, include a primary record of a sample,
- *    interpolation, remix or cover (isRelationRecord, `citesRelation`), such as a connection
- *    card on a record that samples the track. The model asserted the relation by citing it, so
- *    such a claim counts even when the deterministic step dropped that record for its scope (a
- *    cover of the song cited for a claim about this recording). The rule reads the claim's
- *    citations, not what its link's type says: a producer or influence link whose claim cites a
- *    relation record is stated whole too, as every link's claim is. A partly supported one reads
- *    as inferred, on this path as on more facts (factoids/service.ts). A code-built claim is
- *    sourced by construction and gets no verdict; one left citing nothing by the deterministic
- *    step reads as not sourced (inferred), and so does its link. A
+ *    inferred otherwise. Every link's claim states one relation, whole or not at all, whatever
+ *    its link's type and whatever it cites: only `supported` sources it (a `partial` one usually
+ *    means a weaker or another relation). So does every other claim that asserts a relation
+ *    between two records, whatever the model labelled it (`relationTest`): one about a sample or
+ *    a cover (RELATION_ABOUT), and one whose own citations, as the model gave them, include a
+ *    primary record of a sample, interpolation, remix or cover (isRelationRecord,
+ *    `citesRelation`), such as a connection card on a record that samples the track. The model
+ *    asserted the relation by citing it, so such a claim counts even when the deterministic step
+ *    dropped that record for its scope (a cover of the song cited for a claim about this
+ *    recording). A cited id that is not in the pack is no record, and counts for nothing. A
+ *    partly supported one reads as inferred, on this path as on more facts
+ *    (factoids/service.ts). A code-built claim is sourced by construction and gets no verdict;
+ *    one left citing nothing by the deterministic step reads as not sourced (inferred), and so
+ *    does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
@@ -652,8 +652,9 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
     const calls = judged.call ? [judged.call] : [];
 
-    // 4. Kinds, then 5. masked text. A claim that asserts a sample or a cover, whatever its
-    // label, is stated whole, as a link's claim is (applyVerdicts).
+    // 4. Kinds, then 5. masked text. A claim about a sample or a cover, or one that cites a
+    // sample, interpolation, remix or cover record, whatever its label, is stated whole, as a
+    // link's claim is (applyVerdicts).
     const verified = applyVerdicts(
       {
         claims: checked.claims,

@@ -471,6 +471,9 @@ describe("a claim about a relation is stated whole, with or without a link", () 
     expect(isRelationRecord(releaseItem)).toBe(false);
     expect(isRelationRecord(webItem)).toBe(false);
     expect(isRelationRecord({ ...webItem, recordRef: "x/samples/y" })).toBe(false);
+    // A kind is a whole segment of the recordRef, never part of one.
+    expect(isRelationRecord(record("genius", "track/song/1/samples-pack/2"))).toBe(false);
+    expect(isRelationRecord(record("musicbrainz", "track/recording/a-remixed-by-b"))).toBe(false);
   });
 
   it("classifies every link type as a relation or not", () => {
@@ -629,15 +632,23 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
       expect(result.claims?.find((each) => each.id === "card")?.evidenceIds).toEqual(["ev-web"]);
       expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
     });
+
+    it("counts a cited id that is not in the pack as no record", async () => {
+      const claim = labelled("card", "connection", TRIVIA, ["ev-missing", "ev-web"], "recording");
+      const { result } = await verifyIn([claim], () => "partial");
+
+      expect(result.claims?.find((each) => each.id === "card")?.evidenceIds).toEqual(["ev-web"]);
+      expect(provenance(result.claims, "card")).toEqual({ kind: "sourced", verdict: "partial" });
+    });
   });
 
-  // The rule reads the claim's citations, not its link's type: a producer or influence link's
-  // claim that cites a relation record is stated whole, as every link's claim is.
+  // Behaviour main already had, kept: every link's claim is stated whole through its link,
+  // whatever the link's type and whatever the claim cites (here a relation record).
   it.each([
     ["influence", "connection"],
     ["producer", "credit"],
   ] as const)(
-    "reads the %s link of a partly supported %s claim citing a relation record as inferred",
+    "reads the %s link of a partly supported %s claim as inferred, as every link's claim is",
     async (type, about) => {
       const claim = modelClaim("rel", { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] });
       const { result } = await verify(

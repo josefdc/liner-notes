@@ -971,9 +971,8 @@ export function fingerprintSubtitle(track: TrackData, hasGenreProfile: boolean):
 export function missingModelOutput(track: TrackData): string[] {
   const missing: string[] = [];
   if (!track.genreProfile?.length) missing.push('genre profile');
-  if (track.segmentsSource === 'template') {
-    missing.push('song structure (a generic template is shown)');
-  }
+  // A template structure is a generic default, not the model's: it is not drawn.
+  if (track.segmentsSource === 'template') missing.push('song structure');
   if (!track.factoids?.length) missing.push('facts');
   if (!track.genealogy?.nodes?.some((node) => node.group !== 1)) missing.push('connected tracks');
   return missing;

@@ -46,7 +46,7 @@ test("a result with missing lists renders, graph included", async ({ page }) => 
 
   await expect(page.getByRole("heading", { name: "Sparse Result" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Song structure" })).toContainText(
-    "STRUCTURE DATA UNAVAILABLE",
+    "Song sections not analyzed",
   );
   const graph = page.locator("#panel-genealogy svg");
   await expect(graph.locator("g.nodes > g")).toHaveCount(2);

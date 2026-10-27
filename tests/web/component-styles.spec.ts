@@ -986,17 +986,16 @@ async function sectionBoundaries(page: Page) {
   return result;
 }
 
-for (const fixture of ["full-result", "missing-states"]) {
-  test(`song sections stand out 3:1 against the page (${fixture})`, async ({ page }) => {
-    await useMockApi(page, loadFixture(fixture));
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await analyzeAndOpenDashboard(page, "Track");
-    await openPlayer(page);
-    const sections = await sectionBoundaries(page);
-    expect(sections.length).toBeGreaterThan(1);
-    for (const { label, ratio } of sections) expect(ratio, label).toBeGreaterThanOrEqual(3);
-  });
-}
+// Only the model's sections are drawn (a template's are not: see missing-states.spec.ts).
+test("song sections stand out 3:1 against the page (full-result)", async ({ page }) => {
+  await useMockApi(page, loadFixture("full-result"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await analyzeAndOpenDashboard(page, "Track");
+  await openPlayer(page);
+  const sections = await sectionBoundaries(page);
+  expect(sections.length).toBeGreaterThan(1);
+  for (const { label, ratio } of sections) expect(ratio, label).toBeGreaterThanOrEqual(3);
+});
 
 /**
  * The provenance fixture with a "sample" fact whose text names an entity of every colour, and

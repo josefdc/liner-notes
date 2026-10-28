@@ -1,6 +1,6 @@
 /**
  * Test helper: generated strings for comparing a rewritten text matcher with the expression it
- * replaces, and a clock for the time one call takes.
+ * replaces, and clocks for the time one call takes and for how it grows with its text.
  *
  *   const texts = [...allStrings([" ", "to", "A1"], 5), ...randomStrings(parts, 20_000)];
  *   expect(disagreements(texts, rewritten, old)).toEqual([]);
@@ -65,6 +65,39 @@ export function timed<T>(
     if (ms > stopAboveMs) break;
   }
   return { ms: fastest, result: result as T };
+}
+
+/**
+ * How a call's time grows from a text of `size` characters to one `factor` times longer, with its
+ * result on the longer text: the fastest of `runs` calls on each, the two texts taken in turn.
+ * A busy machine slows the calls on both texts alike, so the ratio holds where a bound in
+ * milliseconds does not; a call that reads the text once grows about as the text does, and one
+ * that reads on to the end of the text from each match grows about as its square. A call on the
+ * longer text that takes more than `stopAboveMs` ends the timing there, as in `timed`.
+ */
+export function growth<T>(
+  make: (size: number) => string,
+  call: (text: string) => T,
+  {
+    size,
+    factor,
+    runs = 3,
+    stopAboveMs = Number.POSITIVE_INFINITY,
+  }: { size: number; factor: number; runs?: number; stopAboveMs?: number },
+): { ratio: number; smallMs: number; bigMs: number; result: T } {
+  const small = make(size);
+  const big = make(size * factor);
+  let smallMs = Number.POSITIVE_INFINITY;
+  let bigMs = Number.POSITIVE_INFINITY;
+  let result: T | undefined;
+  for (let run = 0; run < runs; run++) {
+    smallMs = Math.min(smallMs, timed(() => call(small)).ms);
+    const timing = timed(() => call(big));
+    result = timing.result;
+    bigMs = Math.min(bigMs, timing.ms);
+    if (timing.ms > stopAboveMs) break;
+  }
+  return { ratio: bigMs / smallMs, smallMs, bigMs, result: result as T };
 }
 
 /**

@@ -284,12 +284,21 @@ async function settledOnFakeClock<T>(promise: Promise<T>): Promise<T> {
   const watched = promise.finally(() => {
     settled = true;
   });
+  let polls = 0;
   while (!settled && vi.isFakeTimers()) {
+    // A run still going after this many polls (2 s or more) waits on a timer that is not due,
+    // which a clock that stays where it is never reaches: say so, rather than run to the limit.
+    if (polls++ === MAX_POLLS_ON_FAKE_CLOCK) {
+      throw new Error(
+        `the run waits on a timer the stopped clock does not reach (${vi.getTimerCount()} timer(s) pending)`,
+      );
+    }
     vi.advanceTimersByTime(0);
     await new Promise((resolve) => realSetTimeout(resolve, 1));
   }
   return watched;
 }
+const MAX_POLLS_ON_FAKE_CLOCK = 2_000;
 
 /** A real HTTP server for tests that need to drop the connection. */
 let server: http.Server;

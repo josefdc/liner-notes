@@ -37,7 +37,14 @@ import {
   withoutEmails,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
-import { allStrings, disagreements, growth, randomStrings, timed } from "./testing/strings.js";
+import {
+  allStrings,
+  disagreements,
+  growth,
+  randomStrings,
+  threadCpuMs,
+  timed,
+} from "./testing/strings.js";
 
 // Pass-through, so one test can make a write fail half-way.
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -1954,20 +1961,20 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
 });
 
 /**
- * The tables below time each shape on a 50 kB text and on one eight times longer, the fastest of
- * three runs on each, the two taken in turn (`growth`). A single pass grows 5-19 times here, as
- * the longer text also costs more per character to build and to collect. A scan that reads on to
- * the end of its line or of the text from each match grows 35-85 times: a print_r entry or an
+ * The tables below measure each shape's cost on a 50 kB text and on one eight times longer, in the
+ * CPU time of the thread that runs it (`growth`). A single pass grows 5-14 times here, as the
+ * longer text also costs more per character to build and to collect, and as much on a machine
+ * with every CPU busy, since CPU time leaves out the waits for a turn on one. A scan that reads on
+ * to the end of its line or of the text from each match grows 35-85 times: a print_r entry or an
  * environment value read again from each key inside it, a cookie value read to the end of its
  * line, a closing tag sought from the first one for each opening tag, or a mask's place sought
- * from the start of the text for each value. A busy machine slows both texts alike, so the ratio
- * holds where a bound in milliseconds does not: such a scan takes 0.5-1.5 s on 200 kB, within
- * what a busy machine adds. MAX_MS on the longer text, over ten times what a single pass
- * takes at normal load, only stops a scan slow enough to stall the suite.
+ * from the start of the text for each value. Such a scan takes 0.5-1.5 s on 200 kB, which a bound
+ * on the time taken cannot tell from the waits of a busy machine. A call over MAX_MS of CPU time,
+ * over ten times what a single pass takes on 400 kB, fails at once.
  */
-const GROWTH = { size: 50_000, factor: 8, runs: 3, stopAboveMs: 3_000 };
-const MAX_GROWTH = 30;
 const MAX_MS = 3_000;
+const GROWTH = { size: 50_000, factor: 8, maxMs: MAX_MS };
+const MAX_GROWTH = 30;
 /** How many times `part` occurs in `text`, none overlapping. */
 const count = (text: string, part: string) => text.split(part).length - 1;
 /** `unit` repeated to `size` characters. */
@@ -2033,9 +2040,8 @@ describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, 
       (text) => text.length + 10 * count(text, '""'),
     ],
   ])("grows linearly on %s", (_name, make, call, expected) => {
-    const { ratio, bigMs, result } = growth((size) => make(filled(size)), call, GROWTH);
+    const { ratio, result } = growth((size) => make(filled(size)), call, GROWTH);
     expect(ratio).toBeLessThan(MAX_GROWTH);
-    expect(bigMs).toBeLessThan(MAX_MS);
     // The result on the longer text, against what each mask adds to it.
     expect(result).toEqual(expected(make(filled(GROWTH.size * GROWTH.factor))));
   });
@@ -2567,9 +2573,8 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
     ["OAuth parameters", (fill) => `Proxy-Authorization: OAuth k=v ${fill("a.")}\ntoken: QzENDQ`],
     ["string escapes", (fill) => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
   ])("grows linearly on %s", (_name, make) => {
-    const { ratio, bigMs, result } = growth((size) => make(filled(size)), redactText, GROWTH);
+    const { ratio, result } = growth((size) => make(filled(size)), redactText, GROWTH);
     expect(ratio).toBeLessThan(MAX_GROWTH);
-    expect(bigMs).toBeLessThan(MAX_MS);
     expect(result).not.toContain("QzENDQ");
   });
 
@@ -2579,28 +2584,30 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
       (text: string) => new SourceError("spotify", "http", text).message,
     ];
     // Field lines whose value is prose: the end of each line is found once. From 128 kB to 1 MB
-    // this grows 7-11 times here (about 50 ms on 1 MB at normal load). Finding each line's end by
-    // searching for CR and for LF apart grows over 40 times, and searching for each of the seven
-    // line breaks apart about 60 times, as a search for a break the text does not hold reads on to
-    // its end. Those take 0.7-2.5 s on 1 MB, which a bound in milliseconds cannot tell from a busy
-    // machine; the ratio holds under load, as both sizes are slowed alike.
+    // this grows 7-9 times in CPU time (about 50 ms on 1 MB), with every CPU busy as well. Finding
+    // each line's end by searching for CR and for LF apart grows over 40 times, and searching for
+    // each of the seven line breaks apart about 60 times, as a search for a break the text does not
+    // hold reads on to its end. Those take 0.7-2.5 s on 1 MB, which a bound on the time taken
+    // cannot tell from the waits of a busy machine.
     const prose = (size: number) => "\ntoken: a b".repeat(Math.floor(size / 11));
     for (const call of calls) {
-      const { ratio } = growth(prose, call, { size: 1 << 17, factor: 8, stopAboveMs: 6_000 });
+      const { ratio } = growth(prose, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
       expect(ratio).toBeLessThan(20);
     }
-    // About 0.4 s each at normal load (0.67 s with the machine busier). The bound only catches a
-    // scan that reads the whole text again for each value, which takes minutes.
+    // About 0.4 s of CPU time each. The bound only catches a scan that reads the whole text again
+    // for each value, which takes minutes.
     const big = "\nX-Api-Key: k\ntoken: a b".repeat(Math.floor((1 << 20) / 24));
     for (const call of calls) {
-      const { ms, result } = timed(() => call(big), { runs: 3, stopAboveMs: 6_000 });
-      expect(ms).toBeLessThan(3_000);
+      const cpu = { runs: 3, stopAboveMs: 2 * MAX_MS, clock: threadCpuMs };
+      const { ms, result } = timed(() => call(big), cpu);
+      expect(ms).toBeLessThan(MAX_MS);
       expect(result).not.toMatch(/: k\b/);
     }
     // The HTTP error log reads only the text near its cap, however many hosts follow.
     const hosts = "contoso-prod.openai.azure.com ".repeat((1 << 20) / 30);
     for (const text of [big, hosts]) {
-      expect(timed(() => logText(text), { runs: 3, stopAboveMs: 2_000 }).ms).toBeLessThan(25);
+      const cpu = { runs: 3, stopAboveMs: 2_000, clock: threadCpuMs };
+      expect(timed(() => logText(text), cpu).ms).toBeLessThan(25);
     }
   });
 

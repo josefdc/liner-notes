@@ -5,15 +5,17 @@
  * which commit it was recorded, so the progress that follows is never read as live work. The
  * result is the recorded one with the new run's id, still saying `mode: "replay"` with the
  * recording's date, commit and analyzer version, and with this run's own usage (none: a replay
- * calls no model; the recording's cost stays in the record). Every event carries the time it is
- * sent, so a stream's times never go back, and the time since the recorded run started
- * (`elapsedMs`): the event's own, or else the time the recording measured for it (`atMs`, since
- * the recorded stream opened, without the wait at the picker), so a recording made before events
- * carried one still shows when each step happened. The notice and the stream's own events carry
- * none. The recorded `done` is not sent: the stream sends its own, and its own heartbeats.
+ * calls no model; the recording's cost stays in the record), each fact stated once
+ * (`oneClaimPerFact`). Every event carries the time it is sent, so a stream's times never go
+ * back, and the time since the recorded run started (`elapsedMs`): the event's own, or else the
+ * time the recording measured for it (`atMs`, since the recorded stream opened, without the wait
+ * at the picker), so a recording made before events carried one still shows when each step
+ * happened. The notice and the stream's own events carry none. The recorded `done` is not sent:
+ * the stream sends its own, and its own heartbeats.
  */
 
-import type { ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
+import type { ReplayRecord, RunInfo, TrackAnalysis } from "@liner-notes/contract";
+import { withoutRestatements } from "../agent/restatements.js";
 import type { EventBody } from "../http/sse.js";
 
 export interface ReplayPacing {
@@ -49,13 +51,15 @@ const NO_USAGE = { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens
  * matched the track (`queryMatch`): that belonged to the recorded run, not to this one.
  */
 export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnalysis {
-  const { queryMatch: _match, ...analysis } = record.analysis;
-  const run = analysis.run;
+  const { queryMatch: _match, ...recorded } = record.analysis;
+  const run = recorded.run;
   if (!run) throw new Error(`Replay record ${record.slug} has no run information`);
+  const { analysis, verifier } = oneClaimPerFact(recorded, run.verifier);
   return {
     ...analysis,
     run: {
       ...run,
+      ...(verifier ? { verifier } : {}),
       id: runId,
       mode: "replay",
       replayed: "run",
@@ -64,6 +68,30 @@ export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnal
       analyzerVersion: record.analyzerVersion,
       usage: NO_USAGE,
     },
+  };
+}
+
+/**
+ * The recorded result with each fact stated once, as the verifier now leaves it
+ * (agent/restatements.ts): a recording made before that step keeps its claims as recorded, less
+ * the restated ones, which are counted in its verifier summary. A recording without a verifier
+ * summary has nowhere to count them, and keeps every claim.
+ */
+function oneClaimPerFact(
+  analysis: Omit<TrackAnalysis, "queryMatch">,
+  verifier: RunInfo["verifier"],
+): { analysis: Omit<TrackAnalysis, "queryMatch">; verifier: RunInfo["verifier"] } {
+  if (!verifier) return { analysis, verifier };
+  const kept = withoutRestatements(
+    analysis.claims ?? [],
+    analysis.factoids ?? [],
+    [...(analysis.genealogy?.links ?? []), ...(analysis.samples ?? [])],
+    analysis.evidence ?? [],
+  );
+  if (kept.restated === 0) return { analysis, verifier };
+  return {
+    analysis: { ...analysis, claims: kept.claims, factoids: kept.factoids },
+    verifier: { ...verifier, restated: (verifier.restated ?? 0) + kept.restated },
   };
 }
 

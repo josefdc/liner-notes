@@ -541,8 +541,9 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
   );
 
   it("reads a partly supported top-level sample statement about anything else as inferred", async () => {
+    // Each in words of its own: one statement written twice keeps one copy (restatements.ts).
     const claims = (["history", "track", "sound", "trivia"] as const).map((about) =>
-      modelClaim(about, { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] }),
+      modelClaim(about, { text: `${SAMPLES} (${about})`, about, evidenceIds: ["ev-sampled-by"] }),
     );
     const { result } = await verifyIn(claims, () => "partial");
 
@@ -580,8 +581,9 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
     const { result } = await verifyIn(
       [
         labelled("card", "connection", COVER, ["ev-work"], "work"),
+        // In words of its own: one statement written twice keeps one copy (restatements.ts).
         modelClaim("top", {
-          text: COVER,
+          text: "The song has a string version by Vitamin String Quartet.",
           about: "history",
           evidenceIds: ["ev-work"],
           scope: "work",

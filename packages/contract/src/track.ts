@@ -260,7 +260,8 @@ export type RunUsage = z.infer<typeof RunUsage>;
  * What the verifier did in a run: claims judged, and claims left without a verdict. `failed`
  * says the check itself did not complete: the judge call failed, ran out of time, or left some
  * of the claims it was sent without a verdict. Those claims read as not checked, not as checked
- * and found wanting.
+ * and found wanting. `restated` counts the claims left out because they state a fact another
+ * claim of the result states.
  */
 export const VerifierSummary = z.object({
   judged: z.int().min(0),
@@ -277,6 +278,15 @@ export const VerifierSummary = z.object({
     .describe(
       "True when the judge call failed, ran out of time or left claims it was sent without a " +
         "verdict; absent on results from before it was sent",
+    ),
+  restated: z
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Claims left out of the result because they restate another: a model claim stating what " +
+        "a code-built claim states on the same record, or a second copy of one statement; absent " +
+        "when none were left out, and on results from before they were counted",
     ),
 });
 

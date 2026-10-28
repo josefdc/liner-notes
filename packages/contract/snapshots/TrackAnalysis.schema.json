@@ -346,6 +346,12 @@
                   "failed": {
                     "description": "True when the judge call failed, ran out of time or left claims it was sent without a verdict; absent on results from before it was sent",
                     "type": "boolean"
+                  },
+                  "restated": {
+                    "description": "Claims left out of the result because they restate another: a model claim stating what a code-built claim states on the same record, or a second copy of one statement; absent when none were left out, and on results from before they were counted",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["judged", "unjudged"]
@@ -753,6 +759,12 @@
                   "failed": {
                     "description": "True when the judge call failed, ran out of time or left claims it was sent without a verdict; absent on results from before it was sent",
                     "type": "boolean"
+                  },
+                  "restated": {
+                    "description": "Claims left out of the result because they restate another: a model claim stating what a code-built claim states on the same record, or a second copy of one statement; absent when none were left out, and on results from before they were counted",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["judged", "unjudged"],

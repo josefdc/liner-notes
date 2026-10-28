@@ -344,15 +344,31 @@ ADDED_FAMILIES = {
     "chord-keyed-seeded": (
         "; triads ",
         {
-            "e-piano-chord": "on an electric piano",
-            "flute-chord": "of flute-like tones",
-            "fm-e-piano-chord": "on an FM electric piano",
-            "triangle-chord": "of triangle waves",
-            "mallet-chord": "struck on bars",
+            "soft-chord": "in a soft timbre (an electric piano, a flute, an FM electric piano "
+            "or a triangle wave)",
+            "mallet-chord": "struck on bars (a marimba-like bar or a glockenspiel)",
         },
         ", 30 seeds each",
     ),
 }
+
+
+def present_families(group: str, names) -> list[str]:
+    """The words of the families added to `group` that occur among the control `names`."""
+    _, families, _ = ADDED_FAMILIES.get(group, ("", {}, ""))
+    return [
+        words
+        for family, words in families.items()
+        if any(name.startswith(f"{family}-s") for name in names)
+    ]
+
+
+def added_families(names) -> list[str]:
+    """Every added family among the control `names`, in words that stand on their own."""
+    return [
+        *present_families("one-pitch-class-seeded", names),
+        *(f"triads {words}" for words in present_families("chord-keyed-seeded", names)),
+    ]
 
 
 def group_description(group: str, names) -> str:
@@ -361,12 +377,8 @@ def group_description(group: str, names) -> str:
     closing parenthesis when it ends with one, after it otherwise.
     """
     text = GROUPS[group]
-    lead, families, trail = ADDED_FAMILIES.get(group, ("", {}, ""))
-    added = [
-        words
-        for family, words in families.items()
-        if any(name.startswith(f"{family}-s") for name in names)
-    ]
+    lead, _, trail = ADDED_FAMILIES.get(group, ("", {}, ""))
+    added = present_families(group, names)
     if not added:
         return text
     insert = f"{lead}{', '.join(added)}{trail}"

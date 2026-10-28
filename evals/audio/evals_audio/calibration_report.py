@@ -100,6 +100,20 @@ ONE_SOURCE_NOTE = (
 )
 
 
+def added_note(controls: dict) -> list[str]:
+    """The control families added after the single-source rule, when the run holds any."""
+    from .controls import added_families
+
+    added = added_families([c["name"] for c in controls["controls"]])
+    if not added:
+        return []
+    listed = ", ".join(added[:-1]) + (" and " if len(added) > 1 else "") + added[-1]
+    return [
+        f"- Added to the controls after the single-source rule, with no value set on them: "
+        f"{listed}. The rule was not changed for them."
+    ]
+
+
 def count_p_values(doc: dict) -> int:
     """The p-values this section prints: one McNemar per evaluation row, one per AUC line."""
     runs, controls = runs_of(doc)
@@ -173,6 +187,7 @@ def section(doc: dict) -> list[str]:
         "there; a change that alters no evaluation clip stays.",
         *(f"- {note}" for note in PROTOCOL_NOTES),
         *([f"- {ONE_SOURCE_NOTE}"] if after.one_source else []),
+        *added_note(controls),
         "- The families are taken in turn, each with the earlier choices in place: "
         + "; ".join(f"{f['title']}" for f in choice["families"])
         + ".",

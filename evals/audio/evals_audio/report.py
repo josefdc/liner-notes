@@ -553,7 +553,27 @@ def p_value_note(doc: dict) -> str:
 
 def guide(doc: dict) -> list[str]:
     lines = GUIDE if is_legacy(doc) else GUIDE[:-2] + GUIDE_BAKEOFF + GUIDE[-2:]
+    if not is_legacy(doc):
+        suites = {run["suite"] for run in doc["runs"]}
+        lines = [line for line in lines if GUIDE_SUITE.get(_bullet(line), "") in {"", *suites}]
     return [p_value_note(doc) if line is P_VALUES else line for line in lines]
+
+
+# Bullets of the guide that explain one suite's tables, left out of a report without that suite.
+GUIDE_SUITE = {
+    "MIREX": "key",
+    "Paired MIREX difference": "key",
+    "Agreement": "golden",
+    "hit@k": "golden",
+    "Costs": "cost",
+}
+
+
+def _bullet(line) -> str:
+    """The bold term a guide bullet opens with ("" for any other line)."""
+    if not isinstance(line, str) or not line.startswith("- **"):
+        return ""
+    return line[4:].split("**", 1)[0]
 
 
 def is_legacy(doc: dict) -> bool:
@@ -669,6 +689,8 @@ FULL_REPORT = {"tempo", "key", "golden", "cost"}
 
 
 def _listed(parts: list[str]) -> str:
+    if not parts:
+        return ""
     return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
 
 
@@ -705,27 +727,41 @@ def measured(doc: dict) -> str:
                 *parts,
             ]
         )
+    if not parts:
+        return "No measurement of the audio service (`services/audio`)"
     return "The audio service (`services/audio`): " + _listed(parts)
 
 
 def not_run(doc: dict) -> str:
-    """The suites a report without all of them leaves out, said plainly."""
+    """The suites and datasets a report without every suite leaves out, said plainly."""
+    from .datasets import DATASETS
+
     suites = {run["suite"] for run in doc["runs"]}
     if FULL_REPORT <= suites:
         return ""
+    held = {(run["suite"], run["dataset"]["name"]) for run in doc["runs"]}
     missing = [
-        words
-        for suite, words in (
-            ("tempo", "tempo accuracy"),
-            ("key", "key accuracy"),
-            ("golden", "the golden set"),
-            ("cost", "the estimators' costs"),
-        )
-        if suite not in suites
+        *(f"{d.suite} on {d.title}" for d in DATASETS.values() if (d.suite, d.name) not in held),
+        *(
+            f"what the {d.suite} rules compare on {d.title}"
+            for d in DATASETS.values()
+            if ("calibration", d.name) not in held
+        ),
+        *(
+            words
+            for suite, words in (
+                ("golden", "the golden set"),
+                ("cost", "the estimators' costs"),
+                ("controls", "the generated controls"),
+            )
+            if suite not in suites
+        ),
     ]
+    if not missing:
+        return ""
     return (
-        f" Not run for this report: {_listed(missing)}. The earlier reports that hold them "
-        "state the analyzer version they were made with."
+        f" Not run for this report: {'; '.join(missing)}. Any report in `evals/reports` that "
+        "holds them states the analyzer version it was made with."
     )
 
 

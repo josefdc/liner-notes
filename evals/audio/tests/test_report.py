@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from evals_audio import calibration, golden, service
-from evals_audio.controls import GROUPS, group_description
+from evals_audio.controls import GROUPS, added_families, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import (
@@ -12,6 +12,7 @@ from evals_audio.report import (
     OlderResults,
     add_run,
     count_p_values,
+    guide,
     load,
     measured,
     not_run,
@@ -260,13 +261,22 @@ def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
     )
     only_bells = group_description("one-pitch-class-seeded", [*before, "tubular-bell-s507"])
     assert "a held synth note, a tubular bell)" in only_bells
-    chords = group_description(
-        "chord-keyed-seeded", [*before, "fm-e-piano-chord-s700", "mallet-chord-s801"]
-    )
+    chords = group_description("chord-keyed-seeded", [*before, "mallet-chord-s801"])
     assert chords.endswith(
-        "their key not scored; triads on an FM electric piano, struck on bars, 30 seeds each)"
+        "their key not scored; triads struck on bars (a marimba-like bar or a glockenspiel), 30 "
+        "seeds each)"
+    )
+    both = group_description("chord-keyed-seeded", [*before, "mallet-chord-s801", "soft-chord-s7"])
+    assert (
+        "; triads in a soft timbre (an electric piano, a flute, an FM electric piano or a " in both
     )
     assert group_description("no-key", ["tubular-bell-s507"]) == GROUPS["no-key"]
+    assert added_families(before) == []
+    assert added_families([*before, "soft-chord-s700", "tubular-bell-s500"]) == [
+        "a tubular bell",
+        "triads in a soft timbre (an electric piano, a flute, an FM electric piano or a "
+        "triangle wave)",
+    ]
 
 
 def test_a_group_description_takes_added_families_whatever_its_wording(monkeypatch):
@@ -294,12 +304,53 @@ def test_a_report_says_what_it_measures_and_what_it_does_not_hold():
         "Tempo accuracy of the audio service (`services/audio`) on annotated datasets, the "
         "calibration of its withholding rules and its answers on generated controls"
     )
-    assert "key accuracy, the golden set and the estimators' costs" in not_run(partial)
     for words in ("key accuracy", "golden", "costs"):
         assert words not in measured(partial)
     full = doc("tempo", "key", "golden", "cost", "calibration", "controls")
     assert measured(full).startswith("Tempo and key accuracy") and not_run(full) == ""
     assert measured(doc("controls")).endswith("its answers on generated controls")
+    assert measured(doc()) == "No measurement of the audio service (`services/audio`)"
+
+
+def test_a_report_lists_each_run_it_does_not_hold_and_claims_no_other_report():
+    def run(suite, dataset):
+        return {"suite": suite, "dataset": {"name": dataset}}
+
+    partial = {
+        "runs": [
+            run("tempo", "ballroom"),
+            run("calibration", "ballroom"),
+            run("controls", "controls"),
+        ]
+    }
+    text = not_run(partial)
+    assert text.startswith(" Not run for this report: tempo on GiantSteps Tempo; key on GiantSteps")
+    for words in (
+        "what the tempo rules compare on GiantSteps Tempo",
+        "what the key rules compare on GiantSteps Key",
+        "the golden set; the estimators' costs.",
+        "Any report in `evals/reports` that holds them",
+    ):
+        assert words in text
+    assert "Ballroom" not in text and "generated controls" not in text
+    assert "the generated controls" in not_run({"runs": [run("tempo", "ballroom")]})
+
+
+def test_the_guide_explains_only_the_tables_a_report_holds():
+    def terms(doc):
+        return {line[4:].split("**", 1)[0] for line in guide(doc) if line.startswith("- **")}
+
+    def committed(date):
+        return json.loads((REPO_ROOT / "evals" / "reports" / f"audio-{date}.json").read_text())
+
+    full = committed("2026-10-25")  # every suite
+    assert {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"} <= terms(full)
+    partial = dict(full, runs=[r for r in full["runs"] if r["suite"] in ("tempo", "calibration")])
+    held = terms(partial)
+    assert {"Acc1", "Lifted rules", "Comparability", "Intervals"} <= held
+    assert not held & {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"}
+    with_key = dict(full, runs=[r for r in full["runs"] if r["suite"] in ("key", "calibration")])
+    assert {"MIREX", "Paired MIREX difference"} <= terms(with_key)
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

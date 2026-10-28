@@ -134,6 +134,25 @@ async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapse
   }
 }
 
+/**
+ * Runs `run` (inside onFakeClock's `start`) with setTimeout watched, and adds the delay of each
+ * timer set meanwhile to `delays`, whatever the timer is for: a test that bounds the delays fails
+ * on any long timer set during the run, a wait or not. The fake setTimeout is back in place
+ * before onFakeClock restores the real timers.
+ */
+async function recordingTimers<T>(run: () => Promise<T>, delays: number[]): Promise<T> {
+  const fakeSetTimeout = globalThis.setTimeout as (...args: unknown[]) => unknown;
+  globalThis.setTimeout = ((handler: unknown, ms?: number, ...args: unknown[]) => {
+    delays.push(ms ?? 0);
+    return fakeSetTimeout(handler, ms, ...args);
+  }) as typeof setTimeout;
+  try {
+    return await run();
+  } finally {
+    globalThis.setTimeout = fakeSetTimeout as typeof setTimeout;
+  }
+}
+
 describe("scoutNode when the run is cancelled", () => {
   it("cuts its retry wait short and sends no second search", async () => {
     // The first search is rate limited: the scout waits about 1 s before trying again.
@@ -600,10 +619,16 @@ describe("scoutNode's Spotify failures", () => {
     };
     const { graph } = scoutGraph();
 
-    const { out, elapsed } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
+    const delays: number[] = [];
+    const { out, elapsed } = await onFakeClock(() =>
+      recordingTimers(() => graph.invoke({ songQuery: "Song A" }), delays),
+    );
 
-    // Gives up at once, not after any wait (the 60 s asked for, or the 1 s backoff).
-    expect(elapsed).toBeLessThan(50);
+    // Gives up at once, not after any wait (the 60 s asked for, or the 1 s backoff): it sets no
+    // timer for a wait (the store's batching polls with zero-delay ones). The run waits for no
+    // timer, so no time passes on the clock; the bound on it is the shortest wrong wait.
+    expect(delays.filter((ms) => ms >= 100)).toEqual([]);
+    expect(elapsed).toBeLessThan(1000);
     expect(spotify.calls).toBe(1);
     expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 60_000 });
   });
@@ -665,9 +690,14 @@ describe("scoutNode's Spotify failures", () => {
     };
     const { graph } = scoutGraph();
 
-    const { out, elapsed } = await onFakeClock(() => graph.invoke({ songQuery: "Song A" }));
+    const delays: number[] = [];
+    const { out, elapsed } = await onFakeClock(() =>
+      recordingTimers(() => graph.invoke({ songQuery: "Song A" }), delays),
+    );
 
-    expect(elapsed).toBeLessThan(50);
+    // At once, not after the 10 s asked for or the 1 s backoff (as above).
+    expect(delays.filter((ms) => ms >= 100)).toEqual([]);
+    expect(elapsed).toBeLessThan(1000);
     expect(spotify.calls).toBe(1);
     expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 10_001 });
   });

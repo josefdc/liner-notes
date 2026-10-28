@@ -922,6 +922,9 @@ describe("main", () => {
     dir = mkdtempSync(join(tmpdir(), "report-"));
     dbPath = join(dir, "api.db");
     const db = new Database(dbPath);
+    // Without a flush to disk at each of the seed's many commits, which on a machine whose disk
+    // is busy can take longer in all than the hook's 10 s. The file is the same once closed.
+    db.pragma("synchronous = OFF");
     runMigrations(db);
     seed(db);
     db.close();

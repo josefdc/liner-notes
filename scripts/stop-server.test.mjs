@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -23,9 +23,55 @@ const BUSY = "fixtures/stop-server/busy-server.mjs";
 const HOLDS_OUTPUT = "fixtures/stop-server/holds-output.mjs";
 const LEAVES_CHILD = "fixtures/stop-server/leaves-child.mjs";
 const STEP_TIMEOUT_MS = 20_000;
+/** The real timers, for waiting while stopServer's timers run on a fake clock. */
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+
+/** `promise`, or a failure saying `what` did not happen within STEP_TIMEOUT_MS of real time. */
+function within(promise, what) {
+  let timer;
+  const late = new Promise((_resolve, reject) => {
+    timer = realSetTimeout(
+      () => reject(new Error(`${what} within ${STEP_TIMEOUT_MS} ms`)),
+      STEP_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([promise, late]).finally(() => realClearTimeout(timer));
+}
+
+/** Calls stopServer on a fake clock; `settled()` says whether it has returned. */
+function stopOnFakeClock(options) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  let settled = false;
+  const stopping = stopServer(options);
+  stopping.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  return { stopping, settled: () => settled };
+}
+
+/**
+ * Ends a stopServer left waiting on the fake clock by a failed test, then restores the timers.
+ * Never throws: a stop that does not end (a loop of timers) must not hide the test's own failure.
+ */
+async function releaseFakeClock() {
+  try {
+    if (vi.isFakeTimers()) await vi.runAllTimersAsync();
+  } catch {
+    // The test has already failed; its own error is the one to report.
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 const cleanups = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
@@ -177,7 +223,30 @@ describe("stopServer", () => {
       const holder = Number(server.output().match(/holder (\d+)/)?.[1]);
       expect(alive(holder)).toBe(true);
 
-      const stopped = await stopServer({ ...server, timeoutMs: 500, giveUpMs: 1_500 });
+      // stopServer's waits run on a fake clock, moved only once the group has exited: how long
+      // the server and tsx take to exit on a busy machine cannot make the SIGKILL find them.
+      let stopped;
+      try {
+        const { stopping, settled } = stopOnFakeClock({
+          ...server,
+          timeoutMs: 500,
+          giveUpMs: 1_500,
+        });
+        const until = performance.now() + STEP_TIMEOUT_MS;
+        while (alive(-server.group)) {
+          if (performance.now() > until) throw new Error("the server's group did not exit");
+          await new Promise((resolveWait) => realSetTimeout(resolveWait, 20));
+        }
+        await vi.advanceTimersByTimeAsync(500); // the SIGKILL, to a group already gone
+        expect(alive(holder)).toBe(true);
+        await vi.advanceTimersByTimeAsync(999);
+        expect(settled(), "still waiting just before giveUpMs").toBe(false);
+        await vi.advanceTimersByTimeAsync(1); // giving up
+        expect(settled(), "given up at giveUpMs").toBe(true);
+        stopped = await within(stopping, "stopServer did not return");
+      } finally {
+        await releaseFakeClock();
+      }
 
       // The group itself is gone by then (the SIGKILL finds no process); the holder is not in it.
       expect(stopped).toEqual({
@@ -199,7 +268,21 @@ describe("stopServer", () => {
       const child = Number(server.output().match(/child (\d+)/)?.[1]);
       expect(alive(child)).toBe(true);
 
-      const stopped = await stopServer({ ...server, timeoutMs: STEP_TIMEOUT_MS });
+      // stopServer's waits run on a fake clock, moved only once the output has closed: however
+      // long the server takes to exit, the SIGKILL that follows is endGroup's, not the timeout's.
+      let stopped;
+      try {
+        const { stopping, settled } = stopOnFakeClock({ ...server, timeoutMs: STEP_TIMEOUT_MS });
+        await within(server.closed, "the server's output did not close");
+        await vi.advanceTimersByTimeAsync(999);
+        expect(settled(), "still in endGroup's grace just before it ends").toBe(false);
+        expect(alive(child)).toBe(true);
+        await vi.advanceTimersByTimeAsync(1); // endGroup's grace ends: its SIGKILL
+        expect(settled(), "returned once endGroup's grace ended").toBe(true);
+        stopped = await within(stopping, "stopServer did not return");
+      } finally {
+        await releaseFakeClock();
+      }
 
       expect(stopped).toEqual({
         code: 0,

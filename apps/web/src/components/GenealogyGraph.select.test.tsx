@@ -330,6 +330,22 @@ describe('A/B listening in the panel', () => {
     expect(screen.queryByTestId('node-detail')).toBeNull();
   });
 
+  it('stops when another track is selected, and the new panel says nothing plays', async () => {
+    const { container } = render(<Graph />);
+    await click(card(container, 'older'));
+    await act(async () =>
+      fireEvent.click(within(panel()).getByRole('button', { name: 'Hear the sample' })),
+    );
+    expect(element?.paused).toBe(false);
+    await click(card(container, 'later'));
+    expect(element?.paused).toBe(true);
+    expect(panel().querySelector('[data-listening-status]')?.textContent).toBe('');
+    expect(within(panel()).getByRole('button', { name: 'Hear both' })).toBeTruthy();
+    // The pair does not go on to its second clip.
+    await finishClip();
+    expect(played).toEqual([OLDER_CLIP]);
+  });
+
   it('says plainly when a preview is missing, and in a replay that previews play live', async () => {
     const { container, rerender } = render(<Graph />);
     await click(card(container, 'guess'));
@@ -446,7 +462,7 @@ describe("the map's filters", () => {
   });
 });
 
-describe('the panel, as the review asked', () => {
+describe('the panel: what it says of a relation, and how it closes', () => {
   it('offers "Hear both", not "Hear the sample", for a sample the model only proposed', async () => {
     const withClip = {
       ...data,
@@ -510,6 +526,26 @@ describe('the panel, as the review asked', () => {
       expect(screen.queryByTestId('node-detail')).toBeNull();
       expect(outside.mock.calls[1][0].defaultPrevented).toBe(true);
     } finally {
+      window.removeEventListener('keydown', outside);
+    }
+  });
+
+  it('leaves an Escape on the page to the Player while the map is not on screen', async () => {
+    const outside = vi.fn();
+    window.addEventListener('keydown', outside);
+    // The map's tab is hidden (another tab of the Player is shown).
+    const visible = vi.spyOn(Element.prototype, 'checkVisibility').mockReturnValue(false);
+    try {
+      const { container } = render(<Graph />);
+      await click(card(container, 'older'));
+      await act(async () => {
+        (document.activeElement as HTMLElement | null)?.blur();
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+      });
+      expect(outside.mock.calls[0][0].defaultPrevented).toBe(false);
+      expect(panel()).toBeTruthy();
+    } finally {
+      visible.mockRestore();
       window.removeEventListener('keydown', outside);
     }
   });

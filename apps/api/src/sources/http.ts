@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { logger } from "../logger.js";
+import { logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -469,7 +469,8 @@ function maskableUnion(a: readonly Span[], b: readonly Span[]): Span[] {
  * - a value that is not a quoted string (a number, an object, a list): where it ends is not plain
  *   from the text;
  * - quotes written as HTML entities (`&quot;`), and keys escaped more than once
- *   (`\\\"password\\\":`);
+ *   (`\\\"password\\\":`): redactText and scrubText read these in the decoded text
+ *   (moreSecretSpans);
  * - a key and its value at different escape levels (`\"token\":"v"`);
  * - links escaped twice (`https:\\\/\\\/…`) or written with `/` for "/".
  */
@@ -519,12 +520,15 @@ function objectValueSpan(text: string, at: number): Span | undefined {
   return BARE_VALUE_END.test(text) ? [at, end] : undefined;
 }
 
-/** Where the value of each secret object key without quotes lies. Reads the text once. */
-function objectKeySpans(text: string): Span[] {
+/**
+ * Where the value of each secret object key without quotes lies, a key `judge` takes for a
+ * secret. Reads the text once.
+ */
+function objectKeySpans(text: string, judge = isSecretKey): Span[] {
   const spans: Span[] = [];
   OBJECT_KEY.lastIndex = 0;
   for (let key = OBJECT_KEY.exec(text); key; key = OBJECT_KEY.exec(text)) {
-    if (!isSecretKey(key[1] ?? "")) continue;
+    if (!judge(key[1] ?? "")) continue;
     const span = objectValueSpan(text, key.index + key[0].length);
     if (!span) continue;
     spans.push(span);
@@ -546,15 +550,17 @@ const CLOSE_TAG = /<\/((?:[A-Za-z_][\w.-]{0,63}:)?[A-Za-z_][\w.-]{0,63})\s*>/g;
 /**
  * Where the content of each element named after a secret key lies, in any case: from its opening
  * tag to the first closing tag of the same name after it, unless it is a status word. An element
- * without one (a placeholder such as "--token <token>" in a usage line) is left alone. Reads the
- * text twice: once for the closing tags, once for the opening ones, each closing tag passed once.
+ * without one (a placeholder such as "--token <token>" in a usage line) is left alone. `judge`
+ * takes the name without its prefix for a secret. Reads the text twice: once for the closing
+ * tags, once for the opening ones, each closing tag passed once.
  */
-function elementSpans(text: string): Span[] {
+function elementSpans(text: string, judge = isSecretKey): Span[] {
   const closing = new Map<string, Span[]>();
   CLOSE_TAG.lastIndex = 0;
   for (let tag = CLOSE_TAG.exec(text); tag; tag = CLOSE_TAG.exec(text)) {
-    const name = (tag[1] ?? "").toLowerCase();
-    if (!isSecretKey(name.slice(name.indexOf(":") + 1))) continue;
+    const written = tag[1] ?? "";
+    const name = written.toLowerCase();
+    if (!judge(written.slice(written.indexOf(":") + 1))) continue;
     const list = closing.get(name) ?? [];
     list.push([tag.index, tag.index + tag[0].length]);
     closing.set(name, list);
@@ -646,9 +652,809 @@ function headerLineSpans(text: string): Span[] {
  *   as entities (`&lt;token&gt;`) are not read;
  * - an "X-" prefix is dropped only from a header line's name: `{ x_auth_token: v }` and
  *   `<X-Auth-Token>` are not read, while `x-api-key`, a secret key itself, is read in every shape.
+ * moreSecretSpans reads the escaped line breaks, the entities and the "X-" prefixes.
  */
 const unquotedKeySpans = (text: string) =>
   maskableUnion(objectKeySpans(text), maskableUnion(elementSpans(text), headerLineSpans(text)));
+
+/**
+ * Names whose value is a secret besides SECRET_KEYS, compared as keys are (keyForm). A short list
+ * on purpose: headers named after their service, and two well-known fields. A header or field
+ * name that ends in a secret key (`X-Vault-Token`, `X-Goog-Api-Key`) needs no entry
+ * (isSecretFieldName).
+ */
+const MORE_SECRET_NAMES: ReadonlySet<string> = new Set(
+  [
+    // Azure API Management and Azure Functions.
+    "ocp-apim-subscription-key",
+    "functions-key",
+    // AWS: `<SecretAccessKey>`, `aws_secret_access_key = …`.
+    "secret-access-key",
+    // Django's form field, and the CSRF field of Express and Spring (`_csrf`).
+    "csrfmiddlewaretoken",
+    "csrf",
+    // Django's and Flask's signing key (`SECRET_KEY`).
+    "secret-key",
+  ].map(keyForm),
+);
+
+/** The longest of SECRET_KEYS and MORE_SECRET_NAMES: the last words of a name are read up to it. */
+const MAX_NAME_LENGTH = Math.max(
+  ...[...SECRET_KEYS, ...MORE_SECRET_NAMES].map((key) => key.length),
+);
+
+/** The first word of a pagination or sync cursor (`next_page_token`, `pageToken`): not a secret. */
+const CURSOR_WORD = /^(?:next|page|continuation|sync)$/i;
+
+/** A name without an "X-" prefix and an index ("-0", "_1"): `X-Auth-Token`, `Token-0`. */
+const bareName = (name: string) => name.replace(/^x[-_]/i, "").replace(/[-_]\d{1,4}$/, "");
+
+/**
+ * True for a key whose value is a secret in the shapes moreSecretSpans reads: a secret key
+ * (isSecretKey) or one of MORE_SECRET_NAMES, also with an "X-" prefix or an index
+ * (`x_auth_token`, `Token-0`).
+ */
+function isSecretName(name: string): boolean {
+  const bare = bareName(name);
+  return (
+    isSecretKey(name) ||
+    isSecretKey(bare) ||
+    MORE_SECRET_NAMES.has(keyForm(name)) ||
+    MORE_SECRET_NAMES.has(keyForm(bare))
+  );
+}
+
+/**
+ * The words of a name, as "-", "_", "." and a change of case part them (`RapidAPI-Key`); digits go
+ * with the letters around them (`pw1token` is one word).
+ */
+const NAME_WORD = /[A-Z0-9]+(?=[A-Z][a-z])|[A-Z0-9]?[a-z0-9]+|[A-Z0-9]+/g;
+
+/**
+ * True for the name of a header, a config field, an element or a form field whose value is a
+ * secret: a secret name (isSecretName), or a name whose last words are a secret key
+ * (`X-Vault-Token`, `Private-Token`, `X-Goog-Api-Key`, `github_token`, `SessionToken`,
+ * `csrf-token`). `token_count`, `tokenizer`, `Idempotency-Key` and `PRIMARY_KEY` are not: "key"
+ * alone is not a secret key; nor is a cursor (CURSOR_WORD). An object key is judged by
+ * isSecretName only, so `{ my_token: 'kept' }` reads as it did. The last words are joined from
+ * the end and read no further than MAX_NAME_LENGTH, so a long name is read in linear time.
+ */
+function isSecretFieldName(name: string): boolean {
+  if (isSecretName(name)) return true;
+  const words = bareName(name).match(NAME_WORD) ?? [];
+  if (CURSOR_WORD.test(words[0] ?? "")) return false;
+  let last = "";
+  for (let i = words.length - 1; i >= 1; i--) {
+    last = keyForm(words[i] ?? "") + last;
+    if (last.length > MAX_NAME_LENGTH) break;
+    if (SECRET_KEYS.has(last) || MORE_SECRET_NAMES.has(last)) return true;
+  }
+  return false;
+}
+
+/** An environment variable's name: upper-case letters, digits and "_". */
+const ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * True for an environment variable named for a secret, judged as a field name
+ * (isSecretFieldName): `GITHUB_TOKEN`, `OPENAI_API_KEY`, `DB_PASSWORD`, `SECRET_KEY`; not
+ * `IDEMPOTENCY_KEY` or `S3_KEY`.
+ */
+const isSecretEnvName = (name: string) => ENV_NAME.test(name) && isSecretFieldName(name);
+
+/**
+ * A scheme an Authorization value names before its credentials (`Token abc`, `Bot abc`). A
+ * value that is a scheme word alone (`Bearer`) names what is missing, and is kept.
+ */
+const AUTH_SCHEME =
+  /^(?:Bearer|Basic|Token|Bot|Digest|ApiKey|Api-Key|OAuth|SSWS|JWT|DPoP|MAC|Hawk|Negotiate|NTLM|Discogs|AWS4-HMAC-SHA256)$/i;
+/** Credentials written as one token (RFC 7235's token68), "=" only at its end. */
+const TOKEN68 = /^[A-Za-z0-9._~+/-]+=*$/;
+/** Where an Authorization value's parameters start: a name and "=". */
+const AUTH_PARAM_START = /^[A-Za-z0-9_.-]+[ \t]*=/;
+/**
+ * A `name=value` parameter of an Authorization value; group 2 is a quoted value's content. A name
+ * starts only where no name character comes before it, so a long run is read from its start
+ * once, never again from each of its characters.
+ */
+const AUTH_PARAM =
+  /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+)[ \t]*=[ \t]*(?:"((?:[^"\\]|\\.)*)"?|([^\s,"]*))/g;
+
+/** Words a value without quotes can be besides STATUS_WORD, read by the shapes below only. */
+const MORE_STATUS_WORD = /^(?:nil|unset)[.!,;]*$/i;
+
+/** True for a status word (STATUS_WORD, MORE_STATUS_WORD) in place of a value. */
+const isStatusWord = (value: string) => STATUS_WORD.test(value) || MORE_STATUS_WORD.test(value);
+
+const LINE_BREAK = /[\r\n\v\f\u0085\u2028\u2029]/;
+/** The next line break (CR, LF, VT, FF, NEL, U+2028, U+2029) or the end of the text. */
+const LINE_END = /[\r\n\v\f\u0085\u2028\u2029]|$/g;
+
+/** Where the line that `at` is on ends: its line break, or the end of the text. */
+function lineEnd(text: string, at: number): number {
+  LINE_END.lastIndex = at;
+  return LINE_END.exec(text)?.index ?? text.length;
+}
+
+/** `end` moved back over any whitespace before it, not before `start`. */
+function trimmedEnd(text: string, start: number, end: number): number {
+  let stop = end;
+  while (stop > start && /\s/.test(text.charAt(stop - 1))) stop--;
+  return stop;
+}
+
+/** Attributes of a Set-Cookie value, which say where and how long, not what: kept. */
+const COOKIE_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "path",
+  "domain",
+  "expires",
+  "max-age",
+  "samesite",
+  "priority",
+  "version",
+  "comment",
+]);
+
+/**
+ * Adds to `spans` where each cookie value lies in a `Cookie` or `Set-Cookie` value from `start` to
+ * `end`: the value of each `name=value` pair (also `name = value`), up to ";" (its content when
+ * quoted). Cookie names are kept, and so are the attributes of a Set-Cookie value (`Path=/`,
+ * `Expires=…`); there, where fetch joins several cookies with ",", a value also ends and a pair
+ * starts at ",", which a cookie value without quotes never holds. A status word is kept.
+ * Reads the value once.
+ */
+function cookieSpans(text: string, start: number, end: number, set: boolean, spans: Span[]): void {
+  const separator = (char: string) => char === ";" || (set && char === ",");
+  let at = start;
+  while (at < end) {
+    while (at < end && /[\s;,]/.test(text.charAt(at))) at++;
+    let i = at;
+    while (i < end && !/[=;,\s]/.test(text.charAt(i))) i++;
+    if (at >= end) break;
+    // `sid = v`: spaces around "=" are read too.
+    let equals = i;
+    while (equals < end && /[ \t]/.test(text.charAt(equals))) equals++;
+    if (i === at || text.charAt(equals) !== "=") {
+      // Not a pair: a flag (`HttpOnly`) or the words of a date. On to the next separator.
+      while (i < end && !separator(text.charAt(i))) i++;
+      at = i;
+      continue;
+    }
+    const attribute = set && COOKIE_ATTRIBUTES.has(text.slice(at, i).toLowerCase());
+    let from = equals + 1;
+    while (from < end && /[ \t]/.test(text.charAt(from))) from++;
+    // A quoted value runs to its closing quote; then to the next separator.
+    let stop = from;
+    if (text.charAt(from) === '"') {
+      stop++;
+      while (stop < end && text.charAt(stop) !== '"') stop++;
+    }
+    while (stop < end && !separator(text.charAt(stop))) stop++;
+    if (!attribute) {
+      let to = trimmedEnd(text, from, stop);
+      if (to - from >= 2 && text.charAt(from) === '"' && text.charAt(to - 1) === '"') {
+        from++;
+        to--;
+      }
+      if (to > from && !isStatusWord(text.slice(from, to))) spans.push([from, to]);
+    }
+    at = stop;
+  }
+}
+
+/**
+ * A field at the start of a line: a header (`X-Api-Key: v`, after curl's "> " or "< "), a YAML
+ * mapping or list item (`token: v`, `- api_key: v`), a TOML assignment (`api_key = "v"`, also
+ * with a quoted name) or an environment line (`export GITHUB_TOKEN=v`). Group 1, 2 or 3 is the
+ * name, group 5 the ":" or "=" after it, groups 4 and 6 the spaces around that.
+ */
+const FIELD_LINE =
+  /(?:^|[\r\n\v\f\u0085\u2028\u2029])[ \t]*(?:[<>][ \t]+|-[ \t]+|export[ \t]+)?(?:"([A-Za-z0-9_.-]{1,64})"|'([A-Za-z0-9_.-]{1,64})'|([A-Za-z0-9_.-]{1,64}))([ \t]*)([:=])([ \t]*)/g;
+
+/**
+ * Adds where the value without quotes of a field line lies, from `start` to the end of its line:
+ * one run, or after an Authorization scheme (`Token abc`), its credentials: one token, or the
+ * value of each `name=value` parameter but `realm` (`Digest username="a", realm="b"`: `username`
+ * and `nonce` are masked too, as any parameter but the realm may be one). After
+ * "=", the run holds no quote, "<", ">" or "&" (as a `name=` value, which SECRET_PARAM reads)
+ * and a "#" comment may follow it. A status word, or a scheme word alone, is kept.
+ */
+function fieldValueSpans(text: string, start: number, assignment: boolean, spans: Span[]): void {
+  const stop = trimmedEnd(text, start, lineEnd(text, start));
+  const value = text.slice(start, stop);
+  const space = value.search(/\s/);
+  const first = space === -1 ? value : value.slice(0, space);
+  const rest = space === -1 ? "" : value.slice(space).trimStart();
+  if (assignment) {
+    if (!first || /["'<>&]/.test(first) || isStatusWord(first)) return;
+    if (rest === "" || rest.startsWith("#")) spans.push([start, start + first.length]);
+    return;
+  }
+  if (space === -1) {
+    if (value && !isStatusWord(value) && !AUTH_SCHEME.test(value)) spans.push([start, stop]);
+    return;
+  }
+  if (!AUTH_SCHEME.test(first) || isStatusWord(rest)) return;
+  const from = stop - rest.length;
+  if (TOKEN68.test(rest) || (!rest.includes("=") && !/\s/.test(rest))) {
+    spans.push([from, stop]);
+    return;
+  }
+  // Parameters (`username="a", realm="b"`): the value starts with one.
+  if (!AUTH_PARAM_START.test(rest)) return;
+  AUTH_PARAM.lastIndex = 0;
+  for (let param = AUTH_PARAM.exec(rest); param; param = AUTH_PARAM.exec(rest)) {
+    if ((param[1] ?? "").toLowerCase() === "realm") continue;
+    const content = param[2] ?? param[3] ?? "";
+    if (!content || isStatusWord(content)) continue;
+    // The value's content ends the match, but for a closing quote.
+    const close = param[2] !== undefined && param[0].endsWith('"') ? 1 : 0;
+    const end = from + param.index + param[0].length - close;
+    spans.push([end - content.length, end]);
+  }
+}
+
+/**
+ * Where the value of each field line for a secret lies (FIELD_LINE): its name is a secret field
+ * name (isSecretFieldName). A quoted
+ * value is read as quotedKeySpans reads one; a `Cookie` or `Set-Cookie` line by cookieSpans.
+ * Reads the text once.
+ */
+function fieldLineSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  FIELD_LINE.lastIndex = 0;
+  for (let line = FIELD_LINE.exec(text); line; line = FIELD_LINE.exec(text)) {
+    const name = line[1] ?? line[2] ?? line[3] ?? "";
+    const assignment = line[5] === "=";
+    const start = line.index + line[0].length;
+    const cookie = assignment ? "" : name.toLowerCase();
+    // `name= v` or `name =v`: neither an environment line nor a TOML assignment as written.
+    const lopsided = assignment && !line[4] !== !line[6];
+    let end = start;
+    if (cookie === "cookie" || cookie === "set-cookie") {
+      end = lineEnd(text, start);
+      cookieSpans(text, start, end, cookie === "set-cookie", spans);
+    } else if (!lopsided && isSecretFieldName(name)) {
+      const quote = text.charAt(start);
+      if (quote === '"' || quote === "'") {
+        end = quotedValueEnd(text, start + 1, quote, false);
+        if (end > start + 1) spans.push([start + 1, end]);
+      } else {
+        end = lineEnd(text, start);
+        fieldValueSpans(text, start, assignment, spans);
+      }
+    }
+    FIELD_LINE.lastIndex = Math.max(end, FIELD_LINE.lastIndex);
+  }
+  return spans;
+}
+
+/** An environment assignment anywhere in a line (`-e OPENAI_API_KEY=v`); group 1 is the name. */
+const ENV_PAIR = /(?<![\w$.-])([A-Z][A-Z0-9_]{0,63})=/g;
+/** An environment value without quotes: up to whitespace, a quote, or a shell or list separator. */
+const ENV_VALUE = /[^\s"'`;&|<>()[\]{},]+/y;
+
+/** A template's reference as a value: `${{ secrets.GH }}`, `${TOKEN}`, read on one line. */
+const TEMPLATE_REFERENCE = /^\$\{\{[^\r\n}]*\}\}|^\$\{[^\r\n}]*\}/;
+/** How far a template's reference is read, at most. */
+const MAX_TEMPLATE_REFERENCE = 256;
+
+/** A status word of two words (`not set`): the word after a value. */
+const NEXT_WORD = /[ \t]+([^\s"'`;&|<>()[\]{},]+)/y;
+
+/**
+ * Where the value of each environment assignment named for a secret (isSecretEnvName) lies. A
+ * status word is kept, also of two words (`API_TOKEN=not set`). Reads the text once.
+ */
+function envPairSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  ENV_PAIR.lastIndex = 0;
+  for (let pair = ENV_PAIR.exec(text); pair; pair = ENV_PAIR.exec(text)) {
+    if (!isSecretEnvName(pair[1] ?? "")) continue;
+    const at = pair.index + pair[0].length;
+    const quote = text.charAt(at);
+    if (quote === '"' || quote === "'") {
+      const end = quotedValueEnd(text, at + 1, quote, false);
+      if (end > at + 1) spans.push([at + 1, end]);
+      ENV_PAIR.lastIndex = Math.max(end, ENV_PAIR.lastIndex);
+      continue;
+    }
+    // A template's reference (`${{ secrets.GH }}`, `${TOKEN}`) is masked whole.
+    const template = TEMPLATE_REFERENCE.exec(text.slice(at, at + MAX_TEMPLATE_REFERENCE));
+    if (template) {
+      spans.push([at, at + template[0].length]);
+      ENV_PAIR.lastIndex = Math.max(at + template[0].length, ENV_PAIR.lastIndex);
+      continue;
+    }
+    ENV_VALUE.lastIndex = at;
+    const value = ENV_VALUE.exec(text);
+    if (!value) continue;
+    NEXT_WORD.lastIndex = at + value[0].length;
+    const next = NEXT_WORD.exec(text)?.[1];
+    if (!isStatusWord(value[0]) && !(next && isStatusWord(`${value[0]} ${next}`))) {
+      spans.push([at, at + value[0].length]);
+    }
+    // A name inside the value is not read again.
+    ENV_PAIR.lastIndex = Math.max(at + value[0].length, ENV_PAIR.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * A cookie header as an object key or a Map entry, with a quoted value (`Cookie: 'a=1'`,
+ * `"set-cookie": "a"`, `'cookie' => 'a=1'`).
+ */
+const COOKIE_KEY = /(?<![\w-])(["']?)(set-cookie|cookie)\1[ \t]*(?::|=>)[ \t]*(["'])/gi;
+
+/** Where each cookie value lies in the quoted value of a cookie key (cookieSpans). */
+function cookieKeySpans(text: string): Span[] {
+  const spans: Span[] = [];
+  COOKIE_KEY.lastIndex = 0;
+  for (let key = COOKIE_KEY.exec(text); key; key = COOKIE_KEY.exec(text)) {
+    const start = key.index + key[0].length;
+    const end = quotedValueEnd(text, start, key[3] ?? '"', false);
+    cookieSpans(text, start, end, (key[2] ?? "").toLowerCase() === "set-cookie", spans);
+    COOKIE_KEY.lastIndex = Math.max(end, COOKIE_KEY.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * Where the value of each key that `pattern` (global) finds lies, read as after an object key
+ * without quotes (objectValueSpan), when `key` picks a secret name from the match.
+ */
+function keyValueSpans(
+  text: string,
+  pattern: RegExp,
+  key: (match: RegExpExecArray) => string | undefined,
+): Span[] {
+  const spans: Span[] = [];
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+    if (!isSecretName(key(match) ?? "")) continue;
+    const span = objectValueSpan(text, match.index + match[0].length);
+    if (!span) continue;
+    spans.push(span);
+    pattern.lastIndex = Math.max(span[1], pattern.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * A key and its arrow, as util.inspect writes a Map entry and PHP or Ruby a hash entry:
+ * `'authorization' => `, `"token" => `, `:token => `. Group 2 or 3 is the key.
+ */
+const ARROW_KEY = /(?:(["'])([A-Za-z0-9_-]{1,64})\1|(?<![\w:]):([A-Za-z0-9_]{1,64}))\s*=>\s*/g;
+
+/**
+ * A print_r entry, `[api_key] => `, spaced any way (`[api_key]=>`), also of a property
+ * (`[token:protected] => `).
+ */
+const PRINT_R_KEY = /\[([A-Za-z0-9_-]{1,64})(?::[^\]\r\n]{0,128})?\][ \t]*=>[ \t]*/g;
+/** A print_r value that opens a nested array or object, which is read entry by entry. */
+const PRINT_R_NESTED = /^(?:Array|[\w\\]+ Object)$/;
+
+/** Where the value of each print_r entry for a secret lies: the rest of its line. */
+function printRSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  PRINT_R_KEY.lastIndex = 0;
+  for (let key = PRINT_R_KEY.exec(text); key; key = PRINT_R_KEY.exec(text)) {
+    if (!isSecretName(key[1] ?? "")) continue;
+    const start = key.index + key[0].length;
+    const end = lineEnd(text, start);
+    const stop = trimmedEnd(text, start, end);
+    const value = text.slice(start, stop);
+    if (value && !isStatusWord(value) && !PRINT_R_NESTED.test(value)) spans.push([start, stop]);
+    PRINT_R_KEY.lastIndex = Math.max(end, PRINT_R_KEY.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * A var_dump entry holding a string, `["token"]=>` and `string(3) "`, on one line or two (also of
+ * a property, `["token":protected]=>`, and a reference, `&string(3)`). Group 1 is the key,
+ * group 2 the string's length in bytes.
+ */
+const VAR_DUMP_STRING =
+  /\["([A-Za-z0-9_-]{1,64})"(?::[^\]\r\n]{0,128})?\]=>\s*&?string\((\d{1,9})\) "/g;
+
+/** Where the string of each var_dump entry for a secret lies: its length in UTF-8 bytes. */
+function varDumpSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  // Where the line of `at` ends, read once for all the entries on one line.
+  let knownEnd = -1;
+  const lineAfter = (at: number) => {
+    if (at > knownEnd) knownEnd = lineEnd(text, at);
+    return knownEnd;
+  };
+  VAR_DUMP_STRING.lastIndex = 0;
+  for (let key = VAR_DUMP_STRING.exec(text); key; key = VAR_DUMP_STRING.exec(text)) {
+    if (!isSecretName(key[1] ?? "")) continue;
+    const start = key.index + key[0].length;
+    const bytes = Number(key[2]);
+    let end = start;
+    for (let read = 0; end < text.length && read < bytes; ) {
+      const code = text.codePointAt(end) ?? 0;
+      read += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+      end += code > 0xffff ? 2 : 1;
+    }
+    // A length that does not match the text as it reads (another encoding, a length past the
+    // string): to the quote that ends the line the string starts on, if one does, so the next
+    // entries stay readable; else to the end of the line the count reached.
+    if (text.charAt(end) !== '"') {
+      const line = lineAfter(start);
+      const close = trimmedEnd(text, start, line) - 1;
+      end = close >= start && text.charAt(close) === '"' ? close : lineEnd(text, end);
+    }
+    if (end > start) spans.push([start, end]);
+    VAR_DUMP_STRING.lastIndex = Math.max(end, VAR_DUMP_STRING.lastIndex);
+  }
+  return spans;
+}
+
+/** An `<input>` or `<meta>` tag's start; group 1 is its name. */
+const FORM_TAG = /<(input|meta)(?=[\s/>])/gi;
+
+/**
+ * Where the value of each form field for a secret lies: `<input name="token" value="v">`, its
+ * attributes in any order, also `type="password"`, and `<meta name="csrf-token" content="v">`.
+ * A field is named by its `name` or `id` (isSecretFieldName). An attribute value is read to its
+ * closing quote, a ">" inside it included. Reads each tag once.
+ */
+function formFieldSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  FORM_TAG.lastIndex = 0;
+  for (let tag = FORM_TAG.exec(text); tag; tag = FORM_TAG.exec(text)) {
+    const attributes = new Map<string, Span>();
+    let at = tag.index + tag[0].length;
+    for (;;) {
+      while (at < text.length && /[\s/]/.test(text.charAt(at))) at++;
+      const char = text.charAt(at);
+      if (!char || char === ">" || char === "<") break;
+      const nameStart = at;
+      while (at < text.length && !/[\s/>=<"']/.test(text.charAt(at))) at++;
+      if (at === nameStart) {
+        at++;
+        continue;
+      }
+      const name = text.slice(nameStart, at).toLowerCase();
+      let value = at;
+      while (value < text.length && /\s/.test(text.charAt(value))) value++;
+      if (text.charAt(value) !== "=") continue;
+      value++;
+      while (value < text.length && /\s/.test(text.charAt(value))) value++;
+      const quote = text.charAt(value);
+      let span: Span;
+      if (quote === '"' || quote === "'") {
+        const close = text.indexOf(quote, value + 1);
+        span = [value + 1, close === -1 ? text.length : close];
+        at = close === -1 ? text.length : close + 1;
+      } else {
+        at = value;
+        while (at < text.length && !/[\s>]/.test(text.charAt(at))) at++;
+        span = [value, at];
+      }
+      if (!attributes.has(name)) attributes.set(name, span);
+    }
+    const read = (name: string) => {
+      const span = attributes.get(name);
+      return span ? text.slice(span[0], span[1]) : "";
+    };
+    const input = (tag[1] ?? "").toLowerCase() === "input";
+    const type = read("type").toLowerCase();
+    // A choice (`show_password`) is not a secret, whatever it is named.
+    const choice = input && (type === "checkbox" || type === "radio");
+    const secret =
+      !choice &&
+      (isSecretFieldName(read("name")) ||
+        isSecretFieldName(read("id")) ||
+        (input && type === "password"));
+    const field = attributes.get(input ? "value" : "content");
+    if (secret && field && field[1] > field[0]) spans.push(field);
+    FORM_TAG.lastIndex = Math.max(at, FORM_TAG.lastIndex);
+  }
+  return spans;
+}
+
+/**
+ * Where pydantic echoes the input of a field that failed: `[type=…, input_value=`. Group 1 is
+ * the error's type.
+ */
+const PYDANTIC_INPUT = /\[type=([A-Za-z0-9_.]{1,64}), input_value=/g;
+/** The line before it, which names the field (`password`, `body.api_key`); group 1 is the name. */
+const PYDANTIC_FIELD = /^[ \t]*([A-Za-z0-9_.-]{1,128})[ \t]*$/;
+
+/**
+ * Where each `input_value` of a pydantic validation error lies when the line before names a
+ * secret field (isSecretFieldName, its last part): a quoted value's content, or what is written
+ * up to ", input_type=" or "]". A status word (`None`, `True`) is kept, and so is the input of
+ * any other field, and of a missing field (`type=missing`), which is the object around it.
+ * Reads the text once.
+ */
+function pydanticInputSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  let scanned = 0;
+  let lineStart = 0;
+  let previousStart = -1;
+  let judgedLine = -1;
+  let secret = false;
+  PYDANTIC_INPUT.lastIndex = 0;
+  for (let input = PYDANTIC_INPUT.exec(text); input; input = PYDANTIC_INPUT.exec(text)) {
+    for (; scanned < input.index; scanned++) {
+      const char = text.charAt(scanned);
+      if (!LINE_BREAK.test(char)) continue;
+      // CR LF is one line break.
+      if (!(char === "\n" && text.charAt(scanned - 1) === "\r")) previousStart = lineStart;
+      lineStart = scanned + 1;
+    }
+    if (previousStart < 0) continue;
+    if (judgedLine !== lineStart) {
+      judgedLine = lineStart;
+      let previousEnd = lineStart - 1;
+      if (text.charAt(previousEnd) === "\n" && text.charAt(previousEnd - 1) === "\r") previousEnd--;
+      const field = PYDANTIC_FIELD.exec(text.slice(previousStart, previousEnd))?.[1] ?? "";
+      const last =
+        field
+          .split(".")
+          .filter((part) => part && !/^\d+$/.test(part))
+          .at(-1) ?? "";
+      secret = isSecretFieldName(last);
+    }
+    if (!secret || input[1] === "missing") continue;
+    const at = input.index + input[0].length;
+    const quote = text.charAt(at);
+    let end: number;
+    if (quote === "'" || quote === '"') {
+      end = quotedValueEnd(text, at + 1, quote, false);
+      if (end > at + 1) spans.push([at + 1, end]);
+    } else {
+      end = at;
+      while (
+        end < text.length &&
+        text.charAt(end) !== "]" &&
+        !LINE_BREAK.test(text.charAt(end)) &&
+        !text.startsWith(", input_type=", end)
+      ) {
+        end++;
+      }
+      const value = text.slice(at, end);
+      if (value && !isStatusWord(value)) spans.push([at, end]);
+    }
+    PYDANTIC_INPUT.lastIndex = Math.max(end, PYDANTIC_INPUT.lastIndex);
+  }
+  return spans;
+}
+
+/** The shapes moreSecretSpans reads that are not read line by line. */
+const inlineShapeSpans = (text: string): Span[] =>
+  [
+    envPairSpans(text),
+    cookieKeySpans(text),
+    objectKeySpans(text, isSecretName),
+    keyValueSpans(text, QUOTED_KEY, (key) => key[3]),
+    keyValueSpans(text, ARROW_KEY, (key) => key[2] ?? key[3]),
+    varDumpSpans(text),
+    elementSpans(text, isSecretFieldName),
+    formFieldSpans(text),
+  ].reduce(maskableUnion);
+
+/** The shapes moreSecretSpans reads line by line: fields, print_r entries, pydantic inputs. */
+const lineShapeSpans = (text: string): Span[] =>
+  [fieldLineSpans(text), printRSpans(text), pydanticInputSpans(text)].reduce(maskableUnion);
+
+/** The shapes moreSecretSpans reads in the text as it is written. */
+const shapeSpans = (text: string) => maskableUnion(inlineShapeSpans(text), lineShapeSpans(text));
+
+/**
+ * A text decoded from another: its character i was written as the characters [from[i], to[i]) of
+ * the text as it came. Without `from` and `to`, it is that text.
+ */
+interface Decoded {
+  text: string;
+  from?: Int32Array;
+  to?: Int32Array;
+}
+
+/**
+ * `source` with each match of `pattern` (global) that `decode` reads written as what it returns
+ * (never longer than the match), or undefined when there is none. Reads the text once.
+ */
+function decoded(
+  source: Decoded,
+  pattern: RegExp,
+  decode: (match: RegExpExecArray) => string | undefined,
+): Decoded | undefined {
+  const { text } = source;
+  const from = new Int32Array(text.length);
+  const to = new Int32Array(text.length);
+  const fromAt = (i: number) => source.from?.[i] ?? i;
+  const toAt = (i: number) => source.to?.[i] ?? i + 1;
+  let out = "";
+  let length = 0;
+  let kept = 0;
+  const keep = (end: number) => {
+    out += text.slice(kept, end);
+    for (let i = kept; i < end; i++, length++) {
+      from[length] = fromAt(i);
+      to[length] = toAt(i);
+    }
+  };
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+    const value = decode(match);
+    if (value === undefined) continue;
+    keep(match.index);
+    out += value;
+    for (let i = 0; i < value.length; i++, length++) {
+      from[length] = fromAt(match.index);
+      to[length] = toAt(match.index + match[0].length - 1);
+    }
+    kept = match.index + match[0].length;
+  }
+  if (kept === 0) return undefined;
+  keep(text.length);
+  return { text: out, from: from.subarray(0, length), to: to.subarray(0, length) };
+}
+
+/**
+ * A character written as an HTML entity: `&lt;`, `&quot;`, `&#39;`, `&#x3c;`, also without its
+ * ";" where no letter or digit follows (`&lt;/token&gt` at the end of a text).
+ */
+const ENTITY = /&(?:(lt|gt|amp|quot|apos)|#(\d{1,7})|#x([0-9a-f]{1,6}))(?:;|(?![0-9a-z]))/gi;
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  lt: "<",
+  gt: ">",
+  amp: "&",
+  quot: '"',
+  apos: "'",
+};
+
+function entityText(match: RegExpExecArray): string | undefined {
+  if (match[1]) return NAMED_ENTITIES[match[1].toLowerCase()];
+  const code = match[2] ? Number(match[2]) : Number.parseInt(match[3] ?? "", 16);
+  return code <= 0x10ffff ? String.fromCodePoint(code) : undefined;
+}
+
+/** A backslash escape of a JSON or JavaScript string: `\n`, `\"`, `\\`, `\/`, `<`. */
+const STRING_ESCAPE = /\\(?:u([0-9a-fA-F]{4})|([nrtbf"'\\/]))/g;
+/** STRING_ESCAPE, or a quote no backslash escapes (group 3): where a JSON string starts or ends. */
+const STRING_ESCAPE_OR_QUOTE = /\\(?:u([0-9a-fA-F]{4})|([nrtbf"'\\/]))|(")/g;
+const ESCAPED_CHARS: Readonly<Record<string, string>> = {
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  b: "\b",
+  f: "\f",
+};
+
+const escapeText = (match: RegExpExecArray) =>
+  match[1]
+    ? String.fromCharCode(Number.parseInt(match[1], 16))
+    : (ESCAPED_CHARS[match[2] ?? ""] ?? match[2]);
+
+/**
+ * escapeText, and a line break in place of a quote no backslash escapes: the string it starts
+ * or ends is read as lines of its own, one character for one.
+ */
+const escapeTextOrBreak = (match: RegExpExecArray) => (match[3] ? "\n" : escapeText(match));
+
+/** How many times a text is decoded, at most, as entities and as string escapes. */
+const MAX_DECODINGS = 2;
+
+/** Every rule that reads a key: quoted, without quotes, and shapeSpans. */
+const keySpans = (text: string) =>
+  [quotedSecretSpans(text), unquotedKeySpans(text), shapeSpans(text)].reduce(maskableUnion);
+
+/** keySpans but the rules that read a line: quoted keys, object keys, elements, inline shapes. */
+const inlineKeySpans = (text: string) =>
+  [
+    quotedSecretSpans(text),
+    objectKeySpans(text),
+    elementSpans(text),
+    inlineShapeSpans(text),
+  ].reduce(maskableUnion);
+
+/** An escape that STRING_ESCAPE decodes. */
+const HAS_STRING_ESCAPE = /\\(?:u[0-9a-fA-F]{4}|[nrtbf"'\\/])/;
+
+/**
+ * Where each secret value lies in the text decoded from HTML entities (`&lt;token&gt;v`,
+ * `&quot;token&quot;: &quot;v&quot;`) and from string escapes, each up to MAX_DECODINGS times;
+ * what a rule finds there is masked where it was written:
+ * - decoded from entities, every rule that reads a key (keySpans);
+ * - decoded from string escapes with each quote no backslash escapes read as a line break, so a
+ *   line inside a JSON string ends where the string does and starts where it does
+ *   (`{"e":"a\r\nX-Api-Key: v","status":401}`), in a text that holds an escape: every rule;
+ * - decoded from string escapes alone (`{ token: \\"v\\" }`, where a quote of the outer string
+ *   is a quote of the value): every rule but those that read a line, which would run across the
+ *   end of the string.
+ */
+function decodedSpans(text: string): Span[] {
+  let spans: Span[] = [];
+  const decodings: Array<
+    [RegExp, (match: RegExpExecArray) => string | undefined, (text: string) => Span[]]
+  > = [];
+  if (text.includes("&")) decodings.push([ENTITY, entityText, keySpans]);
+  if (text.includes("\\")) {
+    decodings.push([STRING_ESCAPE_OR_QUOTE, escapeTextOrBreak, keySpans]);
+    decodings.push([STRING_ESCAPE, escapeText, inlineKeySpans]);
+  }
+  for (const [pattern, decode, rules] of decodings) {
+    let view: Decoded = { text };
+    for (let level = 0; level < MAX_DECODINGS; level++) {
+      // A view in which no escape was decoded holds nothing the text before it does not.
+      if (pattern !== ENTITY && !HAS_STRING_ESCAPE.test(view.text)) break;
+      const next = decoded(view, pattern, decode);
+      if (!next?.from || !next.to) break;
+      view = next;
+      const { from, to } = next;
+      const found = rules(view.text).map(
+        ([start, end]): Span => [from[start] ?? 0, to[end - 1] ?? 0],
+      );
+      spans = maskableUnion(spans, found);
+    }
+  }
+  return spans;
+}
+
+/**
+ * Where each secret value lies in shapes the rules above do not read, measured on the text as it
+ * came; redactKeyValues masks them over what the other rules hide, so they only add masks. A value
+ * without quotes that is a status word is kept, as above; a quoted value is a value.
+ * - `Cookie:` and `Set-Cookie:` lines (each cookie's value; names and attributes are kept), and
+ *   `Authorization: Token v` (any scheme of AUTH_SCHEME; of `Digest a="v"`, the parameters'
+ *   values but `realm`);
+ * - config text: YAML mappings and list items, TOML assignments and environment lines, at the
+ *   start of a line, for a secret field name or a variable named for a secret
+ *   (`export GITHUB_TOKEN=v`, also anywhere in a line: `-e OPENAI_API_KEY=v`);
+ * - PHP's print_r (`[api_key] => v`) and var_dump (`["token"]=> string(1) "v"`), util.inspect's
+ *   Map entries and other `=>` pairs (`'authorization' => 'v'`, `'cookie' => 'sid=v'`), a quoted
+ *   key with a value without quotes (`{ 'x-api-key': v }`);
+ * - `<input name="token" value="v">` and `<meta name="csrf-token" content="v">` (a checkbox or a
+ *   radio button is a choice, and is kept);
+ * - vendor headers and fields named after their service (MORE_SECRET_NAMES), a header, field or
+ *   element name that ends in a secret key (`X-Vault-Token`, `<SessionToken>`), an "X-" prefix
+ *   or an index (`x_auth_token`, S3's `<Token-0>`);
+ * - pydantic's `input_value=…` under the line that names a secret field;
+ * - all of these, and the quoted and unquoted keys above, in text written with HTML entities or
+ *   string escapes (decodedSpans).
+ *
+ * Known limits, left to the other rules:
+ * - a field or an assignment counts only at the start of a line (an environment variable named
+ *   for a secret anywhere), with "=" spaced on both sides or on neither, and a value without
+ *   quotes only when it is one run to the end of the line (or, after "=", before a "#" comment):
+ *   `token: a b # c` and multi-line values (YAML block scalars, TOML's `"""`, a print_r string
+ *   with line breaks) are left, since where they end is not plain from the line;
+ * - a line indented with a no-break space or another space than " " and a tab, or opened by a
+ *   bullet other than "- " (`• token: v`): a line that does not start like a field could be
+ *   prose that names one;
+ * - shell forms other than `NAME=v` and `export NAME=v`: PowerShell's `$env:TOKEN = "v"`,
+ *   Windows' `setx TOKEN v` and bash's `TOKEN=$'v'` (where `$'` opens the value, so the value
+ *   read is `$`), each a syntax of its own;
+ * - YAML's doubled quote inside a single-quoted value (`token: 'it''s'`) ends the value at the
+ *   first quote: what follows is shown;
+ * - pydantic's union errors, which name the field with the union's member after it
+ *   (`token.str`, `token.function-after[…]`), and an `input_value` written over several lines:
+ *   neither the field nor the value's end is plain from a line;
+ * - a TOML inline table (`creds = { token = "v" }`) and a curl `-H 'Cookie: …'` argument are not
+ *   read, nor a cookie header whose value holds no `name=` pair;
+ * - an object key is judged by isSecretName, not by the last words of its name: `{ my_token: v }`
+ *   reads as before;
+ * - pydantic's input is read only under the line that names its field; written on one line
+ *   (`password String should … [type=…, input_value='v']`) the field is not plain;
+ * - a var_dump value that is not a string (`int(1234)`);
+ * - a JSON text without a single escape is not decoded, so a field inside one of its strings
+ *   (`{"raw": "X-Api-Key: v"}`) is not at the start of a line and is not read: such a text is
+ *   read only by the rules above;
+ * - text decoded more than MAX_DECODINGS times, and entities other than `&lt;`, `&gt;`, `&amp;`,
+ *   `&quot;`, `&apos;` and numeric ones;
+ * - a cursor (`next_page_token`, `pageToken`) and an environment variable whose name ends in a
+ *   bare "key" (`S3_KEY`, `IDEMPOTENCY_KEY`, `STRIPE_KEY`) are kept: most such names are not
+ *   secrets, and a configured key is caught by its value (knownSecrets).
+ */
+function moreSecretSpans(text: string): Span[] {
+  return maskableUnion(shapeSpans(text), decodedSpans(text));
+}
 
 /**
  * `pieces` with each of `spans` (in the text as it came, sorted by start) masked as
@@ -696,8 +1502,9 @@ function sourceHides(pieces: readonly Piece[], spans: readonly Span[]): Hide[] {
  * - each quoted secret value (redactQuotedSecrets); in a text that mentions a header, every
  *   double-quoted value, since fetch echoes an invalid header value, which is the credential;
  *   then `redactSecrets`, then `steps`, each on the text as the rules before it left it;
- * - then each value of a secret key without quotes (unquotedKeySpans), and in a text that mentions
- *   a header, each double-quoted value as the quotes pair once every secret value is gone. These
+ * - then each value of a secret key without quotes (unquotedKeySpans) and each secret value of the
+ *   shapes moreSecretSpans reads, and in a text that mentions a header, each double-quoted value
+ *   as the quotes pair once every secret value is gone (with and without moreSecretSpans). These
  *   are measured on the text as it came and masked with whatever they overlap, so they only add
  *   to what the other rules hide: a link or a `name=` value that reaches into one is still hidden
  *   whole, as it was before.
@@ -713,6 +1520,98 @@ function redactKeyValues(
   steps: readonly HideStep[],
   extra: readonly Span[] = [],
 ): string {
+  return render(text, keyValuePieces(text, steps, extra));
+}
+
+/**
+ * The pieces of `text` as redactKeyValues masks them, with `more` (by default what
+ * moreSecretSpans finds) as the values of the shapes it reads; with none, as the other rules
+ * alone mask them (with `before` in place of `extra`). When `more` holds a value, or `extra` holds
+ * more than `before` (the values of the shapes plainLine read on the lines a text had), what
+ * follows is kept hidden too.
+ *
+ * A log line of the text is scrubbed once more by the logger's own rules (scrubbedSpans), which
+ * read a key (`token: v`, `Bearer v`) or a whole configured value: a value masked here can take
+ * that key, or part of that value. So when `more` holds a value, what those rules hide in the
+ * text the other rules alone leave, and would no longer hide in this one, is masked here too
+ * (lostToLog), until nothing is lost.
+ */
+function keyValuePieces(
+  text: string,
+  steps: readonly HideStep[],
+  extra: readonly Span[],
+  more: readonly Span[] = moreSecretSpans(text),
+  before: readonly Span[] = extra,
+): Piece[] {
+  // The other rules alone: nothing to keep hidden beyond what they hide.
+  if (more.length === 0 && sameSpans(extra, before)) return maskedPieces(text, steps, extra, more);
+  const other = maskedPieces(text, steps, before, []);
+  // A redacted text is often redacted again (a SourceError's message, then describeError): what
+  // the other rules hide in the text they leave, once and twice more, stays hidden too.
+  const again = redactedAgain(text, other);
+  let added = again.length > 0 ? maskableUnion(extra, again) : extra;
+  let pieces = maskedPieces(text, steps, added, more);
+  const logged = loggedSpans(text, other);
+  for (let round = 0; logged.length > 0 && round < MAX_LOG_ROUNDS; round++) {
+    const lost = lostToLog(text, pieces, logged);
+    if (lost.length === 0) break;
+    added = maskableUnion(added, lost);
+    pieces = maskedPieces(text, steps, added, more);
+  }
+  return pieces;
+}
+
+/** True when two lists of spans hold the same spans. */
+const sameSpans = (a: readonly Span[], b: readonly Span[]) =>
+  a === b ||
+  (a.length === b.length && a.every(([start, end], i) => b[i]?.[0] === start && b[i]?.[1] === end));
+
+/**
+ * What the other rules hide when they redact once more the text their `pieces` leave of `text`,
+ * and once more after that, in `text`: the redaction is not always the same the second time (a
+ * quote the header rule paired can be gone).
+ */
+function redactedAgain(text: string, pieces: readonly Piece[]): Span[] {
+  const once = render(text, pieces);
+  const twice = maskedPieces(once, [], [], []);
+  const thrice = maskedPieces(render(once, twice), [], [], []);
+  return maskableUnion(sourceOf(pieces, twice), sourceSpans(pieces, sourceOf(twice, thrice)));
+}
+
+/** How many times keyValuePieces masks what a log line would lose, at most. */
+const MAX_LOG_ROUNDS = 4;
+
+/** What the logger's rules hide in a log line of the text that `pieces` cover, in that text. */
+const loggedSpans = (text: string, pieces: readonly Piece[]) =>
+  sourceSpans(pieces, scrubbedSpans(render(text, pieces)));
+
+/**
+ * The parts of `logged` (spans of `text`) that a log line of the text `pieces` cover would show:
+ * neither masked there nor hidden by the logger's rules in it.
+ */
+function lostToLog(text: string, pieces: readonly Piece[], logged: readonly Span[]): Span[] {
+  const hidden = new Uint8Array(text.length + 1);
+  for (const piece of pieces) if (piece.mask !== undefined) hidden.fill(1, piece.from, piece.to);
+  for (const [start, end] of loggedSpans(text, pieces)) hidden.fill(1, start, end);
+  const lost: Span[] = [];
+  for (const [start, end] of logged) {
+    for (let i = start; i < end; i++) {
+      if (hidden[i]) continue;
+      const last = lost.at(-1);
+      if (last && last[1] === i) last[1] = i + 1;
+      else lost.push([i, i + 1]);
+    }
+  }
+  return maskableUnion(lost, []);
+}
+
+/** keyValuePieces without what the logger's rules hide. */
+function maskedPieces(
+  text: string,
+  steps: readonly HideStep[],
+  extra: readonly Span[],
+  more: readonly Span[],
+): Piece[] {
   const quoted = quotedSecretSpans(text);
   const header = /header/i.test(text);
   const first = header
@@ -724,15 +1623,106 @@ function redactKeyValues(
     hide(wholeText(text), spanHides(first)),
   );
   const unquoted = unquotedKeySpans(text);
-  if (unquoted.length === 0 && extra.length === 0) return render(text, pieces);
-  const values = header
+  if (unquoted.length === 0 && more.length === 0 && extra.length === 0) return pieces;
+  let values = header
     ? mergeSpans(unquoted, doubleQuotedSpans(text, maskableUnion(quoted, unquoted)))
     : unquoted;
-  return render(text, maskSource(pieces, mergeSpans(values, extra)));
+  if (more.length > 0) {
+    // The header rule's pairs as above are kept, and so are its pairs once these values are gone.
+    const secrets = maskableUnion(quoted, maskableUnion(unquoted, more));
+    values = mergeSpans(values, header ? mergeSpans(more, doubleQuotedSpans(text, secrets)) : more);
+  }
+  return maskSource(pieces, mergeSpans(values, extra));
 }
 
 /** Removes credentials from an error message or log line (redactKeyValues). */
 export const redactText = (text: string) => redactKeyValues(text, []);
+
+/** What the HTTP error log keeps of an error's message (logText in http/middleware/errors.ts). */
+const MAX_LOGGED_MESSAGE = 200;
+/**
+ * Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. Every
+ * caller's own words are bounded well under it: fixed words under 64 characters ("Error: ",
+ * "Suggest failed: ", a search's fixed label, INTERNAL_ERROR_PREFIX), and agent/enricher.ts's
+ * `Spotify search for "…" failed: `, whose graph-node label searchFailedPrefix cuts to 200
+ * characters (under 250 in all).
+ */
+const LOG_PREFIX_ROOM = 1024;
+
+/**
+ * `text` redacted (redactText), for a log that cuts it to `max` characters, keeping `keep`. A
+ * value moreSecretSpans masks can make the text shorter than the other rules leave it, so the
+ * cut would fall further on: where they alone leave the text longer than `max`, it stops where
+ * they would be cut, with "…", and the log never shows what that cut left out.
+ */
+function redactForLog(text: string, max: number, keep: number): string {
+  const more = moreSecretSpans(text);
+  const pieces = keyValuePieces(text, [], [], more);
+  if (more.length === 0) return render(text, pieces);
+  const shown = safeCut(text, pieces, keyValuePieces(text, [], [], []), max, keep);
+  return shown < text.length
+    ? `${render(text, piecesBefore(pieces, shown))}…`
+    : render(text, pieces);
+}
+
+/**
+ * Where a cut of the text that `pieces` cover falls when it keeps `keep` characters of a
+ * rendering longer than `max` (cutAt): no further than the same cut of `other`, the other rules'
+ * pieces, and never inside what the logger hides in the log line of either rendering, as the
+ * logger itself cuts a text (logCut): there, at its start, since a part of one is no longer
+ * known to it. The whole text when nothing is cut.
+ */
+function safeCut(
+  text: string,
+  pieces: readonly Piece[],
+  other: readonly Piece[],
+  max: number,
+  keep: number,
+): number {
+  let at = Math.min(cutAt(pieces, max, keep), cutAt(other, max, keep));
+  if (at >= text.length) return at;
+  const renderings = [pieces, other].map((all) => ({ all, text: render(text, all) }));
+  // Each rendering's cut moved by logCut, back in this text, until neither moves it.
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const { all, text: rendered } of renderings) {
+      const there = renderedAt(all, at);
+      const cut = logCut(rendered, there);
+      if (cut < there) {
+        at = Math.min(at, sourceAt(all, cut));
+        moved = true;
+      }
+    }
+  }
+  return at;
+}
+
+/** Where `at`, a place in the text that `pieces` cover, falls in the text they read as. */
+function renderedAt(pieces: readonly Piece[], at: number): number {
+  let out = 0;
+  for (const piece of pieces) {
+    if (piece.to <= at) out += pieceLength(piece);
+    else {
+      if (piece.mask === undefined && piece.from < at) out += at - piece.from;
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Where `at`, a place in the text that `pieces` read as, falls in the text they cover: at a mask's
+ * start when it falls inside one.
+ */
+function sourceAt(pieces: readonly Piece[], at: number): number {
+  let start = 0;
+  for (const piece of pieces) {
+    const length = pieceLength(piece);
+    if (at < start + length) return piece.mask === undefined ? piece.from + at - start : piece.from;
+    start += length;
+  }
+  return pieces.at(-1)?.to ?? 0;
+}
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
 const ID_SHAPED =
@@ -882,9 +1872,19 @@ export function scrubReadText(text: string): string {
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = redactKeyValues(text, [mediaUrlHides, escapedMediaUrlHides, emailHides, phoneHides]);
-  // The cap falls on the redacted text: where a mask is shorter than what it hides, the capped
-  // text reaches further into the tail than it did before. No rule hides less.
+  const steps = [mediaUrlHides, escapedMediaUrlHides, emailHides, phoneHides];
+  const more = moreSecretSpans(text);
+  const pieces = keyValuePieces(text, steps, [], more);
+  let out = render(text, pieces);
+  if (more.length > 0 || out.length > MAX_ERROR_TEXT) {
+    // A value moreSecretSpans masks can make the text shorter than the other rules leave it, or
+    // longer: the cap falls no further than on their text, and never inside a host or a
+    // configured value a log line hides whole (safeCut).
+    const other = more.length > 0 ? keyValuePieces(text, steps, [], []) : pieces;
+    const shown = safeCut(text, pieces, other, MAX_ERROR_TEXT, MAX_ERROR_TEXT);
+    if (shown < text.length) out = render(text, piecesBefore(pieces, shown));
+  }
+  // Past the cut above, the cap only takes the characters of a mask the cut fell inside.
   return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
@@ -941,7 +1941,7 @@ export class SourceError extends Error {
     details: { status?: number; retryAfterMs?: number; body?: unknown; cause?: unknown } = {},
   ) {
     super(
-      redactText(`${source}: ${message}`),
+      redactForLog(`${source}: ${message}`, MAX_LOGGED_MESSAGE, MAX_LOGGED_MESSAGE),
       details.cause === undefined ? {} : { cause: details.cause },
     );
     this.status = details.status;
@@ -954,9 +1954,17 @@ export function isSourceError(error: unknown, kind?: SourceErrorKind): error is 
   return error instanceof SourceError && (kind === undefined || error.kind === kind);
 }
 
-/** One line for logs and tool results, with credentials redacted. */
+/**
+ * One line for logs and tool results, with credentials redacted. A log line keeps
+ * MAX_LOGGED_TEXT characters, its own words before the error included: past that, the line
+ * stops where the other rules alone would leave it with LOG_PREFIX_ROOM to spare (redactForLog).
+ */
 export function describeError(error: unknown): string {
-  return redactText(error instanceof Error ? error.message : String(error));
+  return redactForLog(
+    error instanceof Error ? error.message : String(error),
+    MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+    MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+  );
 }
 
 // =============================================================================
@@ -1408,12 +2416,19 @@ const LINE_STEPS: HideStep[] = [
  * then the cut; whether it is kept is decided on that line, as before. It is then redacted
  * (redactText), so a rule that reads across what was a line break (`Bearer` at the end of one
  * line, its token on the next) reads it as it did on that line. Last, each value of a header line
- * (headerLineSpans), read on the lines the text had, is masked where it lies in the line; it only
- * adds to what is hidden. A line whose masks make it longer is cut again.
+ * (headerLineSpans) and each value moreSecretSpans finds, read on the lines the text had, is
+ * masked where it lies in the line; it only adds to what is hidden. A line whose masks make it
+ * longer is cut again; one that the masks of moreSecretSpans make shorter still stops where the
+ * other rules alone would have cut it (cutAt). When moreSecretSpans finds a value, the line the
+ * other rules alone leave is also redacted once more, as a message made from it is, and what that
+ * hides stays hidden; and a line they leave with an issue is left out.
  *
  * A second check leaves out a line whose redacted form has an issue: a mask can make one (the
  * header rule turns `File "", line 4` into a stack trace). Such a line was kept before, and the
  * message made from it then held the issue, which the readers of stored results refuse.
+ *
+ * Last, when the cut splits a configured value, a link or a host (lineCut), whose part no rule
+ * knows, the line stops at its start; what the line hid before it stays hidden.
  */
 function plainLine(text: string, cut: boolean): string | undefined {
   const pieces = runSteps(text, LINE_STEPS);
@@ -1421,14 +2436,151 @@ function plainLine(text: string, cut: boolean): string | undefined {
   if (!line || reasonIssue(line) !== null) return undefined;
   const short = cut && line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
   const kept = short === line ? line.length : MAX_DETAIL - 1;
-  const headerValues: Span[] = [];
-  for (const [start, end] of sourceHides(pieces, headerLineSpans(text))) {
-    if (start < kept) headerValues.push([start, Math.min(end, kept)]);
+  // The values of the lines the text had, where they lie in the line, up to the cut.
+  const inLine = (spans: readonly Span[]) => {
+    const out: Span[] = [];
+    for (const [start, end] of sourceHides(pieces, spans)) {
+      if (start < kept) out.push([start, Math.min(end, kept)]);
+    }
+    return out;
+  };
+  const lineValues = headerLineSpans(text);
+  const more = moreSecretSpans(text);
+  const headerValues = inLine(more.length > 0 ? maskableUnion(lineValues, more) : lineValues);
+  const lineOnly = inLine(lineValues);
+  // keyValuePieces also keeps hidden what the other rules hide when an error message made from
+  // the line is redacted again (redactedAgain).
+  const masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
+  let redacted = render(short, masked);
+  let stop = short.length;
+  const shapes = more.length + moreSecretSpans(short).length > 0;
+  if (shapes || (cut && redacted.length > MAX_DETAIL)) {
+    const before = shapes ? keyValuePieces(short, [], lineOnly, []) : masked;
+    const old = render(short, before);
+    // A value moreSecretSpans masks can make the line shorter than the other rules leave it, and
+    // a mask longer than what it hides makes it longer: it stops no further than the other rules
+    // alone cut it, and never inside a host or a configured value a log line hides whole
+    // (safeCut), so the last cut below only takes a mask's own characters.
+    const shown = cut ? safeCut(short, masked, before, MAX_DETAIL, MAX_DETAIL - 1) : short.length;
+    if (shown < short.length) {
+      redacted = `${render(short, piecesBefore(masked, shown))}…`;
+      stop = shown;
+    }
+    // A mask can also hide what makes a line one with an issue (`File "[redacted]", line 4`):
+    // a line the other rules alone leave with one is left out, as it was.
+    const oldLine = cut && old.length > MAX_DETAIL ? `${old.slice(0, MAX_DETAIL - 1)}…` : old;
+    if (reasonIssue(oldLine) !== null) return undefined;
   }
-  const redacted = redactKeyValues(short, [], headerValues);
   const out =
     cut && redacted.length > MAX_DETAIL ? `${redacted.slice(0, MAX_DETAIL - 1)}…` : redacted;
-  return reasonIssue(out) === null ? out : undefined;
+  if (reasonIssue(out) !== null) return undefined;
+  // A configured value, a link, a host or an Authorization credential the cut splits is left
+  // out from its start (lineCut);
+  // the line is redacted as it was cut, so what it hides before that stays hidden.
+  const end = kept < line.length ? lineCut(line, kept) : kept;
+  if (end >= Math.min(stop, kept)) return out;
+  const shorter = render(short, piecesBefore(masked, end));
+  const cutAgain = `${shorter.length > MAX_DETAIL - 1 ? shorter.slice(0, MAX_DETAIL - 1) : shorter}…`;
+  return reasonIssue(cutAgain) === null ? cutAgain : undefined;
+}
+
+/**
+ * Where a line's cut to `at` characters falls: there, or at the start of a configured value
+ * (knownSecrets), of what a log line replaces whole (a link, a host) or of an Authorization
+ * credential (logCut) that it would split. A part of one is no longer known to the rules that
+ * hide it, or too short for them; a secret pair or header value cut is still masked up to the
+ * cut.
+ */
+function lineCut(line: string, at: number): number {
+  const values = knownSecrets().flatMap((secret) =>
+    secretHides(line.slice(0, at + secret.length), secret).map(
+      ([start, end]): Span => [start, end],
+    ),
+  );
+  return logCut(line, at, values, { pairs: false });
+}
+
+/**
+ * How much of the text that `pieces` cover a cut to `max` characters shows (the cut keeps `keep`
+ * characters when the text is longer; a line keeps MAX_DETAIL - 1 and its "…"): up to the first
+ * character it cuts, or past a mask the cut falls inside, whose characters it hides. The whole
+ * text when nothing is cut.
+ */
+function cutAt(pieces: readonly Piece[], max = MAX_DETAIL, keep = MAX_DETAIL - 1): number {
+  const length = pieces.reduce((sum, piece) => sum + pieceLength(piece), 0);
+  if (length <= max) return pieces.at(-1)?.to ?? 0;
+  let at = 0;
+  for (const piece of pieces) {
+    const next = at + pieceLength(piece);
+    if (next > keep) {
+      return piece.mask === undefined ? piece.from + (keep - at) : piece.to;
+    }
+    at = next;
+  }
+  return pieces.at(-1)?.to ?? 0;
+}
+
+/**
+ * Where, in the text that `pieces` cover, lies each mask of `again` (pieces of the text `pieces`
+ * read as): a kept character is where it was; one of a mask stands for all the mask hides.
+ */
+function sourceOf(pieces: readonly Piece[], again: readonly Piece[]): Span[] {
+  const spans: Span[] = [];
+  for (const piece of again) {
+    if (piece.mask !== undefined && piece.to > piece.from) spans.push([piece.from, piece.to]);
+  }
+  return sourceSpans(pieces, spans);
+}
+
+/**
+ * Where, in the text that `pieces` cover, lies each of `spans` (of the text they read as, sorted
+ * by start): a kept character is where it was; one of a mask stands for all the mask hides.
+ */
+function sourceSpans(pieces: readonly Piece[], spans: readonly Span[]): Span[] {
+  if (spans.length === 0) return [];
+  // Where each piece starts in the text they read as.
+  const starts: number[] = [];
+  let length = 0;
+  for (const piece of pieces) {
+    starts.push(length);
+    length += pieceLength(piece);
+  }
+  // The last piece that starts at or before `at`, a character of the text they read as.
+  const pieceAt = (at: number) => {
+    let low = 0;
+    let high = pieces.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if ((starts[middle] ?? 0) <= at) low = middle;
+      else high = middle - 1;
+    }
+    return low;
+  };
+  const from = (at: number) => {
+    if (at < 0 || at >= length) return 0;
+    const i = pieceAt(at);
+    const piece = pieces[i] as Piece;
+    return piece.mask === undefined ? piece.from + at - (starts[i] ?? 0) : piece.from;
+  };
+  const to = (at: number) => {
+    if (at < 0 || at >= length) return 0;
+    const i = pieceAt(at);
+    const piece = pieces[i] as Piece;
+    return piece.mask === undefined ? piece.from + at - (starts[i] ?? 0) + 1 : piece.to;
+  };
+  const out: Span[] = [];
+  for (const [start, end] of spans) out.push([from(start), to(end - 1)]);
+  return maskableUnion(out, []);
+}
+
+/** `pieces` that start before `end` in the text as it came, a kept one cut there. */
+function piecesBefore(pieces: readonly Piece[], end: number): Piece[] {
+  const out: Piece[] = [];
+  for (const piece of pieces) {
+    if (piece.from >= end) break;
+    out.push(piece.mask === undefined && piece.to > end ? { from: piece.from, to: end } : piece);
+  }
+  return out;
 }
 
 /**

@@ -228,12 +228,12 @@ export function scrub(input: unknown): string {
 
 /**
  * A text as scrub has rewritten it so far: its character i stands for [from[i], to[i]) of the
- * text it was given.
+ * text it was given, or for character i itself while nothing is rewritten (no `from`, `to`).
  */
 interface Rewritten {
   text: string;
-  from: number[];
-  to: number[];
+  from?: Int32Array;
+  to?: Int32Array;
 }
 
 /**
@@ -256,33 +256,49 @@ function rewrite(
   hidden: Array<[number, number]>,
 ): Rewritten {
   if (parts.length === 0) return current;
-  const from: number[] = [];
-  const to: number[] = [];
-  let text = "";
+  const fromOf = (i: number) => (current.from ? (current.from[i] ?? 0) : i);
+  const toOf = (i: number) => (current.to ? (current.to[i] ?? 0) : i + 1);
+  // The parts replaced: those that start where the one before ended, or later.
+  const used: Rewrite[] = [];
+  let length = current.text.length;
+  for (let i = 0, at = 0; i < parts.length; i++) {
+    const part = parts[i] as Rewrite;
+    if (part[0] < at || part[1] <= part[0]) continue;
+    used.push(part);
+    length += part[2].length - (part[1] - part[0]);
+    at = part[1];
+  }
+  const from = new Int32Array(length);
+  const to = new Int32Array(length);
+  const chunks: string[] = [];
   let at = 0;
+  let out = 0;
   const keep = (end: number) => {
-    text += current.text.slice(at, end);
-    for (let i = at; i < end; i++) {
-      from.push(current.from[i] ?? 0);
-      to.push(current.to[i] ?? 0);
+    chunks.push(current.text.slice(at, end));
+    if (current.from && current.to) {
+      from.set(current.from.subarray(at, end), out);
+      to.set(current.to.subarray(at, end), out);
+      out += end - at;
+    } else {
+      for (let i = at; i < end; i++, out++) {
+        from[out] = i;
+        to[out] = i + 1;
+      }
     }
   };
-  for (const [start, end, replacement, hideStart, hideEnd] of parts) {
-    if (start < at || end <= start) continue;
+  for (const [start, end, replacement, hideStart, hideEnd] of used) {
     keep(start);
-    const first = current.from[start] ?? 0;
-    const last = current.to[end - 1] ?? 0;
-    if (hideEnd > hideStart)
-      hidden.push([current.from[hideStart] ?? 0, current.to[hideEnd - 1] ?? 0]);
-    text += replacement;
-    for (let i = 0; i < replacement.length; i++) {
-      from.push(first);
-      to.push(last);
-    }
+    const first = fromOf(start);
+    const last = toOf(end - 1);
+    if (hideEnd > hideStart) hidden.push([fromOf(hideStart), toOf(hideEnd - 1)]);
+    chunks.push(replacement);
+    from.fill(first, out, out + replacement.length);
+    to.fill(last, out, out + replacement.length);
+    out += replacement.length;
     at = end;
   }
   keep(current.text.length);
-  return { text, from, to };
+  return { text: chunks.join(""), from, to };
 }
 
 /** Each place a value appears in `text`, left to right, as split() finds it, as a Rewrite. */
@@ -309,23 +325,22 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * left (configured values, links, configured hosts, preview and provider hosts, secret pairs,
  * Authorization values), and what each replaces found where it stood in `text`. The quotes
  * around a value and the scheme word before one, which scrub replaces with it, are not in them:
- * they hold no secret, and the redaction that reads these spans keeps them;
- * the configured values as they appear inside a JSON string, which the last pass over a line
- * replaces, are. The cap is not applied: past it, a span holds text scrub cuts off. The redaction
+ * they hold no secret, and the redaction that reads these spans keeps them. The configured
+ * values as JSON writes them (with `"`, `\` or a control character escaped) are in them too,
+ * although scrub does not replace them in a text: the last pass over a line replaces only what
+ * it writes itself from a value, and one written already escaped in a text is escaped again
+ * there. The cap is not applied: past it, a span holds text scrub cuts off. The redaction
  * of source errors (sources/http.ts) reads them, so that the log line of a text it redacts
  * further never shows what the log line of the text it redacted before hid. Reads the text once
- * per rule.
+ * per rule. With `pairs` false, only what scrub replaces whole, which a part of no longer
+ * matches: configured values, links and hosts, not secret pairs or Authorization values.
  */
-export function scrubbedSpans(text: string): Array<[number, number]> {
+export function scrubbedSpans(text: string, pairs = true): Array<[number, number]> {
   const hidden: Array<[number, number]> = [];
   for (const value of escapedSecretValues) {
     for (const [start, end] of occurrences(text, value, REDACTED)) hidden.push([start, end]);
   }
-  let current: Rewritten = {
-    text,
-    from: Array.from({ length: text.length }, (_, i) => i),
-    to: Array.from({ length: text.length }, (_, i) => i + 1),
-  };
+  let current: Rewritten = { text };
   for (const value of secretValues) {
     current = rewrite(current, occurrences(current.text, value, REDACTED), hidden);
   }
@@ -373,6 +388,20 @@ export function scrubbedSpans(text: string): Array<[number, number]> {
     }
     current = rewrite(current, parts, hidden);
   }
+  if (pairs) readPairs(current, hidden);
+  // Sorted by start, those that overlap or touch as one.
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of hidden.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
+/** scrubbedSpans' last two rules, secret pairs and Authorization values, on `current`. */
+function readPairs(before: Rewritten, hidden: Array<[number, number]>): void {
+  let current = before;
   const pairs: Rewrite[] = [];
   for (const pair of current.text.matchAll(SECRET_PAIR)) {
     const from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
@@ -390,14 +419,39 @@ export function scrubbedSpans(text: string): Array<[number, number]> {
     auths.push(valueRewrite(current.text, from, auth.index + auth[0].length));
   }
   rewrite(current, auths, hidden);
-  // Sorted by start, those that overlap or touch as one.
-  const merged: Array<[number, number]> = [];
-  for (const [start, end] of hidden.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
-    const last = merged.at(-1);
-    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
-    else merged.push([start, end]);
+}
+
+/**
+ * How far past a cut logCut reads a text. A rule's match that runs on past it starts where it
+ * does in the whole text, which is all a cut needs.
+ */
+export const LOG_CUT_WINDOW = 4096;
+
+/**
+ * Where a cut of `text` at `at` falls when it never splits what scrub replaces whole
+ * (scrubbedSpans) or one of the `extra` spans: at the start of the first such span it would
+ * split, since a part of one no longer matches. Reads the text up to LOG_CUT_WINDOW characters
+ * past `at`. With `pairs` false, a secret pair or an Authorization value may be cut (scrubbedSpans).
+ */
+export function logCut(
+  text: string,
+  at: number,
+  extra: ReadonlyArray<readonly [number, number]> = [],
+  pairs = true,
+): number {
+  if (at <= 0 || at >= text.length) return at;
+  const spans = [...scrubbedSpans(text.slice(0, at + LOG_CUT_WINDOW), pairs), ...extra];
+  let end = at;
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const [start, stop] of spans) {
+      if (start < end && end < stop) {
+        end = start;
+        moved = true;
+      }
+    }
   }
-  return merged;
+  return end;
 }
 
 /**

@@ -2155,6 +2155,38 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("never cuts a source's reason through a configured value or a host", () => {
+    // The reason's own cut, at 119 characters, comes before any redaction: a part of a value it
+    // split was no longer known to the rules that hide it, nor to the logger.
+    const key = "M7001xM7002xM7003xQQQ";
+    const host = "contoso-prod.openai.azure.com";
+    process.env.TEST_SERVICE_API_KEY = key;
+    configureLogger({ AZURE_OPENAI_ENDPOINT: `https://${host}`, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pad = 40; pad < 60; pad++) {
+        for (const value of [key, host]) {
+          const reason = plainReason(`${"x ".repeat(pad)}The API key ${value} is not valid`) ?? "";
+          const message = new SourceError("spotify", "http", `HTTP 401: ${reason}`).message;
+          for (const shown of [reason, scrub(reason), scrub(logText(message))]) {
+            for (let k = 1; k < value.length; k++) {
+              expect(shown, `${pad} ${k}`).not.toContain(`${value.slice(0, k)}…`);
+            }
+          }
+        }
+      }
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never cuts a body's cap through a host when nothing else in it is masked", () => {
+    for (let pad = 225; pad < 250; pad++) {
+      const body = `<html>${"y ".repeat(pad)} upstream contoso-prod.openai.azure.com timed out</html>`;
+      expect(scrub(scrubText(body)), String(pad)).not.toMatch(/contoso/);
+    }
+  });
+
   it("masks a template reference whole, and keeps an Authorization scheme on every path", () => {
     // A GitHub Actions expression, written as it is in a workflow file.
     const reference = ["deploy GITHUB_TOKEN=$", "{{ secrets.GH }} now"].join("");
@@ -2319,6 +2351,21 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
     const { ms, result } = timed(() => redactText(text), { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
     expect(result).not.toContain("QzENDQ");
+  });
+
+  it("describes a 1 MB error in linear time, and reads only the text near the HTTP log's cap", () => {
+    // About 0.3 s each, 1.5 s when each log-line check built an array per character, and a
+    // few tens of milliseconds for the rules without the shapes.
+    const big = "\nX-Api-Key: k\ntoken: a b".repeat((1 << 20) / 24);
+    for (const call of [
+      () => describeError(new Error(big)),
+      () => new SourceError("spotify", "http", big).message,
+    ]) {
+      const { ms, result } = timed(call, { runs: 3, stopAboveMs: 5_000 });
+      expect(ms).toBeLessThan(1000);
+      expect(result).not.toMatch(/: k\b/);
+    }
+    expect(timed(() => logText(big), { runs: 3, stopAboveMs: 2_000 }).ms).toBeLessThan(100);
   });
 
   it("answers quickly on a long form-field name in a source's reason", () => {

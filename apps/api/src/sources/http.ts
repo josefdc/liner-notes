@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
+import { LOG_CUT_WINDOW, logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -1670,7 +1670,7 @@ function redactForLog(text: string, max: number, keep: number): string {
  * rendering longer than `max` (cutAt): no further than the same cut of `other`, the other rules'
  * pieces, and never inside what a log line's logger hides whole in either (a provider host, a
  * configured value, scrubbedSpans): there, at its start, since a part of one is no longer known
- * to the logger. The whole text when nothing is cut.
+ * to the logger. The whole text when nothing is cut. Only the text near the cut is read.
  */
 function safeCut(
   text: string,
@@ -1681,7 +1681,9 @@ function safeCut(
 ): number {
   const at = Math.min(cutAt(pieces, max, keep), cutAt(other, max, keep));
   if (at >= text.length) return at;
-  for (const [start, end] of maskableUnion(loggedSpans(text, pieces), loggedSpans(text, other))) {
+  // Only the text up to a window past the cut is read (logCut).
+  const near = (all: readonly Piece[]) => loggedSpans(text, piecesBefore(all, at + LOG_CUT_WINDOW));
+  for (const [start, end] of maskableUnion(near(pieces), near(other))) {
     if (start < at && at < end) return start;
   }
   return at;
@@ -1839,15 +1841,15 @@ export function scrubText(text: string): string {
   const more = moreSecretSpans(text);
   const pieces = keyValuePieces(text, steps, [], more);
   let out = render(text, pieces);
-  if (more.length > 0) {
+  if (more.length > 0 || out.length > MAX_ERROR_TEXT) {
     // A value moreSecretSpans masks can make the text shorter than the other rules leave it, or
     // longer: the cap falls no further than on their text, and never inside a host or a
     // configured value a log line hides whole (safeCut).
-    const other = keyValuePieces(text, steps, [], []);
+    const other = more.length > 0 ? keyValuePieces(text, steps, [], []) : pieces;
     const shown = safeCut(text, pieces, other, MAX_ERROR_TEXT, MAX_ERROR_TEXT);
     if (shown < text.length) out = render(text, piecesBefore(pieces, shown));
   }
-  // The cap falls on the redacted text; past a cut above, only on a mask's own characters.
+  // Past the cut above, the cap only takes the characters of a mask the cut fell inside.
   return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
@@ -2376,7 +2378,8 @@ const LINE_STEPS: HideStep[] = [
  * empty or has an issue (reasonIssue).
  *
  * The line is made as it always was: whitespace runs become one space, links become "[link]",
- * then the cut; whether it is kept is decided on that line, as before. It is then redacted
+ * then the cut, which never splits a configured value or what a log line hides whole (lineCut);
+ * whether it is kept is decided on that line, as before. It is then redacted
  * (redactText), so a rule that reads across what was a line break (`Bearer` at the end of one
  * line, its token on the next) reads it as it did on that line. Last, each value of a header line
  * (headerLineSpans) and each value moreSecretSpans finds, read on the lines the text had, is
@@ -2394,8 +2397,8 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const pieces = runSteps(text, LINE_STEPS);
   const line = render(text, pieces);
   if (!line || reasonIssue(line) !== null) return undefined;
-  const short = cut && line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
-  const kept = short === line ? line.length : MAX_DETAIL - 1;
+  const kept = cut && line.length > MAX_DETAIL ? lineCut(line, MAX_DETAIL - 1) : line.length;
+  const short = kept < line.length ? `${line.slice(0, kept)}…` : line;
   // The values of the lines the text had, where they lie in the line, up to the cut.
   const inLine = (spans: readonly Span[]) => {
     const out: Span[] = [];
@@ -2428,6 +2431,21 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const out =
     cut && redacted.length > MAX_DETAIL ? `${redacted.slice(0, MAX_DETAIL - 1)}…` : redacted;
   return reasonIssue(out) === null ? out : undefined;
+}
+
+/**
+ * Where a line's cut to `at` characters falls: there, or at the start of a configured value
+ * (knownSecrets) or of what a log line replaces whole (a link, a host: logCut) that it would
+ * split. A part of one is no longer known to the rules that hide it; a secret pair or header
+ * value cut is still masked up to the cut.
+ */
+function lineCut(line: string, at: number): number {
+  const values = knownSecrets().flatMap((secret) =>
+    secretHides(line.slice(0, at + secret.length), secret).map(
+      ([start, end]): Span => [start, end],
+    ),
+  );
+  return logCut(line, at, values, false);
 }
 
 /**
@@ -2468,16 +2486,38 @@ function sourceOf(pieces: readonly Piece[], again: readonly Piece[]): Span[] {
  */
 function sourceSpans(pieces: readonly Piece[], spans: readonly Span[]): Span[] {
   if (spans.length === 0) return [];
-  const from: number[] = [];
-  const to: number[] = [];
+  // Where each piece starts in the text they read as.
+  const starts: number[] = [];
+  let length = 0;
   for (const piece of pieces) {
-    for (let i = 0; i < pieceLength(piece); i++) {
-      from.push(piece.mask === undefined ? piece.from + i : piece.from);
-      to.push(piece.mask === undefined ? piece.from + i + 1 : piece.to);
-    }
+    starts.push(length);
+    length += pieceLength(piece);
   }
+  // The last piece that starts at or before `at`, a character of the text they read as.
+  const pieceAt = (at: number) => {
+    let low = 0;
+    let high = pieces.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if ((starts[middle] ?? 0) <= at) low = middle;
+      else high = middle - 1;
+    }
+    return low;
+  };
+  const from = (at: number) => {
+    if (at < 0 || at >= length) return 0;
+    const i = pieceAt(at);
+    const piece = pieces[i] as Piece;
+    return piece.mask === undefined ? piece.from + at - (starts[i] ?? 0) : piece.from;
+  };
+  const to = (at: number) => {
+    if (at < 0 || at >= length) return 0;
+    const i = pieceAt(at);
+    const piece = pieces[i] as Piece;
+    return piece.mask === undefined ? piece.from + at - (starts[i] ?? 0) + 1 : piece.to;
+  };
   const out: Span[] = [];
-  for (const [start, end] of spans) out.push([from[start] ?? 0, to[end - 1] ?? 0]);
+  for (const [start, end] of spans) out.push([from(start), to(end - 1)]);
   return maskableUnion(out, []);
 }
 

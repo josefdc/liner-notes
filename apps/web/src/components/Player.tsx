@@ -1014,10 +1014,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
-          // Focus lands here from the header's "Connections" link (not a tab stop of its own).
+          // Focus lands here from the header's "Connections" button (not a tab stop of its own),
+          // and its ring shows it.
           tabIndex={-1}
           className={`
-            min-w-0 outline-none border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            min-w-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >

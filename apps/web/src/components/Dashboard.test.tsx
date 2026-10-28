@@ -177,6 +177,8 @@ describe('Dashboard connected tracks', () => {
     ({
       ...missingTrack,
       modelUnavailable: false,
+      // The analysed track's year, as a result carries it: its name in a relation says it.
+      releaseYear: '2011',
       ...(withPack ? { evidence: PACK } : {}),
       claims,
       genealogy: {

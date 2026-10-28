@@ -205,8 +205,10 @@ export function labelYear(label: string): number | null {
 }
 
 /**
- * A node's release year: the one the API took from MusicBrainz (`year`; the analysed track's
- * falls back on the result's release year), else the one its label ends with; null otherwise.
+ * A node's release year for the direction check (`readLink`): the one the API took from
+ * MusicBrainz (`year`; the analysed track's falls back on the result's release year), else the
+ * one its label ends with; null otherwise. A track is never named or placed by it: a label's year
+ * may be the model's (`recordYear`).
  */
 export function yearOf(node: NamedNode | undefined): number | null {
   if (!node) return null;
@@ -223,10 +225,13 @@ export function recordYear(node: NamedNode | undefined): number | null {
   return node?.year ?? null;
 }
 
-/** How a relation names a track: its title and year, or its label (which carries both). */
+/**
+ * How a relation names a track: its title and the year a record gives it (`recordYear`; never a
+ * year the model wrote in a label), or, with no title of its own, its label as written.
+ */
 export function nodeName(node: NamedNode | undefined, id: string): string {
   if (!node) return id;
-  const year = yearOf(node);
+  const year = recordYear(node);
   const title = node.trackTitle?.trim();
   return title ? `${title}${year === null ? '' : ` (${year})`}` : node.label;
 }

@@ -402,6 +402,8 @@ test("from md up a Connections button in the header takes the keyboard to the ma
   await expect(link).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(panel).toBeFocused();
+  // Where the focus went shows: the panel's ring.
+  expect(await panel.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
   await expect
     .poll(() => panel.evaluate((element) => Math.round(element.getBoundingClientRect().top)))
     .toBeLessThan(300);

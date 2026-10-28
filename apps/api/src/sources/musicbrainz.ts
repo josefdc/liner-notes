@@ -178,12 +178,16 @@ export function withMusicBrainzPriority<T>(fn: () => T): T {
 
 /**
  * A read for the relations map (sources/identity.ts): it waits in the map's lane (after every
- * chain's own reads, before the researchers'), is sent only while the pacing clock is at most
- * `notAfter` (else it is refused when its turn comes, and takes no slot), and is not retried when
- * MusicBrainz sheds it: the map does without it.
+ * chain's own reads, before the researchers'), or with `ahead` in the chain's own lane, in turn
+ * with the chain's reads; it is sent only while the pacing clock is at most `notAfter` (else it
+ * is refused when its turn comes, and takes no slot). When MusicBrainz sheds it, it is asked
+ * again once, after the Retry-After (at most 2 s), only when that still starts by `notAfter`:
+ * else the map does without it.
  */
 export interface MapRead {
   notAfter: number;
+  /** Waits in the chain's own lane rather than the map's. */
+  ahead?: boolean;
 }
 
 /** Why a map read was not sent: its turn came after its `notAfter`. */
@@ -236,12 +240,17 @@ class MusicBrainzRateLimiter {
    * has a timeout), so one request can never stall the queue. When `signal` aborts while the
    * request waits its turn, it leaves the queue at once, rejecting with the signal's reason,
    * and takes no slot. A request made inside `withMusicBrainzPriority` waits in the first lane;
-   * a map read (`map`) in the second, and is checked against its `notAfter` when its turn
-   * comes: past it, it is refused (PaceRefused, "deadline") without being sent, and takes no
-   * slot.
+   * a map read (`map`) in the second (in the first with `ahead`), and is checked against its
+   * `notAfter` when its turn comes: past it, it is refused (PaceRefused, "deadline") without
+   * being sent, and takes no slot.
    */
   async execute<T>(fn: () => Promise<T>, signal?: AbortSignal, map?: MapRead): Promise<T> {
-    const lane = map ? this.map : chainPriority.getStore() ? this.urgent : this.queue;
+    const lane =
+      map && !map.ahead
+        ? this.map
+        : map?.ahead || chainPriority.getStore()
+          ? this.urgent
+          : this.queue;
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(signal.reason);
@@ -540,7 +549,7 @@ const MAX_RETRY_WAIT_MS = 2000;
 /**
  * A rate-limited GET to the MusicBrainz API (JSON), with a timeout. When MusicBrainz sheds the
  * request (503, or 429) it is retried once, after its Retry-After (at most 2 s), through the
- * queue again; a map read (`map`, see MapRead) is not retried.
+ * queue again; a map read (`map`, see MapRead) only when that wait still ends by its `notAfter`.
  */
 async function mbFetch<T>(
   path: string,
@@ -572,9 +581,12 @@ async function mbFetch<T>(
     try {
       return await attempt();
     } catch (error) {
-      // Stopped by its signal, or a map read: never retried.
-      if (signal?.aborted || map || !isSourceError(error, "rate_limited")) throw error;
-      await delay(Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS), signal);
+      // Stopped by its signal: never retried.
+      if (signal?.aborted || !isSourceError(error, "rate_limited")) throw error;
+      const wait = Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS);
+      // A map read is asked again only when it can still start by its limit.
+      if (map && pacingClock() + wait > map.notAfter) throw error;
+      await delay(wait, signal);
       return await attempt();
     }
   } catch (error) {

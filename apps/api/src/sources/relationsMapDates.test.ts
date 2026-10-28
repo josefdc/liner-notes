@@ -10,8 +10,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
-import { collectPrimarySources, type RecordingCache } from "./identity.js";
-import { type MbRelationship, MusicBrainzRateLimiter } from "./musicbrainz.js";
+import { collectPrimarySources, MAP_INCOMPLETE, type RecordingCache } from "./identity.js";
+import {
+  getMusicBrainzArtist,
+  type MbRelationship,
+  MusicBrainzRateLimiter,
+  withMusicBrainzPriority,
+} from "./musicbrainz.js";
 import { type FetchCall, type FetchRoute, json, never, stubFetch } from "./testing/fetchStub.js";
 import type { TrackRef } from "./records.js";
 
@@ -21,6 +26,7 @@ const GANGSTAS = "2f7a6735-2e09-4ce2-81e4-b148e6c39a55";
 const WORK = "5efe152c-3104-3226-9084-d71efc6356af";
 const PASTIME = "e97bedfc-b0ee-4cb6-8343-03a714caab15";
 const COOLIO = "cc30e630-8c75-4d78-b205-8e2edc6bdaa7";
+const LV = "773c48db-eb0c-491f-9a36-633d72dcee8d";
 const now = () => new Date("2026-10-28T12:00:00.000Z");
 
 const TRACK: TrackRef = {
@@ -139,7 +145,7 @@ const isrcAnswer = {
         {
           name: "L.V.",
           joinphrase: "",
-          artist: { id: "773c48db-eb0c-491f-9a36-633d72dcee8d", name: "L.V." },
+          artist: { id: LV, name: "L.V." },
         },
       ],
     },
@@ -240,6 +246,12 @@ const idsOf = (call: FetchCall): string[] =>
 const route: FetchRoute = (call) => {
   const url = new URL(call.url);
   if (call.url.startsWith(`${MB}/isrc/${ISRC}?`)) return json(isrcAnswer);
+  if (call.url.startsWith(`${MB}/artist/${COOLIO}?`)) {
+    return json({ id: COOLIO, name: "Coolio", type: "Person", country: "US", relations: [] });
+  }
+  if (call.url.startsWith(`${MB}/artist/${LV}?`)) {
+    return json({ id: LV, name: "L.V.", type: "Person", country: "US", relations: [] });
+  }
   if (call.url.startsWith(`${MB}/recording/${GANGSTAS}?`)) return json(details);
   if (isHopRead(call)) return json(pastime);
   if (call.url.startsWith(`${MB}/work/${WORK}?`)) return json(work);
@@ -283,14 +295,26 @@ const route: FetchRoute = (call) => {
 };
 
 /**
- * MusicBrainz under load: a lookup or a search answers in 1.7 s, a browse of up to 100 entities
- * in 2.5 s. With the client's own spacing (a request at most every 1.1 s, one at a time), the
- * chain's six reads end at 12.6 s; the map's reads may start until 13.5 s.
+ * How long MusicBrainz took to answer each kind of request when this track's reads were made
+ * from the server on 2026-10-28 (383–670 ms): faster than the client's own spacing, so the
+ * spacing (a request at most every 1.1 s, one at a time) sets the pace.
  */
-const LOOKUP_MS = 1700;
-const BROWSE_MS = 2500;
-const latencyOf = (call: FetchCall) =>
-  /\/ws\/2\/(?:release\?recording=|recording\?work=)/.test(call.url) ? BROWSE_MS : LOOKUP_MS;
+const LIVE_MS: Array<[RegExp, number]> = [
+  [/\/ws\/2\/isrc\//, 383],
+  [/\/ws\/2\/work\//, 645],
+  [/\/ws\/2\/recording\?work=/, 602],
+  [/\/ws\/2\/release\?/, 635],
+  [/\/ws\/2\/recording\?query=/, 670],
+  [/\/ws\/2\/recording\/[0-9a-f-]{36}\?/, 452],
+  [/\/ws\/2\/artist\//, 450],
+];
+const liveMs = (call: FetchCall) => LIVE_MS.find(([re]) => re.test(call.url))?.[1] ?? 500;
+
+/** Live latencies, but `ms` for the `nth` request (from 1) that `matches`: a stalled answer. */
+function stalledAt(matches: (call: FetchCall) => boolean, ms: number, nth = 1) {
+  let seen = 0;
+  return (call: FetchCall) => (matches(call) && ++seen === nth ? ms : liveMs(call));
+}
 
 /** `inner`, answered after `ms` (or rejected when the request's signal aborts first). */
 const slow =
@@ -350,8 +374,44 @@ function unpaced() {
   onTestFinished(restore);
 }
 
-/** The chain on the fake clock, at the client's real spacing: its result, and when it settled. */
-async function onFakeClock(options: { deadlineMs?: number; cache?: RecordingCache } = {}) {
+/**
+ * The research running alongside, as in a real run: it asks MusicBrainz for the credited
+ * artist (a request in the queue's last lane) at `at` ms after the chain starts.
+ */
+function researcher(at: readonly number[]) {
+  for (const ms of at) {
+    setTimeout(() => {
+      void getMusicBrainzArtist
+        .invoke({ artistName: "Coolio", artistMbid: COOLIO })
+        .catch(() => undefined);
+    }, ms);
+  }
+}
+const RESEARCH_AT = [300, 2_000, 5_000, 8_000];
+
+/** Another run's chain, at the same time: one of its own reads (the chain's lane) at `at` ms. */
+function otherRun(at: readonly number[]) {
+  for (const ms of at) {
+    setTimeout(() => {
+      void withMusicBrainzPriority(() =>
+        getMusicBrainzArtist.invoke({ artistName: "L.V.", artistMbid: LV }),
+      ).catch(() => undefined);
+    }, ms);
+  }
+}
+
+/**
+ * The chain on the fake clock, at the client's real spacing (the real MusicBrainz queue, with its
+ * lanes, its 1.1 s spacing and the 10 s request timeout): its result, and when it settled.
+ */
+async function onFakeClock(
+  options: {
+    deadlineMs?: number;
+    cache?: RecordingCache;
+    research?: readonly number[];
+    otherRun?: readonly number[];
+  } = {},
+) {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
   const t0 = performance.now();
   let settledAt = -1;
@@ -363,180 +423,315 @@ async function onFakeClock(options: { deadlineMs?: number; cache?: RecordingCach
     settledAt = performance.now() - t0;
     return sources;
   });
+  researcher(options.research ?? []);
+  otherRun(options.otherRun ?? []);
   await vi.runAllTimersAsync();
   return { mb: records(await run), settledAt };
 }
 
-describe("the relations map's years on a track with many relations", () => {
-  it("dates every direct relation MusicBrainz dates within the budget, on a slow MusicBrainz", async () => {
-    const log = warnings();
-    const net = stubFetch(slow(route, latencyOf));
-    const { mb, settledAt } = await onFakeClock();
+/** A cache that holds nothing and records what is written to it. */
+function writesCache() {
+  const writes: Array<[string, string | null]> = [];
+  const cache: RecordingCache = {
+    getMbHop: () => null,
+    putMbHop: () => {},
+    getMbDate: () => null,
+    putMbDate: (mbid, date) => {
+      writes.push([mbid, date]);
+    },
+  };
+  return { cache, writes };
+}
 
-    // Within the 20 s budget, by the dating cut.
+const shed = () => new Response("busy", { status: 503, headers: { "retry-after": "0" } });
+const isWorkBrowse = (call: FetchCall) => call.url.startsWith(`${MB}/recording?work=`);
+const NONE_DATED = Object.fromEntries(DIRECT_IDS.map((id) => [id, null]));
+const HOP_DATED = { [SIBLING]: "2005-05-05", [UNDATED_SIBLING]: null, [EARLIER]: "1970" };
+const NONE_OF_HOP_DATED = { [SIBLING]: null, [UNDATED_SIBLING]: null, [EARLIER]: null };
+
+/**
+ * The recordings the map's one search asks for: the nine but "Pastime Paradise" (dated by its
+ * own lookup, the second hop's), then the second hop's three.
+ */
+const ASKED_IDS = [...DIRECT_IDS, ...HOP_IDS].filter((id) => id !== PASTIME);
+const { [PASTIME]: _pastimeDate, ...ASKED_DATED } = { ...EXPECTED_DIRECT, ...HOP_DATED };
+const PASTIME_ONLY = { ...NONE_DATED, [PASTIME]: "1976-09-28" };
+/** The chain's own MusicBrainz requests and the map's, in the order they were sent. */
+const mbOrder = (calls: readonly FetchCall[]) =>
+  calls
+    .filter((c) => c.url.startsWith(MB))
+    .map((c) =>
+      c.url.includes(`/artist/${LV}`)
+        ? "other run"
+        : c.url.includes("/artist/")
+          ? "research"
+          : isHopRead(c)
+            ? "hop"
+            : isDateSearch(c)
+              ? "dates"
+              : (new URL(c.url).pathname.split("/")[3] ?? ""),
+    );
+
+describe("the relations map's years in the runs that left them undated", () => {
+  it("dates every recording when the second hop's lookup stalls (run 3a385be1)", async () => {
+    // Live answers, the research alongside, and the lookup of "Pastime Paradise" answered
+    // after 7.95 s, as in the run that dated 1 of the 9.
+    const log = warnings();
+    const { cache, writes } = writesCache();
+    const net = stubFetch(slow(route, stalledAt(isHopRead, 7_950)));
+    const { mb, settledAt } = await onFakeClock({ cache, research: RESEARCH_AT });
+
     expect(settledAt).toBeLessThanOrEqual(15_000);
-    expect(direct(mb.records)).toHaveLength(9);
-    // Every direct relation MusicBrainz dates has its year; the two it does not stay undated.
     expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
-    // One search for the nine, sent first; no time was left for the second hop, and the log
-    // says so.
-    const mapReads = net.calls.filter(isMapRead);
-    expect(mapReads).toHaveLength(1);
-    expect(idsOf(mapReads[0]).sort()).toEqual([...DIRECT_IDS].sort());
-    expect(log()).toEqual([
-      `Relations map incomplete for recording/${GANGSTAS}: not read the second hop from recording/${PASTIME} (no time left)`,
-    ]);
-    expect(mb.incomplete).toMatch(/map incomplete: /);
-  });
-
-  it("reads the direct relations' dates before the second hop, and the hop's after it", async () => {
-    unpaced();
-    const log = warnings();
-    const net = stubFetch(route);
-    const { mb } = await onFakeClock();
-
-    const mapReads = net.calls.filter(isMapRead);
-    expect(mapReads.map((c) => (isHopRead(c) ? "hop" : "dates"))).toEqual([
-      "dates",
-      "hop",
-      "dates",
-    ]);
-    // The nine first; then only the second hop's recordings, none asked twice.
-    expect(idsOf(mapReads[0]).sort()).toEqual([...DIRECT_IDS].sort());
-    expect(idsOf(mapReads[2]).sort()).toEqual([...HOP_IDS].sort());
-    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
-    expect(hopDates(mb.records)).toEqual({
-      [SIBLING]: "2005-05-05",
-      [UNDATED_SIBLING]: null,
-      [EARLIER]: "1970",
-    });
-    expect(log()).toEqual([]);
-    expect(mb.incomplete ?? "").not.toMatch(/map incomplete: /);
-  });
-
-  it("spends a short budget on the direct relations' dates, not the second hop", async () => {
-    // At the client's spacing with answers at once, the chain's six reads are sent by 5.5 s.
-    // With an 11 s deadline a map read may start until 7.15 s: one is made, at 6.6 s.
-    const log = warnings();
-    const net = stubFetch(route);
-    const { mb } = await onFakeClock({ deadlineMs: 11_000 });
-
-    const mapReads = net.calls.filter(isMapRead);
-    expect(mapReads).toHaveLength(1);
-    expect(isDateSearch(mapReads[0])).toBe(true);
-    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
-    // The hop read was queued in time but its turn came after the start limit: not sent.
-    expect(log()).toEqual([
-      expect.stringMatching(
-        new RegExp(
-          `^Relations map incomplete for recording/${GANGSTAS}: not read the second hop from recording/${PASTIME} \\(.+\\)$`,
-        ),
-      ),
-    ]);
-  });
-
-  it("asks for the recordings MusicBrainz does not date, and keeps them undated, on a slow MusicBrainz", async () => {
-    const writes: Array<[string, string | null]> = [];
-    const cache: RecordingCache = {
-      getMbHop: () => null,
-      putMbHop: () => {},
-      getMbDate: () => null,
-      putMbDate: (mbid, date) => {
-        writes.push([mbid, date]);
-      },
-    };
-    stubFetch(slow(route, latencyOf));
-    const { mb } = await onFakeClock({ cache });
-    const undated = DIRECT.filter((r) => r.date === null).map((r) => r.id);
-    expect(undated).toHaveLength(2);
-    for (const id of undated) {
-      const record = mb.records.find((r) => r.recording?.mbid === id);
-      expect(record?.recording).not.toHaveProperty("firstReleaseDate");
-      expect(mb.evidence.some((e) => e.id === `musicbrainz:recording/${id}`)).toBe(false);
-    }
-    // Asked, and answered: the dated ones with their dates, the two without as having none.
-    expect(Object.fromEntries(writes)).toEqual(EXPECTED_DIRECT);
-    // Each date MusicBrainz gave is stated on its recording's page; none for the undated.
+    expect(hopDates(mb.records)).toEqual(HOP_DATED);
+    // The recordings MusicBrainz lists without a date stay undated, with no date item, and are
+    // kept as having none.
+    expect(Object.fromEntries(writes)).toEqual(ASKED_DATED);
     const dateItems = mb.evidence.filter((e) =>
       /^musicbrainz:recording\/[0-9a-f-]{36}$/.test(e.id),
     );
     expect(dateItems.map((e) => e.recordRef).sort()).toEqual(
-      DATED.map((r) => `recording/${r.id}`).sort(),
+      [...DATED.map((r) => r.id), SIBLING, EARLIER].map((id) => `recording/${id}`).sort(),
     );
+    // The map's reads came right after the recording's lookup, before the work's.
+    expect(mbOrder(net.calls).slice(0, 5)).toEqual(["isrc", "recording", "hop", "dates", "work"]);
+    expect(log()).toEqual([]);
   });
 
-  it("reports a failed date search and still reads the second hop and dates it", async () => {
+  it("dates every recording when the work's recordings are slow to browse (run 9a9fd810)", async () => {
+    // The first page of the work's recordings answered after 9.64 s, as in the run that dated
+    // none of the 9.
+    const log = warnings();
+    stubFetch(slow(route, stalledAt(isWorkBrowse, 9_640)));
+    const { mb, settledAt } = await onFakeClock({ research: RESEARCH_AT });
+
+    expect(settledAt).toBeLessThanOrEqual(15_000);
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(hopDates(mb.records)).toEqual(HOP_DATED);
+    expect(log()).toEqual([]);
+  });
+
+  it("asks a shed date search again once, while there is time", async () => {
+    let shedOnce = false;
+    const net = stubFetch(
+      slow((call) => {
+        if (isDateSearch(call) && !shedOnce) {
+          shedOnce = true;
+          return shed();
+        }
+        return route(call);
+      }, liveMs),
+    );
+    const log = warnings();
+    const { mb } = await onFakeClock({ research: RESEARCH_AT });
+
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(hopDates(mb.records)).toEqual(HOP_DATED);
+    expect(net.calls.filter(isDateSearch).map((c) => idsOf(c).length)).toEqual([11, 11]);
+    expect(log()).toEqual([]);
+  });
+
+  it("does not ask a shed search again when it could not start in time", async () => {
+    // With a 7 s deadline the map's reads may start until 4.55 s. The search, sent at 3.3 s, is
+    // shed at 3.97 s with a Retry-After of 2 s: asked again it would start too late.
+    const log = warnings();
+    const net = stubFetch(
+      slow(
+        (call) =>
+          isDateSearch(call)
+            ? new Response("busy", { status: 503, headers: { "retry-after": "2" } })
+            : route(call),
+        liveMs,
+      ),
+    );
+    const { mb } = await onFakeClock({ deadlineMs: 7_000 });
+
+    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
+    // "Pastime Paradise" is dated by its own lookup.
+    expect(directDates(mb.records)).toEqual(PASTIME_ONLY);
+    expect(log()).toEqual([
+      expect.stringMatching(/: not read the dates of 11 recordings \(.*503.*\)$/),
+    ]);
+  });
+
+  it("takes turns with another run's chain: the map's reads are not left behind it", async () => {
+    // The chain waits for the map's reads, so they wait in the chain's lane, in turn with
+    // another run's: here one of its reads, queued at 1.6 s, just after the second hop's lookup.
+    const net = stubFetch(slow(route, liveMs));
+    const { mb } = await onFakeClock({ otherRun: [1_600] });
+
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(mbOrder(net.calls).slice(0, 6)).toEqual([
+      "isrc",
+      "recording",
+      "hop",
+      "other run",
+      "dates",
+      "work",
+    ]);
+  });
+
+  it("keeps the chain's reads ahead of the research after a slow answer", async () => {
+    // Each of the chain's answers takes 1.5 s, longer than the spacing; the research asks every
+    // second. The chain's next read still goes first each time.
+    const net = stubFetch(slow(route, (call) => (call.url.includes("/artist/") ? 450 : 1_500)));
+    const { mb } = await onFakeClock({ research: [300, 1_300, 2_300, 3_300, 4_300, 5_300] });
+
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(mbOrder(net.calls).slice(0, 9)).toEqual([
+      "isrc",
+      "recording",
+      "hop",
+      "dates",
+      "work",
+      "recording",
+      "recording",
+      "release",
+      "research",
+    ]);
+  });
+});
+
+describe("the relations map's years on a track with many relations", () => {
+  it("reads the second hop, then dates every recording in one search, before the work", async () => {
     unpaced();
     const log = warnings();
-    const net = stubFetch((call) =>
-      isDateSearch(call) && idsOf(call).includes(DIRECT_IDS[1])
-        ? new Response("busy", { status: 503, headers: { "retry-after": "0" } })
-        : route(call),
-    );
+    const net = stubFetch(route);
     const { mb } = await onFakeClock();
 
+    expect(mbOrder(net.calls).slice(0, 5)).toEqual(["isrc", "recording", "hop", "dates", "work"]);
     const searches = net.calls.filter(isDateSearch);
-    // Not asked again: the second search asks only the second hop's recordings.
-    expect(searches).toHaveLength(2);
-    expect(idsOf(searches[1]).sort()).toEqual([...HOP_IDS].sort());
-    // "Pastime Paradise" is dated by its own lookup; the other eight stay undated.
-    expect(directDates(mb.records)).toEqual({
-      ...Object.fromEntries(DIRECT_IDS.map((id) => [id, null])),
-      [PASTIME]: "1976-09-28",
-    });
-    expect(hopDates(mb.records)).toEqual({
-      [SIBLING]: "2005-05-05",
-      [UNDATED_SIBLING]: null,
-      [EARLIER]: "1970",
-    });
+    expect(searches).toHaveLength(1);
+    expect(idsOf(searches[0]).sort()).toEqual([...ASKED_IDS].sort());
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(hopDates(mb.records)).toEqual(HOP_DATED);
+    expect(log()).toEqual([]);
+    expect(mb.incomplete ?? "").not.toContain(MAP_INCOMPLETE);
+  });
+
+  it("reads the map in a short budget, since it comes before the chain's later reads", async () => {
+    // At the client's spacing with answers at once, the hop's lookup is sent at 2.2 s and the
+    // search at 3.3 s. With an 11 s deadline a map read may start until 7.15 s: both are made.
+    const log = warnings();
+    const net = stubFetch(route);
+    const { mb } = await onFakeClock({ deadlineMs: 11_000 });
+
+    expect(net.calls.filter(isMapRead).map(isDateSearch)).toEqual([false, true]);
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(hopDates(mb.records)).toEqual(HOP_DATED);
+    expect(log()).toEqual([]);
+  });
+
+  it("reports a date search shed twice: nothing cached, the map incomplete", async () => {
+    unpaced();
+    const log = warnings();
+    const { cache, writes } = writesCache();
+    const net = stubFetch((call) => (isDateSearch(call) ? shed() : route(call)));
+    const { mb } = await onFakeClock({ cache });
+
+    // Asked again once, then not again once the chain has resolved.
+    expect(net.calls.filter(isDateSearch).map((c) => idsOf(c).length)).toEqual([11, 11]);
+    expect(directDates(mb.records)).toEqual(PASTIME_ONLY);
+    expect(hopDates(mb.records)).toEqual(NONE_OF_HOP_DATED);
+    expect(writes).toEqual([]);
     expect(log()).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Relations map incomplete for recording/${GANGSTAS}: not read the dates of 9 recordings \\(.*503.*\\)$`,
+          `^Relations map incomplete for recording/${GANGSTAS}: not read the dates of 11 recordings \\(.*503.*\\)$`,
         ),
       ),
     ]);
     expect(mb.error).toBeUndefined();
-    expect(mb.incomplete).toMatch(/map incomplete: /);
+    expect(mb.incomplete).toContain(MAP_INCOMPLETE);
   });
 
-  it("asks no recording twice in a run, after a failed date search", async () => {
-    // "Pastime Paradise" answered here without its own date: it ends the second hop's
-    // relations too, and the second search does not ask it again.
+  it("looks a second hop up once in a run, after it failed", async () => {
     unpaced();
     const log = warnings();
-    const { "first-release-date": _date, ...undatedPastime } = pastime;
-    const net = stubFetch((call) => {
-      if (isHopRead(call)) return json(undatedPastime);
-      if (isDateSearch(call) && idsOf(call).includes(PASTIME)) {
-        return new Response("busy", { status: 503, headers: { "retry-after": "0" } });
-      }
+    const net = stubFetch((call) => (isHopRead(call) ? shed() : route(call)));
+    const { mb } = await onFakeClock();
+
+    // Asked again once, then not again once the chain has resolved.
+    expect(net.calls.filter(isHopRead)).toHaveLength(2);
+    expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+    expect(hopDates(mb.records)).toEqual({});
+    expect(log()).toEqual([
+      expect.stringMatching(
+        new RegExp(`: not read the second hop from recording/${PASTIME} \\(.*503.*\\)$`),
+      ),
+    ]);
+  });
+
+  it("dates a second hop's source by its own lookup when the search for it failed", async () => {
+    // "Pastime Paradise" lists only this recording as sampling it: its lookup adds no relation,
+    // and it is dated by that lookup alone.
+    unpaced();
+    const onlyThis = { ...pastime, relations: pastime.relations.slice(0, 1) };
+    stubFetch((call) => {
+      if (isHopRead(call)) return json(onlyThis);
+      if (isDateSearch(call)) return shed();
       return route(call);
     });
     const { mb } = await onFakeClock();
 
-    const searches = net.calls.filter(isDateSearch);
-    expect(searches).toHaveLength(2);
-    expect(idsOf(searches[0])).toContain(PASTIME);
-    expect(idsOf(searches[1]).sort()).toEqual([...HOP_IDS].sort());
-    expect(directDates(mb.records)[PASTIME]).toBeNull();
-    expect(log()).toEqual([
-      expect.stringMatching(/: not read the dates of 9 recordings \(.*503.*\)$/),
-    ]);
+    expect(directDates(mb.records)).toEqual(PASTIME_ONLY);
   });
 
-  it("reports a date search that never answers, and settles by the dating cut", async () => {
+  it("reports a search with no time left: nothing cached, the map incomplete", async () => {
+    // An 8 s deadline: a map read may start until 5.2 s. The hop's lookup, sent at 2.2 s,
+    // answers at 5.7 s: its relations are drawn, but the search has no time left.
+    const log = warnings();
+    const { cache, writes } = writesCache();
+    const net = stubFetch(slow(route, stalledAt(isHopRead, 3_500)));
+    const { mb } = await onFakeClock({ cache, deadlineMs: 8_000 });
+
+    expect(net.calls.filter(isDateSearch)).toEqual([]);
+    expect(directDates(mb.records)).toEqual(PASTIME_ONLY);
+    expect(hopDates(mb.records)).toEqual(NONE_OF_HOP_DATED);
+    expect(writes).toEqual([]);
+    expect(log()).toEqual([
+      expect.stringMatching(/: not read the dates of 11 recordings \(no time left\)$/),
+    ]);
+    expect(mb.incomplete).toContain(MAP_INCOMPLETE);
+  });
+
+  it("reports a second hop with no time left: nothing read, the map incomplete", async () => {
+    // An 8 s deadline: a map read may start until 5.2 s. The recording's lookup, sent at 1.1 s,
+    // answers at 5.6 s: too late for the map's reads.
+    const log = warnings();
+    const { cache, writes } = writesCache();
+    const net = stubFetch(
+      slow(
+        route,
+        stalledAt((call) => call.url.startsWith(`${MB}/recording/${GANGSTAS}?`), 4_500),
+      ),
+    );
+    const { mb } = await onFakeClock({ cache, deadlineMs: 8_000 });
+
+    expect(net.calls.filter(isMapRead)).toEqual([]);
+    expect(directDates(mb.records)).toEqual(NONE_DATED);
+    expect(writes).toEqual([]);
+    expect(log()).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `: not read the second hop from recording/${PASTIME} \\(no time left\\); the dates of 9 recordings \\(no time left\\)$`,
+        ),
+      ),
+    ]);
+    expect(mb.incomplete).toContain(MAP_INCOMPLETE);
+  });
+
+  it("reports a date search that never answers, cut by the request timeout", async () => {
     const log = warnings();
     stubFetch((call) => (isDateSearch(call) ? never(call) : route(call)));
     const { mb, settledAt } = await onFakeClock();
 
-    expect(settledAt).toBeGreaterThan(0);
     expect(settledAt).toBeLessThanOrEqual(15_000);
-    expect(directDates(mb.records)).toEqual(Object.fromEntries(DIRECT_IDS.map((id) => [id, null])));
+    expect(directDates(mb.records)).toEqual(PASTIME_ONLY);
     expect(log()).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Relations map incomplete for recording/${GANGSTAS}: not read the dates of 9 recordings \\(.+\\); the second hop from recording/${PASTIME} \\(no time left\\)$`,
+          `^Relations map incomplete for recording/${GANGSTAS}: not read the dates of 11 recordings \\(.*10000 ms.*\\)$`,
         ),
       ),
     ]);

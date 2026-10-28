@@ -338,14 +338,15 @@ times are seconds from the start of the preview. Every block is `null` when it w
   with each estimator at the tests' pinned seeds, and 24 of 27 with Essentia and 23 of 24 with
   librosa at the held-out seeds); a chord of pure sine tones that holds still would read the
   same way. A chord is three pitch classes, or two a second, a third, a sixth or a seventh
-  apart; a fifth or a third about as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
-  and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
-  by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose
-  third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
-  timbres), seventh chords whose fifth folds into a doubled root and whose third is 6-12 dB
-  down, a third 10-25 cents off over a doubled root, and sus2 and sus4 chords over their root
-  lose no key to this rule, and it never gives them its reason. It is not proven beyond those
-  levels and tunings, and two limits are known and pinned in the tests: a fourth (G2 under C3)
+  apart; a fifth or a third about as loud as the root below it is a chord tone, not one of the
+  root's harmonics. What the tests and controls show holds: held chords faded, swelling,
+  getting louder, with tremolo or pumped by a sidechain, chord stabs, bass and chord riffs on
+  one chord, one-bar riffs, triads whose third is 1.5-6 dB softer than a root doubled an
+  octave down (every root, both modes, three timbres), seventh chords whose fifth folds into a
+  doubled root and whose third is 6-12 dB down, a third 10-25 cents off over a doubled root, and
+  sus2 and sus4 chords over their root lose no key to this rule, and it never gives them its
+  reason. It is not proven beyond those levels and tunings, and two limits are known and
+  pinned in the tests: a fourth (G2 under C3)
   whose third is 15 dB down reads as two notes a fourth apart (librosa's right C major is
   withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
   major is withheld with both estimators). A major third sung or played 8 cents flat or more

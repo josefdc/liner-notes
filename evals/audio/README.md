@@ -105,14 +105,14 @@ notes: of the keys 2.3.4 gave tubular bells, 19 of 20 with each estimator at the
 and 24 of 27 (Essentia) and 23 of 24 (librosa) at the held-out seeds, where it also withholds
 one tabla's (seed 626, with both). Church bells, toms (alone, or over a kit) and tabla still get
 a key: at the held-out seeds, Essentia keys 4 bells, 2 bells over drums, 8 toms, 10 kit toms and
-11 tabla, librosa 4, 2, 4, 10 and 7 (the 2026-10-28 report's controls table). Chord controls drawn at 30 seeds each
-(held chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs,
-a bass and chord riff on one chord, one-bar riffs) carry their key as truth: that rule must not
-take it. The calibration records what the rule measures and the values the run was made with
-(`Rules.one_source`), and derives each run at its own values; it does not vary them. The
-`held-out-seeded` group (the same families at seeds 600-629 and 800-829) is evaluation only:
-the choice does not see it and no test pins it. A report whose runs were made with different
-analyzer versions says so at the top.
+11 tabla, librosa 4, 2, 4, 10 and 7 (the 2026-10-28 report's controls table). Chord controls
+drawn at 30 seeds each (held chords faded, swelling, getting louder, with tremolo or a sidechain
+pump, C major stabs, a bass and chord riff on one chord, one-bar riffs) carry their key as truth:
+that rule must not take it. The calibration records what the rule measures and the values the
+run was made with (`Rules.one_source`), and derives each run at its own values; it does not vary
+them. The `held-out-seeded` group (the same families at seeds 600-629 and 800-829) is
+evaluation only: the choice does not see it and no test pins it. A report whose runs were made
+with different analyzer versions says so at the top.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

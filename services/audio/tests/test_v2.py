@@ -2009,11 +2009,18 @@ def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
 
 @pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)
 def test_a_detuned_third_over_a_doubled_root_is_still_a_third(cents):
-    """A root doubled an octave down with its third 10-25 cents off and no fifth: a chord."""
-    for root, mode in ((0, "minor"), (1, "major")):
+    """
+    A root doubled an octave down with its third 10-25 cents off and no fifth: a chord, and the
+    key decision is the one an in-tune third gets: the minor third keeps its key, and the major
+    third's lines spell fewer than three pitch classes. A rule that took off-grid notes for one
+    source would withhold the minor thirds here.
+    """
+    for root, mode, code in ((0, "minor", None), (1, "major", "few_pitch_classes")):
         s = estimators.Signals(signals.detuned_third(root, mode, cents), FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         assert estimators.spells_chord(notes), (root, mode, cents, notes)
+        withheld = s.key_withheld()
+        assert (withheld and withheld.code) == code, (root, mode, cents, withheld)
 
 
 @pytest.mark.parametrize("kind", ["sus2", "sus4"])

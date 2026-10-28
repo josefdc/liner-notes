@@ -816,24 +816,33 @@ function quietly<T>(call: () => T): T | null {
   }
 }
 
+/** The recordings a node can stand for in `list`: each relation's other end, and its `via`. */
+function endsOf(list: readonly MbRelationship[]): MbRelatedRecording[] {
+  return list.flatMap((r) => [...(r.recording ? [r.recording] : []), ...(r.via ? [r.via] : [])]);
+}
+
 /**
  * Reads what the relations map adds to the matched recording's relationships, within the
  * chain's time, through `cache` when given (a hit makes no request; what is read is stored):
+ * - the first release dates of the recordings at either end, for the nodes' years: a hop
+ *   source's own (from its details), the work's dated recordings (`workDates`), the cache's,
+ *   and then one search by recording id for the rest (`recordingReleaseDates`). A recording
+ *   MusicBrainz does not date stays undated;
  * - the second hop: the first MAP_HOP_SOURCES recordings it samples are looked up (one request
  *   each), for what each of them samples and the other recordings that sample it (its
- *   siblings), at most MAP_HOP_RECORDS of each source;
- * - the first release dates of the recordings at either end, for the nodes' years: a hop
- *   source's own, the work's dated recordings (`workDates`), the cache's, and then one search
- *   by recording id for the rest (`recordingReleaseDates`). A recording MusicBrainz does not
- *   date stays undated.
+ *   siblings), at most MAP_HOP_RECORDS of each source.
+ * The time is spent on the matched recording's own relations first: the search for their dates
+ * (with the ends of any second hop the cache holds) is sent before the second hop is looked up,
+ * and the ends that lookup adds are dated by a second search after it, of those recordings
+ * only. A recording is asked once per run: one whose search failed is not asked again.
  * Each request is a map read (MapRead): it waits in the map's lane of the MusicBrainz queue,
  * after every chain's own reads, is not retried, and is sent only while the pacing clock is at
  * most `notAfter` when its turn comes (none is queued once that time has passed). One that is
  * not sent, fails, or is stopped by `signal` gives no record and no error, but leaves the map
- * incomplete (`complete` false, logged once): the research is then read again by a later run,
- * which finds what this one did read in the cache. Only what MusicBrainz answered is cached: a
- * date for a recording the search lists with one, "none" for one it lists without; nothing for
- * a recording it leaves out. Never throws.
+ * incomplete (`complete` false, logged once, with what was not read): the research is then
+ * read again by a later run, which finds what this one did read in the cache. Only what
+ * MusicBrainz answered is cached: a date for a recording the search lists with one, "none" for
+ * one it lists without; nothing for a recording it leaves out. Never throws.
  */
 export async function readRelationsMap(
   resolution: IdentityResolution,
@@ -854,61 +863,51 @@ export async function readRelationsMap(
   const own = identity.recording.mbid;
   const records = relationshipRecords(resolution).slice(0, MAX_RECORDS);
   const missed: string[] = [];
-
-  const hops: MbRelationship[] = [];
-  const sources = [
-    ...new Set(
-      records.flatMap((r) =>
-        r.about === "track" && r.kind === "samples" && r.recording ? [r.recording.mbid] : [],
-      ),
-    ),
-  ].slice(0, MAP_HOP_SOURCES);
-  for (const source of sources) {
-    let hop = cache ? quietly(() => cache.getMbHop(source)) : null;
-    if (!hop && timeLeft()) {
-      try {
-        const answer = sampleHopOf(await getRecordingDetails(source, signal, read));
-        if (answer) {
-          hop = { hop: answer, readAt: now() };
-          const kept = hop;
-          if (cache) quietly(() => cache.putMbHop(source, kept.hop, kept.readAt));
-        }
-      } catch (error) {
-        missed.push(`the second hop from recording/${source} (${describeError(error)})`);
-      }
-    } else if (!hop) {
-      missed.push(`the second hop from recording/${source} (no time left)`);
-    }
-    if (!hop) continue;
-    const date = hop.hop.recording.firstReleaseDate;
-    if (date) dates.set(source, { date, readAt: hop.readAt });
-    hops.push(...secondHopRelationships(hop.hop, own).slice(0, MAP_HOP_RECORDS));
-  }
-
-  // The recordings a node can stand for: this one's own relations (a cover of the song alone
-  // is never drawn) and the second hop's.
-  const ends = [...records.filter((r) => r.about === "track"), ...hops].flatMap((r) => [
-    ...(r.recording ? [r.recording] : []),
-    ...(r.via ? [r.via] : []),
-  ]);
+  /** Recordings MusicBrainz lists without a date (as read now, or cached). */
   const undated = new Set<string>();
-  const readNow = now();
-  for (const end of ends) {
-    const date =
-      knownReleaseDate(end.firstReleaseDate) ?? resolution.workDates?.get(end.mbid) ?? null;
-    if (date && !dates.has(end.mbid)) dates.set(end.mbid, { date, readAt: readNow });
-  }
-  const unknown = [...new Set(ends.map((end) => end.mbid))].filter((mbid) => !dates.has(mbid));
-  for (const mbid of unknown) {
-    const cached = cache ? quietly(() => cache.getMbDate(mbid)) : null;
-    if (!cached) continue;
-    if (cached.date) dates.set(mbid, { date: cached.date, readAt: cached.readAt });
-    else undated.add(mbid);
-  }
-  const ask = unknown
-    .filter((mbid) => !dates.has(mbid) && !undated.has(mbid))
-    .slice(0, RECORDING_DATES_MAX);
-  if (ask.length > 0 && timeLeft()) {
+  /** Recordings a date search was made for in this run, answered or not. */
+  const asked = new Set<string>();
+
+  /** A hop source's own first release date, from its details, unless one is known. */
+  const dateSource = (hop: { hop: MbSampleHop; readAt: string }) => {
+    const { mbid, firstReleaseDate } = hop.hop.recording;
+    const date = knownReleaseDate(firstReleaseDate);
+    if (date && !dates.has(mbid)) {
+      dates.set(mbid, { date, readAt: hop.readAt });
+      undated.delete(mbid);
+    }
+  };
+
+  /**
+   * Dates `ends` from what needs no request (their own date, the work's, the cache's), then
+   * asks MusicBrainz for the rest in one search while there is time; `what` names them in the
+   * log line.
+   */
+  const dateEnds = async (ends: MbRelatedRecording[], what: string) => {
+    const readNow = now();
+    for (const end of ends) {
+      const date =
+        knownReleaseDate(end.firstReleaseDate) ?? resolution.workDates?.get(end.mbid) ?? null;
+      if (date && !dates.has(end.mbid)) dates.set(end.mbid, { date, readAt: readNow });
+    }
+    const unknown = [...new Set(ends.map((end) => end.mbid))].filter(
+      (mbid) => !dates.has(mbid) && !undated.has(mbid) && !asked.has(mbid),
+    );
+    for (const mbid of unknown) {
+      const cached = cache ? quietly(() => cache.getMbDate(mbid)) : null;
+      if (!cached) continue;
+      if (cached.date) dates.set(mbid, { date: cached.date, readAt: cached.readAt });
+      else undated.add(mbid);
+    }
+    const ask = unknown
+      .filter((mbid) => !dates.has(mbid) && !undated.has(mbid))
+      .slice(0, RECORDING_DATES_MAX);
+    if (ask.length === 0) return;
+    for (const mbid of ask) asked.add(mbid);
+    if (!timeLeft()) {
+      missed.push(`the dates of ${ask.length} ${what} (no time left)`);
+      return;
+    }
     try {
       const answer = await recordingReleaseDates(ask, signal, read);
       const readAt = now();
@@ -917,19 +916,67 @@ export async function readRelationsMap(
         // Left out of the answer: nothing is known, and nothing is kept.
         if (listed === undefined) continue;
         if (listed) dates.set(mbid, { date: listed, readAt });
+        else undated.add(mbid);
         if (cache) quietly(() => cache.putMbDate(mbid, listed, readAt));
       }
     } catch (error) {
-      missed.push(`the dates of ${ask.length} recordings (${describeError(error)})`);
+      missed.push(`the dates of ${ask.length} ${what} (${describeError(error)})`);
     }
-  } else if (ask.length > 0) {
-    missed.push(`the dates of ${ask.length} recordings (no time left)`);
+  };
+
+  const sources = [
+    ...new Set(
+      records.flatMap((r) =>
+        r.about === "track" && r.kind === "samples" && r.recording ? [r.recording.mbid] : [],
+      ),
+    ),
+  ].slice(0, MAP_HOP_SOURCES);
+  // The second hop the cache holds costs no request: its ends are dated with the direct ones.
+  const readHops = new Map<string, { hop: MbSampleHop; readAt: string }>();
+  for (const source of sources) {
+    const hop = cache ? quietly(() => cache.getMbHop(source)) : null;
+    if (!hop) continue;
+    readHops.set(source, hop);
+    dateSource(hop);
   }
+  const hopsOf = (source: string) => {
+    const hop = readHops.get(source);
+    return hop ? secondHopRelationships(hop.hop, own).slice(0, MAP_HOP_RECORDS) : [];
+  };
+
+  // The recordings a node can stand for: this one's own relations (a cover of the song alone
+  // is never drawn), dated first, then the second hop's.
+  await dateEnds(
+    [...endsOf(records.filter((r) => r.about === "track")), ...endsOf(sources.flatMap(hopsOf))],
+    "recordings",
+  );
+
+  const added: MbRelationship[] = [];
+  for (const source of sources) {
+    if (readHops.has(source)) continue;
+    if (!timeLeft()) {
+      missed.push(`the second hop from recording/${source} (no time left)`);
+      continue;
+    }
+    try {
+      const answer = sampleHopOf(await getRecordingDetails(source, signal, read));
+      if (!answer) continue;
+      const hop = { hop: answer, readAt: now() };
+      readHops.set(source, hop);
+      if (cache) quietly(() => cache.putMbHop(source, hop.hop, hop.readAt));
+      dateSource(hop);
+      added.push(...hopsOf(source));
+    } catch (error) {
+      missed.push(`the second hop from recording/${source} (${describeError(error)})`);
+    }
+  }
+  await dateEnds(endsOf(added), "recordings of the second hop");
+
   if (missed.length > 0) {
     // One line: the map is read again by a later run.
     log.warn(`Relations map incomplete for recording/${own}: not read ${missed.join("; ")}`);
   }
-  return { hops, dates, complete: missed.length === 0 };
+  return { hops: sources.flatMap(hopsOf), dates, complete: missed.length === 0 };
 }
 
 /**

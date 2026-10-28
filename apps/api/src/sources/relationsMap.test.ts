@@ -88,10 +88,15 @@ const underPressure = {
 const isHopRead = (call: FetchCall) => call.url.startsWith(`${MB}/recording/${UNDER_PRESSURE}?`);
 const isDateSearch = (call: FetchCall) => call.url.startsWith(`${MB}/recording?query=`);
 
+/** The recording ids a search by recording id asks for. */
+const dateIds = (call: FetchCall): string[] =>
+  (new URL(call.url).searchParams.get("query") ?? "").match(
+    /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g,
+  ) ?? [];
+
 /** The dates the search by recording id answers: every recording asked but the sibling. */
 function dateSearch(call: FetchCall) {
-  const query = new URL(call.url).searchParams.get("query") ?? "";
-  const ids = query.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g) ?? [];
+  const ids = dateIds(call);
   const dates: Record<string, string> = { [EARLIER]: "1975", [ICE_ICE_BACON]: "2004-02-10" };
   return json({
     count: ids.length,
@@ -156,9 +161,12 @@ describe("the relations map", () => {
     const sources = await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} });
     const mb = records(sources);
 
-    // The source's details once, and one search by recording id for the dates.
+    // One search by recording id for the dates of the track's own relations, then the
+    // source's details once, then one search for the dates of the second hop's recordings.
     expect(net.calls.filter(isHopRead)).toHaveLength(1);
-    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
+    const mapReads = net.calls.filter((c) => isHopRead(c) || isDateSearch(c));
+    expect(mapReads.map(isHopRead)).toEqual([false, true, false]);
+    expect(dateIds(mapReads[2]).sort()).toEqual([EARLIER, SIBLING].sort());
     expect(mb.error).toBeUndefined();
 
     // The sibling and what the source samples, never this track itself.
@@ -330,7 +338,7 @@ describe("the relations map", () => {
 
   it("drops the second hop quietly when the chain's time is nearly out", async () => {
     // At the real 1.1 s spacing the chain's own reads end at 5.5 s (the recording's releases).
-    // With the 20 s deadline a map read may start until 13.5 s: both are made. With an 8 s
+    // With the 20 s deadline a map read may start until 13.5 s: all three are made. With an 8 s
     // deadline it may start only until 5.2 s, already past: the map queues nothing, so the
     // chain ends when its own reads do, as without the map.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
@@ -352,7 +360,7 @@ describe("the relations map", () => {
       return { mb, settledAt, mapReads: net.calls.filter((c) => isHopRead(c) || isDateSearch(c)) };
     };
     const inTime = await collect(20_000, {});
-    expect(inTime.mapReads).toHaveLength(2);
+    expect(inTime.mapReads).toHaveLength(3);
     expect(hops(inTime.mb.records)).toHaveLength(2);
 
     const late = await collect(8000, {});
@@ -587,8 +595,8 @@ describe("the relations map's pacing", () => {
 
     expect(hops(mb.records)).toHaveLength(2);
     expect(net.calls.filter(isHopRead)).toHaveLength(1);
-    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
-    expect(at.length).toBeGreaterThanOrEqual(7);
+    expect(net.calls.filter(isDateSearch)).toHaveLength(2);
+    expect(at.length).toBeGreaterThanOrEqual(8);
     const gaps = at.slice(1).map((t, i) => t - at[i]);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1100);
   });

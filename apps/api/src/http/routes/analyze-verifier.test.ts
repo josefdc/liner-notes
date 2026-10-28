@@ -176,7 +176,7 @@ describe("the analyze stream with the verifier", () => {
     expect(events.some((event) => event.type === "error")).toBe(false);
     const result = TrackAnalysis.parse(complete[0].data);
     expect(result.claims?.[0]).toMatchObject({ verdict: "supported", kind: "sourced" });
-    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 0 });
+    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 0, restated: 0 });
     expect(events.some((event) => event.type === "status" && event.node === "verifier")).toBe(true);
   });
 
@@ -201,7 +201,7 @@ describe("the analyze stream with the verifier", () => {
       expect(complete).toHaveLength(1);
       const result = TrackAnalysis.parse(complete[0].data);
       expect(result.claims?.[0]).toMatchObject({ verdict: null, kind: "inferred" });
-      expect(result.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
+      expect(result.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true, restated: 0 });
     } finally {
       restoreTiming();
       restoreDeadline();

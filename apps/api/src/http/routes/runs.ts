@@ -6,6 +6,7 @@ import {
   type StoredRun,
 } from "@liner-notes/contract";
 import { Router } from "express";
+import { oneClaimPerFact, type ResultClaims } from "../../agent/restatements.js";
 import { heldTextIssue } from "../../agent/storedResults.js";
 import { replayedAnalysis } from "../../replay/player.js";
 import { replays } from "../../replay/records.js";
@@ -24,12 +25,29 @@ const isoTime = (unixSeconds: number) => new Date(unixSeconds * 1000).toISOStrin
 export const BY_TRACK_CANDIDATES = 5;
 
 /**
+ * A run's stored result with each fact stated once (restatements.ts): one stored before that
+ * step loses the model's restatements and their cards, counted in its verifier summary. A result
+ * that is not an object with a list of claims is returned as it is, for the contract check.
+ */
+function withOneClaimPerFact(stored: unknown): unknown {
+  if (typeof stored !== "object" || stored === null) return stored;
+  const result = stored as ResultClaims;
+  if (!Array.isArray(result.claims)) return stored;
+  try {
+    return oneClaimPerFact(result).result;
+  } catch {
+    // A result of a shape the step cannot read: the contract check refuses it, not this step.
+    return stored;
+  }
+}
+
+/**
  * The result a run sent: its stored result, or for a replayed run the recording it was sent,
  * with its id, while a record with that same content (digest) is served and is of the run's
- * track; else null.
+ * track; else null. Either with each fact stated once.
  */
 export function resultOf(record: RunRecord): unknown {
-  if (record.analysis !== null) return record.analysis;
+  if (record.analysis !== null) return withOneClaimPerFact(record.analysis);
   const replayOf = replayOfRun(record);
   if (!replayOf || record.status !== "completed") return null;
   const recorded = replays().forDigest(replayOf.slug, replayOf.digest);

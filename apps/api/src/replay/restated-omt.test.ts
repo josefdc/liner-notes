@@ -29,7 +29,6 @@ const FACTS = {
 /** The model's claim on the Eddie Johns record that says more than it: kept. */
 const BRASS_FIGURE = "452be048";
 
-/** The claims that state a fact on its record alone: cite only it, and are not partial. */
 /** A statement's words, in order, without case or punctuation. */
 const wordsOf = (text: string) =>
   text
@@ -39,6 +38,7 @@ const wordsOf = (text: string) =>
     .filter(Boolean)
     .join(" ");
 
+/** The claims that state a fact on its record alone: cite only it, and are not partial. */
 const statingOnly = (claims: readonly Claim[], item: string) =>
   claims.filter(
     (claim) =>
@@ -100,5 +100,56 @@ describe("the One More Time recording, replayed", () => {
     for (const link of served.genealogy.links) {
       if (link.claimId) expect(ids.has(link.claimId)).toBe(true);
     }
+  });
+});
+
+describe("a recording replayed", () => {
+  /** The full id of the recorded claim whose id starts with `prefix`. */
+  const claimId = (prefix: string) =>
+    (record.analysis.claims ?? []).find((claim) => claim.id.startsWith(prefix))!.id;
+  const EDDIE_JOHNS = "fdbb79f2";
+  const CIRCO_LOCO = "72c47650";
+
+  it("keeps a restating claim that a link or a timeline sample names", () => {
+    const named = ReplayRecord.parse({
+      ...record,
+      analysis: {
+        ...record.analysis,
+        genealogy: {
+          ...record.analysis.genealogy,
+          links: [
+            ...record.analysis.genealogy.links,
+            {
+              source: "current",
+              target: record.analysis.genealogy.nodes[1].id,
+              value: 1,
+              type: "sample",
+              kind: "inferred",
+              origin: "model",
+              claimId: claimId(EDDIE_JOHNS),
+              evidenceIds: [FACTS["Eddie Johns sample"]],
+            },
+          ],
+        },
+        samples: [{ time: 30, description: "Circo Loco", claimId: claimId(CIRCO_LOCO) }],
+      },
+    });
+    const claims = replayedAnalysis(named, "run-omt").claims ?? [];
+    for (const id of [EDDIE_JOHNS, CIRCO_LOCO]) {
+      expect(claims.some((claim) => claim.id === claimId(id))).toBe(true);
+    }
+    expect(replayedAnalysis(named, "run-omt").run?.verifier).toMatchObject({ restated: 5 });
+  });
+
+  it("is left as recorded when its run already left out what restates another", () => {
+    const run = record.analysis.run!;
+    const already = ReplayRecord.parse({
+      ...record,
+      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+    });
+    const served = replayedAnalysis(already, "run-omt");
+    expect(served.claims).toEqual(already.analysis.claims);
+    expect(served.factoids).toEqual(already.analysis.factoids);
+    expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 0 });
   });
 });

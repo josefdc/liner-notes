@@ -25,7 +25,8 @@ vi.mock(
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
-import type { Factoid, TrackData } from "../schema.js";
+import type { Factoid, GenealogyLink, TrackData } from "../schema.js";
+import type { ComposedDraft } from "../state.js";
 import { testRuntime } from "../testing/stubLlm.js";
 import { createVerifierNode } from "./index.js";
 import { draftOf, judging, modelClaim, stateFor, trackRecord } from "./testing.js";
@@ -170,7 +171,8 @@ describe("a model claim that restates a code-built claim", () => {
 
     // The release claim cites no item a code claim cites: no code claim states the release here.
     expect(idsOf(data)).toEqual(claims.map((claim) => claim.id));
-    expect(data.run?.verifier).toEqual({ judged: 5, unjudged: 0 });
+    // Counted even when nothing is left out: a reader knows the step ran.
+    expect(data.run?.verifier).toEqual({ judged: 5, unjudged: 0, restated: 0 });
     // Each keeps its own verdict.
     expect(data.claims?.find((claim) => claim.id === "m-partial")?.verdict).toBe("partial");
   });
@@ -206,25 +208,40 @@ describe("a model claim that restates a code-built claim", () => {
 });
 
 describe("two model claims with the same text", () => {
-  it("keep the one whose scope fits its evidence, under different subjects; its card goes", async () => {
-    const text = "“Ice Ice Baby” appears on Vanilla Ice’s album To the Extreme.";
-    const track = modelClaim("m-track", {
+  it("keep the one whose scope fits its evidence, when the other is left citing nothing; its card goes", async () => {
+    const text = "Ice Ice Baby takes its bass line from Under Pressure.";
+    // About the song, citing a record of this recording: the item does not fit its scope.
+    const work = modelClaim("m-work", {
+      text: text.replace("Under Pressure", "“Under Pressure”"),
+      about: "sample",
+      scope: "work",
+      evidenceIds: ["ev-sample"],
+    });
+    // Partly supported: a sample is stated whole, so both read as inferred.
+    const recording = modelClaim("m-recording", {
       text,
-      about: "track",
-      scope: "release",
-      evidenceIds: ["ev-release"],
+      about: "sample",
+      evidenceIds: ["ev-sample"],
     });
-    // About a credit of this recording, citing a whole release: the item does not fit its scope.
-    const credit = modelClaim("m-credit", {
-      text: text.replaceAll("’", "'"),
-      about: "credit",
-      scope: "recording",
-      evidenceIds: ["ev-release"],
-    });
-    const data = await verified([credit, track], {}, [cardOf(credit)]);
-    expect(idsOf(data)).toEqual(["m-track"]);
+    const data = await verified([work, recording], { [text]: "partial" }, [cardOf(work)]);
+    expect(idsOf(data)).toEqual(["m-recording"]);
+    expect(data.claims?.[0]).toMatchObject({ verdict: "partial", kind: "inferred" });
     expect(data.factoids).toEqual([]);
     expect(data.run?.verifier).toEqual({ judged: 1, unjudged: 0, restated: 1 });
+  });
+
+  it("are compared as the result shows them, their handles masked", async () => {
+    const one = modelClaim("m-one", {
+      text: "A remix by @djone is on SoundCloud.",
+      about: "trivia",
+    });
+    const two = modelClaim("m-two", {
+      text: "A remix by @djtwo is on SoundCloud.",
+      about: "trivia",
+    });
+    const data = await verified([one, two], {});
+    expect(data.claims?.map((claim) => claim.text)).toEqual(["A remix by @… is on SoundCloud."]);
+    expect(data.run?.verifier).toMatchObject({ restated: 1 });
   });
 
   it("keep the better verdict when both fit, and keep its own verdict", async () => {
@@ -277,5 +294,42 @@ describe("two model claims with the same text", () => {
     expect(data.claims?.[0]).toEqual(codeRelease);
     expect(data.factoids).toEqual([]);
     expect(data.run?.verifier).toEqual({ judged: 2, unjudged: 0, restated: 2 });
+  });
+});
+
+describe("a claim that a link or a timeline sample states", () => {
+  it("stays, though it restates a code-built claim", async () => {
+    const linked = modelClaim("m-link", {
+      text: "Ice Ice Baby samples Under Pressure.",
+      about: "sample",
+      evidenceIds: ["ev-sample"],
+    });
+    const timed = modelClaim("m-timed", {
+      text: "Vanilla Ice samples Under Pressure by Queen.",
+      about: "sample",
+      evidenceIds: ["ev-sample"],
+    });
+    const link: GenealogyLink = {
+      source: "up",
+      target: "current",
+      value: 1,
+      type: "sample",
+      kind: "inferred",
+      origin: "model",
+      claimId: "m-link",
+      evidenceIds: ["ev-sample"],
+    };
+    const draft = draftOf([linked, timed, codeSample], [link], {
+      // A timeline sample that names its claim, as the contract's Sample can.
+      samples: [
+        { time: 12, description: "The bass line", claimId: "m-timed" },
+      ] as unknown as ComposedDraft["samples"],
+    });
+    const llm = judging((sent) =>
+      sent.map(({ claimId }) => ({ claimId, verdict: "supported", reason: "It says so." })),
+    );
+    const out = await createVerifierNode(testRuntime(llm))(stateFor(draft, evidence), config);
+    expect(idsOf(out.trackData!)).toEqual(["m-link", "m-timed", "code-sample"]);
+    expect(out.trackData?.run?.verifier).toMatchObject({ judged: 2, restated: 0 });
   });
 });

@@ -36,6 +36,7 @@ import { webPageIssue } from "../sources/search.js";
 import { plainSourceError } from "../sources/toolResult.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
+import { oneClaimPerFact } from "./restatements.js";
 import type { TrackData } from "./schema.js";
 import { logger } from "../logger.js";
 
@@ -197,9 +198,16 @@ export function shownQueryMatch(state: {
   return state.pickedBy === "click" ? null : (state.queryMatch ?? null);
 }
 
-/** A stored result as this run serves it: with how this run's search text matched the track. */
+/**
+ * A stored result as this run serves it: with how this run's search text matched the track, and
+ * each fact stated once (restatements.ts: a result stored before that step loses the model's
+ * restatements and their cards). The store keeps no run information, so the claims left out are
+ * counted in the log.
+ */
 export function servedResult(stored: TrackData, queryMatch: QueryMatch | null): TrackData {
-  const { queryMatch: _stored, ...result } = stored;
+  const { queryMatch: _stored, ...rest } = stored;
+  const { result, restated } = oneClaimPerFact(rest);
+  if (restated > 0) log.info(`Stored result: left out ${restated} claim(s) that restate another`);
   return queryMatch ? { ...result, queryMatch } : result;
 }
 

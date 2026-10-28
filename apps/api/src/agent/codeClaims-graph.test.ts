@@ -108,6 +108,8 @@ const ICE = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
 const UNDER_PRESSURE = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
 const SAMPLES_ID = `musicbrainz:track/recording/${ICE}/samples/recording/${UNDER_PRESSURE}`;
 const MODEL_CLAIM = "Ice Ice Baby is built on the bass line of Under Pressure.";
+/** A claim on the same record that says more than it: the year of the record sampled. */
+const MORE_CLAIM = "Ice Ice Baby takes its bass line from the 1981 single Under Pressure.";
 
 /**
  * The composition: a claim and the sample, as a link of the model's own, on its own node for
@@ -118,6 +120,13 @@ function compose(role: "source" | "derived" = "source") {
     claims: [
       {
         text: MODEL_CLAIM,
+        about: "sample",
+        evidenceIds: [SAMPLES_ID],
+        field: null,
+        scope: "recording",
+      },
+      {
+        text: MORE_CLAIM,
         about: "sample",
         evidenceIds: [SAMPLES_ID],
         field: null,
@@ -250,11 +259,14 @@ describe("code-built claims and links in the analysis graph", () => {
     expect(result.genealogy.nodes.some((node) => node.id === "up")).toBe(false);
     expect(result.genealogy.links.filter((l) => l.origin === "model")).toEqual([]);
     expect(samples.filter((l) => l.source === `mb-${UNDER_PRESSURE}`)).toHaveLength(1);
-    expect(judged.map((statement) => statement.text)).toEqual([MODEL_CLAIM]);
-    // Its own claim, judged wholly supported by the code claim's record alone, restates the code
-    // claim: it is left out, and counted (restatements.ts).
-    expect(result.claims?.filter((claim) => claim.origin === "model")).toEqual([]);
-    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 0, restated: 1 });
+    expect(judged.map((statement) => statement.text)).toEqual([MODEL_CLAIM, MORE_CLAIM]);
+    // A claim judged wholly supported by the code claim's record alone, naming nothing the record
+    // does not, restates the code claim: it is left out, and counted (restatements.ts). The one
+    // that names a year the record does not state stays, with its verdict.
+    expect(result.claims?.filter((claim) => claim.origin === "model")).toEqual([
+      expect.objectContaining({ text: MORE_CLAIM, verdict: "supported", kind: "sourced" }),
+    ]);
+    expect(result.run?.verifier).toEqual({ judged: 2, unjudged: 0, restated: 1 });
 
     // Every code link reads sourced, by the contract's rule.
     const code = result.genealogy.links.filter((l) => l.origin === "code");

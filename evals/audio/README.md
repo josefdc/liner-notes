@@ -104,19 +104,30 @@ not generalise. Bells, toms and tabla still get a key: at the held-out seeds, Es
 church bells, 2 church bells over drums, 27 tubular bells, 8 toms, 10 kit toms and 12 tabla,
 librosa 4, 2, 24, 4, 10 and 8 (the 2026-10-28 report's controls table). A tubular bell's
 modes hold still and spell a chord, and none is a harmonic of another; the notes of a chord
-in a soft timbre or struck on bars have no more harmonics among the lines, and they keep
-their key. Chord controls drawn at 30 seeds each (held chords faded, swelling, getting louder,
-with tremolo or a sidechain pump, C major stabs, a bass and chord riff on one chord, one-bar
-riffs, and triads on an electric piano, of flute-like tones, on an FM electric piano, of
-triangle waves or struck on bars) carry their key as truth: that rule must not take it. The
+in a soft timbre or struck on bars have as few harmonics among the lines, and they keep
+their key. `scripts/source_rules.py` measures two rules that could tell them apart, on the
+newest report's controls (`uv run python scripts/source_rules.py`; neither is shipped). The
+share of note pairs more than 20 cents off the equal-tempered grid is 0.67-0.83 on the still
+tubular bells and 0.00 on the soft chords, but reaches 0.60 on the chords struck on bars and
+0.67-1.00 on a third 25 cents off over its root, a chord control. The rule tried for analyzer
+2.3.5 (one source when at most a tenth of the lines' level is overtones of the notes they
+spell) withholds 19 tubular bells' keys at the pinned seeds and 24 (Essentia) and 23
+(librosa) at the held-out ones, none right, and right keys with either estimator: 1 soft
+chord at seeds 700-729 and 9 at 800-829, 6 and 9 chords struck on bars. Chord controls drawn
+at 30 seeds each (held chords faded, swelling, getting louder, with tremolo or a sidechain
+pump, C major stabs, a bass and chord riff on one chord, one-bar riffs, triads in a soft
+timbre: an electric piano, a flute, an FM electric piano or a triangle wave, and triads
+struck on bars: a marimba-like bar or a glockenspiel) carry their key as truth: that rule
+must not take it. The
 calibration records what the rule measures and the values the run was made with
 (`Rules.one_source`), and derives each run at its own values; it does not vary them. The
 `held-out-seeded` group (the same families at seeds 600-629 and 800-829) is evaluation only:
 the choice does not see it and no test pins it. A report whose runs were made with different
 analyzer versions says so at the top. The 2026-10-28 report holds the controls and the
 Ballroom tempo and calibration runs, at analyzer 2.3.4; key accuracy (GiantSteps+), GiantSteps
-Tempo, the golden set and the costs were not run for it, and were last measured for the
-2026-10-25 report, at analyzer 2.1.0.
+Tempo, the GiantSteps calibrations, the golden set and the costs were not run for it, and
+were last measured for the 2026-10-25 report, at analyzer 2.1.0. The single-source rule came
+in 2.2.0, so no committed report measures what it costs on annotated keys.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

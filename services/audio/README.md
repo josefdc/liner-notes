@@ -336,8 +336,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
   as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
   and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
   by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads in soft
-  timbres (an electric piano, a flute, an FM electric piano, a triangle wave, whose overtones
-  are 17-30 dB down) or struck on bars (an untuned bar, a glockenspiel), triads whose
+  timbres (an electric piano or a flute, whose overtones are 22-30 dB down; an FM electric
+  piano, whose second harmonic is 7-16 dB down at each attack and then fades; a triangle wave)
+  or struck on bars (a marimba-like bar, a glockenspiel), triads whose
   third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
   timbres), seventh chords whose fifth folds into a doubled root and whose third is 6-12 dB
   down, a third 10-25 cents off over a doubled root, and sus2 and sus4 chords over their root
@@ -350,13 +351,22 @@ times are seconds from the start of the preview. Every block is `null` when it w
   count as one source too. A church bell is not caught (its tierce is a minor third over the
   hum, as in a chord), nor is a tubular bell: its modes hold still and move together (at 29 of
   the tests' 30 seeds), but they spell three pitch classes or more, as a chord's notes do, and
-  none is a harmonic of another, so nothing in the lines tells them from the chords in soft
-  timbres or on bars above, whose overtones are as weak or are not harmonics either, and which
-  keep their key. Both estimators key 20 of those 30 tubular bells, and 27 (Essentia) and 24
-  (librosa) of the 30 held-out ones (`evals/audio`). Several drums are mostly not caught
-  either: toms, alone or over a kit, and tabla strokes have envelopes of their own, so their
-  lines seldom hold still; where they do (tabla at 3 of the 30 seeds and 3 of the 30 held-out,
-  two rack toms and a floor tom over a kit at 1 and 3), their partials spell a chord. Neither
+  none is a harmonic of another. Both estimators key 20 of those 30 tubular bells, and 27
+  (Essentia) and 24 (librosa) of the 30 held-out ones (`evals/audio`). Two rules that could
+  tell the bell from a chord were measured on the controls, and neither is shipped
+  (`evals/audio/scripts/source_rules.py` prints both from the report). The share of a still
+  control's note pairs more than 20 cents off the equal-tempered grid is 0.67-0.83 on the
+  tubular bells and 0.00 on the triads in soft timbres, but up to 0.60 on the triads struck
+  on bars and 0.67-1.00 on a third 25 cents off over its root, which must keep its key. Taking
+  one source when at most a tenth of the lines' level is overtones of the notes they spell
+  (tried for analyzer 2.3.5) withholds 19 of the tubular bells' keys and 24 (Essentia) and 23
+  (librosa) of the held-out ones, none of them right; but it also withholds right keys, the
+  same with either estimator: 1 and 9 of the triads in soft timbres (the 30 seeds and the 30
+  held-out ones) and 6 and 9 of those struck on bars, whose overtones are as few. Drums are not
+  caught either: toms, alone or over a kit, and tabla strokes have envelopes of their own, so
+  their lines seldom hold still; where they do (tabla at 3 of the 30 seeds and 3 of the 30
+  held-out, two rack toms and a floor tom over a kit at 1 and 3), their partials spell a
+  chord. Neither
   strength
   separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
   still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are

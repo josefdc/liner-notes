@@ -374,6 +374,8 @@ describe("web research searches", () => {
    */
   const LONG = 200_000;
   const LINEAR_MS = 1_000;
+  /** Three runs, or one that is already five times over the bound. */
+  const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 5 * LINEAR_MS };
   /** `unit` repeated to LONG characters. */
   const repeated = (unit: string) => unit.repeat(Math.ceil(LONG / unit.length));
 
@@ -384,7 +386,7 @@ describe("web research searches", () => {
     ["spaces before cite", `share | cite${" ".repeat(LONG)}x`],
   ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    const { ms, result } = timed(() => webTextIssue(text), 3);
+    const { ms, result } = timed(() => webTextIssue(text), FASTEST_OF_THREE);
     expect(result).toBeNull();
     expect(ms).toBeLessThan(LINEAR_MS);
   });
@@ -427,7 +429,7 @@ describe("web research searches", () => {
     ["commenters from places", repeated("Jane from Ohio Oct 2, 2009: ")],
   ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    expect(timed(() => webTextIssue(text), 3).ms).toBeLessThan(LINEAR_MS);
+    expect(timed(() => webTextIssue(text), FASTEST_OF_THREE).ms).toBeLessThan(LINEAR_MS);
   });
 
   it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {

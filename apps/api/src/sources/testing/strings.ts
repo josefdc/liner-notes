@@ -44,15 +44,25 @@ export function randomStrings(
 
 /**
  * How long one call takes, in milliseconds, with its result: the fastest of `runs` calls. A busy
- * machine only ever adds time, so the fastest of a few is the closest to the call's own cost.
+ * machine only ever adds time, so the fastest of a few is the closest to the call's own cost. A
+ * call that takes more than `stopAboveMs` ends the timing there: one that far over a bound is a
+ * slow form, not a busy machine, and running it again only makes the failure take longer.
  */
-export function timed<T>(call: () => T, runs = 1): { ms: number; result: T } {
+export function timed<T>(
+  call: () => T,
+  {
+    runs = 1,
+    stopAboveMs = Number.POSITIVE_INFINITY,
+  }: { runs?: number; stopAboveMs?: number } = {},
+): { ms: number; result: T } {
   let fastest = Number.POSITIVE_INFINITY;
   let result: T | undefined;
   for (let run = 0; run < runs; run++) {
     const start = performance.now();
     result = call();
-    fastest = Math.min(fastest, performance.now() - start);
+    const ms = performance.now() - start;
+    fastest = Math.min(fastest, ms);
+    if (ms > stopAboveMs) break;
   }
   return { ms: fastest, result: result as T };
 }

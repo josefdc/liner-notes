@@ -202,9 +202,12 @@ const NEUTRAL_SPREAD = 40;
 /** Batched elements keep at least this many pixels apart (see neutralBadgeContrast). */
 const MEASURE_GAP = 8;
 
-/** Hides the text and icons of the elements being measured (data-measuring). */
+/**
+ * Hides the text and icons of the elements being measured (data-measuring), and makes every
+ * scroll instant: the page scrolls smoothly otherwise.
+ */
 const MEASURING_STYLE =
-  "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}";
+  "*{scroll-behavior:auto!important}[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}";
 
 type Box = { x: number; y: number; width: number; height: number };
 /** Elements screenshotted together: what each says (its text and colour) and its box. */
@@ -339,17 +342,13 @@ async function neutralBadgeContrast(
             b.bottom + gap <= a.top;
 
           // The first pending badge is scrolled into view as Playwright's scrollIntoViewIfNeeded
-          // does (centred in each scrolling box that hides it, to the nearest edge in one that
-          // shows part of it), and at once: the page scrolls smoothly otherwise.
+          // does: centred in each scrolling box that hides it, to the nearest edge in one that
+          // shows part of it (at once, under MEASURING_STYLE).
           const first = elements[pending[0]] as HTMLElement & {
             scrollIntoViewIfNeeded(centerIfNeeded?: boolean): void;
           };
           if (first.getClientRects().length === 0) throw new Error("a neutral badge has no box");
-          const root = document.documentElement.style;
-          const behaviour = root.scrollBehavior;
-          root.scrollBehavior = "auto";
           first.scrollIntoViewIfNeeded(true);
-          root.scrollBehavior = behaviour;
           // The first pending badge, and each other one fully in view (not clipped by the viewport
           // or a scrolling box) and MEASURE_GAP px clear of those picked; their text and colour are
           // read as drawn now, then they are hidden together.
@@ -981,6 +980,8 @@ async function sectionBoundaries(page: Page) {
       };
     });
   });
+  // No sections, nothing to measure: the test says so with its own count.
+  if (sections.length === 0) return [];
   // A handle: once hidden, the bar is no longer found by its role.
   const handle = await bar.elementHandle();
   if (!handle) throw new Error("no song structure bar");

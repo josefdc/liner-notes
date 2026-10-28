@@ -905,6 +905,8 @@ describe("a slow judge", () => {
   }, async () => {
     const restore = setJudgeTimingForTests({ marginMs: 5_000, minMs: 50 });
     const logs = captureLogsForTests({ level: "warn" });
+    // Every timer armed meanwhile, with its delay (they still run).
+    const timers = vi.spyOn(globalThis, "setTimeout");
     try {
       const llm = hanging();
       const writer = vi.fn();
@@ -921,7 +923,9 @@ describe("a slow judge", () => {
         .find((ms) => ms !== undefined);
       expect(Number(given)).toBeGreaterThan(500);
       expect(Number(given)).toBeLessThanOrEqual(1_000);
-      // And stopped there, well before the run's deadline (a judge that waited for it takes 6 s).
+      // Its call is cut by a timer set to that time exactly, not later: what load cannot change.
+      expect(timers.mock.calls.map(([, ms]) => ms)).toContain(Number(given));
+      // And it stopped well before the run's deadline (a judge that waited for it takes 6 s).
       expect(elapsed).toBeLessThan(3_000);
       expect(llm.calls).toHaveLength(1);
       expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
@@ -933,6 +937,7 @@ describe("a slow judge", () => {
       ]);
       expect(out.statusMessages?.[0]).toMatch(/did not finish in the time the run had left/);
     } finally {
+      timers.mockRestore();
       logs.restore();
       restore();
     }

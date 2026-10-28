@@ -25,19 +25,13 @@ import {
 } from '../constants';
 import { resultModeOf } from '../utils/recording';
 import { usePlayerLayout } from '../utils/layout';
+import { useReducedMotion } from '../utils/motion';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
-import {
-  kindLabel,
-  linkContext,
-  nodeName,
-  nodesById,
-  relationLabelsByClaim,
-  shownLinks,
-  yearFrom,
-} from './genealogy/links';
+import { nodeName, nodesById, relationLabelsByClaim, yearFrom } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
+import { LinkKindsChip, noConnectionsText, useConnections } from './genealogy/connections';
 import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -48,9 +42,8 @@ import {
   ResultOriginLabel,
 } from './EstimatedWarning';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
-import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
-import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
+import { resultClaims, type ShownClaim } from './provenance/claims';
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { linerNotes, relationLinkNotes } from './provenance/notes';
@@ -59,11 +52,12 @@ import { isRelationSubject } from './genealogy/relationWords';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { Attribution, shownProviders } from './provenance/Attribution';
 import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
-import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { moreFactsKey, moreFactsOf } from '../hooks/agent/moreFacts';
 import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
+import type { TrailView } from '../router/trail';
+import { isPlainClick } from '../utils/plainClick';
 
 interface PlayerProps {
   trackData: TrackData | null;
@@ -76,8 +70,19 @@ interface PlayerProps {
    * with an AbortError.
    */
   onMoreFactoidsStream?: (result: TrackData, options?: MoreFactsOptions) => Promise<Factoid[]>;
-  // Callback for navigating to a new track from genealogy graph
-  onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
+  /**
+   * Analyses a connected track chosen on the map (its detail panel's "Analyze this track"),
+   * named as the map left it (`from`: here, the Player's map panel).
+   */
+  onAnalyzeTrack?: (trackId: string, title: string, artist: string, from?: TrailView) => void;
+  /** The address of the result's full-size map (`/t/<id>/map`), when it has one. */
+  mapHref?: string | null;
+  /** Opens the full-size map in this page (a plain click on "Open the full map"). */
+  onOpenMap?: () => void;
+  /** The phone tab the Player opens on (one it had in this history entry). */
+  initialTab?: string;
+  /** Called with the phone tab opened, for the history entry to keep it. */
+  onTabChange?: (tab: string) => void;
   // P0:3 — New search callback
   onNewSearch?: () => void;
   // UX: Focus management on phase transition
@@ -128,6 +133,8 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
 const facts = (count: number) => `${count} ${count === 1 ? 'fact' : 'facts'}`;
 
 type Tab = 'context' | 'player' | 'genealogy';
+const isTab = (value: unknown): value is Tab =>
+  value === 'context' || value === 'player' || value === 'genealogy';
 
 /** The phone tabs, in their order: each names its panel, and its colour when it is open. */
 const TABS: ReadonlyArray<{ id: Tab; label: string; panel: string; open: string }> = [
@@ -149,9 +156,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   onAnalyzeTrack,
   onNewSearch,
   headingRef,
+  mapHref,
+  onOpenMap,
+  initialTab,
+  onTabChange,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('player');
+  const [activeTab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : 'player');
+  const setActiveTab = useCallback(
+    (tab: Tab) => {
+      setTab(tab);
+      onTabChange?.(tab);
+    },
+    [onTabChange],
+  );
   const [isDecrypting, setIsDecrypting] = useState(false);
   // Why "More facts" could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
@@ -225,33 +243,17 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
     claims.isHidden(factoid.claimId),
   );
-  const genealogy = useMemo(
-    () => withoutHiddenRelations(track.genealogy, claims.isHidden),
-    [track.genealogy, claims],
-  );
-  // Relations left out because their claim is hidden, said under the graph's legend (entries
-  // that are not links at all are not counted: they had no claim to hide).
-  const hiddenLinks = track.genealogy.links.filter(
-    (link) => typeof link === 'object' && link !== null && claims.isHidden(link.claimId),
-  ).length;
-  // How the shown links are known: the panel's label says "model inference" only when every one
-  // is the model's (each link says its own kind in the graph, its legend and its list).
-  const graphLinks = useMemo(
-    () =>
-      shownLinks(
-        genealogy,
-        linkContext(track.evidence, claims, { releaseYear: track.releaseYear }),
-      ),
-    [genealogy, track.evidence, track.releaseYear, claims],
-  );
-  const linkKinds = useMemo(
-    () => ({
-      sourced: graphLinks.some((link) => link.kind === 'sourced'),
-      inferred: graphLinks.some((link) => link.kind !== 'sourced'),
-      notSourced: graphLinks.some((link) => kindLabel(link) === 'Not sourced'),
-    }),
-    [graphLinks],
-  );
+  // The relations the map shows, and how they are known: the panel's label says "model
+  // inference" only when every one is the model's (each link says its own kind in the graph, its
+  // legend and its list). Two links or fewer in all: the map is a compact row, and its panel (a
+  // row of its own from md up) is as tall as its content.
+  const {
+    genealogy,
+    hiddenLinks,
+    graphLinks,
+    sparse: sparseGenealogy,
+    linkKinds,
+  } = useConnections(track, claims);
   // A claim a shown link states is named as its link is, on a fact's card and in the claims
   // list: one set of words for one relation.
   const claimRelations = useMemo(() => relationLabelsByClaim(graphLinks), [graphLinks]);
@@ -341,6 +343,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
   // The Player's layout at this width: the panels are tab panels only while the tabs show.
   const layout = usePlayerLayout();
+  const reducedMotion = useReducedMotion();
   const tabbed = layout === 'tabs';
   // A panel's tab panel role, named by its tab, while the tabs show (none from md up, where the
   // tabs are hidden and the panels are columns, each headed by its own heading).
@@ -497,7 +500,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       if (!onAnalyzeTrack) return;
       const query = nodeQuery(node);
       if (!query) return;
-      onAnalyzeTrack(node.spotifyId || 'search', query, '');
+      onAnalyzeTrack(node.spotifyId || 'search', query, '', 'player');
     },
     [onAnalyzeTrack],
   );
@@ -505,6 +508,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // The phone tabs (WAI-ARIA tabs): the arrow keys move to the next or previous tab, Home and End
   // to the first and last; the open tab alone is in the Tab order.
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // The connections' heading lies over the top of the map: its height, which the map keeps clear.
+  const genealogyHeadingRef = useRef<HTMLDivElement>(null);
+  const [genealogyHeadingHeight, setGenealogyHeadingHeight] = useState(0);
+  useEffect(() => {
+    const heading = genealogyHeadingRef.current;
+    if (!heading || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      // A hidden panel (a phone's other tab) measures 0: the last height is kept.
+      if (heading.offsetHeight > 0) setGenealogyHeadingHeight(heading.offsetHeight);
+    });
+    observer.observe(heading);
+    return () => observer.disconnect();
+  }, []);
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = tabKeyTarget(event.key, index, TABS.length);
     if (next === null) return;
@@ -591,30 +608,48 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
         {/* Measured values in the measured hue; what was not measured, and the separators, in
             a neutral one */}
-        <p
-          data-testid="player-audio-line"
-          className="hidden md:block shrink-0 whitespace-nowrap text-xs font-mono text-text-tertiary"
-        >
-          {bpm !== null ? (
-            <span className="text-cyber">{formatBpm(bpm)} BPM</span>
-          ) : (
-            'BPM not measured'
-          )}
-          {key !== null && (
-            <>
-              {' · '}
-              <span className="text-cyber">{key}</span>
-            </>
-          )}
-          {measurement && (
-            <>
-              {' · '}
-              <span className="text-cyber">
-                {formatSeconds(measurement.windowSeconds)} s preview
-              </span>
-            </>
-          )}
-        </p>
+        <div className="hidden md:flex shrink-0 flex-col items-end gap-1">
+          <p
+            data-testid="player-audio-line"
+            className="whitespace-nowrap text-xs font-mono text-text-tertiary"
+          >
+            {bpm !== null ? (
+              <span className="text-cyber">{formatBpm(bpm)} BPM</span>
+            ) : (
+              'BPM not measured'
+            )}
+            {key !== null && (
+              <>
+                {' · '}
+                <span className="text-cyber">{key}</span>
+              </>
+            )}
+            {measurement && (
+              <>
+                {' · '}
+                <span className="text-cyber">
+                  {formatSeconds(measurement.windowSeconds)} s preview
+                </span>
+              </>
+            )}
+          </p>
+          {/* From md up the connections are a row below both columns, far down the page: this
+              takes the reader there and puts the focus on them (a button, not a link to
+              #panel-genealogy: the page's address stays the track's) */}
+          <button
+            type="button"
+            aria-controls="panel-genealogy"
+            onClick={() => {
+              const panel = document.getElementById('panel-genealogy');
+              if (!panel) return;
+              panel.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+              panel.focus({ preventScroll: true });
+            }}
+            className="text-xs font-mono text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+          >
+            Connections <span aria-hidden="true">↓</span>
+          </button>
+        </div>
       </div>
 
       {/* On phones only one panel shows at a time: the recording label stays above all of them,
@@ -626,21 +661,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )}
 
       {/* The panels. Phones (below md): one at a time, chosen with the tabs below; each scrolls
-          on its own. md up to xl: two columns, the notes and the player, with the connections
-          as a full-width row below them; the columns take the height of their content and the
-          whole area scrolls as one, down only (a timeline tooltip at rest past the window's
-          edge must not let it scroll sideways). xl (1280 px) and up: three columns, each
-          scrolling on its own. */}
+          on its own. From md up: two columns, the notes and the player, with the connections
+          as a full-width row below them (room for the map's year axis across the page); the
+          columns take the height of their content and the whole area scrolls as one, down only
+          (a timeline tooltip at rest past the window's edge must not let it scroll sideways). */}
       <div
         data-player-columns
-        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] xl:auto-rows-[100%] xl:overflow-hidden"
+        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain"
       >
         {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
           id="panel-context"
           {...panelRole('context')}
           className={`
-            min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
@@ -867,7 +901,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           id="panel-player"
           {...panelRole('player')}
           className={`
-            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain
             ${activeTab === 'player' ? 'block max-md:h-full' : 'hidden md:flex'}
         `}
         >
@@ -968,40 +1002,50 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           </div>
         </div>
 
-        {/* Panel C: the connections (xl: the right column; md up to xl: a full-width row below
-            the columns, 14rem shorter than the window (the nav, the header and the footer take
+        {/* Panel C: the connections (md up: a full-width row below the columns, 14rem shorter
+            than the window (the nav, the header and the footer take
             about 12rem), so a strip of the scrolling area always shows beside it to grab, even
-            on a landscape phone; phones: the Connections tab, covering the panels' area,
-            absolute, so it has that area's height for the graph) */}
+            on a landscape phone, or as tall as its content when the connections are a compact
+            row; phones: the Connections tab, covering the panels' area, absolute, so it has
+            that area's height for the graph) */}
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
+          // Focus lands here from the header's "Connections" button (not a tab stop of its own),
+          // and its ring shows it.
+          tabIndex={-1}
           className={`
-            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
-            ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
+            min-w-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >
-          <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
+          {/* Over the top of the map, on a band of the page's colour: the map leaves this band
+              clear (its `topInset`), so no card sits under the heading until it is panned */}
+          <div
+            ref={genealogyHeadingRef}
+            className="absolute top-0 left-0 right-0 z-10 px-4 pt-4 pb-2 bg-void pointer-events-none flex flex-wrap items-center gap-2"
+          >
             <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Connections
             </h2>
             {/* How the shown links are known, in the words and chips the legend, the list and
                 the connected-track cards use: sourced, not sourced, or (every link) the model's */}
             {genealogy.nodes.length > 1 && (
-              <span data-testid="genealogy-kinds" className="inline-flex max-w-full">
-                {linkKinds.sourced ? (
-                  linkKinds.inferred ? (
-                    <Badge variant="neutral">Sourced and not sourced links</Badge>
-                  ) : (
-                    <ProvenanceChip kind="sourced">Sourced links</ProvenanceChip>
-                  )
-                ) : linkKinds.notSourced ? (
-                  // Not the model's: built from records whose evidence does not hold.
-                  <ProvenanceChip kind="unconfirmed">Not sourced</ProvenanceChip>
-                ) : (
-                  <ResultOriginLabel fromSourceData={fromSourceData} />
-                )}
-              </span>
+              <LinkKindsChip kinds={linkKinds} fromSourceData={fromSourceData} />
+            )}
+            {/* The map on a page of its own: a real link, to copy or open in a new tab */}
+            {genealogy.nodes.length > 1 && mapHref && (
+              <a
+                href={mapHref}
+                onClick={(event) => {
+                  if (!onOpenMap || !isPlainClick(event)) return;
+                  event.preventDefault();
+                  onOpenMap();
+                }}
+                className="pointer-events-auto ml-auto text-xs font-mono text-text-secondary hover:text-white underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+              >
+                Open the full map
+              </a>
             )}
           </div>
           {genealogy.nodes.length > 1 ? (
@@ -1012,7 +1056,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               key={track.id}
               message="The connections graph could not be drawn"
               action={{ label: 'Try again' }}
-              className="h-full"
+              className="flex-1 min-h-0"
             >
               <GenealogyGraph
                 data={genealogy}
@@ -1020,21 +1064,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 claims={claims}
                 releaseYear={track.releaseYear}
                 hiddenLinks={hiddenLinks}
+                topInset={genealogyHeadingHeight}
                 onNodeClick={handleNodeClick}
-                // From md up to xl the page scrolls past the graph: the wheel and one finger
-                // scroll it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones
-                // and at xl nothing scrolls behind the graph, and it takes them all.
+                trackPreviewUrl={track.previewUrl}
+                replay={resultMode === 'replay'}
+                // From md up the page scrolls past the graph: the wheel and one finger scroll
+                // it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones nothing
+                // scrolls behind the graph, and it takes them all.
                 wheelZoom={layout === 'columns' ? 'modifier' : 'plain'}
               />
             </ErrorBoundary>
           ) : (
-            <div className="flex-1 flex items-center justify-center h-full p-6">
+            <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                {/* Relations were found, but the verifier rejected every one (they are listed
-                    with the rejected claims) */}
-                {hiddenLinks > 0
-                  ? 'No connections to show.'
-                  : 'No connected tracks were found for this track.'}
+                {noConnectionsText(hiddenLinks)}
               </p>
             </div>
           )}
@@ -1090,7 +1133,9 @@ const Player: React.FC<PlayerProps> = ({ trackData, ...props }) => {
   // Missing lists default to empty so a partial result renders; memoised so the graph and
   // the factoid list keep their identity between renders.
   const track = useMemo(() => (trackData ? normalizeTrack(trackData) : null), [trackData]);
-  return track ? <PlayerView track={track} {...props} /> : <NoAnalysis {...props} />;
+  // One view per track: another track's Player (a breadcrumb step, Back or Forward) opens
+  // afresh, on the tab its entry has, with none of this one's state.
+  return track ? <PlayerView key={track.id} track={track} {...props} /> : <NoAnalysis {...props} />;
 };
 
 export default Player;

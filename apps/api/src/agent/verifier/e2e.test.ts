@@ -293,7 +293,7 @@ describe("the verifier in the analysis graph", () => {
     });
 
     // Three cited claims judged (the two claims and the link's); the octave claim cites nothing.
-    expect(result.run?.verifier).toEqual({ judged: 3, unjudged: 0 });
+    expect(result.run?.verifier).toEqual({ judged: 3, unjudged: 0, restated: 0 });
     expect(result.run?.usage?.llmCalls).toBe(3);
     expect(analysisIssues(result)).toEqual([]);
     // Judged in full: stored for the track.

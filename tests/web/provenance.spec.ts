@@ -261,9 +261,10 @@ test.describe("a result with claims", () => {
     const timeline = page.getByRole("group", { name: "Song structure" });
     await expect(timeline.getByRole("img", { name: /^Sample: Vocal chop/ })).toHaveCount(1);
     await expect(timeline.getByRole("img", { name: /Horn stab/ })).toHaveCount(0);
-    const graph = page.locator("#panel-genealogy svg");
-    await expect(graph.locator("g.nodes > g")).toHaveCount(3);
-    await expect(graph.locator("g.links line")).toHaveCount(2);
+    // Two relations: the compact row, with its three tracks and two relations.
+    const row = page.locator('#panel-genealogy [data-testid="lineage-row"]');
+    await expect(row.locator("[data-lineage-card]")).toHaveCount(3);
+    await expect(row.locator("[data-relation-chip]")).toHaveCount(2);
     await expect(page.locator("#panel-genealogy")).not.toContainText("Rejected Source");
     await expect(page.locator("#panel-genealogy")).toContainText("Kept Influence - Other (2005)");
     // A card whose claim cannot be read is left out, and the page says so.

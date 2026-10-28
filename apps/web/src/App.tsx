@@ -3,26 +3,38 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense } f
 import Layout from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
-import { TrackLinkScreen, type TrackLinkState } from './components/TrackLinkScreen';
+import { TrackLinkScreen } from './components/TrackLinkScreen';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 // Loaded again on the screen boundary's "Try again" (or another screen) when their code failed.
 const Dashboard = lazyWithRetry(() => import('./components/Dashboard'));
 const Player = lazyWithRetry(() => import('./components/Player'));
+const MapView = lazyWithRetry(() => import('./components/MapView'));
 import { AppPhase, type TrackData } from './types';
 import { useAgent } from './hooks/useAgent';
 import { fetchStoredRun } from './hooks/agent/storedRun';
 import { preloadsResults } from './components/console/progress';
 import { isSpotifyTrackId } from './utils/spotify';
 import type { AnalyzeOptions } from './hooks/agent/types';
-import {
-  currentRoute,
-  onHistoryMove,
-  type Route,
-  routeUrl,
-  writeHistoryEntry,
-} from './router/route';
+import { currentRoute, onHistoryMove, writeHistoryEntry } from './router/route';
 import { screenKey } from './router/screenKey';
 import { ShownResults } from './router/shownResults';
+import {
+  addressOf,
+  type HistoryEntry,
+  linkTo,
+  openingScreen,
+  type TrackLink,
+} from './router/screens';
+import {
+  explore,
+  NO_TRAIL,
+  type Trail,
+  type TrailStep,
+  type TrailView,
+  trailBefore,
+  trailFromState,
+} from './router/trail';
+import { ExploredTrail } from './components/ExploredTrail';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
 const shimmerClass =
@@ -94,6 +106,25 @@ const PlayerSkeleton = (
   </div>
 );
 
+// The full-size map's band (the way back and its heading) above the map's area.
+const MapSkeleton = (
+  <div
+    {...LOADING_VIEW_PROPS}
+    className="h-full w-full flex flex-col bg-void animate-fade-in focus:outline-none"
+  >
+    <div className="px-6 py-3 border-b border-white/5 flex flex-col gap-2">
+      <div className={`h-4 w-40 ${shimmerClass} rounded-sm`} />
+      <div className={`h-5 w-64 ${shimmerClass} rounded-sm`} />
+    </div>
+    <div className={`flex-1 m-4 ${shimmerClass} border border-white/10 rounded-lg`} />
+  </div>
+);
+
+/** The screens that show a result, each with a heading that takes the focus. */
+type ResultScreen = AppPhase.DASHBOARD | AppPhase.PLAYER | AppPhase.MAP;
+const isResultScreen = (screen: AppPhase | 'link'): screen is ResultScreen =>
+  screen === AppPhase.DASHBOARD || screen === AppPhase.PLAYER || screen === AppPhase.MAP;
+
 /** The loading view on the page, if any (see LOADING_VIEW_PROPS). */
 const loadingView = () => document.querySelector<HTMLElement>('[data-loading-view]');
 
@@ -118,60 +149,16 @@ function withinQueryLimit(text: string): string {
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
-/** A link to a track (`/t/<spotifyId>`) whose result is not on screen yet. */
-interface TrackLink {
-  trackId: string;
-  /** The link's own words for the track (`?q=`). */
-  query: string | null;
-  state: TrackLinkState;
-}
-
-const linkTo = (route: Extract<Route, { kind: 'track' }>): TrackLink => ({
-  trackId: route.trackId,
-  query: route.query,
-  // An id that cannot be a Spotify track id is not sent to the API.
-  state: isSpotifyTrackId(route.trackId) ? 'loading' : 'invalid',
-});
-
-/** What the app stores in each browser history entry. */
-interface HistoryEntry {
-  phase: AppPhase;
-  /** In-app entries behind this one. */
-  index: number;
-  /** Pushed when a search started; its result replaces it. */
-  search?: boolean;
-  /** The entry's address. */
-  url: string;
-}
-
-/**
- * The address of a screen: `/` for the search (and an analysis under way), the link's own
- * address while its result loads, and `/t/<id>?q=<title artist>` for a result.
- */
-function addressOf(phase: AppPhase, track: TrackData | null, link: TrackLink | null): string {
-  if (link) return routeUrl({ kind: 'track', trackId: link.trackId, query: link.query });
-  // Only a Spotify track id makes a link that loads again: a result under any other id (a
-  // recording's placeholder) keeps the search's address rather than one the page calls invalid.
-  if (phase === AppPhase.ONBOARDING || !isSpotifyTrackId(track?.id)) return '/';
-  const query = `${track.title ?? ''} ${track.artist ?? ''}`.trim() || null;
-  return routeUrl({ kind: 'track', trackId: track.id, query });
-}
-
-/** The screen the page opens on: the search, or the result its address names. */
-function openingScreen(): { phase: AppPhase; link: TrackLink | null } {
-  const route = currentRoute();
-  if (route?.kind !== 'track') return { phase: AppPhase.ONBOARDING, link: null };
-  // A reload of the Player keeps the Player (the entry's state survives a reload).
-  const saved = window.history.state as Partial<HistoryEntry> | null;
-  return {
-    phase: saved?.phase === AppPhase.PLAYER ? AppPhase.PLAYER : AppPhase.DASHBOARD,
-    link: linkTo(route),
-  };
-}
-
 const App: React.FC = () => {
-  const [opening] = useState(openingScreen);
+  const [opening] = useState(() => openingScreen(currentRoute(), window.history.state));
   const [phase, setPhase] = useState<AppPhase>(opening.phase);
+  // The tracks explored before the one on screen (router/trail.ts), as its history entry has
+  // them: Back and Forward bring each entry's back.
+  const [trail, setTrail] = useState<Trail>(opening.trail);
+  // The trail of the last result left (previousTrackData), for "Back to the last result".
+  const previousTrail = useRef<Trail>(NO_TRAIL);
+  // The Player's phone tab, as its history entry has it.
+  const [playerTab, setPlayerTab] = useState<string | undefined>(opening.tab);
   // A link to a track whose stored result is loading, missing or failed: shown instead of the
   // phase's view until the result is in.
   const [link, setLink] = useState<TrackLink | null>(opening.link);
@@ -199,6 +186,7 @@ const App: React.FC = () => {
   // ─── UX: Focus management refs (Item 1) ─────────────────────────────────
   const dashboardHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const playerHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const mapHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // A result view whose heading is to take the focus as soon as it is in the page: its code
   // was still loading when it was opened. Waited for however long the code takes: the focus
@@ -224,6 +212,13 @@ const App: React.FC = () => {
     (heading: HTMLHeadingElement | null) => {
       playerHeadingRef.current = heading;
       if (heading) takeWaitingFocus(AppPhase.PLAYER, heading);
+    },
+    [takeWaitingFocus],
+  );
+  const setMapHeading = useCallback(
+    (heading: HTMLHeadingElement | null) => {
+      mapHeadingRef.current = heading;
+      if (heading) takeWaitingFocus(AppPhase.MAP, heading);
     },
     [takeWaitingFocus],
   );
@@ -280,9 +275,12 @@ const App: React.FC = () => {
   const screen = link ? 'link' : phase;
   // A result's heading takes the focus, or, while its code loads, the loading view until the
   // heading is in.
-  const focusResult = useCallback((shown: AppPhase.DASHBOARD | AppPhase.PLAYER) => {
-    const heading =
-      shown === AppPhase.DASHBOARD ? dashboardHeadingRef.current : playerHeadingRef.current;
+  const focusResult = useCallback((shown: ResultScreen) => {
+    const heading = {
+      [AppPhase.DASHBOARD]: dashboardHeadingRef,
+      [AppPhase.PLAYER]: playerHeadingRef,
+      [AppPhase.MAP]: mapHeadingRef,
+    }[shown].current;
     if (heading?.isConnected) {
       heading.focus();
       return;
@@ -290,6 +288,10 @@ const App: React.FC = () => {
     focusWait.current = shown;
     loadingView()?.focus();
   }, []);
+  // Another track on the same kind of screen (a breadcrumb step, Back from one map to another)
+  // is a screen change too: the link that had the focus may be gone.
+  const shownResult = isResultScreen(screen) ? (effectiveTrackData?.id ?? null) : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new result moves the focus too
   useLayoutEffect(() => {
     focusWait.current = null;
     if (screen === 'link') return;
@@ -297,11 +299,11 @@ const App: React.FC = () => {
       searchInputRef.current?.focus();
       return;
     }
-    focusResult(screen);
-  }, [screen, focusResult]);
+    if (isResultScreen(screen)) focusResult(screen);
+  }, [screen, shownResult, focusResult]);
   // "Try again" on a result whose code could not be loaded: the focus moves as on opening it.
   const handleScreenRetried = useCallback(() => {
-    if (screen === AppPhase.DASHBOARD || screen === AppPhase.PLAYER) focusResult(screen);
+    if (isResultScreen(screen)) focusResult(screen);
   }, [screen, focusResult]);
 
   // A link to a result: its view's code is fetched while the stored result loads, not after.
@@ -309,6 +311,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!opening.link) return;
     if (opening.phase === AppPhase.PLAYER) import('./components/Player').catch(preloadFailed);
+    else if (opening.phase === AppPhase.MAP) import('./components/MapView').catch(preloadFailed);
     else import('./components/Dashboard').catch(preloadFailed);
   }, []);
 
@@ -326,6 +329,12 @@ const App: React.FC = () => {
       import('./components/Player').catch(preloadFailed);
     }
   }, [phase]);
+
+  // The full-size map's code, fetched once the Player offers it ("Open the full map").
+  const offersMap = phase === AppPhase.PLAYER && isSpotifyTrackId(effectiveTrackData?.id);
+  useEffect(() => {
+    if (offersMap) import('./components/MapView').catch(preloadFailed);
+  }, [offersMap]);
 
   // ─── P2:19 Preload images during analysis ─────────────────────────────────
   // Keyed by the image addresses: a new result object with the same images loads nothing again.
@@ -353,24 +362,47 @@ const App: React.FC = () => {
     setPhase(AppPhase.DASHBOARD);
   }, []);
 
+  // The next history entry the app writes is pushed, even for the same kind of screen (another
+  // track's map from the breadcrumb), with these marks.
+  const nextEntry = useRef<Pick<HistoryEntry, 'search' | 'fromPlayer' | 'fromResult'> | null>(null);
+
   // Handle navigation with track data
   const handleNavigate = useCallback((newPhase: AppPhase) => {
+    // The Player opened from the Dashboard opens on its first tab.
+    setPlayerTab(undefined);
     setPhase(newPhase);
   }, []);
 
-  // A connected track analysed from the Dashboard or the Player. The run starts at once, so the
-  // progress screen is up from its first frame and its status line takes the focus.
+  // A connected track analysed from the Dashboard or the Player, or from the full-size map. The
+  // run starts at once, so the progress screen is up from its first frame and its status line
+  // takes the focus. Analysed from a map (`from`), the track on screen joins the trail of the
+  // next one; from anywhere else the next one starts a trail of its own.
   const handleAnalyzeTrack = useCallback(
-    (trackId: string, title: string, artist: string) => {
+    (trackId: string, title: string, artist: string, from?: TrailView) => {
       // The result on screen stays available: Stop, then "Back to the last result", shows it.
       setPreviousTrackData(effectiveTrackData);
+      previousTrail.current = trail;
+      const left = effectiveTrackData;
+      setTrail(
+        from && left && isSpotifyTrackId(left.id)
+          ? explore(trail, {
+              trackId: left.id,
+              title: left.title || left.id,
+              artist: left.artist || null,
+              view: from,
+            })
+          : NO_TRAIL,
+      );
       setOverrideTrackData(null);
       setIsRestoredSession(false);
       reset();
       analyze(`${title} ${artist}`.trim(), isSpotifyTrackId(trackId) ? { trackId } : {});
+      // The progress screen's entry is taken over by the result, as a search's is: Back from
+      // the result leads to the screen it was analysed from.
+      nextEntry.current = { search: true, fromResult: left !== null };
       setPhase(AppPhase.ONBOARDING);
     },
-    [reset, analyze, effectiveTrackData],
+    [reset, analyze, effectiveTrackData, trail],
   );
 
   const handleBackToDashboard = useCallback(() => {
@@ -379,9 +411,16 @@ const App: React.FC = () => {
 
   // UX: Restore previous session (Item 8)
   const handleRestorePrevious = useCallback(() => {
+    // The result is the entry right behind this one (a track analysed from it, then stopped):
+    // back to that entry, as it was, rather than a copy of it in this one's place.
+    if (previousTrackData && entryRef.current.fromResult) {
+      window.history.back();
+      return;
+    }
     if (previousTrackData) {
       setOverrideTrackData(previousTrackData);
       setIsRestoredSession(true);
+      setTrail(previousTrail.current);
       setPhase(AppPhase.DASHBOARD);
     }
   }, [previousTrackData]);
@@ -391,19 +430,25 @@ const App: React.FC = () => {
     // Save current trackData so user can restore previous session
     if (effectiveTrackData) {
       setPreviousTrackData(effectiveTrackData);
+      // Its trail with it: "Back to the last result" shows the path that led to it.
+      previousTrail.current = trail;
     }
     setOverrideTrackData(null);
     setIsRestoredSession(false);
     setLink(null);
+    // A new search starts no chain: the explored tracks are cleared.
+    setTrail(NO_TRAIL);
     reset();
     setPhase(AppPhase.ONBOARDING);
-  }, [reset, effectiveTrackData]);
+  }, [reset, effectiveTrackData, trail]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
   // One history entry per screen, at that screen's address; the steps of an analysis add none.
   // Each entry records how many in-app entries lie behind it (`index`). The entry a search
   // pushes (`search`) is taken over by its result.
   const address = addressOf(phase, effectiveTrackData, link);
+  // A result's entry keeps its trail (none on the search's).
+  const trailOfEntry = phase !== AppPhase.ONBOARDING && trail.steps.length > 0 ? trail : undefined;
   const entryRef = useRef<HistoryEntry>({ phase, index: 0, url: address });
   const writeHistory = useCallback((entry: HistoryEntry, mode: 'push' | 'replace') => {
     entryRef.current = entry;
@@ -413,23 +458,72 @@ const App: React.FC = () => {
   // The page's own entry, at its address (an unknown path becomes the search's `/`).
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs only on mount
   useEffect(() => {
-    writeHistory({ phase, index: 0, url: address }, 'replace');
+    writeHistory(
+      {
+        phase,
+        index: 0,
+        url: address,
+        trail: trailOfEntry,
+        tab: phase === AppPhase.PLAYER ? opening.tab : undefined,
+        fromPlayer: opening.fromPlayer || undefined,
+      },
+      'replace',
+    );
   }, []);
 
   useEffect(() => {
     const entry = entryRef.current;
-    if (entry.phase === phase) {
+    const marks = nextEntry.current;
+    nextEntry.current = null;
+    if (entry.phase === phase && !marks) {
       // The same screen at a new address: a link's stored result came in, and the address now
       // carries the track's name.
       if (entry.url !== address) writeHistory({ ...entry, url: address }, 'replace');
       return;
     }
+    const next: HistoryEntry = {
+      phase,
+      index: entry.index + 1,
+      url: address,
+      trail: trailOfEntry,
+      // The Player's tab, for Back, Forward and a reload to open it again.
+      tab: phase === AppPhase.PLAYER ? playerTab : undefined,
+      ...marks,
+    };
     if (entry.search && phase === AppPhase.DASHBOARD) {
-      writeHistory({ phase, index: entry.index, url: address }, 'replace');
+      writeHistory({ ...next, index: entry.index, search: undefined }, 'replace');
     } else {
-      writeHistory({ phase, index: entry.index + 1, url: address }, 'push');
+      writeHistory(next, 'push');
     }
-  }, [phase, address, writeHistory]);
+  }, [phase, address, trailOfEntry, playerTab, writeHistory]);
+
+  // The Player's phone tab, kept in its entry for Back and Forward to it.
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      setPlayerTab(tab);
+      const entry = entryRef.current;
+      if (entry.phase === AppPhase.PLAYER && entry.tab !== tab) {
+        writeHistory({ ...entry, tab }, 'replace');
+      }
+    },
+    [writeHistory],
+  );
+
+  // "Open the full map" in the Player: the map gets an entry of its own.
+  const handleOpenMap = useCallback(() => {
+    nextEntry.current = { fromPlayer: true };
+    setPhase(AppPhase.MAP);
+  }, []);
+
+  // "Back to <title>" on the full-size map: back to the Player it was opened from, or (a map
+  // opened from its link) on to the track's address.
+  const handleMapBack = useCallback(() => {
+    if (entryRef.current.fromPlayer) {
+      window.history.back();
+      return;
+    }
+    setPhase(AppPhase.DASHBOARD);
+  }, []);
 
   // A search started on an entry with nothing of the app behind it (the first search after
   // loading the page, or one after going back to the search) gets an entry of its own, so
@@ -447,6 +541,8 @@ const App: React.FC = () => {
   const startSearch = useCallback(
     (query: string, options?: AnalyzeOptions) => {
       markSearchEntry();
+      // A new search starts no chain.
+      setTrail(NO_TRAIL);
       return analyze(query, options);
     },
     [markSearchEntry, analyze],
@@ -475,6 +571,33 @@ const App: React.FC = () => {
     startSearch(query, { trackId: link.trackId, pickedBy: 'click' });
   }, [link, writeHistory, startSearch]);
 
+  // A track of the breadcrumb: its Player or full-size map, with the steps before it as its
+  // trail, in an entry of its own; shown again if this page has it, else its stored result.
+  const handleOpenStep = useCallback(
+    (step: TrailStep, index: number) => {
+      const shown = shownResults.current.get(step.trackId);
+      const query = `${step.title} ${step.artist ?? ''}`.trim() || null;
+      setTrail(trailBefore(trail, index));
+      // Its map was opened from its Player's Connections tab.
+      setPlayerTab(step.view === 'player' ? 'genealogy' : undefined);
+      if (shown) {
+        setOverrideTrackData(shown);
+        setIsRestoredSession(true);
+        setLink(null);
+      } else {
+        reset();
+        setOverrideTrackData(null);
+        setIsRestoredSession(false);
+        setLink(
+          linkTo({ kind: step.view === 'map' ? 'map' : 'track', trackId: step.trackId, query }),
+        );
+      }
+      nextEntry.current = {};
+      setPhase(step.view === 'map' ? AppPhase.MAP : AppPhase.PLAYER);
+    },
+    [trail, reset],
+  );
+
   const handleRetryLink = useCallback(() => {
     setLink((current) => (current ? { ...current, state: 'loading' } : current));
   }, []);
@@ -492,18 +615,25 @@ const App: React.FC = () => {
           writeHistory(entryRef.current, 'push');
           return;
         }
+        // The entry's trail and tab come back with it.
+        const restored = trailFromState(target);
         entryRef.current = {
           phase: targetPhase,
           index: target.index ?? 0,
           search: target.search,
           url: `${window.location.pathname}${window.location.search}`,
+          trail: restored.steps.length > 0 ? restored : undefined,
+          tab: typeof target.tab === 'string' ? target.tab : undefined,
+          fromPlayer: target.fromPlayer === true || undefined,
         };
         if (targetPhase === AppPhase.ONBOARDING) {
           // Back from a result starts a new search; the result stays available to restore.
           if (phase !== AppPhase.ONBOARDING || link) handleNewSearch();
           return;
         }
-        const wanted = route?.kind === 'track' ? route : null;
+        setTrail(restored);
+        setPlayerTab(entryRef.current.tab);
+        const wanted = route?.kind === 'track' || route?.kind === 'map' ? route : null;
         const fits = (track: TrackData | null | undefined): track is TrackData =>
           !!track && (!wanted || track.id === wanted.trackId);
         if (!link && fits(effectiveTrackData)) {
@@ -546,6 +676,13 @@ const App: React.FC = () => {
     ],
   );
 
+  // The address of the result's full-size map; none for a result no address loads again.
+  const mapAddress = addressOf(AppPhase.MAP, effectiveTrackData, null);
+  const shownTrailOf =
+    !link && effectiveTrackData && isResultScreen(phase) && trail.steps.length > 0
+      ? effectiveTrackData
+      : null;
+
   const renderScreen = () => {
     if (link) {
       return (
@@ -583,6 +720,22 @@ const App: React.FC = () => {
             onAnalyzeTrack={handleAnalyzeTrack}
             onNewSearch={handleNewSearch}
             headingRef={setPlayerHeading}
+            mapHref={mapAddress === '/' ? null : mapAddress}
+            onOpenMap={handleOpenMap}
+            initialTab={playerTab}
+            onTabChange={handleTabChange}
+          />
+        );
+      case AppPhase.MAP:
+        return (
+          <MapView
+            trackData={effectiveTrackData}
+            moreFacts={moreFacts}
+            onAnalyzeTrack={handleAnalyzeTrack}
+            trackHref={addressOf(AppPhase.DASHBOARD, effectiveTrackData, null)}
+            onBackToTrack={handleMapBack}
+            onNewSearch={handleNewSearch}
+            headingRef={setMapHeading}
           />
         );
       default:
@@ -612,8 +765,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
+    <Layout
+      footerFromMd={!link && phase === AppPhase.PLAYER}
+      // The full-size map takes the window down to its bottom edge.
+      footer={link !== null || phase !== AppPhase.MAP}
+    >
       <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
+        {/* The tracks explored in this chain, above the result's view */}
+        {shownTrailOf && (
+          <ExploredTrail
+            trail={trail}
+            current={{
+              title: shownTrailOf.title || shownTrailOf.id,
+              artist: shownTrailOf.artist || null,
+              url: address,
+              view: phase === AppPhase.MAP ? 'map' : 'player',
+            }}
+            onOpen={handleOpenStep}
+          />
+        )}
         {/* A screen that throws says so in its place, with a way back to the search; one whose
             code cannot be loaded offers to load it again or to reload the page. Another screen
             or result is tried afresh (resetKey), its code loaded again if it failed, without
@@ -626,7 +796,15 @@ const App: React.FC = () => {
           onRetried={handleScreenRetried}
           className="flex-1 min-h-0 w-full bg-void"
         >
-          <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : DashboardSkeleton}>
+          <Suspense
+            fallback={
+              phase === AppPhase.PLAYER
+                ? PlayerSkeleton
+                : phase === AppPhase.MAP
+                  ? MapSkeleton
+                  : DashboardSkeleton
+            }
+          >
             {renderScreen()}
           </Suspense>
         </ErrorBoundary>

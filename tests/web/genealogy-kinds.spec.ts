@@ -22,7 +22,9 @@ import {
 // relation it states ("possible sample", as the fact cards say),
 // its relation stated as a sentence naming both tracks, and its provenance shown on hover and
 // focus and in a list; the Dashboard names a documented relation as known only for a sourced
-// link, and as a possible one otherwise.
+// link, and as a possible one otherwise. The map is a lineage on a year axis: each track a card,
+// drawn over the links, its relation named in a chip only while a link or a card is pointed at
+// or focused.
 const fixture = loadFixture("genealogy-kinds");
 const ANALYZE = "/api/analyze/stream";
 const CURRENT = "Bright Lines (2011)";
@@ -59,49 +61,49 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string, part?: L
   else await page.screenshot({ path, fullPage: true });
 }
 
-// [kind, relation drawn, dash, line label] for each shown link, in the fixture's order (the
-// link whose claim was contradicted is not shown).
+// [kind, relation drawn, dash, chip] for each shown link, in the fixture's order (the link
+// whose claim was contradicted is not shown).
 const DRAWN = [
-  ["sourced", "sample", "none", "sample"],
-  ["sourced", "interpolation", "none", "interpolation"],
-  ["sourced", "cover", "none", "cover"],
-  ["sourced", "remix", "none", "remix"],
-  ["sourced", "producer", "none", "shared producer"],
-  ["sourced", "influence", "none", "influence"],
-  ["inferred", "influence", "6 4", "possible sample"],
-  ["inferred", "influence", "6 4", "possible interpolation"],
-  ["inferred", "influence", "6 4", "possible cover"],
-  ["inferred", "influence", "6 4", "possible remix"],
-  ["inferred", "producer", "6 4", "possible shared producer"],
-  ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible sample"], // cites an id not in the pack
-  ["inferred", "influence", "6 4", "possible sample"], // says sourced, cites nothing
-  ["inferred", "influence", "6 4", "possible sample"], // the model's "sourced", no verdict
-  ["sourced", "sample", "none", "sample"], // the model's, with a supported claim
-  ["inferred", "influence", "6 4", "related"], // a model link its years contradict
+  ["sourced", "sample", "none", "Sample"],
+  ["sourced", "interpolation", "none", "Interpolation"],
+  ["sourced", "cover", "none", "Cover"],
+  ["sourced", "remix", "none", "Remix"],
+  ["sourced", "producer", "none", "Shared producer"],
+  ["sourced", "influence", "none", "Influence"],
+  ["inferred", "influence", "6 4", "Possible sample"],
+  ["inferred", "influence", "6 4", "Possible interpolation"],
+  ["inferred", "influence", "6 4", "Possible cover"],
+  ["inferred", "influence", "6 4", "Possible remix"],
+  ["inferred", "producer", "6 4", "Possible shared producer"],
+  ["inferred", "influence", "6 4", "Possible influence"],
+  ["inferred", "influence", "6 4", "Possible sample"], // cites an id not in the pack
+  ["inferred", "influence", "6 4", "Possible sample"], // says sourced, cites nothing
+  ["inferred", "influence", "6 4", "Possible sample"], // the model's "sourced", no verdict
+  ["sourced", "sample", "none", "Sample"], // the model's, with a supported claim
+  ["inferred", "influence", "6 4", "Related, direction unknown"], // years contradict it
 ];
 
 const graphOf = (page: Page) =>
   page.locator('#panel-genealogy svg[aria-label="Connections graph"]');
 
-/** The fit's scale of the graph, or NaN before the graph has fitted itself to the panel. */
+/** The zoom's scale of the graph, or NaN before the graph has set its first view. */
 const fitScale = (page: Page) =>
   graphOf(page)
     .locator(":scope > g")
     .evaluate((g) => Number(/scale\(([\d.]+)/.exec(g.getAttribute("transform") ?? "")?.[1]));
 
-/** Page time that covers the force layout (about 300 ticks) and the fit's half-second ease. */
-const LAYOUT_MS = 15_000;
+/** Page time that covers any glide of the view (a double click's zoom is a quarter second). */
+const LAYOUT_MS = 2_000;
 
 /**
  * Where the graph sits in its panel (the svg) on screen: the zoom's scale, the centre of the
- * tracks' discs less the panel's centre (px), and how many discs lie past the panel's edge.
+ * tracks' cards less the panel's centre (px), and how many cards lie past the panel's edge.
  */
 const placeInPanel = (page: Page) =>
   graphOf(page).evaluate((svg) => {
     const panel = svg.getBoundingClientRect();
-    const discs = [...svg.querySelectorAll("g.nodes > g > circle:first-of-type")].map((disc) =>
-      disc.getBoundingClientRect(),
+    const discs = [...svg.querySelectorAll("g.nodes > g > rect.card")].map((card) =>
+      card.getBoundingClientRect(),
     );
     const scale = /scale\(([\d.]+)/.exec(
       svg.querySelector(":scope > g")?.getAttribute("transform") ?? "",
@@ -126,8 +128,8 @@ const placeInPanel = (page: Page) =>
   });
 
 /**
- * Marks the graph drawn now, before a resize, and says where it sits in its panel: the resize
- * keeps the drawing (it is drawn again only for new data) and its zoom.
+ * Marks the graph drawn now, before a resize, and says where it sits in its panel: a resize that
+ * keeps the axis and the cards' width keeps the drawing and its zoom.
  */
 async function markDrawing(page: Page) {
   await graphOf(page)
@@ -137,31 +139,14 @@ async function markDrawing(page: Page) {
 }
 
 /**
- * The drawing marked before a resize is still the one shown, at the same scale, and as centred
- * in the resized panel as it was before.
- */
-async function drawingKept(page: Page, before: Awaited<ReturnType<typeof placeInPanel>>) {
-  await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
-  const now = await placeInPanel(page);
-  expect(now.k).toBe(before.k);
-  expect(Math.abs(now.offset[0] - before.offset[0])).toBeLessThanOrEqual(2);
-  expect(Math.abs(now.offset[1] - before.offset[1])).toBeLessThanOrEqual(2);
-  // A panel no smaller than before still holds every track that was in it. (One that shrank
-  // may cut some off: the zoom was fitted to the larger one, and is kept.)
-  if (now.size[0] >= before.size[0] && now.size[1] >= before.size[1]) {
-    expect(now.outside).toBeLessThanOrEqual(before.outside);
-  }
-  return now;
-}
-
-/**
- * Waits until the layout has settled and the graph has fitted itself to the panel: the fit's
- * transform is set and holds still (it eases in over half a second). The layout runs on the
- * page's clock (installed in beforeEach), which every check first runs forward through the force
- * ticks and the fit, so a layout moved meanwhile (after a resize) settles on it too: on a
- * loaded machine, waiting for them frame by frame takes most of a minute.
+ * Waits until the graph is drawn and its view is set: the zoom's transform is set and holds
+ * still. The page's clock (installed in beforeEach) is first run forward past any glide.
  */
 async function graphFitted(page: Page) {
+  // From md up the map is a row below the columns: scrolled into view, so what is on it can be
+  // pointed at, and the pointer off it, so nothing is pointed at by chance.
+  await graphOf(page).scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
   const fitted = async () => {
     await page.clock.runFor(LAYOUT_MS);
     return graphOf(page)
@@ -205,7 +190,7 @@ test.describe("the genealogy graph", () => {
   }, testInfo) => {
     const problems = collectProblems(page);
     const graph = graphOf(page);
-    const lines = graph.locator("g.links line");
+    const lines = graph.locator("g.links path");
     await expect(lines).toHaveCount(DRAWN.length);
     const drawn = await lines.evaluateAll((elements) =>
       elements.map((line) => [
@@ -215,10 +200,19 @@ test.describe("the genealogy graph", () => {
       ]),
     );
     expect(drawn).toEqual(DRAWN.map(([kind, type, dash]) => [kind, type, dash]));
-    // Each line names its relation in text, hedged when it is not sourced.
-    await expect(graph.locator("g.link-labels text")).toHaveText(
-      DRAWN.map(([, , , label]) => label),
-    );
+    // No relation is written on the map at rest: each link names it, hedged when it is not
+    // sourced, in a chip while it is focused (the view brings it in) or pointed at.
+    await graphFitted(page);
+    await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
+    const targets = graph.locator("g.link-targets path");
+    for (const [index, [, , , label]] of DRAWN.entries()) {
+      await targets.nth(index).focus();
+      await expect(graph.locator(`g.link-chips g.chip[data-link-index="${index}"]`)).toHaveText(
+        label,
+      );
+    }
+    await targets.last().blur();
+    await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
     await expect(page.getByTestId("links-hidden")).toHaveText(
       "1 link not shown: the claim behind it was rejected or cannot be read.",
     );
@@ -226,12 +220,14 @@ test.describe("the genealogy graph", () => {
     await expect(page.getByTestId("genealogy-kinds")).toHaveText("Sourced and not sourced links");
     // The track only the rejected link related is left out with it.
     await expect(graph.locator('g.nodes > g[data-node-id="rejected"]')).toHaveCount(0);
-    // A track is marked as an origin (amber halo) only when a sourced link says this one uses
-    // it: group 2 is not enough. (The panel is too narrow for the "Origin" sub-label.)
-    const halo = (id: string) =>
-      graph.locator(`g.nodes > g[data-node-id="${id}"] > circle`).first();
+    // A track is marked as an origin (amber glow, and its card says so) only when a sourced
+    // link says this one uses it: group 2 is not enough.
+    const halo = (id: string) => graph.locator(`g.nodes > g[data-node-id="${id}"] > rect.card`);
     await expect(halo("sample-sourced")).toHaveAttribute("style", /glow-amber/);
     await expect(halo("model-verified")).toHaveAttribute("style", /glow-amber/);
+    const tag = (id: string) => graph.locator(`g.nodes > g[data-node-id="${id}"] .sub-label`);
+    await expect(tag("sample-sourced")).toHaveText("Origin");
+    await expect(tag("current")).toHaveText("This track");
     // A track that remixes this one (a sourced link, the other way) is no origin either.
     for (const id of [
       "sample-inferred",
@@ -241,6 +237,7 @@ test.describe("the genealogy graph", () => {
       "remix-sourced",
     ]) {
       await expect(halo(id), id).toHaveAttribute("style", /filter: none/);
+      await expect(tag(id), id).toHaveCount(0);
     }
     expect(problems).toEqual([]);
     await graphFitted(page);
@@ -248,109 +245,152 @@ test.describe("the genealogy graph", () => {
   });
 
   /**
-   * The graph's labels drawn now, each with its box on screen: the tracks' names (with their
-   * tag) and the line labels, the hidden ones apart.
+   * The graph's cards and chips drawn now, each with its box on screen, and whether each card's
+   * words are shown and on top: no link, chip or other card is the topmost element at any point
+   * of a card's text.
    */
-  const graphLabels = (page: Page) =>
-    graphOf(page).evaluate((svg) =>
-      [...svg.querySelectorAll("g.node-label, g.link-labels text")].map((label) => {
-        const box = label.getBoundingClientRect();
+  const graphBoxes = (page: Page) =>
+    graphOf(page).evaluate((svg) => {
+      const panel = svg.getBoundingClientRect();
+      const boxOf = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
+      };
+      const cards = [...svg.querySelectorAll("g.nodes > g")].map((card) => {
+        const words = card.querySelector("g.node-label");
+        // Points along the middle of each line of words that are inside the panel.
+        const covered = [...card.querySelectorAll("tspan, text.sub-label")].flatMap((line) => {
+          const box = line.getBoundingClientRect();
+          return [0.1, 0.5, 0.9].flatMap((at) => {
+            const [x, y] = [box.x + box.width * at, box.y + box.height / 2];
+            if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) return [];
+            const hit = document.elementFromPoint(x, y);
+            return hit && !card.contains(hit) ? [hit.tagName] : [];
+          });
+        });
         return {
-          kind: label.matches("g.node-label") ? "name" : "line",
-          id: label.closest("[data-node-id]")?.getAttribute("data-node-id") ?? null,
-          shown: getComputedStyle(label).visibility !== "hidden",
-          box: { x: box.x, y: box.y, right: box.right, bottom: box.bottom },
+          id: card.getAttribute("data-node-id"),
+          shown: words !== null && getComputedStyle(words).visibility !== "hidden",
+          covered,
+          box: boxOf(card.querySelector("rect.card") as Element),
         };
-      }),
-    );
+      });
+      const chips = [...svg.querySelectorAll("g.link-chips g.chip")].map((chip) => ({
+        text: chip.textContent,
+        box: boxOf(chip.querySelector("rect") as Element),
+      }));
+      return { cards, chips };
+    });
 
-  /** Whether two label boxes overlap on screen. */
+  /** Whether two boxes overlap on screen. */
   const overlap = (
     a: { x: number; y: number; right: number; bottom: number },
     b: { x: number; y: number; right: number; bottom: number },
   ) => a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
 
-  // The line labels main showed at 9 px; at 12 px, a label may move along its line (or below it)
-  // to keep at least as many relation words on the graph.
-  const LINE_LABEL_FLOOR: Record<number, number> = { 320: 8, 768: 4, 1024: 4, 1440: 8 };
-
+  // #217: no line, chip or card over a name, and no name hidden (the map used to let a line's
+  // label sit over a name, and hid the names that gave way).
   for (const width of [320, 768, 1024, 1440]) {
-    test(`at ${width} px shows no two names or two line labels over each other, and keeps this track's name and the pointed one`, async ({
+    test(`at ${width} px shows every name, with no line, chip or other card over it`, async ({
       page,
     }) => {
       if (width !== 1440) {
-        await graphFitted(page);
-        const placed = await markDrawing(page);
         await page.setViewportSize({ width, height: 900 });
         if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
-        await graphFitted(page);
-        await drawingKept(page, placed);
       }
       await graphFitted(page);
-      const labels = await graphLabels(page);
-      const shown = labels.filter((label) => label.shown);
-      // Names never overlap names, nor line labels line labels. A line label may sit over a
-      // name (it is drawn above it, on a band of the page's colour), never over this track's.
-      for (let i = 0; i < shown.length; i += 1) {
-        for (let j = i + 1; j < shown.length; j += 1) {
-          if (shown[i].kind !== shown[j].kind) continue;
-          expect(
-            overlap(shown[i].box, shown[j].box),
-            `${shown[i].kind} ${shown[i].id ?? i} and ${shown[j].id ?? j}`,
-          ).toBe(false);
+      const { cards, chips } = await graphBoxes(page);
+      expect(cards).toHaveLength(18);
+      expect(chips).toEqual([]);
+      for (const card of cards) {
+        // Never hidden, and nothing drawn over its words.
+        expect(card.shown, `${card.id} shown`).toBe(true);
+        expect(card.covered, `what covers ${card.id}`).toEqual([]);
+        for (const other of cards) {
+          if (other !== card) {
+            expect(overlap(card.box, other.box), `${card.id} and ${other.id}`).toBe(false);
+          }
         }
       }
-      const lines = shown.filter((label) => label.kind === "line");
-      expect(lines.length).toBeGreaterThanOrEqual(LINE_LABEL_FLOOR[width]);
-      // This track's name is always shown, and nothing covers it.
-      const current = await graphOf(page)
-        .locator('g.nodes > g[role="img"]')
-        .getAttribute("data-node-id");
-      const currentName = shown.find((label) => label.kind === "name" && label.id === current);
-      expect(currentName).toBeDefined();
-      for (const line of lines) {
-        expect(
-          overlap(line.box, currentName?.box ?? line.box),
-          "a line over this track's name",
-        ).toBe(false);
-      }
-      // A track whose name gave way shows it, uncovered, while the pointer is on the track, and
-      // hides it again after; the name is in the track's label for screen readers either way.
-      const hidden = labels.find((label) => label.kind === "name" && !label.shown);
-      expect(hidden?.id).toBeTruthy();
-      const track = graphOf(page).locator(`g.nodes > g[data-node-id="${hidden?.id}"]`);
+      // Focusing a track (the view brings it in) and pointing at it shows its relations in
+      // chips, never over a card; the names stay.
+      const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
       await expect(track).toHaveAttribute("aria-label", /\S/);
+      await track.focus();
       await track.dispatchEvent("mouseenter");
-      const pointedLabels = await graphLabels(page);
-      const pointed = pointedLabels.find((label) => label.id === hidden?.id);
-      expect(pointed?.shown).toBe(true);
-      for (const other of pointedLabels.filter((label) => label.shown && label !== pointed)) {
-        expect(
-          overlap(other.box, pointed?.box ?? other.box),
-          `${other.kind} over the pointed name`,
-        ).toBe(false);
+      const pointed = await graphBoxes(page);
+      expect(pointed.chips.length).toBeGreaterThan(0);
+      for (const chip of pointed.chips) {
+        for (const card of pointed.cards) {
+          expect(overlap(chip.box, card.box), `chip "${chip.text}" over ${card.id}`).toBe(false);
+        }
       }
+      expect(pointed.cards.every((card) => card.shown)).toBe(true);
       await track.dispatchEvent("mouseleave");
-      const after = (await graphLabels(page)).find((label) => label.id === hidden?.id);
-      expect(after?.shown).toBe(false);
+      await track.blur();
+      expect((await graphBoxes(page)).chips).toEqual([]);
     });
   }
 
-  test("keeps the graph centred and whole when its panel narrows, then widens", async ({
+  test("keeps the drawing and its zoom when its row widens, and lays the years down a phone's tab", async ({
     page,
   }) => {
-    // Fitted to the panel at 1440 px; then 1024 px (a narrower panel) and 1920 px (a wider one).
+    // At 1440 px the map is a full-width row, its years from left to right, wider than the
+    // panel; at 1920 px the same drawing is kept at the same zoom, and the row holds the whole
+    // map: it is centred across the panel, no card cut at its sides. On a phone the years run
+    // from top to bottom: drawn again.
     await graphFitted(page);
     const placed = await markDrawing(page);
-    expect(placed.outside).toBe(0);
-    await page.setViewportSize({ width: 1024, height: 900 });
-    await graphFitted(page);
-    await drawingKept(page, placed);
+    expect(placed.outside).toBeGreaterThan(0);
+    const ends = () =>
+      graphOf(page).evaluate((svg) => {
+        const panel = svg.getBoundingClientRect();
+        const cards = [...svg.querySelectorAll("g.nodes rect.card")].map((card) =>
+          card.getBoundingClientRect(),
+        );
+        return {
+          left: Math.min(...cards.map((card) => card.left)) - panel.left,
+          right: panel.right - Math.max(...cards.map((card) => card.right)),
+        };
+      });
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
-    const now = await drawingKept(page, placed);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
+    const now = await placeInPanel(page);
+    expect(now.k).toBe(placed.k);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
-    expect(now.outside).toBe(0);
+    const after = await ends();
+    expect(after.left).toBeGreaterThan(0);
+    expect(after.right).toBeGreaterThan(0);
+    expect(Math.abs(after.left - after.right)).toBeLessThanOrEqual(48);
+    const years = () =>
+      graphOf(page)
+        .locator("text.year-tick")
+        .evaluateAll((ticks) =>
+          ticks.map((tick) => {
+            const box = tick.getBoundingClientRect();
+            return { label: tick.textContent, x: box.x, y: box.y };
+          }),
+        );
+    const row = await years();
+    // The years records give the tracks; the model's tracks (their year in their label only)
+    // are undated, before the first year, as they would feed this one.
+    expect(row.map((tick) => tick.label)).toEqual([
+      "Undated",
+      "1977",
+      "1979",
+      "1984",
+      "2011",
+      "2015",
+    ]);
+    expect(row[1].x).toBeGreaterThan(row[0].x);
+    expect(row[1].y).toBeCloseTo(row[0].y, 0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("tab", { name: "Connections" }).click();
+    await graphFitted(page);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(0);
+    const column = await years();
+    expect(column[1].y).toBeGreaterThan(column[0].y);
   });
 
   test("has a legend in words for the lines and every relation shown", async ({ page }) => {
@@ -376,43 +416,54 @@ test.describe("the genealogy graph", () => {
   test("shows a link's relation and provenance under the mouse", async ({ page }, testInfo) => {
     await graphFitted(page);
     const detail = page.getByTestId("link-detail");
-    // A real pointer on the first link, at the first point along it where nothing else (a
-    // track, another link) is on top: the browser's own hit-testing decides what is hovered.
+    // A real pointer on a link, at the first point along it where nothing else (a track,
+    // another link) is on top: the browser's own hit-testing decides what is hovered. The last
+    // link is drawn above the others (seventeen links meet at this track's card), and lies in
+    // the first view, by this track.
     const point = await graphOf(page)
-      .locator("g.link-targets line")
-      .first()
-      .evaluate((line: SVGLineElement) => {
+      .locator("g.link-targets path")
+      .last()
+      .evaluate((line: SVGPathElement) => {
         const length = line.getTotalLength();
         const matrix = line.getScreenCTM();
-        if (!matrix) throw new Error("no screen matrix");
+        const panel = line.ownerSVGElement?.getBoundingClientRect();
+        if (!matrix || !panel) throw new Error("no screen matrix");
         const seen: string[] = [];
-        for (let step = 2; step <= 8; step += 1) {
-          const at = line.getPointAtLength((length * step) / 10);
+        // Along the part of the link in the panel's view (the map may run past it).
+        for (let step = 1; step <= 19; step += 1) {
+          const at = line.getPointAtLength((length * step) / 20);
           const x = at.x * matrix.a + at.y * matrix.c + matrix.e;
           const y = at.x * matrix.b + at.y * matrix.d + matrix.f;
+          if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) continue;
           const hit = document.elementFromPoint(x, y);
           if (hit === line) return { x, y };
           seen.push(
             `${Math.round(x)},${Math.round(y)}: ${hit?.tagName} ${hit?.outerHTML.slice(0, 80)}`,
           );
         }
-        throw new Error(`the first link is covered all along:\n${seen.join("\n")}`);
+        throw new Error(`the link is covered all along:\n${seen.join("\n")}`);
       });
     await page.mouse.move(point.x, point.y);
     await expect(detail).toHaveText(
-      `${CURRENT} samples Sourced Sample - Someone (1984)Sourced · cites ${MB_SOURCED}`,
+      "Backwards Sample - Someone (2020) and Bright Lines (2011) are related (direction unknown)" +
+        "Model inference · stated as a sample; the years (2020 and 2011) do not fit this " +
+        `direction; cites ${MB}, not checked by a verifier`,
+    );
+    // Its chip names it, clear of the cards.
+    await expect(graphOf(page).locator("g.link-chips g.chip")).toHaveText(
+      "Related, direction unknown",
     );
     await screenshot(page, testInfo, "hover", page.locator("#panel-genealogy"));
     await page.mouse.move(5, 5);
     await expect(detail).toHaveCount(0);
   });
 
-  test("is one tab stop; arrow keys move between tracks and links; Enter analyses a track", async ({
+  test("is one tab stop; arrow keys move between tracks and links; Enter selects a track, Analyze analyses it", async ({
     page,
   }, testInfo) => {
     const graph = graphOf(page);
     const tracks = graph.locator("g.nodes > g");
-    const targets = graph.locator("g.link-targets line");
+    const targets = graph.locator("g.link-targets path");
     const detail = page.getByTestId("link-detail");
     // Keys act on the settled graph, not on one still being laid out.
     await graphFitted(page);
@@ -425,12 +476,13 @@ test.describe("the genealogy graph", () => {
     await expect(tracks.first()).not.toBeFocused();
     await page.keyboard.press("Tab");
     await expect(tracks.first()).toBeFocused();
-    await expect(detail).toHaveText(`${CURRENT}The analyzed track`);
+    // The track named whole, as its card says it.
+    await expect(detail).toHaveText("Bright Lines by Test Artist (2011)The analyzed track");
 
     await page.keyboard.press("ArrowRight");
     await expect(tracks.nth(1)).toBeFocused();
     await expect(detail).toContainText(`${CURRENT} samples Sourced Sample - Someone (1984)`);
-    await expect(detail).toContainText("Enter: analyze this track");
+    await expect(detail).toContainText("Enter: show its details");
     await screenshot(page, testInfo, "focus-track", page.locator("#panel-genealogy"));
 
     // End: the last link; its provenance stays while focused, whatever the pointer does.
@@ -450,14 +502,20 @@ test.describe("the genealogy graph", () => {
     await expect(page.getByText("Links as a list (17)")).toBeFocused();
     await expect(detail).toHaveCount(0);
 
-    // Enter on a track analyses it.
+    // Enter on a track selects it and opens its details, with the focus; it analyses nothing.
+    const analyses = async () =>
+      (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`));
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
-    await expect
-      .poll(async () => (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`)))
-      .toHaveLength(2);
+    const panel = page.getByTestId("node-detail");
+    await expect(panel).toBeFocused();
+    await expect(tracks.nth(1)).toHaveAttribute("aria-pressed", "true");
+    expect(await analyses()).toHaveLength(1);
+    // "Analyze this track" analyses it.
+    await panel.getByRole("button", { name: "Analyze this track" }).click();
+    await expect.poll(analyses).toHaveLength(2);
   });
 
   test("gives screen readers the summary and the focused item, not every drawn word", async ({
@@ -534,14 +592,17 @@ test.describe("the genealogy graph", () => {
       page,
     }, testInfo) => {
       await graphFitted(page);
-      const placed = await markDrawing(page);
       await page.setViewportSize({ width, height });
       await page.getByRole("tab", { name: "Connections" }).click();
       const panel = page.locator("#panel-genealogy");
       const tabBar = page.getByRole("tablist", { name: "Player sections" });
       await expect(page.getByRole("group", { name: "Link legend" })).toBeVisible();
       await graphFitted(page);
-      await drawingKept(page, placed);
+      // Laid out again for the phone: the years from top to bottom.
+      const ticks = await graphOf(page)
+        .locator("text.year-tick")
+        .evaluateAll((list) => list.map((tick) => tick.getBoundingClientRect().y));
+      expect(ticks[1]).toBeGreaterThan(ticks[0]);
       const [panelBox, barBox, graphBox] = await Promise.all([
         panel.boundingBox(),
         tabBar.boundingBox(),
@@ -590,14 +651,17 @@ test.describe("a related track's preview", () => {
     await openPlayer(page);
     const problems = collectProblems(page);
 
-    // The pointer on the track plays nothing. The track is an origin: its hint says a click
-    // explores it (it analyses the track), and no hint offers a preview there.
+    // The pointer on the track plays nothing, and no hint offers a preview (or anything) there:
+    // a click selects the track, and its panel says what it offers.
     const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
+    // In view first (the hint is placed in view, near its card).
+    await track.focus();
+    await track.blur();
     await track.dispatchEvent("mouseenter");
     await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
-    await expect(graphOf(page).locator(".preview-indicator")).toHaveText(/Analyze this track/);
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(0);
     await expect(graphOf(page)).not.toContainText(/PREVIEW/);
     await track.dispatchEvent("mouseleave");
 

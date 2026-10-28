@@ -195,16 +195,43 @@ export function linkDisplayKind(
   });
 }
 
-/** The release year at the end of a node's label ("Title - Artist (1984)"), or null. */
-export function yearOf(node: NamedNode | undefined): number | null {
-  const match = node ? /\((\d{4})\)\s*$/.exec(node.label) : null;
-  return match ? Number(match[1]) : (node?.year ?? null);
+/** A year in brackets at the end of a label: "Title - Artist (1984)". */
+export const LABEL_YEAR = /\s*\((\d{4})\)\s*$/;
+
+/** The year a label ends with, when it is one a node may carry (as `nodeYear` reads one). */
+export function labelYear(label: string): number | null {
+  const match = LABEL_YEAR.exec(label);
+  return match ? nodeYear(Number(match[1])) : null;
 }
 
-/** How a relation names a track: its title and year, or its label (which carries both). */
+/**
+ * A node's release year for the direction check (`readLink`): the one the API took from
+ * MusicBrainz (`year`; the analysed track's falls back on the result's release year), else the
+ * one its label ends with; null otherwise. A track is never named or placed by it: a label's year
+ * may be the model's (`recordYear`).
+ */
+export function yearOf(node: NamedNode | undefined): number | null {
+  if (!node) return null;
+  return node.year ?? labelYear(node.label);
+}
+
+/**
+ * A node's year as a record dates it: the one the API took from MusicBrainz (`year`), or, for the
+ * analysed track, the result's release year (both set by `nodesById`); null otherwise. Never a
+ * year from a label: the model writes its tracks as "Title - Artist (Year)", and a year it wrote
+ * is not a record's. The map places a card and prints its year from this alone.
+ */
+export function recordYear(node: NamedNode | undefined): number | null {
+  return node?.year ?? null;
+}
+
+/**
+ * How a relation names a track: its title and the year a record gives it (`recordYear`; never a
+ * year the model wrote in a label), or, with no title of its own, its label as written.
+ */
 export function nodeName(node: NamedNode | undefined, id: string): string {
   if (!node) return id;
-  const year = yearOf(node);
+  const year = recordYear(node);
   const title = node.trackTitle?.trim();
   return title ? `${title}${year === null ? '' : ` (${year})`}` : node.label;
 }

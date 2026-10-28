@@ -1,7 +1,5 @@
-import type { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
 import type { TrackData, GenealogyNode } from '../../types';
 import type { ResultClaims } from '../provenance/claims';
-import type { ShownLink } from './links';
 
 export interface GenealogyGraphProps {
   data: TrackData['genealogy'];
@@ -22,45 +20,27 @@ export interface GenealogyGraphProps {
   releaseYear?: unknown;
   /** Links the caller left out already because their claim is hidden (said under the legend). */
   hiddenLinks?: number;
-  // Callback to trigger analysis of a clicked node (infinite navigation)
+  /**
+   * How much of the top of the map the panel's heading covers (px): the map leaves it clear in
+   * its first view, and places no chip there.
+   */
+  topInset?: number;
+  /**
+   * Analyses a related track: called by the detail panel's "Analyze this track", the one way the
+   * map starts an analysis (a click on a card selects it).
+   */
   onNodeClick?: (node: GenealogyNode) => void;
+  /** The analysed track's preview clip, for A/B listening with a selected track. */
+  trackPreviewUrl?: string | null;
+  /**
+   * True for a replayed recording: it keeps no previews (preview links expire), so the detail
+   * panel says they play in a live analysis.
+   */
+  replay?: boolean;
   /**
    * What the mouse wheel does over the graph: 'plain' zooms it (where nothing around it
    * scrolls); 'modifier' leaves the wheel to the page and zooms only with Ctrl or ⌘ held (a
    * trackpad pinch sends that too). A touch pinch zooms either way.
    */
   wheelZoom?: 'plain' | 'modifier';
-}
-
-// Extend D3 types for our specific data structure
-export interface CustomNode extends SimulationNodeDatum {
-  id: string;
-  group: number;
-  label: string;
-  img?: string;
-  size: number;
-  // D3 simulation adds these properties
-  x?: number;
-  y?: number;
-  // Audio & navigation fields
-  previewUrl?: string;
-  spotifyId?: string;
-  trackTitle?: string;
-  trackArtist?: string;
-}
-
-export interface CustomLink extends SimulationLinkDatum<CustomNode> {
-  source: CustomNode | string;
-  target: CustomNode | string;
-  value: number;
-  /** The link's position in the shown links (d3-force sets `index` itself). */
-  n: number;
-  /** The link as the app shows it: its kind, relation and citations. */
-  shown: ShownLink;
-  /**
-   * Where its label sits: how far along the line, from source (0) to target (1), and whether
-   * below the line rather than above; none while the label is hidden (the middle, above, until
-   * the labels are first placed).
-   */
-  labelPlace?: { at: number; below: boolean };
 }

@@ -224,6 +224,64 @@ describe("more facts as verified claims", () => {
   });
 });
 
+describe("a new fact that restates a code-built claim of the run", () => {
+  /** The run's code-built claim on ev-1, as codeClaims.ts builds one from its record. */
+  const built: Claim = {
+    id: "code-1",
+    text: PACK[0].excerpt,
+    about: "production",
+    kind: "sourced",
+    origin: "code",
+    evidenceIds: ["ev-1"],
+    verdict: null,
+    verdictReason: null,
+    numericCheck: "n/a",
+    scope: "recording",
+  };
+
+  it("is not sent: the run already states it, on the same record", async () => {
+    const llm = fakeModel({ cards: cards(), judge: judgeByText });
+    const app = createTestApp(
+      createFactoidsRouter({
+        llm,
+        loadRun: (id) => (id === RUN_ID ? storedRun(PACK, [], [built]) : null),
+      }),
+    );
+    const res = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], runId: RUN_ID })
+      .timeout(5000);
+
+    expect(res.status).toBe(200);
+    const texts = res.body.factoids.map((factoid: { content: string }) => factoid.content);
+    expect(texts).toEqual([UNCITED, UNSUPPORTED]);
+    expect(res.body.claims.map((claim: Claim) => claim.text)).toEqual([UNCITED, UNSUPPORTED]);
+    // The judge still checked it: a restatement is known only once it is judged.
+    expect(llm.calls.filter(isJudge)).toHaveLength(1);
+  });
+
+  it("is sent when it says more than the record: another name, another number", async () => {
+    const more = "The synth line was played on a Roland Juno-106 at home by Thomas Bangalter.";
+    const llm = fakeModel({
+      cards: [card(more, ["ev-1"]), null, null],
+      judge: () => "supported",
+    });
+    const app = createTestApp(
+      createFactoidsRouter({
+        llm,
+        loadRun: (id) => (id === RUN_ID ? storedRun(PACK, [], [built]) : null),
+      }),
+    );
+    const res = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], runId: RUN_ID })
+      .timeout(5000);
+    expect(res.body.factoids.map((factoid: { content: string }) => factoid.content)).toEqual([
+      more,
+    ]);
+  });
+});
+
 describe("a relation from more facts is stated whole, as the analysis states it", () => {
   const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
   const sampleCard = (text: string, evidenceIds: string[]) => ({

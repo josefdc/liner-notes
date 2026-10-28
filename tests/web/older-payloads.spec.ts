@@ -48,8 +48,9 @@ test("a result with missing lists renders, graph included", async ({ page }) => 
   await expect(page.getByRole("group", { name: "Song structure" })).toContainText(
     "Song sections not analyzed",
   );
-  const graph = page.locator("#panel-genealogy svg");
-  await expect(graph.locator("g.nodes > g")).toHaveCount(2);
-  await expect(graph.locator("g.links line")).toHaveCount(0);
+  // No relation: the compact row, with its two tracks and no relation drawn.
+  const row = page.locator('#panel-genealogy [data-testid="lineage-row"]');
+  await expect(row.locator("[data-lineage-card]")).toHaveCount(2);
+  await expect(row.locator("[data-relation-chip]")).toHaveCount(0);
   expect(problems.filter((p) => p.startsWith("pageerror"))).toEqual([]);
 });

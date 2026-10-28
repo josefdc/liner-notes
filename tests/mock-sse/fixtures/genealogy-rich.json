@@ -1,0 +1,522 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "thread-genealogy-kinds",
+        "seq": 0,
+        "threadId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "heartbeat",
+        "runId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 1,
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 2,
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "runId": "thread-genealogy-kinds",
+        "seq": 3,
+        "data": {
+          "id": "t-genealogy-kinds",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-full",
+          "releaseYear": "2011",
+          "bpm": null,
+          "key": null,
+          "energy": null,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "durationSeconds": 240,
+          "genreProfile": [
+            {
+              "genre": "Synthpop",
+              "value": 80
+            },
+            {
+              "genre": "Electronic",
+              "value": 70
+            },
+            {
+              "genre": "Rock",
+              "value": 20
+            },
+            {
+              "genre": "Pop",
+              "value": 55
+            },
+            {
+              "genre": "Ambient",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist",
+                "size": 24,
+                "trackTitle": "Bright Lines",
+                "trackArtist": "Test Artist",
+                "year": 2011
+              },
+              {
+                "id": "s1",
+                "group": 2,
+                "label": "Here Comes the Hotstepper (Heartical Mix) [feat. Somebody Else and the Very Long Collective] - Ini Kamoze & The Very Long Collective",
+                "size": 24,
+                "trackTitle": "Here Comes the Hotstepper (Heartical Mix) [feat. Somebody Else and the Very Long Collective]",
+                "trackArtist": "Ini Kamoze & The Very Long Collective",
+                "year": 1994
+              },
+              {
+                "id": "s2",
+                "group": 2,
+                "label": "Funky Drummer, Parts 1 & 2 - James Brown",
+                "size": 24,
+                "trackTitle": "Funky Drummer, Parts 1 & 2",
+                "trackArtist": "James Brown",
+                "year": 1970
+              },
+              {
+                "id": "s3",
+                "group": 2,
+                "label": "Amen, Brother - The Winstons",
+                "size": 24,
+                "trackTitle": "Amen, Brother",
+                "trackArtist": "The Winstons",
+                "year": 1969
+              },
+              {
+                "id": "s4",
+                "group": 2,
+                "label": "Impeach the President - The Honey Drippers",
+                "size": 24,
+                "trackTitle": "Impeach the President",
+                "trackArtist": "The Honey Drippers",
+                "year": 1973
+              },
+              {
+                "id": "s5",
+                "group": 2,
+                "label": "Undated Loop Source - Library Music",
+                "size": 24,
+                "trackTitle": "Undated Loop Source",
+                "trackArtist": "Library Music"
+              },
+              {
+                "id": "s6",
+                "group": 2,
+                "label": "Another Undated Source - Unknown",
+                "size": 24,
+                "trackTitle": "Another Undated Source",
+                "trackArtist": "Unknown"
+              },
+              {
+                "id": "d1",
+                "group": 3,
+                "label": "Bright Lines (Extended Club Remix by Somebody Famous) - DJ Whoever",
+                "size": 24,
+                "trackTitle": "Bright Lines (Extended Club Remix by Somebody Famous)",
+                "trackArtist": "DJ Whoever",
+                "year": 2013
+              },
+              {
+                "id": "d2",
+                "group": 3,
+                "label": "Cover Version - Band",
+                "size": 24,
+                "trackTitle": "Cover Version",
+                "trackArtist": "Band",
+                "year": 2016
+              },
+              {
+                "id": "d3",
+                "group": 3,
+                "label": "Supercalifragilisticexpialidociouslyremixedforever - Remixer",
+                "size": 24,
+                "trackTitle": "Supercalifragilisticexpialidociouslyremixedforever",
+                "trackArtist": "Remixer",
+                "year": 2016
+              },
+              {
+                "id": "d4",
+                "group": 3,
+                "label": "Remix 3 - Remixer",
+                "size": 24,
+                "trackTitle": "Remix 3",
+                "trackArtist": "Remixer",
+                "year": 2016
+              },
+              {
+                "id": "h1",
+                "group": 4,
+                "label": "Sibling That Also Samples Funky Drummer - Public Enemy",
+                "size": 24,
+                "trackTitle": "Sibling That Also Samples Funky Drummer",
+                "trackArtist": "Public Enemy",
+                "year": 1988
+              },
+              {
+                "id": "h2",
+                "group": 4,
+                "label": "Sibling Two - N.W.A",
+                "size": 24,
+                "trackTitle": "Sibling Two",
+                "trackArtist": "N.W.A",
+                "year": 1988
+              },
+              {
+                "id": "h3",
+                "group": 4,
+                "label": "What Amen Brother Sampled - Someone Old",
+                "size": 24,
+                "trackTitle": "What Amen Brother Sampled",
+                "trackArtist": "Someone Old",
+                "year": 1960
+              },
+              {
+                "id": "h4",
+                "group": 4,
+                "label": "Undated Second Hop - Someone",
+                "size": 24,
+                "trackTitle": "Undated Second Hop",
+                "trackArtist": "Someone"
+              },
+              {
+                "id": "i1",
+                "group": 4,
+                "label": "Influence One - Influencer",
+                "size": 24,
+                "trackTitle": "Influence One",
+                "trackArtist": "Influencer",
+                "year": 2001
+              }
+            ],
+            "links": [
+              {
+                "source": "s1",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s2",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s3",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s4",
+                "target": "current",
+                "value": 3,
+                "type": "interpolation",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s5",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s6",
+                "target": "current",
+                "value": 3,
+                "type": "cover",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d1",
+                "value": 3,
+                "type": "remix",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d2",
+                "value": 3,
+                "type": "cover",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d3",
+                "value": 3,
+                "type": "remix",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d4",
+                "value": 3,
+                "type": "remix",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s2",
+                "target": "h1",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s2",
+                "target": "h2",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "h3",
+                "target": "s3",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s3",
+                "target": "h4",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "h1",
+                "target": "h2",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "i1",
+                "target": "current",
+                "value": 3,
+                "type": "influence",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "h3",
+                "target": "current",
+                "value": 3,
+                "type": "influence",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "s4",
+                "target": "h1",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s1",
+                "target": "d1",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "h4",
+                "target": "current",
+                "value": 3,
+                "type": "influence",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              }
+            ]
+          },
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "evidence": [
+            {
+              "id": "ev-mb-1",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000001",
+              "title": "Bright Lines (recording)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "track/recording/00000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "ev-shs-1",
+              "source": "secondhandsongs",
+              "sourceTier": "primary-record",
+              "url": "https://secondhandsongs.com/performance/1",
+              "title": "Bright Lines (performance)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "work/performance/1"
+            },
+            {
+              "id": "ev-discogs-1",
+              "source": "discogs",
+              "sourceTier": "primary-record",
+              "url": "https://www.discogs.com/release/1",
+              "title": "Test Album (release)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "release/1"
+            },
+            {
+              "id": "ev-web-1",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://example.org/article",
+              "title": "An article about Bright Lines",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": null
+            }
+          ],
+          "audioUnavailableReason": "no_preview",
+          "audio": null,
+          "claims": [
+            {
+              "id": "cl-supported",
+              "text": "Bright Lines samples Verified Model Sample.",
+              "about": "sample",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-mb-1"],
+              "verdict": "supported",
+              "verdictReason": "The record lists the sample.",
+              "numericCheck": "n/a"
+            }
+          ]
+        }
+      },
+      {
+        "type": "done",
+        "runId": "thread-genealogy-kinds",
+        "seq": 4,
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

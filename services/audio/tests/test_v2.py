@@ -1886,6 +1886,12 @@ def test_a_tubular_bell_holds_still_but_spells_a_chord():
     assert evidence.still and evidence.chord and not evidence.single, evidence
 
 
+def one_source_withheld(signals_: estimators.Signals) -> bool:
+    """The key is withheld as one pitched source, under whatever reason that code is given."""
+    withheld = signals_.key_withheld()
+    return withheld is not None and withheld.code == "one_pitched_source"
+
+
 @pytest.mark.seeded
 @pytest.mark.parametrize("family", signals.CHORD_KEYED_SEEDED)
 def test_chords_keep_the_key_the_other_rules_give_them(family):
@@ -1904,7 +1910,7 @@ def test_chords_keep_the_key_the_other_rules_give_them(family):
         y, _ = make(seed)
         signals_ = estimators.Signals(y, FIXTURE_SR)
         still += signals_.source_evidence.still
-        if str(signals_.key_withheld()) == estimators.ONE_SOURCE:
+        if one_source_withheld(signals_):
             fired.append(seed)
     assert fired == []
     if family != "one-bar-riff":  # its chords change within a bar: the lines move
@@ -1929,7 +1935,7 @@ def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         if level > -6.0:
             assert estimators.spells_chord(notes), (key, level, notes)
-        assert str(s.key_withheld()) != estimators.ONE_SOURCE, (key, level, notes)
+        assert not one_source_withheld(s), (key, level, notes)
 
 
 @pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)
@@ -1952,7 +1958,7 @@ def test_sus_chords_over_their_root_are_chords(kind):
         s = estimators.Signals(signals.sus_chord(root, kind), FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         assert estimators.spells_chord(notes), (root, notes)
-        assert str(s.key_withheld()) != estimators.ONE_SOURCE
+        assert not one_source_withheld(s)
 
 
 @pytest.mark.seeded
@@ -1980,7 +1986,7 @@ def test_a_seventh_chord_with_a_quiet_third_is_a_chord():
 )
 def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
     s = estimators.Signals(signals.fourth_with_quiet_third(), FIXTURE_SR)
-    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+    assert not one_source_withheld(s), s.source_evidence
 
 
 @pytest.mark.xfail(
@@ -1991,7 +1997,7 @@ def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
 )
 def test_a_triad_under_a_bass_15_db_louder_keeps_its_key():
     s = estimators.Signals(signals.triad_under_a_loud_sine_bass(), FIXTURE_SR)
-    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+    assert not one_source_withheld(s), s.source_evidence
 
 
 def test_chord_key_names_each_family_s_key():

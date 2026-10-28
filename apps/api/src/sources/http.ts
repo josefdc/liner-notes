@@ -132,6 +132,12 @@ function hide(pieces: readonly Piece[], hides: readonly Hide[]): Piece[] {
   pieces.forEach((piece, index) => {
     const start = starts[index] as number;
     const end = start + pieceLength(piece);
+    if (end === start) {
+      // A mask written as nothing (a trimmed space): inside a hide it is hidden with it.
+      if (open) open.to = piece.to;
+      else out.push(piece);
+      return;
+    }
     // The part [a, b) of this piece, in the text as it came.
     const part = (a: number, b: number): Piece =>
       piece.mask !== undefined
@@ -539,9 +545,9 @@ const CLOSE_TAG = /<\/((?:[A-Za-z_][\w.-]{0,63}:)?[A-Za-z_][\w.-]{0,63})\s*>/g;
 
 /**
  * Where the content of each element named after a secret key lies, in any case: from its opening
- * tag to the first closing tag of the same name after it, unless it is a status word. An element without one (a placeholder
- * such as "--token <token>" in a usage line) is left alone. Reads the text twice: once for the
- * closing tags, once for the opening ones, each closing tag passed once.
+ * tag to the first closing tag of the same name after it, unless it is a status word. An element
+ * without one (a placeholder such as "--token <token>" in a usage line) is left alone. Reads the
+ * text twice: once for the closing tags, once for the opening ones, each closing tag passed once.
  */
 function elementSpans(text: string): Span[] {
   const closing = new Map<string, Span[]>();
@@ -578,13 +584,16 @@ function elementSpans(text: string): Span[] {
 }
 
 /**
- * A `Name: value` header line: a name at the start of a line (after any indent, or curl's "> "),
- * then its colon. Group 1 is the name.
+ * A `Name: value` header line: a name at the start of a line (after any indent, or curl's "> "
+ * before a request header or "< " before a response header), then its colon. Group 1 is the name.
+ * A line ends at CR, LF, VT, FF, NEL, U+2028 or U+2029.
  */
-const HEADER_LINE = /(?:^|[\r\n])[ \t]*(?:[<>][ \t]+)?([A-Za-z0-9_-]{1,64})[ \t]*:[ \t]*/g;
-/** A header value: one run without whitespace that reaches the end of its line (or a quoted one). */
-const HEADER_VALUE = /\S+/y;
-const HEADER_VALUE_END = /[ \t]*(?:[\r\n]|$)/y;
+const HEADER_LINE =
+  /(?:^|[\r\n\v\f\u0085\u2028\u2029])[ \t]*(?:[<>][ \t]+)?([A-Za-z0-9_-]{1,64})[ \t]*:[ \t]*/g;
+/** A header value: one run without whitespace or NEL to the end of its line (or a quoted one). */
+const HEADER_VALUE = /[^\s\u0085]+/y;
+/** Any whitespace after a header value that is not a line break, then the line's end. */
+const HEADER_VALUE_END = /[^\S\r\n\v\f\u2028\u2029]*(?:[\r\n\v\f\u0085\u2028\u2029]|$)/y;
 
 /**
  * Where the value of each header line for a secret lies (`X-Api-Key: abc`, `Api-Key: abc`,
@@ -635,8 +644,8 @@ function headerLineSpans(text: string): Span[] {
  *   written with escaped line breaks (`\n` inside a JSON string);
  * - an element needs its closing tag (a body cut off inside one keeps the rest), and tags written
  *   as entities (`&lt;token&gt;`) are not read;
- * - a name with "X-" before a secret key is read only on a header line, not as an object key or an
- *   element.
+ * - an "X-" prefix is dropped only from a header line's name: `{ x_auth_token: v }` and
+ *   `<X-Auth-Token>` are not read, while `x-api-key`, a secret key itself, is read in every shape.
  */
 const unquotedKeySpans = (text: string) =>
   maskableUnion(objectKeySpans(text), maskableUnion(elementSpans(text), headerLineSpans(text)));
@@ -647,7 +656,14 @@ const unquotedKeySpans = (text: string) =>
  * only grows.
  */
 function maskSource(pieces: readonly Piece[], spans: readonly Span[]): Piece[] {
-  if (spans.length === 0) return [...pieces];
+  return spans.length === 0 ? [...pieces] : hide(pieces, sourceHides(pieces, spans));
+}
+
+/**
+ * `spans` of the text as it came (sorted by start) as hides behind "[redacted]" in the text that
+ * `pieces` read as: each reaches to the ends of a mask it starts or ends inside.
+ */
+function sourceHides(pieces: readonly Piece[], spans: readonly Span[]): Hide[] {
   const hides: Hide[] = [];
   let index = 0;
   let at = 0;
@@ -662,9 +678,16 @@ function maskSource(pieces: readonly Piece[], spans: readonly Span[]): Piece[] {
     if (piece.mask !== undefined) return end ? at + piece.mask.length : at;
     return at + (offset - piece.from);
   };
-  for (const [start, end, mask] of spanHides(spans))
+  // An empty span hides nothing: where a mask already touches it, it is not written again.
+  let maskEnds: Set<number> | undefined;
+  for (const [start, end, mask] of spanHides(spans)) {
+    if (start === end) {
+      maskEnds ??= new Set(pieces.flatMap((p) => (p.mask === undefined ? [] : [p.from, p.to])));
+      if (maskEnds.has(start)) continue;
+    }
     hides.push([position(start, false), position(end, true), mask]);
-  return hide(pieces, hides);
+  }
+  return hides;
 }
 
 /**
@@ -685,7 +708,11 @@ function maskSource(pieces: readonly Piece[], spans: readonly Span[]): Piece[] {
  * a secret value cannot move a later pair and show what the rule hid before. Text without a secret
  * value reads as it always did.
  */
-function redactKeyValues(text: string, steps: readonly HideStep[]): string {
+function redactKeyValues(
+  text: string,
+  steps: readonly HideStep[],
+  extra: readonly Span[] = [],
+): string {
   const quoted = quotedSecretSpans(text);
   const header = /header/i.test(text);
   const first = header
@@ -697,11 +724,11 @@ function redactKeyValues(text: string, steps: readonly HideStep[]): string {
     hide(wholeText(text), spanHides(first)),
   );
   const unquoted = unquotedKeySpans(text);
-  if (unquoted.length === 0) return render(text, pieces);
+  if (unquoted.length === 0 && extra.length === 0) return render(text, pieces);
   const values = header
     ? mergeSpans(unquoted, doubleQuotedSpans(text, maskableUnion(quoted, unquoted)))
     : unquoted;
-  return render(text, maskSource(pieces, values));
+  return render(text, maskSource(pieces, mergeSpans(values, extra)));
 }
 
 /** Removes credentials from an error message or log line (redactKeyValues). */
@@ -856,6 +883,8 @@ export function scrubReadText(text: string): string {
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
   const out = redactKeyValues(text, [mediaUrlHides, escapedMediaUrlHides, emailHides, phoneHides]);
+  // The cap falls on the redacted text: where a mask is shorter than what it hides, the capped
+  // text reaches further into the tail than it did before. No rule hides less.
   return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
@@ -1357,31 +1386,67 @@ export function reasonIssue(text: string): string | null {
 }
 
 /**
- * An error message as one line of plain text: whitespace runs become one space, links become
- * "[link]"; undefined when it is empty or has an issue (reasonIssue: markup, a stack trace, a
- * signature or token parameter). What it returns never has one. Credentials are redacted
- * (redactText) while its lines are still lines, so a `Name: value` header line is read as one;
- * whether the message is kept is decided on the text before that, so a mask never lets through
- * what would have been left out.
+ * A message as one line, as steps (so where each character came from is known): whitespace runs
+ * become one space, the line is trimmed, and links become "[link]".
  */
-export function plainMessage(text: string): string | undefined {
-  const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
+const LINE_STEPS: HideStep[] = [
+  (text) => hidesOf(text, /\s+/g, (m) => [m.index, m.index + m[0].length], " "),
+  (text) => {
+    const ends: Hide[] = [];
+    if (text.startsWith(" ")) ends.push([0, 1, ""]);
+    if (text.length > 1 && text.endsWith(" ")) ends.push([text.length - 1, text.length, ""]);
+    return ends;
+  },
+  (text) => hidesOf(text, URL_IN_TEXT, (m) => [m.index, m.index + m[0].length], "[link]"),
+];
+
+/**
+ * A message as one line of plain text, cut to MAX_DETAIL when `cut`; undefined when the line is
+ * empty or has an issue (reasonIssue).
+ *
+ * The line is made as it always was: whitespace runs become one space, links become "[link]",
+ * then the cut; whether it is kept is decided on that line, as before. It is then redacted
+ * (redactText), so a rule that reads across what was a line break (`Bearer` at the end of one
+ * line, its token on the next) reads it as it did on that line. Last, each value of a header line
+ * (headerLineSpans), read on the lines the text had, is masked where it lies in the line; it only
+ * adds to what is hidden. A line whose masks make it longer is cut again.
+ *
+ * A second check leaves out a line whose redacted form has an issue: a mask can make one (the
+ * header rule turns `File "", line 4` into a stack trace). Such a line was kept before, and the
+ * message made from it then held the issue, which the readers of stored results refuse.
+ */
+function plainLine(text: string, cut: boolean): string | undefined {
+  const pieces = runSteps(text, LINE_STEPS);
+  const line = render(text, pieces);
   if (!line || reasonIssue(line) !== null) return undefined;
-  const redacted = redactText(text.replace(URL_IN_TEXT, "[link]")).replace(/\s+/g, " ").trim();
-  return redacted && reasonIssue(redacted) === null ? redacted : undefined;
+  const short = cut && line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
+  const kept = short === line ? line.length : MAX_DETAIL - 1;
+  const headerValues: Span[] = [];
+  for (const [start, end] of sourceHides(pieces, headerLineSpans(text))) {
+    if (start < kept) headerValues.push([start, Math.min(end, kept)]);
+  }
+  const redacted = redactKeyValues(short, [], headerValues);
+  const out =
+    cut && redacted.length > MAX_DETAIL ? `${redacted.slice(0, MAX_DETAIL - 1)}…` : redacted;
+  return reasonIssue(out) === null ? out : undefined;
 }
 
 /**
- * A source's own reason for an error, as a short line of plain text (plainMessage), cut to
+ * An error message as one line of plain text (plainLine): whitespace runs become one space, links
+ * become "[link]", credentials are redacted; undefined when it is empty or has an issue
+ * (reasonIssue: markup, a stack trace, a signature or token parameter). What it returns never has
+ * one.
+ */
+export const plainMessage = (text: string): string | undefined => plainLine(text, false);
+
+/**
+ * A source's own reason for an error, as a short line of plain text (plainLine), cut to
  * MAX_DETAIL: undefined when it is not a string, is empty, or holds markup, a stack trace or a
  * signature or token parameter. Error messages are stored with the result and sent to the
  * client, so a page never reaches them.
  */
 export function plainReason(text: unknown): string | undefined {
-  if (typeof text !== "string") return undefined;
-  const line = plainMessage(text);
-  if (line === undefined) return undefined;
-  return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
+  return typeof text === "string" ? plainLine(text, true) : undefined;
 }
 
 /** What an error status says, in words, for an answer that gave no plain-text reason. */

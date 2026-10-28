@@ -512,6 +512,14 @@ describe("scrubbing", () => {
     // A line that ends in a bare CR, and a space before the colon.
     ["a header line", "Accept: */*\rX-Api-Key: sv-23", "sv-23"],
     ["a header line", "X-Api-Key : sv-24", "sv-24"],
+    ["a header line", "API_KEY: sv-25", "sv-25"],
+    ["a header line", "X-Api-Key: sv-31\u00a0\nHost: a", "sv-31"],
+    // A line also ends at U+2028, U+2029, NEL, VT and FF.
+    ["a header line", "Accept: */*\u2028X-Api-Key: sv-26\u2028Host: a", "sv-26"],
+    ["a header line", "Accept: */*\u2029X-Api-Key: sv-27", "sv-27"],
+    ["a header line", "Accept: */*\u0085X-Api-Key: sv-28\u0085Host: a", "sv-28"],
+    ["a header line", "Accept: */*\vX-Api-Key: sv-29\vHost: a", "sv-29"],
+    ["a header line", "Accept: */*\fX-Api-Key: sv-30\fHost: a", "sv-30"],
     ["an object key", "header rejected: { token: sv-21 }", "sv-21"],
     ["an element", "bad header <token>sv-22</token>", "sv-22"],
   ])("redacts the value of a secret key written as %s: %j", (_shape, text, value) => {
@@ -560,6 +568,16 @@ describe("scrubbing", () => {
     );
     // An escaped backquote is not a quote: the run is the value, backslashes and all.
     expect(redactText("{ token: \\`x\\` }")).toBe("{ token: [redacted] }");
+    // A quoted value is redacted whatever it says; an empty pair the header rule masked is masked
+    // once.
+    expect(redactText('Password: "none"')).toBe('Password: "[redacted]"');
+    expect(redactText('header "" { token: abc }')).toBe(
+      'header "[redacted]" { token: [redacted] }',
+    );
+    // The rules before run in the order they always did: what they hide reads as it did.
+    expect(redactText('\\"token\\":\\""token":key=x@y.co\\"a')).toBe(
+      '\\"token\\":\\"[redacted]\\"a',
+    );
     // A quoted header value is read once: a line inside it is not read again.
     expect(redactText('password: "a\nToken: b"\nnext')).toBe('password: "[redacted]"\nnext');
   });
@@ -595,6 +613,7 @@ describe("scrubbing", () => {
       ["{ token: true, apiKey: False, secret: unknown, id_token: revoked }", "{ token: t1 }"],
       ["{ token: empty }", "{ token: e1 }"],
       ["<error><token>expired</token></error>", "<error><token>expires</token></error>"],
+      ["<token> expired </token>", "<token> expires </token>"],
       // Only "," or "}" ends a value without quotes.
       ["[a, token: x ]", "[a, token: x }"],
       // An empty value has nothing to hide.
@@ -1247,6 +1266,45 @@ describe("what an error message keeps", () => {
     expect(reasonIssue(text)).toBe(issue);
   });
 
+  it("hides a value whose mask a configured credential's value falls inside", () => {
+    // "act" is inside "[redacted]": the mask is hidden whole, never shown in part.
+    const before = process.env.GENIUS_ACCESS_TOKEN;
+    process.env.GENIUS_ACCESS_TOKEN = "act";
+    try {
+      expect(redactText('{"token": "sv-x"}')).toBe('{"token": "[redacted]"}');
+    } finally {
+      if (before === undefined) delete process.env.GENIUS_ACCESS_TOKEN;
+      else process.env.GENIUS_ACCESS_TOKEN = before;
+    }
+  });
+
+  it.each([
+    // A token on the line after "Bearer" or "Basic": the one-line reason reads them together.
+    [" Authorization: Bearer\r\nQzbbQUnauthorizedQzcbQ  QzdbQX-Api-Key: k1", ["QzbbQ", "QzcbQ"]],
+    ["\nX-Api-Key: Basic \r\nQzbbQQzcbQQzdbQQzfbQ", ["QzbbQ", "QzfbQ"]],
+    // Cut where it was always cut, so the token after "Bearer" is whole when it is read.
+    [`${"w ".repeat(40)}{ token: ab } Bearer\nQzAbCdEfGhIjKlMn`, ["QzAbCdEf"]],
+  ])("keeps a token hidden in a reason whose lines are joined: %j", (reason, hidden) => {
+    const detail = plainReason(reason);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail}`).message;
+    for (const value of hidden) {
+      expect(detail, reason).not.toContain(value);
+      expect(message, reason).not.toContain(value);
+    }
+  });
+
+  it("cuts a reason where it always cut it, then redacts it", () => {
+    // Cut before the token is masked: what lay past the cut stays out.
+    const long = `Bearer ${"A1b2C3d4".repeat(5)} ${"w ".repeat(36)}TAILMARK end`;
+    expect(plainReason(long)).toBe(`Bearer [redacted] ${"w ".repeat(35)}w…`);
+    // A mask that makes the line longer is cut again.
+    expect(plainReason(`key=a ${"w ".repeat(80)}`)?.length).toBe(120);
+    // A header value that runs past the cut is masked up to it, and the cut's "…" is kept.
+    expect(plainReason(`${"w ".repeat(45)}\nX-Api-Key: ${"k".repeat(40)}`)).toBe(
+      `${"w ".repeat(45)}X-Api-Key: [redacted]…`,
+    );
+  });
+
   it("redacts a message while its lines are still lines, before it is one line", () => {
     // A header line inside a source's reason: read as a line, then flattened.
     expect(plainMessage("Unauthorized\nX-Api-Key: msg-secret-1")).toBe(
@@ -1260,6 +1318,8 @@ describe("what an error message keeps", () => {
     expect(plainMessage("see https://example.org/x?token=abc123\nnow")).toBe("see [link] now");
     // What would be left out is left out, though its markup was inside a redacted value.
     expect(plainMessage("Unauthorized\nX-Api-Key: <b>k</b>")).toBeUndefined();
+    // A line whose redacted form has an issue is left out: the header rule makes `File ""` a trace.
+    expect(plainMessage('Invalid header File "", line 5')).toBeUndefined();
   });
 
   it("writes a message as a plain line that never has an issue, or leaves it out", () => {

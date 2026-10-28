@@ -2709,7 +2709,7 @@ async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): 
 
 /**
  * The error for a request stopped by its signal: "timeout" when the signal was a deadline
- * (AbortSignal.timeout), "aborted" when the caller cancelled it.
+ * (a TimeoutError reason), "aborted" when the caller cancelled it.
  */
 export function abortError(source: SourceName, signal: AbortSignal, cause?: unknown): SourceError {
   const reason = signal.reason as { name?: string } | undefined;
@@ -2720,8 +2720,15 @@ export function abortError(source: SourceName, signal: AbortSignal, cause?: unkn
 
 async function fetchLive(req: SourceRequest, url: string, method: string): Promise<Recorded> {
   const timeoutMs = req.timeoutMs ?? defaultTimeoutMs();
-  const timeout = AbortSignal.timeout(timeoutMs);
-  const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout;
+  // A timer rather than AbortSignal.timeout: the time limit follows the process's timers, which
+  // a test can drive. Unref'd like AbortSignal.timeout's, so it never holds the process open.
+  const timeout = new AbortController();
+  const timer = setTimeout(
+    () => timeout.abort(new DOMException("The operation timed out.", "TimeoutError")),
+    timeoutMs,
+  );
+  timer.unref?.();
+  const signal = req.signal ? AbortSignal.any([req.signal, timeout.signal]) : timeout.signal;
   try {
     const response = await fetchWithin(req, url, {
       method,
@@ -2757,13 +2764,15 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
   } catch (error) {
     if (isSourceError(error)) throw error;
     if (req.signal?.aborted) throw abortError(req.source, req.signal, error);
-    if (timeout.aborted) {
+    if (timeout.signal.aborted) {
       throw new SourceError(req.source, "timeout", `no answer within ${timeoutMs} ms`, {
         cause: error,
       });
     }
     // No cause: a fetch error can echo a header value, which may be a credential.
     throw new SourceError(req.source, "network", describeError(error));
+  } finally {
+    clearTimeout(timer);
   }
 }
 

@@ -85,6 +85,35 @@ describe("fetchJson", () => {
     expect(error.message).toContain("no answer within 20 ms");
   });
 
+  it("times out on the process's timers, which a test's fake clock drives", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    stubFetch((call) => never(call));
+    const t0 = performance.now();
+    let failedAt = -1;
+    const pending = rejection(fetchJson({ source: "musicbrainz", url: URL_A })).finally(() => {
+      failedAt = performance.now() - t0;
+    });
+    await vi.runAllTimersAsync();
+    const error = await pending;
+
+    expect(error.kind).toBe("timeout");
+    expect(error.message).toContain("no answer within 10000 ms");
+    expect(failedAt).toBe(10_000);
+  });
+
+  it("leaves no timer behind once the answer is in", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    stubFetch(() => json({ ok: 1 }));
+    await expect(fetchJson({ source: "deezer", url: URL_A })).resolves.toEqual({ ok: 1 });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("reports the caller's abort as aborted, not as a timeout", async () => {
     stubFetch((call) => never(call));
     const controller = new AbortController();

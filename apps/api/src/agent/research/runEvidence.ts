@@ -17,13 +17,15 @@
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { SourceError, SourceId } from "@liner-notes/contract";
-import type { CachedEvidence } from "../../store/cache.js";
+import { type CachedEvidence, getCache } from "../../store/cache.js";
 import {
   collectPrimarySources,
   DATES_INCOMPLETE,
+  MAP_INCOMPLETE,
   RELEASES_INCOMPLETE,
   type IdentifiedRecording,
   type PrimarySources,
+  type RecordingCache,
 } from "../../sources/identity.js";
 import { SOURCE_NAMES } from "../prompts.js";
 import { trackQuery, uniqueErrors, unreadableStatus } from "../researcherSubgraph.js";
@@ -69,11 +71,21 @@ export interface PrimaryStart {
   recording: Promise<IdentifiedRecording | null>;
 }
 
+/** The per-recording MusicBrainz cache, or null when the store is not open (it is then not used). */
+function recordingCache(): RecordingCache | null {
+  try {
+    return getCache();
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Starts reading the primary sources for the track from its ISRC (none without one). The
- * collection never throws; a cancelled run reads as unavailable sources, and the caller stops
- * on the signal. `isrcUnread`: the track's Spotify details could not be read, so a missing ISRC
- * is unknown rather than absent, and the status says so.
+ * Starts reading the primary sources for the track from its ISRC (none without one), with the
+ * relations map (the second hop and the related recordings' years, through the per-recording
+ * MusicBrainz cache). The collection never throws; a cancelled run reads as unavailable sources,
+ * and the caller stops on the signal. `isrcUnread`: the track's Spotify details could not be
+ * read, so a missing ISRC is unknown rather than absent, and the status says so.
  */
 export function startPrimarySources(
   spotify: SpotifyData,
@@ -99,7 +111,12 @@ export function startPrimarySources(
       durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
       album: spotify.album || null,
     },
-    { signal, now: runtime.now, onRecording: (found) => identified(found) },
+    {
+      signal,
+      now: runtime.now,
+      onRecording: (found) => identified(found),
+      relationsMap: { cache: recordingCache() },
+    },
   ).then(
     (sources) => ({ status: "read" as const, sources }),
     (error: unknown) => ({ status: "threw" as const, error }),
@@ -201,6 +218,9 @@ const cachedNotAskedNote = (source: SourceId, readAt: string) =>
 const RELEASES_NOTE =
   "MusicBrainz releases incomplete: the recording's releases could not be read, so no release is named for it; a later run reads them";
 
+const MAP_NOTE =
+  "MusicBrainz relations map incomplete: part of the second hop or of the related recordings' years could not be read in time; a later run reads them";
+
 const DATES_NOTE =
   "MusicBrainz release dates incomplete: the work's recordings could not be dated, so its covers are not claimed for this recording; a later run reads them";
 
@@ -266,6 +286,11 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(RELEASES_INCOMPLETE)) {
     incomplete.push({ source: "musicbrainz", part: "releases" });
     warnings.push(RELEASES_NOTE);
+  }
+  // The relations map read in part: its records stand, and a later run reads the rest.
+  if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(MAP_INCOMPLETE)) {
+    incomplete.push({ source: "musicbrainz", part: "map" });
+    warnings.push(MAP_NOTE);
   }
   for (const { source, why } of notAskedSources(read.sources)) {
     incomplete.push({ source, part: "not_asked" });
@@ -362,9 +387,11 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * forums, Rate Your Music, Disqus and Wayback Machine copies of excluded pages, and the comment
  * layouts of Discourse, phpBB, Reddit, Gearspace, YouTube, Disqus, Songfacts and Amazon, with
  * more of XenForo's and MetaFilter's (a row of 7 may hold them, or research text written from
- * them).
+ * them). 9: the relations map is read with the primary sources: related recordings carry their
+ * MusicBrainz first release dates and the second hop's items and relations are kept (a row of 8
+ * has neither, so its map would show no years and no second hop).
  */
-export const CACHED_EVIDENCE_FORMAT = 8;
+export const CACHED_EVIDENCE_FORMAT = 9;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the
@@ -563,7 +590,9 @@ export function cachedRunEvidence(
           ? DATES_NOTE
           : part.part === "releases"
             ? RELEASES_NOTE
-            : cachedNotAskedNote(part.source, cached.readAt),
+            : part.part === "map"
+              ? MAP_NOTE
+              : cachedNotAskedNote(part.source, cached.readAt),
       ),
     ],
   };

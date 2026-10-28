@@ -157,7 +157,13 @@
                 "previewUrl": { "type": "string" },
                 "spotifyId": { "type": "string" },
                 "trackTitle": { "type": "string" },
-                "trackArtist": { "type": "string" }
+                "trackArtist": { "type": "string" },
+                "year": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "mbid": { "type": "string" }
               },
               "required": ["id", "group", "label", "size"]
             },
@@ -552,7 +558,13 @@
                 "previewUrl": { "type": "string" },
                 "spotifyId": { "type": "string" },
                 "trackTitle": { "type": "string" },
-                "trackArtist": { "type": "string" }
+                "trackArtist": { "type": "string" },
+                "year": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "mbid": { "type": "string" }
               },
               "required": ["id", "group", "label", "size"],
               "additionalProperties": false

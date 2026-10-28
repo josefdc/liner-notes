@@ -197,6 +197,10 @@ export const GenealogyNodeSchema = z.object({
   // Parsed metadata for click-to-analyze
   trackTitle: z.string().optional().describe("Song title extracted from label"),
   trackArtist: z.string().optional().describe("Artist name extracted from label"),
+  // Set by code from MusicBrainz for a node built from a record (agent/codeClaims.ts); never a
+  // model's year.
+  year: z.number().int().optional().describe("First release year, from MusicBrainz"),
+  mbid: z.string().optional().describe("MusicBrainz id of the record the node was built from"),
 });
 
 export const GenealogyLinkSchema = z.object({

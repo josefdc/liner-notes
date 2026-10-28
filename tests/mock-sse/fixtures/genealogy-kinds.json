@@ -403,8 +403,8 @@
                 "target": "current",
                 "value": 3,
                 "type": "sample",
-                "kind": "sourced",
-                "origin": "code",
+                "kind": "inferred",
+                "origin": "model",
                 "evidenceIds": ["ev-mb-1"]
               }
             ]

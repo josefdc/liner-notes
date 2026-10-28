@@ -355,6 +355,9 @@ describe("the research key and what a hit trusts", () => {
       "of the format before comment layouts were left out",
       (row) => withEvidence(row, { format: 7 }),
     ],
+    // Written before related recordings were dated and the second hop read: read again, so the
+    // relations map has its years and its second hop.
+    ["of the format before the relations map was read", (row) => withEvidence(row, { format: 8 })],
     [
       "holding a timeout as lasting",
       (row) =>
@@ -473,10 +476,12 @@ describe("what is not cached, or cached for a later run to complete", () => {
       vi.useRealTimers();
     }
     expect((first.out.sourceErrors ?? []).filter((e) => e.code !== "not_configured")).toEqual([]);
-    // The releases are read last, on the dating signal: cut with the dating.
+    // The releases are read last, on the dating signal: cut with the dating, and the relations
+    // map after them.
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "musicbrainz", part: "dates" },
       { source: "musicbrainz", part: "releases" },
+      { source: "musicbrainz", part: "map" },
     ]);
 
     // The dating answers now: the hit asks no model, reads the primary sources and completes the row.
@@ -558,10 +563,12 @@ describe("a row left for a later run", () => {
   it("is never served past the research's own time, however often a hit reads it again", async () => {
     net = stubFetch(undated);
     await onFakeTimers(() => historian(AT));
-    // The releases are read last, on the dating signal: cut with the dating.
+    // The releases are read last, on the dating signal: cut with the dating, and the relations
+    // map after them.
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "musicbrainz", part: "dates" },
       { source: "musicbrainz", part: "releases" },
+      { source: "musicbrainz", part: "map" },
     ]);
     // At +47 h a hit reads the primary sources again (the dating still fails) and asks no model.
     const late = await onFakeTimers(() => historian("2026-10-22T11:00:00.000Z"));

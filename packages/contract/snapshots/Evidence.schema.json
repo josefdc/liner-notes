@@ -29,7 +29,7 @@
       },
       "excerpt": { "type": "string" },
       "recordRef": {
-        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording)",
+        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording). A MusicBrainz relations map record has none: recording/<a>/samples|sampled-by/recording/<b> (a relationship between two other recordings) or recording/<mbid> (another recording and its first release date); it supports no claim",
         "type": ["string", "null"]
       }
     },
@@ -74,7 +74,7 @@
       },
       "excerpt": { "type": "string" },
       "recordRef": {
-        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording)",
+        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording). A MusicBrainz relations map record has none: recording/<a>/samples|sampled-by/recording/<b> (a relationship between two other recordings) or recording/<mbid> (another recording and its first release date); it supports no claim",
         "type": ["string", "null"]
       }
     },

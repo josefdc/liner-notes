@@ -1526,7 +1526,9 @@ function redactKeyValues(
 /**
  * The pieces of `text` as redactKeyValues masks them, with `more` (by default what
  * moreSecretSpans finds) as the values of the shapes it reads; with none, as the other rules
- * alone mask them (with `before` in place of `extra`).
+ * alone mask them (with `before` in place of `extra`). When `more` holds a value, or `extra` holds
+ * more than `before` (the values of the shapes plainLine read on the lines a text had), what
+ * follows is kept hidden too.
  *
  * A log line of the text is scrubbed once more by the logger's own rules (scrubbedSpans), which
  * read a key (`token: v`, `Bearer v`) or a whole configured value: a value masked here can take
@@ -1541,7 +1543,8 @@ function keyValuePieces(
   more: readonly Span[] = moreSecretSpans(text),
   before: readonly Span[] = extra,
 ): Piece[] {
-  if (more.length === 0) return maskedPieces(text, steps, extra, more);
+  // The other rules alone: nothing to keep hidden beyond what they hide.
+  if (more.length === 0 && sameSpans(extra, before)) return maskedPieces(text, steps, extra, more);
   const other = maskedPieces(text, steps, before, []);
   // A redacted text is often redacted again (a SourceError's message, then describeError): what
   // the other rules hide in the text they leave, once and twice more, stays hidden too.
@@ -1557,6 +1560,11 @@ function keyValuePieces(
   }
   return pieces;
 }
+
+/** True when two lists of spans hold the same spans. */
+const sameSpans = (a: readonly Span[], b: readonly Span[]) =>
+  a === b ||
+  (a.length === b.length && a.every(([start, end], i) => b[i]?.[0] === start && b[i]?.[1] === end));
 
 /**
  * What the other rules hide when they redact once more the text their `pieces` leave of `text`,

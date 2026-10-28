@@ -2109,6 +2109,16 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("keeps hidden in a stored reason what the logger reads after a scheme a line's mask takes", () => {
+    // The OAuth parameter's value is the scheme word the logger reads `Bearer v` by.
+    const text = "QzbbQ\nAuthorization: OAuth oauth_token=Bearer QzcbQcookie: 'QzdbQ";
+    const detail = plainReason(text);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail ?? "x"}`).message;
+    for (const line of [scrub(detail ?? ""), scrub(message), scrub(plainMessage(message) ?? "")]) {
+      expect(line).not.toContain("QzcbQ");
+    }
+  });
+
   it("keeps hidden what the other rules hide when they redact their own text again", () => {
     // A network error's message is a described error, described again when it is logged: the
     // header rule pairs the quotes of the text it left, and hides more the second time.

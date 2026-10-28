@@ -1029,6 +1029,29 @@ describe("the recorder", () => {
     ).toEqual([]);
   });
 
+  it("refuses a Spotify listener's page, though the track's own Spotify page is allowed", () => {
+    const user = "https://open.spotify.com/user/1195741771/playlist/4dO9EE9qATbTOWnAH3IcbQ";
+    const track = "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw";
+    const item = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "What's The Sample? - playlist by Somebody",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "A playlist of songs and the songs they sample.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    expect(leaks({ analysis: { evidence: [item(user)] } }, check)).toEqual(
+      expect.arrayContaining([
+        "analysis.evidence[0].id: a social platform page",
+        "analysis.evidence[0].url: a social platform page",
+      ]),
+    );
+    expect(leaks({ analysis: { spotifyUrl: track, evidence: [] } }, check)).toEqual([]);
+  });
+
   it("checks only web evidence for handles: model prose and primary records may name them", () => {
     const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
     const primary = {

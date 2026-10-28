@@ -49,7 +49,9 @@ export const Evidence = z.object({
    * recording (e.g. another artist's cover of it). A claim about the recording must not rest
    * on a `work/` or `release/` item alone: `scopeSupports()` says which items may support a
    * claim of a given scope (`ClaimScope`). The verifier is to apply it; until then it is a rule
-   * of the composer's prompt, not checked by code. Web results have none (null).
+   * of the composer's prompt, not checked by code. Web results have none (null). A relations
+   * map record (`mapRecordKind`) has no scope: it supports no claim, only a code-built link
+   * between two other recordings or another recording's year.
    */
   recordRef: z
     .string()
@@ -57,9 +59,35 @@ export const Evidence = z.object({
     .describe(
       "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A " +
         "primary record's starts with its scope: track/ (this recording), release/ (a whole " +
-        "release the track is on) or work/ (the song, not this recording)",
+        "release the track is on) or work/ (the song, not this recording). A MusicBrainz " +
+        "relations map record has none: recording/<a>/samples|sampled-by/recording/<b> (a " +
+        "relationship between two other recordings) or recording/<mbid> (another recording " +
+        "and its first release date); it supports no claim",
     ),
 });
+
+const MBID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+/**
+ * The recordRef of a relations map record of a relationship between two recordings other than
+ * the analysed one: `recording/<a>/samples|sampled-by/recording/<b>`, read from <a>'s side.
+ */
+export const MAP_RELATION_REF = new RegExp(
+  `^recording/(${MBID})/(samples|sampled-by)/recording/(${MBID})$`,
+);
+
+/** The recordRef of a relations map record of another recording's first release date. */
+export const MAP_DATE_REF = new RegExp(`^recording/(${MBID})$`);
+
+/**
+ * What a MusicBrainz relations map record is about, by its recordRef: "relation" (two other
+ * recordings), "date" (another recording's first release date), or null for any other record.
+ */
+export function mapRecordKind(recordRef: string | null | undefined): "relation" | "date" | null {
+  if (typeof recordRef !== "string") return null;
+  if (MAP_RELATION_REF.test(recordRef)) return "relation";
+  return MAP_DATE_REF.test(recordRef) ? "date" : null;
+}
 export type Evidence = z.infer<typeof Evidence>;
 
 /** A source that could not be read during a run; the UI shows it as "source unavailable". */

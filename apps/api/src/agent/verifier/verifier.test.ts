@@ -17,6 +17,7 @@ import {
 } from "@liner-notes/contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type LlmErrorKind } from "../../llm/errors.js";
+import { captureLogsForTests } from "../../logger.js";
 
 const store = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
 const enrich = vi.hoisted(() => ({
@@ -897,16 +898,35 @@ describe("a slow judge", () => {
     );
   };
 
-  it("loses its verdicts, never the result, when it outlasts its share of the run's time", async () => {
-    const restore = setJudgeTimingForTests({ marginMs: 100, minMs: 50 });
+  // Up to 10 s: a judge that waits for the run's deadline fails on the time it was given, not on
+  // the test's own limit.
+  it("loses its verdicts, never the result, when it outlasts its share of the run's time", {
+    timeout: 10_000,
+  }, async () => {
+    const restore = setJudgeTimingForTests({ marginMs: 5_000, minMs: 50 });
+    const logs = captureLogsForTests({ level: "warn" });
+    // Every timer armed meanwhile, with its delay (they still run).
+    const timers = vi.spyOn(globalThis, "setTimeout");
     try {
       const llm = hanging();
       const writer = vi.fn();
       const started = performance.now();
-      const out = await inRun(llm, 400, writer);
+      const out = await inRun(llm, 6_000, writer);
+      const elapsed = performance.now() - started;
 
-      // Stopped at its share (400 ms less the 100 ms margin), well before the run's deadline.
-      expect(performance.now() - started).toBeLessThan(400);
+      // Given its share: what is left of the run's 6 s when it is asked, less the 5 s margin. The
+      // time it was given, unlike the time it took, does not depend on how busy the machine is:
+      // at most 1 s, and more than 0.5 s unless the steps before the judge stalled for 0.5 s.
+      const given = logs
+        .messages("warn")
+        .map((message) => /no answer within its ([\d.]+) ms/.exec(message)?.[1])
+        .find((ms) => ms !== undefined);
+      expect(Number(given)).toBeGreaterThan(500);
+      expect(Number(given)).toBeLessThanOrEqual(1_000);
+      // Its call is cut by a timer set to that time exactly, not later: what load cannot change.
+      expect(timers.mock.calls.map(([, ms]) => ms)).toContain(Number(given));
+      // And it stopped well before the run's deadline (a judge that waited for it takes 6 s).
+      expect(elapsed).toBeLessThan(3_000);
       expect(llm.calls).toHaveLength(1);
       expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
       const result = TrackAnalysis.parse(out.trackData);
@@ -917,6 +937,8 @@ describe("a slow judge", () => {
       ]);
       expect(out.statusMessages?.[0]).toMatch(/did not finish in the time the run had left/);
     } finally {
+      timers.mockRestore();
+      logs.restore();
       restore();
     }
   });

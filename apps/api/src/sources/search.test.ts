@@ -15,6 +15,7 @@ vi.hoisted(() => {
 import * as search from "./search.js";
 import { EXCLUDED_DOMAINS, isLyricPage, isSocialPage, webTextIssue } from "./search.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
+import { timed } from "./testing/strings.js";
 import { readToolResult } from "./toolResult.js";
 
 const { searchMusicInfo, searchProductionHistory, searchSamples } = search;
@@ -360,12 +361,21 @@ describe("web research searches", () => {
 
   /**
    * The length of an adversarial text, and the time a linear check of it takes at most. A check
-   * that grows with the square of the length (main's NAME_LINE took 0.5 s at 40,000 characters)
-   * takes seconds at this length; a linear one takes a few milliseconds, so the bound leaves room
-   * for a loaded machine.
+   * that grows with the square of the length takes seconds at this length: about 13 s for
+   * NAME_LINE without its 64-character bound (as before #166), 7 s to 32 s for Stack Exchange's
+   * "share" with a whitespace run on each side of an optional pipe, 4 s for a Songfacts commenter
+   * with any number of words before the date. A linear one takes under 50 ms, and up to about
+   * 400 ms on a loaded machine, so the bound leaves room for one; the fastest of three runs is
+   * timed, since load only adds time.
+   *
+   * The bound is for quadratic forms. A form only a few times slower than the linear one (a
+   * bounded repeat such as {1,3000} that backtracks n·k steps) stays under it: no bound in
+   * milliseconds can tell that apart from a busy machine.
    */
-  const LONG = 100_000;
-  const LINEAR_MS = 250;
+  const LONG = 200_000;
+  const LINEAR_MS = 1_000;
+  /** Three runs, or one that is already five times over the bound. */
+  const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 5 * LINEAR_MS };
   /** `unit` repeated to LONG characters. */
   const repeated = (unit: string) => unit.repeat(Math.ceil(LONG / unit.length));
 
@@ -374,11 +384,11 @@ describe("web research searches", () => {
     ["tabs, no-break spaces and newlines", `share${repeated("\t\u00a0\n ")}x`],
     ["spaces around a pipe", `share${" ".repeat(LONG / 2)}|${" ".repeat(LONG / 2)}x`],
     ["spaces before cite", `share | cite${" ".repeat(LONG)}x`],
-  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+  ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    const start = performance.now();
-    expect(webTextIssue(text)).toBeNull();
-    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
+    const { ms, result } = timed(() => webTextIssue(text), FASTEST_OF_THREE);
+    expect(result).toBeNull();
+    expect(ms).toBeLessThan(LINEAR_MS);
   });
 
   it.each([
@@ -417,11 +427,9 @@ describe("web research searches", () => {
     ["open brackets after names", repeated("x (")],
     ["dateline words", repeated("Live from ")],
     ["commenters from places", repeated("Jane from Ohio Oct 2, 2009: ")],
-  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+  ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    const start = performance.now();
-    webTextIssue(text);
-    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
+    expect(timed(() => webTextIssue(text), FASTEST_OF_THREE).ms).toBeLessThan(LINEAR_MS);
   });
 
   it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {

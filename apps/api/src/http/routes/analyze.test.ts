@@ -21,6 +21,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+import { HEARTBEAT_INTERVAL_MS } from "@liner-notes/contract";
 import request from "supertest";
 import {
   afterAll,
@@ -989,18 +990,45 @@ describe("analyze routes", () => {
       expect(ofType(events, "complete")).toHaveLength(1);
     });
 
-    it("sends the stream headers before the resume check finishes", async () => {
+    /**
+     * How long a busy machine is given to carry the headers across the loopback. Well inside the
+     * heartbeat's interval: a heartbeat would send headers held back until the resume check too,
+     * and a wait as long as it would let it.
+     */
+    const LOOPBACK_WAIT_MS = HEARTBEAT_INTERVAL_MS / 2;
+    it("sends the stream headers before the resume check finishes", {
+      timeout: 3 * LOOPBACK_WAIT_MS,
+    }, async () => {
       const threadId = await pausedThread();
       const check = holdNextCheckpointRead();
+      try {
+        const client = open(resumePath(threadId, "track-a"));
+        await check.reading;
+        // The check is held until released below, so headers sent only after it never arrive.
+        // Those sent before it still cross the loopback, which on a busy machine can take more
+        // than a few turns of the event loop: they are waited for, up to a bound no busy machine
+        // reaches.
+        let noHeaders: ReturnType<typeof setTimeout> | undefined;
+        const response = await Promise.race([
+          client.response,
+          new Promise<null>((resolve) => {
+            noHeaders = setTimeout(() => resolve(null), LOOPBACK_WAIT_MS);
+          }),
+        ]);
+        clearTimeout(noHeaders);
+        expect(response?.headers["content-type"]).toBe("text/event-stream");
+        expect(response?.headers["x-accel-buffering"]).toBe("no");
+        // Sent on their own: no event (a heartbeat, say) carried them.
+        await settle();
+        expect(parseEvents(client.body())).toEqual([]);
 
-      const client = open(resumePath(threadId, "track-a"));
-      await check.reading;
-      const response = await Promise.race([client.response, settle().then(() => null)]);
-      expect(response?.headers["content-type"]).toBe("text/event-stream");
-      expect(response?.headers["x-accel-buffering"]).toBe("no");
-
-      check.release();
-      await vi.waitFor(() => expect(parseEvents(client.body()).at(-1)?.type).toBe("done"));
+        check.release();
+        await vi.waitFor(() => expect(parseEvents(client.body()).at(-1)?.type).toBe("done"), {
+          timeout: LOOPBACK_WAIT_MS,
+        });
+      } finally {
+        check.release();
+      }
     });
   });
 

@@ -12,6 +12,7 @@
 import {
   EVIDENCE_EXCERPT_MAX,
   type Evidence,
+  mapRecordKind,
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
@@ -513,6 +514,21 @@ export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceSc
 }
 
 /**
+ * True for an item of the relations map (sources/identity.ts): a MusicBrainz primary record of a
+ * relationship between two other recordings (the second hop), or of another recording's first
+ * release date, whose recordRef has no scope (the contract's `mapRecordKind`). It is about
+ * neither this recording, its song nor a release, so it supports no claim and the model is never
+ * shown it; a code-built link or a node's year rests on it.
+ */
+export function isMapRecord(evidence: Pick<Evidence, "source" | "sourceTier" | "recordRef">) {
+  return (
+    evidence.source === "musicbrainz" &&
+    evidence.sourceTier === "primary-record" &&
+    mapRecordKind(evidence.recordRef) !== null
+  );
+}
+
+/**
  * The items `primaryEvidence` built. Each source module builds its items from the payload it
  * read, so an item in this set came from a source's answer; a copy, an object parsed from text
  * or one written by hand is not in it.
@@ -550,6 +566,18 @@ export function isPrimaryRecordEvidence(item: unknown): item is Evidence {
 /** "Title" by Artist, for excerpts. */
 export const quoted = (title: string, artist?: string | null) =>
   artist ? `"${title}" by ${artist}` : `"${title}"`;
+
+/**
+ * How a recording's own MusicBrainz item states its first release date, the page that shows it:
+ * ", first released 1981-10-26" (nothing when MusicBrainz has none). A node's year is taken only
+ * from a date such an item states.
+ */
+export const firstReleased = (date: string | null | undefined) =>
+  date ? `, first released ${date}` : "";
+
+/** True when a recording's own item states `date` as its first release date. */
+export const statesFirstRelease = (item: Pick<Evidence, "excerpt">, date: string) =>
+  item.excerpt.endsWith(`${firstReleased(date)}.`);
 
 /** Relationship kinds the sources share, read from the track's side. */
 export type RelationKind =

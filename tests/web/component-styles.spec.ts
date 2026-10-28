@@ -203,6 +203,17 @@ const NEUTRAL_SPREAD = 40;
 const MEASURE_GAP = 8;
 
 /**
+ * Hides the text and icons of the elements being measured (data-measuring), and makes every
+ * scroll instant: the page scrolls smoothly otherwise.
+ */
+const MEASURING_STYLE =
+  "*{scroll-behavior:auto!important}[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}";
+
+type Box = { x: number; y: number; width: number; height: number };
+/** Elements screenshotted together: what each says (its text and colour) and its box. */
+type Batch = Array<Box & { index: number; found: Array<{ text: string; color: string }> }>;
+
+/**
  * WCAG contrast of the grey text in each neutral badge, against what the page actually draws
  * behind it: the badge's text and icons are hidden, the area inside its border is screenshotted
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
@@ -219,6 +230,10 @@ const MEASURE_GAP = 8;
  * text and icons hidden), with a few screenshots per page instead of one per badge. An area's
  * pixels are those at least half inside it, and an area with none is an error. The results are
  * in document order.
+ *
+ * Each batch takes two calls to the page, a screenshot and one evaluation that reads the
+ * previous screenshot's pixels and picks, reads and hides the next batch, so the time a check
+ * takes depends little on how slowly a busy machine answers each call.
  */
 async function neutralBadgeContrast(
   page: Page,
@@ -226,159 +241,182 @@ async function neutralBadgeContrast(
   { keepHover = false, keepFocus = false, coloured = false } = {},
 ) {
   if (!keepHover) await page.mouse.move(0, 0);
-  if (!keepFocus) {
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  }
+  await page.evaluate(
+    ({ blur, css }) => {
+      if (blur) (document.activeElement as HTMLElement | null)?.blur();
+      if (document.querySelector("style[data-measuring-style]")) return;
+      const style = document.createElement("style");
+      style.setAttribute("data-measuring-style", "");
+      style.textContent = css;
+      document.head.append(style);
+    },
+    { blur: !keepFocus, css: MEASURING_STYLE },
+  );
   await backgroundSettled(page);
-  await page.addStyleTag({
-    content:
-      "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
-  });
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
   const badges = page.locator(selector);
-  type Found = Array<{ text: string; color: string }>;
-  const texts: Array<Found | undefined> = Array(await badges.count()).fill(undefined);
-  const backgrounds: Array<Rgba | undefined> = texts.map(() => undefined);
-  for (
-    let first = backgrounds.indexOf(undefined);
-    first !== -1;
-    first = backgrounds.indexOf(undefined)
-  ) {
-    await badges.nth(first).scrollIntoViewIfNeeded();
-    const pending = backgrounds.flatMap((background, i) => (background ? [] : [i]));
-    // The first pending badge, and each other one fully in view (not clipped by the viewport
-    // or a scrolling box) and MEASURE_GAP px clear of those picked; their text and colour are
-    // read as drawn now, then they are hidden together.
-    const picked = await badges.evaluateAll(
-      (elements, { pending, gap, keepHover, keepFocus }) => {
-        // A computed colour as rgb()/rgba(): one the browser reports otherwise (oklab() for
-        // text-white/40) is drawn on a 1 px canvas and read back in sRGB.
-        const asRgb = (color: string) => {
-          if (/^rgba?\(/.test(color)) return color;
-          const context = new OffscreenCanvas(1, 1).getContext("2d");
-          if (!context) throw new Error("no 2d context");
-          context.fillStyle = "rgb(1, 2, 3)";
-          context.fillStyle = color;
-          if (context.fillStyle === "#010203") throw new Error(`cannot read the colour ${color}`);
-          context.fillRect(0, 0, 1, 1);
-          const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
-          return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-        };
-        const inView = (element: Element, box: DOMRect) => {
-          if (box.top < 0 || box.left < 0) return false;
-          if (box.bottom > innerHeight || box.right > innerWidth) return false;
-          for (let up = element.parentElement; up; up = up.parentElement) {
-            const style = getComputedStyle(up);
-            if (`${style.overflowX} ${style.overflowY}` === "visible visible") continue;
-            const clip = up.getBoundingClientRect();
-            if (box.top < clip.top || box.left < clip.left) return false;
-            if (box.bottom > clip.bottom || box.right > clip.right) return false;
+  const label = (box: Batch[number]) => `"${box.found.map(({ text }) => text).join(" ")}"`;
+  const texts: Array<Batch[number]["found"]> = [];
+  const backgrounds: Rgba[] = [];
+  const measured: number[] = [];
+  let count: number | undefined;
+  let shot: { batch: Batch; clip: Box; base64: string } | null = null;
+  for (;;) {
+    const step: { count: number; brightest: Array<Rgba | null>; picked: Batch } =
+      await badges.evaluateAll(
+        async (elements, { shot, measured, gap, keepHover, keepFocus }) => {
+          // The previous batch is shown again, and the brightest pixel inside each of its badges'
+          // borders (2 px in from its box) read from its screenshot: null when no whole pixel is
+          // inside it.
+          for (const element of document.querySelectorAll("[data-measuring]")) {
+            element.removeAttribute("data-measuring");
           }
-          return true;
-        };
-        const apart = (a: DOMRect, b: DOMRect) =>
-          a.right + gap <= b.left ||
-          b.right + gap <= a.left ||
-          a.bottom + gap <= b.top ||
-          b.bottom + gap <= a.top;
-        const chosen: Array<{ index: number; box: DOMRect }> = [];
-        for (const index of pending) {
-          const element = elements[index];
-          if (element.getClientRects().length === 0) throw new Error("a neutral badge has no box");
-          const box = element.getBoundingClientRect();
-          if (chosen.length > 0 && !inView(element, box)) continue;
-          if (!chosen.every((other) => apart(other.box, box))) continue;
-          chosen.push({ index, box });
-        }
-        return chosen.map(({ index, box }) => {
-          const element = elements[index];
-          const label = element.textContent?.trim().slice(0, 60);
-          if (!keepHover && element.matches(":hover")) throw new Error(`"${label}" is hovered`);
-          if (!keepFocus && element.matches(":focus-within")) {
-            throw new Error(`"${label}" has the focus`);
-          }
-          const found: Array<{ text: string; color: string }> = [];
-          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-          for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-            if (!text.textContent?.trim() || !text.parentElement) continue;
-            found.push({
-              text: text.textContent.trim(),
-              color: asRgb(getComputedStyle(text.parentElement).color),
-            });
-          }
-          element.setAttribute("data-measuring", "");
-          return { index, found, x: box.x, y: box.y, width: box.width, height: box.height };
-        });
-      },
-      { pending, gap: MEASURE_GAP, keepHover, keepFocus },
-    );
-    // One screenshot of the smallest whole-pixel area around them, inside the viewport.
-    const viewport = page.viewportSize();
-    if (!viewport) throw new Error("no viewport");
-    const left = Math.max(0, Math.floor(Math.min(...picked.map((box) => box.x))));
-    const top = Math.max(0, Math.floor(Math.min(...picked.map((box) => box.y))));
-    const right = Math.min(
-      viewport.width,
-      Math.ceil(Math.max(...picked.map((b) => b.x + b.width))),
-    );
-    const bottom = Math.min(
-      viewport.height,
-      Math.ceil(Math.max(...picked.map((b) => b.y + b.height))),
-    );
-    const clip = { x: left, y: top, width: right - left, height: bottom - top };
-    const label = (box: (typeof picked)[number]) =>
-      `"${box.found.map(({ text }) => text).join(" ")}"`;
-    if (clip.width <= 0 || clip.height <= 0) {
-      throw new Error(`${picked.map(label).join(", ")}: nothing of it in view to measure`);
-    }
-    const png = await page.screenshot({ clip, animations: "disabled" });
-    await badges.evaluateAll((elements) => {
-      for (const element of elements) element.removeAttribute("data-measuring");
-    });
-    // The brightest pixel inside each picked badge's border (2 px in from its box), or null
-    // when no whole pixel is inside it.
-    const brightest: Array<Rgba | null> = await page.evaluate(
-      async ({ base64, boxes, clip }) => {
-        const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
-        const bitmap = await createImageBitmap(blob);
-        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("no 2d context");
-        context.drawImage(bitmap, 0, 0);
-        const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
-        const scale = bitmap.width / clip.width;
-        return boxes.map((box) => {
-          const x = box.x - clip.x;
-          const y = box.y - clip.y;
-          const left = Math.max(0, Math.round((x + 2) * scale));
-          const top = Math.max(0, Math.round((y + 2) * scale));
-          const right = Math.min(bitmap.width, Math.round((x + box.width - 2) * scale));
-          const bottom = Math.min(bitmap.height, Math.round((y + box.height - 2) * scale));
-          if (right <= left || bottom <= top) return null;
-          let best = { r: 0, g: 0, b: 0, a: 1 };
-          for (let y = top; y < bottom; y += 1) {
-            for (let x = left; x < right; x += 1) {
-              const j = (y * bitmap.width + x) * 4;
-              if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
-                best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+          const brightest: Array<{ r: number; g: number; b: number; a: number } | null> = [];
+          if (shot) {
+            const { base64, batch, clip } = shot;
+            const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+            const bitmap = await createImageBitmap(blob);
+            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+            const context = canvas.getContext("2d");
+            if (!context) throw new Error("no 2d context");
+            context.drawImage(bitmap, 0, 0);
+            const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+            const scale = bitmap.width / clip.width;
+            for (const box of batch) {
+              const x = box.x - clip.x;
+              const y = box.y - clip.y;
+              const left = Math.max(0, Math.round((x + 2) * scale));
+              const top = Math.max(0, Math.round((y + 2) * scale));
+              const right = Math.min(bitmap.width, Math.round((x + box.width - 2) * scale));
+              const bottom = Math.min(bitmap.height, Math.round((y + box.height - 2) * scale));
+              if (right <= left || bottom <= top) {
+                brightest.push(null);
+                continue;
               }
+              let best = { r: 0, g: 0, b: 0, a: 1 };
+              for (let y = top; y < bottom; y += 1) {
+                for (let x = left; x < right; x += 1) {
+                  const j = (y * bitmap.width + x) * 4;
+                  if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+                    best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+                  }
+                }
+              }
+              brightest.push(best);
             }
           }
-          return best;
-        });
-      },
-      { base64: png.toString("base64"), boxes: picked, clip },
-    );
-    picked.forEach((box, i) => {
-      const background = brightest[i];
+          const done = new Set(measured);
+          const pending = elements.flatMap((_, i) => (done.has(i) ? [] : [i]));
+          if (pending.length === 0) return { count: elements.length, brightest, picked: [] };
+
+          // A computed colour as rgb()/rgba(): one the browser reports otherwise (oklab() for
+          // text-white/40) is drawn on a 1 px canvas and read back in sRGB.
+          const asRgb = (color: string) => {
+            if (/^rgba?\(/.test(color)) return color;
+            const context = new OffscreenCanvas(1, 1).getContext("2d");
+            if (!context) throw new Error("no 2d context");
+            context.fillStyle = "rgb(1, 2, 3)";
+            context.fillStyle = color;
+            if (context.fillStyle === "#010203") throw new Error(`cannot read the colour ${color}`);
+            context.fillRect(0, 0, 1, 1);
+            const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+            return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+          };
+          const inView = (element: Element, box: DOMRect) => {
+            if (box.top < 0 || box.left < 0) return false;
+            if (box.bottom > innerHeight || box.right > innerWidth) return false;
+            for (let up = element.parentElement; up; up = up.parentElement) {
+              const style = getComputedStyle(up);
+              if (`${style.overflowX} ${style.overflowY}` === "visible visible") continue;
+              const clip = up.getBoundingClientRect();
+              if (box.top < clip.top || box.left < clip.left) return false;
+              if (box.bottom > clip.bottom || box.right > clip.right) return false;
+            }
+            return true;
+          };
+          const apart = (a: DOMRect, b: DOMRect) =>
+            a.right + gap <= b.left ||
+            b.right + gap <= a.left ||
+            a.bottom + gap <= b.top ||
+            b.bottom + gap <= a.top;
+
+          // The first pending badge is scrolled into view as Playwright's scrollIntoViewIfNeeded
+          // does: centred in each scrolling box that hides it, to the nearest edge in one that
+          // shows part of it (at once, under MEASURING_STYLE).
+          const first = elements[pending[0]] as HTMLElement & {
+            scrollIntoViewIfNeeded(centerIfNeeded?: boolean): void;
+          };
+          if (first.getClientRects().length === 0) throw new Error("a neutral badge has no box");
+          first.scrollIntoViewIfNeeded(true);
+          // The first pending badge, and each other one fully in view (not clipped by the viewport
+          // or a scrolling box) and MEASURE_GAP px clear of those picked; their text and colour are
+          // read as drawn now, then they are hidden together.
+          const chosen: Array<{ index: number; box: DOMRect }> = [];
+          for (const index of pending) {
+            const element = elements[index];
+            if (element.getClientRects().length === 0)
+              throw new Error("a neutral badge has no box");
+            const box = element.getBoundingClientRect();
+            if (chosen.length > 0 && !inView(element, box)) continue;
+            if (!chosen.every((other) => apart(other.box, box))) continue;
+            chosen.push({ index, box });
+          }
+          const picked = chosen.map(({ index, box }) => {
+            const element = elements[index];
+            const label = element.textContent?.trim().slice(0, 60);
+            if (!keepHover && element.matches(":hover")) throw new Error(`"${label}" is hovered`);
+            if (!keepFocus && element.matches(":focus-within")) {
+              throw new Error(`"${label}" has the focus`);
+            }
+            const found: Array<{ text: string; color: string }> = [];
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+            for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+              if (!text.textContent?.trim() || !text.parentElement) continue;
+              found.push({
+                text: text.textContent.trim(),
+                color: asRgb(getComputedStyle(text.parentElement).color),
+              });
+            }
+            element.setAttribute("data-measuring", "");
+            return { index, found, x: box.x, y: box.y, width: box.width, height: box.height };
+          });
+          return { count: elements.length, brightest, picked };
+        },
+        { shot, measured, gap: MEASURE_GAP, keepHover, keepFocus },
+      );
+    if (count === undefined) count = step.count;
+    if (step.count !== count) {
+      throw new Error(`${count} elements to measure, then ${step.count}: the page changed`);
+    }
+    shot?.batch.forEach((box, i) => {
+      const background = step.brightest[i];
       if (!background) throw new Error(`${label(box)}: no whole pixel inside its border`);
       texts[box.index] = box.found;
       backgrounds[box.index] = background;
     });
+    const batch = step.picked;
+    if (batch.length === 0) break;
+    measured.push(...batch.map(({ index }) => index));
+    // One screenshot of the smallest whole-pixel area around them, inside the viewport.
+    const left = Math.max(0, Math.floor(Math.min(...batch.map((box) => box.x))));
+    const top = Math.max(0, Math.floor(Math.min(...batch.map((box) => box.y))));
+    const right = Math.min(viewport.width, Math.ceil(Math.max(...batch.map((b) => b.x + b.width))));
+    const bottom = Math.min(
+      viewport.height,
+      Math.ceil(Math.max(...batch.map((b) => b.y + b.height))),
+    );
+    const clip = { x: left, y: top, width: right - left, height: bottom - top };
+    if (clip.width <= 0 || clip.height <= 0) {
+      throw new Error(`${batch.map(label).join(", ")}: nothing of it in view to measure`);
+    }
+    const png = await page.screenshot({ clip, animations: "disabled" });
+    shot = { batch, clip, base64: png.toString("base64") };
   }
   const result: Array<{ text: string; ratio: number }> = [];
   texts.forEach((found, i) => {
-    const background = backgrounds[i] as Rgba;
-    for (const { text, color } of found ?? []) {
+    const background = backgrounds[i];
+    for (const { text, color } of found) {
       const match = /^rgba?\(([^)]+)\)$/.exec(color);
       if (!match) throw new Error(`"${text}": cannot read its colour ${color}`);
       const [r, g, b, a = 1] = match[1]
@@ -480,6 +518,8 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
     test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
       page,
     }) => {
+      // Two views of many lines, a screenshot per few of them: up to 29 s in a full run.
+      test.slow();
       const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
@@ -940,23 +980,34 @@ async function sectionBoundaries(page: Page) {
       };
     });
   });
+  // No sections, nothing to measure: the test says so with its own count.
+  if (sections.length === 0) return [];
   // A handle: once hidden, the bar is no longer found by its role.
   const handle = await bar.elementHandle();
   if (!handle) throw new Error("no song structure bar");
   await handle.evaluate((element) => {
     (element as HTMLElement).style.visibility = "hidden";
   });
-  const result: Array<{ label: string; ratio: number }> = [];
-  for (const section of sections) {
-    const { x, y, width, height } = section.box;
-    const clip = {
-      x: Math.floor(x),
-      y: Math.floor(y),
-      width: Math.max(1, Math.ceil(width)),
-      height: Math.max(1, Math.ceil(height)),
-    };
-    const png = await page.screenshot({ clip, animations: "disabled" });
-    const behind: Rgba = await page.evaluate(async (base64) => {
+  // Each section's area as whole pixels, all of them in one screenshot; the bar is shown again
+  // once its pixels are read.
+  const areas = sections.map(({ box }) => ({
+    x: Math.floor(box.x),
+    y: Math.floor(box.y),
+    width: Math.max(1, Math.ceil(box.width)),
+    height: Math.max(1, Math.ceil(box.height)),
+  }));
+  const left = Math.min(...areas.map((area) => area.x));
+  const top = Math.min(...areas.map((area) => area.y));
+  const clip = {
+    x: left,
+    y: top,
+    width: Math.max(...areas.map((area) => area.x + area.width)) - left,
+    height: Math.max(...areas.map((area) => area.y + area.height)) - top,
+  };
+  const png = await page.screenshot({ clip, animations: "disabled" });
+  const behind: Rgba[] = await handle.evaluate(
+    async (element, { base64, areas, clip }) => {
+      (element as HTMLElement).style.removeProperty("visibility");
       const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
       const bitmap = await createImageBitmap(blob);
       const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -964,26 +1015,42 @@ async function sectionBoundaries(page: Page) {
       if (!context) throw new Error("no 2d context");
       context.drawImage(bitmap, 0, 0);
       const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
-      let best = { r: 0, g: 0, b: 0, a: 1 };
-      for (let j = 0; j < data.length; j += 4) {
-        if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
-          best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
-        }
+      // The screenshot is the whole clip, at the page's pixel ratio: one cut short (a bar past
+      // the viewport's edge) would put each area on the wrong pixels.
+      const scale = devicePixelRatio;
+      const expected = `${Math.round(clip.width * scale)}×${Math.round(clip.height * scale)}`;
+      if (`${bitmap.width}×${bitmap.height}` !== expected) {
+        throw new Error(`a ${bitmap.width}×${bitmap.height} screenshot of a ${expected} clip`);
       }
-      return best;
-    }, png.toString("base64"));
+      // The brightest pixel of each section's area.
+      return areas.map((area) => {
+        const left = Math.round((area.x - clip.x) * scale);
+        const top = Math.round((area.y - clip.y) * scale);
+        const right = Math.round((area.x - clip.x + area.width) * scale);
+        const bottom = Math.round((area.y - clip.y + area.height) * scale);
+        let best = { r: 0, g: 0, b: 0, a: 1 };
+        for (let y = top; y < bottom; y += 1) {
+          for (let x = left; x < right; x += 1) {
+            const j = (y * bitmap.width + x) * 4;
+            if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+              best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+            }
+          }
+        }
+        return best;
+      });
+    },
+    { base64: png.toString("base64"), areas, clip },
+  );
+  return sections.map((section, i) => {
     const ratio = (colour: Rgba) => {
-      const drawn = over(colour, behind);
-      const [light, dark] = [luminance(drawn), luminance(behind)].sort((p, q) => q - p);
+      const drawn = over(colour, behind[i]);
+      const [light, dark] = [luminance(drawn), luminance(behind[i])].sort((p, q) => q - p);
       return (light + 0.05) / (dark + 0.05);
     };
     const best = Math.max(ratio(section.fill), section.border ? ratio(section.border) : 0);
-    result.push({ label: section.label, ratio: Math.round(best * 100) / 100 });
-  }
-  await handle.evaluate((element) => {
-    (element as HTMLElement).style.removeProperty("visibility");
+    return { label: section.label, ratio: Math.round(best * 100) / 100 };
   });
-  return result;
 }
 
 // Only the model's sections are drawn (a template's are not: see missing-states.spec.ts).
@@ -1037,6 +1104,8 @@ function withEntities() {
 }
 
 test("a fact's entity chips and type label meet 4.5:1, at rest and hovered", async ({ page }) => {
+  // Eight measured states (at rest and seven hovers): about 23 s in a full run.
+  test.slow();
   const { fixture, entities } = withEntities();
   await useMockApi(page, fixture);
   await page.setViewportSize({ width: 1440, height: 900 });

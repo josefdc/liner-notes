@@ -17,6 +17,10 @@
  * measurement; a measurement with low confidence is served too, with its confidence. Writes of
  * anything else are refused.
  *
+ * The MusicBrainz recording cache holds what the relations map read of one recording, by its
+ * MBID (sources/identity.ts): its sample relationships for the second hop, and its first release
+ * date for a node's year (null when MusicBrainz has none). A hit makes no request.
+ *
  * Reads return null on a database error (the caller then does the work again). Writes throw,
  * after logging, so the caller decides whether a failed write matters.
  */
@@ -28,7 +32,7 @@ import { PrimaryRelation } from "../agent/research/relations.js";
 import type { ResearchData } from "../agent/state.js";
 import { logger } from "../logger.js";
 import type { IdentifiedRecording } from "../sources/identity.js";
-import { RELEASE_DATE } from "../sources/musicbrainz.js";
+import { isMbid, type MbSampleHop, RELEASE_DATE } from "../sources/musicbrainz.js";
 import {
   audioConfidence,
   type CachedAudio,
@@ -125,10 +129,11 @@ export interface CachedEvidence {
    * was not sent ("not_asked": our own pacing left no slot in time, or the run's time for the
    * primary sources ran out first), the MusicBrainz work's recordings not dated ("dates"; its
    * covers are then about the song), the recording's MusicBrainz releases not read
-   * ("releases"; no release is named for it). A hit reads the primary sources again for such a
-   * row.
+   * ("releases"; no release is named for it), the MusicBrainz relations map not read in full
+   * ("map"; its second hop or years are missing). A hit reads the primary sources again for
+   * such a row.
    */
-  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" | "releases" }>;
+  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" | "releases" | "map" }>;
 }
 
 /** Research as the research cache holds it. */
@@ -145,6 +150,8 @@ const TTL_AUDIO_LOW = LOW_CONFIDENCE_AUDIO_TTL_MS;
 /** The default; the historian passes its own (RESEARCH_TTL_MS, agent/research/runEvidence.ts). */
 const TTL_RESEARCH = 48 * 60 * 60 * 1000;
 const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
+/** As long as research is kept: what a recording relates to changes as seldom. */
+export const TTL_MUSICBRAINZ_RECORDING = TTL_RESEARCH;
 
 // =============================================================================
 // Stored data schemas
@@ -205,8 +212,39 @@ const CachedEvidenceSchema = z.object({
   errors: z.array(SourceError),
   lasting: z.array(SourceError),
   incomplete: z.array(
-    z.object({ source: SourceId, part: z.enum(["not_asked", "dates", "releases"]) }),
+    z.object({ source: SourceId, part: z.enum(["not_asked", "dates", "releases", "map"]) }),
   ),
+});
+
+const RelatedRecordingSchema = z.object({
+  mbid: z.string().refine(isMbid),
+  title: z.string(),
+  artist: z.string(),
+  lengthMs: z.number().nullable(),
+  firstReleaseDate: z.string().regex(RELEASE_DATE).nullable().optional(),
+});
+
+const SampleHopSchema = z.object({
+  recording: RelatedRecordingSchema,
+  samples: z.array(
+    z.object({
+      kind: z.enum(["samples", "sampled-by"]),
+      recording: RelatedRecordingSchema,
+      attributes: z.array(z.string()),
+    }),
+  ),
+});
+
+/** When a recording cache row was read from MusicBrainz (ISO 8601). */
+const ReadAt = z.string().refine((value) => Number.isFinite(Date.parse(value)));
+
+/** A recording's sample relationships as the recording cache keeps them, with when they were read. */
+const CachedHopSchema = z.object({ hop: SampleHopSchema, readAt: ReadAt });
+
+/** A first release date as the recording cache keeps it: null when MusicBrainz has none. */
+const RecordingDateSchema = z.object({
+  date: z.string().regex(RELEASE_DATE).nullable(),
+  readAt: ReadAt,
 });
 
 const ResearchSchema = z
@@ -319,6 +357,17 @@ function prepareStatements(db: Database.Database) {
          track_details = excluded.track_details,
          expires_at = excluded.expires_at`,
     ),
+    getRecording: db.prepare<[string, string], { full_data: string; expires_at: number }>(
+      "SELECT full_data, expires_at FROM musicbrainz_recording_cache WHERE mbid = ? AND part = ?",
+    ),
+    putRecording: db.prepare(
+      `INSERT INTO musicbrainz_recording_cache (mbid, part, full_data, expires_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(mbid, part) DO UPDATE SET
+         full_data = excluded.full_data,
+         expires_at = excluded.expires_at`,
+    ),
+    purgeRecordings: db.prepare("DELETE FROM musicbrainz_recording_cache WHERE expires_at <= ?"),
     purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
     purgeResearch: db.prepare("DELETE FROM research_cache WHERE expires_at <= ?"),
     purgeArtwork: db.prepare("DELETE FROM artwork_cache WHERE expires_at <= ?"),
@@ -513,25 +562,102 @@ export class SonicCache {
   }
 
   // ---------------------------------------------------------------------------
+  // MusicBrainz Recording Cache
+  // ---------------------------------------------------------------------------
+
+  /** A cached part of a recording, parsed by `schema`; null when missing, expired or invalid. */
+  private getRecordingPart<T>(mbid: string, part: string, schema: z.ZodType<T>): T | null {
+    if (!isMbid(mbid)) return null;
+    try {
+      const row = this.stmt.getRecording.get(mbid.toLowerCase(), part);
+      if (!row || nowSec() >= row.expires_at) return null;
+      const parsed = schema.safeParse(parseJson(row.full_data));
+      if (!parsed.success) {
+        log.warn(`Ignoring MusicBrainz ${part} row for ${mbid}: unexpected shape`);
+        return null;
+      }
+      return parsed.data;
+    } catch (err) {
+      log.error("Could not read a MusicBrainz recording row", { err });
+      return null;
+    }
+  }
+
+  private putRecordingPart(mbid: string, part: string, value: unknown, ttlMs: number): void {
+    if (!isMbid(mbid)) throw new TypeError("Only a recording's MBID is a key");
+    try {
+      this.stmt.putRecording.run(
+        mbid.toLowerCase(),
+        part,
+        JSON.stringify(value),
+        nowSec() + Math.floor(ttlMs / 1000),
+      );
+    } catch (err) {
+      log.error("Could not write a MusicBrainz recording row", { err });
+      throw err;
+    }
+  }
+
+  /** The sample relationships cached for a recording's second hop, with when they were read. */
+  getMbHop(mbid: string): { hop: MbSampleHop; readAt: string } | null {
+    return this.getRecordingPart(mbid, "hop", CachedHopSchema);
+  }
+
+  /** Caches the sample relationships read for a recording's second hop at `readAt`. */
+  putMbHop(
+    mbid: string,
+    hop: MbSampleHop,
+    readAt: string,
+    ttlMs = TTL_MUSICBRAINZ_RECORDING,
+  ): void {
+    const parsed = CachedHopSchema.safeParse({ hop, readAt });
+    if (!parsed.success) throw new TypeError("Not a recording's sample relationships");
+    this.putRecordingPart(mbid, "hop", parsed.data, ttlMs);
+  }
+
+  /**
+   * A recording's cached first release date with when it was read: `date` null when MusicBrainz
+   * was asked and has none; null (a miss) when it was not asked or the row expired.
+   */
+  getMbDate(mbid: string): { date: string | null; readAt: string } | null {
+    return this.getRecordingPart(mbid, "date", RecordingDateSchema);
+  }
+
+  /** Caches a recording's first release date read at `readAt`, or that it has none (null). */
+  putMbDate(
+    mbid: string,
+    date: string | null,
+    readAt: string,
+    ttlMs = TTL_MUSICBRAINZ_RECORDING,
+  ): void {
+    const parsed = RecordingDateSchema.safeParse({ date, readAt });
+    if (!parsed.success) throw new TypeError("Not a release date");
+    this.putRecordingPart(mbid, "date", parsed.data, ttlMs);
+  }
+
+  // ---------------------------------------------------------------------------
   // Purge Expired Entries
   // ---------------------------------------------------------------------------
 
-  purgeExpired(): { audio: number; research: number; artwork: number } {
+  purgeExpired(): { audio: number; research: number; artwork: number; recordings: number } {
     const now = nowSec();
 
     try {
       const audio = this.stmt.purgeAudio.run(now).changes;
       const research = this.stmt.purgeResearch.run(now).changes;
       const artwork = this.stmt.purgeArtwork.run(now).changes;
+      const recordings = this.stmt.purgeRecordings.run(now).changes;
 
-      if (audio + research + artwork > 0) {
-        log.info(`Purged expired: ${audio} audio, ${research} research, ${artwork} artwork`);
+      if (audio + research + artwork + recordings > 0) {
+        log.info(
+          `Purged expired: ${audio} audio, ${research} research, ${artwork} artwork, ${recordings} MusicBrainz recordings`,
+        );
       }
 
-      return { audio, research, artwork };
+      return { audio, research, artwork, recordings };
     } catch (err) {
       log.error("Could not purge expired rows", { err });
-      return { audio: 0, research: 0, artwork: 0 };
+      return { audio: 0, research: 0, artwork: 0, recordings: 0 };
     }
   }
 }

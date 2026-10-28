@@ -344,11 +344,17 @@ describe("the research plan of a track with an ISRC", () => {
     // MusicBrainz: one ISRC lookup (the historian's chain, passed to the researcher and the
     // composer), the recording, the work and its dating, the releases (read once, for the
     // release that stands for the recording and for Discogs' links), and the credited artist's
-    // collaborators by its MBID. No name search.
+    // collaborators by its MBID. No name search: the one search is the relations map's dating
+    // of the related recordings, by their MBIDs.
     expect(has("musicbrainz.org/ws/2/isrc/")).toHaveLength(1);
     expect(has(`musicbrainz.org/ws/2/artist/${ARTIST}`)).toHaveLength(1);
     expect(has("musicbrainz.org/ws/2/artist").length).toBe(1);
-    expect(net.calls.some((c) => /[?&]query=/.test(c.url))).toBe(false);
+    const searches = net.calls.flatMap((c) =>
+      /[?&]query=/.test(c.url) ? [new URL(c.url).searchParams.get("query") ?? ""] : [],
+    );
+    expect(
+      searches.every((query) => /^rid:\([0-9a-f-]{36}(?: OR [0-9a-f-]{36})*\)$/.test(query)),
+    ).toBe(true);
     expect(has("musicbrainz.org/ws/2/release")).toHaveLength(1);
     // SecondHandSongs, Discogs and Genius from the chain.
     expect(has("secondhandsongs.com/")).toHaveLength(1);

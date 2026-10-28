@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AUDIO_UNAVAILABLE_TEXT } from '../constants';
 import type { AudioUnavailableReason, TrackData } from '../types';
@@ -320,17 +320,24 @@ describe('RecordedRunNotice', () => {
         }}
       />,
     );
-    expect(screen.getByText('BPM').closest('[title]')?.getAttribute('title')).toBe(
-      'Measured from the audio preview',
-    );
+    // Nothing to say beyond its label: no disclosure, and nothing about a recording.
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    expect(values.textContent).toContain('BPM 120Measured, confidence and basis unknown');
+    expect(screen.queryByRole('button', { name: /\(BPM\)$/ })).toBeNull();
+    expect(values.textContent).not.toContain('recorded');
+    expect(values.querySelector('[title]')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Recorded run' })).toBeNull();
   });
 
   it('says on a replay that its measured values were measured when it was recorded', () => {
     render(<AudioStats track={{ ...base, run: { ...run, mode: 'replay' } }} />);
-    expect(screen.getByText('BPM').closest('[title]')?.getAttribute('title')).toBe(
-      'Measured from the audio preview when this run was recorded',
+    const button = screen.getByRole('button', { name: 'How this was measured (BPM)' });
+    fireEvent.click(button);
+    const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
+    expect(panel?.textContent).toBe(
+      'Measured · confidence and basis unknownmeasured when this run was recorded',
     );
+    expect(screen.getByRole('list', { name: 'Audio values' }).querySelector('[title]')).toBeNull();
   });
 
   it('renders nothing for a live result or one that does not say', () => {

@@ -57,9 +57,10 @@ const log = logger("Enricher");
 
 /**
  * A genealogy node as the composer hands it over: with the year the model gave for it, when it
- * gave one (the result's nodes do not carry it).
+ * gave one (a string; the result's nodes do not carry it). A node built from a record carries
+ * its MusicBrainz year instead (a number, `GenealogyNode.year`), which checks nothing here.
  */
-export type ArtworkNode = GenealogyNode & { year?: string | null };
+export type ArtworkNode = Omit<GenealogyNode, "year"> & { year?: string | number | null };
 
 /** A node as the artwork lookup reads it: what it searches for and what it checks the hit on. */
 type NamedNode = Pick<ArtworkNode, "label" | "trackTitle" | "trackArtist" | "year">;
@@ -691,9 +692,11 @@ function labelYear(label: string): number | null {
 export function releaseYearFits(
   label: string,
   releaseDate: string | null | undefined,
-  year?: string | null,
+  year?: string | number | null,
 ): boolean {
-  const named = labelYear(label) ?? yearIn(year);
+  // Only the model's year (a string): a MusicBrainz year on a node built from a record is not
+  // the release a search finds, and is left out of this check.
+  const named = labelYear(label) ?? yearIn(typeof year === "string" ? year : null);
   if (named === null) return true;
   const released = Number.parseInt(releaseDate?.slice(0, 4) ?? "", 10);
   return released > 0 && Math.abs(released - named) <= 1;

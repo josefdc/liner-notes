@@ -3,6 +3,7 @@ import {
   type ClaimKind,
   claimIsRejected,
   type Evidence,
+  mapRecordKind,
   type SourceId,
   type SourceTier,
 } from '@liner-notes/contract';
@@ -258,6 +259,20 @@ const SCOPES: Record<string, RecordScope> = {
   release: 'release',
 };
 
+/**
+ * True for a relations map record (the contract's `mapRecordKind`): a MusicBrainz primary record
+ * of a relationship between two other recordings, or of another recording's first release date,
+ * which supports no claim but is the record a link between those two, or a node's year, rests
+ * on.
+ */
+export function isMapRecord(evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>) {
+  return (
+    evidence.source === 'musicbrainz' &&
+    evidence.sourceTier === 'primary-record' &&
+    mapRecordKind(evidence.recordRef) !== null
+  );
+}
+
 /** The scope of an item's record, or null when its recordRef names none the contract knows. */
 export function recordScope(evidence: Pick<Evidence, 'recordRef'>): RecordScope | null {
   const prefix = evidence.recordRef?.split('/')[0] ?? '';
@@ -267,12 +282,13 @@ export function recordScope(evidence: Pick<Evidence, 'recordRef'>): RecordScope 
 /**
  * An item's tier as the contract's evidence rules allow it, never above what it states: a web
  * search result is never a primary record (`evidenceIssues`), and a primary record names its
- * record with a scoped recordRef (evidence.ts). A primary record that breaks either rule is
- * shown as a web page; "editorial" and "web" are shown as stated.
+ * record with a scoped recordRef (evidence.ts), or is a relations map record (`isMapRecord`). A
+ * primary record that breaks either rule is shown as a web page; "editorial" and "web" are shown
+ * as stated.
  */
 export function sourceTier(evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>) {
   if (evidence.sourceTier !== 'primary-record') return evidence.sourceTier;
-  return evidence.source !== 'tavily' && recordScope(evidence) !== null
+  return evidence.source !== 'tavily' && (recordScope(evidence) !== null || isMapRecord(evidence))
     ? 'primary-record'
     : ('web' as const);
 }
@@ -283,7 +299,14 @@ export const sourceTierText = (
 ): string => SOURCE_TIER_TEXT[sourceTier(evidence)];
 
 /** What a record is about when that is not this recording, in words; null for this recording. */
-export function scopeText(evidence: Pick<Evidence, 'recordRef'>): string | null {
+export function scopeText(
+  evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>,
+): string | null {
+  if (isMapRecord(evidence)) {
+    return mapRecordKind(evidence.recordRef) === 'relation'
+      ? 'about two other recordings, not this one'
+      : 'about another recording, not this one';
+  }
   const scope = recordScope(evidence);
   if (scope === 'song') return 'about the song, not this recording';
   if (scope === 'release') return 'about a whole release';

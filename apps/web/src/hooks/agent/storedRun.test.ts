@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fetchStoredRun } from './storedRun';
 
 const ID = '4cOdK2wGLETKBW3PvgPWqT';
@@ -23,6 +23,13 @@ function answer(status: number, body: unknown) {
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
+
+// The schemas' first import is transformed cold, which on a busy machine can take longer than a
+// test's 5 s: it is done here, in a hook given time for it. Only the module is imported, so
+// fetchStoredRun must still load the schemas itself (loadEventSchemas) to read a result.
+beforeAll(async () => {
+  await import('./eventSchemas');
+}, 120_000);
 
 afterEach(() => {
   vi.unstubAllGlobals();

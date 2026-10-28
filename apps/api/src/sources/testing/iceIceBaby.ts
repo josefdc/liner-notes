@@ -52,8 +52,24 @@ export const ICE_TRACK: TrackRef = {
   durationMs: 271_733,
 };
 
-/** MusicBrainz (by ISRC, the recording, its releases and work) and SecondHandSongs. */
+/** The recording "Ice Ice Baby" samples ("Under Pressure"). */
+const UNDER_PRESSURE = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
+
+/**
+ * MusicBrainz (by ISRC, the recording, its releases and work) and SecondHandSongs. The relations
+ * map's reads are answered with nothing to add, written for the tests rather than captured: the
+ * sampled recording with no relationships and no date, and a date search that lists every
+ * recording asked without a date.
+ */
 export const primaryRoute: FetchRoute = (call) => {
+  if (call.url.startsWith(`${MB}/recording/${UNDER_PRESSURE}?`)) {
+    return json({ id: UNDER_PRESSURE, title: "Under Pressure", relations: [] });
+  }
+  if (call.url.startsWith(`${MB}/recording?query=`)) {
+    const query = new URL(call.url).searchParams.get("query") ?? "";
+    const ids = query.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g) ?? [];
+    return json({ count: ids.length, recordings: ids.map((id) => ({ id })) });
+  }
   if (call.url === "https://secondhandsongs.com/work/4196") return json(shsWork);
   if (call.url.startsWith(`${MB}/isrc/USCA29001716?`)) return json(iceIsrc);
   if (call.url.startsWith(`${MB}/recording/${ICE}?`)) return json(iceDetails);

@@ -127,7 +127,10 @@ export interface NamedNode {
   id: string;
   label: string;
   trackTitle?: string;
-  /** Its release year when its label does not end with one (the analysed track's). */
+  /**
+   * Its release year when its label does not end with one: the year of its first release that
+   * the API took from MusicBrainz, or else (the analysed track's) the result's release year.
+   */
   year?: number;
 }
 
@@ -245,10 +248,17 @@ export function readLink(
   }));
   const reasons: string[] = [];
 
-  // Direction: the record a link starts from must not be newer than the one it points at.
+  // Direction: the record a link starts from must not be newer than the one it points at. A
+  // code-built sourced link's direction is documented by the record it is built from (which
+  // recording samples which), so years never overrule it; a model's link is checked.
   const [fromYear, toYear] = [yearOf(nodes.get(link.source)), yearOf(nodes.get(link.target))];
+  const documented = origin === 'code' && link.kind === 'sourced';
   const directionKnown =
-    statedType === 'producer' || fromYear === null || toYear === null || fromYear <= toYear;
+    statedType === 'producer' ||
+    documented ||
+    fromYear === null ||
+    toYear === null ||
+    fromYear <= toYear;
   if (!directionKnown) {
     reasons.push(`the years (${fromYear} and ${toYear}) do not fit this direction`);
   }
@@ -304,9 +314,14 @@ export function readLink(
       );
     }
     if (known.length > 0) {
-      reasons.push(
-        `cites ${list(known.map((c) => citationText(c, false)))}${claim?.verdict ? '' : ', not checked by a verifier'}`,
-      );
+      // A code link is sourced on the record it is built from, not on a verifier's verdict.
+      const checked =
+        origin === 'code'
+          ? ', the record it is built from'
+          : claim?.verdict
+            ? ''
+            : ', not checked by a verifier';
+      reasons.push(`cites ${list(known.map((c) => citationText(c, false)))}${checked}`);
     }
     if (citations.length === 0) {
       reasons.push(
@@ -347,10 +362,18 @@ export interface GenealogyReading {
   hidden: number;
 }
 
+/** A node's year as the API sets it (from MusicBrainz): a whole number of four digits, or null. */
+function nodeYear(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1000 && value <= 9999
+    ? value
+    : null;
+}
+
 /**
- * The genealogy's nodes, by id (entries that are not nodes are left out). The analysed track's
- * node (group 1) takes `trackYear` when its label names no year: the API labels it with the
- * title alone.
+ * The genealogy's nodes, by id (entries that are not nodes are left out), each with the year
+ * the API took from MusicBrainz for it (`year`), when it has one. The analysed track's node
+ * (group 1) takes the earlier of that year and `trackYear`, used when its label names no year:
+ * the API labels it with the title alone.
  */
 export function nodesById(
   nodes: unknown,
@@ -362,11 +385,15 @@ export function nodesById(
     if (node && typeof node === 'object' && typeof (node as NamedNode).id === 'string') {
       const { id, label, trackTitle } = node as NamedNode;
       const isCurrent = (node as { group?: unknown }).group === 1;
+      // The analysed track: the earlier of its MusicBrainz year and the result's release year
+      // (a recording is not released after the release that carries it).
+      const own = nodeYear((node as { year?: unknown }).year);
+      const year = isCurrent && trackYear !== null ? Math.min(own ?? trackYear, trackYear) : own;
       byId.set(id, {
         id,
         label: typeof label === 'string' ? label : id,
         ...(typeof trackTitle === 'string' ? { trackTitle } : {}),
-        ...(isCurrent && trackYear !== null ? { year: trackYear } : {}),
+        ...(year !== null ? { year } : {}),
       });
     }
   }

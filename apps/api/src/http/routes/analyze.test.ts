@@ -55,7 +55,8 @@ function captureWarnings(): () => string[] {
       .map((entry) => String(entry.msg));
 }
 
-type Hook = null | ((signal: AbortSignal | undefined) => Promise<void>);
+/** A hook gets the run's signal and its id (the graph's thread). */
+type Hook = null | ((signal: AbortSignal | undefined, runId: string) => Promise<void>);
 
 const stub = vi.hoisted(() => ({
   calls: {
@@ -132,7 +133,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
       stub.seen.requestedTrackId.push(state.requestedTrackId);
       stub.seen.requestPickedBy.push(state.pickedBy);
       status(config, "scout", "searching");
-      await stub.scoutStep?.(config.signal);
+      await stub.scoutStep?.(config.signal, String(config.configurable?.thread_id));
       const query = state.songQuery;
       if (query.startsWith("cached")) {
         const trackData = stub.track("cached");
@@ -175,7 +176,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
     engineerNode: async (_state: State, config: Config) => {
       stub.calls.engineer++;
       status(config, "engineer", "measuring");
-      await stub.engineerStep?.(config.signal);
+      await stub.engineerStep?.(config.signal, String(config.configurable?.thread_id));
       stub.calls.engineerDone++;
       return {};
     },
@@ -191,7 +192,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
       });
       config.writer?.({ type: "complete", data: trackData });
       // Stands for the store write the real composer awaits after reporting the result.
-      await stub.composerAfterComplete?.(config.signal);
+      await stub.composerAfterComplete?.(config.signal, String(config.configurable?.thread_id));
       return { trackData, statusMessages: ["done"] };
     },
   };
@@ -265,6 +266,29 @@ const runStatus = (threadId: string) => getRun(getDb(), threadId)?.status;
 /** Lets pending callbacks run (several event-loop turns). */
 async function settle(): Promise<void> {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+}
+
+/** The real setTimeout, for waiting while a test's timers are fake. */
+const realSetTimeout = globalThis.setTimeout;
+
+/**
+ * `promise` once it settles, on fake timers: meanwhile the timers that are due run, and the clock
+ * stays where it is. The graph's store polls its queue with setTimeout(0) until the run ends, so
+ * a run on fake timers ends only while those polls run. Moving the clock on to let them run, as
+ * advanceTimersByTimeAsync does, costs one poll and one real turn of the event loop for each
+ * millisecond moved: minutes of it take seconds of real time, more on a busy machine. Stops
+ * polling once the real timers are back (the test has ended).
+ */
+async function settledOnFakeClock<T>(promise: Promise<T>): Promise<T> {
+  let settled = false;
+  const watched = promise.finally(() => {
+    settled = true;
+  });
+  while (!settled && vi.isFakeTimers()) {
+    vi.advanceTimersByTime(0);
+    await new Promise((resolve) => realSetTimeout(resolve, 1));
+  }
+  return watched;
 }
 
 /** A real HTTP server for tests that need to drop the connection. */
@@ -983,8 +1007,10 @@ describe("analyze routes", () => {
 
       const pending = sse(streamPath("plain hurt"));
       await started.promise;
-      await vi.advanceTimersByTimeAsync(40_000);
-      const { events } = await pending;
+      // The clock jumps 40 s at once: the timers due meanwhile (the heartbeats, the step's own)
+      // run in order, and the rest of the run then ends on the stopped clock.
+      vi.advanceTimersByTime(40_000);
+      const { events } = await settledOnFakeClock(pending);
 
       expect(ofType(events, "heartbeat").length).toBeGreaterThanOrEqual(2);
       expect(ofType(events, "complete")).toHaveLength(1);
@@ -1036,16 +1062,25 @@ describe("analyze routes", () => {
     it("aborts a run that passes the deadline and reports a timeout", async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
       const started = deferred();
+      let aborted = false;
       stub.engineerStep = (signal) =>
         new Promise<void>((resolve) => {
           started.resolve();
-          signal?.addEventListener("abort", () => resolve());
+          signal?.addEventListener("abort", () => {
+            aborted = true;
+            resolve();
+          });
         });
 
       const pending = sse(streamPath("plain hurt"));
       await started.promise;
-      await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS);
-      const { events } = await pending;
+      // The clock jumps to the deadline at once, set when the run started: no earlier, and
+      // then exactly at it. The rest of the run ends on the stopped clock.
+      vi.advanceTimersByTime(RUN_DEADLINE_MS - 1);
+      expect(aborted).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(aborted).toBe(true);
+      const { events } = await settledOnFakeClock(pending);
 
       expect(ofType(events, "error")).toEqual([
         expect.objectContaining({ code: "timeout", error: expect.any(String) }),
@@ -1185,8 +1220,24 @@ describe("analyze routes", () => {
     const elapsed = (events: Event[]) => events.map((event) => event.elapsedMs);
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-    it("stamps every event of a live run with the time since it started, rising", async () => {
-      stub.scoutStep = () => wait(40);
+    /** How long a busy machine is given to send an event: far more than any takes. */
+    const SENT_WITHIN_MS = 5_000;
+    it("stamps every event of a live run with the time since it started, rising", {
+      timeout: 3 * SENT_WITHIN_MS,
+    }, async () => {
+      // The step's 40 ms start once the scout's line has been sent (each event is stored as it
+      // is sent). Events are stamped as they are sent, and a busy machine can send that line
+      // late, into a wait that started when it was written: its stamp would then be late too.
+      stub.scoutStep = async (_signal, runId) => {
+        await vi.waitFor(
+          () =>
+            expect(
+              listRunEvents(getDb(), runId).map(({ event }) => (event as Event).type),
+            ).toContain("status"),
+          { timeout: SENT_WITHIN_MS, interval: 1 },
+        );
+        await wait(40);
+      };
       const { events } = await sse(streamPath("timed run"));
 
       expect(types(events)).toEqual(["connected", "status", "status", "complete", "done"]);

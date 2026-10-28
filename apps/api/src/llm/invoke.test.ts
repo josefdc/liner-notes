@@ -81,8 +81,18 @@ const ok = () =>
   Response.json(responseBody({ ok: true }, { input: 100, output: 20, reasoning: 8 }));
 const spendLines = () => parseSpendLog(readFileSync(log, "utf8"));
 
+/**
+ * Each call reserves and settles its cost in the spend log, flushing each line to disk
+ * (budget.ts). A flush waits for the disk, and on a disk that other processes keep busy one can
+ * take seconds; the first of a run takes the longest. Hence more than the default 5 s for the
+ * first tests; nothing in them is timed.
+ */
+const FLUSHING_TIMEOUT_MS = 60_000;
+
 describe("the request", () => {
-  it("calls the tier's deployment through the Responses API with strict JSON-schema output", async () => {
+  it("calls the tier's deployment through the Responses API with strict JSON-schema output", {
+    timeout: FLUSHING_TIMEOUT_MS,
+  }, async () => {
     const { llm, net } = setup(ok);
     const result = await llm.invoke("smoke", "research", "say ok", Schema, OPTIONS);
     expect(result.output).toEqual({ ok: true });
@@ -100,7 +110,9 @@ describe("the request", () => {
     expect(call.body.store).toBe(false);
   });
 
-  it("calls the v1 API of the resource named by AZURE_OPENAI_ENDPOINT, with no api-version", async () => {
+  it("calls the v1 API of the resource named by AZURE_OPENAI_ENDPOINT, with no api-version", {
+    timeout: FLUSHING_TIMEOUT_MS,
+  }, async () => {
     const { llm, net } = setup(ok, {
       AZURE_OPENAI_BASE_URL: "",
       AZURE_OPENAI_ENDPOINT: "https://llm.invalid/",

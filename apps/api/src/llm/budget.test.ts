@@ -555,16 +555,36 @@ describe("a settle that cannot get the lock at once", () => {
   it("is tried again", async () => {
     const log = join(dir, "spend.jsonl");
     writeFileSync(log, "");
+    const RETRY_MS = 150;
     const guard = new SpendGuard({
       logPath: log,
       caps: CAPS,
       lockWaitMs: 50,
-      settleRetryMs: 150,
+      settleRetryMs: RETRY_MS,
     });
     const reservation = await guard.reserve(request(0.1));
     const release = await acquireLock(await resolveSpendLogPath(log));
-    setTimeout(() => void release(), 100);
-    await guard.settle(reservation, settled(0.02));
+    // The lock is held until the first try has given up, and free before the second starts:
+    // it is released when the wait before the retry is set, and the retry waits for that. Timed
+    // releases depend on how busy the machine is: one late misses the retry, one early lets the
+    // first try through.
+    const realSetTimeout = globalThis.setTimeout;
+    const retryWaits: Array<number | undefined> = [];
+    const timers = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      ms?: number,
+    ) => {
+      if (ms !== RETRY_MS) return realSetTimeout(handler, ms);
+      retryWaits.push(ms);
+      return realSetTimeout(() => void release().then(handler), ms);
+    }) as typeof setTimeout);
+    try {
+      await guard.settle(reservation, settled(0.02));
+    } finally {
+      timers.mockRestore();
+      await release();
+    }
+    expect(retryWaits).toEqual([RETRY_MS]);
     expect(summarise(parseSpendLog(readFileSync(log, "utf8"))).openReservations).toBe(0);
   });
 });

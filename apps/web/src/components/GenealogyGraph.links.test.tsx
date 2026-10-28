@@ -135,7 +135,7 @@ describe('GenealogyGraph links', () => {
       });
       expect(chips(container)).toEqual([]);
     }
-    expect(names).toEqual(['sample', 'possible sample', 'possible shared producer']);
+    expect(names).toEqual(['Sample', 'Possible sample', 'Possible shared producer']);
     // An arrowhead shows the direction of each link but the shared producer's.
     expect(lines(container).map((line) => line.getAttribute('marker-end') !== null)).toEqual([
       true,
@@ -210,7 +210,7 @@ describe('GenealogyGraph links', () => {
     await act(async () => {
       target.dispatchEvent(new MouseEvent('mouseenter'));
     });
-    expect(chips(container)[0].textContent).toBe('possible sample');
+    expect(chips(container)[0].textContent).toBe('Possible sample');
     expect(subLabel(container, 'older')).toBeUndefined();
   });
 

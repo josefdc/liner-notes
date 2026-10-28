@@ -38,7 +38,7 @@ import {
   yearFrom,
 } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
-import { isSparse } from './genealogy/lineageLayout';
+import { isSparse, relationCount } from './genealogy/lineageLayout';
 import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -247,7 +247,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
   // Two relations or fewer: the graph is a compact row, and its panel is as tall as its content
   // (from md up to xl, where it is a row of its own).
-  const sparseGenealogy = isSparse(graphLinks.length);
+  const sparseGenealogy = isSparse(
+    relationCount(graphLinks, genealogy.nodes.find((node) => node.group === 1)?.id ?? null),
+  );
   const linkKinds = useMemo(
     () => ({
       sourced: graphLinks.some((link) => link.kind === 'sourced'),
@@ -644,21 +646,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )}
 
       {/* The panels. Phones (below md): one at a time, chosen with the tabs below; each scrolls
-          on its own. md up to xl: two columns, the notes and the player, with the connections
-          as a full-width row below them; the columns take the height of their content and the
-          whole area scrolls as one, down only (a timeline tooltip at rest past the window's
-          edge must not let it scroll sideways). xl (1280 px) and up: three columns, each
-          scrolling on its own. */}
+          on its own. From md up: two columns, the notes and the player, with the connections
+          as a full-width row below them (room for the map's year axis across the page); the
+          columns take the height of their content and the whole area scrolls as one, down only
+          (a timeline tooltip at rest past the window's edge must not let it scroll sideways). */}
       <div
         data-player-columns
-        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] xl:auto-rows-[100%] xl:overflow-hidden"
+        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain"
       >
         {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
           id="panel-context"
           {...panelRole('context')}
           className={`
-            min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            min-w-0 p-6 border-white/5 bg-black/25 backdrop-blur-sm md:border-r max-md:overflow-y-auto max-md:overscroll-contain
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
@@ -885,7 +886,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           id="panel-player"
           {...panelRole('player')}
           className={`
-            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain xl:overflow-y-auto xl:overscroll-contain
+            min-w-0 p-8 flex flex-col items-center justify-start relative max-md:overflow-x-hidden max-md:overflow-y-auto max-md:overscroll-contain
             ${activeTab === 'player' ? 'block max-md:h-full' : 'hidden md:flex'}
         `}
         >
@@ -986,8 +987,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           </div>
         </div>
 
-        {/* Panel C: the connections (xl: the right column; md up to xl: a full-width row below
-            the columns, 14rem shorter than the window (the nav, the header and the footer take
+        {/* Panel C: the connections (md up: a full-width row below the columns, 14rem shorter
+            than the window (the nav, the header and the footer take
             about 12rem), so a strip of the scrolling area always shows beside it to grab, even
             on a landscape phone, or as tall as its content when the connections are a compact
             row; phones: the Connections tab, covering the panels' area, absolute, so it has
@@ -996,7 +997,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           id="panel-genealogy"
           {...panelRole('genealogy')}
           className={`
-            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'} xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
+            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >
@@ -1046,9 +1047,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 hiddenLinks={hiddenLinks}
                 topInset={genealogyHeadingHeight}
                 onNodeClick={handleNodeClick}
-                // From md up to xl the page scrolls past the graph: the wheel and one finger
-                // scroll it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones
-                // and at xl nothing scrolls behind the graph, and it takes them all.
+                // From md up the page scrolls past the graph: the wheel and one finger scroll
+                // it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones nothing
+                // scrolls behind the graph, and it takes them all.
                 wheelZoom={layout === 'columns' ? 'modifier' : 'plain'}
               />
             </ErrorBoundary>

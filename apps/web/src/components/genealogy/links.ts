@@ -195,10 +195,22 @@ export function linkDisplayKind(
   });
 }
 
-/** The release year at the end of a node's label ("Title - Artist (1984)"), or null. */
+/** A year in brackets at the end of a label: "Title - Artist (1984)". */
+export const LABEL_YEAR = /\s*\((\d{4})\)\s*$/;
+
+/** The year a label ends with, when it is one a node may carry (as `nodeYear` reads one). */
+export function labelYear(label: string): number | null {
+  const match = LABEL_YEAR.exec(label);
+  return match ? nodeYear(Number(match[1])) : null;
+}
+
+/**
+ * A node's release year: the one the API took from MusicBrainz (`year`; the analysed track's
+ * falls back on the result's release year), else the one its label ends with; null otherwise.
+ */
 export function yearOf(node: NamedNode | undefined): number | null {
-  const match = node ? /\((\d{4})\)\s*$/.exec(node.label) : null;
-  return match ? Number(match[1]) : (node?.year ?? null);
+  if (!node) return null;
+  return node.year ?? labelYear(node.label);
 }
 
 /** How a relation names a track: its title and year, or its label (which carries both). */

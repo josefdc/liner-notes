@@ -1,5 +1,4 @@
 import type { LinkType } from '@liner-notes/contract';
-import { type Box, placeLabels } from './labels';
 
 /**
  * The song-relations map as a lineage: where each track's card goes, worked out from its release
@@ -50,23 +49,38 @@ export function orientationFor(viewportWidth: number, panelWidth: number): Orien
   return viewportWidth < MD_PX || panelWidth < NARROW_PANEL_PX ? 'vertical' : 'horizontal';
 }
 
-/** With this many relations or fewer the map is a compact row, not a canvas. */
+/** With this many relations to the analysed track or fewer the map is a compact row. */
 export const SPARSE_RELATIONS = 2;
 export const isSparse = (relations: number) => relations <= SPARSE_RELATIONS;
 
 /**
- * `text` in lines of at most `maxChars` characters, broken at spaces (a word longer than a line
- * is broken inside), at most `maxLines` of them. Text that needs more lines is cut, its last line
- * ending in "…", and said to be `truncated`.
+ * The relations a map shows to the analysed track: the links that touch it (every link when the
+ * genealogy has no analysed track). A second hop between two other tracks is not one.
+ */
+export function relationCount(
+  links: ReadonlyArray<{ source: string; target: string }>,
+  currentId: string | null,
+): number {
+  return currentId === null
+    ? links.length
+    : links.filter((link) => link.source === currentId || link.target === currentId).length;
+}
+
+/**
+ * `text` in lines of at most `maxChars` characters, broken at spaces. A word longer than a line
+ * is broken inside, its piece ending in a hyphen (`hyphenated` says which lines end so). At most
+ * `maxLines` lines: text that needs more is cut, its last line ending in "…", and said to be
+ * `truncated`.
  */
 export function wrapText(
   text: string,
   maxChars: number,
   maxLines = 2,
-): { lines: string[]; truncated: boolean } {
-  const width = Math.max(1, Math.floor(maxChars));
+): { lines: string[]; hyphenated: boolean[]; truncated: boolean } {
+  const width = Math.max(2, Math.floor(maxChars));
   const words = text.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
+  const hyphenated: boolean[] = [];
   let line = '';
   for (const word of words) {
     let rest = word;
@@ -77,19 +91,28 @@ export function wrapText(
         rest = '';
       } else if (line) {
         lines.push(line);
+        hyphenated.push(false);
         line = '';
       } else {
-        lines.push(rest.slice(0, width));
-        rest = rest.slice(width);
+        lines.push(`${rest.slice(0, width - 1)}-`);
+        hyphenated.push(true);
+        rest = rest.slice(width - 1);
       }
     }
   }
-  if (line) lines.push(line);
-  if (lines.length <= maxLines) return { lines, truncated: false };
+  if (line) {
+    lines.push(line);
+    hyphenated.push(false);
+  }
+  if (lines.length <= maxLines) return { lines, hyphenated, truncated: false };
   const kept = lines.slice(0, maxLines);
-  const last = kept[maxLines - 1];
+  const last = kept[maxLines - 1].replace(/-$/, '');
   kept[maxLines - 1] = `${last.slice(0, Math.max(0, width - 1))}…`;
-  return { lines: kept, truncated: true };
+  return {
+    lines: kept,
+    hyphenated: hyphenated.slice(0, maxLines - 1).concat(false),
+    truncated: true,
+  };
 }
 
 /**
@@ -188,7 +211,9 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   // Lanes in their order, the empty ones left out; each one card's breadth apart.
   const lanes = LANES.filter((lane) => cards.some((card) => card.lane === lane));
   const pitch = Math.max(0, ...cards.map(crossOf)) + gap;
-  const desiredCross = (card: CardInput) => lanes.indexOf(card.lane) * pitch;
+  // Horizontal: each lane a band. Vertical: the cards start right after the axis, in lane order
+  // (a narrow panel has no room for a band per lane).
+  const desiredCross = (card: CardInput) => (horizontal ? lanes.indexOf(card.lane) * pitch : 0);
 
   // Year slots in order, then the undated one.
   const years = [...new Set(cards.flatMap((card) => (card.year === null ? [] : [card.year])))].sort(
@@ -284,7 +309,7 @@ export function boxesMeet(a: CardBox, b: CardBox, gap = 0): boolean {
 
 /** A chip to place near a point (an edge's middle, a card): its size and how much it matters. */
 export interface ChipInput {
-  /** Where it would best go (its centre), the nearest free place after. */
+  /** Where it would best go (its centre). */
   near: { x: number; y: number };
   width: number;
   height: number;
@@ -292,46 +317,211 @@ export interface ChipInput {
 }
 
 /**
- * Where each chip goes (its top-left corner), or null for one with no free place: never over a
- * card, an obstacle or another chip, inside `bounds`. Candidates are a grid over `bounds`, the
- * nearest to the chip's point first. Deterministic.
+ * Where each chip goes (its top-left corner), or null for one with no free place near its point:
+ * never over a card, an obstacle or another chip, inside `bounds`, and its centre at most
+ * `reach` from its point. The search goes outward from the point, ring by ring, and stops at the
+ * first free place, so a chip costs little where there is room near its link. Chips are placed in
+ * priority order (then in their own). Deterministic.
  */
 export function placeChips(
   chips: readonly ChipInput[],
   cards: readonly CardBox[],
   bounds: CardBox,
-  step = 6,
-  gap = 3,
+  { step = 6, gap = 3, reach = 140 }: { step?: number; gap?: number; reach?: number } = {},
 ): Array<CardBox | null> {
-  const choices = chips.map((chip) => {
-    const free: Array<Box & { distance: number }> = [];
-    for (let y = bounds.y; y + chip.height <= bounds.y + bounds.height; y += step) {
-      for (let x = bounds.x; x + chip.width <= bounds.x + bounds.width; x += step) {
-        const box = { x, y, width: chip.width, height: chip.height };
-        if (cards.some((card) => boxesMeet(box, card, gap))) continue;
-        const [cx, cy] = [x + chip.width / 2, y + chip.height / 2];
-        free.push({
-          // placeLabels reads a box by its centre
-          x: cx,
-          y: cy,
-          width: chip.width,
-          height: chip.height,
-          distance: Math.hypot(cx - chip.near.x, cy - chip.near.y),
-        });
+  const order = chips
+    .map((_, i) => i)
+    .sort((a, b) => chips[b].priority - chips[a].priority || a - b);
+  const placed: CardBox[] = [];
+  const at: Array<CardBox | null> = chips.map(() => null);
+  const inside = (box: CardBox) =>
+    box.x >= bounds.x &&
+    box.y >= bounds.y &&
+    box.x + box.width <= bounds.x + bounds.width &&
+    box.y + box.height <= bounds.y + bounds.height;
+  const free = (box: CardBox) =>
+    inside(box) &&
+    !cards.some((card) => boxesMeet(box, card, gap)) &&
+    !placed.some((chip) => boxesMeet(box, chip, gap));
+  for (const i of order) {
+    const { near, width, height } = chips[i];
+    const boxAt = (dx: number, dy: number) => ({
+      x: near.x + dx - width / 2,
+      y: near.y + dy - height / 2,
+      width,
+      height,
+    });
+    let found: CardBox | null = null;
+    for (let ring = 0; ring * step <= reach && found === null; ring += 1) {
+      // The ring's points, nearest first, within the reach.
+      const points: Array<[number, number]> = [];
+      if (ring === 0) points.push([0, 0]);
+      for (let k = -ring; k <= ring && ring > 0; k += 1) {
+        points.push([k, -ring], [k, ring]);
+        if (Math.abs(k) !== ring) points.push([-ring, k], [ring, k]);
+      }
+      points.sort(
+        (a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || a[0] - b[0],
+      );
+      for (const [px, py] of points) {
+        if (Math.hypot(px, py) * step > reach) continue;
+        const box = boxAt(px * step, py * step);
+        if (free(box)) {
+          found = box;
+          break;
+        }
       }
     }
-    free.sort((a, b) => a.distance - b.distance || a.y - b.y || a.x - b.x);
-    return { candidates: free, priority: chip.priority, kind: 'chip' };
+    if (found) {
+      placed.push(found);
+      at[i] = found;
+    }
+  }
+  return at;
+}
+
+/** A point on the map. */
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** A link's route: its SVG path, its middle (where its chip goes), and its two ends. */
+export interface Route {
+  d: string;
+  mid: Point;
+  start: Point;
+  end: Point;
+  /** True for a route out to a rail beside a column of cards, false between facing sides. */
+  rail: boolean;
+}
+
+/**
+ * Each link's route between its two cards, inside the drawing:
+ * - between cards that stand apart across the page, a curve from the side of one facing the
+ *   other to the facing side of the other;
+ * - between cards in one column, out to a rail to the right of the column (and of every card
+ *   between them), along it and back in; links that would share a stretch of rail get rails of
+ *   their own, `railStep` apart, the shorter ones nearer the cards, so they fan out rather than
+ *   run as one bundle. The rails take at most `railRoom` px beside the cards.
+ * The ends on a card's side are spread down its edge, in the order of their other ends, so no two
+ * arrowheads meet. `right` is how far right the routes reach: the drawing is at least that wide.
+ */
+export function routeLinks(
+  links: ReadonlyArray<{ source: string; target: string }>,
+  cards: ReadonlyMap<string, CardBox>,
+  {
+    railStep = 5,
+    railGap = 8,
+    railRoom = 80,
+  }: { railStep?: number; railGap?: number; railRoom?: number } = {},
+): { routes: Route[]; right: number } {
+  const none: CardBox = { x: 0, y: 0, width: 0, height: 0 };
+  const boxes = links.map((link) => [
+    cards.get(link.source) ?? none,
+    cards.get(link.target) ?? none,
+  ]);
+  const apart = (a: CardBox, b: CardBox) => a.x + a.width < b.x || b.x + b.width < a.x;
+  const centreY = (box: CardBox) => box.y + box.height / 2;
+
+  // Which side of each card each end leaves from: the facing side, or the right (a rail).
+  type End = { link: number; card: string; side: 'left' | 'right'; other: number };
+  const ends: End[] = [];
+  links.forEach((link, n) => {
+    const [a, b] = boxes[n];
+    const forward = a.x < b.x;
+    const [sideA, sideB]: Array<'left' | 'right'> = apart(a, b)
+      ? forward
+        ? ['right', 'left']
+        : ['left', 'right']
+      : ['right', 'right'];
+    ends.push({ link: n, card: link.source, side: sideA, other: centreY(b) });
+    ends.push({ link: n, card: link.target, side: sideB, other: centreY(a) });
   });
-  const { at } = placeLabels(choices, [], gap);
-  return at.map((index, i) => {
-    if (index === -1) return null;
-    const box = choices[i].candidates[index];
-    return {
-      x: box.x - box.width / 2,
-      y: box.y - box.height / 2,
-      width: box.width,
-      height: box.height,
-    };
+  // The ends on one side of one card, spread down its edge in the order of their other ends.
+  const endY = new Map<string, number>();
+  const groups = new Map<string, End[]>();
+  for (const end of ends) {
+    const key = `${end.card}\u0000${end.side}`;
+    groups.set(key, [...(groups.get(key) ?? []), end]);
+  }
+  for (const group of groups.values()) {
+    const box = cards.get(group[0].card) ?? none;
+    group.sort((p, q) => p.other - q.other || p.link - q.link);
+    group.forEach((end, i) => {
+      endY.set(
+        `${end.link}\u0000${end.card === links[end.link].source ? 's' : 't'}`,
+        box.y + (box.height * (i + 1)) / (group.length + 1),
+      );
+    });
+  }
+
+  // Rails: a level for each rail link, so that links whose stretches overlap differ.
+  const railLinks = links
+    .map((_, n) => n)
+    .filter((n) => !apart(boxes[n][0], boxes[n][1]))
+    .map((n) => {
+      const [y1, y2] = [endY.get(`${n}\u0000s`) ?? 0, endY.get(`${n}\u0000t`) ?? 0];
+      return { n, top: Math.min(y1, y2), bottom: Math.max(y1, y2) };
+    })
+    .sort((p, q) => p.bottom - p.top - (q.bottom - q.top) || p.n - q.n);
+  const level = new Map<number, number>();
+  const levels: Array<Array<{ top: number; bottom: number }>> = [];
+  for (const rail of railLinks) {
+    let at = levels.findIndex((taken) =>
+      taken.every((other) => rail.bottom + 2 < other.top || other.bottom + 2 < rail.top),
+    );
+    if (at === -1) {
+      at = levels.length;
+      levels.push([]);
+    }
+    levels[at].push(rail);
+    level.set(rail.n, at);
+  }
+  const step =
+    levels.length > 1 ? Math.min(railStep, (railRoom - railGap - 2) / (levels.length - 1)) : 0;
+
+  let right = 0;
+  const routes = links.map((_link, n): Route => {
+    const [a, b] = boxes[n];
+    const [sy, ty] = [endY.get(`${n}\u0000s`) ?? centreY(a), endY.get(`${n}\u0000t`) ?? centreY(b)];
+    if (apart(a, b)) {
+      const forward = a.x < b.x;
+      const start = { x: forward ? a.x + a.width : a.x, y: sy };
+      const end = { x: forward ? b.x : b.x + b.width, y: ty };
+      const half = (end.x - start.x) / 2;
+      right = Math.max(right, start.x, end.x);
+      return {
+        d: `M${start.x},${start.y} C${start.x + half},${sy} ${end.x - half},${ty} ${end.x},${end.y}`,
+        mid: { x: (start.x + end.x) / 2, y: (sy + ty) / 2 },
+        start,
+        end,
+        rail: false,
+      };
+    }
+    const start = { x: a.x + a.width, y: sy };
+    const end = { x: b.x + b.width, y: ty };
+    const [top, bottom] = [Math.min(sy, ty), Math.max(sy, ty)];
+    const column = Math.max(
+      start.x,
+      end.x,
+      ...[...cards.values()]
+        .filter((c) => c.y < bottom && c.y + c.height > top && !apart(c, a))
+        .map((c) => c.x + c.width),
+    );
+    const rx = column + railGap + (level.get(n) ?? 0) * step;
+    right = Math.max(right, rx);
+    const r = Math.min(6, (bottom - top) / 2, rx - Math.max(start.x, end.x));
+    const down = ty >= sy ? 1 : -1;
+    const d = [
+      `M${start.x},${sy}`,
+      `H${rx - r}`,
+      `Q${rx},${sy} ${rx},${sy + down * r}`,
+      `V${ty - down * r}`,
+      `Q${rx},${ty} ${rx - r},${ty}`,
+      `H${end.x}`,
+    ].join(' ');
+    return { d, mid: { x: rx, y: (sy + ty) / 2 }, start, end, rail: true };
   });
+  return { routes, right };
 }

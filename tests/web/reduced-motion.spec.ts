@@ -181,6 +181,8 @@ async function openGraph(page: Page, reducedMotion: "reduce" | "no-preference") 
   await page.getByRole("button", { name: "View full analysis" }).click();
   const graph = graphOf(page);
   await expect(graph.locator("g.nodes > g")).toHaveCount(4);
+  // The map's row, below the columns, in view to be pointed at.
+  await graph.scrollIntoViewIfNeeded();
   const drawnAt = await page.evaluate(() => (window as unknown as { __drawnAt: number }).__drawnAt);
   expect(drawnAt).toBeGreaterThanOrEqual(0);
   const framesBefore = await frames(page);

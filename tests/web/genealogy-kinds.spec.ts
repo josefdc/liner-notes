@@ -64,23 +64,23 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string, part?: L
 // [kind, relation drawn, dash, chip] for each shown link, in the fixture's order (the link
 // whose claim was contradicted is not shown).
 const DRAWN = [
-  ["sourced", "sample", "none", "sample"],
-  ["sourced", "interpolation", "none", "interpolation"],
-  ["sourced", "cover", "none", "cover"],
-  ["sourced", "remix", "none", "remix"],
-  ["sourced", "producer", "none", "shared producer"],
-  ["sourced", "influence", "none", "influence"],
-  ["inferred", "influence", "6 4", "possible sample"],
-  ["inferred", "influence", "6 4", "possible interpolation"],
-  ["inferred", "influence", "6 4", "possible cover"],
-  ["inferred", "influence", "6 4", "possible remix"],
-  ["inferred", "producer", "6 4", "possible shared producer"],
-  ["inferred", "influence", "6 4", "possible influence"],
-  ["inferred", "influence", "6 4", "possible sample"], // cites an id not in the pack
-  ["inferred", "influence", "6 4", "possible sample"], // says sourced, cites nothing
-  ["inferred", "influence", "6 4", "possible sample"], // the model's "sourced", no verdict
-  ["sourced", "sample", "none", "sample"], // the model's, with a supported claim
-  ["inferred", "influence", "6 4", "related"], // a model link its years contradict
+  ["sourced", "sample", "none", "Sample"],
+  ["sourced", "interpolation", "none", "Interpolation"],
+  ["sourced", "cover", "none", "Cover"],
+  ["sourced", "remix", "none", "Remix"],
+  ["sourced", "producer", "none", "Shared producer"],
+  ["sourced", "influence", "none", "Influence"],
+  ["inferred", "influence", "6 4", "Possible sample"],
+  ["inferred", "influence", "6 4", "Possible interpolation"],
+  ["inferred", "influence", "6 4", "Possible cover"],
+  ["inferred", "influence", "6 4", "Possible remix"],
+  ["inferred", "producer", "6 4", "Possible shared producer"],
+  ["inferred", "influence", "6 4", "Possible influence"],
+  ["inferred", "influence", "6 4", "Possible sample"], // cites an id not in the pack
+  ["inferred", "influence", "6 4", "Possible sample"], // says sourced, cites nothing
+  ["inferred", "influence", "6 4", "Possible sample"], // the model's "sourced", no verdict
+  ["sourced", "sample", "none", "Sample"], // the model's, with a supported claim
+  ["inferred", "influence", "6 4", "Related, direction unknown"], // years contradict it
 ];
 
 const graphOf = (page: Page) =>
@@ -128,8 +128,8 @@ const placeInPanel = (page: Page) =>
   });
 
 /**
- * Marks the graph drawn now, before a resize, and says where it sits in its panel: the resize
- * keeps the drawing (it is drawn again only for new data) and its zoom.
+ * Marks the graph drawn now, before a resize, and says where it sits in its panel: a resize that
+ * keeps the axis and the cards' width keeps the drawing and its zoom.
  */
 async function markDrawing(page: Page) {
   await graphOf(page)
@@ -139,28 +139,14 @@ async function markDrawing(page: Page) {
 }
 
 /**
- * The drawing marked before a resize is still the one shown, at the same scale, and as centred
- * in the resized panel as it was before.
- */
-async function drawingKept(page: Page, before: Awaited<ReturnType<typeof placeInPanel>>) {
-  await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
-  const now = await placeInPanel(page);
-  expect(now.k).toBe(before.k);
-  expect(Math.abs(now.offset[0] - before.offset[0])).toBeLessThanOrEqual(2);
-  expect(Math.abs(now.offset[1] - before.offset[1])).toBeLessThanOrEqual(2);
-  // A panel no smaller than before still holds every track that was in it. (One that shrank
-  // may cut some off: the zoom was fitted to the larger one, and is kept.)
-  if (now.size[0] >= before.size[0] && now.size[1] >= before.size[1]) {
-    expect(now.outside).toBeLessThanOrEqual(before.outside);
-  }
-  return now;
-}
-
-/**
  * Waits until the graph is drawn and its view is set: the zoom's transform is set and holds
  * still. The page's clock (installed in beforeEach) is first run forward past any glide.
  */
 async function graphFitted(page: Page) {
+  // From md up the map is a row below the columns: scrolled into view, so what is on it can be
+  // pointed at, and the pointer off it, so nothing is pointed at by chance.
+  await graphOf(page).scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
   const fitted = async () => {
     await page.clock.runFor(LAYOUT_MS);
     return graphOf(page)
@@ -215,16 +201,17 @@ test.describe("the genealogy graph", () => {
     );
     expect(drawn).toEqual(DRAWN.map(([kind, type, dash]) => [kind, type, dash]));
     // No relation is written on the map at rest: each link names it, hedged when it is not
-    // sourced, in a chip while it is pointed at.
+    // sourced, in a chip while it is focused (the view brings it in) or pointed at.
+    await graphFitted(page);
     await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
     const targets = graph.locator("g.link-targets path");
     for (const [index, [, , , label]] of DRAWN.entries()) {
-      await targets.nth(index).dispatchEvent("mouseenter");
+      await targets.nth(index).focus();
       await expect(graph.locator(`g.link-chips g.chip[data-link-index="${index}"]`)).toHaveText(
         label,
       );
-      await targets.nth(index).dispatchEvent("mouseleave");
     }
+    await targets.last().blur();
     await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
     await expect(page.getByTestId("links-hidden")).toHaveText(
       "1 link not shown: the claim behind it was rejected or cannot be read.",
@@ -325,9 +312,11 @@ test.describe("the genealogy graph", () => {
           }
         }
       }
-      // Pointing at a track shows its relations in chips, never over a card; the names stay.
+      // Focusing a track (the view brings it in) and pointing at it shows its relations in
+      // chips, never over a card; the names stay.
       const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
       await expect(track).toHaveAttribute("aria-label", /\S/);
+      await track.focus();
       await track.dispatchEvent("mouseenter");
       const pointed = await graphBoxes(page);
       expect(pointed.chips.length).toBeGreaterThan(0);
@@ -338,22 +327,42 @@ test.describe("the genealogy graph", () => {
       }
       expect(pointed.cards.every((card) => card.shown)).toBe(true);
       await track.dispatchEvent("mouseleave");
+      await track.blur();
       expect((await graphBoxes(page)).chips).toEqual([]);
     });
   }
 
-  test("keeps the drawing and its zoom when its panel widens, and lays the years across a wide row", async ({
+  test("keeps the drawing and its zoom when its row widens, and lays the years down a phone's tab", async ({
     page,
   }) => {
-    // At 1440 px the map is a column (years from top to bottom); at 1920 px the column is wider
-    // and the same drawing is kept, as centred; at 1024 px the map is a full-width row, its
-    // years from left to right: drawn again.
+    // At 1440 px the map is a full-width row, its years from left to right, wider than the
+    // panel, this track (2011) near its right end; at 1920 px the same drawing is kept at the
+    // same zoom, its right end still at the panel's (no empty band opens past it). On a phone
+    // the years run from top to bottom: drawn again.
     await graphFitted(page);
     const placed = await markDrawing(page);
+    expect(placed.outside).toBeGreaterThan(0);
+    const ends = () =>
+      graphOf(page).evaluate((svg) => {
+        const panel = svg.getBoundingClientRect();
+        const cards = [...svg.querySelectorAll("g.nodes rect.card")].map((card) =>
+          card.getBoundingClientRect(),
+        );
+        return {
+          left: Math.min(...cards.map((card) => card.left)) - panel.left,
+          right: panel.right - Math.max(...cards.map((card) => card.right)),
+        };
+      });
+    const before = await ends();
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
-    const now = await drawingKept(page, placed);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
+    const now = await placeInPanel(page);
+    expect(now.k).toBe(placed.k);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
+    const after = await ends();
+    expect(after.left).toBeLessThan(0);
+    expect(Math.abs(after.right - before.right)).toBeLessThanOrEqual(2);
     const years = () =>
       graphOf(page)
         .locator("text.year-tick")
@@ -363,8 +372,8 @@ test.describe("the genealogy graph", () => {
             return { label: tick.textContent, x: box.x, y: box.y };
           }),
         );
-    const column = await years();
-    expect(column.map((tick) => tick.label)).toEqual([
+    const row = await years();
+    expect(row.map((tick) => tick.label)).toEqual([
       "1977",
       "1979",
       "1982",
@@ -375,13 +384,14 @@ test.describe("the genealogy graph", () => {
       "2015",
       "2020",
     ]);
-    expect(column[1].y).toBeGreaterThan(column[0].y);
-    await page.setViewportSize({ width: 1024, height: 900 });
-    await graphFitted(page);
-    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(0);
-    const row = await years();
     expect(row[1].x).toBeGreaterThan(row[0].x);
     expect(row[1].y).toBeCloseTo(row[0].y, 0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("tab", { name: "Connections" }).click();
+    await graphFitted(page);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(0);
+    const column = await years();
+    expect(column[1].y).toBeGreaterThan(column[0].y);
   });
 
   test("has a legend in words for the lines and every relation shown", async ({ page }) => {
@@ -441,7 +451,9 @@ test.describe("the genealogy graph", () => {
         `direction; cites ${MB}, not checked by a verifier`,
     );
     // Its chip names it, clear of the cards.
-    await expect(graphOf(page).locator("g.link-chips g.chip")).toHaveText("related");
+    await expect(graphOf(page).locator("g.link-chips g.chip")).toHaveText(
+      "Related, direction unknown",
+    );
     await screenshot(page, testInfo, "hover", page.locator("#panel-genealogy"));
     await page.mouse.move(5, 5);
     await expect(detail).toHaveCount(0);
@@ -465,7 +477,8 @@ test.describe("the genealogy graph", () => {
     await expect(tracks.first()).not.toBeFocused();
     await page.keyboard.press("Tab");
     await expect(tracks.first()).toBeFocused();
-    await expect(detail).toHaveText(`${CURRENT}The analyzed track`);
+    // The track named whole, as its card says it.
+    await expect(detail).toHaveText("Bright Lines by Test Artist (2011)The analyzed track");
 
     await page.keyboard.press("ArrowRight");
     await expect(tracks.nth(1)).toBeFocused();
@@ -574,14 +587,17 @@ test.describe("the genealogy graph", () => {
       page,
     }, testInfo) => {
       await graphFitted(page);
-      const placed = await markDrawing(page);
       await page.setViewportSize({ width, height });
       await page.getByRole("tab", { name: "Connections" }).click();
       const panel = page.locator("#panel-genealogy");
       const tabBar = page.getByRole("tablist", { name: "Player sections" });
       await expect(page.getByRole("group", { name: "Link legend" })).toBeVisible();
       await graphFitted(page);
-      await drawingKept(page, placed);
+      // Laid out again for the phone: the years from top to bottom.
+      const ticks = await graphOf(page)
+        .locator("text.year-tick")
+        .evaluateAll((list) => list.map((tick) => tick.getBoundingClientRect().y));
+      expect(ticks[1]).toBeGreaterThan(ticks[0]);
       const [panelBox, barBox, graphBox] = await Promise.all([
         panel.boundingBox(),
         tabBar.boundingBox(),
@@ -633,6 +649,9 @@ test.describe("a related track's preview", () => {
     // The pointer on the track plays nothing. The track is an origin: its hint says a click
     // explores it (it analyses the track), and no hint offers a preview there.
     const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
+    // In view first (the hint is placed in view, near its card).
+    await track.focus();
+    await track.blur();
     await track.dispatchEvent("mouseenter");
     await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);

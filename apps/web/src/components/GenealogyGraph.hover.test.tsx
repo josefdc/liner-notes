@@ -70,7 +70,7 @@ const data = {
 /** The drawn node for `id`: the group whose label text is the node's. */
 function nodeGroup(container: HTMLElement, label: string): Element {
   const group = [...container.querySelectorAll('g.nodes > g')].find((g) =>
-    g.textContent?.includes(label.slice(0, 10)),
+    g.getAttribute('data-title')?.includes(label.slice(0, 10)),
   );
   if (!group) throw new Error(`no drawn node for ${label}`);
   return group;

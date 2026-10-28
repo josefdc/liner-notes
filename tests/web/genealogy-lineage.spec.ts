@@ -11,20 +11,26 @@ import {
 } from "./mock";
 import { offline } from "./offline";
 
-// The song-relations map as a lineage (#217): each track a card on a year axis. On every width
-// the map is drawn at (a phone, the xl column at 1280, 1440 and 1920 px), for the genealogy-kinds
-// result and the recorded One More Time run:
+// The song-relations map as a lineage (#217): each track a card on a year axis, across the page
+// from md up (a full-width row below the columns) and down a phone's tab. On every width, for the
+// genealogy-kinds result, the recorded One More Time run and a rich map (MusicBrainz years,
+// second hops, undated tracks, a 92-character title and a 50-letter word):
 // - no two cards overlap;
 // - no relation is written on the map at rest; a chip names it while a card or a link is pointed
-//   at or focused, and a chip never lies over a card;
-// - from 1280 px no title, artist or year is cut: each wraps to two lines at most, inside its
-//   card.
-// With two relations or fewer the map is a compact row instead, and the panel is as tall as it.
+//   at or focused: never over a card, another chip or the detail box, and near its link;
+// - every card and link the keyboard reaches is brought into view, clear of the detail box, a
+//   card with its year's label; down a phone's tab nothing runs past the panel's sides;
+// - from 1280 px no title, artist or year is cut: each wraps (four lines of title, three of
+//   artist and year at most), a long word broken with a hyphen, inside its card.
+// With two relations to the analysed track or fewer the map is a compact row instead, and the
+// panel is as tall as it.
 
 // Animations end at once, so what is read is where things stay.
 test.use({ reducedMotion: "reduce" });
 
 const ANALYZE = "/api/analyze/stream";
+/** How far a chip may lie from its link's middle (map px): CHIP_REACH in GenealogyGraph.tsx. */
+const CHIP_REACH = 240;
 
 // Nothing leaves the machine: the recording's cover and any other outside address are answered
 // on the page.
@@ -36,50 +42,130 @@ const graphOf = (page: Page) =>
   page.locator('#panel-genealogy svg[aria-label="Connections graph"]');
 
 type Box = { x: number; y: number; right: number; bottom: number };
-const overlap = (a: Box, b: Box) =>
-  a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
 
-/** The cards on screen, and the chips drawn now. */
-const drawn = (page: Page) =>
-  graphOf(page).evaluate((svg) => {
+/**
+ * Everything the checks read from the map once the page has settled (two frames: React has drawn
+ * the detail box, and the map has placed its chips and its view for it), on screen.
+ */
+const measure = async (page: Page) => {
+  await page.evaluate(
+    () =>
+      new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))),
+  );
+  return graphOf(page).evaluate((svg) => {
     const boxOf = (element: Element | null): Box => {
       const box = (element as Element).getBoundingClientRect();
       return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
     };
+    const detail = document.querySelector('[data-testid="link-detail"]');
+    const focused = document.activeElement;
+    const onMap = focused !== null && svg.contains(focused);
+    /** A focused link: the middle of its route (where the view brings it), as a small box. */
+    const middleOf = (path: Element): Box => {
+      const [x, y] = (path.getAttribute("data-mid") ?? "0,0").split(",").map(Number);
+      const matrix = (path as SVGGraphicsElement).getScreenCTM();
+      const at = matrix ? new DOMPoint(x, y).matrixTransform(matrix) : new DOMPoint(x, y);
+      return { x: at.x - 1, y: at.y - 1, right: at.x + 1, bottom: at.y + 1 };
+    };
     return {
+      wrapper: boxOf(svg.parentElement),
+      detail: detail ? boxOf(detail) : null,
+      focused: onMap
+        ? focused.matches("g.nodes > g")
+          ? { kind: "card", box: boxOf(focused.querySelector("rect.card")) }
+          : { kind: "link", box: middleOf(focused) }
+        : null,
       cards: [...svg.querySelectorAll("g.nodes > g")].map((card) => ({
         id: card.getAttribute("data-node-id") ?? "",
         box: boxOf(card.querySelector("rect.card")),
       })),
-      chips: [...svg.querySelectorAll("g.link-chips g.chip")].map((chip) => ({
-        text: chip.textContent ?? "",
-        box: boxOf(chip.querySelector("rect")),
+      chips: [...svg.querySelectorAll("g.link-chips g.chip")].map((chip) => {
+        const rect = chip.querySelector("rect") as SVGRectElement;
+        const [x, y] = (
+          /translate\(([-\d.e]+),([-\d.e]+)\)/.exec(chip.getAttribute("transform") ?? "") ?? [
+            "",
+            "0",
+            "0",
+          ]
+        )
+          .slice(1)
+          .map(Number);
+        const near = chip.getAttribute("data-near")?.split(",").map(Number) ?? null;
+        const centre = [
+          x + Number(rect.getAttribute("width")) / 2,
+          y + Number(rect.getAttribute("height")) / 2,
+        ];
+        return {
+          text: chip.textContent ?? "",
+          box: boxOf(rect),
+          // How far the chip's centre is from its link's middle, in the map's units.
+          reach: near ? Math.hypot(centre[0] - near[0], centre[1] - near[1]) : 0,
+        };
+      }),
+      ticks: [...svg.querySelectorAll("text.year-tick")].map((tick) => ({
+        label: tick.textContent ?? "",
+        box: boxOf(tick),
       })),
+      links: [...svg.querySelectorAll("g.links path")].map((path) => boxOf(path)),
     };
   });
+};
+type Measure = Awaited<ReturnType<typeof measure>>;
 
-/**
- * Each card's words as drawn, against the card's own title and artist and year: whether a line
- * was cut ("…"), whether every word is drawn, how many lines each takes, and how far the
- * longest line runs past the card's right edge (px; at most 0 when it fits).
- */
+const overlap = (a: Box, b: Box) =>
+  a.x < b.right - 0.5 && b.x < a.right - 0.5 && a.y < b.bottom - 0.5 && b.y < a.bottom - 0.5;
+const insideX = (box: Box, wrapper: Box) =>
+  box.x >= wrapper.x - 0.5 && box.right <= wrapper.right + 0.5;
+const inside = (box: Box, wrapper: Box) =>
+  insideX(box, wrapper) && box.y >= wrapper.y - 0.5 && box.bottom <= wrapper.bottom + 0.5;
+
+/** The chips drawn now: none over a card, another chip or the detail box, none far from its link. */
+function checkChips(now: Measure, what: string) {
+  for (const [i, chip] of now.chips.entries()) {
+    for (const card of now.cards) {
+      expect(overlap(chip.box, card.box), `${what}: chip "${chip.text}" over ${card.id}`).toBe(
+        false,
+      );
+    }
+    for (const other of now.chips.slice(i + 1)) {
+      expect(overlap(chip.box, other.box), `${what}: chips "${chip.text}", "${other.text}"`).toBe(
+        false,
+      );
+    }
+    if (now.detail) {
+      expect(overlap(chip.box, now.detail), `${what}: chip "${chip.text}" under the detail`).toBe(
+        false,
+      );
+    }
+    expect(chip.reach, `${what}: chip "${chip.text}" far from its link`).toBeLessThanOrEqual(
+      CHIP_REACH + 1,
+    );
+  }
+}
+
+/** Each card's words as drawn, against its own title and artist and year. */
 const cardWords = (page: Page) =>
   graphOf(page).evaluate((svg) =>
     [...svg.querySelectorAll("g.nodes > g")].map((card) => {
       const right = (card.querySelector("rect.card") as Element).getBoundingClientRect().right;
-      const lines = (name: string) => [
-        ...card.querySelectorAll<SVGTSpanElement>(`text.${name} tspan`),
-      ];
-      const words = (text: string | null) => (text ?? "").replace(/\s+/g, "");
       const read = (name: string, whole: string | null) => {
-        const drawnLines = lines(name);
+        const lines = [...card.querySelectorAll<SVGTSpanElement>(`text.${name} tspan`)];
+        // The lines joined back: a space between two lines, none after a hyphen the wrap put in.
+        const joined = lines
+          .map((line, i) => {
+            const text = line.textContent ?? "";
+            if (line.hasAttribute("data-hyphen")) return text.slice(0, -1);
+            return i < lines.length - 1 ? `${text} ` : text;
+          })
+          .join("");
         return {
-          lines: drawnLines.length,
-          cut: drawnLines.some((line) => line.textContent?.includes("…")),
-          whole: words(drawnLines.map((line) => line.textContent).join("")) === words(whole),
+          lines: lines.length,
+          cut: lines.some((line) => line.textContent?.includes("…")),
+          whole: joined === (whole ?? "").trim().replace(/\s+/g, " "),
+          joined,
           past: Math.max(
             -Infinity,
-            ...drawnLines.map((line) => line.getBoundingClientRect().right - right),
+            ...lines.map((line) => line.getBoundingClientRect().right - right),
           ),
         };
       };
@@ -115,31 +201,49 @@ const SHOWCASES = {
     },
     cards: 10,
   },
+  rich: {
+    open: async (page: Page) => {
+      await useMockApi(page, loadFixture("genealogy-rich"));
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      await openPlayer(page);
+    },
+    cards: 16,
+  },
 } as const;
 
 for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) {
   for (const [width, height] of [
     [390, 844],
+    [820, 1180],
+    [1024, 768],
     [1280, 800],
     [1440, 900],
     [1920, 1080],
   ] as const) {
-    test(`at ${width} px the ${showcase} map has no card over a card and no chip over a card${width >= 1280 ? ", and cuts no words" : ""}`, async ({
+    const vertical = width < 768;
+    test(`at ${width} px the ${showcase} map keeps cards, chips and the focused item apart and in view${width >= 1280 ? ", and cuts no words" : ""}`, async ({
       page,
     }, testInfo) => {
-      test.slow();
+      test.setTimeout(240_000);
       const problems = collectProblems(page);
       await page.setViewportSize({ width, height });
       await open(page);
-      if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+      if (vertical) await page.getByRole("tab", { name: "Connections" }).click();
       const graph = graphOf(page);
       await expect(graph.locator("g.nodes > g")).toHaveCount(cardCount);
+      await graph.scrollIntoViewIfNeeded();
+      // The pointer off the map: at rest, nothing is pointed at.
+      await page.mouse.move(0, 0);
       await page.evaluate(async () => {
         await document.fonts.ready;
       });
 
+      // The axis: across the page from md up, down a phone's tab.
+      const rest = await measure(page);
+      const [first, second] = rest.ticks;
+      if (vertical) expect(second.box.y).toBeGreaterThan(first.box.y);
+      else expect(second.box.x).toBeGreaterThan(first.box.x);
       // Cards never meet; no chip at rest.
-      const rest = await drawn(page);
       for (const [i, card] of rest.cards.entries()) {
         for (const other of rest.cards.slice(i + 1)) {
           expect(overlap(card.box, other.box), `${card.id} and ${other.id}`).toBe(false);
@@ -148,47 +252,68 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
       expect(rest.chips).toEqual([]);
       await screenshot(page, testInfo, `${showcase}-${width}`);
 
-      // A chip, on hover of a card or focus of a link, never lies over a card.
+      // Every card pointed at: its chips apart from cards, chips and the detail box, near links.
       let chipsShown = 0;
-      const checkChips = async (what: string) => {
-        const now = await drawn(page);
-        chipsShown += now.chips.length;
-        for (const chip of now.chips) {
-          for (const card of now.cards) {
-            expect(
-              overlap(chip.box, card.box),
-              `${what}: chip "${chip.text}" over ${card.id}`,
-            ).toBe(false);
-          }
-        }
-      };
       const tracks = graph.locator("g.nodes > g");
       for (let i = 0; i < cardCount; i += 1) {
         await tracks.nth(i).dispatchEvent("mouseenter");
-        await checkChips(`card ${i}`);
+        const now = await measure(page);
+        chipsShown += now.chips.length;
+        checkChips(now, `card ${i}`);
+        if (i === 0) await screenshot(page, testInfo, `${showcase}-${width}-hover-first`);
         await tracks.nth(i).dispatchEvent("mouseleave");
       }
-      const targets = graph.locator("g.link-targets path");
-      for (let i = 0; i < (await targets.count()); i += 1) {
-        await targets.nth(i).focus();
-        await checkChips(`link ${i}`);
-        if (i === 0) await screenshot(page, testInfo, `${showcase}-${width}-focus`);
+
+      // The keyboard through every card and link: the focused item in view, clear of the detail
+      // box; down a phone's tab, the axis's labels, the cards and the links inside the panel.
+      await tracks.first().focus();
+      const total = cardCount + (await graph.locator("g.link-targets path").count());
+      for (let i = 0; i < total; i += 1) {
+        const now = await measure(page);
+        chipsShown += now.chips.length;
+        checkChips(now, `item ${i}`);
+        const focused = now.focused;
+        expect(focused, `item ${i} focused`).not.toBeNull();
+        if (!focused) break;
+        expect(inside(focused.box, now.wrapper), `item ${i} in view`).toBe(true);
+        if (now.detail) {
+          expect(overlap(focused.box, now.detail), `item ${i} under the detail`).toBe(false);
+        }
+        if (vertical) {
+          for (const tick of now.ticks) {
+            expect(insideX(tick.box, now.wrapper), `item ${i}: label ${tick.label} cut`).toBe(true);
+          }
+          for (const card of now.cards) {
+            expect(insideX(card.box, now.wrapper), `item ${i}: card ${card.id} cut`).toBe(true);
+          }
+          for (const link of now.links) {
+            expect(insideX(link, now.wrapper), `item ${i}: a link past the panel`).toBe(true);
+          }
+        } else if (focused.kind === "card") {
+          // The year's label above the card is in view with it.
+          const label = now.ticks.find(
+            (tick) => tick.box.right > focused.box.x && tick.box.x < focused.box.right,
+          );
+          expect(
+            label !== undefined && inside(label.box, now.wrapper),
+            `item ${i}: its year in view`,
+          ).toBe(true);
+        }
+        if (i === cardCount) await screenshot(page, testInfo, `${showcase}-${width}-focus-link`);
+        await page.keyboard.press("ArrowRight");
       }
-      await targets.last().blur();
-      await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
       expect(chipsShown).toBeGreaterThan(0);
 
-      // From 1280 px, every title and every artist and year is drawn whole, in two lines at
-      // most, inside its card.
+      // From 1280 px, every title and every artist and year is drawn whole, inside its card.
       if (width >= 1280) {
         for (const card of await cardWords(page)) {
-          for (const [part, words] of [
-            ["title", card.title],
-            ["artist and year", card.meta],
+          for (const [part, words, most] of [
+            ["title", card.title, 4],
+            ["artist and year", card.meta, 3],
           ] as const) {
             expect(words.cut, `${card.id}'s ${part} cut`).toBe(false);
-            expect(words.whole, `${card.id}'s ${part} whole`).toBe(true);
-            expect(words.lines, `${card.id}'s ${part} lines`).toBeLessThanOrEqual(2);
+            expect(words.whole, `${card.id}'s ${part} whole: ${words.joined}`).toBe(true);
+            expect(words.lines, `${card.id}'s ${part} lines`).toBeLessThanOrEqual(most);
             expect(words.past, `${card.id}'s ${part} past its card`).toBeLessThanOrEqual(0);
           }
         }
@@ -198,7 +323,62 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
   }
 }
 
-/** The full result with only the first `count` of the genealogy-kinds relations. */
+test("a long title and a long word are read whole, in the card's name and its detail", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await SHOWCASES.rich.open(page);
+  const graph = graphOf(page);
+  await graph.scrollIntoViewIfNeeded();
+  const title =
+    "Here Comes the Hotstepper (Heartical Mix) [feat. Somebody Else and the Very Long Collective]";
+  const name = `${title} by Ini Kamoze & The Very Long Collective (1994)`;
+  const long = graph.locator('g.nodes > g[data-node-id="s1"]');
+  expect((await long.getAttribute("aria-label"))?.startsWith(`${name}:`)).toBe(true);
+  await long.focus();
+  const detail = page.getByTestId("link-detail");
+  await expect(detail).toContainText(name);
+  // Nothing in the detail box is cut: it is as tall as its words.
+  expect(await detail.evaluate((box) => box.scrollHeight <= box.clientHeight + 1)).toBe(true);
+  // The 50-letter word wraps with a hyphen, and its card's name has it whole.
+  const word = graph.locator('g.nodes > g[data-node-id="d3"]');
+  expect(await word.getAttribute("aria-label")).toMatch(
+    /^Supercalifragilisticexpialidociouslyremixedforever by Remixer \(2016\):/,
+  );
+  expect(await word.locator("text.card-title tspan[data-hyphen]").count()).toBeGreaterThan(0);
+});
+
+test("a narrower phone lays the map out again, keeping the reader's place, inside the panel", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 700, height: 900 });
+  await SHOWCASES.rich.open(page);
+  await page.getByRole("tab", { name: "Connections" }).click();
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(16);
+  // The reader moves down the map: the last card brought into view.
+  await graph.locator("g.nodes > g").last().focus();
+  await graph.locator("g.nodes > g").last().blur();
+  const view = () =>
+    graph.locator(":scope > g").evaluate((g) => {
+      const match = /translate\(([-\d.e]+),([-\d.e]+)\)/.exec(g.getAttribute("transform") ?? "");
+      return { x: Number(match?.[1]), y: Number(match?.[2]) };
+    });
+  const before = await view();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect.poll(async () => (await measure(page)).wrapper.right).toBeLessThanOrEqual(391);
+  const now = await measure(page);
+  // Laid out again for the narrower panel, the reader's place down the map kept.
+  expect((await view()).y).toBe(before.y);
+  for (const card of now.cards) {
+    expect(insideX(card.box, now.wrapper), `card ${card.id} cut`).toBe(true);
+  }
+  for (const tick of now.ticks) {
+    expect(insideX(tick.box, now.wrapper), `label ${tick.label} cut`).toBe(true);
+  }
+});
+
+/** The genealogy-kinds result with only its first `count` relations to the analysed track. */
 function withRelations(count: number) {
   const fixture = loadFixture("genealogy-kinds");
   const complete = fixture.streams[ANALYZE].find(
@@ -219,7 +399,7 @@ for (const count of [1, 2]) {
     page,
   }, testInfo) => {
     const problems = collectProblems(page);
-    // From md up to xl the connections are a row of their own below the columns.
+    // From md up the connections are a row of their own below the columns.
     await page.setViewportSize({ width: 1024, height: 900 });
     await useMockApi(page, withRelations(count));
     await analyzeAndOpenDashboard(page, "Bright Lines");

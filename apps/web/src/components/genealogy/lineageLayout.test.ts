@@ -11,6 +11,8 @@ import {
   layoutLineage,
   orientationFor,
   placeChips,
+  relationCount,
+  routeLinks,
   wrapText,
 } from './lineageLayout';
 
@@ -165,8 +167,9 @@ describe('layoutLineage, vertical (below md, or a narrow panel)', () => {
     expect(orientationFor(390, 390)).toBe('vertical');
     expect(orientationFor(767, 767)).toBe('vertical');
     expect(orientationFor(1024, 1024)).toBe('horizontal');
-    // The xl column at 1440 px is 360 px wide.
+    // A panel too narrow for years side by side, at any width of the window.
     expect(orientationFor(1440, 360)).toBe('vertical');
+    expect(orientationFor(1440, 1440)).toBe('horizontal');
   });
 
   const layout = layoutLineage(CARDS, {
@@ -214,10 +217,19 @@ describe('a card’s lane', () => {
 });
 
 describe('the compact row', () => {
-  it('stands in for the canvas with two relations or fewer', () => {
+  it('stands in for the canvas with two relations to the analysed track or fewer', () => {
     expect(isSparse(0)).toBe(true);
     expect(isSparse(2)).toBe(true);
     expect(isSparse(3)).toBe(false);
+    // A second hop between two other tracks is not a relation to the analysed one.
+    const links = [
+      { source: 'a', target: 'current' },
+      { source: 'current', target: 'b' },
+      { source: 'a', target: 'c' },
+      { source: 'c', target: 'd' },
+    ];
+    expect(relationCount(links, 'current')).toBe(2);
+    expect(relationCount(links, null)).toBe(4);
   });
 });
 
@@ -225,13 +237,22 @@ describe('wrapText', () => {
   it('wraps at spaces into at most two lines, and says when it had to cut', () => {
     expect(wrapText('One More Time (Daft Punk) / Swoon (Chemical Brothers)', 27)).toEqual({
       lines: ['One More Time (Daft Punk) /', 'Swoon (Chemical Brothers)'],
+      hyphenated: [false, false],
       truncated: false,
     });
     const cut = wrapText('One More Time (Daft Punk) / Swoon (Chemical Brothers)', 20);
     expect(cut.truncated).toBe(true);
     expect(cut.lines).toHaveLength(2);
     expect(cut.lines[1].endsWith('…')).toBe(true);
-    expect(wrapText('Supercalifragilistic', 8, 3).lines).toEqual(['Supercal', 'ifragili', 'stic']);
+    // A word longer than a line is broken inside it, with a hyphen, never silently.
+    expect(wrapText('Supercalifragilistic', 8, 3)).toEqual({
+      lines: ['Superca-', 'lifragi-', 'listic'],
+      hyphenated: [true, true, false],
+      truncated: false,
+    });
+    // Four lines hold an 80-character title in 24 characters a line.
+    const long = 'Here Comes the Hotstepper (Heartical Mix) [feat. Somebody Else and the Rest]';
+    expect(wrapText(long, 24, 4).truncated).toBe(false);
   });
 
   it('finds the fewest characters a line needs for two lines', () => {
@@ -278,5 +299,90 @@ describe('placeChips', () => {
     expect(
       placeChips([{ near: { x: 50, y: 50 }, width: 60, height: 16, priority: 1 }], [full], full),
     ).toEqual([null]);
+  });
+});
+
+describe('placeChips, its reach', () => {
+  it('leaves a chip out rather than put it far from its link', () => {
+    // Free room only 200 px from the point.
+    const wall = { x: 0, y: 0, width: 300, height: 300 };
+    const bounds = { x: 0, y: 0, width: 600, height: 300 };
+    expect(
+      placeChips(
+        [{ near: { x: 150, y: 150 }, width: 40, height: 16, priority: 1 }],
+        [wall],
+        bounds,
+        {
+          reach: 100,
+        },
+      ),
+    ).toEqual([null]);
+    const far = placeChips(
+      [{ near: { x: 150, y: 150 }, width: 40, height: 16, priority: 1 }],
+      [wall],
+      bounds,
+      { reach: 220 },
+    )[0];
+    expect(far).not.toBeNull();
+    expect((far?.x ?? 0) + 20 - 150).toBeLessThanOrEqual(220);
+  });
+});
+
+describe('routeLinks', () => {
+  // A column of cards (the vertical map): a source on top, this track, and cards between.
+  const column = new Map<string, CardBox>(
+    ['a', 'b', 'c', 'current', 'd'].map((id, i) => [
+      id,
+      { x: 22, y: i * 70, width: 200, height: 60 },
+    ]),
+  );
+  const links = [
+    { source: 'a', target: 'current' },
+    { source: 'b', target: 'current' },
+    { source: 'c', target: 'current' },
+    { source: 'current', target: 'd' },
+  ];
+  const { routes, right } = routeLinks(links, column, { railRoom: 40 });
+
+  it('keeps every route inside the room beside the column, and says how far right it goes', () => {
+    expect(right).toBeLessThanOrEqual(222 + 40);
+    for (const route of routes) {
+      // A rail route goes no further right than its rail (its middle).
+      const xs = [
+        ...route.d.matchAll(/[MHQ](-?[\d.]+)/g),
+        ...route.d.matchAll(/ (-?[\d.]+),/g),
+      ].map((m) => Number(m[1]));
+      expect(route.rail).toBe(true);
+      expect(route.mid.x).toBeLessThanOrEqual(right);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(route.mid.x + 0.01);
+    }
+  });
+
+  it('fans links that share a stretch out to rails of their own', () => {
+    const rails = routes.slice(0, 3).map((route) => route.mid.x);
+    expect(new Set(rails).size).toBe(3);
+    // The shorter link nearer the cards.
+    expect(rails[2]).toBeLessThan(rails[0]);
+  });
+
+  it('spreads the ends that meet a card side down its edge: no two arrowheads on one point', () => {
+    const ends = routes.slice(0, 3).map((route) => route.end.y);
+    expect(new Set(ends).size).toBe(3);
+    const current = column.get('current') as CardBox;
+    for (const y of ends) {
+      expect(y).toBeGreaterThan(current.y);
+      expect(y).toBeLessThan(current.y + current.height);
+    }
+  });
+
+  it('joins cards that stand apart from facing sides', () => {
+    const apart = new Map<string, CardBox>([
+      ['x', { x: 0, y: 0, width: 100, height: 40 }],
+      ['y', { x: 200, y: 100, width: 100, height: 40 }],
+    ]);
+    const [route] = routeLinks([{ source: 'x', target: 'y' }], apart).routes;
+    expect(route.rail).toBe(false);
+    expect(route.start).toEqual({ x: 100, y: 20 });
+    expect(route.end).toEqual({ x: 200, y: 120 });
   });
 });

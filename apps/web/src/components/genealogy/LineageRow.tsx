@@ -1,18 +1,26 @@
 import type React from 'react';
-import type { GenealogyNode } from '../../types';
 import { Music } from 'lucide-react';
+import type { GenealogyNode } from '../../types';
 import { placeholderBackground } from '../../styles/placeholder';
 import { isValidImageUrl } from '../../utils/image';
 import { cardWords } from './cardWords';
-import { relationLabel, relationToTrack, type ShownLink } from './links';
+import { relationLabel, relationSentence, relationToTrack, type ShownLink } from './links';
 import { LINK_COLOR } from './linkStyle';
 
+/** True for a link whose direction the row may draw: known, and not a shared producer. */
+const directed = (link: ShownLink) => link.directionKnown && link.type !== 'producer';
+
 /**
- * The map when it has two relations or fewer: a compact row of cards instead of a canvas. The
- * tracks this one uses sit before it, the tracks that use it after it, each with its relation
- * between them in the words the canvas, the list and the cards use ("Sample", "Possible
- * sample"), its border solid when the link is sourced and dashed when it is not, and an arrow
- * only when the direction is known. Tracks with no link to this one follow, said so.
+ * The map when it has two relations to the analysed track or fewer: a compact row of cards
+ * instead of a canvas.
+ * - The tracks this one uses sit before it and the tracks that use it after it, each with its
+ *   relation between them, but only for a link whose direction is known (not a shared producer,
+ *   nor a link whose years contradict it): that order says which record came from which.
+ * - Every other track is in "Related tracks", in no order: its relation to this one without an
+ *   arrow, or (a second hop) its best link to another track, said as a sentence naming both.
+ * - With no analysed track, each link is drawn once, from its source to its target.
+ * A relation is named in the words the canvas, the list and the cards use ("Sample", "Possible
+ * sample"), its border solid when the link is sourced and dashed when it is not.
  */
 export const LineageRow: React.FC<{
   nodes: readonly GenealogyNode[];
@@ -24,23 +32,41 @@ export const LineageRow: React.FC<{
   isOrigin: (id: string) => boolean;
   /** A track's name for screen readers: its relation and how it is known. */
   describe: (node: GenealogyNode) => string;
+  /** How a relation names a track (its title and year). */
+  nameOf: (id: string) => string;
   onAnalyse: (node: GenealogyNode) => void;
   /** Room left at the top for the panel's heading, which lies over it (px). */
   topInset?: number;
-}> = ({ nodes, links, currentId, yearOf, isOrigin, describe, onAnalyse, topInset = 0 }) => {
+}> = ({ nodes, links, currentId, yearOf, isOrigin, describe, nameOf, onAnalyse, topInset = 0 }) => {
   const current = nodes.find((node) => node.id === currentId) ?? null;
+  const byId = new Map(nodes.map((node) => [node.id, node]));
   const byYear = (a: GenealogyNode, b: GenealogyNode) =>
     (yearOf(a.id) ?? Number.POSITIVE_INFINITY) - (yearOf(b.id) ?? Number.POSITIVE_INFINITY);
   const related = nodes
     .filter((node) => node.id !== currentId)
-    .map((node) => ({ node, link: relationToTrack(links, node.id, currentId).link }));
+    .map((node) => ({
+      node,
+      link: current ? relationToTrack(links, node.id, current.id).link : null,
+    }));
   const sources = related
-    .filter(({ link }) => current && link && link.target === current.id)
+    .filter(({ link }) => current && link && directed(link) && link.target === current.id)
     .sort((a, b) => byYear(a.node, b.node));
   const later = related
-    .filter(({ link }) => current && link && link.source === current.id)
+    .filter(({ link }) => current && link && directed(link) && link.source === current.id)
     .sort((a, b) => byYear(a.node, b.node));
-  const others = related.filter((item) => !sources.includes(item) && !later.includes(item));
+  // The rest: a relation to this track without a known direction, or a second hop (the track's
+  // best link to another track), or none.
+  // With no analysed track the links show every linked track: only the others are listed here.
+  const others = related
+    .filter((item) => !sources.includes(item) && !later.includes(item))
+    .map(({ node, link }) => ({
+      node,
+      link: current ? (link ?? relationToTrack(links, node.id, null).link) : null,
+    }))
+    .filter(
+      ({ node }) =>
+        current !== null || !links.some((l) => l.source === node.id || l.target === node.id),
+    );
 
   const card = (node: GenealogyNode) => {
     const { title, meta } = cardWords(node, yearOf(node.id));
@@ -82,94 +108,107 @@ export const LineageRow: React.FC<{
         type="button"
         aria-label={describe(node)}
         onClick={() => onAnalyse(node)}
-        className="max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70"
+        className="max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
       >
         {body}
       </button>
     );
   };
 
-  const relation = (link: ShownLink | null) => {
-    if (!link) {
-      return (
-        <span className="font-mono text-chrome text-text-tertiary">
-          {currentId === null ? 'No link to another track' : 'No direct link to this track'}
+  /** A relation's chip; its arrow only where `arrow` (a known direction, drawn in order). */
+  const chip = (link: ShownLink, arrow: boolean) => (
+    <span
+      data-relation-chip=""
+      data-link-kind={link.kind}
+      data-link-type={link.type}
+      className="inline-flex w-fit items-center gap-1 rounded-sm border bg-void px-1.5 py-0.5 font-mono text-chrome text-text-secondary"
+      style={{
+        borderColor: LINK_COLOR[link.type],
+        borderStyle: link.kind === 'sourced' ? 'solid' : 'dashed',
+      }}
+    >
+      {relationLabel(link)}
+      {arrow && (
+        // Down where the row is a column, right where it is a row.
+        <span
+          aria-hidden="true"
+          className="inline-block @max-xl:rotate-90"
+          style={{ color: LINK_COLOR[link.type] }}
+        >
+          →
         </span>
-      );
-    }
-    const arrow = link.directionKnown && link.type !== 'producer';
-    return (
-      <span
-        data-relation-chip=""
-        data-link-kind={link.kind}
-        data-link-type={link.type}
-        className="inline-flex w-fit items-center gap-1 rounded-sm border bg-void px-1.5 py-0.5 font-mono text-chrome text-text-secondary"
-        style={{
-          borderColor: LINK_COLOR[link.type],
-          borderStyle: link.kind === 'sourced' ? 'solid' : 'dashed',
-        }}
-      >
-        {relationLabel(link)}
-        {arrow && (
-          // Down where the row is a column, right where it is a row.
-          <span
-            aria-hidden="true"
-            className="inline-block @max-xl:rotate-90"
-            style={{ color: LINK_COLOR[link.type] }}
-          >
-            →
-          </span>
-        )}
-      </span>
-    );
-  };
+      )}
+    </span>
+  );
 
+  const row = 'flex flex-col gap-1 @xl:flex-row @xl:items-center @xl:gap-2';
   return (
-    // A row where the panel is wide enough (a container query: the xl column is narrow), else a
-    // column, its arrows turned down.
+    // A row where the panel is wide enough (a container query), else a column, its arrows
+    // turned down.
     <div
       data-testid="lineage-row"
       className="@container flex flex-col gap-3 px-4 pb-3"
       style={{ paddingTop: topInset + 8 }}
     >
-      <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center">
-        {sources.length > 0 && (
-          <ul aria-label="Tracks this one uses" className="flex flex-col gap-2">
-            {sources.map(({ node, link }) => (
-              <li
-                key={node.id}
-                className="flex flex-col gap-1 @xl:flex-row @xl:items-center @xl:gap-2"
-              >
-                {card(node)}
-                {relation(link)}
-              </li>
-            ))}
+      {current ? (
+        <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center">
+          {sources.length > 0 && (
+            <ul aria-label="Tracks this one uses" className="flex flex-col gap-2">
+              {sources.map(({ node, link }) => (
+                <li key={node.id} className={row}>
+                  {card(node)}
+                  {link && chip(link, true)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {card(current)}
+          {later.length > 0 && (
+            <ul aria-label="Tracks that use this one" className="flex flex-col gap-2">
+              {later.map(({ node, link }) => (
+                <li key={node.id} className={row}>
+                  {link && chip(link, true)}
+                  {card(node)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        // No analysed track: each link once, from its source to its target.
+        links.length > 0 && (
+          <ul aria-label="Links" className="flex flex-col gap-2">
+            {links.map((link, index) => {
+              const [from, to] = [byId.get(link.source), byId.get(link.target)];
+              return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: two tracks may share links
+                <li key={index} className={row}>
+                  {from && card(from)}
+                  {chip(link, directed(link))}
+                  {to && card(to)}
+                </li>
+              );
+            })}
           </ul>
-        )}
-        {current && card(current)}
-        {later.length > 0 && (
-          <ul aria-label="Tracks that use this one" className="flex flex-col gap-2">
-            {later.map(({ node, link }) => (
-              <li
-                key={node.id}
-                className="flex flex-col gap-1 @xl:flex-row @xl:items-center @xl:gap-2"
-              >
-                {relation(link)}
-                {card(node)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+        )
+      )}
       {others.length > 0 && (
-        <ul aria-label="Other tracks" className="flex flex-col gap-2">
+        <ul aria-label="Related tracks" className="flex flex-col gap-2">
           {others.map(({ node, link }) => (
-            <li
-              key={node.id}
-              className="flex flex-col gap-1 @xl:flex-row @xl:items-center @xl:gap-2"
-            >
+            <li key={node.id} className={row}>
               {card(node)}
-              {relation(link)}
+              {link ? (
+                <>
+                  {chip(link, false)}
+                  <span className="font-mono text-chrome text-text-tertiary">
+                    {relationSentence(link, nameOf)}
+                  </span>
+                </>
+              ) : (
+                <span className="font-mono text-chrome text-text-tertiary">
+                  {current ? 'No link to this track' : 'No link to another track'}
+                </span>
+              )}
             </li>
           ))}
         </ul>

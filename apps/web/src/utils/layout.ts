@@ -1,16 +1,14 @@
 import { useSyncExternalStore } from 'react';
 
-// The Player's layout by the window's width, read with the breakpoints its classes use
-// (Tailwind's md, 48rem, and xl, 80rem), so script and stylesheet switch at the same width:
+// The Player's layout by the window's width, read with the breakpoint its classes use
+// (Tailwind's md, 48rem), so script and stylesheet switch at the same width:
 // - 'tabs' below md: one panel at a time, chosen with the phone tabs;
-// - 'columns' from md up to xl: the notes and the player side by side, the connections below,
-//   the whole area scrolling as one;
-// - 'triptych' from xl: three columns, each scrolling on its own.
+// - 'columns' from md up: the notes and the player side by side, the connections in a row
+//   below them, the whole area scrolling as one.
 
-export type PlayerLayout = 'tabs' | 'columns' | 'triptych';
+export type PlayerLayout = 'tabs' | 'columns';
 
 const MD = '(min-width: 48rem)';
-const XL = '(min-width: 80rem)';
 
 function list(query: string): MediaQueryList | null {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -20,12 +18,11 @@ function list(query: string): MediaQueryList | null {
 
 /** The Player's layout at the window's width now ('tabs' where it cannot be read). */
 export function playerLayout(): PlayerLayout {
-  if (list(XL)?.matches) return 'triptych';
   return list(MD)?.matches ? 'columns' : 'tabs';
 }
 
 function subscribe(onChange: () => void): () => void {
-  const lists = [list(MD), list(XL)];
+  const lists = [list(MD)];
   for (const item of lists) item?.addEventListener('change', onChange);
   return () => {
     for (const item of lists) item?.removeEventListener('change', onChange);

@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type Selection, select } from 'd3-selection';
 import { type D3ZoomEvent, zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
@@ -38,9 +38,11 @@ import {
   type Orientation,
   orientationFor,
   placeChips,
+  relationCount,
+  routeLinks,
   wrapText,
 } from './genealogy/lineageLayout';
-import { cardWords } from './genealogy/cardWords';
+import { cardName, cardWords } from './genealogy/cardWords';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
 import { LineageRow } from './genealogy/LineageRow';
@@ -66,11 +68,6 @@ const sameItem = (a: Item | null, b: Item | null) =>
 const isStatedInfluence = (link: ShownLink) =>
   link.statedType === null || link.statedType === 'influence';
 
-/** The words on a link's chip: its relation as the cards name it, hedged when it is not sourced. */
-function lineLabel(link: ShownLink): string {
-  return link.directionKnown ? relationLabel(link).toLowerCase() : 'related';
-}
-
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
   data: Partial<TrackData['genealogy']> | null | undefined,
@@ -78,86 +75,68 @@ function graphNodes(
   return Array.isArray(data?.nodes) ? data.nodes : [];
 }
 
-// A card: a thumbnail, then the track's title (two lines at most), its artist and year (two
+// A card: a thumbnail, then the track's title (four lines at most), its artist and year (three
 // lines at most) and a tag for this track or an origin, in the graph's 12 px text.
 const PAD = 6;
 const THUMB = 28;
 const TEXT_GAP = 8;
 const LINE_PX = 15;
+const TITLE_LINES = 4;
+const META_LINES = 3;
 /** A character's width in the graph's monospace text. */
 const CHAR_PX = labelWidth('x', NODE_LABEL_PX);
 /** A card's text is never narrower than this many characters, nor (horizontal) wider than this. */
 const MIN_CHARS = 12;
-const MAX_TEXT_PX = 240;
+const MAX_TEXT_PX = 208;
+/** A card's text width moves in steps of this many px: a resize of a pixel draws nothing again. */
+const TEXT_STEP_PX = 16;
 const cardWidth = (textWidth: number) => PAD + THUMB + TEXT_GAP + textWidth + PAD;
 const chipHeight = LINE_LABEL_PX + 6;
 const chipWidth = (text: string) => labelWidth(text, LINE_LABEL_PX) + 10;
 /** Room kept round a card or a link the keyboard brings into view (screen px). */
 const VIEW_PAD = 12;
+/**
+ * How far from its link's middle a chip may go (map px): no chip far from what it names. One
+ * that is not by its link is joined to it by a leader, drawn under the cards.
+ */
+const CHIP_REACH = 240;
+/** A chip this far from its link's middle (map px) or more gets a leader to it. */
+const LEADER_FROM = 24;
+/** The space between year slots; in the row it also holds the rails of a year's own links. */
+const SLOT_GAP: Record<Orientation, number> = { horizontal: 44, vertical: 18 };
 
-// The map's margins: room for the year axis and (vertical) the links' arcs to the right of the
-// cards. The panel's heading is above the map, not over it.
+// The map's margins: room for the year axis and, to the right, the links' rails. The panel's
+// heading lies over the top of the map (`topInset`).
 const MARGIN: Record<Orientation, { top: number; right: number; bottom: number; left: number }> = {
   horizontal: { top: 8, right: 24, bottom: 16, left: 16 },
-  vertical: { top: 8, right: 26, bottom: 16, left: 22 },
+  vertical: { top: 8, right: 0, bottom: 16, left: 22 },
 };
 
-/** How wide a card's text is: as wide as the longest words need for two lines, as the room allows. */
-function textWidthFor(panelWidth: number, orientation: Orientation, chars: number): number {
-  const need = Math.max(MIN_CHARS, chars) * CHAR_PX;
-  const margin = MARGIN[orientation];
-  const room =
-    orientation === 'vertical'
-      ? panelWidth - margin.left - margin.right - cardWidth(0)
-      : MAX_TEXT_PX;
-  return Math.ceil(Math.max(MIN_CHARS * CHAR_PX, Math.min(need, room)));
-}
-
-/** A point on a cubic Bézier curve at t. */
-function bezier(
-  [p0, p1, p2, p3]: Array<{ x: number; y: number }>,
-  t: number,
-): { x: number; y: number } {
-  const u = 1 - t;
-  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
-  return {
-    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-  };
-}
+/** The room the rails take to the right of a column of cards: more for more links, at most 80. */
+const railRoomFor = (links: number) => Math.min(80, 12 + 5 * links);
 
 /**
- * A link's curve from its source card to its target card: between facing sides when the cards
- * stand apart across the page, else an arc out to the right of both and of every card between
- * them (cards in a column), its bulge growing with the distance up to `maxBulge`, so the arc runs
- * beside the cards it passes rather than under them.
+ * How wide a card's text is: as wide as its words need (`chars` a line), as far as the room
+ * allows, in steps of `TEXT_STEP_PX`.
  */
-function edgeCurve(a: CardBox, b: CardBox, maxBulge: number, cards: readonly CardBox[]) {
-  const [ay, by] = [a.y + a.height / 2, b.y + b.height / 2];
-  if (a.x + a.width < b.x || b.x + b.width < a.x) {
-    const forward = a.x < b.x;
-    const start = { x: forward ? a.x + a.width : a.x, y: ay };
-    const end = { x: forward ? b.x : b.x + b.width, y: by };
-    const half = (end.x - start.x) / 2;
-    return [start, { x: start.x + half, y: ay }, { x: end.x - half, y: by }, end];
-  }
-  const start = { x: a.x + a.width, y: ay };
-  const end = { x: b.x + b.width, y: by };
-  const [top, bottom] = [Math.min(ay, by), Math.max(ay, by)];
-  const rail = Math.max(
-    start.x,
-    end.x,
-    ...cards.filter((c) => c.y < bottom && c.y + c.height > top).map((c) => c.x + c.width),
-  );
-  const bulge = Math.min(maxBulge, 14 + (bottom - top) * 0.15);
-  // The curve's middle is a quarter of its ends' x and three quarters of its controls': the
-  // controls go far enough out for the middle to clear the rail by three quarters of the bulge.
-  const out = rail + bulge + (rail - Math.min(start.x, end.x)) / 3;
-  return [start, { x: out, y: ay }, { x: out, y: by }, end];
+function textWidthFor(
+  panelWidth: number,
+  orientation: Orientation,
+  chars: number,
+  links: number,
+): number {
+  const need = Math.max(MIN_CHARS, chars) * CHAR_PX;
+  const room =
+    orientation === 'vertical'
+      ? panelWidth - MARGIN.vertical.left - railRoomFor(links) - cardWidth(0)
+      : MAX_TEXT_PX;
+  const width = Math.max(MIN_CHARS * CHAR_PX, Math.min(need, room));
+  // Up a step where the room allows it, else down: never past the room.
+  const stepped = Math.ceil(width / TEXT_STEP_PX) * TEXT_STEP_PX;
+  return stepped <= room
+    ? stepped
+    : Math.max(MIN_CHARS * CHAR_PX, Math.floor(room / TEXT_STEP_PX) * TEXT_STEP_PX);
 }
-
-const pathOf = ([p0, p1, p2, p3]: Array<{ x: number; y: number }>) =>
-  `M${p0.x},${p0.y} C${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`;
 
 const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   data,
@@ -190,8 +169,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
     [data],
   );
-  // With two relations or fewer the map is a compact row, not a canvas.
-  const sparse = isSparse(links.length);
+  // With two relations to the analysed track or fewer the map is a compact row, not a canvas.
+  const sparse = isSparse(relationCount(links, currentId));
   // What the pointer is on, and what keyboard focus is on: the detail shows the first of them,
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
@@ -273,27 +252,41 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     },
     [relations, currentId],
   );
+  // A track's name as its card says it, whole: title, artist and year, or "undated".
+  const cardNameOf = useMemo(() => {
+    const nodes = new Map(graphNodes(data).map((node) => [node.id, node]));
+    return (id: string) => {
+      const node = nodes.get(id);
+      return node ? cardName(node, yearOfNode(id)) : id;
+    };
+  }, [data, yearOfNode]);
   const nodeAriaLabel = useMemo(
     () => (d: GenealogyNode) => {
-      const name = nameOf(d.id);
+      const name = cardNameOf(d.id);
       if (d.group === 1) return `${name}, the analyzed track`;
       const link = relations.get(d.id)?.link;
+      // No link to the analysed track: its best link to another track (a second hop).
+      const other = link ? null : relationToTrack(links, d.id, null).link;
       const said = link
         ? `${relationSentence(link, nameOf)}. ${provenanceText(link)}.`
-        : 'No direct link to the analyzed track.';
+        : other
+          ? `No direct link to the analyzed track. ${relationSentence(other, nameOf)}. ${provenanceText(other)}.`
+          : 'No direct link to the analyzed track.';
       return `${name}: ${said} Press Enter to analyze it.`;
     },
-    [nameOf, relations],
+    [cardNameOf, nameOf, relations, links],
   );
 
-  // The characters a card's line needs so that no title, artist or year is cut in two lines.
+  // The characters a card's line needs for every title, artist and year in two lines, no word
+  // broken. Where the room is less (a narrow panel, or past MAX_TEXT_PX), a title takes up to four
+  // lines and an artist and year three, a word too long for a line broken with a hyphen.
   const needChars = useMemo(
     () =>
       Math.max(
         MIN_CHARS,
         ...graphNodes(data).map((node) => {
           const { title, meta } = cardWords(node, yearOfNode(node.id));
-          return Math.max(charsToWrap(title), charsToWrap(meta), 'This track'.length);
+          return Math.max(charsToWrap(title, 2), charsToWrap(meta, 2), 'This track'.length);
         }),
       ),
     [data, yearOfNode],
@@ -304,15 +297,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // keeps the drawing and its zoom and shifts the view so the map stays where it was in the
   // panel (`resizeRef`, set by the drawing). A hidden panel (the phone tabs) measures 0 by 0:
   // the graph keeps its last size.
-  // The band the panel's heading covers at the top: the view keeps the map below it. A taller
-  // heading (it wraps on a narrower panel) moves the view down by as much; nothing is drawn
+  // The band the panel's heading covers at the top: the view keeps the map below it. A heading
+  // that grows or shrinks (it wraps or unwraps) moves the view by as much; nothing is drawn
   // again.
   const insetRef = useRef(topInset);
   const insetShiftRef = useRef<((by: number) => void) | null>(null);
   useEffect(() => {
     const by = topInset - insetRef.current;
     insetRef.current = topInset;
-    if (by > 0) insetShiftRef.current?.(by);
+    if (by !== 0) insetShiftRef.current?.(by);
   }, [topInset]);
   const sizeRef = useRef<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<((size: { width: number; height: number }) => void) | null>(null);
@@ -337,10 +330,37 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   }, [sparse]);
 
   const orientation = panel ? orientationFor(panel.viewport, panel.width) : null;
-  const textWidth = panel && orientation ? textWidthFor(panel.width, orientation, needChars) : null;
+  const textWidth =
+    panel && orientation ? textWidthFor(panel.width, orientation, needChars, links.length) : null;
+  // The cards a year's row holds side by side (vertical): a layout input, so a resize that
+  // changes it lays the map out again (keeping the view), and one that does not keeps the
+  // drawing.
+  const perRow =
+    panel && orientation === 'vertical' && textWidth !== null
+      ? Math.max(
+          1,
+          Math.floor(
+            (panel.width - MARGIN.vertical.left - railRoomFor(links.length) + 10) /
+              (cardWidth(textWidth) + 10),
+          ),
+        )
+      : 0;
 
   // Under reduced motion nothing glides or fades.
   const reducedMotion = useReducedMotion();
+
+  // The view the map was last left at, kept when the map is laid out again for the same tracks
+  // and axis (a resize that changes the cards a row holds): the reader's pan and zoom stay.
+  const viewRef = useRef<{
+    data: unknown;
+    orientation: Orientation;
+    transform: ZoomTransform;
+  } | null>(null);
+  // The detail box's height while it is shown: chips are not placed under it, and a focused item
+  // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
+  const detailRef = useRef<HTMLDivElement>(null);
+  const detailInsetRef = useRef(0);
+  const afterDetailRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const size = sizeRef.current;
@@ -388,15 +408,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     }
 
     // 3. The cards and their places on the year axis.
-    const margin = MARGIN[orientation];
+    const railRoom =
+      orientation === 'vertical' ? railRoomFor(links.length) : SLOT_GAP.horizontal - 12;
+    const margin =
+      orientation === 'vertical' ? { ...MARGIN.vertical, right: railRoom + 4 } : MARGIN.horizontal;
     const chars = Math.max(MIN_CHARS, Math.floor(textWidth / CHAR_PX));
     const nodes = graphNodes(data).map((node, i) => {
       const year = yearOfNode(node.id);
       const { title, meta } = cardWords(node, year);
       const tag = node.id === currentId ? 'This track' : isOrigin(node.id) ? 'Origin' : null;
-      const titleLines = wrapText(title, chars).lines;
-      const metaLines = meta ? wrapText(meta, chars).lines : [];
-      const lines = titleLines.length + metaLines.length + (tag ? 1 : 0);
+      const titleWrap = wrapText(title, chars, TITLE_LINES);
+      const metaWrap = meta
+        ? wrapText(meta, chars, META_LINES)
+        : { lines: [], hyphenated: [], truncated: false };
+      const lines = titleWrap.lines.length + metaWrap.lines.length + (tag ? 1 : 0);
       return {
         node,
         i,
@@ -405,8 +430,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         title,
         meta,
         tag,
-        titleLines,
-        metaLines,
+        titleWrap,
+        metaWrap,
         width: cardWidth(textWidth),
         height: PAD * 2 + Math.max(THUMB, lines * LINE_PX),
         lane: laneOf(node.id === currentId, relations.get(node.id)?.link?.type ?? null),
@@ -416,16 +441,21 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const layout = layoutLineage(nodes, {
       orientation,
       gap: 10,
-      slotGap: orientation === 'horizontal' ? 40 : 18,
+      slotGap: SLOT_GAP[orientation],
       axisSize: orientation === 'horizontal' ? 22 : 20,
-      crossSpace: width - margin.left - margin.right,
+      crossSpace: perRow * (cardWidth(textWidth) + 10) - 10,
       margin,
     });
     const boxOf = (id: string) => layout.cards.get(id) ?? { x: 0, y: 0, width: 0, height: 0 };
     const cardBoxes = nodes.map((d) => boxOf(d.id));
+    // The links' routes, inside the drawing: the drawing is as wide as the widest rail needs.
+    const { routes, right: routesRight } = routeLinks(links, layout.cards, { railRoom });
+    const mapWidth = Math.max(layout.width, routesRight + 4);
+    const mapHeight = layout.height;
 
     // 4. Zoom: the map is drawn at its size (its text at 12 px), panned to see what does not
-    // fit, and zoomed in, never out past its size.
+    // fit, and zoomed in, never out past its size. Chips are placed again when a zoom or a pan
+    // ends, not at each of its steps.
     const g = svg.append('g');
     let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
@@ -460,12 +490,24 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         transform = event.transform;
         g.attr('transform', event.transform.toString());
-        drawChips();
-      });
+        viewRef.current = { data, orientation, transform };
+        pinAxis();
+      })
+      .on('end', () => drawChips());
     svg.call(zoomBehavior);
 
     // 5. The year axis: a label for each year a card carries, and "Undated" for the rest.
+    // Across the page the labels stay at the top of the view when the map is panned down past
+    // them, on a band of the page's colour, over the cards that pass beneath (`pinAxis`).
     const axis = g.append('g').attr('class', 'lineage-axis').attr('aria-hidden', 'true');
+    const axisBackdrop = axis
+      .append('rect')
+      .attr('x', 0)
+      .attr('y', margin.top - 6)
+      .attr('width', Math.max(layout.width, 1))
+      .attr('height', orientation === 'horizontal' ? layout.axisSize + 6 : 0)
+      .attr('fill', colors.void)
+      .attr('fill-opacity', 0);
     const yearLabels: CardBox[] = [];
     const lineColor = colors.gray[600];
     if (orientation === 'horizontal') {
@@ -525,25 +567,38 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         });
       }
     }
+    /** The year slot a card sits in. */
+    const slotOf = (id: string) => {
+      const year = nodes.find((d) => d.id === id)?.year ?? null;
+      return layout.slots.find((slot) => slot.year === year) ?? null;
+    };
+
+    /** The band the pinned labels take at the top of the view (screen px; none down a column). */
+    const pinnedBand = () =>
+      orientation === 'horizontal' ? (layout.axisSize + 6) * (transform.k || 1) : 0;
+    /** Pins the row's labels to the top of the view once the map is panned down past them. */
+    function pinAxis() {
+      if (orientation !== 'horizontal') return;
+      const k = transform.k || 1;
+      const below = Math.max(0, (insetRef.current - transform.y) / k - (margin.top - 6));
+      axis.attr('transform', below > 0 ? `translate(0,${below})` : null);
+      axisBackdrop.attr('fill-opacity', below > 0 ? 0.95 : 0);
+    }
 
     // 6. Links: the colour is the relation a link is shown as, the line its kind (solid when
     // sourced, dashed when not), and an arrowhead its direction (from the earlier record to the
     // one that uses it; none when the direction is unknown, or for a shared producer).
-    const maxBulge = orientation === 'vertical' ? (margin.right - 4) / 0.75 : (40 * 0.8) / 0.75;
-    const simulationLinks = links.map((shown, n) => {
-      const curve = edgeCurve(boxOf(shown.source), boxOf(shown.target), maxBulge, cardBoxes);
-      return { shown, n, curve, d: pathOf(curve) };
-    });
-    type DrawnLink = (typeof simulationLinks)[number];
+    const drawnLinks = links.map((shown, n) => ({ shown, n, route: routes[n] }));
+    type DrawnLink = (typeof drawnLinks)[number];
     const restingOpacity = (d: DrawnLink) => LINK_OPACITY[d.shown.kind];
     const link = g
       .append('g')
       .attr('class', 'links')
       .attr('aria-hidden', 'true')
       .selectAll('path')
-      .data(simulationLinks)
+      .data(drawnLinks)
       .join('path')
-      .attr('d', (d) => d.d)
+      .attr('d', (d) => d.route.d)
       .attr('fill', 'none')
       .attr('data-link-index', (d) => d.n)
       .attr('data-link-kind', (d) => d.shown.kind)
@@ -565,9 +620,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .append('g')
       .attr('class', 'link-targets')
       .selectAll('path')
-      .data(simulationLinks)
+      .data(drawnLinks)
       .join('path')
-      .attr('d', (d) => d.d)
+      .attr('d', (d) => d.route.d)
       .attr('fill', 'none')
       .attr('data-link-index', (d) => d.n)
       .attr('stroke', colors.cyber)
@@ -577,7 +632,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .style('pointer-events', 'stroke')
       .style('outline', 'none')
       .attr('tabindex', -1)
+      .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
+
+    // The chips' leaders, under the cards: a leader never runs over a card's words.
+    const leaders = g
+      .append('g')
+      .attr('class', 'chip-leaders')
+      .attr('aria-hidden', 'true')
+      .style('pointer-events', 'none');
 
     // 7. The cards, drawn over the links (a card is opaque: no line runs over its words).
     const node = g
@@ -669,14 +732,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         .attr('clip-path', `url(#${clipId})`);
     });
 
-    // The words: the title, then the artist and year, then the tag, each line at 12 px.
+    // The words: the title, then the artist and year, then the tag, each line at 12 px. A line
+    // that ends inside a word (a word longer than the line) ends in a hyphen, and says so.
     const textX = PAD + THUMB + TEXT_GAP;
     const words = node.append('g').attr('class', 'node-label').style('pointer-events', 'none');
     const lineText = (
       className: string,
-      lines: (d: Card) => string[],
+      wrapped: (d: Card) => { lines: string[]; hyphenated: boolean[] },
       first: (d: Card) => number,
-      fill: (d: Card) => string,
+      fill: string,
     ) => {
       words
         .append('text')
@@ -687,33 +751,35 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         .attr('font-size', `${NODE_LABEL_PX}px`)
         .each(function (d) {
           const text = select(this);
-          lines(d).forEach((line, index) => {
+          const { lines, hyphenated } = wrapped(d);
+          lines.forEach((line, index) => {
             text
               .append('tspan')
               .attr('x', textX)
               .attr('y', PAD + 11 + (first(d) + index) * LINE_PX)
+              .attr('data-hyphen', hyphenated[index] ? '' : null)
               .text(line);
           });
         });
     };
     lineText(
       'card-title',
-      (d) => d.titleLines,
+      (d) => d.titleWrap,
       () => 0,
-      () => colors.white,
+      colors.white,
     );
     lineText(
       'card-meta',
-      (d) => d.metaLines,
-      (d) => d.titleLines.length,
-      () => colors.gray[400],
+      (d) => d.metaWrap,
+      (d) => d.titleWrap.lines.length,
+      colors.gray[400],
     );
     words
       .filter((d) => d.tag !== null)
       .append('text')
       .attr('class', 'sub-label')
       .attr('x', textX)
-      .attr('y', (d) => PAD + 11 + (d.titleLines.length + d.metaLines.length) * LINE_PX)
+      .attr('y', (d) => PAD + 11 + (d.titleWrap.lines.length + d.metaWrap.lines.length) * LINE_PX)
       .attr('fill', (d) => (d.id === currentId ? genealogyColors.current : genealogyColors.origin))
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${SUB_LABEL_PX}px`)
@@ -723,8 +789,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     node.selectChildren().attr('aria-hidden', 'true');
 
     // 8. Chips: a link's relation, shown while the pointer or the focus is on the link or on a
-    // card it joins, placed clear of every card and year label; a chip with no free place is
+    // card it joins, placed clear of every card and year label, in view (below the heading,
+    // above the detail box) and near the link's middle; a chip with no free place near it is
     // left out (the detail box says the same). An origin's card also says a click analyses it.
+    // The axis above the cards (its labels may be pinned over them), below the chips.
+    axis.raise();
     const chips = g
       .append('g')
       .attr('class', 'link-chips')
@@ -736,30 +805,34 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let hint: string | null = null;
 
     function drawChips() {
-      chips.selectAll('*').remove();
+      // A hint's fade stops with the hint.
+      chips.selectAll('*').interrupt().remove();
+      leaders.selectAll('*').remove();
       const active = pointerOn ?? focusOn;
       if (!active) return;
       const k = transform.k || 1;
-      // What is in view, in the map's units, below the panel's heading.
+      // What is in view, in the map's units, below the heading and above the detail box.
+      const top = insetRef.current + pinnedBand();
+      const bottom = height - detailInsetRef.current;
       const view = {
         x: -transform.x / k,
-        y: (insetRef.current - transform.y) / k,
+        y: (top - transform.y) / k,
         width: width / k,
-        height: Math.max(0, height - insetRef.current) / k,
+        height: Math.max(0, bottom - top) / k,
       };
       const shown =
         active.kind === 'link'
-          ? simulationLinks.filter((d) => d.n === active.index)
-          : simulationLinks
+          ? drawnLinks.filter((d) => d.n === active.index)
+          : drawnLinks
               .filter((d) => d.shown.source === active.id || d.shown.target === active.id)
               .sort((a, b) => rank(b.shown) - rank(a.shown));
       const wanted: Array<ChipInput & { text: string; link: DrawnLink | null }> = shown.map(
         (d, order) => ({
-          near: bezier(d.curve, 0.5),
-          width: chipWidth(lineLabel(d.shown)),
+          near: d.route.mid,
+          width: chipWidth(relationLabel(d.shown)),
           height: chipHeight,
           priority: -order,
-          text: lineLabel(d.shown),
+          text: relationLabel(d.shown),
           link: d,
         }),
       );
@@ -774,7 +847,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           link: null,
         });
       }
-      const at = placeChips(wanted, obstacles, view);
+      const at = placeChips(wanted, obstacles, view, { reach: CHIP_REACH });
       wanted.forEach((chip, index) => {
         const box = at[index];
         if (!box) return;
@@ -782,7 +855,25 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .append('g')
           .attr('class', chip.link ? 'chip' : 'chip hint')
           .attr('transform', `translate(${box.x},${box.y})`);
-        if (chip.link) group.attr('data-link-index', chip.link.n);
+        if (chip.link) {
+          group
+            .attr('data-link-index', chip.link.n)
+            .attr('data-near', `${chip.near.x},${chip.near.y}`);
+          const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+          if (Math.hypot(centre.x - chip.near.x, centre.y - chip.near.y) >= LEADER_FROM) {
+            leaders
+              .append('line')
+              .attr('x1', centre.x)
+              .attr('y1', centre.y)
+              .attr('x2', chip.near.x)
+              .attr('y2', chip.near.y)
+              .attr('stroke', LINK_COLOR[chip.link.shown.type])
+              .attr('stroke-opacity', 0.7)
+              .attr('stroke-width', 1)
+              .attr('stroke-dasharray', '2 2')
+              .attr('vector-effect', 'non-scaling-stroke');
+          }
+        }
         group
           .append('rect')
           .attr('width', box.width)
@@ -854,26 +945,48 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
 
     /**
-     * Pans the view, at once and no further than it takes, so a focused card or the middle of a
-     * focused link is in it.
+     * Pans the view, at once and no further than it takes, so a focused card (with its year's
+     * label on the axis, where the room allows) or the middle of a focused link is in view:
+     * below the panel's heading and above the detail box.
      */
     const bringIntoView = (item: Item) => {
-      const box =
-        item.kind === 'node'
-          ? boxOf(item.id)
-          : (() => {
-              const middle = bezier(simulationLinks[item.index].curve, 0.5);
-              return { x: middle.x - 1, y: middle.y - 1, width: 2, height: 2 };
-            })();
+      let box: CardBox;
+      if (item.kind === 'node') {
+        const card = boxOf(item.id);
+        const slot = slotOf(item.id);
+        // The card and the label of its year: along the axis (vertical, the slot's heading is
+        // above the card) and across it (the labels' band).
+        // Down a column, the card with its year's heading above it, where the room allows;
+        // across the page, the card (the year labels are pinned to the top of the view).
+        box = card;
+        if (orientation === 'vertical' && slot) {
+          const withHeading = {
+            x: card.x,
+            y: slot.start,
+            width: card.width,
+            height: card.y + card.height - slot.start,
+          };
+          const k = transform.k || 1;
+          const room = height - insetRef.current - detailInsetRef.current - 2 * VIEW_PAD;
+          if (withHeading.height * k <= room) box = withHeading;
+        }
+      } else {
+        const { mid } = drawnLinks[item.index].route;
+        box = { x: mid.x - 1, y: mid.y - 1, width: 2, height: 2 };
+      }
       const k = transform.k || 1;
       const [left, top] = [transform.x + box.x * k, transform.y + box.y * k];
       const [right, bottom] = [left + box.width * k, top + box.height * k];
       // The least move that brings a side into view (the near side first, if both are out).
-      const shift = (low: number, high: number, size: number) =>
-        low < VIEW_PAD ? VIEW_PAD - low : high > size - VIEW_PAD ? size - VIEW_PAD - high : 0;
+      const shift = (low: number, high: number, from: number, to: number) =>
+        low < from + VIEW_PAD
+          ? from + VIEW_PAD - low
+          : high > to - VIEW_PAD
+            ? to - VIEW_PAD - high
+            : 0;
       const [dx, dy] = [
-        shift(left, right, width),
-        shift(top - insetRef.current, bottom - insetRef.current, height - insetRef.current),
+        shift(left, right, 0, width),
+        shift(top, bottom, insetRef.current + pinnedBand(), height - detailInsetRef.current),
       ];
       if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
@@ -887,7 +1000,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         element: element as SVGElement,
       })),
       ...linkTarget.nodes().map((element, i) => ({
-        item: { kind: 'link', index: simulationLinks[i].n } as Item,
+        item: { kind: 'link', index: drawnLinks[i].n } as Item,
         element: element as SVGElement,
       })),
     ];
@@ -916,6 +1029,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         setFocused(null);
       });
     });
+    // Once React has drawn the detail box (or taken it away): the focused item clear of it, and
+    // the chips placed again above it.
+    afterDetailRef.current = () => {
+      if (focusOn) bringIntoView(focusOn);
+      drawChips();
+    };
     svg.on('keydown', (event: KeyboardEvent) => {
       if (items.length === 0) return;
       const at = items.findIndex(({ element }) => element === event.target);
@@ -939,7 +1058,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       if (next !== null) {
         event.preventDefault();
         setRoving(next);
-        items[next].element.focus();
+        // The view is brought to it by the map's own pan (`bringIntoView`), not by scrolling.
+        items[next].element.focus({ preventScroll: true });
         return;
       }
       const { item } = items[at];
@@ -971,22 +1091,67 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         analyseRef.current(d.node);
       });
 
-    // The first view: the map at its size, below the panel's heading (which lies over the top of
-    // the map). Across each direction a map smaller than the room is centred in it; a larger one
-    // shows this track's card in the middle of the room, as far as the map allows (no empty band
-    // past its edge).
-    const anchor = boxOf(currentId ?? nodes[0]?.id ?? '');
-    const offset = (map: number, panel: number, middle: number, from = 0) =>
-      map <= panel - from
-        ? from + (panel - from - map) / 2
-        : Math.min(from, Math.max(panel - map, (from + panel) / 2 - middle));
-    svg.call(
-      zoomBehavior.transform,
-      zoomIdentity.translate(
-        offset(layout.width, width, anchor.x + anchor.width / 2),
-        offset(layout.height, height, anchor.y + anchor.height / 2, insetRef.current),
-      ),
-    );
+    // The first view, unless the map is laid out again for the same tracks and axis (then the
+    // reader's view is kept). The map at its size, below the panel's heading:
+    // - along the year axis, this track's card in the middle of the room, as far as the map
+    //   allows (no empty band past its edge); vertical, the view then starts at a year's label
+    //   (the slot the top of the view falls in), so the year the first cards belong to is said;
+    // - across it, the axis's labels in view (the top of the row, the left of the column) when
+    //   this track's card is then in view too.
+    const kept = viewRef.current;
+    /**
+     * Holds the view to the map after a resize or a new layout: across each direction, a map
+     * that fits the room sits where the first view puts it (centred along the axis, at the top of
+     * the row, at the left of the column), and a larger one leaves no empty band past its edges.
+     */
+    const holdView = () => {
+      const k = transform.k || 1;
+      const inset = insetRef.current;
+      const hold = (at: number, map: number, panel: number, from: number, centre: boolean) =>
+        map <= panel - from
+          ? centre
+            ? from + (panel - from - map) / 2
+            : from
+          : Math.min(from, Math.max(panel - map, at));
+      const x = hold(transform.x, mapWidth * k, width, 0, orientation === 'horizontal');
+      const y = hold(transform.y, mapHeight * k, height, inset, orientation === 'vertical');
+      if (x !== transform.x || y !== transform.y) {
+        svg.call(zoomBehavior.transform, zoomIdentity.translate(x, y).scale(k));
+      }
+    };
+    if (kept && kept.data === data && kept.orientation === orientation) {
+      svg.call(zoomBehavior.transform, kept.transform);
+      holdView();
+    } else {
+      const inset = insetRef.current;
+      const anchor = boxOf(currentId ?? nodes[0]?.id ?? '');
+      const along = (map: number, panel: number, middle: number, from = 0) =>
+        map <= panel - from
+          ? from + (panel - from - map) / 2
+          : Math.min(from, Math.max(panel - map, (from + panel) / 2 - middle));
+      const across = (map: number, panel: number, near: number, far: number, from = 0) =>
+        map <= panel - from || far + VIEW_PAD <= panel
+          ? from
+          : along(map, panel, (near + far) / 2, from);
+      let tx: number;
+      let ty: number;
+      if (orientation === 'horizontal') {
+        tx = along(mapWidth, width, anchor.x + anchor.width / 2);
+        ty = across(mapHeight, height, anchor.y, anchor.y + anchor.height + inset, inset);
+      } else {
+        tx = across(mapWidth, width, anchor.x, anchor.x + anchor.width);
+        ty = along(mapHeight, height, anchor.y + anchor.height / 2, inset);
+        // Start the view at the label of the year its top falls in, while this track's card
+        // stays in view.
+        const viewTop = inset - ty;
+        const slot = [...layout.slots].reverse().find((s) => s.start <= viewTop + 1);
+        if (slot && slot.start < viewTop - 1) {
+          const moved = inset - slot.start;
+          if (anchor.y + anchor.height + moved <= height - VIEW_PAD) ty = moved;
+        }
+      }
+      svg.call(zoomBehavior.transform, zoomIdentity.translate(tx, ty));
+    }
 
     insetShiftRef.current = (by) => {
       svg.call(zoomBehavior.translateBy, 0, by / (transform.k || 1));
@@ -1001,6 +1166,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       svg.attr('width', width).attr('height', height);
       const k = transform.k || 1;
       svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      holdView();
+      drawChips();
     };
 
     // Everything the drawing started stops with it: transitions (the hint's fade, a double
@@ -1008,6 +1175,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     return () => {
       resizeRef.current = null;
       insetShiftRef.current = null;
+      afterDetailRef.current = null;
       svg.interrupt();
       svg.selectAll('*').interrupt();
       svg.on('.zoom', null).on('keydown', null);
@@ -1031,6 +1199,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     nodeAriaLabel,
     orientation,
     textWidth,
+    perRow,
     clipPrefix,
     reducedMotion,
   ]);
@@ -1069,6 +1238,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const activeNode =
     active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
   const activeRelation = activeNode ? relationToTrack(links, activeNode.id, currentId) : null;
+  // A track with no link to this one: its best link to another track (a second hop).
+  const activeOther =
+    activeNode && !activeRelation?.link ? relationToTrack(links, activeNode.id, null).link : null;
+  // The detail box's height, once React has drawn it (or 0 once it has gone): the drawing keeps
+  // chips and the focused item clear of it.
+  useLayoutEffect(() => {
+    const inset = detailRef.current ? detailRef.current.offsetHeight + 8 : 0;
+    if (inset === detailInsetRef.current) return;
+    detailInsetRef.current = inset;
+    afterDetailRef.current?.();
+  });
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
   // Every drawn related track with a clip, whether or not a shown link names it: each has its
   // preview button (PreviewList).
@@ -1085,12 +1265,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .
       {nodeList
         .map((node) => {
-          if (node.group === 1) return ` ${nameOf(node.id)}: the analyzed track.`;
+          // Each track named whole, as its card says it: title, artist, year or "undated".
+          const name = cardNameOf(node.id);
+          if (node.group === 1) return ` ${name}: the analyzed track.`;
           // Which track uses which, as a sentence naming both, and how it is known.
           const relation = relationToTrack(links, node.id, currentId);
           return relation.link
-            ? ` ${nameOf(node.id)}: ${relationSentence(relation.link, nameOf)} (${kindLabel(relation.link)}).`
-            : ` ${nameOf(node.id)}: ${relation.text.toLowerCase()}.`;
+            ? ` ${name}: ${relationSentence(relation.link, nameOf)} (${kindLabel(relation.link)}).`
+            : ` ${name}: ${relation.text.toLowerCase()}.`;
         })
         .join('')}
       {!sparse &&
@@ -1157,6 +1339,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             yearOf={yearOfNode}
             isOrigin={isOrigin}
             describe={nodeAriaLabel}
+            nameOf={nameOf}
             onAnalyse={(node) => analyseRef.current(node)}
           />
           {summary}
@@ -1166,10 +1349,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <div
           ref={wrapperRef}
           className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-radial-[circle_at_center] from-surface from-0% to-transparent to-70%"
+          // The browser scrolls a box that hides its overflow to show what takes the focus: the
+          // map pans to it instead (the drawing's `bringIntoView`), so the box never scrolls.
+          onScroll={(event) => {
+            event.currentTarget.scrollTop = 0;
+            event.currentTarget.scrollLeft = 0;
+          }}
         >
           <svg
             ref={svgRef}
-            className="w-full h-full overflow-visible"
+            // Nothing in the drawing takes a CSS transition (the reduced-motion stylesheet gives
+            // every change one, a hundredth of a millisecond long): a pan or a zoom is drawn at
+            // once, and reads back at once.
+            className="w-full h-full overflow-visible [&_*]:transition-none"
             // One finger scrolls the page (vertically) and two pinch the graph, where the page
             // scrolls past it
             style={wheelZoom === 'modifier' ? { touchAction: 'pan-y pinch-zoom' } : undefined}
@@ -1181,10 +1373,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           {/* What the pointer or keyboard focus is on: a link's relation and where it comes
               from, or a track's relation to this one */}
           {(activeLink || activeNode) && (
+            // As tall as its words: none is cut (the drawing keeps chips and the focused item
+            // above it).
             <div
+              ref={detailRef}
               aria-hidden="true"
               data-testid="link-detail"
-              className="absolute left-2 right-2 bottom-2 z-20 max-h-[40%] overflow-hidden pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip"
+              className="absolute left-2 right-2 bottom-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere"
             >
               {activeLink && (
                 <>
@@ -1194,13 +1389,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               )}
               {activeNode && (
                 <>
-                  <p className="text-text-secondary">{nameOf(activeNode.id)}</p>
+                  <p className="text-text-secondary">{cardNameOf(activeNode.id)}</p>
                   {activeNode.group === 1 ? (
                     <p>The analyzed track</p>
                   ) : activeRelation?.link ? (
                     <>
                       <p>{relationSentence(activeRelation.link, nameOf)}</p>
                       <p>{provenanceText(activeRelation.link)}</p>
+                    </>
+                  ) : activeOther ? (
+                    <>
+                      <p>No direct link to this track</p>
+                      <p>{relationSentence(activeOther, nameOf)}</p>
+                      <p>{provenanceText(activeOther)}</p>
                     </>
                   ) : (
                     <p>No direct link to this track</p>
@@ -1217,10 +1418,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
       {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
       {(links.length > 0 || hidden > 0 || previewTracks.length > 0) && (
-        // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Its
-        // extra space below is the xl column's only: in the md-to-xl row, on a short landscape
-        // screen, every pixel of the row's height goes to the drawing.
-        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 xl:pb-14 bg-void">
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
+        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}

@@ -95,7 +95,9 @@ for _client_logger in ("httpx", "httpcore"):
 # its phase is left out too. A run off the grid, or whose part from its first onset is off it,
 # is left out as a whole, so a band's sparse or drifting first or last beats in such a run are
 # missing with it; tempo, confidence and sections are unchanged.
-ANALYZER_VERSION = "2.3.4"
+# 2.3.5: lines that hold still and rise and fall together but are not the harmonics of notes
+# (the partials of a struck bar or tube, such as a tubular bell) are one pitched source: no key.
+ANALYZER_VERSION = "2.3.5"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -143,7 +145,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.3.4+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.5+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)

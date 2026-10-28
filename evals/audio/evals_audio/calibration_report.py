@@ -92,7 +92,8 @@ PROTOCOL_NOTES = (
 ONE_SOURCE_NOTE = (
     "The single-source rule (no key for one pitched source: spectral lines that keep their "
     "proportions over the window, rise and fall together and spell one note, or two that are "
-    "not a third or a sixth apart, as a cowbell or one note repeated on a bass) was added after "
+    "not a third or a sixth apart, as a cowbell or one note repeated on a bass, or that are not "
+    "the harmonics of notes, as a tubular bell, since analyzer 2.3.5) was added after "
     "this calibration, from the one-pitch-class and chord controls and the GiantSteps+ keys the "
     "service gave without it. The procedure does not vary it: before is without it, after with "
     "it at the values each run recorded, and the choice below is made without it. The held-out "

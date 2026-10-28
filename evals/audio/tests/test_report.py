@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from evals_audio import golden
+from evals_audio import calibration, golden, service
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import (
@@ -222,6 +222,24 @@ COMMITTED = sorted((REPO_ROOT / "evals" / "reports").glob("audio-*.json"))
 def test_there_is_a_committed_report():
     """The checks below run once per committed report; with none they would run on nothing."""
     assert COMMITTED, "no evals/reports/audio-*.json"
+
+
+def test_the_newest_controls_run_has_the_services_single_source_rule():
+    """
+    The READMEs quote the control counts of the newest committed controls run, so that run must
+    have been made with the single-source values the service holds now: a change to the rule
+    needs a fresh run (uv run python -m evals_audio --suite controls).
+    """
+    runs = [
+        (path.name, run)
+        for path in COMMITTED
+        for run in json.loads(path.read_text())["runs"]
+        if run["suite"] == "controls"
+    ]
+    assert runs, "no committed controls run"
+    name, newest = max(runs, key=lambda item: item[1]["startedAt"])
+    _, est = service.load()
+    assert newest["rules"].get("one_source") == calibration.source_values(est), name
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

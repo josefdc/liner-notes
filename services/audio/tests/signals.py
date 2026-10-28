@@ -655,6 +655,69 @@ def seeded_synth_note(seed: int) -> np.ndarray:
     return normalise(_db(y, -3.0) + _db(_drums_at(seed), 0.0))
 
 
+# Circular-membrane modes over the fundamental (zeros of the Bessel functions) and their levels.
+MEMBRANE_MODES = ((1.0, 1.0), (1.594, 0.45), (2.136, 0.3), (2.296, 0.2), (2.653, 0.12))
+
+
+def _membrane(f0: float, drop: float, decay: float, rng, seconds: float = 0.8) -> np.ndarray:
+    """One drum stroke: membrane modes whose pitch falls by `drop` just after the stick hits."""
+    t = seconds_of(seconds)
+    glide = 1 + drop * np.exp(-t / rng.uniform(0.04, 0.09))
+    phase = 2 * np.pi * np.cumsum(f0 * glide) / SR
+    body = sum(a * np.sin(r * phase) * np.exp(-t * r / decay) for r, a in MEMBRANE_MODES)
+    stick = 0.3 * rng.standard_normal(t.size) * np.exp(-t / 0.008)
+    return (body + stick) * np.minimum(1, t / 0.002)
+
+
+def seeded_kit_toms(seed: int) -> np.ndarray:
+    """Two rack toms and a floor tom (pitch falling 4-12 % per stroke) over a drum kit."""
+    rng = np.random.default_rng(seed)
+    bpm = float(rng.uniform(90.0, 140.0))
+    floor = float(rng.uniform(70.0, 110.0))
+    racks = sorted(rng.uniform(140.0, 280.0, 2))
+    toms = [
+        _membrane(f, rng.uniform(0.04, 0.12), rng.uniform(0.25, 0.6), rng) for f in (*racks, floor)
+    ]
+    step = 60.0 / bpm / 4
+    pattern = rng.integers(-2, 3, 16)  # sixteenths; negative: no tom
+    y = np.zeros(30 * SR)
+    for n, start in enumerate(np.arange(0.0, 30.0, step)):
+        if pattern[n % 16] >= 0:
+            place(y, float(start), toms[pattern[n % 16]] * rng.uniform(0.7, 1.0))
+    return normalise(_db(y, 0.0) + _db(_drums_at(seed, bpm), rng.uniform(-6.0, 0.0)))
+
+
+# A tubular bell (a chime): the modes of a free bar (ratio, level, decay in s). The strike note
+# is heard an octave under the fourth mode, and no mode is a harmonic of another.
+CHIME_MODES = (
+    (1.0, 0.15, 1.0),
+    (2.756, 0.3, 1.5),
+    (5.404, 0.6, 3.0),
+    (8.933, 1.0, 4.0),
+    (13.34, 0.7, 3.0),
+    (18.64, 0.4, 2.0),
+)
+
+
+def seeded_tubular_bell(seed: int) -> np.ndarray:
+    """One tubular bell (strike note G3-G5) tolling every 1.5-3 s, odd seeds over drums."""
+    rng = np.random.default_rng(seed)
+    first = 2 * hz(float(rng.uniform(55.0, 79.0))) / CHIME_MODES[3][0]
+    t = seconds_of(6.0)
+    strike = sum(
+        a * np.sin(2 * np.pi * first * r * t) * np.exp(-t / d)
+        for r, a, d in CHIME_MODES
+        if first * r < 5000
+    )
+    period = float(rng.uniform(1.5, 3.0))
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, period):
+        place(y, float(start), strike)
+    if seed % 2:
+        return normalise(_db(y, -3.0) + _db(_drums_at(seed), 0.0))
+    return normalise(y)
+
+
 ONE_PITCH_CLASS_SEEDED = {
     "one-note-bass": seeded_one_note_bass,
     "octave-riff": seeded_octave_riff,
@@ -664,6 +727,8 @@ ONE_PITCH_CLASS_SEEDED = {
     "toms": seeded_toms,
     "cowbell": seeded_cowbell,
     "synth-note-over-drums": seeded_synth_note,
+    "kit-toms": seeded_kit_toms,
+    "tubular-bell": seeded_tubular_bell,
 }
 ONE_PITCH_CLASS_SEEDS = range(500, 530)
 # Seeds 600-629 of these families are kept out of every test and every threshold choice: they

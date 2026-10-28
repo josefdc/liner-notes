@@ -312,7 +312,8 @@ GROUPS = {
     "pitchless-seeded": "no key: drums, noise with a beat, a siren over drums and clicks, 30 "
     "seeds each, drawn from the seed (tempo, kit, levels, sounds)",
     "one-pitch-class-seeded": "no key: one pitched source (a one-note bass, octave riffs, a bell "
-    "alone or over drums, tabla, toms, a cowbell, a held synth note), 30 seeds each",
+    "alone or over drums, tabla, toms, a cowbell, a held synth note, two rack toms and a floor "
+    "tom over a kit, a tubular bell), 30 seeds each",
     "music": "music the service's tests expect a key for",
     "no-tempo": "no single tempo",
     "tempo": "a known tempo (octave and meter)",

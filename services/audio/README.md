@@ -140,12 +140,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.4+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.5+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.4+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.5+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -168,7 +168,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.5+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -331,9 +331,14 @@ times are seconds from the start of the preview. Every block is `null` when it w
   proportions over the whole window (followed in 2 s steps) and rise and fall together, and
   what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
   as "one pitched source". That catches most cowbells, but one note repeated on a bass only
-  sometimes: lines next to the note often count as notes of their own. A chord is three
-  pitch classes, or two a second, a third, a sixth or a seventh apart; a fifth or a third about
-  as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
+  sometimes: lines next to the note often count as notes of their own. Lines that hold still
+  and rise and fall together but are not the harmonics of notes (at most a tenth of their level
+  is overtones of the notes they spell) are one pitched source too, since 2.3.5: the modes of a
+  struck bar or tube, such as a tubular bell (of the tubular bells that 2.3.4 keyed, 19 of 20
+  with each estimator at the tests' pinned seeds, and 24 of 27 with Essentia and 23 of 24 with
+  librosa at the held-out seeds); a chord of pure sine tones that holds still would read the
+  same way. A chord is three pitch classes, or two a second, a third, a sixth or a seventh
+  apart; a fifth or a third about as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
   and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
   by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose
   third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
@@ -345,8 +350,10 @@ times are seconds from the start of the preview. Every block is `null` when it w
   withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
   major is withheld with both estimators). A major third sung or played 8 cents flat or more
   over its root two octaves down reads as the root's fifth harmonic, so such a still chord can
-  count as one source too. A bell is not caught (its tierce is a minor third over the hum, as in
-  a chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
+  count as one source too. A church bell is not caught (its tierce is a minor third over the hum,
+  as in a chord, and its prime and nominal are the hum's octaves, harmonics as a chord's notes
+  have), nor are toms, alone or two rack toms and a floor tom over a kit, nor tabla: each drum
+  or stroke has its own envelope, so the lines do not hold still together. Neither strength
   separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
   still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
   what keep keys off pitchless sound, and they also withhold many keys of electronic dance

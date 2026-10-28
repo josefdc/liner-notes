@@ -179,7 +179,8 @@ export const Fingerprint = z.object({
  * - key: `no_sustained_pitch` (too little energy in spectral lines), `speech_like` (one pitch
  *   line without stable notes), `one_harmonic_series` (the lines form one harmonic series),
  *   `one_held_pitch`, `no_pitch_track`, `few_pitch_classes`, `one_pitched_source` (the partials
- *   hold still, rise and fall together and spell one note or an open interval),
+ *   hold still, rise and fall together and spell one note or an open interval, or are not the
+ *   harmonics of notes),
  *   `low_key_strength`, `no_key_estimate` (the estimator named no key);
  * - the fingerprint and its parts: `models_not_loaded`, `not_music` (no beat, and the key rules
  *   found one harmonic series, one held pitch or one pitch line without stable notes),

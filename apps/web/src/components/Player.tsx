@@ -1068,6 +1068,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 hiddenLinks={hiddenLinks}
                 topInset={genealogyHeadingHeight}
                 onNodeClick={handleNodeClick}
+                trackPreviewUrl={track.previewUrl}
+                replay={resultMode === 'replay'}
                 // From md up the page scrolls past the graph: the wheel and one finger scroll
                 // it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones nothing
                 // scrolls behind the graph, and it takes them all.

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
+  apiRequests,
   collectProblems,
   loadFixture,
   openPlayer,
@@ -489,11 +490,23 @@ for (const count of [1, 2]) {
     });
     expect(fit.gap).toBeLessThanOrEqual(2);
     expect(fit.height).toBeLessThan(900 - 224);
-    // Its tracks are buttons that analyse them, named with their relation for screen readers.
-    await expect(
-      row.getByRole("button", { name: /^Sourced Sample - Someone \(1984\): Bright Lines/ }),
-    ).toBeVisible();
+    // Its tracks are toggle buttons that select them (their details open under the row), named
+    // with their relation for screen readers.
+    const sample = row.getByRole("button", {
+      name: /^Sourced Sample - Someone \(1984\): Bright Lines/,
+    });
+    await expect(sample).toBeVisible();
     await screenshot(page, testInfo, `compact-${count}`);
+    // A click selects it: its details open under the row, with the focus; nothing is analysed.
+    await sample.click();
+    await expect(sample).toHaveAttribute("aria-pressed", "true");
+    await expect(panel.getByTestId("node-detail")).toBeFocused();
+    expect(
+      (await apiRequests(page)).filter((entry) => entry.startsWith(`stream ${ANALYZE}?`)),
+    ).toHaveLength(1);
+    await page.keyboard.press("Escape");
+    await expect(panel.getByTestId("node-detail")).toHaveCount(0);
+    await expect(sample).toBeFocused();
     expect(problems).toEqual([]);
   });
 }

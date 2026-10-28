@@ -164,7 +164,7 @@ describe('GenealogyGraph links', () => {
 
   it('gives its hints in a neutral hue: the measured hue is for measured values', () => {
     render(<Graph />);
-    expect(screen.getByText('Click a track to analyze it').className).not.toMatch(/cyber/);
+    expect(screen.getByText('Click a track for its details').className).not.toMatch(/cyber/);
   });
 
   it('marks no origin for a track that samples or remixes this one, sourced as it is', () => {
@@ -241,7 +241,7 @@ describe('GenealogyGraph links', () => {
     expect(screen.queryByTestId('link-detail')).toBeNull();
   });
 
-  it('is one tab stop; the arrow keys move between tracks and links, Enter analyses a track', async () => {
+  it('is one tab stop; the arrow keys move between tracks and links, Enter selects a track', async () => {
     const onNodeClick = vi.fn();
     const { container } = render(<Graph onNodeClick={onNodeClick} />);
     const items = focusables(container);
@@ -271,12 +271,22 @@ describe('GenealogyGraph links', () => {
     expect(items[1].querySelector('.focus-ring')?.getAttribute('opacity')).toBe('1');
     expect(screen.getByTestId('link-detail').textContent).toBe(
       'Older Record - Someone (1984)Bright Lines (2011) samples Older Record - Someone (1984)' +
-        `Sourced · cites ${MB_SOURCED}Enter: analyze this track`,
+        `Sourced · cites ${MB_SOURCED}Enter: show its details`,
     );
+    // Enter selects the track and opens its details; it analyses nothing.
     await act(async () => {
       fireEvent.keyDown(items[1], { key: 'Enter' });
     });
-    expect(onNodeClick).toHaveBeenCalledWith(expect.objectContaining({ id: 'older' }));
+    expect(items[1].getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('node-detail')).toBeTruthy();
+    expect(onNodeClick).not.toHaveBeenCalled();
+    // Escape closes them, and the focus is back on the track.
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId('node-detail'), { key: 'Escape' });
+    });
+    expect(screen.queryByTestId('node-detail')).toBeNull();
+    expect(items[1].getAttribute('aria-pressed')).toBe('false');
+    expect(document.activeElement).toBe(items[1]);
 
     // End: the last link. Its band shows as the focus ring.
     await act(async () => {
@@ -289,7 +299,7 @@ describe('GenealogyGraph links', () => {
       '0.15',
       '1',
     ]);
-    // Enter on a link does nothing; Enter on the analyzed track does nothing either.
+    // Enter on a link selects nothing; Enter on the analyzed track selects nothing either.
     await act(async () => {
       fireEvent.keyDown(items[7], { key: 'Enter' });
     });
@@ -300,7 +310,9 @@ describe('GenealogyGraph links', () => {
     await act(async () => {
       fireEvent.keyDown(items[0], { key: 'Enter' });
     });
-    expect(onNodeClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('node-detail')).toBeNull();
+    expect(items[0].hasAttribute('aria-pressed')).toBe(false);
+    expect(onNodeClick).not.toHaveBeenCalled();
   });
 
   it('keeps the focused link’s detail when the pointer passes over another and leaves', async () => {

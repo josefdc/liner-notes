@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type Selection, select } from 'd3-selection';
+import { select } from 'd3-selection';
 import { type D3ZoomEvent, zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
 import type { LinkType } from '@liner-notes/contract';
@@ -48,6 +48,20 @@ import { LineageRow } from './genealogy/LineageRow';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
 import { PreviewList } from './genealogy/PreviewList';
+import { GRAPH_LISTS } from './genealogy/exclusiveLists';
+import { DetailPanel } from './genealogy/DetailPanel';
+import { clearOfPanel } from './genealogy/clearOfPanel';
+import { LinkFilters } from './genealogy/LinkFilters';
+import {
+  filterCounts,
+  filterGenealogy,
+  hiddenText,
+  isFiltering,
+  type LinkFilter,
+  NO_FILTER,
+} from './genealogy/filters';
+import { listeningPlan, useABListening } from './genealogy/useABListening';
+import { Button } from './ui/Button';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
 import { useNoHover } from '../utils/layout';
@@ -89,6 +103,8 @@ const CHAR_PX = labelWidth('x', NODE_LABEL_PX);
 /** A card's text is never narrower than this many characters, nor (horizontal) wider than this. */
 const MIN_CHARS = 12;
 const MAX_TEXT_PX = 208;
+/** A map shorter than this (px) leaves no room above an overlaid panel: the panel follows it. */
+const SHORT_MAP_PX = 200;
 /** A card's text width moves in steps of this many px: a resize of a pixel draws nothing again. */
 const TEXT_STEP_PX = 16;
 const cardWidth = (textWidth: number) => PAD + THUMB + TEXT_GAP + textWidth + PAD;
@@ -112,6 +128,13 @@ const MARGIN: Record<Orientation, { top: number; right: number; bottom: number; 
   horizontal: { top: 8, right: 24, bottom: 16, left: 16 },
   vertical: { top: 8, right: 0, bottom: 16, left: 22 },
 };
+
+/**
+ * The least move along an axis that brings [low, high] into [from, to] with VIEW_PAD to spare
+ * (the near side first, if both are out).
+ */
+const nearShift = (low: number, high: number, from: number, to: number) =>
+  low < from + VIEW_PAD ? from + VIEW_PAD - low : high > to - VIEW_PAD ? to - VIEW_PAD - high : 0;
 
 /** The room the rails take to the right of a column of cards: more for more links, at most 80. */
 const railRoomFor = (links: number) => Math.min(80, 12 + 5 * links);
@@ -148,9 +171,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   topInset = 0,
   onNodeClick,
   wheelZoom = 'plain',
+  trackPreviewUrl = null,
+  replay = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // The links that can be drawn (one to an unknown node id is left out), each read with the
   // contract's link schema and shown by its rule and this app's stricter ones; links whose claim
@@ -159,7 +185,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     () => readGenealogy(data, linkContext(evidence, claims, { releaseYear })),
     [data, evidence, claims, releaseYear],
   );
-  const links = reading.links;
+  const allLinks = reading.links;
   const hidden = reading.hidden + hiddenLinks;
   const named = useMemo(() => nodesById(data?.nodes, yearFrom(releaseYear)), [data, releaseYear]);
   const nameOf = useMemo(() => (id: string) => nodeName(named.get(id), id), [named]);
@@ -171,8 +197,38 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
     [data],
   );
-  // With two links or fewer in all the map is a compact row, not a canvas.
-  const sparse = isSparse(links.length);
+  // The filters (not stored): the tracks and links they keep are what the canvas, the compact
+  // row, the list and the summary show. The analysed track is always kept.
+  const [filter, setFilter] = useState<LinkFilter>(NO_FILTER);
+  const filtered = useMemo(
+    () => filterGenealogy(graphNodes(data), allLinks, currentId, filter),
+    [data, allLinks, currentId, filter],
+  );
+  const links = filtered.links;
+  const shownNodes = filtered.nodes;
+  const counts = useMemo(() => filterCounts(allLinks, currentId), [allLinks, currentId]);
+  const shownCounts = useMemo(
+    () => new Map(filterCounts(links, currentId).map(({ kind, count }) => [kind, count])),
+    [links, currentId],
+  );
+  // With two links or fewer in all the map is a compact row, not a canvas (whatever the filters
+  // leave: filtering never turns the canvas into the row).
+  const sparse = isSparse(allLinks.length);
+
+  // The selected track: a click, a tap or Enter on its card selects it (never analyses it) and
+  // opens its details; Escape, the close button or another click on it clears it. The drawing
+  // reads it through `selectedRef` and draws it with `drawSelectedRef`.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedRef = useRef<string | null>(null);
+  const drawSelectedRef = useRef<(() => void) | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  /** Selects a track (another click on the selected one clears it); never the analysed one. */
+  const selectRef = useRef<(id: string) => void>(() => {});
+  selectRef.current = (id: string) => {
+    if (id === currentId) return;
+    setSelectedId((was) => (was === id ? null : id));
+  };
+  const ab = useABListening();
   // What the pointer is on, and what keyboard focus is on: the detail shows the first of them,
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
@@ -216,12 +272,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     onNodeClickRef.current = onNodeClick;
   }, [onNodeClick]);
 
-  /** Analyses a track (never the current one), read when a track is chosen. */
+  /** Analyses a track (never the current one): the detail panel's "Analyze this track". */
   const analyseRef = useRef<(d: GenealogyNode) => void>(() => {});
+  const stopListening = ab.stop;
   useEffect(() => {
     analyseRef.current = (d) => {
       if (d.group === 1) return;
       stopPreview();
+      stopListening();
       onNodeClickRef.current?.({
         id: d.id,
         group: d.group,
@@ -234,7 +292,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         trackArtist: d.trackArtist,
       });
     };
-  }, [stopPreview]);
+  }, [stopPreview, stopListening]);
 
   // Each track's relation to the analysed one, from the link that joins them.
   const relations = useMemo(
@@ -274,10 +332,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         : other
           ? `No direct link to the analyzed track. ${relationSentence(other, nameOf)}. ${provenanceText(other)}.`
           : 'No direct link to the analyzed track.';
-      return `${name}: ${said} Press Enter to analyze it.`;
+      return `${name}: ${said}`;
     },
     [cardNameOf, nameOf, relations, links],
   );
+  /** A card's name with what Enter does on it: open its details, or close them (selected). */
+  const cardLabel = (d: GenealogyNode, selected: boolean) =>
+    d.group === 1
+      ? nodeAriaLabel(d)
+      : `${nodeAriaLabel(d)} Press Enter ${selected ? 'to close its details' : 'for its details'}.`;
+  const cardLabelRef = useRef(cardLabel);
+  cardLabelRef.current = cardLabel;
 
   // The characters a card's line needs for every title, artist and year in two lines, no word
   // broken. Where the room is less (a narrow panel, or past MAX_TEXT_PX), a title takes up to four
@@ -354,6 +419,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // The view the map was last left at, kept when the map is laid out again for the same tracks
   // and axis (a resize that changes the cards a row holds): the reader's pan and zoom stay.
   const viewRef = useRef<{
+    /** The tracks laid out (the filtered list: a filter lays the map out afresh). */
     data: unknown;
     orientation: Orientation;
     transform: ZoomTransform;
@@ -362,6 +428,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
   const detailRef = useRef<HTMLDivElement>(null);
   const detailInsetRef = useRef(0);
+  // Where the box or the panel lies across the map (px from the map's left): a card beside it,
+  // not under it, is clear of it.
+  const detailAcrossRef = useRef<readonly [number, number]>([0, 0]);
   const afterDetailRef = useRef<(() => void) | null>(null);
   // The detail box goes to the top of the map while the item the pointer is on sits in the
   // bottom band, where the box would cover it (`detailTopRef` mirrors it for the drawing).
@@ -377,13 +446,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
     // Listeners added here outside d3 (focus and blur), removed when the drawing goes.
-    const listening: Array<{ element: SVGElement; type: string; listener: () => void }> = [];
-
-    // A hint shown on hover fades in, or appears at once under reduced motion.
-    const fadeIn = (hint: Selection<SVGGElement, unknown, null, undefined>) => {
-      if (reducedMotion) hint.style('opacity', 1);
-      else hint.style('opacity', 0).transition().duration(300).style('opacity', 1);
-    };
+    const listening: Array<{
+      element: SVGElement;
+      type: string;
+      listener: (event: Event) => void;
+      capture: boolean;
+    }> = [];
+    // Listeners on the window, removed the same way.
+    const unlisten: Array<() => void> = [];
 
     let { width, height } = size;
     svg.attr('width', width).attr('height', height);
@@ -433,7 +503,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         }
       }
     }
-    const nodes = graphNodes(data).map((node, i) => {
+    const nodes = shownNodes.map((node, i) => {
       const year = yearOfNode(node.id);
       const { title, meta } = cardWords(node, year);
       const tag = node.id === currentId ? 'This track' : isOrigin(node.id) ? 'Origin' : null;
@@ -511,7 +581,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         transform = event.transform;
         g.attr('transform', event.transform.toString());
-        viewRef.current = { data, orientation, transform };
+        viewRef.current = { data: shownNodes, orientation, transform };
         pinAxis();
       })
       .on('end', () => drawChips());
@@ -724,7 +794,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       })
       .attr('tabindex', -1)
       .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
-      .attr('aria-label', (d) => nodeAriaLabel(d.node))
+      .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
       .style('outline', 'none');
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
@@ -754,15 +824,35 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             : 'none',
       );
 
+    // The selection ring, solid, shown while the card is selected (its details are open).
+    // (While a card is selected its panel replaces the hover box; a focused item's name still
+    // says what the box would. Accepted.)
+    node
+      .append('rect')
+      .attr('class', 'select-ring')
+      .attr('x', -2)
+      .attr('y', -2)
+      .attr('width', (d) => d.width + 4)
+      .attr('height', (d) => d.height + 4)
+      .attr('rx', 5)
+      .attr('fill', 'none')
+      // White, at full strength: apart from the analysed track's cyan, an origin's amber and the
+      // other cards' faint white frames.
+      .attr('stroke', colors.white)
+      .attr('stroke-width', 2)
+      .attr('opacity', 0)
+      .attr('vector-effect', 'non-scaling-stroke')
+      .style('pointer-events', 'none');
+
     // The focus ring, shown while keyboard focus is on the card.
     node
       .append('rect')
       .attr('class', 'focus-ring')
-      .attr('x', -4)
-      .attr('y', -4)
-      .attr('width', (d) => d.width + 8)
-      .attr('height', (d) => d.height + 8)
-      .attr('rx', 6)
+      .attr('x', -5)
+      .attr('y', -5)
+      .attr('width', (d) => d.width + 10)
+      .attr('height', (d) => d.height + 10)
+      .attr('rx', 7)
       .attr('fill', 'none')
       .attr('stroke', colors.cyber)
       .attr('stroke-width', 2)
@@ -854,9 +944,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     node.selectChildren().attr('aria-hidden', 'true');
 
     // 8. Chips: a link's relation, shown while the pointer or the focus is on the link or on a
-    // card it joins, placed clear of every card and year label, in view (below the heading,
-    // above the detail box) and near the link's middle; a chip with no free place near it is
-    // left out (the detail box says the same). An origin's card also says a click analyses it.
+    // card it joins (or, with neither, while a card it joins is selected: a tap shows them),
+    // placed clear of every card and year label, in view (below the heading, above the detail
+    // box or panel) and near the link's middle; a chip with no free place near it is left out
+    // (the detail box and the panel say the same).
     // The axis above the cards (its labels may be pinned over them), below the chips.
     axis.raise();
     const chips = g
@@ -867,13 +958,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const obstacles = [...cardBoxes, ...yearLabels];
     let pointerOn: Item | null = null;
     let focusOn: Item | null = null;
-    let hint: string | null = null;
+    // True after a touch on the map, until a mouse moves on it again.
+    let touching = false;
+    /** The selected card, as an item (null when none is). */
+    const selectedItem = (): Item | null =>
+      selectedRef.current === null ? null : { kind: 'node', id: selectedRef.current };
 
     function drawChips() {
-      // A hint's fade stops with the hint.
-      chips.selectAll('*').interrupt().remove();
+      chips.selectAll('*').remove();
       leaders.selectAll('*').remove();
-      const active = pointerOn ?? focusOn;
+      const active = pointerOn ?? focusOn ?? selectedItem();
       if (!active) return;
       const k = transform.k || 1;
       // What is in view, in the map's units, below the heading and above the detail box.
@@ -892,7 +986,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           : drawnLinks
               .filter((d) => d.shown.source === active.id || d.shown.target === active.id)
               .sort((a, b) => rank(b.shown) - rank(a.shown));
-      const wanted: Array<ChipInput & { text: string; link: DrawnLink | null }> = shown.map(
+      const wanted: Array<ChipInput & { text: string; link: DrawnLink }> = shown.map(
         (d, order) => ({
           near: d.route.mid,
           width: chipWidth(relationLabel(d.shown)),
@@ -902,43 +996,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           link: d,
         }),
       );
-      if (active.kind === 'node' && hint === active.id) {
-        const box = boxOf(active.id);
-        wanted.unshift({
-          near: { x: box.x + box.width / 2, y: box.y - chipHeight / 2 - 4 },
-          width: chipWidth('Analyze this track'),
-          height: chipHeight,
-          priority: 1,
-          text: 'Analyze this track',
-          link: null,
-        });
-      }
       const at = placeChips(wanted, obstacles, view, { reach: CHIP_REACH });
       wanted.forEach((chip, index) => {
         const box = at[index];
         if (!box) return;
         const group = chips
           .append('g')
-          .attr('class', chip.link ? 'chip' : 'chip hint')
-          .attr('transform', `translate(${box.x},${box.y})`);
-        if (chip.link) {
-          group
-            .attr('data-link-index', chip.link.n)
-            .attr('data-near', `${chip.near.x},${chip.near.y}`);
-          const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-          if (Math.hypot(centre.x - chip.near.x, centre.y - chip.near.y) >= LEADER_FROM) {
-            leaders
-              .append('line')
-              .attr('x1', centre.x)
-              .attr('y1', centre.y)
-              .attr('x2', chip.near.x)
-              .attr('y2', chip.near.y)
-              .attr('stroke', LINK_COLOR[chip.link.shown.type])
-              .attr('stroke-opacity', 0.7)
-              .attr('stroke-width', 1)
-              .attr('stroke-dasharray', '2 2')
-              .attr('vector-effect', 'non-scaling-stroke');
-          }
+          .attr('class', 'chip')
+          .attr('transform', `translate(${box.x},${box.y})`)
+          .attr('data-link-index', chip.link.n)
+          .attr('data-near', `${chip.near.x},${chip.near.y}`);
+        const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        if (Math.hypot(centre.x - chip.near.x, centre.y - chip.near.y) >= LEADER_FROM) {
+          leaders
+            .append('line')
+            .attr('x1', centre.x)
+            .attr('y1', centre.y)
+            .attr('x2', chip.near.x)
+            .attr('y2', chip.near.y)
+            .attr('stroke', LINK_COLOR[chip.link.shown.type])
+            .attr('stroke-opacity', 0.7)
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '2 2')
+            .attr('vector-effect', 'non-scaling-stroke');
         }
         group
           .append('rect')
@@ -946,26 +1026,24 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .attr('height', box.height)
           .attr('rx', 3)
           .attr('fill', colors.void)
-          .attr('stroke', chip.link ? LINK_COLOR[chip.link.shown.type] : colors.gray[600])
-          .attr('stroke-dasharray', chip.link ? LINK_DASH[chip.link.shown.kind] : 'none')
+          .attr('stroke', LINK_COLOR[chip.link.shown.type])
+          .attr('stroke-dasharray', LINK_DASH[chip.link.shown.kind])
           .attr('vector-effect', 'non-scaling-stroke');
         group
           .append('text')
-          .attr('class', chip.link ? null : 'preview-indicator')
           .attr('x', 5)
           .attr('y', box.height - 6)
-          .attr('fill', chip.link ? colors.white : colors.gray[400])
+          .attr('fill', colors.white)
           .attr('font-family', 'IBM Plex Mono')
           .attr('font-size', `${LINE_LABEL_PX}px`)
           .text(chip.text);
-        if (!chip.link) fadeIn(group);
       });
     }
 
     // 9. Interactions: what the pointer and keyboard focus are on (the detail box is React's;
     // this draws the rest).
     const drawActive = () => {
-      const active = pointerOn ?? focusOn;
+      const active = pointerOn ?? focusOn ?? selectedItem();
       const activeLink = active?.kind === 'link' ? active.index : null;
       const activeNode = active?.kind === 'node' ? active.id : null;
       const touches = (d: DrawnLink) =>
@@ -983,12 +1061,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           (d) =>
             linkWidth(d.shown.value, d.shown.kind) * (d.n === activeLink || touches(d) ? 1.8 : 1),
         );
-      // The cards the pointed track is not joined to fade back.
+      // The cards the pointed track is not joined to fade back (never the selected one).
       const joined = new Set(
         activeNode === null
           ? []
           : [
               activeNode,
+              ...(selectedRef.current === null ? [] : [selectedRef.current]),
               ...links.flatMap((l) =>
                 l.source === activeNode ? [l.target] : l.target === activeNode ? [l.source] : [],
               ),
@@ -1003,6 +1082,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         .select('.focus-ring')
         .attr('opacity', (d) => (focusOn?.kind === 'node' && focusOn.id === d.id ? 1 : 0));
       drawChips();
+    };
+    // The selected card: its ring, and its state for screen readers (a toggle button's).
+    const drawSelected = () => {
+      const selected = selectedRef.current;
+      node
+        .attr('aria-pressed', (d) => (d.id === currentId ? null : String(d.id === selected)))
+        .attr('aria-label', (d) => cardLabelRef.current(d.node, d.id === selected))
+        .select('.select-ring')
+        .attr('opacity', (d) => (d.id === selected ? 1 : 0));
+      drawActive();
     };
     const pointAt = (item: Item | null) => {
       pointerOn = item;
@@ -1043,22 +1132,64 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const k = transform.k || 1;
       const [left, top] = [transform.x + box.x * k, transform.y + box.y * k];
       const [right, bottom] = [left + box.width * k, top + box.height * k];
-      // The least move that brings a side into view (the near side first, if both are out).
-      const shift = (low: number, high: number, from: number, to: number) =>
-        low < from + VIEW_PAD
-          ? from + VIEW_PAD - low
-          : high > to - VIEW_PAD
-            ? to - VIEW_PAD - high
-            : 0;
       const [dx, dy] = [
-        shift(left, right, 0, width),
-        shift(
+        nearShift(left, right, 0, width),
+        nearShift(
           top,
           bottom,
           insetRef.current + pinnedBand() + (detailTopRef.current ? detailInsetRef.current : 0),
           height - (detailTopRef.current ? 0 : detailInsetRef.current),
         ),
       ];
+      if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+    };
+
+    /**
+     * Where the selected card's panel goes: on the side of the map away from the analysed
+     * track's card (at the top when that card lies below the selected one, else at the bottom),
+     * so the view can hold the selected card beside the panel and leave the analysed one clear.
+     */
+    const panelAtTop = () => {
+      const id = selectedRef.current;
+      if (id === null || currentId === null || id === currentId) return false;
+      const [selected, current] = [boxOf(id), boxOf(currentId)];
+      return current.y + current.height / 2 > selected.y + selected.height / 2;
+    };
+
+    /**
+     * Pans the view so the selected card is in view, clear of its panel, and the analysed track's
+     * card is not under the panel either (on the far side of the selected card, or past the
+     * view's edge) where a move allows both (`clearOfPanel`).
+     */
+    const bringSelectedClear = () => {
+      const id = selectedRef.current;
+      if (id === null) return;
+      const k = transform.k || 1;
+      const onScreen = (b: CardBox) => ({
+        x: [transform.x + b.x * k, transform.x + (b.x + b.width) * k] as const,
+        y: [transform.y + b.y * k, transform.y + (b.y + b.height) * k] as const,
+      });
+      const selected = onScreen(boxOf(id));
+      const current = currentId !== null && currentId !== id ? onScreen(boxOf(currentId)) : null;
+      const dx = nearShift(selected.x[0], selected.x[1], 0, width);
+      const [from, to] = detailAcrossRef.current;
+      // The analysed card matters where it is under the panel across the map.
+      const under =
+        current !== null && current.x[1] + dx > from && current.x[0] + dx < to ? current.y : null;
+      const heading = insetRef.current + pinnedBand();
+      // A selected card beside the panel (a desktop's corner panel) has the whole height.
+      const beside = selected.x[1] + dx <= from || selected.x[0] + dx >= to;
+      let dy: number;
+      if (detailTopRef.current) {
+        // The panel under the heading: the room is below it.
+        const end = heading + detailInsetRef.current;
+        const room = [beside ? heading + VIEW_PAD : end + VIEW_PAD, height - VIEW_PAD] as const;
+        dy = clearOfPanel(selected.y, room, under, [0, end]);
+      } else {
+        const edge = height - detailInsetRef.current;
+        const room = [heading + VIEW_PAD, beside ? height - VIEW_PAD : edge - VIEW_PAD] as const;
+        dy = clearOfPanel(selected.y, room, under, [edge, height]);
+      }
       if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
 
@@ -1081,15 +1212,64 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
     };
     setRoving(0);
-    const listen = (element: SVGElement, type: string, listener: () => void) => {
-      element.addEventListener(type, listener);
-      listening.push({ element, type, listener });
+    const listen = (
+      element: SVGElement,
+      type: string,
+      listener: (event: Event) => void,
+      capture = false,
+    ) => {
+      element.addEventListener(type, listener, capture);
+      listening.push({ element, type, listener, capture });
     };
+    // A press of the pointer or a finger on a card focuses it: the view does not move then (a
+    // card that moved between the press and the release would not get the click, or the tap,
+    // that selects it). The selected card is brought clear of its panel once it opens.
+    let pressing = false;
+    const svgElement = svg.node() as SVGSVGElement;
+    listen(svgElement, 'pointerdown', (event) => {
+      pressing = true;
+      touching = (event as PointerEvent).pointerType === 'touch';
+    });
+    listen(svgElement, 'pointermove', (event) => {
+      if ((event as PointerEvent).pointerType !== 'touch') touching = false;
+    });
+    // Before the card's own click handler (which stops the click there).
+    // A press that ends without a click (a drag that panned, a touch d3 takes for a gesture) ends
+    // it too. A mouse's press focused the card already (on its mousedown): it ends on release. A
+    // finger's focuses it after the release (the mouse events a tap sends then): it ends on the
+    // click, or a moment later when no click comes.
+    const released = (event: Event) => {
+      if ((event as PointerEvent).pointerType === 'mouse') {
+        pressing = false;
+        return;
+      }
+      setTimeout(() => {
+        pressing = false;
+      }, 500);
+    };
+    for (const type of ['pointerup', 'pointercancel']) {
+      window.addEventListener(type, released, true);
+    }
+    unlisten.push(() => {
+      for (const type of ['pointerup', 'pointercancel']) {
+        window.removeEventListener(type, released, true);
+      }
+    });
+    for (const type of ['click', 'keydown']) {
+      listen(
+        svgElement,
+        type,
+        () => {
+          pressing = false;
+        },
+        true,
+      );
+    }
     items.forEach(({ item, element }, i) => {
       listen(element, 'focus', () => {
         setRoving(i);
         focusOn = item;
-        bringIntoView(item);
+        if (!pressing) bringIntoView(item);
         drawActive();
         setFocused(item);
       });
@@ -1117,21 +1297,28 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // Once React has drawn the detail box (or taken it away): the box at the top while the
     // pointed item is low, the focused item clear of it, and the chips placed again.
     afterDetailRef.current = () => {
-      const top = pointedLow();
+      // The selected card's panel goes on the side away from the analysed track's card; the
+      // hover box goes to the top while the item pointed at is low.
+      const top = selectedRef.current !== null ? panelAtTop() : pointedLow();
       if (top !== detailTopRef.current) {
         detailTopRef.current = top;
         setDetailTop(top);
       }
-      if (focusOn && !pointerOn) bringIntoView(focusOn);
+      if (selectedRef.current !== null) bringSelectedClear();
+      else if (focusOn && !pointerOn) bringIntoView(focusOn);
       drawChips();
     };
+    drawSelectedRef.current = drawSelected;
+    drawSelected();
     svg.on('keydown', (event: KeyboardEvent) => {
-      if (items.length === 0) return;
+      // Escape the map's root handled already (a selection or a pair playing).
+      if (items.length === 0 || event.defaultPrevented) return;
       const at = items.findIndex(({ element }) => element === event.target);
       if (at === -1) return;
-      // Escape closes the focused item's detail box first; with none open it is the Player's.
+      // Escape stops A/B listening, then clears the selection, then closes the focused item's
+      // detail box; with none of them it is the Player's.
       if (event.key === 'Escape') {
-        if (dismissRef.current()) event.preventDefault();
+        if (escapeRef.current()) event.preventDefault();
         return;
       }
       const last = items.length - 1;
@@ -1155,30 +1342,30 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const { item } = items[at];
       if ((event.key === 'Enter' || event.key === ' ') && item.kind === 'node') {
         event.preventDefault();
-        const d = nodes.find((n) => n.id === item.id);
-        if (d) analyseRef.current(d.node);
+        selectRef.current(item.id);
       }
     });
 
     linkTarget
-      .on('mouseenter', (_event, d) => pointAt({ kind: 'link', index: d.n }))
+      .on('mouseenter', (_event, d) => {
+        if (!touching) pointAt({ kind: 'link', index: d.n });
+      })
       .on('mouseleave', () => pointAt(null));
 
     node
+      // Pointing at a track plays nothing: previews play from their own buttons (PreviewList)
+      // and from the detail panel's A/B listening. A finger points at nothing: the browser's
+      // mouse events after a tap would leave a card "pointed at" until the next tap.
       .on('mouseenter', (_event, d) => {
-        // An origin says a click analyses the track, whether or not it has a clip. No hint
-        // names a preview: previews play from their own buttons (PreviewList).
-        hint = isOrigin(d.id) ? d.id : null;
-        pointAt({ kind: 'node', id: d.id });
+        if (!touching) pointAt({ kind: 'node', id: d.id });
       })
-      .on('mouseleave', () => {
-        hint = null;
-        pointAt(null);
-      })
-      // A click analyses the track.
+      .on('mouseleave', () => pointAt(null))
+      // A click or a tap selects the track (its details open); it never analyses it.
       .on('click', (event, d) => {
         event.stopPropagation();
-        analyseRef.current(d.node);
+        // The second click of a double click (a zoom) does not toggle the selection back.
+        if ((event as MouseEvent).detail > 1) return;
+        selectRef.current(d.id);
       });
 
     // The first view, unless the map is laid out again for the same tracks and axis (then the
@@ -1209,7 +1396,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         svg.call(zoomBehavior.transform, zoomIdentity.translate(x, y).scale(k));
       }
     };
-    if (kept && kept.data === data && kept.orientation === orientation) {
+    if (kept && kept.data === shownNodes && kept.orientation === orientation) {
       svg.call(zoomBehavior.transform, kept.transform);
       holdView();
     } else {
@@ -1242,6 +1429,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       }
       svg.call(zoomBehavior.transform, zoomIdentity.translate(tx, ty));
     }
+    // Laid out again with a track selected (a filter, a resize): the selected card back in view
+    // and clear of its panel. A filter lays the map out afresh, so the pan and zoom start over
+    // (accepted: the cards have new places).
+    if (selectedRef.current !== null) afterDetailRef.current?.();
 
     insetShiftRef.current = (by) => {
       svg.call(zoomBehavior.translateBy, 0, by / (transform.k || 1));
@@ -1257,6 +1448,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const k = transform.k || 1;
       svg.call(zoomBehavior.translateBy, dx / k, dy / k);
       holdView();
+      // A selected card stays clear of its panel in the new size (the legend's filters opening
+      // below the map shorten it, for one).
+      if (selectedRef.current !== null) afterDetailRef.current?.();
       drawChips();
     };
 
@@ -1266,27 +1460,28 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       resizeRef.current = null;
       insetShiftRef.current = null;
       afterDetailRef.current = null;
+      drawSelectedRef.current = null;
       svg.interrupt();
       svg.selectAll('*').interrupt();
       svg.on('.zoom', null).on('keydown', null);
       node.on('mouseenter', null).on('mouseleave', null).on('click', null);
       linkTarget.on('mouseenter', null).on('mouseleave', null);
-      for (const { element, type, listener } of listening) {
-        element.removeEventListener(type, listener);
+      for (const remove of unlisten) remove();
+      for (const { element, type, listener, capture } of listening) {
+        element.removeEventListener(type, listener, capture);
       }
       setHovered(null);
       setFocused(null);
     };
   }, [
     sparse,
-    data,
+    shownNodes,
     links,
     nameOf,
     yearOfNode,
     currentId,
     relations,
     isOrigin,
-    nodeAriaLabel,
     orientation,
     textWidth,
     perRow,
@@ -1299,7 +1494,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     if (panel) resizeRef.current?.(panel);
   }, [panel]);
 
-  const nodeList = graphNodes(data);
+  // The tracks the filters keep: the summary and the compact row name these.
+  const nodeList = shownNodes;
+  const hiddenTracks = filtered.hiddenTracks;
   const related = nodeList.filter((node) => node.group !== 1);
   // The gestures, in words, as the graph takes them here (see the zoom's filter).
   const touch = useNoHover();
@@ -1309,14 +1506,191 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         ? [
             'Pinch with two fingers to zoom',
             'Drag with two fingers to pan',
-            'Tap a track to analyze it',
+            'Tap a track for its details',
           ]
-        : ['Ctrl or ⌘ + scroll to zoom', 'Drag to pan', 'Click a track to analyze it']
+        : ['Ctrl or ⌘ + scroll to zoom', 'Drag to pan', 'Click a track for its details']
       : touch
-        ? ['Pinch to zoom', 'Drag to pan', 'Tap a track to analyze it']
-        : ['Scroll to zoom', 'Drag to pan', 'Click a track to analyze it'];
+        ? ['Pinch to zoom', 'Drag to pan', 'Tap a track for its details']
+        : ['Scroll to zoom', 'Drag to pan', 'Click a track for its details'];
+
+  // The selected track, while the filters show it (a filter that hides it clears it).
+  const selectedNode =
+    selectedId === null ? null : (shownNodes.find((node) => node.id === selectedId) ?? null);
+  // A filter that hides the selected track closes its details, and the filters' status says so.
+  // A track gone for another reason (a new map without it) just leaves no selection.
+  const [filterNote, setFilterNote] = useState<string | null>(null);
+  const changeFilter = (next: LinkFilter) => {
+    setFilterNote(null);
+    setFilter(next);
+  };
+  const filtering = isFiltering(filter);
+  useEffect(() => {
+    if (selectedId !== null && selectedNode === null) {
+      setSelectedId(null);
+      setFilterNote(
+        filtering
+          ? `The details of ${nameOf(selectedId)} closed: the filters hide that track`
+          : null,
+      );
+    }
+  }, [selectedId, selectedNode, nameOf, filtering]);
+  // Read by the drawing (its chips, the view it keeps the card in) as it is drawn now.
+  selectedRef.current = selectedNode?.id ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: draws the selection when it changes
+  useLayoutEffect(() => {
+    drawSelectedRef.current?.();
+  }, [selectedNode]);
+  // A new selection (or none) stops A/B listening, and an opened panel takes the focus.
+  const stopAb = ab.stop;
+  useEffect(() => {
+    stopAb();
+    if (selectedNode) panelRef.current?.focus();
+  }, [selectedNode, stopAb]);
+
+  /** Puts the focus back on a track's card (the canvas's, or the compact row's). */
+  const focusCard = (id: string) => {
+    const root = rootRef.current;
+    if (!root) return;
+    const card = [
+      ...root.querySelectorAll<HTMLElement | SVGElement>('g.nodes > g, button[data-card-id]'),
+    ].find(
+      (element) =>
+        (element.getAttribute('data-node-id') ?? element.getAttribute('data-card-id')) === id,
+    );
+    card?.focus({ preventScroll: true });
+  };
+  /** Closes the panel; the focus, when it was in the panel, goes back to the card. */
+  const closeSelection = () => {
+    const id = selectedNode?.id;
+    const active = document.activeElement;
+    const inPanel = active !== null && (panelRef.current?.contains(active) ?? false);
+    setSelectedId(null);
+    if (id && (inPanel || active === document.body)) focusCard(id);
+  };
+  // Escape closes a list open over the panel first (the links, the previews), then stops A/B
+  // listening, then closes the panel, then the hover box. With neither a selection nor a pair
+  // playing an open list is the Player's to close, as before.
+  const escapeRef = useRef<() => boolean>(() => false);
+  escapeRef.current = () => {
+    const list =
+      ab.playing || selectedNode
+        ? rootRef.current?.querySelector<HTMLDetailsElement>(`details[name="${GRAPH_LISTS}"][open]`)
+        : null;
+    if (list) {
+      const active = document.activeElement;
+      list.open = false;
+      if (active && list.contains(active)) list.querySelector('summary')?.focus();
+      return true;
+    }
+    if (ab.playing) {
+      ab.stop();
+      return true;
+    }
+    if (selectedNode) {
+      closeSelection();
+      return true;
+    }
+    return dismissRef.current();
+  };
+  /**
+   * Escape anywhere in the map (the panel, a card, the canvas, the filters), while a track is
+   * selected or a pair plays: it stops the pair, then closes the panel, before anything else
+   * (and before the Player's Escape, which would leave the map). Caught on the way down, so the
+   * canvas's own key handler sees it handled.
+   */
+  const onRootKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || event.isDefaultPrevented()) return;
+    if (!ab.playing && !selectedNode) return;
+    if (escapeRef.current()) event.preventDefault();
+  };
+  // The same with the focus on no element (the page's body), while the map is on screen: the
+  // Player would take that Escape as its own and leave the map.
+  const escapeOwned = Boolean(ab.playing || selectedNode);
+  useEffect(() => {
+    if (!escapeOwned) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (target !== document.body && target !== document.documentElement && target !== document) {
+        return;
+      }
+      const root = rootRef.current;
+      if (!root || (typeof root.checkVisibility === 'function' && !root.checkVisibility())) return;
+      if (escapeRef.current()) event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [escapeOwned]);
+
+  // A/B listening: the selected track and this one, the earlier record first.
+  const currentNode = currentId === null ? null : (named.get(currentId) ?? null);
+  const clipOf = (url: unknown) => (typeof url === 'string' && url ? url : null);
+  const selectedLink = selectedNode
+    ? relationToTrack(links, selectedNode.id, currentId).link
+    : null;
+  const plan =
+    selectedNode && currentId !== null && currentNode
+      ? listeningPlan({
+          selected: {
+            id: selectedNode.id,
+            name: nameOf(selectedNode.id),
+            url: clipOf(selectedNode.previewUrl),
+          },
+          current: {
+            id: currentId,
+            name: nameOf(currentId),
+            url:
+              clipOf(trackPreviewUrl) ??
+              clipOf(graphNodes(data).find((node) => node.id === currentId)?.previewUrl),
+          },
+          link: selectedLink,
+          replay,
+        })
+      : null;
+  // The panel lies over the bottom of the map, unless the map is a compact row or too short to
+  // leave its card room above it (a landscape phone): then it follows the map, in the flow.
+  const inlinePanel = sparse || (panel !== null && panel.height < SHORT_MAP_PX);
+  const detailPanel = selectedNode && (
+    <DetailPanel
+      panelRef={panelRef}
+      layout={inlinePanel ? 'inline' : detailTop ? 'top' : 'overlay'}
+      topOffset={topInset + 4}
+      node={selectedNode}
+      year={yearOfNode(selectedNode.id)}
+      links={links
+        .filter((link) => link.source === selectedNode.id || link.target === selectedNode.id)
+        .sort((a, b) => rank(b) - rank(a))}
+      nameOf={nameOf}
+      claims={claims}
+      plan={plan}
+      listening={ab.playing}
+      listeningMessage={ab.message}
+      onListen={() => {
+        if (plan?.kind !== 'ready') return;
+        stopPreview();
+        ab.start(plan.steps);
+      }}
+      onStopListening={ab.stop}
+      onAnalyse={() => analyseRef.current(selectedNode)}
+      onClose={closeSelection}
+    />
+  );
+  // Every link hidden by the filters: what is hidden, and a way back.
+  const filteredOut = isFiltering(filter) && links.length === 0 && allLinks.length > 0 && (
+    <div
+      data-testid="filters-empty"
+      className="flex flex-col items-start gap-2 rounded-sm border border-white/15 bg-void p-3 font-mono text-chrome text-text-chip"
+    >
+      <p>No links match the filters: {hiddenText(filter)} are hidden.</p>
+      <Button type="button" variant="neutral" size="sm" onClick={() => changeFilter(NO_FILTER)}>
+        Clear filters
+      </Button>
+    </div>
+  );
+
   const pointed = hovered ?? focused;
-  const active = sameItem(pointed, dismissed) ? null : pointed;
+  // The hover box is the unselected map's: with a track selected, its panel says it.
+  const active = selectedNode || sameItem(pointed, dismissed) ? null : pointed;
   useEffect(() => {
     dismissRef.current = () => {
       if (active === null) return false;
@@ -1334,9 +1708,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // The detail box's height, once React has drawn it (or 0 once it has gone): the drawing keeps
   // chips and the focused item clear of it.
   useLayoutEffect(() => {
-    const inset = detailRef.current ? detailRef.current.offsetHeight + 8 : 0;
+    // The panel's height (on the canvas), else the hover box's.
+    const box = (inlinePanel ? null : panelRef.current) ?? detailRef.current;
+    const inset = box ? box.offsetHeight + 8 : 0;
+    detailAcrossRef.current = box ? [box.offsetLeft, box.offsetLeft + box.offsetWidth] : [0, 0];
     // What the box shows, and how tall it is: either changing places things again.
-    const shown = active === null ? '' : JSON.stringify(active);
+    const shown = `${
+      selectedNode ? `selected:${selectedNode.id}` : active === null ? '' : JSON.stringify(active)
+    }|${detailTop ? 'top' : 'bottom'}`;
     if (inset === detailInsetRef.current && shown === detailShownRef.current) return;
     detailInsetRef.current = inset;
     detailShownRef.current = shown;
@@ -1345,7 +1724,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
   // Every drawn related track with a clip, whether or not a shown link names it: each has its
   // preview button (PreviewList).
-  const previewTracks = previewTracksOf(data);
+  // (The filters' tracks only: the list shows what the map shows.)
+  const shownIds = new Set(shownNodes.map((node) => node.id));
+  const previewTracks = previewTracksOf(data).filter((track) => shownIds.has(track.id));
 
   // P2:22 — Accessible summary for screen readers: each track's relation comes from the link
   // that joins it to this one, never from its group.
@@ -1356,6 +1737,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         ? `: ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
         : ''}
       .
+      {hiddenTracks > 0 &&
+        ` The filters hide ${hiddenTracks} ${hiddenTracks === 1 ? 'track' : 'tracks'} and ${allLinks.length - links.length} ${allLinks.length - links.length === 1 ? 'link' : 'links'}.`}
       {nodeList
         .map((node) => {
           // Each track named whole, as its card says it: title, artist, year or "undated".
@@ -1370,7 +1753,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         .join('')}
       {!sparse &&
         links.length > 0 &&
-        ' In the graph, the arrow keys move between the tracks and the links; Enter analyzes the focused track.'}
+        ' In the graph, the arrow keys move between the tracks and the links; Enter selects the focused track and opens its details.'}
     </div>
   );
 
@@ -1420,9 +1803,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   );
 
   return (
-    <div className={`relative w-full flex flex-col ${sparse ? '' : 'flex-1 min-h-0'}`}>
+    <div
+      ref={rootRef}
+      onKeyDownCapture={onRootKeyDownCapture}
+      // With the panel in the flow under a short map, the map, the panel and the legend scroll
+      // in the map's panel (the map keeps its height): "Analyze this track" stays in reach.
+      className={`relative w-full flex flex-col ${sparse ? '' : 'flex-1 min-h-0'} ${!sparse && inlinePanel && selectedNode ? 'overflow-y-auto' : ''}`}
+    >
       {sparse ? (
-        // Two relations or fewer: a compact row of cards, as tall as it needs.
+        // Two relations or fewer: a compact row of cards, as tall as it needs, the selected
+        // track's details under it.
         <div className="relative">
           <LineageRow
             topInset={topInset}
@@ -1431,10 +1821,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             currentId={currentId}
             yearOf={yearOfNode}
             isOrigin={isOrigin}
-            describe={nodeAriaLabel}
+            describe={(node) => cardLabel(node, node.id === selectedNode?.id)}
             nameOf={nameOf}
-            onAnalyse={(node) => analyseRef.current(node)}
+            selectedId={selectedNode?.id ?? null}
+            onSelect={(node) => selectRef.current(node.id)}
           />
+          {filteredOut && <div className="px-4 pb-3">{filteredOut}</div>}
+          {detailPanel}
           {summary}
           {previewState}
         </div>
@@ -1442,6 +1835,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         <div
           ref={wrapperRef}
           className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-radial-[circle_at_center] from-surface from-0% to-transparent to-70%"
+          // With the panel after it, the map keeps the height it had (its box scrolls instead).
+          style={inlinePanel && selectedNode && panel ? { minHeight: panel.height } : undefined}
           // The browser scrolls a box that hides its overflow to show what takes the focus: the
           // map pans to it instead (the drawing's `bringIntoView`), so the box never scrolls.
           onScroll={(event) => {
@@ -1501,20 +1896,35 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                   ) : (
                     <p>No direct link to this track</p>
                   )}
-                  {keyboardOnNode && activeNode.group !== 1 && <p>Enter: analyze this track</p>}
+                  {keyboardOnNode && activeNode.group !== 1 && <p>Enter: show its details</p>}
                 </>
               )}
+            </div>
+          )}
+
+          {/* The selected track's details, over the bottom of the map (the view keeps its card
+              and the analysed track's above them) */}
+          {!inlinePanel && detailPanel}
+
+          {filteredOut && (
+            <div className="absolute inset-x-2 bottom-2 z-20 flex justify-center">
+              {filteredOut}
             </div>
           )}
 
           {previewState}
         </div>
       )}
+      {/* A map too short for the panel over it: the panel after it, in the flow */}
+      {!sparse && inlinePanel && detailPanel && <div className="shrink-0 pt-2">{detailPanel}</div>}
 
-      {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
-      {(links.length > 0 || hidden > 0 || previewTracks.length > 0) && (
-        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
-        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
+      {/* What the lines mean, in words, the filters, and the links as a list (which opens over
+          the graph) */}
+      {(allLinks.length > 0 || hidden > 0 || previewTracks.length > 0) && (
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Above
+        // the selected track's panel too (z-30): a list opened here (the links, the previews)
+        // lies over the map and the panel, as what was opened last, and Escape closes it first.
+        <div className="relative z-40 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}
@@ -1546,7 +1956,28 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 : `${hidden} links not shown: the claims behind them were rejected or cannot be read.`}
             </p>
           )}
-          <LinkList links={links} nameOf={nameOf} />
+          {/* The list of links (the map's text alternative, the next stop after it), the
+              filters and the previews, on one line where they fit: the map keeps its room */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <LinkList links={links} nameOf={nameOf} />
+            {allLinks.length > 0 && (
+              <LinkFilters
+                counts={counts}
+                filter={filter}
+                onChange={changeFilter}
+                note={filterNote}
+                shownOf={(kind) => shownCounts.get(kind) ?? 0}
+                shown={links.length}
+                total={allLinks.length}
+              />
+            )}
+            <PreviewList
+              tracks={previewTracks}
+              nameOf={nameOf}
+              playingId={isPlaying ? playingNodeId : null}
+              onToggle={(id, url) => playPreview(url, id)}
+            />
+          </div>
           {/* The map's gestures, in words, under it rather than over its cards: from md up,
               but not on a short screen (a landscape phone), where every pixel goes to the map;
               on a phone, in short. */}
@@ -1565,12 +1996,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               </p>
             </>
           )}
-          <PreviewList
-            tracks={previewTracks}
-            nameOf={nameOf}
-            playingId={isPlaying ? playingNodeId : null}
-            onToggle={(id, url) => playPreview(url, id)}
-          />
         </div>
       )}
     </div>

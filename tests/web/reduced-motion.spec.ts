@@ -193,12 +193,14 @@ async function openGraph(page: Page, reducedMotion: "reduce" | "no-preference") 
 const origin = (graph: ReturnType<typeof graphOf>) =>
   graph.locator('g.nodes > g[data-node-id="sample-sourced"]');
 
-test("a hover hint on the genealogy graph fades in over frames without reduced motion (control)", async ({
+test("a double click on the genealogy graph zooms in over frames without reduced motion (control)", async ({
   page,
 }) => {
   const { graph, framesBefore } = await openGraph(page, "no-preference");
-  await origin(graph).dispatchEvent("mouseenter");
-  await expect(graph.locator(".preview-indicator")).toHaveCount(1);
+  const box = await graph.boundingBox();
+  if (!box) throw new Error("no graph box");
+  // An empty corner of the graph, away from the tracks.
+  await page.mouse.dblclick(box.x + 6, box.y + box.height - 6);
   await expect.poll(() => frames(page)).toBeGreaterThan(framesBefore);
 });
 
@@ -214,15 +216,15 @@ test("the genealogy graph is drawn settled under reduced motion: no frame asked 
   expect(await frames(page)).toBe(drawnAt);
 });
 
-test("a hover hint appears at once under reduced motion", async ({ page }) => {
-  // A track a sourced sample says this one uses: pointing at it shows a hint.
+test("pointing at a card shows its relations at once under reduced motion", async ({ page }) => {
+  // A track a sourced sample says this one uses: pointing at it names its relations in chips,
+  // and selecting it draws its ring; nothing fades in.
   const { graph, framesBefore } = await openGraph(page, "reduce");
   await origin(graph).dispatchEvent("mouseenter");
-  const hint = graph.locator(".preview-indicator");
-  await expect(hint).toHaveCount(1);
-  expect(
-    await hint.evaluate((text) => getComputedStyle(text.parentElement as Element).opacity),
-  ).toBe("1");
+  await expect(graph.locator("g.link-chips g.chip").first()).toBeVisible();
+  await origin(graph).dispatchEvent("click");
+  await expect(origin(graph)).toHaveAttribute("aria-pressed", "true");
+  await expect(origin(graph).locator("rect.select-ring")).toHaveAttribute("opacity", "1");
   await page.waitForTimeout(400);
   expect(await frames(page)).toBe(framesBefore);
 });
@@ -242,7 +244,10 @@ test("a drag on a card pans the map and leaves every card at its year, under red
   await page.mouse.up();
   await page.waitForTimeout(400);
   const after = await graphPlaces(page);
-  // The cards keep their places on the map; the view moved; nothing played out.
+  // The cards keep their places on the map; the view moved; nothing played out; and the drag
+  // (a press on a card) selected nothing.
+  await expect(graph.locator('g.nodes > g[aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.getByTestId("node-detail")).toHaveCount(0);
   expect(after.nodes).toEqual(before.nodes);
   expect(after.zoom).not.toBe(before.zoom);
   expect(await frames(page)).toBe(framesBefore);

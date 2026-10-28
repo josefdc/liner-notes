@@ -333,6 +333,7 @@ def test_a_report_lists_each_run_it_does_not_hold_and_claims_no_other_report():
     ):
         assert words in text
     assert "Ballroom" not in text and "generated controls" not in text
+    assert "earlier report" not in text  # no report is said to hold them
     assert "the generated controls" in not_run({"runs": [run("tempo", "ballroom")]})
 
 

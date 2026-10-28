@@ -24,6 +24,7 @@ import {
 } from "./logger.js";
 import { timed } from "./sources/testing/strings.js";
 import { logText } from "./http/middleware/errors.js";
+import { SourceError } from "./sources/http.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -294,6 +295,9 @@ describe("Authorization values in quotes and at the cap", () => {
     ],
     ["in JSON", `{"Authorization":"Bearer ${TOKEN}"}`, '{"Authorization":[redacted]}'],
     ["a Basic one", `{ Authorization: 'Basic ${CRED}' }`, "{ Authorization: [redacted] }"],
+    ["after a tab", `{ authorization: 'Bearer\t${TOKEN}' }`, "{ authorization: [redacted] }"],
+    ["after two spaces", `{ authorization: "Basic  ${CRED}" }`, "{ authorization: [redacted] }"],
+    ["in backticks", `{ authorization: \`Bearer ${TOKEN}\` }`, "{ authorization: [redacted] }"],
     [
       "in a headers object util.inspect wrote",
       headers,
@@ -321,6 +325,51 @@ describe("Authorization values in quotes and at the cap", () => {
     ]);
   });
 
+  it("leaves no part of a token after a scheme written twice, on every path to a line", () => {
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const texts: string[] = [];
+    for (const quote of ["'", '"'])
+      for (const first of ["Bearer", "Basic", "bearer", "BASIC"])
+        for (const between of [" ", "\t", "\n", "  "])
+          for (const second of ["Bearer", "Basic", "BEARER", "basic"])
+            texts.push(`authorization: ${quote}${first}${between}${second} ${token}${quote}`);
+    const shown = (out: string) => out.includes(token.slice(0, 4)) || out.includes(token.slice(-4));
+    const dir = mkdtempSync(join(tmpdir(), "log-twice-"));
+    const target = { log: () => {} } as unknown as Console;
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      const restore = installConsoleBridge(target);
+      let inspected = 0;
+      try {
+        for (const text of texts) {
+          expect(shown(scrub(text)), text).toBe(false);
+          expect(shown(scrub(logText(text))), text).toBe(false);
+          expect(shown(JSON.stringify(serializeError(new Error(text)))), text).toBe(false);
+          expect(shown(scrub(new SourceError("spotify", "http", text).message)), text).toBe(false);
+          const log = logger("Probe");
+          log.warn(text);
+          log.warn("failed", { err: new Error(text), note: text });
+          // util.inspect writes a tab or a line break escaped (`\t`), which is #237's.
+          if (/[\t\n]/.test(text)) continue;
+          const value = text.slice("authorization: '".length, -1);
+          target.log("[Fetch] sent", { note: inspect({ Authorization: value }) });
+          target.log(`[Fetch] sent ${inspect({ authorization: value })}`);
+          inspected++;
+        }
+      } finally {
+        restore();
+      }
+      const lines = readFileSync(file, "utf8").trim().split("\n");
+      expect(lines).toHaveLength(texts.length * 2 + inspected * 2);
+      expect(inspected).toBe(64);
+      expect(lines.filter(shown)).toEqual([]);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("finds the token of a quoted Authorization value, without its scheme and quotes", () => {
     const text = `{ authorization: 'Bearer ${TOKEN}', 'proxy-authorization': "Basic ${CRED}" }`;
     expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
@@ -339,6 +388,26 @@ describe("Authorization values in quotes and at the cap", () => {
       "{ accept: 'application/json', 'content-type': 'text/plain' }",
     ]) {
       expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("keeps the words after a quoted scheme word that holds no token", () => {
+    for (const [text, expected] of [
+      [
+        "authorization: 'Bearer' or 'Basic' expected",
+        "authorization: [redacted] or 'Basic' expected",
+      ],
+      // A line break after a quoted scheme ends the value: the next line stays.
+      [
+        "authorization: 'Bearer\n    at Object.<anonymous> (app.js:1:1)'",
+        "authorization: [redacted]\n    at Object.<anonymous> (app.js:1:1)'",
+      ],
+      [
+        "password: 'Basic\n\nThe server then retried'",
+        "password: [redacted]\n\nThe server then retried'",
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
     }
   });
 
@@ -384,9 +453,20 @@ describe("Authorization values in quotes and at the cap", () => {
     }
   });
 
-  it("moves a cut to the start of a Basic credential, after the word Basic", () => {
+  it("cuts before an Authorization value as the text came, whose scheme a pair took alone", () => {
+    // The cap reads Authorization values in the text before secret pairs replace anything: here
+    // the pair rule takes the quoted scheme word alone (a line break follows it), so after it no
+    // rule would find the credential; the cut still falls before it.
+    for (const k of [26, 30, 40]) {
+      const text = `${"w".repeat(MAX_LOGGED_TEXT - k - 1)} { authorization: 'Basic\n    ${CRED}' }`;
+      expect(scrub(text).slice(-30), String(k)).toBe("w { authorization: [redacted]]");
+    }
+  });
+
+  it("moves a cut that moved to a credential it splits after the word Basic", () => {
     // Moved to a configured value glued to the credential, then to the start of the credential,
-    // which only the text as it came holds whole.
+    // which only the text as it came holds whole; a cut through a Basic credential that nothing
+    // else moved falls before the word (readPairs).
     configureLogger({ GLUED_SECRET: "S1xS2xS3xS4xS5xS6x" });
     const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x yy ${"z ".repeat(20)}`;
     expect(logCut(glued, glued.indexOf("S3x"))).toBe(glued.indexOf("M0003x"));

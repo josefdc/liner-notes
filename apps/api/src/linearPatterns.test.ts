@@ -32,10 +32,11 @@ const OLD_SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/
 const OLD_NAME_JOIN = /\s*(?:,|&|\band\b|\/)\s*/i;
 const OLD_CREDIT_JOIN = /\s*(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i;
 const OLD_DISAMBIGUATION_NUMBER = /\s+\(\d+\)$/;
-// The earlier form of SECRET_PAIR's whitespace, with the scheme it now takes inside the quotes
-// (#235) too.
+// The earlier form of SECRET_PAIR's whitespace after ":" or "=". Its scheme group is SECRET_PAIR's
+// (#235), so it checks the whitespace only: what the scheme group takes is pinned by literal
+// cases below.
 const OLD_SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])((?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)(?!(?:Bearer|Basic|Discogs)\s))?["']?[^\s"'&,;}\]]+["']?/gi;
 
 const credits = [
   "Queen & David Bowie",
@@ -165,6 +166,7 @@ describe("SECRET_PAIR", { timeout: 30_000 }, () => {
           '"',
           "'",
           "Bearer ",
+          "Basic ",
           "Discogs ",
           "[redacted]",
           "abc",
@@ -181,6 +183,28 @@ describe("SECRET_PAIR", { timeout: 30_000 }, () => {
     expect(
       lines.filter((line) => line.replace(OLD_SECRET_PAIR, "") !== line).length,
     ).toBeGreaterThan(500);
+  });
+
+  it("takes the scheme before a value, quoted or not, and no more", () => {
+    for (const [line, expected] of [
+      ["authorization: 'Bearer\tabc.def'", "authorization: [R]"],
+      ["authorization: 'Bearer  abc.def'", "authorization: [R]"],
+      ['authorization: "Basic  QWxhZGRp"', "authorization: [R]"],
+      ["authorization: `Bearer abc.def`", "authorization: [R]"],
+      ["authorization: 'Discogs token=abc123'", "authorization: [R]"],
+      ["authorization: Bearer\n  abc.def", "authorization: [R]"],
+      // Readable text: the scheme word alone, quoted, then words that are no token.
+      ["authorization: 'Bearer' or 'Basic' expected", "authorization: [R] or 'Basic' expected"],
+      ["token: 'Basic' is not supported", "token: [R] is not supported"],
+      // A line break after a quoted scheme ends the value.
+      ["authorization: 'Bearer\n  at Object.x'", "authorization: [R]\n  at Object.x'"],
+      // A scheme before another is the value alone: the second, with its token, is left for the
+      // Authorization rule.
+      ["authorization: 'Bearer Bearer abc.def'", "authorization: [R] Bearer abc.def'"],
+      ["authorization: Basic bearer abc.def", "authorization: [R] bearer abc.def"],
+    ]) {
+      expect(line.replace(SECRET_PAIR, "$1$2[R]"), line).toBe(expected);
+    }
   });
 
   it("reads a long run of whitespace after a secret's name quickly", () => {

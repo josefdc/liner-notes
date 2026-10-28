@@ -124,11 +124,15 @@ const AUTH_SCHEME =
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
  * whitespace after ":" or "=" is taken whole (a value never starts with a space), so a long run
  * of it is not read again from each of its characters. An Authorization scheme before the value
- * is taken with it, inside the quotes too (`authorization: 'Bearer …'`, as util.inspect writes a
- * headers object): taken as the value alone, the scheme word would leave the token after it.
+ * is taken with it (the third group), inside the quotes too (`authorization: 'Bearer …'`, as
+ * util.inspect writes a headers object, with backticks when the text holds both quotes): taken
+ * as the value alone, the scheme word would leave the token after it. Inside the quotes, only
+ * spaces and tabs follow the scheme, so a line break after it keeps the next line. A scheme
+ * followed by another (`'Bearer Bearer <token>'`) is not taken: the pair then replaces the first
+ * word only, and the Authorization rule finds the second with its token.
  */
 export const SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])((?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)(?!(?:Bearer|Basic|Discogs)\s))?["']?[^\s"'&,;}\]]+["']?/gi;
 
 /** Environment variables whose values are never written: keys, secrets, tokens, endpoints. */
 const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;
@@ -431,10 +435,9 @@ function readPairs(
   for (const pair of withPairs ? current.text.matchAll(SECRET_PAIR) : []) {
     const from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
     const part = valueRewrite(current.text, from, pair.index + pair[0].length);
-    // An Authorization scheme before the value names it; it is not in the span.
-    const scheme = /^["']?(?:Bearer|Basic|Discogs)\s+/i.exec(current.text.slice(from, from + 17));
-    if (scheme && from + scheme[0].length < part[1])
-      part[3] = Math.max(part[3], from + scheme[0].length);
+    // An Authorization scheme the pair took before the value names it; it is not in the span.
+    const scheme = pair[3] ?? "";
+    if (scheme && from + scheme.length < part[1]) part[3] = Math.max(part[3], from + scheme.length);
     pairs.push(part);
   }
   current = rewrite(current, pairs, hidden);
@@ -464,7 +467,9 @@ const LOG_CUT_WINDOW = 4096;
  * the cut is looked up around it, however long. Once the cut has moved, it also falls before an
  * Authorization credential of the text as it came that crosses it: matched there, the credential
  * ran on into what the cut now leaves out, and what is left of it may be too short for its rule.
- * The credential's span starts after its scheme word, which holds no secret.
+ * That second span starts after the scheme word, which holds no secret; a cut through a Basic
+ * credential that only the rules moved falls before the word Basic, which its span from
+ * scrubbedSpans keeps (readPairs).
  *
  * It places the cuts that decide how much of a text a log line shows: scrub's cap, logText's
  * (http/middleware/errors.ts), and those of the redaction of source errors (safeCut and lineCut
@@ -472,7 +477,8 @@ const LOG_CUT_WINDOW = 4096;
  * its length before it masks it, and then moves that cut with lineCut; after their cuts here,
  * plainLine and scrubText slice the redacted text to their length once more, which only takes
  * the characters of a mask the cut fell inside; serializeError cuts a scrubbed code and a few
- * other short fields to 100 characters.
+ * other short fields to 100 characters; and llm/invoke.ts cuts a model error's message, already
+ * redacted (scrubSecrets), to 500 and 300 characters before it reaches a log line.
  */
 export function logCut(
   text: string,

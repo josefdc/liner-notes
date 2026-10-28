@@ -25,7 +25,7 @@ import {
   type Shape,
   SourceError,
 } from "./http.js";
-import { pacingClock } from "./pacing.js";
+import { PaceRefused, pacingClock } from "./pacing.js";
 import { type NotAskedReason, notAnswered, toolFailure } from "./toolResult.js";
 import { logger } from "../logger.js";
 
@@ -169,10 +169,25 @@ const chainPriority = new AsyncLocalStorage<true>();
  * Runs `fn` as the primary-source chain: every MusicBrainz request made from it (sync or async)
  * waits its turn ahead of any other request (the researcher's), so another run's research never
  * pushes a chain past its deadline. The order within each lane stays first come, first served.
+ * The chain's relations map reads (`MapRead`) wait in a lane of their own, after every chain's
+ * own reads and before the others.
  */
 export function withMusicBrainzPriority<T>(fn: () => T): T {
   return chainPriority.run(true, fn);
 }
+
+/**
+ * A read for the relations map (sources/identity.ts): it waits in the map's lane (after every
+ * chain's own reads, before the researchers'), is sent only while the pacing clock is at most
+ * `notAfter` (else it is refused when its turn comes, and takes no slot), and is not retried when
+ * MusicBrainz sheds it: the map does without it.
+ */
+export interface MapRead {
+  notAfter: number;
+}
+
+/** Why a map read was not sent: its turn came after its `notAfter`. */
+export const NOT_SENT_IN_TIME = "not sent: its turn came after the time it had to start by";
 
 class MusicBrainzRateLimiter {
   private static instance: MusicBrainzRateLimiter;
@@ -180,8 +195,10 @@ class MusicBrainzRateLimiter {
   private lastRequestTime = Number.NEGATIVE_INFINITY;
   private minInterval: number = 1100; // 1.1 seconds for safety margin
   /** The primary-source chain's requests: served first. */
-  private urgent: Array<() => Promise<void>> = [];
-  private queue: Array<() => Promise<void>> = [];
+  private urgent: Array<() => Promise<boolean>> = [];
+  /** The relations map's reads: after the chains' own, before the others. */
+  private map: Array<() => Promise<boolean>> = [];
+  private queue: Array<() => Promise<boolean>> = [];
   private processing: boolean = false;
 
   private constructor() {}
@@ -208,6 +225,7 @@ class MusicBrainzRateLimiter {
    */
   resetForTests(): void {
     this.urgent.length = 0;
+    this.map.length = 0;
     this.queue.length = 0;
     this.processing = false;
     this.lastRequestTime = Number.NEGATIVE_INFINITY;
@@ -217,10 +235,13 @@ class MusicBrainzRateLimiter {
    * Execute a request with rate limiting. `fn` must settle on its own (every MusicBrainz request
    * has a timeout), so one request can never stall the queue. When `signal` aborts while the
    * request waits its turn, it leaves the queue at once, rejecting with the signal's reason,
-   * and takes no slot. A request made inside `withMusicBrainzPriority` waits in the first lane.
+   * and takes no slot. A request made inside `withMusicBrainzPriority` waits in the first lane;
+   * a map read (`map`) in the second, and is checked against its `notAfter` when its turn
+   * comes: past it, it is refused (PaceRefused, "deadline") without being sent, and takes no
+   * slot.
    */
-  async execute<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    const lane = chainPriority.getStore() ? this.urgent : this.queue;
+  async execute<T>(fn: () => Promise<T>, signal?: AbortSignal, map?: MapRead): Promise<T> {
+    const lane = map ? this.map : chainPriority.getStore() ? this.urgent : this.queue;
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(signal.reason);
@@ -233,13 +254,18 @@ class MusicBrainzRateLimiter {
       };
       // The queue is drained by whichever caller found it idle; bound here, the request runs in
       // its own caller's context, so what it logs carries that caller's run id.
-      const task = AsyncLocalStorage.bind(async () => {
+      const task = AsyncLocalStorage.bind(async (): Promise<boolean> => {
         signal?.removeEventListener("abort", onAbort);
+        if (map && pacingClock() > map.notAfter) {
+          reject(new PaceRefused(0, NOT_SENT_IN_TIME, "deadline"));
+          return false;
+        }
         try {
           resolve(await fn());
         } catch (error) {
           reject(error);
         }
+        return true;
       });
       signal?.addEventListener("abort", onAbort, { once: true });
       lane.push(task);
@@ -252,7 +278,7 @@ class MusicBrainzRateLimiter {
 
   /** Requests waiting their turn (tests). */
   get pending(): number {
-    return this.urgent.length + this.queue.length;
+    return this.urgent.length + this.map.length + this.queue.length;
   }
 
   private async processQueue(): Promise<void> {
@@ -274,11 +300,17 @@ class MusicBrainzRateLimiter {
         await this.delay(Math.ceil(wait));
       }
 
-      // Chosen after the wait: a chain request that came in meanwhile goes first.
-      const task = this.urgent.shift() ?? this.queue.shift();
-      if (task) {
-        this.lastRequestTime = pacingClock();
-        await task();
+      // Chosen after the wait: a chain request that came in meanwhile goes first, then a map
+      // read. A map read refused at its turn sends nothing and takes no slot: the slot goes to
+      // the next request.
+      for (;;) {
+        const task = this.urgent.shift() ?? this.map.shift() ?? this.queue.shift();
+        if (!task) break;
+        const sentAt = pacingClock();
+        const before = this.lastRequestTime;
+        this.lastRequestTime = sentAt;
+        if (await task()) break;
+        this.lastRequestTime = before;
       }
     }
 
@@ -497,35 +529,40 @@ const MAX_RETRY_WAIT_MS = 2000;
 /**
  * A rate-limited GET to the MusicBrainz API (JSON), with a timeout. When MusicBrainz sheds the
  * request (503, or 429) it is retried once, after its Retry-After (at most 2 s), through the
- * queue again.
+ * queue again; a map read (`map`, see MapRead) is not retried.
  */
 async function mbFetch<T>(
   path: string,
   params: Record<string, string>,
   scrub: Shape,
   signal?: AbortSignal,
+  map?: MapRead,
 ): Promise<T> {
   const url = new URL(`${MB_API_BASE}/${path}`);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   url.searchParams.set("fmt", "json");
   const attempt = () =>
-    rateLimiter.execute(() => {
-      log.info(`Request: /${path}`);
-      return fetchJson<T>({
-        source: "musicbrainz",
-        url,
-        headers: { Accept: "application/json" },
-        rateLimitStatuses: [429, 503],
-        scrub,
-        signal,
-      });
-    }, signal);
+    rateLimiter.execute(
+      () => {
+        log.info(`Request: /${path}`);
+        return fetchJson<T>({
+          source: "musicbrainz",
+          url,
+          headers: { Accept: "application/json" },
+          rateLimitStatuses: [429, 503],
+          scrub,
+          signal,
+        });
+      },
+      signal,
+      map,
+    );
   try {
     try {
       return await attempt();
     } catch (error) {
-      // Stopped by its signal: never retried.
-      if (signal?.aborted || !isSourceError(error, "rate_limited")) throw error;
+      // Stopped by its signal, or a map read: never retried.
+      if (signal?.aborted || map || !isSourceError(error, "rate_limited")) throw error;
       await delay(Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS), signal);
       return await attempt();
     }
@@ -1330,10 +1367,14 @@ export async function lookupIsrc(
   }
 }
 
-/** A recording with its recording and work relationships, and the URLs linked to its works. */
+/**
+ * A recording with its recording and work relationships, and the URLs linked to its works. With
+ * `map`, read for the relations map (see MapRead).
+ */
 export async function getRecordingDetails(
   mbid: string,
   signal?: AbortSignal,
+  map?: MapRead,
 ): Promise<MbRecordingDetails> {
   if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
   return mbFetch<MbRecordingDetails>(
@@ -1341,6 +1382,7 @@ export async function getRecordingDetails(
     { inc: "artist-credits recording-rels work-rels work-level-rels url-rels" },
     RECORDING_DETAILS_SHAPE,
     signal,
+    map,
   );
 }
 
@@ -1432,6 +1474,50 @@ export async function browseWorkRecordings(
   return { recordings, total };
 }
 
+const RECORDING_DATES_SHAPE: Shape = {
+  count: true,
+  recordings: [{ id: true, "first-release-date": true }],
+};
+
+/** The most recordings one date search asks for (MusicBrainz's largest search page). */
+export const RECORDING_DATES_MAX = 100;
+
+/**
+ * The first release dates MusicBrainz files for `mbids`, in one search request by recording id
+ * (at most RECORDING_DATES_MAX), by lower-case MBID: the date (`knownReleaseDate`) for a
+ * recording the answer lists with one, null for one it lists without. A recording the answer
+ * leaves out, or an answer without a list, says nothing: those ids are not in the map. No
+ * request without ids. With `map`, read for the relations map (see MapRead).
+ */
+export async function recordingReleaseDates(
+  mbids: readonly string[],
+  signal?: AbortSignal,
+  map?: MapRead,
+): Promise<Map<string, string | null>> {
+  const ids = [...new Set(mbids.filter(isMbid).map((id) => id.toLowerCase()))].slice(
+    0,
+    RECORDING_DATES_MAX,
+  );
+  const dates = new Map<string, string | null>();
+  if (ids.length === 0) return dates;
+  const data = await mbFetch<{ recordings?: MbRecordingSummary[] }>(
+    "recording",
+    { query: `rid:(${ids.join(" OR ")})`, limit: String(ids.length) },
+    RECORDING_DATES_SHAPE,
+    signal,
+    map,
+  );
+  const wanted = new Set(ids);
+  for (const recording of Array.isArray(data?.recordings) ? data.recordings : []) {
+    const id = typeof recording?.id === "string" ? recording.id.toLowerCase() : "";
+    if (!wanted.has(id)) continue;
+    const date = knownReleaseDate(recording?.["first-release-date"]);
+    // A date found for one listing is kept over another listing without one.
+    if (date || !dates.has(id)) dates.set(id, date);
+  }
+  return dates;
+}
+
 /** The credit as MusicBrainz prints it: "Queen & David Bowie". */
 export function creditString(credits: MbCredit[] | undefined): string {
   return (Array.isArray(credits) ? credits : [])
@@ -1449,19 +1535,36 @@ export type MbRelationshipKind =
   | "cover-of"
   | "covered-by";
 
+/** A recording at the other end of a relationship, as MusicBrainz names it. */
+export interface MbRelatedRecording {
+  mbid: string;
+  title: string;
+  artist: string;
+  lengthMs: number | null;
+  /**
+   * Its first release date as MusicBrainz files it (`knownReleaseDate`); null or absent when
+   * not known. Nested relationships carry none, so the identity chain dates them apart.
+   */
+  firstReleaseDate?: string | null;
+}
+
 export interface MbRelationship {
   kind: MbRelationshipKind;
   /**
    * "track": a fact about the matched recording. "work": a fact about the song it performs (a
-   * cover of the work), not claimed for this recording.
+   * cover of the work), not claimed for this recording. "hop": a fact about two other
+   * recordings (`via`, one the matched recording samples, and `recording`), read for the
+   * relations map only: never claimed, and about neither this recording nor its song.
    */
-  about: "track" | "work";
+  about: "track" | "work" | "hop";
   /** The Evidence item that states this relationship; its recordRef carries the scope. */
   evidenceId: string;
   /** The related recording; null when the relationship is to a work. */
-  recording: { mbid: string; title: string; artist: string; lengthMs: number | null } | null;
+  recording: MbRelatedRecording | null;
   work: { mbid: string; title: string } | null;
   attributes: string[];
+  /** A "hop" record's own subject: the recording whose relationship it is (`kind` reads from it). */
+  via?: MbRelatedRecording;
 }
 
 /**
@@ -1481,11 +1584,15 @@ class UniqueRelationships {
   }
 }
 
-const relatedRecording = (r: MbRecordingSummary): MbRelationship["recording"] => ({
+const relatedRecording = (r: MbRecordingSummary): MbRelatedRecording => ({
   mbid: r.id,
   title: r.title,
   artist: creditString(r["artist-credit"]),
   lengthMs: typeof r.length === "number" ? r.length : null,
+  // Only when MusicBrainz dates it (nested relationships do not).
+  ...(knownReleaseDate(r["first-release-date"])
+    ? { firstReleaseDate: knownReleaseDate(r["first-release-date"]) }
+    : {}),
 });
 
 /**
@@ -1530,6 +1637,59 @@ export function recordingRelationships(details: MbRecordingDetails): MbRelations
     }
   }
   return out.list;
+}
+
+/** What the relations map keeps of a recording read for its second hop (and caches). */
+export interface MbSampleHop {
+  /** The recording read, with its own first release date. */
+  recording: MbRelatedRecording;
+  /** Its sample relationships, read from its side, at most MB_HOP_KEPT_PER_KIND of each kind. */
+  samples: Array<{
+    kind: "samples" | "sampled-by";
+    recording: MbRelatedRecording;
+    attributes: string[];
+  }>;
+}
+
+/** The most sample relationships of each direction a second hop keeps of one recording. */
+export const MB_HOP_KEPT_PER_KIND = 25;
+
+/**
+ * A recording's sample relationships for the second hop, from its details: what it samples and
+ * what samples it, each direction in MusicBrainz's order and capped; null when the details are
+ * not a recording.
+ */
+export function sampleHopOf(details: MbRecordingDetails): MbSampleHop | null {
+  if (!details || !isMbid(details.id) || typeof details.title !== "string") return null;
+  const samples: MbSampleHop["samples"] = [];
+  const counts = { samples: 0, "sampled-by": 0 };
+  for (const r of recordingRelationships(details)) {
+    if ((r.kind !== "samples" && r.kind !== "sampled-by") || !r.recording) continue;
+    if (r.recording.mbid === details.id || counts[r.kind] >= MB_HOP_KEPT_PER_KIND) continue;
+    counts[r.kind]++;
+    samples.push({ kind: r.kind, recording: r.recording, attributes: r.attributes });
+  }
+  return { recording: relatedRecording(details), samples };
+}
+
+/**
+ * The second hop from a recording the matched one samples (`hop`, read by `sampleHopOf`): what
+ * that source samples ("samples", read from its side) and the other recordings that sample it
+ * ("sampled-by": the matched recording's siblings), never `ownRecording` itself. Each is a
+ * "hop" record whose `via` is the source, in MusicBrainz's order.
+ */
+export function secondHopRelationships(hop: MbSampleHop, ownRecording: string): MbRelationship[] {
+  return hop.samples
+    .filter((r) => r.recording.mbid !== ownRecording)
+    .map((r) => ({
+      kind: r.kind,
+      about: "hop" as const,
+      evidenceId: "",
+      recording: { ...r.recording },
+      work: null,
+      attributes: [...r.attributes],
+      via: { ...hop.recording },
+    }));
 }
 
 /**

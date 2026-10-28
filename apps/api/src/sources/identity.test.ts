@@ -621,7 +621,8 @@ describe("musicBrainzRelationships", () => {
     expect(result.evidence[0]).toMatchObject({
       id: `musicbrainz:track/recording/${ICE}`,
       url: `https://musicbrainz.org/recording/${ICE}`,
-      excerpt: 'MusicBrainz recording "Ice Ice Baby" by Vanilla Ice (4:31), ISRC USCA29001716.',
+      excerpt:
+        'MusicBrainz recording "Ice Ice Baby" by Vanilla Ice (4:31), ISRC USCA29001716, first released 1990-09-04.',
     });
     expect(result.evidence.map((e) => e.excerpt)).toContain(
       'MusicBrainz: "Ice Ice Baby" by Vanilla Ice samples "Under Pressure" by Queen & David Bowie.',

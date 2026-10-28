@@ -108,6 +108,13 @@ export const GenealogyNode = z.object({
   spotifyId: z.string().optional(),
   trackTitle: z.string().optional(),
   trackArtist: z.string().optional(),
+  /**
+   * The year the recording was first released, from MusicBrainz (its first release date), set
+   * by code only; absent when MusicBrainz has no date for it. Never a model's year.
+   */
+  year: z.number().int().optional(),
+  /** The MusicBrainz id of the recording (or work) the node was built from, set by code only. */
+  mbid: z.string().optional(),
 });
 export type GenealogyNode = z.infer<typeof GenealogyNode>;
 

@@ -2378,8 +2378,7 @@ const LINE_STEPS: HideStep[] = [
  * empty or has an issue (reasonIssue).
  *
  * The line is made as it always was: whitespace runs become one space, links become "[link]",
- * then the cut, which never splits a configured value or what a log line hides whole (lineCut);
- * whether it is kept is decided on that line, as before. It is then redacted
+ * then the cut; whether it is kept is decided on that line, as before. It is then redacted
  * (redactText), so a rule that reads across what was a line break (`Bearer` at the end of one
  * line, its token on the next) reads it as it did on that line. Last, each value of a header line
  * (headerLineSpans) and each value moreSecretSpans finds, read on the lines the text had, is
@@ -2392,13 +2391,16 @@ const LINE_STEPS: HideStep[] = [
  * A second check leaves out a line whose redacted form has an issue: a mask can make one (the
  * header rule turns `File "", line 4` into a stack trace). Such a line was kept before, and the
  * message made from it then held the issue, which the readers of stored results refuse.
+ *
+ * Last, when the cut splits a configured value, a link or a host (lineCut), whose part no rule
+ * knows, the line stops at its start; what the line hid before it stays hidden.
  */
 function plainLine(text: string, cut: boolean): string | undefined {
   const pieces = runSteps(text, LINE_STEPS);
   const line = render(text, pieces);
   if (!line || reasonIssue(line) !== null) return undefined;
-  const kept = cut && line.length > MAX_DETAIL ? lineCut(line, MAX_DETAIL - 1) : line.length;
-  const short = kept < line.length ? `${line.slice(0, kept)}…` : line;
+  const short = cut && line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
+  const kept = short === line ? line.length : MAX_DETAIL - 1;
   // The values of the lines the text had, where they lie in the line, up to the cut.
   const inLine = (spans: readonly Span[]) => {
     const out: Span[] = [];
@@ -2415,6 +2417,7 @@ function plainLine(text: string, cut: boolean): string | undefined {
   // the line is redacted again (redactedAgain).
   const masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
   let redacted = render(short, masked);
+  let stop = short.length;
   if (more.length + moreSecretSpans(short).length > 0) {
     const before = keyValuePieces(short, [], lineOnly, []);
     const old = render(short, before);
@@ -2422,7 +2425,10 @@ function plainLine(text: string, cut: boolean): string | undefined {
     // longer: it stops no further than they cut it, and never inside a host or a configured
     // value a log line hides whole (safeCut).
     const shown = cut ? safeCut(short, masked, before, MAX_DETAIL, MAX_DETAIL - 1) : short.length;
-    if (shown < short.length) redacted = `${render(short, piecesBefore(masked, shown))}…`;
+    if (shown < short.length) {
+      redacted = `${render(short, piecesBefore(masked, shown))}…`;
+      stop = shown;
+    }
     // A mask can also hide what makes a line one with an issue (`File "[redacted]", line 4`):
     // a line the other rules alone leave with one is left out, as it was.
     const oldLine = cut && old.length > MAX_DETAIL ? `${old.slice(0, MAX_DETAIL - 1)}…` : old;
@@ -2430,7 +2436,14 @@ function plainLine(text: string, cut: boolean): string | undefined {
   }
   const out =
     cut && redacted.length > MAX_DETAIL ? `${redacted.slice(0, MAX_DETAIL - 1)}…` : redacted;
-  return reasonIssue(out) === null ? out : undefined;
+  if (reasonIssue(out) !== null) return undefined;
+  // A configured value, a link or a host the cut splits is left out from its start (lineCut);
+  // the line is redacted as it was cut, so what it hides before that stays hidden.
+  const end = kept < line.length ? lineCut(line, kept) : kept;
+  if (end >= Math.min(stop, kept)) return out;
+  const shorter = render(short, piecesBefore(masked, end));
+  const cutAgain = `${shorter.length > MAX_DETAIL - 1 ? shorter.slice(0, MAX_DETAIL - 1) : shorter}…`;
+  return reasonIssue(cutAgain) === null ? cutAgain : undefined;
 }
 
 /**

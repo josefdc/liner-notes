@@ -2180,6 +2180,27 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("leaves out past a configured value a reason's cut splits, and hides what it hid before", () => {
+    // The configured value ends a long token run and a Basic credential: cut at the value's
+    // start, neither would be long enough for its rule, so the line is redacted as first cut.
+    const key = "Zq7".repeat(23);
+    process.env.TEST_SERVICE_API_KEY = key;
+    try {
+      for (let pad = 9; pad < 21; pad++) {
+        for (const [before, hidden] of [
+          ['"tokens"aB3dE6gH9jK2mN5pQ8sT1vaB3dE6gH9jK2mN5pQ8', "aB3dE6"],
+          ["\nProxy-Authorization: Basic Api-Key", "Api-Key"],
+        ] as const) {
+          const reason = plainReason(`${"x ".repeat(pad)}${before}${key} tail`) ?? "";
+          expect(reason, String(pad)).not.toContain(hidden);
+          expect(reason, String(pad)).not.toContain("Zq7");
+        }
+      }
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+    }
+  });
+
   it("never cuts a body's cap through a host when nothing else in it is masked", () => {
     for (let pad = 225; pad < 250; pad++) {
       const body = `<html>${"y ".repeat(pad)} upstream contoso-prod.openai.azure.com timed out</html>`;

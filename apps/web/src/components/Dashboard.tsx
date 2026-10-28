@@ -319,8 +319,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               )}
 
               {/* Audio values: measured, model scores, or "not measured". Compact: each value
-                  with a chip of its kind, its provenance behind the chip (the Player has the
-                  full lines) */}
+                  with a chip of its kind, its provenance behind the chip (the Player shows a
+                  short label, the same lines behind "How this was measured") */}
               <AudioStats
                 track={trackData}
                 size="md"

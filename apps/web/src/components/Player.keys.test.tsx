@@ -235,7 +235,7 @@ describe('choosing a related track in the graph', () => {
         trackArtist: 'Real Artist',
         spotifyId: '28cnXtME493VX9NOw9cIUh',
       }),
-    ).toHaveBeenCalledWith('28cnXtME493VX9NOw9cIUh', 'Real Title Real Artist', '');
+    ).toHaveBeenCalledWith('28cnXtME493VX9NOw9cIUh', 'Real Title Real Artist', '', 'player');
   });
 
   it('never splits an artist off the label: a label alone is searched whole', () => {
@@ -244,12 +244,14 @@ describe('choosing a related track in the graph', () => {
       'search',
       'Song - Live at Wembley (1986)',
       '',
+      'player',
     );
     cleanup();
     expect(choose({ label: 'Song - Live at Wembley', trackArtist: 'Queen' })).toHaveBeenCalledWith(
       'search',
       'Song - Live at Wembley Queen',
       '',
+      'player',
     );
   });
 

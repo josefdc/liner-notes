@@ -123,10 +123,12 @@ const AUTH_SCHEME =
 /**
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
  * whitespace after ":" or "=" is taken whole (a value never starts with a space), so a long run
- * of it is not read again from each of its characters.
+ * of it is not read again from each of its characters. An Authorization scheme before the value
+ * is taken with it, inside the quotes too (`authorization: 'Bearer …'`, as util.inspect writes a
+ * headers object): taken as the value alone, the scheme word would leave the token after it.
  */
 export const SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
 
 /** Environment variables whose values are never written: keys, secrets, tokens, endpoints. */
 const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;
@@ -204,10 +206,11 @@ export function scrub(input: unknown): string {
   try {
     let out = replaceAll(asText(input), secretValues, REDACTED);
     // The cap falls on the text as it came, never inside a link or a host (logCut), whose part
-    // the rules below would no longer know. Replaced first, they would shorten the text and let
-    // in more of it.
+    // the rules below would no longer know, nor inside an Authorization credential, whose part
+    // can be too short for its rule (a Basic one needs 8 characters). Replaced first, they would
+    // shorten the text and let in more of it.
     if (out.length > MAX_LOGGED_TEXT) {
-      out = `${out.slice(0, logCut(out, MAX_LOGGED_TEXT, [], { pairs: false, auth: false }))}${TRUNCATED}`;
+      out = `${out.slice(0, logCut(out, MAX_LOGGED_TEXT, [], { pairs: false }))}${TRUNCATED}`;
     }
     out = out.replace(URL_IN_TEXT, (url) => {
       const host = hostOf(url);
@@ -328,7 +331,9 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * left (configured values, links, configured hosts, preview and provider hosts, secret pairs,
  * Authorization values), and what each replaces found where it stood in `text`. The quotes
  * around a value and the scheme word before one, which scrub replaces with it, are not in them:
- * they hold no secret, and the redaction that reads these spans keeps them. The configured
+ * they hold no secret, and the redaction that reads these spans keeps them (the word Basic
+ * before a credential that scrub's Authorization rule replaces is the one exception, see
+ * readPairs). The configured
  * values as JSON writes them (with `"`, `\` or a control character escaped) are in them too,
  * although scrub does not replace them in a text: the last pass over a line replaces only what
  * it writes itself from a value, and one written already escaped in a text is escaped again
@@ -435,7 +440,10 @@ function readPairs(
   current = rewrite(current, pairs, hidden);
   const auths: Rewrite[] = [];
   for (const auth of withAuth ? current.text.matchAll(AUTH_SCHEME) : []) {
-    const from = auth.index + (auth[1] ?? auth[3] ?? "").length;
+    // A Basic credential's span keeps its scheme word, as it always has: spans that touch are
+    // merged, so with the word a cut through the credential also falls before a host or a value
+    // written right before it, and without it the cut would show them where it hid them before.
+    const from = auth.index + (auth[1] ?? "").length;
     auths.push(valueRewrite(current.text, from, auth.index + auth[0].length));
   }
   rewrite(current, auths, hidden);
@@ -456,8 +464,15 @@ const LOG_CUT_WINDOW = 4096;
  * the cut is looked up around it, however long. Once the cut has moved, it also falls before an
  * Authorization credential of the text as it came that crosses it: matched there, the credential
  * ran on into what the cut now leaves out, and what is left of it may be too short for its rule.
- * Every cut of a text a log line shows is made here, by the logger's own redaction too
- * (sources/http.ts).
+ * The credential's span starts after its scheme word, which holds no secret.
+ *
+ * It places the cuts that decide how much of a text a log line shows: scrub's cap, logText's
+ * (http/middleware/errors.ts), and those of the redaction of source errors (safeCut and lineCut
+ * in sources/http.ts). It does not make every slice of such a text. plainLine slices a line to
+ * its length before it masks it, and then moves that cut with lineCut; after their cuts here,
+ * plainLine and scrubText slice the redacted text to their length once more, which only takes
+ * the characters of a mask the cut fell inside; serializeError cuts a scrubbed code and a few
+ * other short fields to 100 characters.
  */
 export function logCut(
   text: string,
@@ -472,7 +487,7 @@ export function logCut(
   if (end === at) return at;
   const credentials: Array<[number, number]> = [];
   for (const auth of window.matchAll(AUTH_SCHEME)) {
-    credentials.push([auth.index + (auth[1] ?? auth[3] ?? "").length, auth.index + auth[0].length]);
+    credentials.push([auth.index + (auth[1] ?? auth[2] ?? "").length, auth.index + auth[0].length]);
   }
   return settle(text, [...spans, ...credentials], end);
 }

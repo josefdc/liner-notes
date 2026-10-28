@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inspect } from "node:util";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { randomStrings } from "./sources/testing/strings.js";
@@ -12,14 +13,17 @@ import {
   currentRunId,
   installConsoleBridge,
   ipHash,
+  logCut,
   logger,
   MAX_LOGGED_TEXT,
+  SECRET_PAIR,
   scrub,
   scrubbedSpans,
   serializeError,
   withRun,
 } from "./logger.js";
 import { timed } from "./sources/testing/strings.js";
+import { logText } from "./http/middleware/errors.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -224,6 +228,9 @@ describe("scrubbedSpans", () => {
       "authorization: ",
       "Bearer ",
       "Basic abcdefgh12",
+      "'Bearer abc.def1'",
+      '"Basic abcdefgh12"',
+      "proxy-authorization: ",
       "contoso-prod.openai.azure.com",
       "https://u:p@h.example/x?token=t1&a=b",
       "p.scdn.co/clip",
@@ -257,6 +264,160 @@ describe("scrubbedSpans", () => {
     const text = "the token count is 5; see https://example.org/a?page=2";
     expect(scrub(text)).toBe(text);
     expect(scrubbedSpans(text)).toEqual([]);
+  });
+});
+
+describe("Authorization values in quotes and at the cap", () => {
+  const TOKEN = "eyJhbGciOi.secretpart";
+  const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+  // What util.inspect writes for a headers object, which reaches a line as text.
+  const headers = inspect({
+    accept: "application/json",
+    authorization: `Bearer ${TOKEN}`,
+    "proxy-authorization": `Basic ${CRED}`,
+  });
+  /** Whether `out` shows any 4 characters of the token or the credential. */
+  const shows = (out: string) =>
+    [TOKEN, CRED].some((secret) =>
+      Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
+        out.includes(part),
+      ),
+    );
+
+  it.each([
+    ["in single quotes", `{ authorization: 'Bearer ${TOKEN}' }`, "{ authorization: [redacted] }"],
+    ["in double quotes", `{ authorization: "Bearer ${TOKEN}" }`, "{ authorization: [redacted] }"],
+    [
+      "under proxy-authorization",
+      `{ 'proxy-authorization': 'Bearer ${TOKEN}' }`,
+      "{ 'proxy-authorization': [redacted] }",
+    ],
+    ["in JSON", `{"Authorization":"Bearer ${TOKEN}"}`, '{"Authorization":[redacted]}'],
+    ["a Basic one", `{ Authorization: 'Basic ${CRED}' }`, "{ Authorization: [redacted] }"],
+    [
+      "in a headers object util.inspect wrote",
+      headers,
+      "{\n  accept: 'application/json',\n  authorization: [redacted],\n  'proxy-authorization': [redacted]\n}",
+    ],
+  ])("leaves no part of a quoted token: %s", (_label, text, expected) => {
+    expect(scrub(text)).toBe(expected);
+    expect(shows(scrub(logText(text)))).toBe(false);
+    logger("Probe").warn(`sent ${logText(text)} with ${text}`);
+    expect(shows(logs.lines().join("\n"))).toBe(false);
+  });
+
+  it("leaves no part of a quoted token in a console line of an inspected headers object", () => {
+    const target = { log: () => {}, warn: () => {} } as unknown as Console;
+    const restore = installConsoleBridge(target);
+    try {
+      target.log(headers);
+      target.warn("[Fetch] headers %s", inspect({ Authorization: `Bearer ${TOKEN}` }));
+    } finally {
+      restore();
+    }
+    expect(logs.messages()).toEqual([
+      "{\n  accept: 'application/json',\n  authorization: [redacted],\n  'proxy-authorization': [redacted]\n}",
+      "headers { Authorization: [redacted] }",
+    ]);
+  });
+
+  it("finds the token of a quoted Authorization value, without its scheme and quotes", () => {
+    const text = `{ authorization: 'Bearer ${TOKEN}', 'proxy-authorization': "Basic ${CRED}" }`;
+    expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
+      TOKEN,
+      CRED,
+    ]);
+  });
+
+  it("keeps readable text readable", () => {
+    for (const text of [
+      "Authorization header missing",
+      "authorization missing for the request",
+      "the scheme is Bearer",
+      "scheme 'Basic', then 'Bearer'",
+      "{ authorization: '' }",
+      "{ accept: 'application/json', 'content-type': 'text/plain' }",
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("does not replace a quoted value it replaced before", () => {
+    for (const text of [
+      "authorization: 'Bearer [redacted]'",
+      'authorization: "Basic [redacted]"',
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("leaves no part of a credential the cap cuts, a short Basic one included", () => {
+    const dir = mkdtempSync(join(tmpdir(), "log-cap-"));
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      for (const [scheme, quote] of [
+        ["Basic ", ""],
+        ["Basic ", '"'],
+        ["Authorization: Basic ", ""],
+        ["Bearer ", ""],
+      ]) {
+        const value = `${scheme}${quote}${CRED}${quote}`;
+        for (let k = 1; k < CRED.length; k++) {
+          const at = MAX_LOGGED_TEXT - scheme.length - quote.length - k;
+          const text = `${"w".repeat(at - 1)} ${value} tail`;
+          const out = scrub(text);
+          expect(out.length, value).toBeLessThan(MAX_LOGGED_TEXT + 20);
+          expect(out.slice(-40), `${value} cut after ${k}`).not.toContain(
+            CRED.slice(0, Math.min(k, 3)),
+          );
+          if (k === 5) logger("Probe").warn(text);
+        }
+      }
+      const lines = readFileSync(file, "utf8").trim().split("\n");
+      expect(lines).toHaveLength(4);
+      for (const line of lines) expect(line).not.toContain(CRED.slice(0, 3));
+      expect(JSON.parse(lines[0] as string).msg).toMatch(/w …\[truncated\]$/);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("moves a cut to the start of a Basic credential, after the word Basic", () => {
+    // Moved to a configured value glued to the credential, then to the start of the credential,
+    // which only the text as it came holds whole.
+    configureLogger({ GLUED_SECRET: "S1xS2xS3xS4xS5xS6x" });
+    const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x yy ${"z ".repeat(20)}`;
+    expect(logCut(glued, glued.indexOf("S3x"))).toBe(glued.indexOf("M0003x"));
+  });
+
+  it("moves a cut through a Basic credential before a host written right before it", () => {
+    // The credential's span, with its word, touches the host's: the cut falls before both, as
+    // it always has, and never shows the host where it hid it before.
+    configureLogger({ AZURE_OPENAI_ENDPOINT: "https://contoso-prod.openai.azure.com" });
+    const text = `xx contoso-prod.openai.azure.comBasic C1xC2xC3xC4x yy ${"z ".repeat(20)}`;
+    expect(logCut(text, text.indexOf("C3x"))).toBe(text.indexOf("contoso"));
+  });
+
+  it("reads 1 MB of quoted Authorization values in linear time", { timeout: 60_000 }, () => {
+    const pieces = [
+      `authorization: 'Bearer ${" ".repeat(1 << 20)}]`,
+      "authorization: 'Bearer ".repeat(1 << 15),
+      "authorization:\"Basic\t'Bearer ".repeat(1 << 15),
+      `"authorization": "Bearer abc.def", `.repeat(1 << 15),
+    ];
+    const { ms } = timed(
+      () => {
+        for (const text of pieces) {
+          text.replace(SECRET_PAIR, "$1$2[R]");
+          scrubbedSpans(text);
+          scrub(text);
+        }
+      },
+      { runs: 3, stopAboveMs: 10_000 },
+    );
+    expect(ms).toBeLessThan(4_000);
   });
 });
 

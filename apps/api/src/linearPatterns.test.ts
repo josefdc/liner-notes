@@ -32,8 +32,10 @@ const OLD_SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/
 const OLD_NAME_JOIN = /\s*(?:,|&|\band\b|\/)\s*/i;
 const OLD_CREDIT_JOIN = /\s*(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i;
 const OLD_DISAMBIGUATION_NUMBER = /\s+\(\d+\)$/;
+// The earlier form of SECRET_PAIR's whitespace, with the scheme it now takes inside the quotes
+// (#235) too.
 const OLD_SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:["']?(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
 
 const credits = [
   "Queen & David Bowie",

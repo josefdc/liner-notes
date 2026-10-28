@@ -446,14 +446,18 @@ function readPairs(
  * hosts, pairs and Authorization values that cross the cut are found there. A link whose user
  * info runs on past it is the one such match it can miss.
  */
-export const LOG_CUT_WINDOW = 4096;
+const LOG_CUT_WINDOW = 4096;
 
 /**
  * Where a cut of `text` at `at` falls when it never splits what scrub hides (scrubbedSpans, the
  * rules `rules` names, all by default) or one of the `extra` spans: at the start of the first
- * such span it would split, since a part of one no longer matches. A configured value that
- * crosses the cut is looked up in the whole text; the other rules read it up to LOG_CUT_WINDOW
- * characters past `at`.
+ * such span it would split, since a part of one no longer matches, until none is split. The
+ * rules read the text up to LOG_CUT_WINDOW characters past `at`; a configured value that crosses
+ * the cut is looked up around it, however long. Once the cut has moved, it also falls before an
+ * Authorization credential of the text as it came that crosses it: matched there, the credential
+ * ran on into what the cut now leaves out, and what is left of it may be too short for its rule.
+ * Every cut of a text a log line shows is made here, by the logger's own redaction too
+ * (sources/http.ts).
  */
 export function logCut(
   text: string,
@@ -462,20 +466,26 @@ export function logCut(
   rules: Omit<SpanRules, "cut"> = {},
 ): number {
   if (at <= 0 || at >= text.length) return at;
-  const spans: Array<readonly [number, number]> = [
-    ...scrubbedSpans(text.slice(0, at + LOG_CUT_WINDOW), { ...rules, cut: true }),
-    ...extra,
-  ];
-  for (const value of [...secretValues, ...escapedSecretValues]) {
-    const first = text.indexOf(value, Math.max(0, at - value.length + 1));
-    for (let i = first; i !== -1 && i < at; i = text.indexOf(value, i + 1)) {
-      spans.push([i, i + value.length]);
-    }
+  const window = text.slice(0, at + LOG_CUT_WINDOW);
+  const spans = [...scrubbedSpans(window, { ...rules, cut: true }), ...extra];
+  const end = settle(text, spans, at);
+  if (end === at) return at;
+  const credentials: Array<[number, number]> = [];
+  for (const auth of window.matchAll(AUTH_SCHEME)) {
+    credentials.push([auth.index + (auth[1] ?? auth[3] ?? "").length, auth.index + auth[0].length]);
   }
+  return settle(text, [...spans, ...credentials], end);
+}
+
+/**
+ * `at`, moved to the start of each of `spans`, or of a configured value of `text`, that it falls
+ * inside, until it falls inside none.
+ */
+function settle(text: string, spans: ReadonlyArray<readonly [number, number]>, at: number): number {
   let end = at;
   for (let moved = true; moved; ) {
     moved = false;
-    for (const [start, stop] of spans) {
+    for (const [start, stop] of [...spans, ...valuesAcross(text, end)]) {
       if (start < end && end < stop) {
         end = start;
         moved = true;
@@ -483,6 +493,20 @@ export function logCut(
     }
   }
   return end;
+}
+
+/** Where a configured value (or its escaped form) of `text` crosses `at`: read around it only. */
+function valuesAcross(text: string, at: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const value of [...secretValues, ...escapedSecretValues]) {
+    if (value.length < 2) continue;
+    const from = Math.max(0, at - value.length + 1);
+    const around = text.slice(from, at + value.length - 1);
+    for (let i = around.indexOf(value); i !== -1; i = around.indexOf(value, i + 1)) {
+      out.push([from + i, from + i + value.length]);
+    }
+  }
+  return out;
 }
 
 /**

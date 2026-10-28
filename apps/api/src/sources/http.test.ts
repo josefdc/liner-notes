@@ -2275,6 +2275,52 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("never cuts a described error before a link's @, or through a long configured value", () => {
+    // A new shape before the link (the Cookie line) makes describeError cut the text itself.
+    const lead = `401\nCookie: sid=${"a".repeat(40)}\n`;
+    const userinfo = "https://u:U1xU2xU3xU4xU5xU6xU7xU8x@h.example/x tail";
+    for (let shift = -3; shift < 3; shift++) {
+      const text = `${lead}${"x ".repeat(7635).slice(0, 15268 + shift)} ${userinfo}`;
+      expect(scrub(`Error: ${describeError(new Error(text))}`), String(shift)).not.toContain(
+        "U1xU2",
+      );
+    }
+    // A configured value longer than the window the logger reads past a cut, at each cut.
+    const long = "L7.".repeat(1_700);
+    configureLogger({ LOG_IP_SALT: long, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (const [cut, path] of [
+        [15_360, (t: string) => scrub(`Error: ${describeError(new Error(t))}`)],
+        [200, (t: string) => scrub(logText(new SourceError("spotify", "http", t).message))],
+        [500, (t: string) => scrub(scrubText(t))],
+        [120, (t: string) => scrub(plainReason(t) ?? "")],
+      ] as const) {
+        for (const before of [5, 40, 150]) {
+          const filler = "x ".repeat(cut).slice(0, cut - before - lead.length - 1);
+          const text = `${lead}${filler} ${long} tail`;
+          expect(path(text), `${cut} ${before}`).not.toContain("L7.L7.");
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never leaves a short Basic credential where a cut moved before a value glued to it", () => {
+    // `Basic M0003x=` plus the salt was one credential; cut before the salt, it is too short for
+    // the logger's rule.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let before = 1; before < salt.length; before++) {
+        const text = `${"x".repeat(200 - before - 14)} Basic M0003x=${salt} tail`;
+        expect(scrub(logText(text)), String(before)).not.toContain("M0003x");
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
   it("never cuts a body's cap through a host when nothing else in it is masked", () => {
     for (let pad = 225; pad < 250; pad++) {
       const body = `<html>${"y ".repeat(pad)} upstream contoso-prod.openai.azure.com timed out</html>`;

@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { LOG_CUT_WINDOW, logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
+import { logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -1668,9 +1668,9 @@ function redactForLog(text: string, max: number, keep: number): string {
 /**
  * Where a cut of the text that `pieces` cover falls when it keeps `keep` characters of a
  * rendering longer than `max` (cutAt): no further than the same cut of `other`, the other rules'
- * pieces, and never inside what a log line's logger hides whole in either (a provider host, a
- * configured value, scrubbedSpans): there, at its start, since a part of one is no longer known
- * to the logger. The whole text when nothing is cut. Only the text near the cut is read.
+ * pieces, and never inside what the logger hides in the log line of either rendering, as the
+ * logger itself cuts a text (logCut): there, at its start, since a part of one is no longer
+ * known to it. The whole text when nothing is cut.
  */
 function safeCut(
   text: string,
@@ -1679,14 +1679,49 @@ function safeCut(
   max: number,
   keep: number,
 ): number {
-  const at = Math.min(cutAt(pieces, max, keep), cutAt(other, max, keep));
+  let at = Math.min(cutAt(pieces, max, keep), cutAt(other, max, keep));
   if (at >= text.length) return at;
-  // Only the text up to a window past the cut is read (logCut).
-  const near = (all: readonly Piece[]) => loggedSpans(text, piecesBefore(all, at + LOG_CUT_WINDOW));
-  for (const [start, end] of maskableUnion(near(pieces), near(other))) {
-    if (start < at && at < end) return start;
+  const renderings = [pieces, other].map((all) => ({ all, text: render(text, all) }));
+  // Each rendering's cut moved by logCut, back in this text, until neither moves it.
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const { all, text: rendered } of renderings) {
+      const there = renderedAt(all, at);
+      const cut = logCut(rendered, there);
+      if (cut < there) {
+        at = Math.min(at, sourceAt(all, cut));
+        moved = true;
+      }
+    }
   }
   return at;
+}
+
+/** Where `at`, a place in the text that `pieces` cover, falls in the text they read as. */
+function renderedAt(pieces: readonly Piece[], at: number): number {
+  let out = 0;
+  for (const piece of pieces) {
+    if (piece.to <= at) out += pieceLength(piece);
+    else {
+      if (piece.mask === undefined && piece.from < at) out += at - piece.from;
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Where `at`, a place in the text that `pieces` read as, falls in the text they cover: at a mask's
+ * start when it falls inside one.
+ */
+function sourceAt(pieces: readonly Piece[], at: number): number {
+  let start = 0;
+  for (const piece of pieces) {
+    const length = pieceLength(piece);
+    if (at < start + length) return piece.mask === undefined ? piece.from + at - start : piece.from;
+    start += length;
+  }
+  return pieces.at(-1)?.to ?? 0;
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */

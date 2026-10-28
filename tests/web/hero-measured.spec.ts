@@ -25,8 +25,8 @@ const WHITE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><rect width="100%" height="100%" fill="#fff"/></svg>';
 
 /** The measured result, with a white cover (the worst case behind the hero) when asked. */
-function measured(whiteCover = false) {
-  const fixture = loadFixture("measured-v2");
+function measured(whiteCover = false, name = "measured-v2") {
+  const fixture = loadFixture(name);
   if (whiteCover) {
     const complete = fixture.streams["/api/analyze/stream"].find(
       (event: { type: string }) => event.type === "complete",
@@ -36,14 +36,14 @@ function measured(whiteCover = false) {
   return fixture;
 }
 
-async function openHero(page: Page, width: number, whiteCover = false) {
+async function openHero(page: Page, width: number, whiteCover = false, name = "measured-v2") {
   await offline(page);
   if (whiteCover) {
     await page.route(`${WHITE_COVER}**`, (route) =>
       route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
     );
   }
-  await useMockApi(page, measured(whiteCover));
+  await useMockApi(page, measured(whiteCover, name));
   await page.setViewportSize({ width, height: 900 });
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
@@ -76,21 +76,35 @@ async function expectRing(target: Locator) {
 }
 
 /**
- * Each value in a column of one width: a stack of values shares its left edge, and values side by
- * side keep at least 24 px apart, so one label never runs into the next.
+ * Each value in a column of one width, as drawn (the value itself, not its list item): a stack of
+ * values shares its left edge, and values side by side keep at least 24 px apart, so one label
+ * never runs into the next.
  */
 async function expectColumns(list: Locator) {
-  const boxes = await list
-    .getByRole("listitem")
-    .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().toJSON()));
+  // Rows are the list items' (a value sits on its line's baseline, a pixel up or down); the
+  // edges are the values' own.
+  const boxes = await list.getByRole("listitem").evaluateAll((items) =>
+    items.map((item) => {
+      const value = (item.firstElementChild ?? item).getBoundingClientRect();
+      return {
+        row: Math.round(item.getBoundingClientRect().top),
+        left: value.left,
+        right: value.right,
+      };
+    }),
+  );
+  expect(boxes.length).toBeGreaterThan(0);
   const rows = new Map<number, Array<{ left: number; right: number }>>();
   for (const box of boxes) {
-    const row = rows.get(Math.round(box.top)) ?? [];
+    const row = rows.get(box.row) ?? [];
     row.push(box);
-    rows.set(Math.round(box.top), row);
+    rows.set(box.row, row);
   }
   if ([...rows.values()].every((row) => row.length === 1)) {
-    expect(new Set(boxes.map((box) => Math.round(box.left))).size, "one left edge").toBe(1);
+    expect(
+      new Set(boxes.map((box) => Math.round(box.left))).size,
+      `one left edge: ${JSON.stringify(boxes)}`,
+    ).toBe(1);
   }
   for (const row of rows.values()) {
     row.sort((a, b) => a.left - b.left);
@@ -288,6 +302,17 @@ for (const width of [390, 1440]) {
   });
 }
 
+// Values that were not measured keep to the same columns.
+for (const width of [390, 1440]) {
+  test(`the Player hero's missing values share their columns (gated-v2, ${width} px)`, async ({
+    page,
+  }) => {
+    const { values } = await openHero(page, width, false, "gated-v2");
+    await expect(values.getByRole("listitem")).toHaveCount(3);
+    await expectColumns(values);
+  });
+}
+
 for (const cover of ["no cover", "a white cover"]) {
   test(`the hero's label and disclosure are 12 px or more and meet 4.5:1 at rest and on focus (${cover})`, async ({
     page,
@@ -324,6 +349,8 @@ for (const cover of ["no cover", "a white cover"]) {
       await tabTo(page, button);
       expect(await button.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
       await expectRing(button);
+      // A touch target at least 24 px high.
+      expect((await button.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(24);
       expect(await contrastOf(page, button), "on focus").toBeGreaterThanOrEqual(4.5);
     }
   });

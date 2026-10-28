@@ -425,7 +425,7 @@ describe("the Player hero's disclosures", () => {
     const values = screen.getByRole('list', { name: 'Audio values' });
     expect(values.className).toContain('gap-x-6');
     for (const li of within(values).getAllByRole('listitem')) {
-      expect(li.className).toContain('w-60 max-w-full');
+      expect(li.className).toContain('w-60 max-w-full text-left');
     }
   });
 });

@@ -4,26 +4,27 @@
  * and no cassette is used.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import {
-  type Claim,
-  type ComposerFactoid,
-  type Evidence,
-  type Factoid,
-  type JudgeOutput,
+import type {
+  Claim,
+  ComposerFactoid,
+  Evidence,
+  Factoid,
+  JudgeOutput,
   ReplayRecord,
-  type TrackAnalysis,
-  type Verdict,
+  TrackAnalysis,
+  Verdict,
 } from "@liner-notes/contract";
 import { messagesOf, type StubCall, type StubLlm, stubLlm } from "../../agent/testing/stubLlm.js";
-import { DEFAULT_REPLAY_DIR } from "../../replay/records.js";
+import { pinnedRecord, readRecording } from "../../replay/testing/recordings.js";
 
 /** The demo recording, read from the replay directory. */
-export const demoRecord = (): ReplayRecord =>
-  ReplayRecord.parse(
-    JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "one-more-time-daft-punk.json"), "utf8")),
-  );
+export const demoRecord = (): ReplayRecord => readRecording();
+
+/**
+ * The One More Time recording as made before one claim per fact (the pinned copy): a recording
+ * whose replay leaves out the model's restatements of code-built claims.
+ */
+export const restatingRecord = (): ReplayRecord => pinnedRecord();
 
 export const RUN_ID = "run-more-facts-1";
 

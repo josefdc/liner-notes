@@ -22,6 +22,7 @@ import {
   focusOf,
   isJudge,
   RUN_ID,
+  restatingRecord,
   storedRun,
 } from "../../factoids/testing/fakes.js";
 import { LlmError } from "../../llm/errors.js";
@@ -29,6 +30,7 @@ import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
 import { captureLogsForTests } from "../../logger.js";
 import { replayedAnalysis } from "../../replay/player.js";
+import { PINNED_DIR } from "../../replay/testing/recordings.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -722,10 +724,12 @@ describe("each fact's claim", () => {
 
   it("of a recording never brings back a card the replay left out as a restatement", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
+    // A recording made before one claim per fact: its replay leaves restatements out.
+    vi.stubEnv("REPLAY_DIR", PINNED_DIR);
     onTestFinished(() => {
       vi.unstubAllEnvs();
     });
-    const record = demoRecord();
+    const record = restatingRecord();
     const served = replayedAnalysis(record, "run-served");
     const shown = served.factoids.map((factoid) => factoid.id);
     // The recording has cards the replay left out (their claims restate code-built ones).

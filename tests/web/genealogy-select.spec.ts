@@ -433,6 +433,79 @@ test("Escape from the filters or the page closes the panel, and stays on the map
   await expect(graphOf(page)).toBeVisible();
 });
 
+/**
+ * Where an open list (the links, the previews) and the panel overlap, the list is on top: every
+ * point of the overlap hit-tests to the list.
+ */
+async function expectOverPanel(page: Page, list: Locator) {
+  await settled(page);
+  const [a, b] = await Promise.all([list.boundingBox(), panelOf(page).boundingBox()]);
+  if (!a || !b) throw new Error("no layout");
+  const area = {
+    x0: Math.max(a.x, b.x),
+    x1: Math.min(a.x + a.width, b.x + b.width),
+    y0: Math.max(a.y, b.y),
+    y1: Math.min(a.y + a.height, b.y + b.height),
+  };
+  if (area.x1 - area.x0 < 1 || area.y1 - area.y0 < 1) return;
+  const covered = await list.evaluate((element, { x0, x1, y0, y1 }) => {
+    let points = 0;
+    for (let i = 0; i < 6; i++) {
+      for (let j = 0; j < 6; j++) {
+        const hit = document.elementFromPoint(
+          x0 + ((i + 0.5) * (x1 - x0)) / 6,
+          y0 + ((j + 0.5) * (y1 - y0)) / 6,
+        );
+        if (!hit || !element.contains(hit)) points++;
+      }
+    }
+    return points;
+  }, area);
+  expect(covered, "points of the open list the panel covers").toBe(0);
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width} px an open list of links or previews lies over the panel, and Escape closes the list first`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height });
+    await useMockApi(page, richWithPreviews());
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+    await expect(cardOf(page, "s2")).toHaveCount(1);
+    await graphOf(page).scrollIntoViewIfNeeded();
+    await select(page, "s2");
+    const lists = [
+      [/^Links as a list/, "Genealogy links"],
+      [/^Previews/, "Track previews"],
+    ] as const;
+    for (const [summary, name] of lists) {
+      const toggle = page.locator("#panel-genealogy summary", { hasText: summary });
+      await toggle.click();
+      const list = page.getByRole("list", { name });
+      await expect(list).toBeVisible();
+      await expectOverPanel(page, list);
+      await screenshot(
+        page,
+        testInfo,
+        `rich-${width}-${name === "Track previews" ? "previews" : "links"}-over-panel`,
+      );
+      // Escape on the list's toggle closes the list; the panel stays open.
+      await expect(toggle).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+      await expect(panelOf(page)).toBeVisible();
+    }
+    // The next Escape closes the panel.
+    await page.keyboard.press("Escape");
+    await expect(panelOf(page)).toHaveCount(0);
+  });
+}
+
 for (const [width, height] of [
   [390, 844],
   [1440, 900],

@@ -48,6 +48,7 @@ import { LineageRow } from './genealogy/LineageRow';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
 import { PreviewList } from './genealogy/PreviewList';
+import { GRAPH_LISTS } from './genealogy/exclusiveLists';
 import { DetailPanel } from './genealogy/DetailPanel';
 import { clearOfPanel } from './genealogy/clearOfPanel';
 import { LinkFilters } from './genealogy/LinkFilters';
@@ -1566,9 +1567,21 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     setSelectedId(null);
     if (id && (inPanel || active === document.body)) focusCard(id);
   };
-  // Escape stops A/B listening first, then closes the panel, then the hover box.
+  // Escape closes a list open over the panel first (the links, the previews), then stops A/B
+  // listening, then closes the panel, then the hover box. With neither a selection nor a pair
+  // playing an open list is the Player's to close, as before.
   const escapeRef = useRef<() => boolean>(() => false);
   escapeRef.current = () => {
+    const list =
+      ab.playing || selectedNode
+        ? rootRef.current?.querySelector<HTMLDetailsElement>(`details[name="${GRAPH_LISTS}"][open]`)
+        : null;
+    if (list) {
+      const active = document.activeElement;
+      list.open = false;
+      if (active && list.contains(active)) list.querySelector('summary')?.focus();
+      return true;
+    }
     if (ab.playing) {
       ab.stop();
       return true;
@@ -1908,8 +1921,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       {/* What the lines mean, in words, the filters, and the links as a list (which opens over
           the graph) */}
       {(allLinks.length > 0 || hidden > 0 || previewTracks.length > 0) && (
-        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
-        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Above
+        // the selected track's panel too (z-30): a list opened here (the links, the previews)
+        // lies over the map and the panel, as what was opened last, and Escape closes it first.
+        <div className="relative z-40 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}

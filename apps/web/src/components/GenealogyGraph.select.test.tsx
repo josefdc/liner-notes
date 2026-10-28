@@ -530,6 +530,26 @@ describe('the panel: what it says of a relation, and how it closes', () => {
     }
   });
 
+  it('Escape closes a list open over the panel first, then the panel', async () => {
+    const { container } = render(<Graph />);
+    await click(card(container, 'older'));
+    const list = container.querySelector<HTMLDetailsElement>('details[name="genealogy-lists"]');
+    const summary = list?.querySelector('summary');
+    if (!list || !summary) throw new Error('no list of links');
+    list.open = true;
+    summary.focus();
+    await act(async () => {
+      fireEvent.keyDown(summary, { key: 'Escape' });
+    });
+    expect(list.open).toBe(false);
+    expect(panel()).toBeTruthy();
+    expect(document.activeElement).toBe(summary);
+    await act(async () => {
+      fireEvent.keyDown(summary, { key: 'Escape' });
+    });
+    expect(screen.queryByTestId('node-detail')).toBeNull();
+  });
+
   it('leaves an Escape on the page to the Player while the map is not on screen', async () => {
     const outside = vi.fn();
     window.addEventListener('keydown', outside);

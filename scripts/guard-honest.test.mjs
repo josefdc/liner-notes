@@ -828,7 +828,10 @@ describe("tailwind-v3-variable-classes", () => {
   });
 });
 
-describe("baselines", () => {
+// Each test starts git three times and the guard (which loads the TypeScript parser) up to three
+// times, as real processes: on a busy machine that takes longer than the default 5 s. Nothing in
+// them is timed.
+describe("baselines", { timeout: 60_000 }, () => {
   // The CLI runs in a throwaway repository, isolated from the surrounding git setup
   // (GIT_DIR and friends, hooks, signing, global config).
   const isolatedEnv = Object.fromEntries(

@@ -17,6 +17,7 @@ import {
   serializeError,
   withRun,
 } from "./logger.js";
+import { timed } from "./sources/testing/strings.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -153,10 +154,17 @@ describe("scrub", () => {
     const long = scrub("x".repeat(MAX_LOGGED_TEXT + 100));
     expect(long).toHaveLength(MAX_LOGGED_TEXT + "…[truncated]".length);
     expect(long.endsWith("…[truncated]")).toBe(true);
-    const started = performance.now();
-    scrub("a-".repeat(8000));
-    scrub("a.".repeat(8000));
-    expect(performance.now() - started).toBeLessThan(200);
+    // Host-like text as long as is scrubbed, ten times over: an expression that reads it again
+    // from each character takes seconds on it, the linear ones a few milliseconds. The fastest of
+    // three runs, since a busy machine only adds time.
+    const hostLike = ["a-".repeat(8000), "a.".repeat(8000)];
+    const { ms } = timed(
+      () => {
+        for (let i = 0; i < 10; i++) for (const text of hostLike) scrub(text);
+      },
+      { runs: 3, stopAboveMs: 1000 },
+    );
+    expect(ms).toBeLessThan(1000);
   });
 
   it("does not replace short or numeric configured values", () => {
@@ -216,6 +224,8 @@ describe("every line", () => {
     "😀",
   ];
 
+  // About a second of work on an idle machine (each line scrubs an error's stack), several on a
+  // busy one, so it gets more than the default 5 s; nothing in it is timed.
   it("is valid JSON and holds no configured secret, whatever text it is given (fuzz)", () => {
     let seed = 42;
     const random = () => {
@@ -239,7 +249,7 @@ describe("every line", () => {
       expect(line).not.toContain(KEY);
       expect(line).not.toContain("dummy-resource");
     }
-  });
+  }, 60_000);
 });
 
 describe("serializeError", () => {

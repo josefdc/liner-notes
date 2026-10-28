@@ -989,18 +989,35 @@ describe("analyze routes", () => {
       expect(ofType(events, "complete")).toHaveLength(1);
     });
 
-    it("sends the stream headers before the resume check finishes", async () => {
+    /** How long a busy machine is given to carry the headers, and then the rest, to the client. */
+    const LOOPBACK_WAIT_MS = 15_000;
+    it("sends the stream headers before the resume check finishes", {
+      timeout: 3 * LOOPBACK_WAIT_MS,
+    }, async () => {
       const threadId = await pausedThread();
       const check = holdNextCheckpointRead();
 
       const client = open(resumePath(threadId, "track-a"));
       await check.reading;
-      const response = await Promise.race([client.response, settle().then(() => null)]);
+      // The check is held until released below, so headers sent only after it never arrive.
+      // Those sent before it still cross the loopback, which on a busy machine can take more
+      // than a few turns of the event loop: they are waited for, up to a bound no busy machine
+      // reaches.
+      let noHeaders: ReturnType<typeof setTimeout> | undefined;
+      const response = await Promise.race([
+        client.response,
+        new Promise<null>((resolve) => {
+          noHeaders = setTimeout(() => resolve(null), LOOPBACK_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(noHeaders);
       expect(response?.headers["content-type"]).toBe("text/event-stream");
       expect(response?.headers["x-accel-buffering"]).toBe("no");
 
       check.release();
-      await vi.waitFor(() => expect(parseEvents(client.body()).at(-1)?.type).toBe("done"));
+      await vi.waitFor(() => expect(parseEvents(client.body()).at(-1)?.type).toBe("done"), {
+        timeout: LOOPBACK_WAIT_MS,
+      });
     });
   });
 

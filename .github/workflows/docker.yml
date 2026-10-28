@@ -111,10 +111,14 @@ jobs:
       # Checks how the audio image runs: as a non-root user, without ffmpeg or wget, analysing a
       # generated band offline (as MP3 and as WAV) with the Essentia estimators
       # (RhythmExtractor2013 and KeyExtractor), refusing M4A and AAC as a format it does not
-      # decode, and serving /health as "degraded" when the models are not downloaded.
+      # decode, and serving /health as "degraded" when the models are not downloaded; then that
+      # it is no larger than its size budget (services/audio/README.md, "Image size").
       - name: Check the audio image
+        env:
+          # The most the image may take, in bytes of unpacked layers (services/audio/README.md,
+          # "Image size").
+          AUDIO_IMAGE_BUDGET: "1500000000"
         run: |
-          echo "audio image size: $(docker image inspect -f '{{.Size}}' liner-notes-audio:latest | numfmt --to=iec)"
           uid=$(docker run --rm liner-notes-audio:latest id -u)
           echo "audio image runs as uid $uid"
           test "$uid" -ne 0
@@ -234,13 +238,37 @@ jobs:
           done
           cat offline-health.json
           grep -q '"status":"degraded"' offline-health.json
+
+          # Last, so that a broken image reports what is broken first: the image's size, as the
+          # sum of its unpacked layers, against its budget (services/audio/README.md, "Image
+          # size"). Anything but a whole number of bytes, in the budget or per layer, fails here.
+          case $AUDIO_IMAGE_BUDGET in
+            ''|*[!0-9]*)
+              echo "::error title=Audio image budget invalid::AUDIO_IMAGE_BUDGET must be a whole number of bytes, not \"$AUDIO_IMAGE_BUDGET\""
+              exit 1
+              ;;
+          esac
+          layers=$(docker history -H=false --format '{{.Size}}' liner-notes-audio:latest)
+          if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
+            echo "::error title=Audio image size unknown::docker history did not print the audio image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"
+            exit 1
+          fi
+          if ! [ "$size" -le "$AUDIO_IMAGE_BUDGET" ]; then
+            echo "::error title=Audio image over budget::audio image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), over its budget of $AUDIO_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$AUDIO_IMAGE_BUDGET")): see services/audio/README.md, \"Image size\""
+            exit 1
+          fi
+          echo "audio image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), within its budget of $AUDIO_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$AUDIO_IMAGE_BUDGET"))"
       # Checks how the API image runs: Node 24, as a non-root user, without wget, with the native
       # SQLite module loading (/api/ready), the recorded replays served (/api/replays), the run
       # report reading the API's database, and Docker's health check (Node's fetch) turning
-      # healthy.
+      # healthy; then that it is no larger than its size budget (services/audio/README.md, "Image
+      # size").
       - name: Check the API image
+        env:
+          # The most the image may take, in bytes of unpacked layers (services/audio/README.md,
+          # "Image size").
+          API_IMAGE_BUDGET: "490000000"
         run: |
-          echo "API image size: $(docker image inspect -f '{{.Size}}' liner-notes-api:latest | numfmt --to=iec)"
           docker run --rm liner-notes-api:latest node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
           uid=$(docker run --rm liner-notes-api:latest id -u)
           echo "API image runs as uid $uid"
@@ -284,6 +312,26 @@ jobs:
           done
           echo "health status: $status"
           test "$status" = healthy
+
+          # Last, so that a broken image reports what is broken first: the image's size, as the
+          # sum of its unpacked layers, against its budget (services/audio/README.md, "Image
+          # size"). Anything but a whole number of bytes, in the budget or per layer, fails here.
+          case $API_IMAGE_BUDGET in
+            ''|*[!0-9]*)
+              echo "::error title=API image budget invalid::API_IMAGE_BUDGET must be a whole number of bytes, not \"$API_IMAGE_BUDGET\""
+              exit 1
+              ;;
+          esac
+          layers=$(docker history -H=false --format '{{.Size}}' liner-notes-api:latest)
+          if ! size=$(printf '%s\n' "$layers" | awk '!/^[0-9]+$/ { bad = 1 } { s += $1 } END { if (bad) exit 1; printf "%.0f\n", s }'); then
+            echo "::error title=API image size unknown::docker history did not print the API image's layer sizes in bytes: $(printf '%s' "$layers" | tr '\n' ' ')"
+            exit 1
+          fi
+          if ! [ "$size" -le "$API_IMAGE_BUDGET" ]; then
+            echo "::error title=API image over budget::API image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), over its budget of $API_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$API_IMAGE_BUDGET")): see services/audio/README.md, \"Image size\""
+            exit 1
+          fi
+          echo "API image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), within its budget of $API_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$API_IMAGE_BUDGET"))"
       # The production stack on this runner, through Caddy (deploy/check-stack.sh, which runs the
       # same way on a development machine): every service healthy, no published port but Caddy's,
       # a stream without a run token refused, the security headers and the policy on a page, a

@@ -14,18 +14,193 @@ const template = [
 ];
 
 describe('SmartTimeline', () => {
-  it('labels template segments and draws no marker when nothing was detected', () => {
-    render(<SmartTimeline segments={template} segmentsSource="template" audioAnalyzed={false} />);
-    const timeline = screen.getByRole('group', { name: 'Song structure' });
-    expect(timeline.textContent).toContain('Template — not analyzed');
-    expect(timeline.textContent).toContain('No key moments');
-    expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
-  });
+  it.each([
+    ['that is a template', 'template'],
+    ['of unknown origin', undefined],
+  ] as const)(
+    'draws no section of a structure %s, and says the sections were not analysed',
+    (_case, source) => {
+      // The same sections from the model are drawn (so their absence below is the source's).
+      render(<SmartTimeline segments={template} segmentsSource="inferred" durationSeconds={240} />);
+      expect(screen.getAllByRole('listitem')).toHaveLength(3);
+      cleanup();
+      render(
+        <SmartTimeline
+          segments={template}
+          segmentsSource={source}
+          durationSeconds={240}
+          audioAnalyzed={false}
+        />,
+      );
+      const timeline = screen.getByRole('group', { name: 'Song structure' });
+      expect(within(timeline).queryAllByRole('list')).toHaveLength(0);
+      expect(within(timeline).queryAllByRole('listitem')).toHaveLength(0);
+      expect(timeline.querySelector('[data-segment-tint]')).toBeNull();
+      expect(timeline.textContent).not.toMatch(/Intro|Main|Outro|Template/);
+      const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+      // No measured sections in the preview: the line says nothing about them.
+      expect(line.textContent).toBe('Song sections not analyzed');
+      expect(timeline.textContent?.match(/not analyzed/g)).toHaveLength(2);
+      expect(timeline.textContent).toContain('No key moments');
+      expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
+      // Nothing is placed on the song's time, so no axis is drawn for it: its length is said in
+      // words beside the line instead.
+      expect(timeline.textContent).not.toContain('0:00');
+      expect(timeline.querySelector('[data-song-length]')?.textContent).toBe('Song length 4:00');
+      expect(timeline.textContent?.match(/4:00/g)).toHaveLength(1);
+    },
+  );
 
-  it('says the duration is unknown instead of showing a default length', () => {
+  it("says the song's length is unknown, in words, when no axis is drawn", () => {
     render(<SmartTimeline segments={template} segmentsSource="template" />);
     const timeline = screen.getByRole('group', { name: 'Song structure' });
-    expect(timeline.textContent).toContain('Duration unknown');
+    expect(timeline.querySelector('[data-song-length]')?.textContent).toBe('Song length unknown');
+    // Read in order: the line, then the length.
+    expect(timeline.textContent).toContain('Song sections not analyzedSong length unknown');
+    expect(timeline.textContent?.match(/Song length unknown/g)).toHaveLength(1);
+    expect(timeline.textContent).not.toMatch(/0:00|3:45/);
+  });
+
+  it("says the song's length is unknown, with no axis, when sample times cannot be placed", () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        samples={[{ time: 60, description: 'Old record' }]}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.querySelector('[data-song-length]')?.textContent).toBe('Song length unknown');
+    // The sample is not placed, and the note says why in the same words.
+    expect(timeline.textContent).toContain('Song length unknown: 1 sample not placed');
+    expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
+    expect(timeline.textContent).not.toMatch(/0:00|Duration/);
+  });
+
+  it('says a song length of 0 is unknown, never 0:00', () => {
+    render(<SmartTimeline segments={template} segmentsSource="template" durationSeconds={0} />);
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.querySelector('[data-song-length]')?.textContent).toBe('Song length unknown');
+    expect(timeline.textContent).not.toContain('0:00');
+  });
+
+  it("says the song's sections were not analysed, and the preview's below were measured", () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        durationSeconds={240}
+        previewSeconds={20}
+        measuredSections={{
+          segments: [
+            { label: 'A', start: 0, end: 8 },
+            { label: 'B', start: 8, end: 20 },
+          ],
+          method: 'novelty-on-beat-chroma',
+          basis: 'signal',
+        }}
+        audioAnalyzed
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+    expect(line.textContent).toBe(
+      "Song sections not analyzed(the preview's sections below are measured)",
+    );
+    // Never a bare "Sections not analyzed" beside measured sections.
+    expect(timeline.textContent).not.toContain('Sections not analyzed');
+    // The line comes before the preview lane that draws the measured sections.
+    const lane = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
+    expect(within(lane).getAllByRole('listitem')).toHaveLength(2);
+    expect(line.compareDocumentPosition(lane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says nothing of the preview's sections when they are given but not drawn", () => {
+    // Measured sections with no preview length cannot be placed, so none is drawn below.
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        durationSeconds={240}
+        measuredSections={neutralSections}
+        audioAnalyzed
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.querySelector('[data-measured-layer="sections"]')).toBeNull();
+    const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+    expect(line.textContent).toBe('Song sections not analyzed');
+  });
+
+  it("says nothing of the preview's sections when only its beats and energy were measured", () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        durationSeconds={240}
+        previewSeconds={20}
+        beats={grid}
+        energyContour={contour}
+        audioAnalyzed
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    // The other layers are drawn; no section is.
+    expect(timeline.querySelector('[data-measured-layer="beats"]')).not.toBeNull();
+    expect(timeline.querySelector('[data-measured-layer="energy"]')).not.toBeNull();
+    expect(timeline.querySelector('[data-measured-layer="sections"]')).toBeNull();
+    const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+    expect(line.textContent).toBe('Song sections not analyzed');
+  });
+
+  it('draws no section of a "measured" structure, which the web does not know', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource={'measured' as never}
+        durationSeconds={240}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(within(timeline).queryAllByRole('list')).toHaveLength(0);
+    expect(within(timeline).queryAllByRole('listitem')).toHaveLength(0);
+    expect(timeline.querySelector('[data-segment-tint]')).toBeNull();
+    expect(timeline.textContent).not.toMatch(/Intro|Main|Outro/);
+    const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+    expect(line.textContent).toBe('Song sections not analyzed');
+  });
+
+  it("draws the song's time axis over sample times, with no section drawn", () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="template"
+        durationSeconds={240}
+        samples={[{ time: 60, description: 'Old record' }]}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain('0:00');
+    expect(timeline.textContent).toContain('4:00');
+    // The axis says the length: no second length in words.
+    expect(timeline.querySelector('[data-song-length]')).toBeNull();
+    expect(timeline.textContent).not.toContain('Song length');
+    expect(within(timeline).getAllByRole('img', { name: /^Sample: Old record/ })).toHaveLength(1);
+    expect(timeline.textContent).toContain('Song sections not analyzed');
+  });
+
+  it('says the sections were not analysed when the result has none', () => {
+    render(<SmartTimeline segments={[]} segmentsSource="inferred" />);
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(within(timeline).queryAllByRole('listitem')).toHaveLength(0);
+    expect(timeline.textContent).toContain('Song sections not analyzed');
+    expect(timeline.textContent).not.toContain('Model inference');
+  });
+
+  it("says the song's length is unknown on the axis instead of showing a default length", () => {
+    render(<SmartTimeline segments={template} segmentsSource="inferred" />);
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain('0:00Song length unknown');
     expect(timeline.textContent).not.toContain('3:45');
   });
 
@@ -48,6 +223,9 @@ describe('SmartTimeline', () => {
     const timeline = screen.getByRole('group', { name: 'Song structure' });
     expect(timeline.textContent).toContain('Model inference');
     expect(timeline.textContent).toContain('4:00');
+    expect(timeline.textContent).not.toContain('not analyzed');
+    expect(timeline.querySelector('[data-structure="not-analyzed"]')).toBeNull();
+    expect(timeline.querySelector('[data-song-length]')).toBeNull();
     expect(within(timeline).getAllByRole('img')).toHaveLength(2);
     expect(error.mock.calls.flat().join(' ')).not.toMatch(/same key/);
   });
@@ -62,8 +240,8 @@ describe('SmartTimeline', () => {
       cleanup();
       return found;
     };
-    expect(chipOf('template')).toEqual({ kind: 'missing', text: 'Template — not analyzed' });
-    expect(chipOf(undefined)).toEqual({ kind: 'unconfirmed', text: 'Not measured' });
+    expect(chipOf('template')).toEqual({ kind: 'missing', text: 'Song sections not analyzed' });
+    expect(chipOf(undefined)).toEqual({ kind: 'missing', text: 'Song sections not analyzed' });
     expect(chipOf('inferred')).toEqual({ kind: 'inferred', text: 'Model inference' });
   });
 
@@ -85,12 +263,6 @@ describe('SmartTimeline', () => {
     for (const section of sections) {
       expect(section.style.backgroundColor).toBe('');
       expect(section.className).toContain('bg-prov-inferred/');
-    }
-    cleanup();
-    render(<SmartTimeline segments={template} segmentsSource="template" />);
-    for (const section of screen.getAllByRole('listitem')) {
-      expect(section.style.backgroundColor).toBe('');
-      expect(section.className).not.toContain('prov-inferred');
     }
   });
 
@@ -175,7 +347,10 @@ describe('SmartTimeline', () => {
     render(<SmartTimeline segments={template} audioAnalyzed={analysed} />);
     const timeline = screen.getByRole('group', { name: 'Song structure' });
     expect(timeline.textContent).toContain(text);
-    if (analysed !== false) expect(timeline.textContent).not.toContain('not analyzed');
+    // "Not analyzed" only where it is true: the song's sections always, the audio when it was not.
+    const line = timeline.querySelector('[data-structure="not-analyzed"]') as HTMLElement;
+    expect(line.textContent).toBe('Song sections not analyzed');
+    expect(timeline.textContent?.match(/not analyzed/g)).toHaveLength(analysed === false ? 2 : 1);
   });
 
   it('labels sample times as inferred and leaves out samples past the end of the song', () => {
@@ -307,6 +482,44 @@ describe('the measured layers of the preview', () => {
     expect(timelineText).toContain('2 energy frames outside the preview, not drawn');
   });
 
+  it('draws the measured layers of a result whose structure is a template, and no song section', () => {
+    const lane = (source: 'template' | 'inferred') => {
+      render(
+        <SmartTimeline
+          segments={template}
+          segmentsSource={source}
+          durationSeconds={240}
+          previewSeconds={20}
+          beats={grid}
+          energyContour={contour}
+          measuredSections={neutralSections}
+          keyMoments={[{ time: 4, type: 'onset', intensity: 1, description: 'Onset' }]}
+          audioAnalyzed
+        />,
+      );
+      const drawn = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
+      const timeline = screen.getByRole('group', { name: 'Song structure' });
+      const found = {
+        lane: drawn.innerHTML,
+        // Every list in the timeline other than the preview lane's measured sections.
+        songLists: within(timeline)
+          .queryAllByRole('list')
+          .filter((list) => !drawn.contains(list)).length,
+      };
+      cleanup();
+      return found;
+    };
+    const model = lane('inferred');
+    const templated = lane('template');
+    // The preview lane is the same, layer for layer, whatever the song's structure.
+    expect(templated.lane).toBe(model.lane);
+    expect(templated.lane).toContain('data-measured-layer="sections"');
+    expect(templated.lane).toContain('data-measured-layer="energy"');
+    expect(templated.lane).toContain('data-measured-layer="beats"');
+    expect(model.songLists).toBe(1);
+    expect(templated.songLists).toBe(0);
+  });
+
   it("keeps the model's sections inferred beside the measured ones", () => {
     render(
       <SmartTimeline
@@ -339,6 +552,9 @@ describe('the measured layers of the preview', () => {
     const lane = screen.getByRole('group', { name: 'Preview window (20 s, measured)' });
     expect(within(lane).getAllByRole('listitem')).toHaveLength(2);
     expect(lane.textContent).not.toMatch(/Verse|Chorus/);
+    // The model's sections are drawn, so no line says the song's were not analysed.
+    expect(timeline.querySelector('[data-structure="not-analyzed"]')).toBeNull();
+    expect(timeline.textContent).not.toContain('not analyzed');
   });
 
   it.each([

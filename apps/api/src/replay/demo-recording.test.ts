@@ -1,13 +1,15 @@
 /**
  * The committed demo recording (fixtures/replays/one-more-time-daft-punk.json) is what a
  * first-time visitor sees without any key configured. These checks pin what it is for: a run of
- * today's analyzer that shows its measured key or why the key was withheld, the release's cover
- * from the Cover Art Archive, source errors in words, web evidence without social pages, forum
- * comment threads or private handles, and the app's own messages without the prototype's copy or emoji. A recording that
- * falls short is re-recorded (npm run replay:record -w apps/api), never edited by hand.
+ * today's analyzer, recorded from a committed tree, that shows its measured key or why the key
+ * was withheld, the release's cover from the Cover Art Archive, source errors in words, web
+ * evidence without social pages, forum comment threads or private handles, and the app's own
+ * messages without the prototype's copy or emoji. A recording that falls short is re-recorded
+ * (npm run replay:record -w apps/api), never edited by hand.
  */
 
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analysisIssues, ReplayRecord } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
@@ -15,7 +17,7 @@ import { reasonIssue } from "../sources/http.js";
 import { isSocialPage, webPageIssue, webTextIssue } from "../sources/search.js";
 import { ARCHIVE_FRONT, archiveCoverOf } from "./cover.js";
 import { leaks, publicTextsOf } from "./recorder.js";
-import { DEFAULT_REPLAY_DIR } from "./records.js";
+import { DEFAULT_REPLAY_DIR, loadReplays } from "./records.js";
 
 const record = ReplayRecord.parse(
   JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "one-more-time-daft-punk.json"), "utf8")),
@@ -51,11 +53,68 @@ const atLeast23 = (version: [number, number] | null) =>
 
 const webEvidence = (analysis.evidence ?? []).filter((item) => item.sourceTier === "web");
 
+/**
+ * The recordings in `dir` that do not name the clean commit that made them (no commit, or one
+ * marked "-dirty"), and the files that could not be loaded at all, as "<slug or file>: why".
+ */
+function uncleanRecordings(dir: string): string[] {
+  const set = loadReplays(dir);
+  return [
+    ...set.problems,
+    ...set.records.flatMap((r) =>
+      r.commit === null || r.commit === undefined || r.commit.trim() === ""
+        ? [`${r.slug}: no commit`]
+        : r.commit.endsWith("-dirty")
+          ? [`${r.slug}: recorded from uncommitted changes (${r.commit})`]
+          : [],
+    ),
+  ];
+}
+
+describe("every committed recording", () => {
+  it("loads, and names the clean commit that made it", () => {
+    expect(loadReplays(DEFAULT_REPLAY_DIR).records.length).toBeGreaterThan(0);
+    expect(uncleanRecordings(DEFAULT_REPLAY_DIR)).toEqual([]);
+  });
+
+  it("is checked one by one: a second recording stamped -dirty fails the check", () => {
+    const dir = mkdtempSync(join(tmpdir(), "recordings-"));
+    try {
+      const file = "one-more-time-daft-punk.json";
+      copyFileSync(join(DEFAULT_REPLAY_DIR, file), join(dir, file));
+      expect(uncleanRecordings(dir)).toEqual([]);
+      // Another track's recording (the showcase under another id, title and slug), made from a
+      // working tree with uncommitted changes, as replay:record --allow-dirty stamps it.
+      const text = readFileSync(join(DEFAULT_REPLAY_DIR, file), "utf8");
+      const commit = record.commit as string;
+      writeFileSync(
+        join(dir, "second-showcase.json"),
+        text
+          .replaceAll(record.analysis.id, "0SecondShowcaseTrack00")
+          .replaceAll(record.slug, "second-showcase")
+          .replaceAll(record.analysis.title, "Second Showcase")
+          .replaceAll(`"${commit}"`, `"${commit}-dirty"`),
+      );
+      expect(loadReplays(dir).records).toHaveLength(2);
+      expect(uncleanRecordings(dir)).toEqual([
+        `second-showcase: recorded from uncommitted changes (${commit}-dirty)`,
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the demo recording (one-more-time-daft-punk)", () => {
   it("was measured by analyzer 2.3 or later", () => {
     expect(record.analyzerVersion).not.toBeNull();
     expect(atLeast23(versionOf(record.analyzerVersion))).toBe(true);
     expect(analysis.audio?.analyzerVersion).toBe(record.analyzerVersion);
+  });
+
+  it("was recorded from a committed tree, so its commit names the code that made it", () => {
+    expect(record.commit).not.toBeNull();
+    expect(record.commit).not.toMatch(/-dirty$/);
   });
 
   it("shows the tempo measured from the signal, and copies of measured values that match it", () => {

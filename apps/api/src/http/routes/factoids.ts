@@ -1,7 +1,6 @@
 /**
  * "More facts" for a track: POST /api/factoids/more (three at once) and
- * GET /api/factoids/more/stream (one per category, as server-sent events). Their old paths
- * (DEPRECATED_FACTOIDS_PATH, ./factoidPaths.ts) answer the same for one more release.
+ * GET /api/factoids/more/stream (one per category, as server-sent events).
  *
  * Live facts are written and checked by the factoid service (../../factoids/service.ts): one
  * model call per focus through the provider layer, all in one request run (at most
@@ -46,12 +45,7 @@ import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
-import {
-  DEPRECATED_FACTOIDS_PATH,
-  DEPRECATED_FACTOIDS_STREAM_PATH,
-  FACTOIDS_PATH,
-  FACTOIDS_STREAM_PATH,
-} from "./factoidPaths.js";
+import { FACTOIDS_PATH, FACTOIDS_STREAM_PATH } from "./factoidPaths.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Factoids");
@@ -237,7 +231,7 @@ export function createFactoidsRouter({
   /**
    * Generate additional obscure facts for a track
    *
-   * POST /api/factoids/more (deprecated alias: DEPRECATED_FACTOIDS_PATH, until the next release)
+   * POST /api/factoids/more
    * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...",
    *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1 }
    * Returns: { factoids: Factoid[], claims: Claim[], nextRound, roundsLeft } - up to 3 new facts
@@ -265,7 +259,7 @@ export function createFactoidsRouter({
    * each call sends.
    */
   router.post(
-    [FACTOIDS_PATH, DEPRECATED_FACTOIDS_PATH],
+    FACTOIDS_PATH,
     asyncRoute(async (req, res) => {
       const parsed = DecryptBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -360,11 +354,8 @@ export function createFactoidsRouter({
   // GET /api/factoids/more/stream
   // =============================================================================
 
-  // The stream's paths: the new one, and the old one for one more release.
-  const streamPaths = [FACTOIDS_STREAM_PATH, DEPRECATED_FACTOIDS_STREAM_PATH];
-
   // HEAD gets the stream's headers only; it never asks the model.
-  router.head(streamPaths, eventStreamHead);
+  router.head(FACTOIDS_STREAM_PATH, eventStreamHead);
 
   /**
    * Stream factoids via SSE, each with its checked claim
@@ -403,7 +394,7 @@ export function createFactoidsRouter({
    * the client disconnects, the calls in flight are stopped and nothing more is written.
    */
   router.get(
-    streamPaths,
+    FACTOIDS_STREAM_PATH,
     asyncRoute(async (req, res) => {
       const parsed = StreamQuerySchema.safeParse(req.query);
       // Read before the stream opens: its envelope names the run only when the facts use it.

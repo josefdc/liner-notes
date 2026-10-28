@@ -331,7 +331,7 @@ export const TrackDataSchema = z.object({
     .enum(["template", "inferred"])
     .optional()
     .describe(
-      "Where the segments come from: 'template' = a generic default structure, 'inferred' = generated from genre conventions. Neither is measured from the audio.",
+      "Where the segments come from: 'template' = a generic default structure, not drawn by the web; 'inferred' = written by the model, drawn as inferred. Neither is measured from the audio.",
     ),
 
   // Sample history

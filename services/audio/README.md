@@ -47,6 +47,72 @@ download fails or times out, the service starts anyway without perceptual featur
 In the full stack the service is built and started by `deploy/compose.prod.yml` (`audio`),
 with the models on a volume and no published port.
 
+#### Image size
+
+The image has a budget of 1.5 GB: 1 500 000 000 bytes of unpacked layers. The `docker` workflow's
+"Check the audio image" step prints the measured size and the budget, and fails when the image is
+over it, when it cannot read the sizes, or when the budget is not a whole number of bytes. It runs
+after the step's other checks, so an image that is both broken and too large reports both. The
+budget is `AUDIO_IMAGE_BUDGET` in `.github/workflows/docker.yml`. The API image is checked the same
+way against `API_IMAGE_BUDGET` (490 000 000 bytes) in "Check the API image", and its figures are
+kept here too.
+
+The check sums the sizes of the image's layers as `docker history -H=false` prints them, in bytes,
+which is what the layers take unpacked. That counts the same files on every Docker image store, but
+not the same bytes: the containerd image store (the default on a new Docker 29 install) rounds each
+file up to whole disk blocks, and the overlay2 store (GitHub's `ubuntu-24.04` runner, Docker 28)
+does not. The audio image therefore measures about 3 % more on containerd than on overlay2, and the
+API image, with many small files, about 15 % more. A difference of that size between two stores is
+not growth. Each budget has to pass on both. The size `docker image inspect` reports differs more:
+the containerd store adds the compressed layers to it, and the overlay2 store reports the unpacked
+layers alone.
+
+The reference measurements, all of images built at commit cfd80a8:
+
+| Measure | containerd store | overlay2 store |
+| --- | --- | --- |
+| Audio: unpacked layers (what the check sums) | 1 287 974 912 bytes (1.29 GB) | 1 254 570 996 bytes (1.25 GB) |
+| Audio: budget above that | about 16 % | about 20 % |
+| Audio: virtual environment layer | 1 156 431 872 bytes (1.16 GB) | 1 134 725 325 bytes (1.13 GB) |
+| Audio: `docker image inspect` | 1 783 716 776 bytes (1.78 GB) | 1 254 570 996 bytes (1.25 GB) |
+| API: unpacked layers (what the check sums) | 388 505 600 bytes (389 MB) | 336 484 899 bytes (336 MB) |
+| API: budget above that | about 26 % | about 46 % |
+
+With the containerd store, `docker image inspect` reported 2.48 GB for the single-stage audio image
+before this one.
+
+Almost all of the image is the virtual environment: 1.13 GB of files (`du -sb /app/.venv`, the
+same on both stores). The largest packages in its `site-packages`, also by `du -sb`:
+
+| Package | Size | Why it is there |
+| --- | --- | --- |
+| `essentia_tensorflow.libs` | 601 MB | The TensorFlow runtime bundled in the `essentia-tensorflow` wheel (the `models` extra), which runs the models for the fingerprint. |
+| `llvmlite` | 169 MB | The LLVM that `numba` compiles with; `librosa` requires `numba`. |
+| `scipy`, `scipy.libs` | 112 MB, 31 MB | Used by the estimators and the signal features, and required by `librosa`. |
+| `sklearn` | 45 MB | Required by `librosa`. |
+| `essentia` | 41 MB | Essentia's own algorithms, from the same wheel. |
+| `numpy`, `numpy.libs` | 41 MB, 28 MB | Everything above. |
+| `numba` | 30 MB | Required by `librosa`. |
+
+The rest is the `python:3.12.15-slim-trixie` base (about 131 MB on the containerd store) and the
+service's own files (0.4 MB). To measure a build the same way:
+
+```bash
+docker history -H=false --format '{{.Size}}' liner-notes-audio:latest | awk '{s += $1} END {printf "%.0f\n", s}'
+docker history liner-notes-audio:latest
+docker run --rm --entrypoint sh liner-notes-audio:latest -c \
+  'du -sb /app/.venv; cd /app/.venv/lib/python3.12/site-packages && du -sb * | sort -rn | head'
+```
+
+When the check fails, compare those numbers with the ones above for the same store to find what
+grew. The "Docker info" group of the `setup-buildx-action` step shows the runner's store under
+`Storage Driver`: `overlay2` for the overlay2 store, and `overlayfs` with `driver-type:
+io.containerd.snapshotter.v1` for the containerd store. The growth is usually a new or upgraded
+dependency in `uv.lock`, or files in the build context that `.dockerignore` should leave out.
+Remove it if the service does not need it. If it does, raise the budget in
+`.github/workflows/docker.yml` and update the figures in this section in the same change, with the
+commit they were measured at and the reason.
+
 ## Configuration
 
 All settings are optional environment variables.

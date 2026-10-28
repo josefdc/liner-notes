@@ -86,12 +86,15 @@ test("the recorded run credits MusicBrainz, its cover's archive, Spotify and Dee
     await expect(link).toHaveAttribute("target", "_blank");
     await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   }
-  // Each claim keeps its own source link beside it.
-  await expect(
-    page
-      .getByRole("region", { name: "Samples and covers" })
-      .locator('a[data-source="musicbrainz"]'),
-  ).toHaveCount(1);
+  // Each claim keeps its own source link beside it: one MusicBrainz link per listed claim.
+  const listedClaims = page
+    .getByRole("region", { name: "Samples and covers" })
+    .getByRole("listitem")
+    .filter({ has: page.locator(":scope > p") });
+  await expect(listedClaims).toHaveCount(16);
+  for (const claim of await listedClaims.all()) {
+    await expect(claim.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
+  }
   // A replayed result says it is a recording.
   await expect(page.getByLabel("Recorded run").first()).toContainText("Recorded run");
   expect(problems).toEqual([]);

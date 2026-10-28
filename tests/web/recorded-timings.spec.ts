@@ -87,8 +87,8 @@ test("the committed recording replays with each line at the time its recording m
   const entries = page.getByRole("region", { name: "Activity log entries" });
   const timeOf = (message: string) =>
     entries.locator("[data-log-code]", { hasText: message }).locator("[data-log-time]");
-  await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+19.6 s");
-  await expect(timeOf("Writing the liner notes")).toHaveText("+13.8 s");
+  await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+28.7 s");
+  await expect(timeOf("Writing the liner notes")).toHaveText("+18.0 s");
   await expect(entries).not.toContainText("Just now");
   await expect(entries).not.toContainText(/\bago\b/);
   expect(problems).toEqual([]);
@@ -117,8 +117,8 @@ test("the progress log shows a replayed line's recorded time, and no time withou
   const log = page.getByRole("log");
   const timeOf = (message: string) =>
     log.locator("[data-log-id]", { hasText: message }).locator("[data-log-time]");
-  await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+19.6 s");
-  await expect(timeOf("Reading the track from Spotify")).toHaveText("+0.0 s");
+  await expect(timeOf("Looking up cover art on Spotify for the genealogy")).toHaveText("+28.7 s");
+  await expect(timeOf("Searching Spotify")).toHaveText("+0.0 s");
   // The page's own line has no recorded time: it shows none, never the viewer's clock.
   await expect(log.locator("[data-log-id]", { hasText: "Searching for" })).toBeVisible();
   await expect(timeOf("Searching for")).toHaveCount(0);

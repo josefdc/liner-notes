@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { type Claim, FactoidsOutput, FactoidsResponse } from "@liner-notes/contract";
 import type { Router } from "express";
 import { FACTOIDS_SYSTEM_PROMPT } from "../../factoids/prompt.js";
+import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
@@ -700,7 +701,8 @@ describe("each fact's claim", () => {
       data: { claimId: string };
       claim: Claim;
     }>;
-    expect(streamed).toHaveLength(record.analysis.factoids.length);
+    // At most one request's worth: the recording may hold more facts than one request serves.
+    expect(streamed).toHaveLength(Math.min(record.analysis.factoids.length, FACTOIDS_PER_REQUEST));
     for (const { data, claim } of streamed) {
       expect(claim).toEqual(recordedClaim(data.claimId));
     }
@@ -807,75 +809,23 @@ describe("each fact's claim", () => {
 // The old paths
 // =============================================================================
 
-describe("the routes' old paths (deprecated aliases)", () => {
-  const PACK = [evidenceItem("ev-1", "Recorded with a Roland Juno-106.")];
-  /** A router whose model writes the same facts for every request, checked against PACK. */
-  const sameEveryTime = () =>
-    createFactoidsRouter({
-      llm: fakeModel({
-        cards: [card("The synth line was played on a Roland Juno-106.", ["ev-1"]), null, null],
-        judge: () => "supported",
-      }),
-      loadRun: (id) => (id === RUN_ID ? storedRun(PACK) : null),
-    });
-  /** An answer without the times it was sent at. */
-  const untimed = (value: unknown): unknown =>
-    JSON.parse(JSON.stringify(value), (key, field) => (key === "timestamp" ? undefined : field));
+describe("the routes' old paths", () => {
+  it("answer 404 and do not call the model", async () => {
+    model.invoke.mockResolvedValue(answer("a"));
+    const server = app();
+    const stream = await request(server)
+      .get(withRunToken(`/api/factoids/decrypt/stream?${QUERY}`))
+      .timeout(2000);
+    const head = await request(server)
+      .head(withRunToken(`/api/factoids/decrypt/stream?${QUERY}`))
+      .timeout(2000);
+    const post = await request(server)
+      .post(withRunToken("/api/factoids/decrypt"))
+      .send(DEMO_TRACK)
+      .timeout(2000);
 
-  it("answers a POST exactly as the new path does", async () => {
-    const body = { ...DEMO_TRACK, runId: RUN_ID, round: 0 };
-    const answers = [];
-    for (const path of ["/api/factoids/more", "/api/factoids/decrypt"]) {
-      const res = await request(createTestApp(sameEveryTime()))
-        .post(withRunToken(path))
-        .send(body)
-        .timeout(5000);
-      const invalid = await request(app()).post(withRunToken(path)).send({}).timeout(2000);
-      answers.push({ status: res.status, body: untimed(res.body), invalid: invalid.body });
-    }
-
-    expect(answers[0].status).toBe(200);
-    expect((answers[0].body as { claims: Claim[] }).claims).toHaveLength(1);
-    expect(answers[1]).toEqual(answers[0]);
+    expect([stream.status, head.status, post.status]).toEqual([404, 404, 404]);
+    expect(stream.headers["content-type"]).not.toContain("text/event-stream");
+    expect(model.invoke).not.toHaveBeenCalled();
   });
-
-  it("answers the stream exactly as the new path does", async () => {
-    const query = new URLSearchParams({
-      trackTitle: DEMO_TRACK.trackTitle,
-      trackArtist: DEMO_TRACK.trackArtist,
-      runId: RUN_ID,
-      round: "0",
-    }).toString();
-    const answers = [];
-    for (const path of ["/api/factoids/more/stream", "/api/factoids/decrypt/stream"]) {
-      const stream = await openStream(query, sameEveryTime(), path);
-      expect([path, stream.status]).toEqual([path, 200]);
-      await stream.waitFor(ofType("done"));
-      answers.push({ status: stream.status, messages: untimed(stream.messages) });
-    }
-
-    expect(answers[0].messages).toEqual([
-      expect.objectContaining({ type: "connected", runId: RUN_ID, nextRound: 1 }),
-      expect.objectContaining({
-        type: "factoid",
-        claim: expect.objectContaining({ kind: "sourced" }),
-      }),
-      expect.objectContaining({ type: "done" }),
-    ]);
-    expect(answers[1]).toEqual(answers[0]);
-  });
-
-  it.each(["/api/factoids/more/stream", "/api/factoids/decrypt/stream"])(
-    "answers HEAD on %s with the stream headers only, and does not call the model",
-    async (path) => {
-      model.invoke.mockResolvedValue(answer("a"));
-      const res = await request(app()).head(`${path}?${QUERY}`).timeout(2000);
-
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toContain("text/event-stream");
-      expect(res.text ?? "").toBe("");
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(model.invoke).not.toHaveBeenCalled();
-    },
-  );
 });

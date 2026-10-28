@@ -1,8 +1,8 @@
 import type React from 'react';
 import {
   Component,
+  type ContextType,
   createRef,
-  lazy,
   Suspense,
   useEffect,
   useLayoutEffect,
@@ -26,20 +26,34 @@ import { TrackPicker } from './search/TrackPicker';
 import { ANALYZING_STATUSES } from './console/progress';
 import { ProgressScreen, type ShownTrack } from './ProgressScreen';
 import { spokenWait, useTimeLeft, waitText } from '../hooks/useTimeLeft';
+import { LoadAttempt, lazyWithRetry } from '../utils/lazyWithRetry';
 
-// Loaded only when live analysis turns out to be unavailable.
-const BudgetBanner = lazy(() => import('./BudgetBanner'));
+// Loaded only when live analysis turns out to be unavailable; loaded again on "Try again" when
+// its code failed.
+const BudgetBanner = lazyWithRetry(() => import('./BudgetBanner'));
 
 /**
  * Shows the paused-analysis banner, or, when its code cannot be loaded (a page older than the
  * deployed version, a dropped connection), the same explanation in plain text: never an empty
- * page in the state the banner exists for.
+ * page in the state the banner exists for. "Try again" loads the banner's code again.
  */
 class BannerBoundary extends Component<
   { code: LiveUnavailableCode; children: React.ReactNode },
-  { failed: boolean }
+  { failed: boolean; attempt: object }
 > {
-  state = { failed: false };
+  static contextType = LoadAttempt;
+  state: { failed: boolean; attempt: object };
+
+  constructor(
+    props: { code: LiveUnavailableCode; children: React.ReactNode },
+    attempt: ContextType<typeof LoadAttempt>,
+  ) {
+    super(props);
+    // The banner's load attempt (utils/lazyWithRetry.ts): at first the one around it (the
+    // screen boundary's, as in ErrorBoundary.tsx), and a new one on each "Try again".
+    this.state = { failed: false, attempt };
+  }
+
   // The explanation's heading takes the focus, as the banner's does: the view that had it is
   // gone.
   private headingRef = createRef<HTMLHeadingElement>();
@@ -56,8 +70,17 @@ class BannerBoundary extends Component<
     if (this.state.failed && !previous.failed) this.headingRef.current?.focus();
   }
 
+  // The banner's loading line takes the focus while its code loads again (BannerLoading).
+  private retry = () => this.setState({ failed: false, attempt: {} });
+
   render() {
-    if (!this.state.failed) return this.props.children;
+    if (!this.state.failed) {
+      return (
+        <LoadAttempt.Provider value={this.state.attempt}>
+          {this.props.children}
+        </LoadAttempt.Provider>
+      );
+    }
     const { title, text } = LIVE_UNAVAILABLE_COPY[this.props.code];
     return (
       <section
@@ -75,9 +98,12 @@ class BannerBoundary extends Component<
           <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
         </div>
         <p className="text-text-tertiary text-xs font-mono">
-          The recorded tracks could not be loaded. Reload the page to see them.
+          The recorded tracks could not be loaded. Try again, or reload the page to see them.
         </p>
-        <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button variant="neutral" size="md" onClick={this.retry}>
+            Try again
+          </Button>
           <Button
             variant="neutral"
             size="md"

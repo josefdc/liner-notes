@@ -1802,10 +1802,10 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # tierce is a minor third over the hum: two notes a third apart, as in a chord); three cowbells
 # whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
 # harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
-# with its own envelope, alone or over a kit) and tabla whose strokes alternate partials, which
-# do not move together; and a tubular bell, whose modes hold still and move together but spell
-# three or more pitch classes, as a chord's notes do, and have no harmonics among them, as the
-# notes of a chord in a soft timbre or struck on bars have none (test_chords_keep_the_key...).
+# with its own envelope, alone or over a kit) and tabla, whose lines mostly move apart, and
+# where they hold still (tabla 504, 516, 520; kit toms 515) spell a chord; and a tubular bell,
+# whose modes hold still and move together but spell three or more pitch classes, as a chord's
+# notes do.
 # Seeds 600-629 are an evaluation set (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
     ("one-note-bass", "essentia"): {500, 501},
@@ -1892,27 +1892,96 @@ def one_source_withheld(signals_: estimators.Signals) -> bool:
     return withheld is not None and withheld.code == "one_pitched_source"
 
 
+def test_one_source_withheld_sees_the_single_source_rule():
+    """The guards below rest on this helper: it sees a cowbell's key withheld, not a chord's."""
+    assert one_source_withheld(estimators.Signals(signals.seeded_cowbell(500), FIXTURE_SR))
+    y, _ = signals.seeded_faded_pad(700)
+    assert not one_source_withheld(estimators.Signals(y, FIXTURE_SR))
+
+
+# The chord families' keys that the service withholds at seeds 700-729, by any rule, with the
+# rule's code (estimator-independent: Signals.key_withheld). None is the single-source rule's;
+# the earlier rules withhold them as one held pitch, one harmonic series or, for two one-bar
+# riffs, speech. Pinned exactly, so a rule that takes a chord's key under any code, new or old,
+# fails here.
+CHORD_WITHHELD = {
+    "faded-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "swelling-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "crescendo-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "tremolo-pad": {**dict.fromkeys((716, 728), "one_held_pitch")},
+    "pumped-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((709, 716, 728), "one_held_pitch"),
+    },
+    "c-major-stabs": {},
+    "one-chord-riff": {
+        **dict.fromkeys(
+            (
+                700,
+                701,
+                702,
+                703,
+                704,
+                705,
+                707,
+                708,
+                709,
+                710,
+                711,
+                712,
+                713,
+                715,
+                716,
+                717,
+                722,
+                724,
+                725,
+                727,
+                728,
+                729,
+            ),
+            "one_held_pitch",
+        )
+    },
+    "one-bar-riff": {**dict.fromkeys((726, 727), "speech_like")},
+    "soft-chord": {
+        **dict.fromkeys((704, 708, 710, 716, 718, 722, 726), "one_held_pitch"),
+        **dict.fromkeys((709,), "one_harmonic_series"),
+    },
+    "mallet-chord": {**dict.fromkeys((710, 714, 718, 722, 724), "one_held_pitch")},
+}
+
+
 @pytest.mark.seeded
 @pytest.mark.parametrize("family", signals.CHORD_KEYED_SEEDED)
 def test_chords_keep_the_key_the_other_rules_give_them(family):
     """
     Held chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs,
-    a bass and chord riff on one chord, one-bar riffs, and triads in soft timbres (an electric
-    piano, a flute, an FM electric piano, a triangle wave) or struck on bars, whose overtones
-    are 17-30 dB down or not harmonics at all (signals.CHORD_KEYED_SEEDED, seeds 700-729): many
-    hold still and move together, but their lines spell a chord, so the single-source rule
-    withholds none of their keys, and what the other rules decide is left as analyzer 2.1.0
-    had it.
+    a bass and chord riff on one chord, one-bar riffs, triads in soft timbres (an electric
+    piano, a flute, an FM electric piano, a triangle wave) and triads struck on bars
+    (signals.CHORD_KEYED_SEEDED, seeds 700-729): many hold still and move together, but their
+    lines spell a chord, so the single-source rule withholds none of their keys. Every key
+    that is withheld is withheld as pinned in CHORD_WITHHELD, by the same rule.
     """
     make = signals.CHORD_KEYED_SEEDED[family]
-    fired, still = [], 0
+    withheld, still = {}, 0
     for seed in signals.CHORD_KEYED_SEEDS:
         y, _ = make(seed)
         signals_ = estimators.Signals(y, FIXTURE_SR)
         still += signals_.source_evidence.still
-        if one_source_withheld(signals_):
-            fired.append(seed)
-    assert fired == []
+        reason = signals_.key_withheld()
+        if reason is not None:
+            withheld[seed] = reason.code
+    assert withheld == CHORD_WITHHELD[family]
     if family != "one-bar-riff":  # its chords change within a bar: the lines move
         assert still > 0  # the notes test, not time, keeps these keys
 

@@ -894,15 +894,26 @@ def seeded_one_bar_riff(seed: int):
     return y, (PITCH_NAMES[root], "major")
 
 
-# Chords in soft timbres: overtones 17-30 dB under each note (an electric piano, a flute, an FM
-# electric piano, a triangle wave) or the inharmonic modes of a struck bar (a mallet: an untuned
-# bar, 1 : 3.9 : 9.2, or a glockenspiel, 1 : 2.71 : 5.15). (ratio, level) of each partial.
+# Chords in soft timbres: an electric piano and a flute (2nd and 3rd harmonics 22-30 dB down),
+# an FM electric piano (its 2nd harmonic 7-16 dB down at each attack, then fading) and a
+# triangle wave (odd harmonics at 1/k^2: the 3rd 19 dB down, the 7th 34 dB); and chords struck
+# on bars, whose partials are not harmonics: a tuned, marimba-like bar (1 : 3.9 : 9.2) or a
+# glockenspiel (1 : 2.71 : 5.15). (ratio, level) of each partial. Each family draws from its own
+# seed stream, so its chords are not the other families' chords at the same seed.
 _SOFT_TIMBRES = {
     "e-piano": [(1, 1.0), (2, 0.08), (3, 0.03)],
     "flute": [(1, 1.0), (2, 0.06), (3, 0.03)],
     "triangle": [(k, 1.0 / k**2) for k in (1, 3, 5, 7)],
 }
-_BARS = ([(1, 1.0), (3.9, 0.25), (9.2, 0.08)], [(1, 1.0), (2.71, 0.2), (5.15, 0.05)])
+_BARS = {
+    "marimba-like bar": [(1, 1.0), (3.9, 0.25), (9.2, 0.08)],
+    "glockenspiel": [(1, 1.0), (2.71, 0.2), (5.15, 0.05)],
+}
+_CHORD_STREAMS = {"soft-chord": 1, "mallet-chord": 2}
+
+
+def _chord_rng(family: str, seed: int) -> np.random.Generator:
+    return np.random.default_rng([seed, _CHORD_STREAMS[family]])
 
 
 def _fm_tone(f: float, t: np.ndarray, index: float) -> np.ndarray:
@@ -910,85 +921,85 @@ def _fm_tone(f: float, t: np.ndarray, index: float) -> np.ndarray:
     return np.sin(2 * np.pi * f * t + index * np.exp(-t / 0.3) * np.sin(2 * np.pi * f * t))
 
 
-def _soft_chord(seed: int, timbre: str):
-    """
-    A triad in a soft timbre (root doubled an octave down on even seeds), held, with tremolo,
-    pumped by a 128 BPM sidechain or struck on the beat, a third of the seeds over drums.
-    """
-    rng = np.random.default_rng(seed)
+def _repeated(sound: np.ndarray, period: float) -> np.ndarray:
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, period):
+        place(y, float(start), sound)
+    return y
+
+
+def _maybe_over_drums(y: np.ndarray, seed: int, rng: np.random.Generator) -> np.ndarray:
+    """Over drums on a third of the seeds."""
+    return _with_drums(y, seed) if rng.uniform() < 1 / 3 else normalise(y)
+
+
+def _seed_triad(rng: np.random.Generator, seed: int) -> tuple[list[int], int, str]:
+    """A triad at C3-B4 (root doubled an octave down on even seeds), with its root and mode."""
     root, mode = _key_draw(rng)
     notes = _triad(root, mode, (48, 60)[int(rng.integers(0, 2))])
     if seed % 2 == 0:
         notes = notes + [notes[0] - 12]
+    return notes, root, mode
+
+
+def seeded_soft_chord(seed: int):
+    """
+    A triad on an electric piano, of flute-like tones, on an FM electric piano or of triangle
+    waves (drawn from the seed), held, with tremolo, pumped by a 128 BPM sidechain or struck on
+    the beat.
+    """
+    rng = _chord_rng("soft-chord", seed)
+    notes, root, mode = _seed_triad(rng, seed)
+    timbre = ("e-piano", "flute", "fm-e-piano", "triangle")[int(rng.integers(0, 4))]
     shape = ("held", "tremolo", "pumped", "struck")[int(rng.integers(0, 4))]
     bpm = float(rng.uniform(100.0, 130.0))
-    length = 30.0 if shape != "struck" else 60.0 / bpm
+    length = 60.0 / bpm if shape == "struck" else 30.0
     t = seconds_of(length)
     if timbre == "fm-e-piano":
         index = float(rng.uniform(0.3, 0.8))
-        sound = sum(_fm_tone(hz(m), t, index) for m in notes)
-    elif timbre == "mallet":
-        bar = _BARS[int(rng.integers(0, 2))]
-        decay = float(rng.uniform(0.3, 0.8))
-        sound = sum(
-            w * np.sin(2 * np.pi * hz(m) * r * t) * np.exp(-t * r / decay)
-            for m in notes
-            for r, w in bar
-            if hz(m) * r < 5000
-        )
+        y = sum(_fm_tone(hz(m), t, index) for m in notes)
     else:
-        sound = sum(
+        y = sum(
             w * np.sin(2 * np.pi * hz(m) * r * t)
             for m in notes
             for r, w in _SOFT_TIMBRES[timbre]
             if hz(m) * r < 5000
         )
-    if shape == "struck" or timbre == "mallet":
-        decay = float(rng.uniform(0.15, 0.5))
-        sound = sound * np.exp(-t / decay) * np.minimum(1, t / 0.004)
-        if shape != "struck":  # a mallet roll: the chord struck on every sixteenth
-            length, t = 15.0 / bpm, seconds_of(15.0 / bpm)
-            sound = sound[: t.size] * np.minimum(1, (length - t) / 0.01)
-        y = np.zeros(30 * SR)
-        for start in np.arange(0.0, 30.0, length):
-            place(y, float(start), sound)
+    if shape == "struck":
+        decay = rng.uniform(0.15, 0.5)
+        y = y * np.exp(-t / decay) * np.minimum(1, t / 0.004) * np.minimum(1, (length - t) / 0.01)
+        y = _repeated(y, length)
     else:
-        y = sound * np.minimum(1, t / 0.05) * np.minimum(1, (30 - t) / 0.05)
+        y = y * np.minimum(1, t / 0.05) * np.minimum(1, (30 - t) / 0.05)
         if shape == "tremolo":
             depth = rng.uniform(0.4, 0.6)
             y = y * (1 - depth * (0.5 + 0.5 * np.sin(2 * np.pi * rng.uniform(5.5, 6.5) * t)))
         elif shape == "pumped":
             beat = 60.0 / 128.0
             y = y * (1 - rng.uniform(0.7, 0.9) * np.exp(-(t % beat) / rng.uniform(0.08, 0.15)))
-    key = (PITCH_NAMES[root], mode)
-    if rng.uniform() < 1 / 3:
-        return _with_drums(y, seed), key
-    return normalise(y), key
-
-
-def seeded_e_piano_chord(seed: int):
-    """A triad on an electric piano (2nd and 3rd harmonics 22 and 30 dB down)."""
-    return _soft_chord(seed, "e-piano")
-
-
-def seeded_flute_chord(seed: int):
-    """A triad of flute-like tones (2nd and 3rd harmonics 24 and 30 dB down)."""
-    return _soft_chord(seed, "flute")
-
-
-def seeded_fm_e_piano_chord(seed: int):
-    """A triad on an FM electric piano (index 0.3-0.8, decaying)."""
-    return _soft_chord(seed, "fm-e-piano")
-
-
-def seeded_triangle_chord(seed: int):
-    """A triad of triangle waves (odd harmonics at 1/k^2: the 3rd 19 dB down)."""
-    return _soft_chord(seed, "triangle")
+    return _maybe_over_drums(y, seed, rng), (PITCH_NAMES[root], mode)
 
 
 def seeded_mallet_chord(seed: int):
-    """A triad struck on bars (an untuned bar or a glockenspiel): stabs on the beat or a roll."""
-    return _soft_chord(seed, "mallet")
+    """
+    A triad struck on bars (a marimba-like bar or a glockenspiel, drawn from the seed): stabs
+    on the beat or a roll on sixteenths, each mode dying away faster the higher it is.
+    """
+    rng = _chord_rng("mallet-chord", seed)
+    notes, root, mode = _seed_triad(rng, seed)
+    bar = _BARS[("marimba-like bar", "glockenspiel")[int(rng.integers(0, 2))]]
+    bpm = float(rng.uniform(100.0, 130.0))
+    length = (60.0 if rng.uniform() < 0.5 else 15.0) / bpm
+    decay = float(rng.uniform(0.3, 0.8))
+    t = seconds_of(length)
+    sound = sum(
+        w * np.sin(2 * np.pi * hz(m) * r * t) * np.exp(-t * r / decay)
+        for m in notes
+        for r, w in bar
+        if hz(m) * r < 5000
+    )
+    sound = sound * np.minimum(1, t / 0.004) * np.minimum(1, (length - t) / 0.01)
+    return _maybe_over_drums(_repeated(sound, length), seed, rng), (PITCH_NAMES[root], mode)
 
 
 CHORD_KEYED_SEEDED = {
@@ -1000,10 +1011,7 @@ CHORD_KEYED_SEEDED = {
     "c-major-stabs": seeded_c_major_stabs,
     "one-chord-riff": seeded_one_chord_riff,
     "one-bar-riff": seeded_one_bar_riff,
-    "e-piano-chord": seeded_e_piano_chord,
-    "flute-chord": seeded_flute_chord,
-    "fm-e-piano-chord": seeded_fm_e_piano_chord,
-    "triangle-chord": seeded_triangle_chord,
+    "soft-chord": seeded_soft_chord,
     "mallet-chord": seeded_mallet_chord,
 }
 CHORD_KEYED_SEEDS = range(700, 730)
@@ -1156,6 +1164,9 @@ def chord_key(family: str, seed: int) -> tuple[str, str]:
     """The key of CHORD_KEYED_SEEDED[family](seed), without making the signal."""
     if family == "c-major-stabs":
         return ("C", "major")
+    if family in _CHORD_STREAMS:
+        root, mode = _key_draw(_chord_rng(family, seed))
+        return (PITCH_NAMES[root], mode)
     rng = np.random.default_rng(seed)
     if family == "one-bar-riff":
         return (PITCH_NAMES[_key_draw(rng, "major")[0]], "major")

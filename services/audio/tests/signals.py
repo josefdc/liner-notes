@@ -655,6 +655,23 @@ def seeded_synth_note(seed: int) -> np.ndarray:
     return normalise(_db(y, -3.0) + _db(_drums_at(seed), 0.0))
 
 
+# Families added after the others draw from streams of their own, so that a seed's draws (key,
+# pitch, tempo, pattern; for kit toms and the tubular bell, the drum kit too) are not those of
+# another family at the same seed. Stream 0 is never used: default_rng([seed, 0]) draws exactly
+# as default_rng(seed), the generator of every family above.
+_STREAMS = {"soft-chord": 1, "mallet-chord": 2, "kit-toms": 3, "tubular-bell": 4}
+assert 0 not in _STREAMS.values()
+
+
+def _stream_rng(family: str, seed: int) -> np.random.Generator:
+    return np.random.default_rng([seed, _STREAMS[family]])
+
+
+def _stream_drums(rng: np.random.Generator, bpm: float | None = None) -> np.ndarray:
+    """A drum kit drawn from a family's own stream (_drums_at draws from the seed itself)."""
+    return _drums_at(int(rng.integers(1 << 16)), bpm)
+
+
 # Circular-membrane modes over the fundamental (zeros of the Bessel functions) and their levels.
 MEMBRANE_MODES = ((1.0, 1.0), (1.594, 0.45), (2.136, 0.3), (2.296, 0.2), (2.653, 0.12))
 
@@ -671,8 +688,9 @@ def _membrane(f0: float, drop: float, decay: float, rng, seconds: float = 0.8) -
 
 def seeded_kit_toms(seed: int) -> np.ndarray:
     """Two rack toms and a floor tom (pitch falling 4-12 % per stroke) over a drum kit."""
-    rng = np.random.default_rng(seed)
+    rng = _stream_rng("kit-toms", seed)
     bpm = float(rng.uniform(90.0, 140.0))
+    drums = _stream_drums(rng, bpm)
     floor = float(rng.uniform(70.0, 110.0))
     racks = sorted(rng.uniform(140.0, 280.0, 2))
     toms = [
@@ -684,7 +702,7 @@ def seeded_kit_toms(seed: int) -> np.ndarray:
     for n, start in enumerate(np.arange(0.0, 30.0, step)):
         if pattern[n % 16] >= 0:
             place(y, float(start), toms[pattern[n % 16]] * rng.uniform(0.7, 1.0))
-    return normalise(_db(y, 0.0) + _db(_drums_at(seed, bpm), rng.uniform(-6.0, 0.0)))
+    return normalise(_db(y, 0.0) + _db(drums, rng.uniform(-6.0, 0.0)))
 
 
 # A tubular bell (a chime): the modes of a free bar (ratio, level, decay in s). The strike note
@@ -701,7 +719,7 @@ CHIME_MODES = (
 
 def seeded_tubular_bell(seed: int) -> np.ndarray:
     """One tubular bell (strike note G3-G5) tolling every 1.5-3 s, odd seeds over drums."""
-    rng = np.random.default_rng(seed)
+    rng = _stream_rng("tubular-bell", seed)
     first = 2 * hz(float(rng.uniform(55.0, 79.0))) / CHIME_MODES[3][0]
     t = seconds_of(6.0)
     strike = sum(
@@ -714,7 +732,7 @@ def seeded_tubular_bell(seed: int) -> np.ndarray:
     for start in np.arange(0.0, 30.0, period):
         place(y, float(start), strike)
     if seed % 2:
-        return normalise(_db(y, -3.0) + _db(_drums_at(seed), 0.0))
+        return normalise(_db(y, -3.0) + _db(_stream_drums(rng), 0.0))
     return normalise(y)
 
 
@@ -909,11 +927,6 @@ _BARS = {
     "marimba-like bar": [(1, 1.0), (3.9, 0.25), (9.2, 0.08)],
     "glockenspiel": [(1, 1.0), (2.71, 0.2), (5.15, 0.05)],
 }
-_CHORD_STREAMS = {"soft-chord": 1, "mallet-chord": 2}
-
-
-def _chord_rng(family: str, seed: int) -> np.random.Generator:
-    return np.random.default_rng([seed, _CHORD_STREAMS[family]])
 
 
 def _fm_tone(f: float, t: np.ndarray, index: float) -> np.ndarray:
@@ -948,7 +961,7 @@ def seeded_soft_chord(seed: int):
     waves (drawn from the seed), held, with tremolo, pumped by a 128 BPM sidechain or struck on
     the beat.
     """
-    rng = _chord_rng("soft-chord", seed)
+    rng = _stream_rng("soft-chord", seed)
     notes, root, mode = _seed_triad(rng, seed)
     timbre = ("e-piano", "flute", "fm-e-piano", "triangle")[int(rng.integers(0, 4))]
     shape = ("held", "tremolo", "pumped", "struck")[int(rng.integers(0, 4))]
@@ -985,7 +998,7 @@ def seeded_mallet_chord(seed: int):
     A triad struck on bars (a marimba-like bar or a glockenspiel, drawn from the seed): stabs
     on the beat or a roll on sixteenths, each mode dying away faster the higher it is.
     """
-    rng = _chord_rng("mallet-chord", seed)
+    rng = _stream_rng("mallet-chord", seed)
     notes, root, mode = _seed_triad(rng, seed)
     bar = _BARS[("marimba-like bar", "glockenspiel")[int(rng.integers(0, 2))]]
     bpm = float(rng.uniform(100.0, 130.0))
@@ -1164,8 +1177,8 @@ def chord_key(family: str, seed: int) -> tuple[str, str]:
     """The key of CHORD_KEYED_SEEDED[family](seed), without making the signal."""
     if family == "c-major-stabs":
         return ("C", "major")
-    if family in _CHORD_STREAMS:
-        root, mode = _key_draw(_chord_rng(family, seed))
+    if family in _STREAMS:
+        root, mode = _key_draw(_stream_rng(family, seed))
         return (PITCH_NAMES[root], mode)
     rng = np.random.default_rng(seed)
     if family == "one-bar-riff":

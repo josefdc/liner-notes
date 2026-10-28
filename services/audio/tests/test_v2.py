@@ -1803,7 +1803,7 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
 # harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
 # with its own envelope, alone or over a kit) and tabla, whose lines mostly move apart, and
-# where they hold still (tabla 504, 516, 520; kit toms 515) spell a chord; and a tubular bell,
+# where they hold still (tabla 504, 516, 520; kit toms 528) spell a chord; and a tubular bell,
 # whose modes hold still and move together but spell three or more pitch classes, as a chord's
 # notes do.
 # Seeds 600-629 are an evaluation set (evals/audio controls) and are kept out of these tests.
@@ -1819,15 +1819,15 @@ ONE_PITCH_CLASS_KEYED = {
     ("toms", "librosa"): {502, 507, 509, 517, 522, 526, 529},
     ("cowbell", "essentia"): {508, 515, 528},
     ("cowbell", "librosa"): {508, 528},
-    ("kit-toms", "essentia"): {505, 507, 510, 512, 521, 524, 529},
-    ("kit-toms", "librosa"): {505, 507, 508, 510, 512, 521, 524, 529},
+    ("kit-toms", "essentia"): {500, 505, 507, 513, 515, 523, 529},
+    ("kit-toms", "librosa"): {500, 505, 507, 513, 515, 529},
     ("tubular-bell", "essentia"): {
-        *{500, 502, 506, 507, 508, 509, 510, 511, 512, 513, 514, 516, 517, 518, 519, 520},
-        *{522, 524, 526, 527},
+        *{500, 502, 503, 504, 505, 506, 507, 508, 510, 511, 513, 514, 515, 516, 517, 518},
+        *{519, 520, 521, 522, 524, 526, 527, 529},
     },
     ("tubular-bell", "librosa"): {
-        *{500, 502, 506, 507, 508, 509, 510, 511, 512, 513, 514, 516, 518, 519, 520, 522},
-        *{524, 526, 527, 528},
+        *{500, 502, 503, 504, 506, 508, 510, 511, 512, 513, 514, 515, 516, 518, 519, 520},
+        *{521, 522, 524, 526, 527, 528, 529},
     },
 }
 

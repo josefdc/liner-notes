@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomStrings } from "./sources/testing/strings.js";
 import {
   type CapturedLogs,
   captureLogsForTests,
@@ -14,6 +15,7 @@ import {
   logger,
   MAX_LOGGED_TEXT,
   scrub,
+  scrubbedSpans,
   serializeError,
   withRun,
 } from "./logger.js";
@@ -176,6 +178,85 @@ describe("scrub", () => {
     expect(scrub("count 200000, word abc1234")).toBe("count 200000, word abc1234");
     logger("X").info("count", { n: 200000 });
     expect(logs.entries()[0]).toMatchObject({ n: 200000 });
+  });
+});
+
+describe("scrubbedSpans", () => {
+  it("finds each part of a text that scrub replaces, without the quotes around a value", () => {
+    const text = `token: "abc1" Bearer xyz123456 ${KEY} https://u:p@h.example/x?token=t1 api_key=k2`;
+    const hidden = scrubbedSpans(text).map(([start, end]) => text.slice(start, end));
+    expect(hidden).toEqual(expect.arrayContaining(["abc1", "xyz123456", KEY, "u:p", "t1", "k2"]));
+    // With each span masked, scrub has nothing more to replace.
+    let masked = text;
+    for (const [start, end] of [...scrubbedSpans(text)].reverse()) {
+      masked = `${masked.slice(0, start)}[redacted]${masked.slice(end)}`;
+    }
+    expect(scrub(masked)).toBe(masked);
+  });
+
+  it("replaces a host or a configured value the cap would cut through", () => {
+    // Configured values are replaced before the cap, and the cap falls before a host it would
+    // cut, so none is cut in two.
+    for (const shift of [6, 12, 20]) {
+      const host = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} contoso-prod.openai.azure.com`);
+      expect(host).not.toContain("contoso");
+      const key = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} ${KEY}`);
+      expect(key).not.toContain(KEY.slice(0, 4));
+    }
+  });
+
+  it("logs nothing past the cap, however much its links and hosts are shortened", () => {
+    // The endpoint's link is replaced by a shorter marker: measured after that, the cap would
+    // fall later in the text and let in what lies past it.
+    const link = `"${ENDPOINT}/x?k=1a`;
+    for (let past = 0; past < 30; past++) {
+      const text = `${"w".repeat(MAX_LOGGED_TEXT - 200)}${link}${"y".repeat(200 - link.length + past)}M0001x tail`;
+      expect(scrub(text), String(past)).not.toContain("M00");
+    }
+    const cookie = `${"w ".repeat(8156)}${link}Set-Cookie: s=M0000x; Path=/, t=M0001x`;
+    expect(scrub(cookie)).not.toContain("M0001x");
+  });
+
+  it("finds all scrub replaces in texts of keys, hosts, links and values in any order", () => {
+    const parts = [
+      "token: ",
+      "X-Api-Key=",
+      "authorization: ",
+      "Bearer ",
+      "Basic abcdefgh12",
+      "contoso-prod.openai.azure.com",
+      "https://u:p@h.example/x?token=t1&a=b",
+      "p.scdn.co/clip",
+      KEY,
+      ENDPOINT,
+      " ",
+      "\\n",
+      "\n",
+      "a",
+      '"',
+      "'",
+    ];
+    // Every part of the text outside the spans is written as it was, in order: scrub replaced
+    // nothing else but the quotes and scheme words around a value, which the spans leave out.
+    const bare = (text: string) => text.replace(/["']|(?:Bearer|Basic|Discogs)\s+/g, "");
+    for (const text of randomStrings(parts, 3_000, 10)) {
+      const out = bare(scrub(text));
+      let at = 0;
+      let kept = 0;
+      for (const [start, end] of [...scrubbedSpans(text), [text.length, text.length]]) {
+        const part = bare(text.slice(kept, start));
+        const found = out.indexOf(part, at);
+        expect(found, `${JSON.stringify(text)}: ${JSON.stringify(part)}`).not.toBe(-1);
+        at = found + part.length;
+        kept = end;
+      }
+    }
+  });
+
+  it("finds nothing in a text that scrub leaves as it is", () => {
+    const text = "the token count is 5; see https://example.org/a?page=2";
+    expect(scrub(text)).toBe(text);
+    expect(scrubbedSpans(text)).toEqual([]);
   });
 });
 

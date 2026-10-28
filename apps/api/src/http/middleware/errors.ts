@@ -1,7 +1,7 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
 import { FACTOIDS_STREAM_PATH } from "../routes/factoidPaths.js";
 import { refuseStream } from "../sse.js";
-import { logger } from "../../logger.js";
+import { logCut, logger } from "../../logger.js";
 
 const log = logger("HTTP");
 
@@ -145,10 +145,16 @@ export function refuse(
 const CONTROL_OR_LINE_BREAK = /[\p{Cc}\u2028\u2029]/gu;
 const MAX_LOGGED_LENGTH = 200;
 
-/** Client-supplied text made safe for a log line: no line breaks or control characters, capped. */
+/**
+ * Client-supplied text made safe for a log line: no line breaks or control characters, capped.
+ * The cap never cuts through what the logger replaces whole (a provider host, a configured value:
+ * logCut), which it would no longer know: there it falls at its start. Only the text near the cap
+ * is read, however long the text.
+ */
 export function logText(value: unknown): string {
   const text = String(value).replace(CONTROL_OR_LINE_BREAK, " ");
-  return text.length > MAX_LOGGED_LENGTH ? `${text.slice(0, MAX_LOGGED_LENGTH)}…` : text;
+  if (text.length <= MAX_LOGGED_LENGTH) return text;
+  return `${text.slice(0, logCut(text, MAX_LOGGED_LENGTH))}…`;
 }
 
 /**

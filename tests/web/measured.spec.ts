@@ -15,7 +15,8 @@ import {
 // block) shows each value with its confidence and basis, or as missing with why; model scores
 // are labelled model estimates; the preview lane spans the measured window. A result without
 // the block (older APIs) never shows a value as more than it is. The Dashboard shows each value
-// with a chip of its kind, its provenance behind the chip; the Player shows the provenance lines.
+// with a chip of its kind, its provenance behind the chip; the Player shows each value with a
+// short label, its provenance behind a "How this was measured" button.
 const measured = loadFixture("measured-v2");
 const partly = loadFixture("partly-measured-v2");
 const gated = loadFixture("gated-v2");
@@ -164,7 +165,7 @@ test.describe("a measured result", () => {
     await expect(timeline).not.toContainText("about 30 s");
     await expect(page.getByTestId("player-audio-line")).toContainText("29.8 s preview");
     await expect(valueItem(page.getByRole("list", { name: "Audio values" }), "BPM")).toContainText(
-      "Measured · estimator confidence 3.30 of 5.32, not calibrated",
+      "BPM 105.2Measured from a 29.8 s preview",
     );
     await screenshot(page, testInfo, "player");
     await screenshot(page, testInfo, "timeline", timeline);
@@ -261,15 +262,18 @@ for (const width of [390, 1440]) {
     await expect(lines).toBeHidden();
     await expect(hero.getByText(/confidence/)).toHaveCount(0);
 
-    // The Player keeps the long lines, with nothing to open.
+    // The Player shows a short label, the same lines behind its own disclosure.
     await openPlayer(page);
     const player = valueItem(page.getByRole("list", { name: "Audio values" }), "BPM");
     await expect(player).toHaveText(
-      "BPM 105.2Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
+      "BPM 105.2Measured from a 29.8 s previewHow this was measured (BPM)",
+    );
+    const how = player.getByRole("button", { name: "How this was measured (BPM)" });
+    await how.click();
+    await expect(page.locator(`[id="${await how.getAttribute("aria-controls")}"]`)).toHaveText(
+      "Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
         `essentia.RhythmExtractor2013 · ${ANALYZER} · the confidence does not flag half or double tempo`,
     );
-    await expect(player.getByText(/^Measured · estimator confidence/)).toBeVisible();
-    await expect(player.getByRole("button")).toHaveCount(0);
     expect(problems).toEqual([]);
   });
 }

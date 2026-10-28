@@ -446,8 +446,16 @@ export interface ShownReading {
   confidence: string | null;
   /** What the value rests on (signal or model, and the preview window); null when unknown. */
   basis: string | null;
+  /** The length of the preview it was read from, in seconds; null when the result does not say. */
+  previewSeconds: number | null;
   /** Method, model and analyzer; null when the result does not say. */
   detail: string | null;
+  /**
+   * What the tooltip says that no other line does (a value measured when its run was recorded,
+   * why a value is not confirmed, what a score is), for views that show no tooltip; null when
+   * there is nothing more.
+   */
+  note: string | null;
   /** The same provenance, for the tooltip. */
   title: string;
 }
@@ -496,6 +504,8 @@ export interface AudioReadings {
 
 const MEASURED_TITLE = 'Measured from the audio preview';
 const RECORDED_TITLE = 'Measured from the audio preview when this run was recorded';
+const RECORDED_NOTE = 'measured when this run was recorded';
+const ESTIMATE_NOTE = 'an estimate, not a measurement';
 const ESTIMATED_TEXT = 'estimated, not measured';
 const SCORE_TEXT = 'score, not a probability';
 const NOT_MEASURED = 'not measured';
@@ -574,7 +584,9 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
     value,
     confidence,
     basis,
+    previewSeconds: audio.windowSeconds,
     detail,
+    note: recorded ? RECORDED_NOTE : null,
     title: titleOf(`${confidence} · ${detail}`),
   });
 
@@ -644,7 +656,9 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
       value: head === 'valence' && unit !== null ? `${moodLabel(unit)} ${value}` : value,
       confidence: SCORE_TEXT,
       basis: `model ${score.model.id}, ${window}`,
+      previewSeconds: audio.windowSeconds,
       detail: analyzer,
+      note: ESTIMATE_NOTE,
       title: `Score from the audio model ${score.model.id} on the ${window}: an estimate, not a measurement and not a probability · ${analyzer}`,
     } satisfies ShownReading;
   });
@@ -716,7 +730,18 @@ function copyReadings(track: TrackData, recorded: boolean, state: AudioState): A
     value,
     confidence: kind === 'estimate' ? SCORE_TEXT : null,
     basis: null,
+    previewSeconds: null,
     detail: null,
+    note:
+      kind === 'unverified'
+        ? `not confirmed as measured: ${UNREADABLE_AUDIO_TEXT}`
+        : kind === 'estimate'
+          ? `a 0–1 score: ${ESTIMATE_NOTE}`
+          : kind === 'score'
+            ? `scaled RMS on the first analyzer's 0–1 scale, saturates on loud masters; ${title.toLowerCase()}, how is not known`
+            : recorded
+              ? RECORDED_NOTE
+              : null,
     title:
       kind === 'unverified'
         ? `Not confirmed as measured: ${UNREADABLE_AUDIO_TEXT}`

@@ -1358,17 +1358,26 @@ describe("cassettes", () => {
     process.env.SOURCE_CASSETTE = "record";
     stubFetch(() => json({ ok: true }));
     const logs = captureLogsForTests();
-
-    const started = Date.now();
+    // Broken at once: the recorder sets no timer to wait for the lock (acquireLock polls with
+    // one), which a busy machine cannot change as it can the time taken. A recorder that waited
+    // would also give up after 50 ms and log an error.
+    const restoreWait = setCassetteLockWaitForTests(50);
+    const realSetTimeout = globalThis.setTimeout;
+    const lockWaits: Array<number | undefined> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+      if (new Error().stack?.includes("acquireLock")) lockWaits.push(ms);
+      return realSetTimeout(handler, ms);
+    }) as typeof setTimeout);
     try {
       await fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" });
     } finally {
+      restoreWait();
       logs.restore();
       vi.restoreAllMocks();
     }
 
+    expect(lockWaits).toEqual([]);
     expect(logs.messages("error")).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(2000);
     const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
     expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/after-crash"]);
     expect(existsSync(join(dir, "deezer.json.lock"))).toBe(false);
@@ -1905,6 +1914,16 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
   });
 });
 
+/**
+ * The bound for one linear step on the 200 kB texts of the tables below, timed as the fastest of
+ * three runs. A linear step takes up to about 100 ms here at normal load, so the bound leaves
+ * room for a busy machine; a quadratic one takes seconds (about 5 s for a cookie value read to
+ * its end from each pair, 15 s for double quotes read to the end of the text from each one), and
+ * a run over twice the bound ends the timing.
+ */
+const QUICK_MS = 800;
+const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 2 * QUICK_MS };
+
 describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
   // 200 kB: a scan that reads each start on to the end of its run takes seconds here, where a
   // single pass takes milliseconds.
@@ -1955,8 +1974,8 @@ describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, 
     ],
   ])("answers quickly on %s", (_name, call, expected) => {
     // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
-    const { ms, result } = timed(call, { runs: 3, stopAboveMs: 2_000 });
-    expect(ms).toBeLessThan(400);
+    const { ms, result } = timed(call, FASTEST_OF_THREE);
+    expect(ms).toBeLessThan(QUICK_MS);
     expect(result).toBe(expected);
   });
 
@@ -2490,22 +2509,24 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
   ])("answers quickly on %s", (_name, make) => {
     const text = make();
     // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
-    const { ms, result } = timed(() => redactText(text), { runs: 3, stopAboveMs: 2_000 });
-    expect(ms).toBeLessThan(400);
+    const { ms, result } = timed(() => redactText(text), FASTEST_OF_THREE);
+    expect(ms).toBeLessThan(QUICK_MS);
     expect(result).not.toContain("QzENDQ");
   });
 
   it("describes a 1 MB error in linear time, and reads only the text near the HTTP log's cap", () => {
-    // About 0.4 s each on a busy machine, 1.2-1.7 s when each log-line check built an array per
-    // character, and a few tens of milliseconds for the rules without the shapes; a scan that
-    // reads the text again for each value takes minutes.
+    // About 0.4 s each at normal load (the fastest of three runs reached 0.67 s with the machine
+    // busier), 1.2-1.7 s when each log-line check built an array per character, and a few tens
+    // of milliseconds for the rules without the shapes; a scan that reads the text again for
+    // each value takes minutes. The bound leaves room for a busy machine and catches that scan;
+    // a constant-factor slowdown such as the array per character can pass it.
     const big = "\nX-Api-Key: k\ntoken: a b".repeat((1 << 20) / 24);
     for (const call of [
       () => describeError(new Error(big)),
       () => new SourceError("spotify", "http", big).message,
     ]) {
-      const { ms, result } = timed(call, { runs: 3, stopAboveMs: 5_000 });
-      expect(ms).toBeLessThan(1500);
+      const { ms, result } = timed(call, { runs: 3, stopAboveMs: 6_000 });
+      expect(ms).toBeLessThan(3_000);
       expect(result).not.toMatch(/: k\b/);
     }
     // The HTTP error log reads only the text near its cap, however many hosts follow.

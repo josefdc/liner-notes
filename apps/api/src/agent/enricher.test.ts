@@ -189,6 +189,11 @@ describe("the log line of a failed Spotify search", () => {
     expect(long.length).toBeLessThan(1024);
     const shown = "Song - Artist (1999) ".repeat(10).slice(0, 200);
     expect(long).toBe(`Spotify search for "${shown}…" failed: `);
+    // An emoji across the cut is kept whole or left out, never split.
+    const emoji = searchFailedPrefix(`${"a".repeat(199)}😀 more`);
+    expect(emoji).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
     expect(searchFailedPrefix("Song - Artist (1999)")).toBe(
       'Spotify search for "Song - Artist (1999)" failed: ',
     );

@@ -774,7 +774,11 @@ const MAX_LOGGED_LABEL = 200;
  * room sources/http.ts leaves before a described error, LOG_PREFIX_ROOM).
  */
 export function searchFailedPrefix(label: string): string {
-  const shown = label.length > MAX_LOGGED_LABEL ? `${label.slice(0, MAX_LOGGED_LABEL)}…` : label;
+  // A character written as two (an emoji) is kept whole or left out, never split.
+  const end = /[\uD800-\uDBFF]/.test(label.charAt(MAX_LOGGED_LABEL - 1))
+    ? MAX_LOGGED_LABEL - 1
+    : MAX_LOGGED_LABEL;
+  const shown = label.length > MAX_LOGGED_LABEL ? `${label.slice(0, end)}…` : label;
   return `Spotify search for "${shown}" failed: `;
 }
 

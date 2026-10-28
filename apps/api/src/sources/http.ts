@@ -752,8 +752,13 @@ const AUTH_SCHEME =
 const TOKEN68 = /^[A-Za-z0-9._~+/-]+=*$/;
 /** Where an Authorization value's parameters start: a name and "=". */
 const AUTH_PARAM_START = /^[A-Za-z0-9_.-]+[ \t]*=/;
-/** A `name=value` parameter of an Authorization value; group 2 is a quoted value's content. */
-const AUTH_PARAM = /([A-Za-z0-9_.-]+)[ \t]*=[ \t]*(?:"((?:[^"\\]|\\.)*)"?|([^\s,"]*))/g;
+/**
+ * A `name=value` parameter of an Authorization value; group 2 is a quoted value's content. A name
+ * starts only where no name character comes before it, so a long run is read from its start
+ * once, never again from each of its characters.
+ */
+const AUTH_PARAM =
+  /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+)[ \t]*=[ \t]*(?:"((?:[^"\\]|\\.)*)"?|([^\s,"]*))/g;
 
 /** Words a value without quotes can be besides STATUS_WORD, read by the shapes below only. */
 const MORE_STATUS_WORD = /^(?:nil|unset)[.!,;]*$/i;
@@ -849,7 +854,8 @@ const FIELD_LINE =
 /**
  * Adds where the value without quotes of a field line lies, from `start` to the end of its line:
  * one run, or after an Authorization scheme (`Token abc`), its credentials: one token, or the
- * value of each `name=value` parameter but `realm` (`Digest username="a", realm="b"`). After
+ * value of each `name=value` parameter but `realm` (`Digest username="a", realm="b"`: `username`
+ * and `nonce` are masked too, as any parameter but the realm may be one). After
  * "=", the run holds no quote, "<", ">" or "&" (as a `name=` value, which SECRET_PARAM reads)
  * and a "#" comment may follow it. A status word, or a scheme word alone, is kept.
  */
@@ -928,6 +934,11 @@ const ENV_PAIR = /(?<![\w$.-])([A-Z][A-Z0-9_]{0,63})=/g;
 /** An environment value without quotes: up to whitespace, a quote, or a shell or list separator. */
 const ENV_VALUE = /[^\s"'`;&|<>()[\]{},]+/y;
 
+/** A template's reference as a value: `${{ secrets.GH }}`, `${TOKEN}`, read on one line. */
+const TEMPLATE_REFERENCE = /^\$\{\{[^\r\n}]*\}\}|^\$\{[^\r\n}]*\}/;
+/** How far a template's reference is read, at most. */
+const MAX_TEMPLATE_REFERENCE = 256;
+
 /** A status word of two words (`not set`): the word after a value. */
 const NEXT_WORD = /[ \t]+([^\s"'`;&|<>()[\]{},]+)/y;
 
@@ -946,6 +957,13 @@ function envPairSpans(text: string): Span[] {
       const end = quotedValueEnd(text, at + 1, quote, false);
       if (end > at + 1) spans.push([at + 1, end]);
       ENV_PAIR.lastIndex = Math.max(end, ENV_PAIR.lastIndex);
+      continue;
+    }
+    // A template's reference (`${{ secrets.GH }}`, `${TOKEN}`) is masked whole.
+    const template = TEMPLATE_REFERENCE.exec(text.slice(at, at + MAX_TEMPLATE_REFERENCE));
+    if (template) {
+      spans.push([at, at + template[0].length]);
+      ENV_PAIR.lastIndex = Math.max(at + template[0].length, ENV_PAIR.lastIndex);
       continue;
     }
     ENV_VALUE.lastIndex = at;
@@ -1346,7 +1364,7 @@ const HAS_STRING_ESCAPE = /\\(?:u[0-9a-fA-F]{4}|[nrtbf"'\\/])/;
  * - decoded from entities, every rule that reads a key (keySpans);
  * - decoded from string escapes with each quote no backslash escapes read as a line break, so a
  *   line inside a JSON string ends where the string does and starts where it does
- *   (`{"e":"a\r\nX-Api-Key: v","status":401}`): every rule;
+ *   (`{"e":"a\r\nX-Api-Key: v","status":401}`), in a text that holds an escape: every rule;
  * - decoded from string escapes alone (`{ token: \\"v\\" }`, where a quote of the outer string
  *   is a quote of the value): every rule but those that read a line, which would run across the
  *   end of the string.
@@ -1425,6 +1443,9 @@ function decodedSpans(text: string): Span[] {
  * - pydantic's input is read only under the line that names its field; written on one line
  *   (`password String should … [type=…, input_value='v']`) the field is not plain;
  * - a var_dump value that is not a string (`int(1234)`);
+ * - a JSON text without a single escape is not decoded, so a field inside one of its strings
+ *   (`{"raw": "X-Api-Key: v"}`) is not at the start of a line and is not read: such a text is
+ *   read only by the rules above;
  * - text decoded more than MAX_DECODINGS times, and entities other than `&lt;`, `&gt;`, `&amp;`,
  *   `&quot;`, `&apos;` and numeric ones;
  * - a cursor (`next_page_token`, `pageToken`) and an environment variable whose name ends in a
@@ -1520,11 +1541,14 @@ function keyValuePieces(
   more: readonly Span[] = moreSecretSpans(text),
   before: readonly Span[] = extra,
 ): Piece[] {
-  let pieces = maskedPieces(text, steps, extra, more);
-  if (more.length === 0) return pieces;
+  if (more.length === 0) return maskedPieces(text, steps, extra, more);
   const other = maskedPieces(text, steps, before, []);
+  // A redacted text is often redacted again (a SourceError's message, then describeError): what
+  // the other rules hide in the text they leave, once and twice more, stays hidden too.
+  const again = redactedAgain(text, other);
+  let added = again.length > 0 ? maskableUnion(extra, again) : extra;
+  let pieces = maskedPieces(text, steps, added, more);
   const logged = loggedSpans(text, other);
-  let added = extra;
   for (let round = 0; logged.length > 0 && round < MAX_LOG_ROUNDS; round++) {
     const lost = lostToLog(text, pieces, logged);
     if (lost.length === 0) break;
@@ -1532,6 +1556,18 @@ function keyValuePieces(
     pieces = maskedPieces(text, steps, added, more);
   }
   return pieces;
+}
+
+/**
+ * What the other rules hide when they redact once more the text their `pieces` leave of `text`,
+ * and once more after that, in `text`: the redaction is not always the same the second time (a
+ * quote the header rule paired can be gone).
+ */
+function redactedAgain(text: string, pieces: readonly Piece[]): Span[] {
+  const once = render(text, pieces);
+  const twice = maskedPieces(once, [], [], []);
+  const thrice = maskedPieces(render(once, twice), [], [], []);
+  return maskableUnion(sourceOf(pieces, twice), sourceSpans(pieces, sourceOf(twice, thrice)));
 }
 
 /** How many times keyValuePieces masks what a log line would lose, at most. */
@@ -1615,10 +1651,32 @@ function redactForLog(text: string, max: number, keep: number): string {
   const more = moreSecretSpans(text);
   const pieces = keyValuePieces(text, [], [], more);
   if (more.length === 0) return render(text, pieces);
-  const shown = cutAt(keyValuePieces(text, [], [], []), max, keep);
+  const shown = safeCut(text, pieces, keyValuePieces(text, [], [], []), max, keep);
   return shown < text.length
     ? `${render(text, piecesBefore(pieces, shown))}…`
     : render(text, pieces);
+}
+
+/**
+ * Where a cut of the text that `pieces` cover falls when it keeps `keep` characters of a
+ * rendering longer than `max` (cutAt): no further than the same cut of `other`, the other rules'
+ * pieces, and never inside what a log line's logger hides whole in either (a provider host, a
+ * configured value, scrubbedSpans): there, at its start, since a part of one is no longer known
+ * to the logger. The whole text when nothing is cut.
+ */
+function safeCut(
+  text: string,
+  pieces: readonly Piece[],
+  other: readonly Piece[],
+  max: number,
+  keep: number,
+): number {
+  const at = Math.min(cutAt(pieces, max, keep), cutAt(other, max, keep));
+  if (at >= text.length) return at;
+  for (const [start, end] of maskableUnion(loggedSpans(text, pieces), loggedSpans(text, other))) {
+    if (start < at && at < end) return start;
+  }
+  return at;
 }
 
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
@@ -1774,12 +1832,14 @@ export function scrubText(text: string): string {
   const pieces = keyValuePieces(text, steps, [], more);
   let out = render(text, pieces);
   if (more.length > 0) {
-    // A value moreSecretSpans masks can make the text shorter than the other rules leave it:
-    // the cap still falls where it falls on their text, so it never shows what it left out.
-    const shown = cutAt(keyValuePieces(text, steps, [], []), MAX_ERROR_TEXT, MAX_ERROR_TEXT);
+    // A value moreSecretSpans masks can make the text shorter than the other rules leave it, or
+    // longer: the cap falls no further than on their text, and never inside a host or a
+    // configured value a log line hides whole (safeCut).
+    const other = keyValuePieces(text, steps, [], []);
+    const shown = safeCut(text, pieces, other, MAX_ERROR_TEXT, MAX_ERROR_TEXT);
     if (shown < text.length) out = render(text, piecesBefore(pieces, shown));
   }
-  // The cap falls on the redacted text, at the same place as without the shapes above.
+  // The cap falls on the redacted text; past a cut above, only on a mask's own characters.
   return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
@@ -2340,22 +2400,17 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const more = moreSecretSpans(text);
   const headerValues = inLine(more.length > 0 ? maskableUnion(lineValues, more) : lineValues);
   const lineOnly = inLine(lineValues);
-  let masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
+  // keyValuePieces also keeps hidden what the other rules hide when an error message made from
+  // the line is redacted again (redactedAgain).
+  const masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
   let redacted = render(short, masked);
   if (more.length + moreSecretSpans(short).length > 0) {
     const before = keyValuePieces(short, [], lineOnly, []);
     const old = render(short, before);
-    // An error message made from the line is redacted again. What the other rules alone hide
-    // then in the line they leave stays hidden: a mask here can take the key that made it a
-    // value there (`A_SECRET='…"password": "` and the rest of that value).
-    const again = sourceOf(before, keyValuePieces(old, [], [], []));
-    if (again.length > 0) {
-      masked = keyValuePieces(short, [], maskableUnion(headerValues, again), undefined, lineOnly);
-      redacted = render(short, masked);
-    }
-    // A value moreSecretSpans masks can make the line shorter than the other rules leave it:
-    // the line still stops where they cut it, so it never shows what that cut left out.
-    const shown = cut ? cutAt(before) : short.length;
+    // A value moreSecretSpans masks can make the line shorter than the other rules leave it, or
+    // longer: it stops no further than they cut it, and never inside a host or a configured
+    // value a log line hides whole (safeCut).
+    const shown = cut ? safeCut(short, masked, before, MAX_DETAIL, MAX_DETAIL - 1) : short.length;
     if (shown < short.length) redacted = `${render(short, piecesBefore(masked, shown))}…`;
     // A mask can also hide what makes a line one with an issue (`File "[redacted]", line 4`):
     // a line the other rules alone leave with one is left out, as it was.

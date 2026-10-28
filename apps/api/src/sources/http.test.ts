@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { captureLogsForTests, scrub } from "../logger.js";
+import { captureLogsForTests, configureLogger, scrub } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -2065,6 +2065,54 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("leaves no part of a host or a configured value where a log line's cut falls", () => {
+    // A cut that lands inside a provider host or a configured value would leave a part the
+    // logger no longer knows: the SourceError's own cut (a), and the HTTP error log's (b).
+    const salt = "M9001xM9002xM9003x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pad = 50; pad < 75; pad++) {
+        for (const tail of [salt, "contoso-prod.openai.azure.com"]) {
+          const a = `401\nCookie: sid=${"a".repeat(40)}\n${"x ".repeat(pad)}${tail} tail`;
+          const b = `token: 1\nCookie: a=1; b=2; c=3\n${"y ".repeat(pad)}${tail}`;
+          const lines = [
+            scrub(
+              `Spotify search for "x" failed: ${describeError(new SourceError("spotify", "http", a))}`,
+            ),
+            scrub(logText(new SourceError("spotify", "http", b).message)),
+          ];
+          for (const line of lines) expect(line, `${pad} ${tail}`).not.toMatch(/M900\dx|contoso/);
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("keeps hidden what the other rules hide when they redact their own text again", () => {
+    // A network error's message is a described error, described again when it is logged: the
+    // header rule pairs the quotes of the text it left, and hides more the second time.
+    const text =
+      '}header<input name="tokenizer" value=aa" type=password>x"{ token: \\"\\"M0008x }' +
+      '&amp;lt;Token-0>\'M0013x"&lt;/Token-0>{"raw": "aCookie: Token ,M0018x", "b": 1}';
+    const twice = describeError(
+      new SourceError("audio", "network", describeError(new Error(text))),
+    );
+    expect(twice).not.toContain("M0018x");
+  });
+
+  it("masks a template reference whole, and keeps an Authorization scheme on every path", () => {
+    // A GitHub Actions expression, written as it is in a workflow file.
+    const reference = ["deploy GITHUB_TOKEN=$", "{{ secrets.GH }} now"].join("");
+    expect(redactText(reference)).toBe("deploy GITHUB_TOKEN=[redacted] now");
+    expect(redactText("Unauthorized\nAuthorization: Bearer abc.def")).toBe(
+      "Unauthorized\nAuthorization: Bearer [redacted]",
+    );
+    expect(plainReason("Unauthorized\nAuthorization: Bearer abc.def")).toBe(
+      "Unauthorized Authorization: Bearer [redacted]",
+    );
+  });
+
   it("keeps hidden what a reason's error message hides when it is redacted again", () => {
     // The other rules leave M0017x in the reason, and mask it when the message made from it is
     // redacted again, by the key before it; a mask over that key must not show it.
@@ -2204,6 +2252,12 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
       "a long input name inside a JSON string",
       () => `{"m":"\\u003cinput name=\\"${fill("aB")}\\"\\u003e"} X_TOKEN=QzENDQ`,
     ],
+    ["Authorization parameters", () => `Authorization: Digest a=b, ${fill("x")}\ntoken: QzENDQ`],
+    [
+      "Authorization parameters inside a JSON string",
+      () => `{"e":"a\\r\\nAuthorization: Digest a=b, ${fill("x")}"} X_TOKEN=QzENDQ`,
+    ],
+    ["OAuth parameters", () => `Proxy-Authorization: OAuth k=v ${fill("a.")}\ntoken: QzENDQ`],
     ["string escapes", () => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
   ])("answers quickly on %s", (_name, make) => {
     const text = make();

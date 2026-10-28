@@ -202,18 +202,20 @@ function asText(value: unknown): string {
  */
 export function scrub(input: unknown): string {
   try {
+    // Configured values, links and hosts are replaced before the cap: one it cut through would
+    // no longer be known, and a part of it would be written.
     let out = replaceAll(asText(input), secretValues, REDACTED);
-    if (out.length > MAX_LOGGED_TEXT) out = `${out.slice(0, MAX_LOGGED_TEXT)}${TRUNCATED}`;
     out = out.replace(URL_IN_TEXT, (url) => {
       const host = hostOf(url);
       if (host && PREVIEW_HOST.test(host)) return PREVIEW_LINK;
       if (host && secretHosts.includes(host)) return PROVIDER_ENDPOINT;
       return url.replace(USERINFO, `$1${REDACTED}@`).replace(SECRET_PARAM, `$1${REDACTED}`);
     });
-    out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT);
-    return out
+    out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT)
       .replace(BARE_PREVIEW, PREVIEW_LINK)
-      .replace(PROVIDER_HOST, PROVIDER_ENDPOINT)
+      .replace(PROVIDER_HOST, PROVIDER_ENDPOINT);
+    if (out.length > MAX_LOGGED_TEXT) out = `${out.slice(0, MAX_LOGGED_TEXT)}${TRUNCATED}`;
+    return out
       .replace(SECRET_PAIR, `$1$2${REDACTED}`)
       .replace(
         AUTH_SCHEME,
@@ -226,11 +228,13 @@ export function scrub(input: unknown): string {
 
 /**
  * Where scrub replaces something in `text`, as [start, end) spans sorted by start, none
- * overlapping another: each of its rules read on `text` as it is (configured values and hosts,
- * links, preview and provider hosts, Authorization values, secret pairs). The spans hold all it
- * replaces before the cap but the quotes around a value, and may hold more. The redaction of
- * source errors (sources/http.ts) reads them, so that the log line of a text it redacts further
- * never shows what the log line of the text it redacted before hid. Reads the text once per rule.
+ * overlapping another. Each span is a match of one of scrub's rules (configured values and hosts,
+ * links, preview and provider hosts, Authorization values, secret pairs) on `text` as it is given,
+ * without the quotes around a value and the scheme word before an Authorization value, which
+ * scrub keeps. Scrub applies its rules in turn, each to the text the rules before it left, so on
+ * some texts it replaces a little more than these spans hold, or less. The redaction of source
+ * errors (sources/http.ts) reads them, so that the log line of a text it redacts further never
+ * shows what the log line of the text it redacted before hid. Reads the text once per rule.
  */
 export function scrubbedSpans(text: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
@@ -268,10 +272,10 @@ export function scrubbedSpans(text: string): Array<[number, number]> {
     spans.push([start, end]);
   };
   for (const pair of text.matchAll(SECRET_PAIR)) {
-    value(
-      pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length,
-      pair.index + pair[0].length,
-    );
+    let from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
+    // An Authorization scheme before the value is written as it is.
+    from += /^(?:Bearer|Basic|Discogs)\s+/i.exec(text.slice(from, from + 16))?.[0].length ?? 0;
+    value(from, pair.index + pair[0].length);
   }
   for (const auth of text.matchAll(AUTH_SCHEME)) {
     value(auth.index + (auth[1] ?? auth[3] ?? "").length, auth.index + auth[0].length);

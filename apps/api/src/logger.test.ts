@@ -193,6 +193,16 @@ describe("scrubbedSpans", () => {
     expect(scrub(masked)).toBe(masked);
   });
 
+  it("replaces a host or a configured value the cap would cut through", () => {
+    // Hosts and configured values are replaced before the cap, so none is cut in two.
+    for (const shift of [6, 12, 20]) {
+      const host = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} contoso-prod.openai.azure.com`);
+      expect(host).not.toContain("contoso");
+      const key = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} ${KEY}`);
+      expect(key).not.toContain(KEY.slice(0, 4));
+    }
+  });
+
   it("finds nothing in a text that scrub leaves as it is", () => {
     const text = "the token count is 5; see https://example.org/a?page=2";
     expect(scrub(text)).toBe(text);

@@ -2281,9 +2281,10 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     const userinfo = "https://u:U1xU2xU3xU4xU5xU6xU7xU8x@h.example/x tail";
     for (let shift = -3; shift < 3; shift++) {
       const text = `${lead}${"x ".repeat(7635).slice(0, 15268 + shift)} ${userinfo}`;
-      expect(scrub(`Error: ${describeError(new Error(text))}`), String(shift)).not.toContain(
-        "U1xU2",
-      );
+      const logged = scrub(`Error: ${describeError(new Error(text))}`);
+      expect(logged, String(shift)).not.toContain("U1xU2");
+      // The cut moves to the link, not back to the start of the text around it.
+      expect(logged.length, String(shift)).toBeGreaterThan(15_000);
     }
     // A configured value longer than the window the logger reads past a cut, at each cut.
     const long = "L7.".repeat(1_700);

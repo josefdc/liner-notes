@@ -5,7 +5,7 @@
 
 import type { Claim, Evidence } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
-import { statementKey, withoutRestatements } from "./restatements.js";
+import { namesOnlyWhatItCites, statementKey, withoutRestatements } from "./restatements.js";
 import { modelClaim, trackRecord } from "./verifier/testing.js";
 
 const sampleRecord: Evidence = {
@@ -70,13 +70,49 @@ describe("statementKey", () => {
       ["It sold 1.500 copies.", "It sold 1,500 copies."],
       ["It runs at 1.5 times.", "It runs at 15 times."],
       ["One More Time.", "One More Time again."],
+      // A chord or key name keeps its case: C-sharp minor is not C-sharp major, B-flat not B-B.
+      ["It is in C#m.", "It is in C#M."],
+      ["The bass plays Bb.", "The bass plays BB."],
+      ["It moves to Am.", "It moves to AM."],
     ];
     for (const [a, b] of different)
       expect(statementKey(a), `${a} / ${b}`).not.toBe(statementKey(b));
   });
 });
 
+describe("namesOnlyWhatItCites", () => {
+  it("counts a name in a script without case as a name", () => {
+    const text = "The melody was written by 林哲司.";
+    expect(namesOnlyWhatItCites(text, ["The melody was written by a session player."])).toBe(false);
+    expect(namesOnlyWhatItCites(text, ["Written by 林哲司 in 1983."])).toBe(true);
+    expect(namesOnlyWhatItCites("La chanson est de محمد.", ["La chanson."])).toBe(false);
+  });
+});
+
 describe("withoutRestatements", () => {
+  it("keeps a copy the judge found unsupported over an unjudged copy: its objection stays", () => {
+    const text = "The hook was cut from a horn line.";
+    // Past the judge's batch: no verdict.
+    const unjudged = judged("m-card", {
+      text,
+      about: "trivia",
+      verdict: null,
+      kind: "inferred",
+      evidenceIds: ["ev-other"],
+      factoid: { title: "The hook", type: "trivia", entities: [] },
+    });
+    const unsupported = judged("m-checked", {
+      text,
+      about: "trivia",
+      verdict: "unsupported",
+      kind: "inferred",
+      evidenceIds: ["ev-other"],
+    });
+    const kept = withoutRestatements([unjudged, unsupported], [card("m-card")], [], evidence);
+    expect(ids(kept.claims)).toEqual(["m-checked"]);
+    expect(kept.claims[0].verdict).toBe("unsupported");
+  });
+
   it("leaves out a model claim restating a code claim on its record, keeps the code claim, and counts it", () => {
     const restated = judged("m-1", {
       text: "Vanilla Ice samples Queen.",
@@ -379,9 +415,9 @@ describe("two model claims with one text", () => {
     expect(ids(kept.claims)).toEqual(["m-history", "m-sample"]);
   });
 
-  it("keep the better verdict when both fit: supported, partial, not judged, unsupported", () => {
+  it("keep the better verdict when both fit: supported, partial, unsupported, then not judged", () => {
     const text = "It appears on To the Extreme.";
-    const order = ["unsupported", null, "partial", "supported"] as const;
+    const order = [null, "unsupported", "partial", "supported"] as const;
     for (let i = 0; i < order.length; i++) {
       for (let j = 0; j < order.length; j++) {
         if (i === j) continue;

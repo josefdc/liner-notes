@@ -47,7 +47,17 @@ export function setReplayPacingForTests(next: ReplayPacing): () => void {
 const NO_USAGE = { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 };
 
 /** Each record's result as a replay serves it, worked out once per record. */
-const served = new WeakMap<ReplayRecord, TrackAnalysis>();
+const served = new WeakMap<ReplayRecord, { analysis: TrackAnalysis; restated: number }>();
+
+/** A recording's result as a replay serves it, and how many repeated claims it left out. */
+function servedWithCount(record: ReplayRecord): { analysis: TrackAnalysis; restated: number } {
+  const known = served.get(record);
+  if (known) return known;
+  const { result, restated } = oneClaimPerFact(record.analysis);
+  const entry = { analysis: result, restated };
+  served.set(record, entry);
+  return entry;
+}
 
 /**
  * A recording's result with each fact stated once, as the verifier now leaves it
@@ -57,11 +67,7 @@ const served = new WeakMap<ReplayRecord, TrackAnalysis>();
  * (http/routes/factoids.ts) both read it, so a card left out here is never served there.
  */
 export function servedRecording(record: ReplayRecord): TrackAnalysis {
-  const known = served.get(record);
-  if (known) return known;
-  const { result } = oneClaimPerFact(record.analysis);
-  served.set(record, result);
-  return result;
+  return servedWithCount(record).analysis;
 }
 
 /**
@@ -88,13 +94,20 @@ export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnal
   };
 }
 
-/** The status sent right after `connected`: this run is a replay of a recording. */
+/**
+ * The status sent right after `connected`: this run is a replay of a recording, and, when the
+ * replay left out claims that repeat another (`servedRecording`), how many, so the result is not
+ * read as the recording word for word.
+ */
 export function replayNotice(record: ReplayRecord): EventBody {
+  const { restated } = servedWithCount(record);
+  const repeats =
+    restated > 0 ? ` ${restated} repeated ${restated === 1 ? "claim" : "claims"} left out.` : "";
   return {
     type: "status",
     message:
       `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +
-      "nothing below runs live.",
+      `nothing below runs live.${repeats}`,
     code: "SYS-INIT",
     node: "replay",
     timestamp: new Date().toISOString(),

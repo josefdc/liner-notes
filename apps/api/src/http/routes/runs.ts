@@ -26,17 +26,26 @@ export const BY_TRACK_CANDIDATES = 5;
 
 /**
  * A run's stored result with each fact stated once (restatements.ts): one stored before that
- * step loses the model's restatements and their cards, counted in its verifier summary. A result
- * that is not an object with a list of claims is returned as it is, for the contract check.
+ * step loses the model's restatements and their cards, counted in its verifier summary and in
+ * the log. A result that is not an object with a list of claims, or that the step cannot read, is
+ * returned as it is, for the contract check; the step's failure is logged.
  */
-function withOneClaimPerFact(stored: unknown): unknown {
+function withOneClaimPerFact(runId: string, stored: unknown): unknown {
   if (typeof stored !== "object" || stored === null) return stored;
   const result = stored as ResultClaims;
   if (!Array.isArray(result.claims)) return stored;
   try {
-    return oneClaimPerFact(result).result;
-  } catch {
+    const { result: served, restated } = oneClaimPerFact(result);
+    if (restated > 0) log.info(`Run ${runId}: left out ${restated} claim(s) that restate another`);
+    return served;
+  } catch (error) {
     // A result of a shape the step cannot read: the contract check refuses it, not this step.
+    log.warn(
+      `Run ${runId}: its stored result could not be read for repeated claims; served as stored`,
+      {
+        err: error,
+      },
+    );
     return stored;
   }
 }
@@ -47,7 +56,7 @@ function withOneClaimPerFact(stored: unknown): unknown {
  * track; else null. Either with each fact stated once.
  */
 export function resultOf(record: RunRecord): unknown {
-  if (record.analysis !== null) return withOneClaimPerFact(record.analysis);
+  if (record.analysis !== null) return withOneClaimPerFact(record.runId, record.analysis);
   const replayOf = replayOfRun(record);
   if (!replayOf || record.status !== "completed") return null;
   const recorded = replays().forDigest(replayOf.slug, replayOf.digest);

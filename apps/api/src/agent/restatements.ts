@@ -14,9 +14,10 @@
  *    claim's relation too.
  * 2. Then, of the model claims left with the same text (`statementKey`), the best copy stays: the
  *    one whose citations fit its scope (`scopeSupports`: the deterministic step left it citing
- *    evidence), then the one with the better verdict (supported, partial, not judged,
- *    unsupported), then the one on a fact card (the card shows the same statement, with its
- *    title), then the first. Taken best first, a copy goes when it repeats one kept before it:
+ *    evidence), then the one with the better verdict (supported, partial, unsupported, then
+ *    none: a copy the judge checked, and what it said of it, is never dropped for one it did not
+ *    check), then the one on a fact card (the card shows the same statement, with its title),
+ *    then the first. Taken best first, a copy goes when it repeats one kept before it:
  *    it reads as the same kind (sourced or inferred), states a relation or not as that one does,
  *    is about the same scope (or one of the two cites nothing), and cites nothing that one does
  *    not. A stricter copy (inferred) is never dropped for a lenient one (sourced).
@@ -61,8 +62,12 @@ const VERDICT_RANK: Record<Verdict, number> = {
   unsupported: 1,
   contradicted: 0,
 };
-/** A claim the judge did not judge ranks between a partial verdict and an unsupported one. */
-const UNJUDGED_RANK = 2;
+/**
+ * A claim the judge did not judge (past its batch, or the check failed) ranks below every verdict
+ * that may go: a copy found unsupported keeps its objection over an unjudged copy. (A
+ * contradicted copy never goes.)
+ */
+const UNJUDGED_RANK = 0.5;
 
 // =============================================================================
 // Statements
@@ -79,15 +84,27 @@ const MINUS = String.fromCharCode(0xe003);
 const SENTENCE_MARKS = new RegExp(`[^\\p{L}\\p{N}%#♭♯${POINT}${COMMA}${PLUS}${MINUS}]+`, "gu");
 
 /**
+ * A note or key name: a letter A-G with an accidental, a minor or major mark, or both ("C#m",
+ * "Bb", "Am", "C#M"). Its case is its meaning ("C#m" is minor, "C#M" major; "Bb" is B-flat).
+ */
+const NOTE_NAME = /(?<![\p{L}\p{N}])([A-G](?:[#♯♭b][mM]?|[mM]))(?![\p{L}\p{N}])/u;
+
+/** `text` in lower case, but for its note and key names (NOTE_NAME), which keep theirs. */
+const lowerButNoteNames = (text: string) =>
+  text
+    .split(NOTE_NAME)
+    .map((part, i) => (i % 2 === 1 ? part : part.toLowerCase()))
+    .join("");
+
+/**
  * A statement as it is compared: its case, quotes, apostrophes and sentence punctuation do not
  * count, nor compatibility forms (NFKC: "ﬁ" is "fi"). What changes a fact does: an accidental
- * ("B♭", "C#", "C♯"), a percent sign, a sign before a number ("-3 dB") and a decimal or thousands
- * separator between digits ("1.5", "1,500").
+ * ("B♭", "C#", "C♯"), the case of a note or key name ("C#m", "C#M"; "Bb", "BB"), a percent
+ * sign, a sign before a number ("-3 dB") and a decimal or thousands separator between digits
+ * ("1.5", "1,500").
  */
 export function statementKey(text: string): string {
-  return text
-    .normalize("NFKC")
-    .toLowerCase()
+  return lowerButNoteNames(text.normalize("NFKC"))
     .replace(QUOTES, "")
     .replace(/(\d)([.,])(?=\d)/gu, (_, digit: string, mark: string) =>
       mark === "." ? `${digit}${POINT}` : `${digit}${COMMA}`,
@@ -136,8 +153,10 @@ const FUNCTION_WORDS = new Set(
 /**
  * Whether every capitalised word and every number of `text` is in `excerpts`: it names no
  * person, label, place, title or date they do not. Words are compared without case; a number by
- * its value ("02" is 2); a month also by its number ("February" is in "2001-02-26"). A
- * capitalised word that names nothing ("The", "It") is not counted.
+ * its value ("02" is 2); a month also by its number ("February" is in "2001-02-26"). A word in a
+ * script without case (Chinese, Japanese, Arabic, Hebrew, Thai: `\p{Lo}`) may be a name too, and
+ * must be found in the excerpts as it is written (such a script may write no spaces between
+ * words). A capitalised word that names nothing ("The", "It") is not counted.
  */
 export function namesOnlyWhatItCites(text: string, excerpts: readonly string[]): boolean {
   const tokens = (from: string) =>
@@ -147,12 +166,14 @@ export function namesOnlyWhatItCites(text: string, excerpts: readonly string[]):
       .filter(Boolean);
   const words = new Set<string>();
   const numbers = new Set<number>();
+  const written = excerpts.map((excerpt) => excerpt.normalize("NFKC")).join("\n");
   for (const token of excerpts.flatMap(tokens)) {
     words.add(token.toLowerCase());
     if (/^[0-9]+$/.test(token)) numbers.add(Number(token));
   }
   return tokens(text).every((token) => {
     if (/^[0-9]+$/.test(token)) return numbers.has(Number(token));
+    if (/\p{Lo}/u.test(token)) return written.includes(token);
     const month = monthOf(token);
     if (month !== null && /^\p{Lu}/u.test(token)) {
       return words.has(token.toLowerCase()) || numbers.has(month);

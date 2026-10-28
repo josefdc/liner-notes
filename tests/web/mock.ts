@@ -8,7 +8,7 @@ import {
   RunResponse,
 } from "@liner-notes/contract";
 import { expect, type Page } from "@playwright/test";
-import { replayedAnalysis } from "../../apps/api/src/replay/player";
+import { replayedAnalysis, replayNotice } from "../../apps/api/src/replay/player";
 import {
   contractMisfits,
   type MockConfig,
@@ -174,12 +174,8 @@ export function replayedRecording(runId = "replay-run") {
     ),
   );
   const result = replayedAnalysis(record, runId);
-  const notice = {
-    type: "status",
-    message: `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); nothing below runs live.`,
-    code: "SYS-INIT",
-    node: "replay",
-  };
+  // The API's own notice, without its send time.
+  const { timestamp: _sent, ...notice } = replayNotice(record) as Record<string, unknown>;
   const events: Array<Record<string, unknown>> = [];
   for (const { atMs, event } of record.events as Array<{
     atMs: number;

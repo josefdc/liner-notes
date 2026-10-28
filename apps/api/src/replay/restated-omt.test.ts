@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Claim, ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
-import { playRecord, replayedAnalysis } from "./player.js";
+import { playRecord, replayedAnalysis, replayNotice } from "./player.js";
 import { DEFAULT_REPLAY_DIR } from "./records.js";
 
 const record = ReplayRecord.parse(
@@ -151,5 +151,45 @@ describe("a recording replayed", () => {
     expect(served.claims).toEqual(already.analysis.claims);
     expect(served.factoids).toEqual(already.analysis.factoids);
     expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 0 });
+  });
+});
+
+describe("the replay notice", () => {
+  it("says how many repeated claims the replay left out", () => {
+    expect(replayNotice(record).message).toBe(
+      `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +
+        "nothing below runs live. 7 repeated claims left out.",
+    );
+  });
+
+  it("says nothing of them when none were left out", () => {
+    const run = record.analysis.run!;
+    const already = ReplayRecord.parse({
+      ...record,
+      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+    });
+    expect(replayNotice(already).message).toBe(
+      `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +
+        "nothing below runs live.",
+    );
+  });
+
+  it("says one in the singular", () => {
+    const run = record.analysis.run!;
+    const claims = record.analysis.claims ?? [];
+    // Only the Discovery copy filed under the track is left: one repeat.
+    const one = ReplayRecord.parse({
+      ...record,
+      analysis: {
+        ...record.analysis,
+        claims: claims.filter(
+          (claim) =>
+            claim.origin === "code" || (claim.id.startsWith("f665ed7c") && claim.about === "track"),
+        ),
+        factoids: [],
+        run,
+      },
+    });
+    expect(replayNotice(one).message).toMatch(/live\. 1 repeated claim left out\.$/);
   });
 });

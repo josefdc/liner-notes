@@ -7,8 +7,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { resultOf } from "../http/routes/runs.js";
+import { captureLogsForTests } from "../logger.js";
 import { DEFAULT_REPLAY_DIR } from "../replay/records.js";
 import type { RunRecord } from "../store/runs.js";
 import type { TrackData } from "./schema.js";
@@ -51,5 +52,24 @@ describe("a result stored before one claim per fact", () => {
       analysis: done,
     } as unknown as RunRecord;
     expect(resultOf(record)).toEqual(done);
+  });
+});
+
+describe("a run's stored result the step cannot read", () => {
+  it("is served as it is, for the contract check, and the step's failure is logged", () => {
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
+    const odd = { ...analysis, claims: [null] };
+    const record = { runId: "run-odd", status: "completed", analysis: odd } as unknown as RunRecord;
+    expect(resultOf(record)).toBe(odd);
+    expect(logs.messages("warn").join("\n")).toMatch(/run-odd.*could not be read/);
+  });
+
+  it("logs how many claims it left out", () => {
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
+    const record = { runId: "run-old", status: "completed", analysis } as unknown as RunRecord;
+    resultOf(record);
+    expect(logs.messages("info").join("\n")).toMatch(/run-old.*left out 7 claim/);
   });
 });

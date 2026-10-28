@@ -2121,6 +2121,14 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("keeps hidden a value the log line reads only once an earlier lost part is masked", () => {
+    // The first reading masks the key "token", which the log line would lose; the line then reads
+    // "[redacted] = M0019x", which the logger no longer takes for a pair, so the value is lost too.
+    const text = '[token] => Bearer \ntoken = M0019x<meta content="a"';
+    expect(scrub(scrubText(text))).not.toContain("M0019x");
+    expect(scrub(redactText(text))).not.toContain("M0019x");
+  });
+
   it("keeps hidden what the other rules hide when they redact their own text again", () => {
     // A network error's message is a described error, described again when it is logged: the
     // header rule pairs the quotes of the text it left, and hides more the second time.

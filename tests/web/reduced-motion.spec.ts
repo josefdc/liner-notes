@@ -244,7 +244,10 @@ test("a drag on a card pans the map and leaves every card at its year, under red
   await page.mouse.up();
   await page.waitForTimeout(400);
   const after = await graphPlaces(page);
-  // The cards keep their places on the map; the view moved; nothing played out.
+  // The cards keep their places on the map; the view moved; nothing played out; and the drag
+  // (a press on a card) selected nothing.
+  await expect(graph.locator('g.nodes > g[aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.getByTestId("node-detail")).toHaveCount(0);
   expect(after.nodes).toEqual(before.nodes);
   expect(after.zoom).not.toBe(before.zoom);
   expect(await frames(page)).toBe(framesBefore);

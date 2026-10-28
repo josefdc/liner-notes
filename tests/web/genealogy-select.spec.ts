@@ -58,15 +58,20 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string, part?: L
   });
 }
 
-/** The panel and the selected card on screen: the panel never covers the card. */
+/**
+ * The panel, the selected card and the analysed track's card on screen: the panel covers
+ * neither card.
+ */
 async function expectClear(page: Page, id: string) {
   await settled(page);
-  const [panel, card] = await Promise.all([
+  const [panel, card, current] = await Promise.all([
     panelOf(page).boundingBox(),
     cardOf(page, id).locator("rect.card").boundingBox(),
+    cardOf(page, "current").locator("rect.card").boundingBox(),
   ]);
-  if (!panel || !card) throw new Error("no layout");
+  if (!panel || !card || !current) throw new Error("no layout");
   expect(overlap(panel, card), `the panel covers ${id}`).toBe(false);
+  expect(overlap(panel, current), "the panel covers the analysed track").toBe(false);
 }
 
 const SHOWCASES = {
@@ -89,7 +94,7 @@ const SHOWCASES = {
     code: { id: "s2", retrieved: "20 Oct 2026" },
     model: {
       id: "i1",
-      verdict: "Verifier: not checked; no claim in this result states this relation",
+      verdict: "Verifier: not checked; no claim is linked to this relation",
     },
     replay: false,
   },
@@ -206,10 +211,13 @@ for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES
 
       await page.getByRole("button", { name: "Filter links" }).click();
       const first = page.getByRole("checkbox").first();
+      // "Sample (6/6)": shown of all.
       const label = (await first.locator("xpath=..").textContent()) ?? "";
-      const count = Number(/\((\d+)\)$/.exec(label)?.[1]);
+      const [, shownOfKind, count] = (/\((\d+)\/(\d+)\)$/.exec(label) ?? []).map(Number);
       expect(count).toBeGreaterThan(0);
+      expect(shownOfKind).toBe(count);
       await first.uncheck();
+      await expect(first.locator("xpath=..")).toHaveText(new RegExp(`\\(0/${count}\\)$`));
       await expect(page.getByTestId("filter-status")).toHaveText(
         `Showing ${total - count} of ${total} links`,
       );
@@ -377,5 +385,197 @@ test.describe("on a touch screen", () => {
     await screenshot(page, testInfo, "tap-390");
     await expect(graphOf(page).locator("g.link-chips g.chip").first()).toBeVisible();
     expect(await analyses(page)).toHaveLength(1);
+  });
+});
+
+/** The genealogy-kinds map, opened in the Player at `width` × `height`. */
+async function openKinds(page: Page, width: number, height: number) {
+  await page.setViewportSize({ width, height });
+  await SHOWCASES["genealogy-kinds"].open(page);
+  if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+  await expect(cardOf(page, "sample-sourced")).toHaveCount(1);
+  await graphOf(page).scrollIntoViewIfNeeded();
+}
+
+/** Selects a card from the keyboard (the view brings it in first). */
+async function select(page: Page, id: string) {
+  await cardOf(page, id).focus();
+  await page.keyboard.press("Enter");
+  await expect(panelOf(page)).toBeFocused();
+}
+
+test("Escape from the filters or the page closes the panel, and stays on the map", async ({
+  page,
+}) => {
+  await openKinds(page, 1440, 900);
+  const back = page.getByRole("button", { name: /Back to summary/ });
+  await select(page, "sample-sourced");
+  await page.getByRole("button", { name: "Filter links" }).focus();
+  await page.keyboard.press("Escape");
+  await expect(panelOf(page)).toHaveCount(0);
+  await expect(back).toBeVisible();
+  await expect(graphOf(page)).toBeVisible();
+
+  // With the focus on no element (the page's body).
+  await select(page, "sample-sourced");
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Escape");
+  await expect(panelOf(page)).toHaveCount(0);
+  await expect(back).toBeVisible();
+  await expect(graphOf(page)).toBeVisible();
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width} px a filter that keeps the selected track lays the map out with both cards clear of the panel`, async ({
+    page,
+  }, testInfo) => {
+    await openKinds(page, width, height);
+    await select(page, "sample-sourced");
+    await page.getByRole("button", { name: "Filter links" }).click();
+    await page.getByRole("checkbox", { name: /^Cover/ }).uncheck();
+    await expect(panelOf(page)).toBeVisible();
+    await expect(cardOf(page, "cover-sourced")).toHaveCount(0);
+    await expectClear(page, "sample-sourced");
+    await screenshot(page, testInfo, `kinds-${width}-filter-selected`);
+  });
+}
+
+test("on a short landscape screen (844×390) the panel follows the map, and Analyze is in reach", async ({
+  page,
+}, testInfo) => {
+  await openKinds(page, 844, 390);
+  await select(page, "sample-sourced");
+  const panel = panelOf(page);
+  // In the flow after the map, not over it.
+  const [map, box] = await Promise.all([
+    graphOf(page).locator("xpath=..").boundingBox(),
+    panel.boundingBox(),
+  ]);
+  if (!map || !box) throw new Error("no layout");
+  expect(box.y).toBeGreaterThanOrEqual(map.y + map.height - 1);
+  await screenshot(page, testInfo, "kinds-844x390-panel");
+  await panel.getByRole("button", { name: "Analyze this track" }).click();
+  await expect.poll(async () => (await analyses(page)).length).toBe(2);
+});
+
+test("after a drag on the map, the keyboard still brings the focused card into view", async ({
+  page,
+}) => {
+  await openKinds(page, 1440, 900);
+  const graph = graphOf(page);
+  const wrapper = graph.locator("xpath=..");
+  // A track selected (its panel replaces the hover box, so only the focus brings a card in).
+  await select(page, "sample-sourced");
+  const box = await wrapper.boundingBox();
+  if (!box) throw new Error("no map");
+  // A drag on the empty canvas pans the selected card out of view.
+  await page.mouse.move(box.x + 6, box.y + box.height - 6);
+  await page.mouse.down();
+  for (let step = 1; step <= 10; step += 1) {
+    await page.mouse.move(box.x + 6 + step * 120, box.y + box.height - 6);
+  }
+  await page.mouse.up();
+  const card = cardOf(page, "sample-sourced").locator("rect.card");
+  const outOfView = async () => {
+    const [cardBox, view] = await Promise.all([card.boundingBox(), wrapper.boundingBox()]);
+    if (!cardBox || !view) throw new Error("no layout");
+    return cardBox.x >= view.x + view.width || cardBox.x + cardBox.width <= view.x;
+  };
+  expect(await outOfView()).toBe(true);
+  // The drag changed no selection.
+  await expect(graph.locator('g.nodes > g[aria-pressed="true"]')).toHaveCount(1);
+  // Into the map from its panel (where the header's Connections button puts the focus): the
+  // focus lands on the selected card (the map's one tab stop), which the view brings in.
+  await page.locator("#panel-genealogy").focus();
+  await page.keyboard.press("Tab");
+  await expect(cardOf(page, "sample-sourced")).toBeFocused();
+  await expect.poll(outOfView).toBe(false);
+});
+
+/** A WAV clip of silence, `seconds` long: a preview the page's real audio element plays. */
+function wav(seconds: number) {
+  const rate = 8000;
+  const samples = Math.round(rate * seconds);
+  const buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + samples * 2, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(rate, 24);
+  buffer.writeUInt32LE(rate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(samples * 2, 40);
+  return buffer;
+}
+
+test.describe("A/B listening with the page's real audio element", () => {
+  /** Serves the two previews: `answer` says, for each, what the clip's request gets. */
+  async function routePreviews(page: Page, answer: (url: string) => "short" | "long" | 403) {
+    const asked: string[] = [];
+    await page.route("https://previews.example.test/**", (route) => {
+      const url = route.request().url();
+      asked.push(url);
+      const what = answer(url);
+      return what === 403
+        ? route.fulfill({ status: 403, body: "" })
+        : route.fulfill({
+            status: 200,
+            contentType: "audio/wav",
+            body: wav(what === "short" ? 0.4 : 20),
+          });
+    });
+    return asked;
+  }
+  async function openRich(page: Page) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await useMockApi(page, richWithPreviews());
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    await select(page, "s2");
+  }
+  const FUNKY = "https://previews.example.test/funky-drummer.mp3";
+  const BRIGHT = "https://previews.example.test/bright-lines.mp3";
+
+  test("plays the sample, then this track, to their ends", async ({ page }) => {
+    const asked = await routePreviews(page, () => "short");
+    await openRich(page);
+    const status = panelOf(page).locator("[data-listening-status]");
+    await panelOf(page).getByRole("button", { name: "Hear the sample" }).click();
+    await expect(status).toHaveText("Playing: Bright Lines (2011) (2 of 2)", { timeout: 10_000 });
+    await expect(status).toHaveText("", { timeout: 10_000 });
+    expect([...new Set(asked)]).toEqual([FUNKY, BRIGHT]);
+  });
+
+  test("says which preview could not be played (an expired link)", async ({ page }) => {
+    await routePreviews(page, (url) => (url === FUNKY ? 403 : "short"));
+    await openRich(page);
+    await panelOf(page).getByRole("button", { name: "Hear the sample" }).click();
+    await expect(panelOf(page).locator("[data-listening-status]")).toHaveText(
+      "The preview of Funky Drummer, Parts 1 & 2 (1970) could not be played.",
+    );
+    await expect(panelOf(page).getByRole("button", { name: "Hear the sample" })).toBeVisible();
+  });
+
+  test("another preview stops the pair", async ({ page }) => {
+    await routePreviews(page, () => "long");
+    await openRich(page);
+    const panel = panelOf(page);
+    await panel.getByRole("button", { name: "Hear the sample" }).click();
+    await expect(panel.getByRole("button", { name: "Stop" })).toBeVisible();
+    await page.getByText("Previews (1)").click();
+    await page
+      .getByRole("list", { name: "Track previews" })
+      .getByRole("button", { name: "Play preview of Funky Drummer, Parts 1 & 2 (1970)" })
+      .click();
+    await expect(panel.getByRole("button", { name: "Hear the sample" })).toBeVisible();
+    await expect(panel.locator("[data-listening-status]")).toHaveText("");
   });
 });

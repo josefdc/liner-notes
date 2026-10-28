@@ -12,12 +12,16 @@ import { FILTER_LABEL, type FilterKind, isFiltering, type LinkFilter, NO_FILTER 
 export const LinkFilters: React.FC<{
   /** The kinds of link the map has, with how many of each. */
   counts: ReadonlyArray<{ kind: FilterKind; count: number }>;
+  /** How many links of each kind the filters show now. */
+  shownOf: (kind: FilterKind) => number;
+  /** What the filters did besides (a selected track's details they closed), said with the count. */
+  note?: string | null;
   filter: LinkFilter;
   onChange: (filter: LinkFilter) => void;
   /** Links shown, and in all. */
   shown: number;
   total: number;
-}> = ({ counts, filter, onChange, shown, total }) => {
+}> = ({ counts, shownOf, note = null, filter, onChange, shown, total }) => {
   const [open, setOpen] = useState(false);
   // Whether a filter was ever changed: clearing them then says every link is back.
   const [touched, setTouched] = useState(false);
@@ -33,13 +37,15 @@ export const LinkFilters: React.FC<{
     else off.add(kind);
     change({ ...filter, off });
   };
-  const said = filtering
+  const count = filtering
     ? `Showing ${shown} of ${total} ${total === 1 ? 'link' : 'links'}`
     : touched
       ? `Showing all ${total} ${total === 1 ? 'link' : 'links'}`
       : '';
+  const said = [count, note].filter(Boolean).join('. ');
+  // Every control at least 24 px tall (a touch target), its focus ring 2 px.
   const box =
-    'inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-cyber/70';
+    'inline-flex min-h-6 items-center gap-1.5 rounded-sm border px-1.5 py-0.5 cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-cyber/70';
   return (
     // Its parts take their places in the line it is in; the boxes, open, on a line of their own.
     <div className="contents text-chrome font-mono text-text-chip">
@@ -49,7 +55,7 @@ export const LinkFilters: React.FC<{
           aria-expanded={open}
           aria-controls={groupId}
           onClick={() => setOpen(!open)}
-          className="inline-flex items-center gap-1 text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70"
+          className="inline-flex min-h-6 items-center gap-1 text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
         >
           Filter links
           <ChevronDown size={12} aria-hidden="true" className={open ? 'rotate-180' : undefined} />
@@ -66,7 +72,7 @@ export const LinkFilters: React.FC<{
           <button
             type="button"
             onClick={() => change(NO_FILTER)}
-            className="text-text-secondary underline underline-offset-2 hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70"
+            className="min-h-6 text-text-secondary underline underline-offset-2 hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
           >
             Clear filters
           </button>
@@ -78,7 +84,7 @@ export const LinkFilters: React.FC<{
           className="basis-full flex flex-wrap items-center gap-1.5 text-chrome font-mono text-text-chip"
         >
           <legend className="sr-only">Show links</legend>
-          {counts.map(({ kind, count }) => {
+          {counts.map(({ kind, count: all }) => {
             const on = !filter.off.has(kind);
             return (
               <label
@@ -92,7 +98,7 @@ export const LinkFilters: React.FC<{
                   onChange={() => toggle(kind)}
                   className="accent-cyber focus-visible:outline-none"
                 />
-                {FILTER_LABEL[kind]} ({count})
+                {FILTER_LABEL[kind]} ({shownOf(kind)}/{all})
               </label>
             );
           })}

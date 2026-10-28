@@ -218,7 +218,7 @@ describe('selecting a track on the map', () => {
     // A model link with no claim: no verdict is made up.
     await click(card(container, 'guess'));
     expect(panel().querySelector('[data-verifier]')?.textContent).toBe(
-      'Verifier: not checked; no claim in this result states this relation',
+      'Verifier: not checked; no claim is linked to this relation',
     );
     expect(panel().textContent).toContain('Why it is not sourced: no evidence cited');
   });
@@ -355,7 +355,7 @@ describe('A/B listening in the panel', () => {
 describe("the map's filters", () => {
   const openFilters = () =>
     act(async () => fireEvent.click(screen.getByRole('button', { name: 'Filter links' })));
-  const toggle = (name: string) =>
+  const toggle = (name: string | RegExp) =>
     act(async () => fireEvent.click(screen.getByRole('checkbox', { name })));
   const shownLinks = (container: HTMLElement) => container.querySelectorAll('g.links path').length;
 
@@ -363,20 +363,28 @@ describe("the map's filters", () => {
     const { container } = render(<Graph />);
     await openFilters();
     expect(screen.getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual([
-      'Sample (3)',
-      'Remix (1)',
-      'Second hop (1)',
+      'Sample (3/3)',
+      'Remix (1/1)',
+      'Second hop (1/1)',
       'Sourced only',
     ]);
-    await toggle('Sample (3)');
+    await toggle(/^Sample/);
+    // Each box says how many of its links are shown.
+    expect(screen.getByRole('checkbox', { name: /^Sample/ }).parentElement?.textContent).toBe(
+      'Sample (0/3)',
+    );
     expect(shownLinks(container)).toBe(2);
     // Older Record stays: the second hop still joins it.
     expect(cardIds(container)).toEqual(['current', 'older', 'later', 'peer']);
     expect(screen.getByTestId('filter-status').textContent).toBe('Showing 2 of 5 links');
     expect(screen.getByText('Links as a list (2)')).toBeTruthy();
+    // Screen readers hear what the filters hide.
+    expect(container.querySelector('.sr-only')?.textContent).toContain(
+      'The filters hide 2 tracks and 3 links.',
+    );
 
-    await toggle('Remix (1)');
-    await toggle('Second hop (1)');
+    await toggle(/^Remix/);
+    await toggle(/^Second hop/);
     expect(shownLinks(container)).toBe(0);
     expect(cardIds(container)).toEqual(['current']);
     expect(screen.getByTestId('filters-empty').textContent).toContain(
@@ -399,6 +407,9 @@ describe("the map's filters", () => {
       path.getAttribute('data-link-kind'),
     );
     expect(kinds).toEqual(['sourced', 'sourced', 'sourced', 'sourced']);
+    expect(screen.getByRole('checkbox', { name: /^Sample/ }).parentElement?.textContent).toBe(
+      'Sample (2/3)',
+    );
     expect(cardIds(container)).not.toContain('guess');
     expect(cardIds(container)).toContain('current');
   });
@@ -410,5 +421,78 @@ describe("the map's filters", () => {
     await openFilters();
     await toggle('Sourced only');
     expect(screen.queryByTestId('node-detail')).toBeNull();
+    // The status says so, with the count.
+    expect(screen.getByTestId('filter-status').textContent).toBe(
+      'Showing 4 of 5 links. The details of Guess - Someone (1990) closed: the filters hide that track',
+    );
+  });
+});
+
+describe('the panel, as the review asked', () => {
+  it('offers "Hear both", not "Hear the sample", for a sample the model only proposed', async () => {
+    const withClip = {
+      ...data,
+      nodes: data.nodes.map((n) => (n.id === 'guess' ? { ...n, previewUrl: OLDER_CLIP } : n)),
+    };
+    const { container } = render(<Graph data={withClip} />);
+    await click(card(container, 'guess'));
+    expect(within(panel()).getByRole('button', { name: 'Hear both' })).toBeTruthy();
+    expect(within(panel()).queryByRole('button', { name: 'Hear the sample' })).toBeNull();
+  });
+
+  it('never says "Sourced from" for a link that does not say it was built from a record', async () => {
+    // An older result: the link states no origin, and cites the record.
+    const older = {
+      ...data,
+      links: data.links.map((l, i) => (i === 0 ? { ...l, origin: undefined } : l)),
+    };
+    const { container } = render(<Graph data={older} />);
+    await click(card(container, 'older'));
+    const first = within(panel())
+      .getAllByRole('listitem')
+      .find((item) => item.textContent?.includes('Bright Lines (2011)'));
+    if (!first) throw new Error('no relation to this track');
+    expect(first.querySelector('[data-sourced-from]')).toBeNull();
+    expect(first.querySelector('[data-verifier]')?.textContent).toBe(
+      'Verifier: not checked; no claim is linked to this relation',
+    );
+    expect(first.textContent).toContain('Cites:');
+  });
+
+  it('a selected card says Enter closes its details', async () => {
+    const { container } = render(<Graph />);
+    expect(card(container, 'older').getAttribute('aria-label')).toMatch(
+      /Press Enter for its details\.$/,
+    );
+    await click(card(container, 'older'));
+    expect(card(container, 'older').getAttribute('aria-label')).toMatch(
+      /Press Enter to close its details\.$/,
+    );
+  });
+
+  it('Escape from the filters or the page closes the panel first, not the map', async () => {
+    const outside = vi.fn();
+    window.addEventListener('keydown', outside);
+    try {
+      const { container } = render(<Graph />);
+      await click(card(container, 'older'));
+      const filters = screen.getByRole('button', { name: 'Filter links' });
+      await act(async () => {
+        fireEvent.keyDown(filters, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('node-detail')).toBeNull();
+      // Handled: the Player's own Escape (on the window) sees it taken.
+      expect(outside.mock.calls[0][0].defaultPrevented).toBe(true);
+
+      await click(card(container, 'older'));
+      await act(async () => {
+        (document.activeElement as HTMLElement | null)?.blur();
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('node-detail')).toBeNull();
+      expect(outside.mock.calls[1][0].defaultPrevented).toBe(true);
+    } finally {
+      window.removeEventListener('keydown', outside);
+    }
   });
 });

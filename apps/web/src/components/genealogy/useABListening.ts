@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type PreviewAudio,
   type PreviewEvents,
@@ -33,9 +33,10 @@ export type ListeningPlan =
   | { kind: 'ready'; label: 'Hear the sample' | 'Hear both'; steps: [ListenStep, ListenStep] };
 
 /**
- * The pair a selected track is heard with: the earlier record first (the link's source, where
- * the link gives a direction), then the later one; the selected track first otherwise. "Hear the
- * sample" for a sample, "Hear both" for any other relation. A replay keeps no previews (preview
+ * The pair a selected track is heard with: the earlier record first (the link's source, where a
+ * sourced link documents the direction), then the later one; the selected track first otherwise.
+ * "Hear the sample" only for a sourced sample: a sample the model proposed, or one whose evidence
+ * does not hold, is "Hear both", as is any other relation. A replay keeps no previews (preview
  * links are signed and expire), and a track without a clip cannot be heard: either is said.
  */
 export function listeningPlan({
@@ -52,7 +53,7 @@ export function listeningPlan({
   if (replay) return { kind: 'replay' };
   const missing = [selected, current].filter((track) => !track.url);
   if (missing.length > 0) return { kind: 'missing', names: missing.map((track) => track.name) };
-  const directed = link?.directionKnown === true && link.type !== 'producer';
+  const directed = link?.kind === 'sourced' && link.directionKnown && link.type !== 'producer';
   const selectedFirst = !directed || link.source === selected.id;
   const [a, b] = (selectedFirst ? [selected, current] : [current, selected]) as [
     ListenTrack,
@@ -60,7 +61,7 @@ export function listeningPlan({
   ];
   return {
     kind: 'ready',
-    label: directed && link.named === 'sample' ? 'Hear the sample' : 'Hear both',
+    label: directed && link.type === 'sample' ? 'Hear the sample' : 'Hear both',
     steps: [
       { id: a.id, name: a.name, url: a.url as string },
       { id: b.id, name: b.name, url: b.url as string },
@@ -90,6 +91,12 @@ export interface Listening {
 /** The preview volume, as the graph's other previews play. */
 const VOLUME = 0.4;
 
+/**
+ * How long one step may take before the pair gives up (ms): a preview is 30 s long, so this
+ * leaves the clip a generous while to load. A clip that stalls past it is said to have stopped.
+ */
+export const STEP_LIMIT_MS = 60_000;
+
 export function useABListening() {
   const [playing, setPlaying] = useState<Listening | null>(null);
   // What the last pair ended with, when it did not play through (a clip that failed, audio the
@@ -100,13 +107,27 @@ export function useABListening() {
   // Each start or stop: a play() that settles for an earlier one is not this one's.
   const runRef = useRef(0);
   const audioRef = useRef<PreviewAudio | null>(null);
-
-  const finish = useCallback((said: string | null) => {
-    runRef.current += 1;
-    stepsRef.current = null;
-    setPlaying(null);
-    setMessage(said);
+  // The step's time limit (STEP_LIMIT_MS), and the check after a pause.
+  const limitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimers = useCallback(() => {
+    if (limitRef.current !== null) clearTimeout(limitRef.current);
+    if (pauseCheckRef.current !== null) clearTimeout(pauseCheckRef.current);
+    limitRef.current = null;
+    pauseCheckRef.current = null;
   }, []);
+  useEffect(() => clearTimers, [clearTimers]);
+
+  const finish = useCallback(
+    (said: string | null) => {
+      clearTimers();
+      runRef.current += 1;
+      stepsRef.current = null;
+      setPlaying(null);
+      setMessage(said);
+    },
+    [clearTimers],
+  );
 
   const playStep = useCallback(
     (index: number) => {
@@ -116,6 +137,12 @@ export function useABListening() {
       indexRef.current = index;
       setPlaying({ steps, index });
       const run = runRef.current;
+      clearTimers();
+      limitRef.current = setTimeout(() => {
+        if (run !== runRef.current || stepsRef.current !== steps) return;
+        audioRef.current?.stop();
+        finish(`The preview of ${step.name} stopped before its end.`);
+      }, STEP_LIMIT_MS);
       const started = audioRef.current?.play(step.url, VOLUME);
       if (started === undefined) {
         finish('Previews cannot play here.');
@@ -133,7 +160,7 @@ export function useABListening() {
         );
       });
     },
-    [finish],
+    [finish, clearTimers],
   );
 
   const events = useMemo<PreviewEvents>(
@@ -153,6 +180,21 @@ export function useABListening() {
       // Another preview took the element over.
       onStopped: () => {
         if (stepsRef.current) finish(null);
+      },
+      // A pause from outside (the browser's or the system's media controls) ends the pair. A clip
+      // that plays through is paused just before it ends: a pause the clip's end follows, or that
+      // the next step replaces, is not one.
+      onPause: () => {
+        const steps = stepsRef.current;
+        if (!steps) return;
+        const [run, index] = [runRef.current, indexRef.current];
+        if (pauseCheckRef.current !== null) clearTimeout(pauseCheckRef.current);
+        pauseCheckRef.current = setTimeout(() => {
+          pauseCheckRef.current = null;
+          if (run !== runRef.current || stepsRef.current !== steps) return;
+          if (indexRef.current !== index || audioRef.current?.playing()) return;
+          finish('Paused: the pair stopped.');
+        }, 0);
       },
     }),
     [playStep, finish],

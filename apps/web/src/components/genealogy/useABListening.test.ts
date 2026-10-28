@@ -2,7 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGenealogy } from './links';
 import { contextOf, link, node } from './testing';
-import { listeningPlan, unavailableText, useABListening } from './useABListening';
+import { listeningPlan, STEP_LIMIT_MS, unavailableText, useABListening } from './useABListening';
 
 /** The page's preview element: each clip asked to play, in order; a test ends or fails it. */
 let played: string[] = [];
@@ -91,6 +91,49 @@ describe('A/B listening', () => {
   });
 });
 
+describe('A/B listening, stopped from outside', () => {
+  it('ends the pair on a pause from outside, but not on the pause a clip ends with', async () => {
+    const { result } = renderHook(() => useABListening());
+    act(() => result.current.start([A, B]));
+    // A clip that plays through is paused just before its end: the next step plays.
+    await act(async () => {
+      if (!element) throw new Error('no element');
+      element.paused = true;
+      element.onpause?.();
+      element.ended = true;
+      element.onended?.();
+      await new Promise((done) => setTimeout(done, 10));
+    });
+    expect(played).toEqual([A.url, B.url]);
+    expect(result.current.playing?.index).toBe(1);
+    // The system's media keys pause it: the pair ends, and says so.
+    await act(async () => {
+      if (!element) throw new Error('no element');
+      element.paused = true;
+      element.onpause?.();
+      await new Promise((done) => setTimeout(done, 10));
+    });
+    expect(result.current.playing).toBeNull();
+    expect(result.current.message).toBe('Paused: the pair stopped.');
+  });
+
+  it('gives up on a clip that stalls, and says so', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useABListening());
+      act(() => result.current.start([A, B]));
+      act(() => {
+        vi.advanceTimersByTime(STEP_LIMIT_MS + 1);
+      });
+      expect(result.current.playing).toBeNull();
+      expect(result.current.message).toBe('The preview of Source (1984) stopped before its end.');
+      expect(played).toEqual([A.url]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('the pair to hear', () => {
   const nodes = [
     node('this', 1, 'This - Me (2011)'),
@@ -129,6 +172,23 @@ describe('the pair to hear', () => {
   it('starts with this track before a later one ("Hear both")', () => {
     const plan = listeningPlan({ selected: later, current, link: remix, replay: false });
     expect(plan).toEqual({ kind: 'ready', label: 'Hear both', steps: [current, later] });
+  });
+
+  it('says "Hear both" for a sample that is not sourced, and starts with the selected track', () => {
+    const [guess] = readGenealogy(
+      {
+        nodes,
+        links: [link('older', 'this', { type: 'sample', kind: 'inferred', evidenceIds: [] })],
+      },
+      contextOf(),
+    ).links;
+    expect(guess.kind).toBe('inferred');
+    const plan = listeningPlan({ selected: older, current, link: guess, replay: false });
+    expect(plan).toEqual({ kind: 'ready', label: 'Hear both', steps: [older, current] });
+    // From this track's side too: the model's direction does not order the pair.
+    expect(
+      listeningPlan({ selected: current, current: older, link: guess, replay: false }),
+    ).toEqual({ kind: 'ready', label: 'Hear both', steps: [current, older] });
   });
 
   it('is skipped, with the reason, when a preview is missing or in a replay', () => {

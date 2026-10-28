@@ -128,7 +128,7 @@ export const LineageRow: React.FC<{
         data-card-id={node.id}
         onClick={() => onSelect(node)}
         // Selected: a solid ring, apart from the card's frame (focus adds its own ring outside).
-        className={`max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void ${selected ? 'outline-2 outline-cyber outline-offset-1' : ''}`}
+        className={`max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void ${selected ? 'outline-2 outline-white outline-offset-1' : ''}`}
       >
         {body}
       </button>

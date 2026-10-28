@@ -360,8 +360,8 @@ function nodeYear(value: unknown): number | null {
 /**
  * The genealogy's nodes, by id (entries that are not nodes are left out), each with the year
  * the API took from MusicBrainz for it (`year`), when it has one. The analysed track's node
- * (group 1) without one takes `trackYear` when its label names no year: the API labels it with
- * the title alone.
+ * (group 1) takes the earlier of that year and `trackYear`, used when its label names no year:
+ * the API labels it with the title alone.
  */
 export function nodesById(
   nodes: unknown,
@@ -373,7 +373,10 @@ export function nodesById(
     if (node && typeof node === 'object' && typeof (node as NamedNode).id === 'string') {
       const { id, label, trackTitle } = node as NamedNode;
       const isCurrent = (node as { group?: unknown }).group === 1;
-      const year = nodeYear((node as { year?: unknown }).year) ?? (isCurrent ? trackYear : null);
+      // The analysed track: the earlier of its MusicBrainz year and the result's release year
+      // (a recording is not released after the release that carries it).
+      const own = nodeYear((node as { year?: unknown }).year);
+      const year = isCurrent && trackYear !== null ? Math.min(own ?? trackYear, trackYear) : own;
       byId.set(id, {
         id,
         label: typeof label === 'string' ? label : id,

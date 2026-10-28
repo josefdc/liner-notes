@@ -45,6 +45,7 @@ import {
   type MbRelatedRecording,
   type MbRelationship,
   type MbReleaseSummary,
+  type MapRead,
   type MbSampleHop,
   type MbWork,
   NOT_ORIGINAL_RELEASE_TYPES,
@@ -72,6 +73,7 @@ import {
   type Omission,
   primaryEvidence,
   quoted,
+  quotedDated,
   RELATION_PHRASE,
   errorRecord,
   scopedRef,
@@ -811,9 +813,13 @@ function quietly<T>(call: () => T): T | null {
  *   source's own, the work's dated recordings (`workDates`), the cache's, and then one search
  *   by recording id for the rest (`recordingReleaseDates`). A recording MusicBrainz does not
  *   date stays undated.
- * A request starts only while `signal` has not aborted and the pacing clock is at most
- * `notAfter`; one that fails, or that the signal stops, is dropped quietly: no record, no error,
- * and a later run asks again. Never throws.
+ * Each request is a map read (MapRead): it waits in the map's lane of the MusicBrainz queue,
+ * after every chain's own reads, is not retried, and is sent only while the pacing clock is at
+ * most `notAfter` when its turn comes (none is queued once that time has passed). One that is
+ * not sent, fails, or is stopped by `signal`, is dropped quietly: no record, no error, and a
+ * later run asks again. Only what MusicBrainz answered is cached: a date for a recording the
+ * search lists with one, "none" for one it lists without; nothing for a recording it leaves out.
+ * Never throws.
  */
 export async function readRelationsMap(
   resolution: IdentityResolution,
@@ -823,6 +829,7 @@ export async function readRelationsMap(
   const { identity } = resolution;
   if (!identity) return { hops: [], dates };
   const { signal, notAfter, cache } = options;
+  const read: MapRead = { notAfter };
   const timeLeft = () => !signal?.aborted && pacingClock() <= notAfter;
   const own = identity.recording.mbid;
   const records = relationshipRecords(resolution).slice(0, MAX_RECORDS);
@@ -839,9 +846,9 @@ export async function readRelationsMap(
     let hop = cache ? quietly(() => cache.getMbHop(source)) : null;
     if (!hop && timeLeft()) {
       try {
-        hop = sampleHopOf(await getRecordingDetails(source, signal));
-        const read = hop;
-        if (read && cache) quietly(() => cache.putMbHop(source, read));
+        hop = sampleHopOf(await getRecordingDetails(source, signal, read));
+        const answer = hop;
+        if (answer && cache) quietly(() => cache.putMbHop(source, answer));
       } catch {
         hop = null;
       }
@@ -875,11 +882,13 @@ export async function readRelationsMap(
     .slice(0, RECORDING_DATES_MAX);
   if (ask.length > 0 && timeLeft()) {
     try {
-      const read = await recordingReleaseDates(ask, signal);
+      const answer = await recordingReleaseDates(ask, signal, read);
       for (const mbid of ask) {
-        const date = read.get(mbid.toLowerCase()) ?? null;
-        if (date) dates.set(mbid, date);
-        if (cache) quietly(() => cache.putMbDate(mbid, date));
+        const listed = answer.get(mbid.toLowerCase());
+        // Left out of the answer: nothing is known, and nothing is kept.
+        if (listed === undefined) continue;
+        if (listed) dates.set(mbid, listed);
+        if (cache) quietly(() => cache.putMbDate(mbid, listed));
       }
     } catch {
       // Dropped quietly: the nodes stay undated, and a later run asks again.
@@ -903,10 +912,11 @@ function dated(
  * MusicBrainz, with an Evidence item for the recording itself (its ISRC, title, credit and
  * length) and one per relationship. Covers of the work are phrased as covers of the work and
  * link the work's page; they are claimed for the track (`about: "track"`) only when it is the
- * work's original recording. With a relations map (`map`), each related recording carries the
- * first release date MusicBrainz files for it, and the second hop's records follow, each with
- * an item about two other recordings: `recording/<a>/<kind>/recording/<b>`, with no scope, on
- * the page of <a> (the recording the matched one samples).
+ * work's original recording. A related recording's first release date, when known, is in its
+ * record and stated in its item ("(first released …)"). With a relations map (`map`), each
+ * related recording carries the date MusicBrainz files for it, and the second hop's records
+ * follow, each with an item about two other recordings: `recording/<a>/<kind>/recording/<b>`,
+ * with no scope, on the page of <a> (the recording the matched one samples).
  */
 export async function musicBrainzRelationships(
   resolution: IdentityResolution,
@@ -954,8 +964,9 @@ export async function musicBrainzRelationships(
     .slice(0, MAX_RECORDS)
     .map((r) => (map && r.recording ? { ...r, recording: dated(r.recording, map.dates) } : r));
   for (const r of kept) {
+    // The other recording with the first release date MusicBrainz files for it, when known.
     const other = r.recording
-      ? quoted(r.recording.title, r.recording.artist)
+      ? quotedDated(r.recording.title, r.recording.artist, r.recording.firstReleaseDate)
       : quoted(r.work?.title ?? "");
     if (r.kind === "covered-by" && r.work) {
       // A cover of the work: stated about the work, on the work's page, and scoped to the track
@@ -1023,7 +1034,7 @@ export async function musicBrainzRelationships(
       recordRef: ref,
       url: `${MB_SITE}/recording/${via.mbid}`,
       title: `${via.title} — MusicBrainz relationships`,
-      excerpt: `MusicBrainz: ${quoted(via.title, via.artist)} ${RELATION_PHRASE[hop.kind]} ${quoted(other.title, other.artist)}.`,
+      excerpt: `MusicBrainz: ${quotedDated(via.title, via.artist, via.firstReleaseDate)} ${RELATION_PHRASE[hop.kind]} ${quotedDated(other.title, other.artist, other.firstReleaseDate)}.`,
       retrievedAt: at,
     });
     evidence.push(item);

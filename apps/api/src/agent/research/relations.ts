@@ -23,7 +23,7 @@ import type { Evidence } from "@liner-notes/contract";
 import { z } from "zod";
 import { hopRecordRef, type PrimarySources } from "../../sources/identity.js";
 import { type MbRelatedRecording, RELEASE_DATE } from "../../sources/musicbrainz.js";
-import { evidenceScope, quoted, RELATION_PHRASE } from "../../sources/records.js";
+import { evidenceScope, quoted, quotedDated, RELATION_PHRASE } from "../../sources/records.js";
 
 const RelationKind = z.enum([
   "samples",
@@ -238,8 +238,9 @@ const hopEnd = (recording: MbRelatedRecording): HopRelation["via"] => ({
 /**
  * True when `item` states `relation` as its source module writes it: of its source and scope,
  * a recordRef naming the same kind of relation to the same record (or the same release, or a
- * Discogs credit), and an excerpt naming the same other record (title and artist credit), the
- * same credited name and roles, or the same release title.
+ * Discogs credit), and an excerpt naming the same other record (title, artist credit and the
+ * first release date the relation carries, or none), the same credited name and roles, or the
+ * same release title.
  */
 function statedBy(relation: PrimaryRelation, item: Evidence): boolean {
   if (relation.type === "hop") {
@@ -250,7 +251,7 @@ function statedBy(relation: PrimaryRelation, item: Evidence): boolean {
       evidenceScope(item) === null &&
       item.recordRef === hopRecordRef(via.mbid, kind, other.mbid) &&
       item.excerpt ===
-        `MusicBrainz: ${quoted(via.title, via.artist)} ${RELATION_PHRASE[kind]} ${quoted(other.title, other.artist)}.`
+        `MusicBrainz: ${quotedDated(via.title, via.artist, via.firstReleaseDate)} ${RELATION_PHRASE[kind]} ${quotedDated(other.title, other.artist, other.firstReleaseDate)}.`
     );
   }
   if (item.source !== relation.source || evidenceScope(item) !== relation.scope) return false;
@@ -258,10 +259,12 @@ function statedBy(relation: PrimaryRelation, item: Evidence): boolean {
   const { excerpt } = item;
   switch (relation.type) {
     case "relation": {
-      const { entity, mbid, title, artist } = relation.other;
+      // With the first release date the relation carries, stated as it is: a date the item
+      // does not state (or states otherwise) is not the record's.
+      const { entity, mbid, title, artist, firstReleaseDate } = relation.other;
       return (
         ref.endsWith(`/${relation.kind}/${entity}/${mbid}`) &&
-        excerpt.endsWith(` ${quoted(title, artist)}.`)
+        excerpt.endsWith(` ${quotedDated(title, artist, firstReleaseDate)}.`)
       );
     }
     case "release":

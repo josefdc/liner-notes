@@ -620,12 +620,55 @@ describe('the relations MusicBrainz states', () => {
     );
   });
 
+  it('keeps a MusicBrainz sample sourced when the track’s MusicBrainz year is later than its release', () => {
+    // MusicBrainz dates this recording 2015; the result's release of it is from 1990, and a
+    // record dated 2005 samples it.
+    const later = {
+      ...evidenceItem('ev-later'),
+      recordRef:
+        'track/recording/00000000-0000-4000-8000-000000000000/sampled-by/recording/00000000-0000-4000-8000-000000000009',
+    };
+    const g = {
+      nodes: [
+        { id: 'current', group: 1, label: 'T', trackTitle: 'T', size: 40, year: 2015 },
+        { id: 'mb-9', group: 4, label: 'Later - B', trackTitle: 'Later', size: 22, year: 2005 },
+      ],
+      links: [
+        link('current', 'mb-9', {
+          type: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-later'],
+        }),
+      ],
+    };
+    const [shown] = shownLinks(g, linkContext([later], null, { releaseYear: '1990-05-01' }));
+    expect(shown).toMatchObject({ kind: 'sourced', directionKnown: true });
+    expect(relationLabel(shown)).toBe('Sample');
+    const named = nodesById(g.nodes, 1990);
+    expect(relationSentence(shown, (id) => nodeName(named.get(id), id))).toBe(
+      'Later (2005) samples T (1990)',
+    );
+  });
+
+  it('names a relations map record as a MusicBrainz record about two other recordings', () => {
+    expect(sourceLabel(hopItem as Evidence)).toBe(
+      'MusicBrainz · primary record · about two other recordings, not this one',
+    );
+    // Not one with any other shape.
+    expect(sourceLabel({ ...hopItem, recordRef: 'recording/abc' } as Evidence)).toBe(
+      'MusicBrainz · web page',
+    );
+  });
+
   it('takes the result’s year for the analysed track only when MusicBrainz gave its node none', () => {
     const [current, ...rest] = genealogy.nodes;
     const { year: _year, ...undated } = current;
     const named = nodesById([undated, ...rest], 2022);
     expect(named.get('current')?.year).toBe(2022);
     expect(nodesById(genealogy.nodes, 2022).get('current')?.year).toBe(2005);
+    // Never later than the result's own release of it.
+    expect(nodesById(genealogy.nodes, 1999).get('current')?.year).toBe(1999);
     // A year that is not a whole number of four digits is no year.
     expect(nodesById([{ ...rest[0], year: '1979' }]).get('mb-1')).not.toHaveProperty('year');
     expect(nodesById([{ ...rest[0], year: 19.79 }]).get('mb-1')).not.toHaveProperty('year');

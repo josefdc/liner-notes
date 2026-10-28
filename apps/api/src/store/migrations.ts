@@ -444,6 +444,8 @@ export const MIGRATIONS: readonly Migration[] = [
           expires_at INTEGER NOT NULL,
           PRIMARY KEY (mbid, part)
         );
+        CREATE INDEX musicbrainz_recording_cache_expires_at
+          ON musicbrainz_recording_cache (expires_at);
       `);
     },
   },

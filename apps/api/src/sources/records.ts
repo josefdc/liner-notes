@@ -568,6 +568,14 @@ export function isPrimaryRecordEvidence(item: unknown): item is Evidence {
 export const quoted = (title: string, artist?: string | null) =>
   artist ? `"${title}" by ${artist}` : `"${title}"`;
 
+/**
+ * A recording as an item names it, with the first release date MusicBrainz files for it when
+ * it has one: `"Title" by Artist (first released 1981-10-26)`. A node's year is taken only from a
+ * date its item states so.
+ */
+export const quotedDated = (title: string, artist?: string | null, date?: string | null) =>
+  `${quoted(title, artist)}${date ? ` (first released ${date})` : ""}`;
+
 /** Relationship kinds the sources share, read from the track's side. */
 export type RelationKind =
   | "samples"

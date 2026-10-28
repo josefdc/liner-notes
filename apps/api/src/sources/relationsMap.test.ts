@@ -19,9 +19,16 @@ import { shownEvidence } from "../agent/prompts.js";
 import { runMigrations } from "../store/migrations.js";
 import { SonicCache, TTL_MUSICBRAINZ_RECORDING } from "../store/cache.js";
 import { collectPrimarySources, type RecordingCache } from "./identity.js";
-import { type MbRelationship, MusicBrainzRateLimiter } from "./musicbrainz.js";
+import {
+  getRecordingDetails,
+  type MbRelationship,
+  MusicBrainzRateLimiter,
+  withMusicBrainzPriority,
+} from "./musicbrainz.js";
+import { PaceRefused } from "./pacing.js";
 import { evidenceScope } from "./records.js";
-import { type FetchCall, json, stubFetch } from "./testing/fetchStub.js";
+import { type FetchCall, json, never, stubFetch } from "./testing/fetchStub.js";
+import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 import { ICE_TRACK, primaryRoute } from "./testing/iceIceBaby.js";
 
 const MB = "https://musicbrainz.org/ws/2";
@@ -94,15 +101,18 @@ const route = (call: FetchCall) => {
   return primaryRoute(call);
 };
 
-/** The per-recording cache on a fresh database. */
-function recordingCache(): SonicCache {
+/** The per-recording cache on a fresh database, with the database. */
+function recordingCacheWithDb() {
   const db = new Database(":memory:");
   runMigrations(db);
   onTestFinished(() => {
     db.close();
   });
-  return new SonicCache(db);
+  return { db, cache: new SonicCache(db) };
 }
+
+/** The per-recording cache on a fresh database. */
+const recordingCache = (): SonicCache => recordingCacheWithDb().cache;
 
 const records = (sources: Awaited<ReturnType<typeof collectPrimarySources>>) => {
   if (sources.musicbrainz.status !== "found") throw new Error(sources.musicbrainz.reason);
@@ -167,7 +177,7 @@ describe("the relations map", () => {
       recordRef: `recording/${UNDER_PRESSURE}/sampled-by/recording/${SIBLING}`,
       url: `https://musicbrainz.org/recording/${UNDER_PRESSURE}`,
       excerpt:
-        'MusicBrainz: "Under Pressure" by Queen & David Bowie is sampled in "Sibling Song" by Sibling Artist.',
+        'MusicBrainz: "Under Pressure" by Queen & David Bowie (first released 1981-10-26) is sampled in "Sibling Song" by Sibling Artist.',
     });
     expect(item && evidenceScope(item)).toBeNull();
 
@@ -256,6 +266,31 @@ describe("the relations map", () => {
     expect(second.evidence).toEqual(first.evidence);
   });
 
+  it("keeps a row 48 h to the second, and purges only expired rows", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));
+    const { cache, db } = recordingCacheWithDb();
+    cache.putMbDate(EARLIER, "1975");
+    cache.putMbDate(SIBLING, null, 1000);
+    vi.setSystemTime(new Date("2026-10-21T23:59:59Z"));
+    expect(cache.getMbDate(EARLIER)).toEqual({ date: "1975" });
+    expect(cache.purgeExpired().recordings).toBe(1);
+    const left = () =>
+      db.prepare("SELECT mbid FROM musicbrainz_recording_cache").pluck().all() as string[];
+    expect(left()).toEqual([EARLIER]);
+    vi.setSystemTime(new Date("2026-10-22T00:00:00Z"));
+    expect(cache.getMbDate(EARLIER)).toBeNull();
+    expect(cache.purgeExpired().recordings).toBe(1);
+    expect(left()).toEqual([]);
+    // Purged by an index on the expiry.
+    const plan = db
+      .prepare("EXPLAIN QUERY PLAN DELETE FROM musicbrainz_recording_cache WHERE expires_at <= ?")
+      .all(0) as Array<{ detail: string }>;
+    expect(plan.map((row) => row.detail).join(" ")).toMatch(
+      /musicbrainz_recording_cache_expires_at/,
+    );
+  });
+
   it("keeps a recording's reads as long as the research cache keeps research", () => {
     expect(TTL_MUSICBRAINZ_RECORDING).toBe(RESEARCH_TTL_MS);
     const cache = recordingCache();
@@ -266,30 +301,164 @@ describe("the relations map", () => {
   });
 
   it("drops the second hop quietly when the chain's time is nearly out", async () => {
-    // At the real 1.1 s spacing the chain's own reads take until 5.5 s. With the 20 s deadline
-    // the map's reads start by 13.5 s and are made; with an 8 s deadline they would have to
-    // start by 5.2 s, and are not.
+    // At the real 1.1 s spacing the chain's own reads end at 5.5 s (the recording's releases).
+    // With the 20 s deadline a map read may start until 13.5 s: both are made. With an 8 s
+    // deadline it may start only until 5.2 s, already past: the map queues nothing, so the
+    // chain ends when its own reads do, as without the map.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
-    const collect = async (deadlineMs: number) => {
+    const collect = async (deadlineMs: number, relationsMap?: object) => {
+      MusicBrainzRateLimiter.getInstance().resetForTests();
       const net = stubFetch(route);
-      const run = collectPrimarySources(ICE_TRACK, { now, deadlineMs, relationsMap: {} });
+      const t0 = performance.now();
+      let settledAt = -1;
+      const run = collectPrimarySources(ICE_TRACK, {
+        now,
+        deadlineMs,
+        ...(relationsMap ? { relationsMap } : {}),
+      }).then((sources) => {
+        settledAt = performance.now() - t0;
+        return sources;
+      });
       await vi.runAllTimersAsync();
       const mb = records(await run);
-      return { mb, mapReads: net.calls.filter((c) => isHopRead(c) || isDateSearch(c)) };
+      return { mb, settledAt, mapReads: net.calls.filter((c) => isHopRead(c) || isDateSearch(c)) };
     };
-    const inTime = await collect(20_000);
+    const inTime = await collect(20_000, {});
     expect(inTime.mapReads).toHaveLength(2);
     expect(hops(inTime.mb.records)).toHaveLength(2);
 
-    MusicBrainzRateLimiter.getInstance().resetForTests();
-    const late = await collect(8000);
+    const late = await collect(8000, {});
+    const without = await collect(8000);
     expect(late.mapReads).toEqual([]);
+    expect(late.settledAt).toBe(without.settledAt);
     expect(hops(late.mb.records)).toEqual([]);
     // Nothing lost and no error: the track's own records are all there, undated.
     expect(late.mb.error).toBeUndefined();
     const sample = late.mb.records.find((r) => r.recording?.mbid === UNDER_PRESSURE);
     expect(sample?.recording).not.toHaveProperty("firstReleaseDate");
     expect(late.mb.incomplete).toBe(inTime.mb.incomplete);
+  });
+
+  it("makes no map request once the chain's own reads end past the map's start limit", async () => {
+    // With the 20 s deadline the map's reads may start until 13.5 s; the dating cut is at 15 s.
+    // Here MusicBrainz answers the recording's releases (the chain's last read) only at 13.6 s:
+    // a request sent then would still be answered before the cut, but it starts too late.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    const t0 = performance.now();
+    const net = stubFetch(async (call) => {
+      if (call.url.startsWith(`${MB}/release?`)) {
+        await new Promise((resolve) => setTimeout(resolve, 13_600 - (performance.now() - t0)));
+      }
+      return route(call);
+    });
+    const run = collectPrimarySources(ICE_TRACK, { now, relationsMap: {} });
+    await vi.runAllTimersAsync();
+    const mb = records(await run);
+    expect(net.calls.filter((c) => isHopRead(c) || isDateSearch(c))).toEqual([]);
+    expect(hops(mb.records)).toEqual([]);
+    expect(mb.error).toBeUndefined();
+  });
+
+  it.each([
+    ["the second hop's read", isHopRead],
+    ["the date search", isDateSearch],
+  ])("settles by the dating cut when %s never answers", async (_name, held) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    const t0 = performance.now();
+    stubFetch((call) => (held(call) ? never(call) : route(call)));
+    let settledAt = -1;
+    const run = collectPrimarySources(ICE_TRACK, { now, relationsMap: {} }).then((sources) => {
+      settledAt = performance.now() - t0;
+      return sources;
+    });
+    await vi.runAllTimersAsync();
+    const mb = records(await run);
+    // The 20 s deadline less the 5 s left for the other sources.
+    expect(settledAt).toBeGreaterThan(0);
+    expect(settledAt).toBeLessThanOrEqual(15_000);
+    expect(mb.error).toBeUndefined();
+  });
+
+  it("caches only what the date search answers about", async () => {
+    unpaced();
+    const { cache, db } = recordingCacheWithDb();
+    const answers: unknown[] = [{ count: 0, recordings: [] }, { count: 1 }];
+    for (const answer of answers) {
+      stubFetch((call) => (isDateSearch(call) ? json(answer) : route(call)));
+      await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } });
+      const dates = db
+        .prepare("SELECT COUNT(*) FROM musicbrainz_recording_cache WHERE part = 'date'")
+        .pluck()
+        .get();
+      // An answer that lists no recording says nothing of any: nothing kept, asked again later.
+      expect(dates).toBe(0);
+    }
+    // One that lists a recording without a date says it has none: kept as such.
+    stubFetch(route);
+    await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } });
+    expect(cache.getMbDate(SIBLING)).toEqual({ date: null });
+  });
+
+  it("does not ask again when MusicBrainz sheds a map read", async () => {
+    unpaced();
+    const net = stubFetch((call) =>
+      isHopRead(call) || isDateSearch(call)
+        ? new Response("busy", { status: 503, headers: { "retry-after": "0" } })
+        : route(call),
+    );
+    const mb = records(await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} }));
+    expect(net.calls.filter(isHopRead)).toHaveLength(1);
+    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
+    expect(mb.error).toBeUndefined();
+  });
+
+  it("refuses cached relations whose dates their items do not state", async () => {
+    unpaced();
+    stubFetch(route);
+    const sources = await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} });
+    const items = primaryRecordEvidence(sources);
+    const relations = primaryRelations(sources);
+    expect(relationsIssue(relations, items)).toBeNull();
+    const tampered = (date: string, hop: boolean) =>
+      relations.map((r) =>
+        hop && r.type === "hop" && r.kind === "samples"
+          ? { ...r, other: { ...r.other, firstReleaseDate: date } }
+          : !hop && r.type === "relation" && r.other.mbid === UNDER_PRESSURE
+            ? { ...r, other: { ...r.other, firstReleaseDate: date } }
+            : r,
+      );
+    expect(relationsIssue(tampered("1901", false), items)).toBe(
+      "a relation its item does not state",
+    );
+    expect(relationsIssue(tampered("2099", true), items)).toBe(
+      "a relation its item does not state",
+    );
+  });
+
+  it("restores a map item only when its recording is one this one samples", async () => {
+    unpaced();
+    stubFetch(route);
+    const items = primaryRecordEvidence(
+      await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} }),
+    );
+    const context = {
+      readAt: now().toISOString(),
+      recordingMbid: ICE,
+      trackIsOriginal: false,
+      configured: { discogs: false, genius: false },
+    };
+    expect(restoredEvidence(items, context)).not.toBeNull();
+    // Without the item that says this recording samples "Under Pressure".
+    const sample = `musicbrainz:track/recording/${ICE}/samples/recording/${UNDER_PRESSURE}`;
+    const unsourced = items.filter((item) => item.id !== sample);
+    expect(unsourced.length).toBe(items.length - 1);
+    expect(restoredEvidence(unsourced, context)).toBeNull();
+    expect(
+      restoredEvidence(
+        unsourced.filter((item) => !item.recordRef?.startsWith("recording/")),
+        context,
+      ),
+    ).not.toBeNull();
   });
 
   it("drops a hop read that fails, and still dates what it can", async () => {
@@ -350,5 +519,52 @@ describe("the relations map's pacing", () => {
     expect(at.length).toBeGreaterThanOrEqual(7);
     const gaps = at.slice(1).map((t, i) => t - at[i]);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1100);
+  });
+});
+
+describe("the relations map's place in the MusicBrainz queue", () => {
+  const [A, B, C, D] = [ICE, UNDER_PRESSURE, SIBLING, EARLIER];
+  const answer = (call: FetchCall) => {
+    const id = new URL(call.url).pathname.split("/").at(-1) ?? "";
+    return json({ id, title: "x", relations: [] });
+  };
+
+  it("sends a map read after every chain's own reads and before the others", async () => {
+    queueOnFakeClock(100);
+    const sent: string[] = [];
+    stubFetch((call) => {
+      sent.push(new URL(call.url).pathname.split("/").at(-1) ?? "");
+      return answer(call);
+    });
+    // The first request is sent at once; the next three wait their turn, queued in this order.
+    const first = getRecordingDetails(A);
+    const research = getRecordingDetails(B);
+    const map = getRecordingDetails(C, undefined, { notAfter: Number.POSITIVE_INFINITY });
+    const chain = withMusicBrainzPriority(() => getRecordingDetails(D));
+    await settleOnFakeClock(Promise.all([first, research, map, chain]));
+    expect(sent).toEqual([A, D, C, B]);
+  });
+
+  it("refuses a map read whose turn comes after its start limit, and keeps its slot free", async () => {
+    queueOnFakeClock(1000);
+    const sent: Array<[string, number]> = [];
+    const t0 = performance.now();
+    stubFetch((call) => {
+      sent.push([new URL(call.url).pathname.split("/").at(-1) ?? "", performance.now() - t0]);
+      return answer(call);
+    });
+    const first = getRecordingDetails(A);
+    // Queued well before its limit (500 ms), but its turn comes at 1000 ms.
+    const late = getRecordingDetails(C, undefined, { notAfter: t0 + 500 }).then(
+      () => "sent",
+      (error: unknown) => error,
+    );
+    const next = getRecordingDetails(B);
+    await settleOnFakeClock(Promise.all([first, late, next]));
+    expect(await late).toBeInstanceOf(PaceRefused);
+    expect(sent).toEqual([
+      [A, 0],
+      [B, 1000],
+    ]);
   });
 });

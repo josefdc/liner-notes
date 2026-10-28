@@ -428,11 +428,18 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     /** The run's code-built claims and links, from the whole evidence pack. */
     function codeBuilt() {
+      const recording = state.isrcRecording ?? null;
       return buildCodeClaims(
         state.relations,
         state.evidence,
         runtime.newId,
-        state.isrcRecording ?? null,
+        recording && {
+          mbid: recording.mbid,
+          firstReleaseDate: recording.firstReleaseDate,
+          title: recording.title,
+          artist: recording.artist,
+          releaseDate: state.spotifyData?.releaseDate ?? null,
+        },
       );
     }
 

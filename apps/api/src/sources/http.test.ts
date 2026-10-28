@@ -2046,14 +2046,19 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     // A mask over the key the logger reads (`token=`, `Bearer`) must not show the value after it.
     for (const [text, hidden] of [
       ["<input name=_token value=\ntoken= QzLOGAQ", "QzLOGAQ"],
-      ["deploy X_TOKEN=Bearer QzLOGBQzLOGBQ", "QzLOGBQ"],
-      ["Set-Cookie: password=a; token: QzLOGCQ", "QzLOGCQ"],
+      ["Forbidden\nexport X_TOKEN=Bearer QzLOGDQ", "QzLOGDQ"],
+      ["Forbidden X_TOKEN=Bearer QzLOGEQ", "QzLOGEQ"],
+      // Masking the value the logger read behind `token:` takes its `Bearer`: a second round.
+      ["Forbidden X_TOKEN=token: Bearer QzLOGFQ", "QzLOGFQ"],
     ]) {
+      const reason = plainReason(text);
       for (const line of [
         scrub(`Error: ${describeError(new Error(text))}`),
         scrub(new SourceError("spotify", "http", text).message),
         scrub(redactText(text)),
         scrub(scrubText(text)),
+        scrub(new SourceError("spotify", "http", `HTTP 401 — ${reason ?? "refused"}`).message),
+        scrub(plainMessage(text) ?? ""),
       ]) {
         expect(line, text).not.toContain(hidden);
       }

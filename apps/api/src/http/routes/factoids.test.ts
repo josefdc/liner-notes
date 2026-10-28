@@ -28,6 +28,7 @@ import { LlmError } from "../../llm/errors.js";
 import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
 import { captureLogsForTests } from "../../logger.js";
+import { replayedAnalysis } from "../../replay/player.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -691,9 +692,9 @@ describe("each fact's claim", () => {
     onTestFinished(() => {
       vi.unstubAllEnvs();
     });
-    const record = demoRecord();
-    const recordedClaim = (claimId: string) =>
-      record.analysis.claims?.find((claim) => claim.id === claimId);
+    // The recording as a replay serves it: each fact stated once.
+    const served = replayedAnalysis(demoRecord(), "run-served");
+    const recordedClaim = (claimId: string) => served.claims?.find((claim) => claim.id === claimId);
 
     const stream = await openStream(streamQuery({ runId: RUN_ID }));
     await stream.waitFor(ofType("done"));
@@ -702,7 +703,7 @@ describe("each fact's claim", () => {
       claim: Claim;
     }>;
     // At most one request's worth: the recording may hold more facts than one request serves.
-    expect(streamed).toHaveLength(Math.min(record.analysis.factoids.length, FACTOIDS_PER_REQUEST));
+    expect(streamed).toHaveLength(Math.min(served.factoids.length, FACTOIDS_PER_REQUEST));
     for (const { data, claim } of streamed) {
       expect(claim).toEqual(recordedClaim(data.claimId));
     }
@@ -716,6 +717,31 @@ describe("each fact's claim", () => {
       res.body.factoids.map((factoid: { claimId: string }) => recordedClaim(factoid.claimId)),
     );
     expect(res.body.claims.length).toBeGreaterThan(0);
+    expect(model.invoke).not.toHaveBeenCalled();
+  });
+
+  it("of a recording never brings back a card the replay left out as a restatement", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const record = demoRecord();
+    const served = replayedAnalysis(record, "run-served");
+    const shown = served.factoids.map((factoid) => factoid.id);
+    // The recording has cards the replay left out (their claims restate code-built ones).
+    expect(record.analysis.factoids.length).toBeGreaterThan(shown.length);
+
+    const res = await request(app())
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: shown })
+      .timeout(2000);
+    expect(res.status).toBe(200);
+    expect(res.body.factoids).toEqual([]);
+    expect(res.body.claims).toEqual([]);
+
+    const stream = await openStream(streamQuery({ runId: RUN_ID, existingIds: shown.join(",") }));
+    await stream.waitFor(ofType("done"));
+    expect(stream.messages.filter(ofType("factoid"))).toEqual([]);
     expect(model.invoke).not.toHaveBeenCalled();
   });
 

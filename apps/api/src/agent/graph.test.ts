@@ -509,7 +509,7 @@ describe("the analysis graph", () => {
       replayed.trackData?.claims?.find((claim) => claim.text === text);
     expect(claimIsRejected(replayedClaim(CONTRADICTED)!)).toBe(true);
     expect(claimIsRejected(replayedClaim(SUPPORTED)!)).toBe(false);
-    expect(replayed.trackData?.run?.verifier).toEqual({ judged: 2, unjudged: 0 });
+    expect(replayed.trackData?.run?.verifier).toEqual({ judged: 2, unjudged: 0, restated: 0 });
     expect(replayed.trackData?.run?.verifier).toEqual(recorded.trackData?.run?.verifier);
     // The judge's answer came from the cassette, recorded at the recording's commit: no spend.
     expect(replayed.trackData?.run).toMatchObject({

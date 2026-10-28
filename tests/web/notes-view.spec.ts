@@ -17,10 +17,11 @@ import { offline } from "./offline";
 // A section with nothing to list says so in a sentence: nothing is made up to fill it.
 //
 // Two showcases: the recorded run (fixtures/replays/one-more-time-daft-punk.json) for samples,
-// covers, connections and the recording label. It has no history claims and no real credit: its
-// one "credit" is the album the track appears on, a release fact the model filed as a credit
-// (shown on a fact card; #216 addresses it). So the provenance mock stands in for credits and
-// history. The genealogy-kinds mock holds the samples no verdict supports.
+// covers, connections and the recording label. It has no history claims and no credit: its one
+// "credit" was the album the track appears on, a release fact the model filed as a credit, and
+// the replay leaves it out with the other model claims that restate a code-built claim. So the
+// provenance mock stands in for credits and history. The genealogy-kinds mock holds the samples
+// no verdict supports.
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
@@ -83,16 +84,24 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     "H2:Data from",
   ]);
 
-  // The relations no card shows, first the model's claims the verifier found supported, then
-  // those built from the MusicBrainz records: each named as what it is (no "Possible"), sourced,
-  // with the record it cites beside it.
+  // The relations no card shows, built from the MusicBrainz records: each named as what it is
+  // (no "Possible"), sourced, with the record it cites beside it. The model's claims that only
+  // restated one of them are left out: each fact is listed once.
   const samples = page.getByRole("region", { name: "Samples and covers" });
   const rows = await listed(page, "Samples and covers");
-  expect(rows).toHaveLength(16);
-  expect(rows[0]).toBe("SampleDaft Punk’s recording samples Eddie Johns’s “More Spell on You.”");
+  expect(rows).toHaveLength(13);
+  expect(rows[0]).toBe(
+    'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
+  );
   for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
+    expect(
+      rows.filter((row) => fact.test(row)),
+      String(fact),
+    ).toHaveLength(1);
+  }
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
-  await expect(items).toHaveCount(16);
+  await expect(items).toHaveCount(13);
   for (const item of await items.all()) {
     await expect(item.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
     await expect(item).toContainText("Sourced");
@@ -101,14 +110,19 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     "href",
     "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
   );
-  // The sample claim on a fact card is counted, not listed twice.
+  // The sample claim on a fact card says more than the record (how the sample is used): it is
+  // counted, not listed twice.
   await expect(samples).toContainText("1 claim of this section is shown with the facts above.");
 
-  // The recording's one "credit" is a release fact (the album the track appears on) the model
-  // filed as a credit (#216 addresses it); it is on a fact card: counted, not listed twice. It has
-  // no history claim: the section says so, and lists nothing.
+  // The release the track appears on is stated once, in "More claims", by its MusicBrainz record:
+  // the model's two copies (one filed as a credit, on a fact card) are left out. The recording has
+  // no credit and no history claim: each section says so, and lists nothing.
+  const release = (await listed(page, "More claims")).filter((row) => /Discovery/.test(row));
+  expect(release).toEqual([
+    'Track"One More Time" by Daft Punk appears on the official album "Discovery" (2001-02-26).',
+  ]);
   await expect(page.getByRole("region", { name: "Credits" })).toContainText(
-    "1 credit is shown with the facts above.",
+    "No credits found in this result.",
   );
   const history = page.getByRole("region", { name: "History" });
   await expect(history).toContainText("No history was found in this result.");

@@ -5,15 +5,17 @@
  * which commit it was recorded, so the progress that follows is never read as live work. The
  * result is the recorded one with the new run's id, still saying `mode: "replay"` with the
  * recording's date, commit and analyzer version, and with this run's own usage (none: a replay
- * calls no model; the recording's cost stays in the record). Every event carries the time it is
- * sent, so a stream's times never go back, and the time since the recorded run started
- * (`elapsedMs`): the event's own, or else the time the recording measured for it (`atMs`, since
- * the recorded stream opened, without the wait at the picker), so a recording made before events
- * carried one still shows when each step happened. The notice and the stream's own events carry
- * none. The recorded `done` is not sent: the stream sends its own, and its own heartbeats.
+ * calls no model; the recording's cost stays in the record), each fact stated once
+ * (`servedRecording`). Every event carries the time it is sent, so a stream's times never go
+ * back, and the time since the recorded run started (`elapsedMs`): the event's own, or else the
+ * time the recording measured for it (`atMs`, since the recorded stream opened, without the wait
+ * at the picker), so a recording made before events carried one still shows when each step
+ * happened. The notice and the stream's own events carry none. The recorded `done` is not sent:
+ * the stream sends its own, and its own heartbeats.
  */
 
 import type { ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
+import { oneClaimPerFact } from "../agent/restatements.js";
 import type { EventBody } from "../http/sse.js";
 
 export interface ReplayPacing {
@@ -44,12 +46,37 @@ export function setReplayPacingForTests(next: ReplayPacing): () => void {
 /** What a replay spends: nothing (no model is called). */
 const NO_USAGE = { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 };
 
+/** Each record's result as a replay serves it, worked out once per record. */
+const served = new WeakMap<ReplayRecord, { analysis: TrackAnalysis; restated: number }>();
+
+/** A recording's result as a replay serves it, and how many repeated claims it left out. */
+function servedWithCount(record: ReplayRecord): { analysis: TrackAnalysis; restated: number } {
+  const known = served.get(record);
+  if (known) return known;
+  const { result, restated } = oneClaimPerFact(record.analysis);
+  const entry = { analysis: result, restated };
+  served.set(record, entry);
+  return entry;
+}
+
 /**
- * The recorded result as the result of run `runId`. It says nothing about how a search text
- * matched the track (`queryMatch`): that belonged to the recorded run, not to this one.
+ * A recording's result with each fact stated once, as the verifier now leaves it
+ * (agent/restatements.ts, `oneClaimPerFact`): a recording made before that step loses the model's
+ * restatements and their cards, counted in its verifier summary; one made after it (its summary
+ * counts the step) is served as recorded. The replayed result and the recording's "more facts"
+ * (http/routes/factoids.ts) both read it, so a card left out here is never served there.
+ */
+export function servedRecording(record: ReplayRecord): TrackAnalysis {
+  return servedWithCount(record).analysis;
+}
+
+/**
+ * The recorded result as the result of run `runId`, each fact stated once (`servedRecording`).
+ * It says nothing about how a search text matched the track (`queryMatch`): that belonged to the
+ * recorded run, not to this one.
  */
 export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnalysis {
-  const { queryMatch: _match, ...analysis } = record.analysis;
+  const { queryMatch: _match, ...analysis } = servedRecording(record);
   const run = analysis.run;
   if (!run) throw new Error(`Replay record ${record.slug} has no run information`);
   return {
@@ -67,13 +94,20 @@ export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnal
   };
 }
 
-/** The status sent right after `connected`: this run is a replay of a recording. */
+/**
+ * The status sent right after `connected`: this run is a replay of a recording, and, when the
+ * replay left out claims that repeat another (`servedRecording`), how many, so the result is not
+ * read as the recording word for word.
+ */
 export function replayNotice(record: ReplayRecord): EventBody {
+  const { restated } = servedWithCount(record);
+  const repeats =
+    restated > 0 ? ` ${restated} repeated ${restated === 1 ? "claim" : "claims"} left out.` : "";
   return {
     type: "status",
     message:
       `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +
-      "nothing below runs live.",
+      `nothing below runs live.${repeats}`,
     code: "SYS-INIT",
     node: "replay",
     timestamp: new Date().toISOString(),

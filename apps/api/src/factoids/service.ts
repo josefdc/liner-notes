@@ -38,6 +38,9 @@
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
  *    names, the focus and the normalised text, never a count, and it is never one the client or
  *    the run already has, nor another fact's of the batch.
+ * 6. One claim per fact. Once judged, a fact that restates a code-built claim of the run (on the
+ *    same record, naming nothing it does not), or repeats another fact of the batch, is dropped
+ *    as a repeat, as the verifier leaves such a claim out of the analysis (restatements.ts).
  *
  * The facts are handed back in focus order once all of them have been checked.
  */
@@ -58,6 +61,7 @@ import {
 import { FACTOID_ABOUT, modelClaim } from "../agent/nodes/composerNode.js";
 import type { PromptTrack } from "../agent/prompts.js";
 import { agentRuntime } from "../agent/runtime.js";
+import { withoutRestatements } from "../agent/restatements.js";
 import { heldTextIssue } from "../agent/storedResults.js";
 import { applyVerdicts, checkClaims, judgeable } from "../agent/verifier/index.js";
 import { judgeClaims } from "../agent/verifier/judge.js";
@@ -595,9 +599,25 @@ export async function writeFactoids(
       }),
     );
 
+    // 6. One claim per fact: a fact that restates a code-built claim of the run (or another fact
+    // of the batch) is not sent; the run already states it (restatements.ts).
+    const codeBuilt = context.claims.filter((claim) => claim.origin === "code");
+    const { claims: keptClaims } = withoutRestatements(
+      [...codeBuilt, ...verified.claims],
+      [],
+      [],
+      context.evidence,
+    );
+    const kept = new Set(keptClaims.map((claim) => claim.id));
+
     const answered = answers.find((answer) => answer.ok);
     const model = answered?.ok ? answered.model : null;
     for (const [index, draft] of drafts) {
+      if (!kept.has(draft.claim.id)) {
+        log.info(`Factoid ${index + 1}: restates a claim the run already has; dropped`);
+        outcomes.push({ index, status: "none", reason: "repeat" });
+        continue;
+      }
       const claim = claimsById.get(draft.claim.id) ?? draft.claim;
       outcomes.push({ index, status: "written", ...masked(draft.factoid, claim) });
     }

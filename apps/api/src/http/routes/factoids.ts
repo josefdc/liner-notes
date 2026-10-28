@@ -41,6 +41,7 @@ import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, llm } from "../../llm/invoke.js";
 import { chooseReplay, type ReplayChoice, recordingFor } from "../../replay/mode.js";
+import { servedRecording } from "../../replay/player.js";
 import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
@@ -139,13 +140,16 @@ export function failureCode(error: unknown): "rate_limited" | "budget_exhausted"
 /**
  * The factoids of a recording that the client does not have yet (by id), at most `count`, with
  * their recorded ids and claim links: asking again with them as existing ids gives nothing new,
- * so a client never shows a recorded fact twice. A card links its claim only when the recording
+ * so a client never shows a recorded fact twice. They are the recording's cards as a replay
+ * serves its result (servedRecording): a card left out there, its claim restating a code-built
+ * one, is never served here. A card links its claim only when the recording
  * has that claim: a link to a claim that is not sent would point at nothing.
  */
 export function recordedFactoids(record: ReplayRecord, existingIds: string[], count: number) {
   const known = new Set(existingIds);
-  const claims = new Set((record.analysis.claims ?? []).map((claim) => claim.id));
-  return record.analysis.factoids
+  const analysis = servedRecording(record);
+  const claims = new Set((analysis.claims ?? []).map((claim) => claim.id));
+  return analysis.factoids
     .filter((factoid) => !known.has(factoid.id))
     .slice(0, count)
     .map((factoid) => ({
@@ -159,10 +163,10 @@ export function recordedFactoids(record: ReplayRecord, existingIds: string[], co
     }));
 }
 
-/** The recorded claim of a recorded card, when the recording has it. */
+/** The recorded claim of a recorded card, when the recording, as a replay serves it, has it. */
 export function recordedClaim(record: ReplayRecord, card: { claimId?: string }): Claim | undefined {
   if (card.claimId === undefined) return undefined;
-  return (record.analysis.claims ?? []).find((claim) => claim.id === card.claimId);
+  return (servedRecording(record).claims ?? []).find((claim) => claim.id === card.claimId);
 }
 
 /** The written facts and their claims, in focus order. */

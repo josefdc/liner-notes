@@ -198,7 +198,7 @@ describe("citations: the pack and the claim's scope", () => {
       ["rec", "inferred", null],
       ["ok", "sourced", "supported"],
     ]);
-    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 0 });
+    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 0, restated: 0 });
   });
 
   it("makes a link cite what its claim still cites, so it is never sourced on an out-of-scope item", async () => {
@@ -541,8 +541,9 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
   );
 
   it("reads a partly supported top-level sample statement about anything else as inferred", async () => {
+    // Each in words of its own: one statement written twice keeps one copy (restatements.ts).
     const claims = (["history", "track", "sound", "trivia"] as const).map((about) =>
-      modelClaim(about, { text: SAMPLES, about, evidenceIds: ["ev-sampled-by"] }),
+      modelClaim(about, { text: `${SAMPLES} (${about})`, about, evidenceIds: ["ev-sampled-by"] }),
     );
     const { result } = await verifyIn(claims, () => "partial");
 
@@ -580,8 +581,9 @@ describe("a statement that asserts a relation is stated whole, whatever its labe
     const { result } = await verifyIn(
       [
         labelled("card", "connection", COVER, ["ev-work"], "work"),
+        // In words of its own: one statement written twice keeps one copy (restatements.ts).
         modelClaim("top", {
-          text: COVER,
+          text: "The song has a string version by Vitamin String Quartet.",
           about: "history",
           evidenceIds: ["ev-work"],
           scope: "work",
@@ -931,7 +933,7 @@ describe("a slow judge", () => {
       expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
       const result = TrackAnalysis.parse(out.trackData);
       expect(result.claims?.[0]).toMatchObject({ verdict: null, kind: "inferred" });
-      expect(result.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
+      expect(result.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true, restated: 0 });
       expect(out.usage).toEqual([
         expect.objectContaining({ callSite: "verifier", status: "timeout" }),
       ]);
@@ -951,7 +953,12 @@ describe("a slow judge", () => {
     // 5 s left, less the 10 s margin: no time for the judge.
     expect(llm.calls).toHaveLength(0);
     expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
-    expect(out.trackData?.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
+    expect(out.trackData?.run?.verifier).toEqual({
+      judged: 0,
+      unjudged: 1,
+      failed: true,
+      restated: 0,
+    });
     expect(out.usage).toEqual([]);
     expect(out.statusMessages?.[0]).toMatch(/there was no time left in the run to check them/);
     expect(out.statusMessages?.[0]).not.toMatch(/did not finish/);
@@ -1077,7 +1084,7 @@ describe("the result", () => {
       kind: "inferred",
       verdictReason: "Not judged: longer than the judge reads whole.",
     });
-    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 1 });
+    expect(result.run?.verifier).toEqual({ judged: 1, unjudged: 1, restated: 0 });
   });
 
   it("masks @handles in model-written claims, cards and verdict reasons", async () => {

@@ -95,8 +95,14 @@ test("a run started from the Player moves the focus to its progress", async ({ p
   await useMockApi(page, fullResult);
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
-  const node = page.getByRole("button", { name: /Press Enter to analyze it/ }).first();
+  // Enter on a track selects it (its details take the focus); their Analyze starts the run.
+  const node = page.getByRole("button", { name: /Press Enter for its details/ }).first();
   await node.focus();
+  await page.keyboard.press("Enter");
+  const analyze = page.getByTestId("node-detail").getByRole("button", {
+    name: "Analyze this track",
+  });
+  await analyze.focus();
   await watchFocus(page);
 
   await page.keyboard.press("Enter");

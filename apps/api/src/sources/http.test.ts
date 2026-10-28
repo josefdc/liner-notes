@@ -11,7 +11,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { captureLogsForTests } from "../logger.js";
+import { logText } from "../http/middleware/errors.js";
+import { captureLogsForTests, configureLogger, scrub } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -36,7 +37,14 @@ import {
   withoutEmails,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
-import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
+import {
+  allStrings,
+  disagreements,
+  growth,
+  randomStrings,
+  threadCpuMs,
+  timed,
+} from "./testing/strings.js";
 
 // Pass-through, so one test can make a write fail half-way.
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -718,6 +726,256 @@ describe("scrubbing", () => {
   });
 });
 
+describe("secret values in cookies, config text, PHP dumps, forms and escaped text", () => {
+  /** Each way a text reaches a log, a cassette or an error message. */
+  const outputs = (text: string) => [
+    scrubText(text),
+    redactText(text),
+    describeError(new Error(text)),
+    new SourceError("spotify", "http", text).message,
+  ];
+  /** A source's reason as it reaches an error message, and that message as it is stored. */
+  const reasonOutputs = (text: string) => {
+    const detail = plainReason(text);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail ?? "refused"}`).message;
+    return [detail ?? "", message, plainMessage(message) ?? ""];
+  };
+
+  // Each shape with made-up values planted in it; `reason`: it can also arrive as a source's own
+  // reason, without markup.
+  it.each<[shape: string, text: string, planted: string[], reason: boolean]>([
+    [
+      "curl Cookie lines",
+      "> GET /v1 HTTP/1.1\n> Cookie: theme=QzcAQ; session=QzcBQ\n> Accept: */*",
+      ["QzcAQ", "QzcBQ"],
+      false,
+    ],
+    [
+      "Set-Cookie lines, several cookies joined",
+      "< HTTP/1.1 401\n< set-cookie: sid=QzcCQ; Path=/; HttpOnly\n" +
+        "< Set-Cookie: a=QzcDQ, b=QzcEQ; Expires=Wed, 21 Oct 2015 07:28:00 GMT, c=QzcFQ; Path=/",
+      ["QzcCQ", "QzcDQ", "QzcEQ", "QzcFQ"],
+      false,
+    ],
+    [
+      "a Cookie line in a reason",
+      'Forbidden\nCookie: session="QzcGQ"; lang=QzcHQ',
+      ["QzcGQ", "QzcHQ"],
+      true,
+    ],
+    [
+      "cookie headers as object keys",
+      `{ headers: { Cookie: 'sid=QzcJQ; csrftoken=QzcKQ' } } {"set-cookie":"sid=QzcLQ; Path=/"}`,
+      ["QzcJQ", "QzcKQ", "QzcLQ"],
+      true,
+    ],
+    [
+      "Authorization lines with a Token or Bot scheme",
+      "Unauthorized\nAuthorization: Token QzaAQ\nProxy-Authorization: Bot QzaBQ",
+      ["QzaAQ", "QzaBQ"],
+      true,
+    ],
+    [
+      "YAML mappings and list items",
+      'credentials:\n  - api_key: QzyAQ\n  - name: x\n    github_token: QzyBQ\n  password: "QzyCQ"',
+      ["QzyAQ", "QzyBQ", "QzyCQ"],
+      true,
+    ],
+    [
+      "TOML assignments",
+      "[auth]\napi_key = \"QzyDQ\"\nclient_secret = 'QzyEQ'\ntoken = QzyFQ # rotated\n" +
+        "DEPLOY_TOKEN = QzyGQ\naws_secret_access_key = QzyHQ",
+      ["QzyDQ", "QzyEQ", "QzyFQ", "QzyGQ", "QzyHQ"],
+      true,
+    ],
+    [
+      "environment lines",
+      'export GITHUB_TOKEN=QzeAQ\nSTRIPE_SECRET_KEY="QzeBQ"\nDB_PASSWORD=QzeCQ',
+      ["QzeAQ", "QzeBQ", "QzeCQ"],
+      true,
+    ],
+    [
+      "environment variables in a command",
+      "docker run -e OPENAI_API_KEY=QzeDQ -e LOG_LEVEL=debug img",
+      ["QzeDQ"],
+      true,
+    ],
+    [
+      "PHP print_r output",
+      "Array\n(\n    [api_key] => QzpAQ\n    [config] => Array\n        (\n" +
+        "            [token:protected] => QzpBQ\n        )\n)",
+      ["QzpAQ", "QzpBQ"],
+      false,
+    ],
+    [
+      "PHP var_dump output",
+      'array(2) {\n  ["token"]=>\n  string(5) "QzpCQ"\n  ["password":protected]=>\n  string(8) "QzpDQ é"\n}',
+      ["QzpCQ", "QzpDQ"],
+      false,
+    ],
+    [
+      "util.inspect Map entries and other => pairs",
+      "Map(2) { 'authorization' => 'QzmAQ', 'x-api-key' => QzmBQ } {:token => \"QzmCQ\"}",
+      ["QzmAQ", "QzmBQ", "QzmCQ"],
+      false,
+    ],
+    [
+      "quoted keys with values without quotes",
+      `{ 'x-api-key': QzkAQ, "token": 98765432 }`,
+      ["QzkAQ", "98765432"],
+      true,
+    ],
+    [
+      "form inputs, attributes in any order",
+      '<form><input type="hidden" value="QzhAQ" name="_token">' +
+        '<input name=password type=password value=QzhBQ><input type="password" id="pw" value=\'QzhCQ\'></form>',
+      ["QzhAQ", "QzhBQ", "QzhCQ"],
+      false,
+    ],
+    [
+      "meta tags",
+      '<meta name="csrf-token" content="QzhDQ"><meta content="QzhEQ" name="api-token">',
+      ["QzhDQ", "QzhEQ"],
+      false,
+    ],
+    [
+      "vendor headers",
+      "Unauthorized\nOcp-Apim-Subscription-Key: QzvAQ\nX-Functions-Key: QzvBQ\nX-Vault-Token: QzvCQ\nX-Goog-Api-Key: QzvDQ",
+      ["QzvAQ", "QzvBQ", "QzvCQ", "QzvDQ"],
+      true,
+    ],
+    [
+      "S3's Token-0 element",
+      "<Error><Code>InvalidToken</Code><Token-0>QzvEQ</Token-0><SessionToken>QzvFQ</SessionToken></Error>",
+      ["QzvEQ", "QzvFQ"],
+      false,
+    ],
+    [
+      "entity-escaped markup and JSON",
+      "&lt;error&gt;&lt;token&gt;QznAQ&lt;/token&gt;&lt;/error&gt; {&quot;password&quot;: &quot;QznBQ&quot;} " +
+        "&amp;lt;token&amp;gt;QznCQ&amp;lt;/token&amp;gt; token=&quot;QznDQ QznEQ&quot;",
+      ["QznAQ", "QznBQ", "QznCQ", "QznDQ", "QznEQ"],
+      false,
+    ],
+    [
+      "header lines after \\r\\n escapes inside a JSON string",
+      '{"error":"Unauthorized\\r\\nX-Api-Key: QzjAQ\\r\\nAuthorization: Token QzjBQ"}',
+      ["QzjAQ", "QzjBQ"],
+      true,
+    ],
+    ["a value escaped twice", '{"detail":"{ token: \\\\"QzjCQ\\\\" }"}', ["QzjCQ"], true],
+    [
+      "pydantic's input_value under a secret field",
+      "2 validation errors for Settings\nbody.password\n  Input should be a valid string [type=string_type, input_value=QzdAQ, input_type=int]\n" +
+        "api_key\n  String too short [type=string_too_short, input_value='QzdBQ', input_type=str]",
+      ["QzdAQ", "QzdBQ"],
+      true,
+    ],
+  ])("redacts the values of %s", (_shape, text, planted, reason) => {
+    for (const out of [...outputs(text), ...(reason ? reasonOutputs(text) : [])]) {
+      for (const value of planted) expect(out, text).not.toContain(value);
+    }
+    if (reason) expect(plainReason(text), text).toContain("[redacted]");
+  });
+
+  it("tells each shape from its near-misses and from prose", () => {
+    // Each near-miss is kept as it is; the shape next to it is redacted.
+    const pairs: Array<[near: string, shape: string]> = [
+      ["cookies: 3", "cookie: a=3"],
+      ["Cookie: session=expired", "Cookie: session=e1"],
+      ["Cookie: missing", "Cookie: id=m1"],
+      ["Set-Cookie: Path=/; Max-Age=0; HttpOnly", "Set-Cookie: sid=1; Path=/"],
+      ["token_count = 5", "token = 5"],
+      ["max_tokens = 5", "github_token = 5"],
+      ["the token = a word", "token = word"],
+      ["token= abc", "token = abc"],
+      ["pw1token = abc", "pw_token = abc"],
+      ["api_key = a b", "api_key = ab"],
+      ["Authorization: not allowed here", "Authorization: Token abc"],
+      ["Authorization: Token expired", "Authorization: Token e1"],
+      ["Authorization: Bearer of bad news", "Authorization: Bearer abc"],
+      ["Idempotency-Key: k1", "X-Goog-Api-Key: k1"],
+      ["Token-Count: 5", "Token-0: 5"],
+      ["MAX_TOKENS=5", "API_TOKEN=5"],
+      ["x sort_token=name", "x SORT_TOKEN=name"],
+      ["GITHUB_TOKEN=invalid", "GITHUB_TOKEN=i1"],
+      ["[name] => kept", "[token] => kept"],
+      ["[token] => Array", "[token] => Arrays"],
+      ['["name"]=> string(4) "kept"', '["token"]=> string(4) "kept"'],
+      ["'name' => 'kept'", "'token' => 'kept'"],
+      ['<input name="tokenizer" value="bert">', '<input name="token" value="bert">'],
+      ['<input name="token_count" value="5">', '<input name="csrf-token" value="5">'],
+      ['<input type="text" value="kept">', '<input type="password" value="kept">'],
+      ['<meta name="viewport" content="width=1">', '<meta name="api-token" content="width=1">'],
+      [
+        "name\n  Input should be a valid string [type=string_type, input_value='kept', input_type=str]",
+        "token\n  Input should be a valid string [type=string_type, input_value='kept', input_type=str]",
+      ],
+      [
+        "token\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]",
+        "token\n  Input should be a valid string [type=string_type, input_value=Nine, input_type=NoneType]",
+      ],
+      ["{ my_token: kept }", "{ x_auth_token: kept }"],
+      ["&lt;token-count&gt;3&lt;/token-count&gt;", "&lt;token&gt;3&lt;/token&gt;"],
+      ['{ tokenizer: \\\\"bert\\\\" }', '{ token: \\\\"bert\\\\" }'],
+    ];
+    for (const [near, shape] of pairs) {
+      expect(scrubText(near), near).toBe(near);
+      expect(redactText(near), near).toBe(near);
+      const reason = plainReason(near);
+      if (reason !== undefined) expect(reason, near).toBe(near.replace(/\s+/g, " "));
+      expect(scrubText(shape), shape).toContain("[redacted]");
+    }
+  });
+
+  it("keeps cookie names, attributes, comments and the rest of each line", () => {
+    expect(
+      redactText("Set-Cookie: sid=abc; Path=/; Expires=Wed, 21 Oct 2015 07:28:00 GMT; HttpOnly"),
+    ).toBe("Set-Cookie: sid=[redacted]; Path=/; Expires=Wed, 21 Oct 2015 07:28:00 GMT; HttpOnly");
+    expect(redactText('Cookie: a="q1"; b=q2')).toBe('Cookie: a="[redacted]"; b=[redacted]');
+    expect(redactText('api_key = "v1" # rotated\ntoken = v2 # rotated')).toBe(
+      'api_key = "[redacted]" # rotated\ntoken = [redacted] # rotated',
+    );
+    // A var_dump string is as long as its length in bytes says, "é" being two.
+    expect(redactText('["token"]=>\n  string(8) "ab é cd"\n}')).toBe(
+      '["token"]=>\n  string(8) "[redacted]"\n}',
+    );
+    expect(redactText("[password] => hunter2\n[user] => ana")).toBe(
+      "[password] => [redacted]\n[user] => ana",
+    );
+    expect(redactText('<input value="a>b" name="token">')).toBe(
+      '<input value="[redacted]" name="token">',
+    );
+    // A line of a reason is read as a line before the reason is one line.
+    expect(plainReason("Unauthorized\nCookie: session=v4")).toBe(
+      "Unauthorized Cookie: session=[redacted]",
+    );
+    expect(plainMessage("export GITHUB_TOKEN=v5\nnext")).toBe(
+      "export GITHUB_TOKEN=[redacted] next",
+    );
+    // The header rule pairs quotes as it does once these values are gone too: a quote inside a
+    // cookie value does not show the next pair.
+    expect(redactText('header\nCookie: a=x"y\n "LEAK-1" z"')).not.toContain("LEAK-1");
+  });
+
+  it("cuts a reason where the other rules cut it, though a mask makes it shorter", () => {
+    for (let pad = 20; pad < 50; pad++) {
+      const reason = `{ token: a } GITHUB_TOKEN=${"v".repeat(30)} ${"w ".repeat(pad)}QzTAILQ`;
+      const before = plainReason(reason.replace("GITHUB_TOKEN", "GITHUB_TOKEX"));
+      const now = plainReason(reason);
+      if (!before?.includes("Qz")) expect(now, reason).not.toContain("Qz");
+      expect(now?.length ?? 0).toBeLessThanOrEqual(120);
+      // The other rules' cut falls inside a mask longer than what it hides: no further.
+      const masked = `GITHUB_TOKEN=${"v".repeat(30)} ${"w ".repeat(pad)}{ token: a } QzTAILQ`;
+      const unmasked = plainReason(masked.replace("GITHUB_TOKEN", "GITHUB_TOKEX"));
+      if (!unmasked?.includes("Qz")) expect(plainReason(masked), masked).not.toContain("Qz");
+    }
+    expect(plainReason(`{ token: a } GITHUB_TOKEN=${"v".repeat(30)} ${"w ".repeat(44)}`)).toBe(
+      `{ token: [redacted] } GITHUB_TOKEN=[redacted] ${"w ".repeat(26)}w…`,
+    );
+  });
+});
+
 describe("cassettes", () => {
   let dir: string;
 
@@ -1100,6 +1358,21 @@ describe("cassettes", () => {
     expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
+  /**
+   * The delays of the timers the recorder sets while `call` runs to wait for a cassette lock
+   * (acquireLock polls with one), told from other timers by where each is set.
+   */
+  async function lockPolls(call: () => Promise<unknown>): Promise<Array<number | undefined>> {
+    const realSetTimeout = globalThis.setTimeout;
+    const polls: Array<number | undefined> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+      if (new Error().stack?.includes("acquireLock")) polls.push(ms);
+      return realSetTimeout(handler, ms);
+    }) as typeof setTimeout);
+    await call();
+    return polls;
+  }
+
   it("breaks a lock left by a recorder that is no longer running", async () => {
     // The pid of a process that has exited.
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
@@ -1107,20 +1380,53 @@ describe("cassettes", () => {
     process.env.SOURCE_CASSETTE = "record";
     stubFetch(() => json({ ok: true }));
     const logs = captureLogsForTests();
-
-    const started = Date.now();
+    // Broken at once: the recorder sets no timer to wait for the lock, which a busy machine
+    // cannot change as it can the time taken. A recorder that waited would also give up after
+    // 50 ms and log an error. The next test shows lockPolls finds the timers of a wait.
+    const restoreWait = setCassetteLockWaitForTests(50);
+    let polls: Array<number | undefined> = [];
     try {
-      await fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" });
+      polls = await lockPolls(() =>
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" }),
+      );
     } finally {
+      restoreWait();
       logs.restore();
       vi.restoreAllMocks();
     }
 
+    expect(polls).toEqual([]);
     expect(logs.messages("error")).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(2000);
     const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
     expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/after-crash"]);
     expect(existsSync(join(dir, "deezer.json.lock"))).toBe(false);
+  });
+
+  it("waits for a lock a running recorder holds, then records nothing", async () => {
+    // The pid of a running process: the one that started this test's.
+    writeFileSync(join(dir, "deezer.json.lock"), String(process.ppid));
+    process.env.SOURCE_CASSETTE = "record";
+    stubFetch(() => json({ ok: true }));
+    const logs = captureLogsForTests();
+    // The wait the test above must not find: lockPolls reads its timers, so a recorder that
+    // polled for a dead recorder's lock would not pass there.
+    const restoreWait = setCassetteLockWaitForTests(50);
+    let polls: Array<number | undefined> = [];
+    try {
+      polls = await lockPolls(() =>
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/while-held" }),
+      );
+    } finally {
+      restoreWait();
+      logs.restore();
+      vi.restoreAllMocks();
+    }
+
+    expect(polls.length).toBeGreaterThan(0);
+    expect(new Set(polls)).toEqual(new Set([10]));
+    expect(logs.messages("error").join("\n")).toContain("deezer.json.lock is held");
+    expect(readFileSync(join(dir, "deezer.json.lock"), "utf8")).toBe(String(process.ppid));
+    expect(existsSync(join(dir, "deezer.json"))).toBe(false);
   });
 
   it("a record run that loses answers says how many when it ends", {
@@ -1647,72 +1953,668 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
       ];
     }),
   ])("answers quickly on %s", (_name, call, expected) => {
-    const { ms, result } = timed(call);
+    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
+    const { ms, result } = timed(call, { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
     expect(result).toBe(expected);
   });
 });
 
-describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
-  // 200 kB: a scan that reads each start on to the end of its run takes seconds here, where a
-  // single pass takes milliseconds.
-  const size = 200_000;
-  const fill = (unit: string) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+/**
+ * The tables below measure each shape's cost on a 50 kB text and on one eight times longer, in the
+ * CPU time of the thread that runs it (`growth`). A single pass grows 5-14 times here, as the
+ * longer text also costs more per character to build and to collect, and as much on a machine
+ * with every CPU busy, since CPU time leaves out the waits for a turn on one. A scan that reads on
+ * to the end of its line or of the text from each match grows 35-85 times: a print_r entry or an
+ * environment value read again from each key inside it, a cookie value read to the end of its
+ * line, a closing tag sought from the first one for each opening tag, or a mask's place sought
+ * from the start of the text for each value. Such a scan takes 0.5-1.5 s on 200 kB, which a bound
+ * on the time taken cannot tell from the waits of a busy machine. A call over MAX_MS of CPU time,
+ * over ten times what a single pass takes on 400 kB, fails at once.
+ */
+const MAX_MS = 3_000;
+const GROWTH = { size: 50_000, factor: 8, maxMs: MAX_MS };
+const MAX_GROWTH = 30;
+/** How many times `part` occurs in `text`, none overlapping. */
+const count = (text: string, part: string) => text.split(part).length - 1;
+/** `unit` repeated to `size` characters. */
+const filled = (size: number) => (unit: string) =>
+  unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
 
-  it.each<[string, () => unknown, unknown]>([
+describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
+  it.each<
+    [
+      string,
+      (fill: (unit: string) => string) => string,
+      (text: string) => unknown,
+      (text: string) => unknown,
+    ]
+  >([
     [
       "object keys whose value is an object",
-      () => redactText(`${fill("{token:")} x, token: k}`).endsWith("token: [redacted]}"),
-      true,
+      (fill) => `${fill("{token:")} x, token: k}`,
+      (text) => redactText(text).endsWith("token: [redacted]}"),
+      () => true,
     ],
     [
       "closing tags before opening tags",
-      () => redactText(`${fill("</token>")}<token>k</token>${fill("<token>")}`).length,
-      2 * size + 25,
+      (fill) => `${fill("</token>")}<token>k</token>${fill("<token>")}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 9,
     ],
     [
       "opening tags without a closing tag",
-      () => redactText(`<token>k</token>${fill("<token>")}`).length,
-      size + 25,
+      (fill) => `<token>k</token>${fill("<token>")}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 9,
     ],
     [
       "name= pairs inside a value",
-      () => redactText(`{ token: ${fill("key=")} }`),
-      "{ token: [redacted] }",
+      (fill) => `{ token: ${fill("key=")} }`,
+      redactText,
+      () => "{ token: [redacted] }",
     ],
     [
       "links inside a value",
-      () => redactText(`{ token: ${fill("//i.scdn.co/a")} }`),
-      "{ token: [redacted] }",
+      (fill) => `{ token: ${fill("//i.scdn.co/a")} }`,
+      redactText,
+      () => "{ token: [redacted] }",
     ],
     // Every rule masks on a text that earlier rules masked many times over.
     [
       "masks after masks",
-      () => scrubText(`{ token: k } ${fill("key=a //i.scdn.co/x x@y.co ")}`).length,
-      500,
+      (fill) => `{ token: k } ${fill("key=a //i.scdn.co/x x@y.co ")}`,
+      (text) => scrubText(text).length,
+      () => 500,
     ],
     [
       "values without quotes among masks",
-      () => redactText(fill("{ token: k } key=a ")).length,
-      size + Math.floor(size / 19) * 18,
+      (fill) => fill("{ token: k } key=a "),
+      (text) => redactText(text).length,
+      (text) => text.length + 9 * (count(text, ": k") + count(text, "=a")),
     ],
     [
       "empty quote pairs after a header",
-      () => redactText(`header ${fill('"" ')}`).length,
-      7 + size + Math.ceil(size / 3) * 10,
+      (fill) => `header ${fill('"" ')}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 10 * count(text, '""'),
     ],
-  ])("answers quickly on %s", (_name, call, expected) => {
-    const { ms, result } = timed(call);
-    expect(ms).toBeLessThan(400);
-    expect(result).toBe(expected);
+  ])("grows linearly on %s", (_name, make, call, expected) => {
+    const { ratio, result } = growth((size) => make(filled(size)), call, GROWTH);
+    expect(ratio).toBeLessThan(MAX_GROWTH);
+    // The result on the longer text, against what each mask adds to it.
+    expect(result).toEqual(expected(make(filled(GROWTH.size * GROWTH.factor))));
   });
 
   it("finds where each mask goes once, on 1 MB of masks among masks", () => {
     // About 0.2 s; reading the parts of the text from its start for each mask takes seconds.
     const big = "key=a a@b.cc ".repeat(80_000);
-    const { ms, result } = timed(() => scrubText(big).length);
+    const { ms, result } = timed(() => scrubText(big).length, { runs: 3, stopAboveMs: 5_000 });
     expect(ms).toBeLessThan(1500);
     expect(result).toBe(500);
+  });
+});
+
+describe("secret values in JSON strings, cut texts and more variants of each shape", () => {
+  /** A source's reason as it reaches an error message, and that message as it is stored. */
+  const reasonOutputs = (text: string) => {
+    const detail = plainReason(text);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail ?? "refused"}`).message;
+    return [detail ?? "", message, plainMessage(message) ?? ""];
+  };
+
+  it.each<[layout: string, text: string, planted: string[]]>([
+    ["a key after the string", '{"raw": "a\\r\\nX-Api-Key: QzlAQ", "b": 1}', ["QzlAQ"]],
+    ["no space after the string", '{"raw":"a\\nX-Api-Key: QzlBQ","b":1}', ["QzlBQ"]],
+    ["the first line of a string", '{"raw": "X-Api-Key: QzlCQ\\r\\nnext"}', ["QzlCQ"]],
+    ["a whole string", '{"raw": "Authorization: Token QzlDQ\\n"}', ["QzlDQ"]],
+    ["strings in an array", '["a\\nX-Api-Key: QzlEQ", "Cookie: sid=QzlFQ"]', ["QzlEQ", "QzlFQ"]],
+    ["a config line in a string", '{"env": "export GITHUB_TOKEN=QzlGQ\\nDEBUG=1"}', ["QzlGQ"]],
+  ])("redacts a header line inside a JSON string: %s", (_layout, text, planted) => {
+    for (const out of [scrubText(text), redactText(text), ...reasonOutputs(text)]) {
+      for (const value of planted) expect(out, text).not.toContain(value);
+    }
+  });
+
+  it("ends a line inside a JSON string where the string ends", () => {
+    expect(redactText('{"error":"bad\\nX-Api-Key: abc","status":401,"title":"Unauthorized"}')).toBe(
+      '{"error":"bad\\nX-Api-Key: [redacted]","status":401,"title":"Unauthorized"}',
+    );
+    expect(redactText('{"error":"bad\\nX-Api-Key: abc", "status": 401}')).toBe(
+      '{"error":"bad\\nX-Api-Key: [redacted]", "status": 401}',
+    );
+    // A doubled backslash before a quote is read as an escaped quote of a value escaped twice
+    // too: the value runs on to the end, as the widened filter of the test below allows.
+    expect(redactText('token=\\\\"v" rest')).toBe("token=[redacted]");
+  });
+
+  it("cuts a scrubbed body where the other rules cut it, though a mask makes it shorter", () => {
+    for (let pad = 180; pad < 260; pad += 3) {
+      const body = `GITHUB_TOKEN=${"v".repeat(120)} ${"w ".repeat(pad)}QzTAILQ`;
+      const before = scrubText(body.replace("GITHUB_TOKEN", "GITHUB_TOKEX"));
+      const now = scrubText(body);
+      if (!before.includes("Qz")) expect(now, body).not.toContain("Qz");
+      expect(now.length).toBeLessThanOrEqual(500);
+    }
+    // A mask longer than what it hides: the cap falls on the redacted text, as before.
+    expect(scrubText(`GITHUB_TOKEN=v1 ${"w ".repeat(300)}`)).toHaveLength(500);
+    // Without the new shapes, the cap falls where it always fell.
+    const plain = `${"w ".repeat(300)}QzTAILQ`;
+    expect(scrubText(plain)).toBe(plain.slice(0, 500));
+  });
+
+  it("leaves out a line the other rules leave with an issue, though a mask removes it", () => {
+    // The header rule makes `File "[redacted]", line 4` a stack trace; a mask over `File` would
+    // hide that, and show a line that was left out.
+    expect(plainMessage('Invalid header GITHUB_TOKEN=File "", line 4')).toBeUndefined();
+    expect(plainReason('Invalid header GITHUB_TOKEN=File "", line 4')).toBeUndefined();
+  });
+
+  it("cuts an error message where a log's cap cuts it without the new shapes", () => {
+    // The HTTP error log keeps 200 characters of a message (logText), a log line 16 KiB (scrub).
+    for (let pad = 20; pad < 80; pad += 3) {
+      const message = `GITHUB_TOKEN=${"v".repeat(60)} ${"w ".repeat(pad)}QzTAILQ`;
+      const unmasked = message.replace("GITHUB_TOKEN", "GITHUB_TOKEX");
+      const logged = (text: string) => logText(new SourceError("spotify", "http", text).message);
+      if (!logged(unmasked).includes("Qz")) expect(logged(message), message).not.toContain("Qz");
+    }
+    for (let pad = 8_150; pad < 8_220; pad += 7) {
+      const message = `GITHUB_TOKEN=${"v".repeat(400)} ${"w ".repeat(pad)}QzTAILQ`;
+      const unmasked = message.replace("GITHUB_TOKEN", "GITHUB_TOKEX");
+      const logged = (text: string) => scrub(`Error: ${describeError(new Error(text))}`);
+      if (!logged(unmasked).includes("Qz"))
+        expect(logged(message), String(pad)).not.toContain("Qz");
+    }
+    // Without the new shapes, a message is what it always was.
+    const plain = `spotify: ${"w ".repeat(150)}`;
+    expect(new SourceError("spotify", "http", "w ".repeat(150)).message).toBe(plain);
+  });
+
+  it("keeps hidden in a log line what the logger's own rules hide on the other rules' text", () => {
+    // A mask over the key the logger reads (`token=`, `Bearer`) must not show the value after it.
+    for (const [text, hidden] of [
+      ["<input name=_token value=\ntoken= QzLOGAQ", "QzLOGAQ"],
+      ["Forbidden\nexport X_TOKEN=Bearer QzLOGDQ", "QzLOGDQ"],
+      ["Forbidden X_TOKEN=Bearer QzLOGEQ", "QzLOGEQ"],
+      // Masking the value the logger read behind `token:` takes its `Bearer`: a second round.
+      ["Forbidden X_TOKEN=token: Bearer QzLOGFQ", "QzLOGFQ"],
+    ]) {
+      const reason = plainReason(text);
+      for (const line of [
+        scrub(`Error: ${describeError(new Error(text))}`),
+        scrub(new SourceError("spotify", "http", text).message),
+        scrub(redactText(text)),
+        scrub(scrubText(text)),
+        scrub(new SourceError("spotify", "http", `HTTP 401 — ${reason ?? "refused"}`).message),
+        scrub(plainMessage(text) ?? ""),
+      ]) {
+        expect(line, text).not.toContain(hidden);
+      }
+    }
+  });
+
+  it("leaves no part of a host or a configured value where a log line's cut falls", () => {
+    // A cut that lands inside a provider host or a configured value would leave a part the
+    // logger no longer knows: the SourceError's own cut (a), and the HTTP error log's (b).
+    const salt = "M9001xM9002xM9003x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pad = 50; pad < 75; pad++) {
+        for (const tail of [salt, "contoso-prod.openai.azure.com"]) {
+          const a = `401\nCookie: sid=${"a".repeat(40)}\n${"x ".repeat(pad)}${tail} tail`;
+          const b = `token: 1\nCookie: a=1; b=2; c=3\n${"y ".repeat(pad)}${tail}`;
+          const lines = [
+            scrub(
+              `Spotify search for "x" failed: ${describeError(new SourceError("spotify", "http", a))}`,
+            ),
+            scrub(logText(new SourceError("spotify", "http", b).message)),
+          ];
+          for (const line of lines) expect(line, `${pad} ${tail}`).not.toMatch(/M900\dx|contoso/);
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("keeps hidden a value the logger reads only once it has replaced a host", () => {
+    // Scrub replaces the host first; its pair rule then reads `X-Api-Key: v` after it.
+    const text =
+      "QzbbQ\n  - token: contoso-prod.openai.azure.com\\n\\r\\nX-Api-Key: QzdbQcookies: QzfbQ";
+    for (const endpoint of [undefined, "https://contoso-prod.openai.azure.com"]) {
+      configureLogger({ AZURE_OPENAI_ENDPOINT: endpoint, LOG_LEVEL: process.env.LOG_LEVEL });
+      try {
+        for (const line of [
+          scrub(`Error: ${describeError(new Error(text))}`),
+          scrub(logText(new SourceError("spotify", "http", text).message)),
+          scrub(scrubText(text)),
+        ]) {
+          expect(line, endpoint).not.toContain("QzdbQ");
+        }
+      } finally {
+        configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+      }
+    }
+  });
+
+  it("keeps hidden in a stored reason what the logger reads after a scheme a line's mask takes", () => {
+    // The OAuth parameter's value is the scheme word the logger reads `Bearer v` by.
+    const text = "QzbbQ\nAuthorization: OAuth oauth_token=Bearer QzcbQcookie: 'QzdbQ";
+    const detail = plainReason(text);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail ?? "x"}`).message;
+    for (const line of [scrub(detail ?? ""), scrub(message), scrub(plainMessage(message) ?? "")]) {
+      expect(line).not.toContain("QzcbQ");
+    }
+  });
+
+  it("finds what a log line hides right after a mask where it lies in the text", () => {
+    // The log line's span ends on the first character after a mask: read as part of the mask, the
+    // last "-" of the token run would be left out of it.
+    const text = `\\t\nPassword:password=" "4${"-A1b2C3d4".repeat(7)}-`;
+    expect(redactText(text)).toBe("\\t\nPassword:[redacted]");
+  });
+
+  it("keeps hidden a value the log line reads only once an earlier lost part is masked", () => {
+    // The first reading masks the key "token", which the log line would lose; the line then reads
+    // "[redacted] = M0019x", which the logger no longer takes for a pair, so the value is lost too.
+    const text = '[token] => Bearer \ntoken = M0019x<meta content="a"';
+    expect(scrub(scrubText(text))).not.toContain("M0019x");
+    expect(scrub(redactText(text))).not.toContain("M0019x");
+  });
+
+  it("keeps hidden what the other rules hide when they redact their own text again", () => {
+    // A network error's message is a described error, described again when it is logged: the
+    // header rule pairs the quotes of the text it left, and hides more the second time.
+    const text =
+      '}header<input name="tokenizer" value=aa" type=password>x"{ token: \\"\\"M0008x }' +
+      '&amp;lt;Token-0>\'M0013x"&lt;/Token-0>{"raw": "aCookie: Token ,M0018x", "b": 1}';
+    const twice = describeError(
+      new SourceError("audio", "network", describeError(new Error(text))),
+    );
+    expect(twice).not.toContain("M0018x");
+  });
+
+  it("never cuts a host in two: the HTTP error log's text, or a body masks make longer", () => {
+    for (let pad = 80; pad < 100; pad++) {
+      // Client text in the HTTP error log, cut at 200 characters.
+      expect(scrub(logText(`${"x ".repeat(pad)}contoso-prod.openai.azure.com`))).not.toMatch(
+        /contoso/,
+      );
+    }
+    for (let pad = 140; pad < 165; pad++) {
+      // Masks longer than the values they hide carry the body's cap into the host.
+      const body = `${"X_TOKEN=a ".repeat(10)}${"y ".repeat(pad)}contoso-prod.openai.azure.com tail`;
+      expect(scrub(scrubText(body)), String(pad)).not.toMatch(/contoso/);
+    }
+  });
+
+  it("never cuts a source's reason through a configured value or a host", () => {
+    // The reason's own cut, at 119 characters, comes before any redaction: a part of a value it
+    // split was no longer known to the rules that hide it, nor to the logger.
+    const key = "M7001xM7002xM7003xQQQ";
+    const host = "contoso-prod.openai.azure.com";
+    process.env.TEST_SERVICE_API_KEY = key;
+    configureLogger({ AZURE_OPENAI_ENDPOINT: `https://${host}`, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pad = 40; pad < 60; pad++) {
+        for (const value of [key, host]) {
+          const reason = plainReason(`${"x ".repeat(pad)}The API key ${value} is not valid`) ?? "";
+          const message = new SourceError("spotify", "http", `HTTP 401: ${reason}`).message;
+          for (const shown of [reason, scrub(reason), scrub(logText(message))]) {
+            for (let k = 1; k < value.length; k++) {
+              expect(shown, `${pad} ${k}`).not.toContain(`${value.slice(0, k)}…`);
+            }
+          }
+        }
+      }
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("leaves out past a configured value a reason's cut splits, and hides what it hid before", () => {
+    // The configured value ends a long token run and a Basic credential: cut at the value's
+    // start, neither would be long enough for its rule, so the line is redacted as first cut.
+    const key = "Zq7".repeat(23);
+    process.env.TEST_SERVICE_API_KEY = key;
+    try {
+      for (let pad = 9; pad < 21; pad++) {
+        for (const [before, hidden] of [
+          ['"tokens"aB3dE6gH9jK2mN5pQ8sT1vaB3dE6gH9jK2mN5pQ8', "aB3dE6"],
+          ["\nProxy-Authorization: Basic Api-Key", "Api-Key"],
+        ] as const) {
+          const reason = plainReason(`${"x ".repeat(pad)}${before}${key} tail`) ?? "";
+          expect(reason, String(pad)).not.toContain(hidden);
+          expect(reason, String(pad)).not.toContain("Zq7");
+        }
+      }
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+    }
+  });
+
+  it("moves a reason's cut until it splits nothing, where a configured value starts in a host", () => {
+    // Moved to the start of the value, the cut would split the host the value starts in.
+    process.env.TEST_SERVICE_API_KEY = "azure.com K7xQ";
+    try {
+      for (let pad = 38; pad < 52; pad++) {
+        const reason = plainReason(`${"x ".repeat(pad)}contoso-prod.openai.azure.com K7xQ tail`);
+        expect(reason, String(pad)).not.toMatch(/contoso[\w.-]*…/);
+      }
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+    }
+  });
+
+  it("never cuts a reason through a host or a configured value the masks before it push across", () => {
+    // `api_key=a` becomes `api_key=[redacted]`: the line grows past the cut with no new shape.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const host = "contoso-prod.openai.azure.com";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pairs = 4; pairs < 9; pairs++) {
+        for (const value of [salt, host]) {
+          const reason = plainReason(`${"api_key=a ".repeat(pairs)}${value} tail`) ?? "";
+          for (const shown of [reason, scrub(reason)]) {
+            for (let k = 2; k < value.length; k++) {
+              expect(shown, `${pairs} ${k}`).not.toContain(`${value.slice(0, k)}…`);
+            }
+          }
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never keeps part of an Authorization credential where a reason's cut falls", () => {
+    for (let at = 60; at < 100; at++) {
+      const bearer = plainReason(
+        `${"x".repeat(at)} Authorization: Bearer abcdefghijklmnopqrstuvwx tail ${"z ".repeat(60)}`,
+      );
+      expect(bearer ?? "", String(at)).not.toMatch(/Bearer a[a-x]*…/);
+      const basic = plainReason(
+        `401\n${"x".repeat(at)} Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ== tail ${"z ".repeat(60)}`,
+      );
+      for (const shown of [basic ?? "", scrub(basic ?? "")]) {
+        expect(shown, String(at)).not.toMatch(/Basic Q[\w+/=]*…/);
+      }
+    }
+  });
+
+  it("never cuts a log line or a reason through a long configured value, or before a link's @", () => {
+    const userinfo = "https://u:P1xP2xP3xP4xP5xP6xP7xP8x@h.example/";
+    const atSign = `${"x ".repeat(83).slice(0, 165)} ${userinfo} tail ${"x ".repeat(100)}`;
+    expect(scrub(logText(atSign))).not.toContain("P1xP2");
+    // A configured value longer than the window logCut reads past a cut.
+    const long = "Q7".repeat(2_500);
+    configureLogger({ LOG_IP_SALT: long, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (const before of [10, 60, 118, 150, 199]) {
+        const text = `${"x".repeat(before)}${long} tail`;
+        expect(scrub(logText(text)), String(before)).not.toContain("Q7Q7");
+        expect(scrub(plainReason(text) ?? ""), String(before)).not.toContain("Q7Q7");
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never cuts a described error before a link's @, or through a long configured value", () => {
+    // A new shape before the link (the Cookie line) makes describeError cut the text itself.
+    const lead = `401\nCookie: sid=${"a".repeat(40)}\n`;
+    const userinfo = "https://u:U1xU2xU3xU4xU5xU6xU7xU8x@h.example/x tail";
+    for (let shift = -3; shift < 3; shift++) {
+      const text = `${lead}${"x ".repeat(7635).slice(0, 15268 + shift)} ${userinfo}`;
+      const logged = scrub(`Error: ${describeError(new Error(text))}`);
+      expect(logged, String(shift)).not.toContain("U1xU2");
+      // The cut moves to the link, not back to the start of the text around it.
+      expect(logged.length, String(shift)).toBeGreaterThan(15_000);
+    }
+    // A configured value longer than the window the logger reads past a cut, at each cut.
+    const long = "L7.".repeat(1_700);
+    configureLogger({ LOG_IP_SALT: long, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (const [cut, path] of [
+        [15_360, (t: string) => scrub(`Error: ${describeError(new Error(t))}`)],
+        [200, (t: string) => scrub(logText(new SourceError("spotify", "http", t).message))],
+        [500, (t: string) => scrub(scrubText(t))],
+        [120, (t: string) => scrub(plainReason(t) ?? "")],
+      ] as const) {
+        for (const before of [5, 40, 150]) {
+          const filler = "x ".repeat(cut).slice(0, cut - before - lead.length - 1);
+          const text = `${lead}${filler} ${long} tail`;
+          expect(path(text), `${cut} ${before}`).not.toContain("L7.L7.");
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never leaves a short Basic credential where a cut moved before a value glued to it", () => {
+    // `Basic M0003x=` plus the salt was one credential; cut before the salt, it is too short for
+    // the logger's rule.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let before = 1; before < salt.length; before++) {
+        const text = `${"x".repeat(200 - before - 14)} Basic M0003x=${salt} tail`;
+        expect(scrub(logText(text)), String(before)).not.toContain("M0003x");
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never cuts a body's cap through a host when nothing else in it is masked", () => {
+    for (let pad = 225; pad < 250; pad++) {
+      const body = `<html>${"y ".repeat(pad)} upstream contoso-prod.openai.azure.com timed out</html>`;
+      expect(scrub(scrubText(body)), String(pad)).not.toMatch(/contoso/);
+    }
+  });
+
+  it("masks a template reference whole, and keeps an Authorization scheme on every path", () => {
+    // A GitHub Actions expression, written as it is in a workflow file.
+    const reference = ["deploy GITHUB_TOKEN=$", "{{ secrets.GH }} now"].join("");
+    expect(redactText(reference)).toBe("deploy GITHUB_TOKEN=[redacted] now");
+    expect(redactText("Unauthorized\nAuthorization: Bearer abc.def")).toBe(
+      "Unauthorized\nAuthorization: Bearer [redacted]",
+    );
+    expect(plainReason("Unauthorized\nAuthorization: Bearer abc.def")).toBe(
+      "Unauthorized Authorization: Bearer [redacted]",
+    );
+  });
+
+  it("keeps hidden what a reason's error message hides when it is redacted again", () => {
+    // The other rules leave M0017x in the reason, and mask it when the message made from it is
+    // redacted again, by the key before it; a mask over that key must not show it.
+    const reason =
+      '-e A_SECRET=\'\\aa\\""password": "\u00e9\u00e9 }\r\nexport api_key=\';"\\ntoken = \u00e9\'M0017x\\" x\'set-cookie": a=;\'&quot;token&quot;:\\"\\"=&quot;["a\\nGITHUB_TOKEN: \u00e9"","status":401}';
+    const detail = plainReason(reason);
+    const message = new SourceError("spotify", "http", `HTTP 401 — ${detail}`).message;
+    for (const out of [message, plainMessage(message) ?? ""]) expect(out).not.toContain("M0017x");
+  });
+
+  it.each<[variant: string, text: string, planted: string[]]>([
+    ["print_r entries spaced any way", "[api_key]=>QzvaQ\n[token]  =>  QzvbQ", ["QzvaQ", "QzvbQ"]],
+    ["var_dump references", '["token"]=>\n  &string(5) "QzvcQ"', ["QzvcQ"]],
+    ["cookies in a Map", "Map(1) { 'cookie' => 'sid=QzvdQ; lang=QzveQ' }", ["QzvdQ", "QzveQ"]],
+    [
+      "a _csrf form field",
+      '<input name="_csrf" value="QzvfQ"><meta name="_csrf" content="QzvgQ">',
+      ["QzvfQ", "QzvgQ"],
+    ],
+    ["a last entity without ';'", "&lt;token&gt;QzvhQ&lt;/token&gt", ["QzvhQ"]],
+    [
+      "a cookie spaced around '='",
+      "Unauthorized\nCookie: sid = QzvjQ; lang =QzvkQ",
+      ["QzvjQ", "QzvkQ"],
+    ],
+    ["Set-Cookie values joined by ','", "Set-Cookie: a=QzvmQ,b=QzvnQ; Path=/", ["QzvmQ", "QzvnQ"]],
+    [
+      "Digest parameters",
+      'Unauthorized\nAuthorization: Digest username="QzvpQ", realm="api", response="QzvqQ"',
+      ["QzvpQ", "QzvqQ"],
+    ],
+    [
+      "OAuth parameters",
+      'Unauthorized\nAuthorization: OAuth realm="api", oauth_token="QzvrQ", oauth_signature="QzvsQ"',
+      ["QzvrQ", "QzvsQ"],
+    ],
+    [
+      "a secret key named in an environment line",
+      "SECRET_KEY=QzvtQ\nexport STRIPE_SECRET_KEY=QzvuQ",
+      ["QzvtQ", "QzvuQ"],
+    ],
+  ])("redacts the values of %s", (_variant, text, planted) => {
+    for (const out of [scrubText(text), redactText(text)]) {
+      for (const value of planted) expect(out, text).not.toContain(value);
+    }
+  });
+
+  it("keeps the parts of each shape that are not secret", () => {
+    expect(redactText("Set-Cookie: a=1,b=2; Path=/")).toBe(
+      "Set-Cookie: a=[redacted],b=[redacted]; Path=/",
+    );
+    expect(
+      redactText('Unauthorized\nAuthorization: Digest username="ana", realm="api", response="r1"'),
+    ).toBe(
+      'Unauthorized\nAuthorization: Digest username="[redacted]", realm="api", response="[redacted]"',
+    );
+    // A string over two lines is as long as its length in bytes says.
+    expect(redactText('["token"]=>\n  string(6) "éé\na"\n}')).toBe(
+      '["token"]=>\n  string(6) "[redacted]"\n}',
+    );
+    expect(redactText('["token"]=>\n  string(99) "abc"\n  ["name"]=>\n  string(4) "kept"')).toBe(
+      '["token"]=>\n  string(99) "[redacted]"\n  ["name"]=>\n  string(4) "kept"',
+    );
+  });
+
+  it("tells each variant from its near-misses", () => {
+    const kept = [
+      "IDEMPOTENCY_KEY=abc",
+      "S3_KEY=uploads/a.png",
+      "PRIMARY_KEY=id",
+      "SORT_KEY=name",
+      "CACHE_KEY=v1",
+      "HASH_KEY=pk",
+      "PARTITION_KEY=pk",
+      "FOREIGN_KEY=user_id",
+      "export IDEMPOTENCY_KEY=abc",
+      "API_TOKEN=not set",
+      "API_TOKEN=nil",
+      "DB_PASSWORD=unset",
+      "Unauthorized\nProxy-Authorization: Bearer",
+      "Unauthorized\nX-Api-Key: Key please",
+      "token\n  Field required [type=missing, input_value={'a': 1}, input_type=dict]",
+      "next_page_token: abc",
+      "pageToken: abc",
+      "continuation_token = abc",
+      "sync_token = abc",
+      "<NextContinuationToken>abc</NextContinuationToken>",
+      '<input type="checkbox" name="show_password" value="1">',
+    ];
+    for (const near of kept) {
+      expect(scrubText(near), near).toBe(near);
+      expect(redactText(near), near).toBe(near);
+    }
+  });
+});
+
+describe("cookies, config text, dumps, forms and escaped text in linear time", {
+  timeout: 60_000,
+}, () => {
+  // Each text ends with a value to hide.
+  it.each<[string, (fill: (unit: string) => string) => string]>([
+    ["cookie pairs", (fill) => `Cookie: ${fill("a=b; ")}s=QzENDQ`],
+    ["Set-Cookie dates", (fill) => `Set-Cookie: ${fill("Expires=Wed, 21 Oct ")}, s=QzENDQ`],
+    ["field lines that are prose", (fill) => `${fill("\ntoken: a b")}\ntoken: QzENDQ`],
+    ["field names without a colon", (fill) => `${fill(`\n${"a".repeat(70)}`)}\ntoken: QzENDQ`],
+    ["environment names", (fill) => `${fill("A_TOKENA_TOKEN")} B_TOKEN=QzENDQ`],
+    ["environment values holding names", (fill) => `X_TOKEN=${fill("A_TOKEN=")}QzENDQ`],
+    ["quoted keys whose value is prose", (fill) => `${fill("'token': a b ")}{ 'token': QzENDQ }`],
+    ["print_r entries", (fill) => `${fill("[token] => [token] => ")}\n[token] => QzENDQ`],
+    [
+      "var_dump lengths that do not match",
+      (fill) => `${fill('["token"]=> string(1) "aé ')}"\n["token"]=> string(6) "QzENDQ"`,
+    ],
+    ["form tags", (fill) => `${fill("<input <meta a=b ")}<input name=token value=QzENDQ>`],
+    [
+      "pydantic inputs on one line",
+      (fill) => `token\n${fill("[type=a, input_value=b]")}[type=a, input_value=QzENDQ]`,
+    ],
+    ["entities", (fill) => `${fill("&amp;lt;token&amp;gt;")}&lt;token&gt;QzENDQ&lt;/token&gt;`],
+    [
+      "a long input name",
+      (fill) => `<input name="${fill("aB")}" value="x"><input name=token value=QzENDQ>`,
+    ],
+    [
+      "a long input id",
+      (fill) => `<input id="${fill("a-")}" value="x"><input name=token value=QzENDQ>`,
+    ],
+    [
+      "a long meta name",
+      (fill) => `<meta name="${fill("a_")}" content="x"><meta name=token content=QzENDQ>`,
+    ],
+    [
+      "a long input name inside a JSON string",
+      (fill) => `{"m":"\\u003cinput name=\\"${fill("aB")}\\"\\u003e"} X_TOKEN=QzENDQ`,
+    ],
+    [
+      "Authorization parameters",
+      (fill) => `Authorization: Digest a=b, ${fill("x")}\ntoken: QzENDQ`,
+    ],
+    [
+      "Authorization parameters inside a JSON string",
+      (fill) => `{"e":"a\\r\\nAuthorization: Digest a=b, ${fill("x")}"} X_TOKEN=QzENDQ`,
+    ],
+    ["OAuth parameters", (fill) => `Proxy-Authorization: OAuth k=v ${fill("a.")}\ntoken: QzENDQ`],
+    ["string escapes", (fill) => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
+  ])("grows linearly on %s", (_name, make) => {
+    const { ratio, result } = growth((size) => make(filled(size)), redactText, GROWTH);
+    expect(ratio).toBeLessThan(MAX_GROWTH);
+    expect(result).not.toContain("QzENDQ");
+  });
+
+  it("describes a 1 MB error in linear time, and reads only the text near the HTTP log's cap", () => {
+    const calls = [
+      (text: string) => describeError(new Error(text)),
+      (text: string) => new SourceError("spotify", "http", text).message,
+    ];
+    // Field lines whose value is prose: the end of each line is found once. From 128 kB to 1 MB
+    // this grows 7-9 times in CPU time (about 50 ms on 1 MB), with every CPU busy as well. Finding
+    // each line's end by searching for CR and for LF apart grows over 40 times, and searching for
+    // each of the seven line breaks apart about 60 times, as a search for a break the text does not
+    // hold reads on to its end. Those take 0.7-2.5 s on 1 MB, which a bound on the time taken
+    // cannot tell from the waits of a busy machine.
+    const prose = (size: number) => "\ntoken: a b".repeat(Math.floor(size / 11));
+    for (const call of calls) {
+      const { ratio } = growth(prose, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
+      expect(ratio).toBeLessThan(20);
+    }
+    // About 0.4 s of CPU time each. The bound only catches a scan that reads the whole text again
+    // for each value, which takes minutes.
+    const big = "\nX-Api-Key: k\ntoken: a b".repeat(Math.floor((1 << 20) / 24));
+    for (const call of calls) {
+      const cpu = { runs: 3, stopAboveMs: 2 * MAX_MS, clock: threadCpuMs };
+      const { ms, result } = timed(() => call(big), cpu);
+      expect(ms).toBeLessThan(MAX_MS);
+      expect(result).not.toMatch(/: k\b/);
+    }
+    // The HTTP error log reads only the text near its cap, however many hosts follow.
+    const hosts = "contoso-prod.openai.azure.com ".repeat((1 << 20) / 30);
+    for (const text of [big, hosts]) {
+      const cpu = { runs: 3, stopAboveMs: 2_000, clock: threadCpuMs };
+      expect(timed(() => logText(text), cpu).ms).toBeLessThan(25);
+    }
+  });
+
+  it("answers quickly on a long form-field name in a source's reason", () => {
+    const reason = `{"m":"\\u003cinput name=\\"${filled(200_000)("aB")}\\" value=\\"x\\"\\u003e"}`;
+    const { ms } = timed(() => plainReason(reason), { runs: 3, stopAboveMs: 2_000 });
+    expect(ms).toBeLessThan(400);
   });
 });
 
@@ -1837,8 +2739,10 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     ...randomStrings(["a", "b.c", "@", ".", "+", "-", "_", " ", "x@y.z", "é", "\n"], 5_000, 14),
     ...randomStrings(["a", "A", "0", "_", "-", " ", "aB3dE6gH9jK2mN5pQ8sT1v", "="], 5_000, 24),
   ];
+  // A quote after a key or "=" counts escaped any number of times: text is also read as it reads
+  // once its string escapes are decoded (`token=\\"v` is `token=\"v` there).
   const quotedKeyOrEscapedSlash =
-    /\\\/|(?:key|token|secret|password|authorization)\\?["']|=\\?["']/i;
+    /\\\/|(?:key|token|secret|password|authorization)\\*["']|=\\*["']/i;
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
     const plain = corpus.filter((text) => !quotedKeyOrEscapedSlash.test(text));
@@ -1922,5 +2826,65 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     expect(
       changed.filter(({ input }) => !quotedKeyOrEscapedSlash.test(input)).length,
     ).toBeGreaterThan(2_000);
+  });
+
+  it("differs from before on cookies, config text, dumps, forms and escaped text only by masks", () => {
+    const shapes = randomStrings(
+      [
+        "\nCookie: ",
+        "\n< Set-Cookie: ",
+        "a=",
+        "sid=",
+        "; ",
+        ", ",
+        "Path=/",
+        "Expires=Wed, 21 Oct 2015",
+        "\nexport ",
+        "GITHUB_TOKEN=",
+        "STRIPE_KEY=",
+        "\napi_key = ",
+        "\n- github_token: ",
+        "\nAuthorization: Token ",
+        "[api_key] => ",
+        "'token' => ",
+        "{ 'x-api-key': ",
+        ' string(3) "',
+        '["token"]=>',
+        "<input name=_token value=",
+        '<meta name="csrf-token" content="',
+        "&lt;token&gt;",
+        "&lt;/token&gt;",
+        "&quot;",
+        "\\r\\n",
+        "X-Vault-Token: ",
+        "input_value=",
+        "[type=a, ",
+        "\npassword\n  ",
+        "sv1",
+        "a b",
+        "invalid",
+        '"',
+        "'",
+        "\\",
+        "\n",
+        " ",
+        "}",
+        ",",
+        ">",
+        "#",
+      ],
+      20_000,
+      12,
+      7,
+    );
+    const runs = shapes.map((input) => ({
+      input,
+      now: scrubText(input),
+      old: scrubTextBefore(input),
+    }));
+    const changed = runs.filter(({ now, old }) => now !== old);
+    expect(changed.filter(({ now, old }) => !onlyNewRedactions(now, old)).slice(0, 5)).toEqual([]);
+    // About half of these texts hold a shape the rules before did not read.
+    expect(changed.length).toBeGreaterThan(8_000);
   });
 });

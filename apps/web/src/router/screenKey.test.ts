@@ -14,6 +14,19 @@ describe('screenKey', () => {
     );
   });
 
+  it("keeps a result's full-size map apart from its Player and from another result's map", () => {
+    // A map that failed does not keep the Player's fallback on Back, nor the Player the map's.
+    expect(screenKey(AppPhase.MAP, false, 'track-a')).not.toBe(
+      screenKey(AppPhase.PLAYER, false, 'track-a'),
+    );
+    expect(screenKey(AppPhase.MAP, false, 'track-a')).not.toBe(
+      screenKey(AppPhase.MAP, false, 'track-b'),
+    );
+    expect(screenKey(AppPhase.MAP, false, 'track-a')).toBe(
+      screenKey(AppPhase.MAP, false, 'track-a'),
+    );
+  });
+
   it('keeps the search screen as it is while a result arrives', () => {
     expect(screenKey(AppPhase.ONBOARDING, false, null)).toBe(
       screenKey(AppPhase.ONBOARDING, false, 'track-a'),

@@ -23,7 +23,7 @@ function placesOf(
       isOrigin={() => false}
       describe={(n) => n.label}
       nameOf={(id) => nodeName(named.get(id), id)}
-      onAnalyse={() => {}}
+      onSelect={() => {}}
     />,
   );
   const places: Record<string, string> = {};

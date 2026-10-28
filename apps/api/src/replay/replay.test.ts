@@ -109,6 +109,8 @@ const CHOICE_B = "0ReplayTestTrackB00001";
 const SECRET = "configured-secret-value-123456";
 
 const live = vi.hoisted(() => ({ scout: 0, search: 0, model: 0 }));
+/** How long the stub scout takes after its status line. */
+const scoutWait = vi.hoisted(() => ({ ms: 0 }));
 
 vi.mock("../sources/spotify.js", () => ({
   fetchTrack: async (trackId: string) => ({
@@ -167,6 +169,7 @@ vi.mock("../agent/nodes/index.js", async () => {
         "scout",
         state.songQuery.startsWith("echo") ? `Searching for "${state.songQuery}"` : "Searching",
       );
+      if (scoutWait.ms > 0) await new Promise((r) => setTimeout(r, scoutWait.ms));
       if (state.songQuery.startsWith("ambiguous")) {
         const candidates = ["0ReplayTestTrackA00001", "0ReplayTestTrackB00001"].map((id) => ({
           id,
@@ -611,7 +614,11 @@ describe("the recorder", () => {
     expect(times.slice(2).some((ms) => (ms as number) > 10_000)).toBe(true);
   });
 
-  it("records the times a live run's stream sent, rising, without the wait at the picker", async () => {
+  // A second's wait at the picker and three live streams: more than the default 5 s on a busy
+  // machine. Nothing in it is bounded by a fixed time.
+  it("records the times a live run's stream sent, rising, without the wait at the picker", {
+    timeout: 30_000,
+  }, async () => {
     const plain = await liveRun("timed run");
     const sent = stored(plain).events.map(({ event }) => (event as Event).elapsedMs);
     expect(sent.every((ms) => Number.isInteger(ms))).toBe(true);
@@ -619,14 +626,36 @@ describe("the recorder", () => {
       sent,
     );
 
-    const paused = await liveRun("ambiguous timed");
-    // The visitor takes a second to choose.
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    // How long the paused run's two streams take, without the wait between them. The paused one
+    // takes 100 ms or more (its scout waits), so a resume whose times started again from 0
+    // would show.
+    let streamsMs = performance.now();
+    scoutWait.ms = 100;
+    let paused: string;
+    try {
+      paused = await liveRun("ambiguous timed");
+    } finally {
+      scoutWait.ms = 0;
+    }
+    streamsMs = performance.now() - streamsMs;
+    const pausedEvents = stored(paused).events;
+    const pausedAt = (pausedEvents.at(-1)?.event as Event | undefined)?.elapsedMs as number;
+    expect(pausedAt).toBeGreaterThanOrEqual(100);
+    // The visitor takes a while to choose: a second more than the paused stream took, so a
+    // recording that counted the wait spans more than the streams could, however long a busy
+    // machine makes them.
+    await new Promise((resolve) => setTimeout(resolve, 1_000 + streamsMs));
+    const resumedAt = performance.now();
     await sse(`/api/analyze/stream/resume?threadId=${paused}&selectedTrackId=${CHOICE_A}`);
+    streamsMs += performance.now() - resumedAt;
     const times = record(paused).record.events.map(({ event }) => (event as Event).elapsedMs);
     expect(times.every((ms) => Number.isInteger(ms))).toBe(true);
     expect(times).toEqual([...(times as number[])].sort((a, b) => a - b));
-    expect((times.at(-1) as number) - (times[0] as number)).toBeLessThan(1_000);
+    // The resume goes on from the paused stream's time: its first recorded event (the record
+    // keeps the paused stream without its interrupt and done) is no earlier.
+    expect(times[pausedEvents.length - 2]).toBeGreaterThanOrEqual(pausedAt);
+    // Within the time the streams took (each time is cut to whole milliseconds).
+    expect((times.at(-1) as number) - (times[0] as number)).toBeLessThan(streamsMs + 2);
   });
 
   it("never rewrites content that holds the typed query when it is the track's own text", async () => {
@@ -1954,19 +1983,39 @@ describe("REPLAY_MODE", () => {
     const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
     const recordedMs = dev.events.at(-1)?.atMs ?? 0;
     expect(recordedMs).toBeGreaterThan(5_000);
-    const started = Date.now();
     const sent: string[] = [];
-    const result = await playRecord(
-      dev,
-      "some-run",
-      (body) => {
-        sent.push(body.type);
-        return true;
-      },
-      new AbortController().signal,
-      { speed: 1, maxGapMs: 5 },
-    );
-    expect(Date.now() - started).toBeLessThan(2_000);
+    // The waits it sets, not the time it takes, which a busy machine stretches: the player's
+    // timers (told apart by where they are set) run at once, so a wait over the cap fails the
+    // test without being waited out. Every other timer runs as it was set.
+    const realSetTimeout = globalThis.setTimeout;
+    const waits: Array<number | undefined> = [];
+    const timers = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      ms?: number,
+    ) => {
+      if (!new Error().stack?.includes(join("replay", "player.")))
+        return realSetTimeout(handler, ms);
+      waits.push(ms);
+      return realSetTimeout(handler, 0);
+    }) as typeof setTimeout);
+    let result: Awaited<ReturnType<typeof playRecord>>;
+    try {
+      result = await playRecord(
+        dev,
+        "some-run",
+        (body) => {
+          sent.push(body.type);
+          return true;
+        },
+        new AbortController().signal,
+        { speed: 1, maxGapMs: 5 },
+      );
+    } finally {
+      timers.mockRestore();
+    }
+    // At most the cap each, which the recording's longer gaps reach.
+    expect(waits.filter((ms) => ms === undefined || ms > 5)).toEqual([]);
+    expect(waits).toContain(5);
     expect(result?.run?.id).toBe("some-run");
     expect(sent.at(-1)).toBe("complete");
   });

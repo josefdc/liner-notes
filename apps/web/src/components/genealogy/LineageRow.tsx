@@ -34,10 +34,24 @@ export const LineageRow: React.FC<{
   describe: (node: GenealogyNode) => string;
   /** How a relation names a track (its title and year). */
   nameOf: (id: string) => string;
-  onAnalyse: (node: GenealogyNode) => void;
+  /** The selected track (its details are open under the row), if any. */
+  selectedId?: string | null;
+  /** A click or Enter on a card selects its track (or clears it, selected); it never analyses. */
+  onSelect: (node: GenealogyNode) => void;
   /** Room left at the top for the panel's heading, which lies over it (px). */
   topInset?: number;
-}> = ({ nodes, links, currentId, yearOf, isOrigin, describe, nameOf, onAnalyse, topInset = 0 }) => {
+}> = ({
+  nodes,
+  links,
+  currentId,
+  yearOf,
+  isOrigin,
+  describe,
+  nameOf,
+  selectedId = null,
+  onSelect,
+  topInset = 0,
+}) => {
   const current = nodes.find((node) => node.id === currentId) ?? null;
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const byYear = (a: GenealogyNode, b: GenealogyNode) =>
@@ -74,6 +88,7 @@ export const LineageRow: React.FC<{
     const { title, meta } = cardWords(node, yearOf(node.id));
     const isCurrent = node.id === currentId;
     const tag = isCurrent ? 'This track' : isOrigin(node.id) ? 'Origin' : null;
+    const selected = node.id === selectedId;
     const frame = isCurrent
       ? 'border-cyber/70'
       : isOrigin(node.id)
@@ -109,8 +124,11 @@ export const LineageRow: React.FC<{
       <button
         type="button"
         aria-label={describe(node)}
-        onClick={() => onAnalyse(node)}
-        className="max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+        aria-pressed={selected}
+        data-card-id={node.id}
+        onClick={() => onSelect(node)}
+        // Selected: a solid ring, apart from the card's frame (focus adds its own ring outside).
+        className={`max-w-64 rounded-sm hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void ${selected ? 'outline-2 outline-white outline-offset-1' : ''}`}
       >
         {body}
       </button>

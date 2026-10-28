@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { AgentLog, TrackData } from '../types';
 import Dashboard from './Dashboard';
 import TargetScanOverlay from './TargetScanOverlay';
@@ -8,6 +8,14 @@ import { setReaderImport } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE } from '../styles/placeholder';
 
 afterEach(cleanup);
+
+// The Dashboard loads the Sonic Fingerprint lazily. Its first import (with Recharts) is
+// transformed cold, which takes over half a second at normal load and can take longer than
+// findBy's 1 s on a busy machine: it is done here first, in a hook given time for it. The lazy
+// load still runs; it then finds the module ready.
+beforeAll(async () => {
+  await import('./SonicFingerprint');
+}, 30_000);
 
 // A result built without the model and without audio analysis (the shape the API sends).
 const missingTrack = {

@@ -458,7 +458,7 @@ test.describe("the genealogy graph", () => {
     await expect(detail).toHaveCount(0);
   });
 
-  test("is one tab stop; arrow keys move between tracks and links; Enter analyses a track", async ({
+  test("is one tab stop; arrow keys move between tracks and links; Enter selects a track, Analyze analyses it", async ({
     page,
   }, testInfo) => {
     const graph = graphOf(page);
@@ -482,7 +482,7 @@ test.describe("the genealogy graph", () => {
     await page.keyboard.press("ArrowRight");
     await expect(tracks.nth(1)).toBeFocused();
     await expect(detail).toContainText(`${CURRENT} samples Sourced Sample - Someone (1984)`);
-    await expect(detail).toContainText("Enter: analyze this track");
+    await expect(detail).toContainText("Enter: show its details");
     await screenshot(page, testInfo, "focus-track", page.locator("#panel-genealogy"));
 
     // End: the last link; its provenance stays while focused, whatever the pointer does.
@@ -502,14 +502,20 @@ test.describe("the genealogy graph", () => {
     await expect(page.getByText("Links as a list (17)")).toBeFocused();
     await expect(detail).toHaveCount(0);
 
-    // Enter on a track analyses it.
+    // Enter on a track selects it and opens its details, with the focus; it analyses nothing.
+    const analyses = async () =>
+      (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`));
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
-    await expect
-      .poll(async () => (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`)))
-      .toHaveLength(2);
+    const panel = page.getByTestId("node-detail");
+    await expect(panel).toBeFocused();
+    await expect(tracks.nth(1)).toHaveAttribute("aria-pressed", "true");
+    expect(await analyses()).toHaveLength(1);
+    // "Analyze this track" analyses it.
+    await panel.getByRole("button", { name: "Analyze this track" }).click();
+    await expect.poll(analyses).toHaveLength(2);
   });
 
   test("gives screen readers the summary and the focused item, not every drawn word", async ({
@@ -645,8 +651,8 @@ test.describe("a related track's preview", () => {
     await openPlayer(page);
     const problems = collectProblems(page);
 
-    // The pointer on the track plays nothing. The track is an origin: its hint says a click
-    // explores it (it analyses the track), and no hint offers a preview there.
+    // The pointer on the track plays nothing, and no hint offers a preview (or anything) there:
+    // a click selects the track, and its panel says what it offers.
     const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
     // In view first (the hint is placed in view, near its card).
     await track.focus();
@@ -655,7 +661,7 @@ test.describe("a related track's preview", () => {
     await expect(page.getByTestId("link-detail")).toBeVisible();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
-    await expect(graphOf(page).locator(".preview-indicator")).toHaveText(/Analyze this track/);
+    await expect(graphOf(page).locator(".preview-indicator")).toHaveCount(0);
     await expect(graphOf(page)).not.toContainText(/PREVIEW/);
     await track.dispatchEvent("mouseleave");
 

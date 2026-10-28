@@ -25,8 +25,18 @@ export interface GenealogyGraphProps {
    * its first view, and places no chip there.
    */
   topInset?: number;
-  // Callback to trigger analysis of a clicked node (infinite navigation)
+  /**
+   * Analyses a related track: called by the detail panel's "Analyze this track", the one way the
+   * map starts an analysis (a click on a card selects it).
+   */
   onNodeClick?: (node: GenealogyNode) => void;
+  /** The analysed track's preview clip, for A/B listening with a selected track. */
+  trackPreviewUrl?: string | null;
+  /**
+   * True for a replayed recording: it keeps no previews (preview links expire), so the detail
+   * panel says they play in a live analysis.
+   */
+  replay?: boolean;
   /**
    * What the mouse wheel does over the graph: 'plain' zooms it (where nothing around it
    * scrolls); 'modifier' leaves the wheel to the page and zooms only with Ctrl or ⌘ held (a

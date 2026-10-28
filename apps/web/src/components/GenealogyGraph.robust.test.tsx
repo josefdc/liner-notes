@@ -14,7 +14,6 @@ const frames = vi.hoisted(() => {
 });
 
 import GenealogyGraph from './GenealogyGraph';
-import { colors } from '../styles/theme';
 import { link, node, PACK } from './genealogy/testing';
 
 const CLIP = 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y';
@@ -239,7 +238,7 @@ describe('GenealogyGraph previews', () => {
       relatedTrack(container).dispatchEvent(new MouseEvent('mouseenter'));
     });
     expect(played).toEqual([]);
-    // Clicking the track analyses it: no hint names a preview there.
+    // No hint names a preview there.
     expect(container.querySelector('.preview-indicator')).toBeNull();
     expect(container.textContent).not.toMatch(/PREVIEW/);
   });
@@ -261,7 +260,7 @@ describe('GenealogyGraph previews', () => {
     expect(played).toEqual([CLIP]);
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
-  it('shows the click hint on an origin that has a clip too, and plays nothing', async () => {
+  it('shows no hint on an origin that has a clip, and plays nothing on hover', async () => {
     const withClip = {
       ...withOrigin,
       nodes: withOrigin.nodes.map((n) =>
@@ -274,13 +273,9 @@ describe('GenealogyGraph previews', () => {
         .querySelector('g.nodes > g[data-node-id="older"]')
         ?.dispatchEvent(new MouseEvent('mouseenter'));
     });
-    expect(container.querySelector('.preview-indicator')?.textContent).toMatch(
-      /Analyze this track/,
-    );
-    // A hint, in a neutral hue: not the amber of a sourced origin.
-    expect(container.querySelector('.preview-indicator')?.getAttribute('fill')).toBe(
-      colors.gray[400],
-    );
+    // A click selects the track (the panel says what it offers): the pointer shows no hint.
+    expect(container.querySelector('.preview-indicator')).toBeNull();
+    expect(container.querySelector('g.link-chips')?.textContent).not.toMatch(/Analyze/);
     expect(played).toEqual([]);
   });
 
@@ -332,12 +327,13 @@ describe('GenealogyGraph when it goes', () => {
     const view = render(<GenealogyGraph data={withOrigin} evidence={PACK} />);
     const svg = view.container.querySelector('svg');
     if (!svg) throw new Error('no svg');
-    // The pointer on the origin: its hint fades in (a transition).
+    // The pointer on the origin, then a click: it is selected (its ring, its panel).
     const origin = view.container.querySelector('g.nodes > g[data-node-id="older"]');
     await act(async () => {
       origin?.dispatchEvent(new MouseEvent('mouseenter'));
+      origin?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(view.container.querySelector('.preview-indicator')).not.toBeNull();
+    expect(origin?.getAttribute('aria-pressed')).toBe('true');
 
     view.unmount();
 

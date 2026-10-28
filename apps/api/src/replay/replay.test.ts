@@ -87,6 +87,7 @@ import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
 import { playRecord, replayedAnalysis, setReplayPacingForTests } from "./player.js";
+import { DEMO_SLUG } from "./testing/recordings.js";
 import {
   archiveCoverOf,
   buildRecord,
@@ -107,6 +108,13 @@ const TRACK_ID = "0ReplayTestTrack000001";
 const CHOICE_A = "0ReplayTestTrackA00001";
 const CHOICE_B = "0ReplayTestTrackB00001";
 const SECRET = "configured-secret-value-123456";
+
+/** The committed demo recording (One More Time), as the replay directory loads it. */
+function demoReplay() {
+  const found = loadReplays(DEFAULT_REPLAY_DIR).records.find((r) => r.slug === DEMO_SLUG);
+  if (!found) throw new Error(`no ${DEMO_SLUG} recording in ${DEFAULT_REPLAY_DIR}`);
+  return found;
+}
 
 const live = vi.hoisted(() => ({ scout: 0, search: 0, model: 0 }));
 
@@ -588,7 +596,7 @@ describe("the recorder", () => {
   });
 
   it("keeps the time since the run started that each event was sent with, and records events without one", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const { run, events } = fixtureAsLiveRun(fixture, "One More Time Daft Punk");
     // Every event but the first two was sent with its time since the run started (the
     // recording's own times are taken off the first two).
@@ -645,7 +653,7 @@ describe("the recorder", () => {
   });
 
   it("records the dev fixture's content unchanged whatever public text was typed", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     for (const typed of ["One More Time", "daft punk"]) {
       const { run, events } = fixtureAsLiveRun(fixture, typed);
       const { record: built } = buildRecord(run, events, {
@@ -663,7 +671,7 @@ describe("the recorder", () => {
   });
 
   it("does not record how the recorded run's search text matched the track", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const matched = {
       ...fixture,
       analysis: { ...fixture.analysis, queryMatch: "partial" as const },
@@ -679,7 +687,7 @@ describe("the recorder", () => {
   });
 
   it("records a measured result's audio block and analyzer version unchanged, and replays them", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // The fixture's result as the API finalises it today: with the measurement it came from.
     const measured = {
       ...fixture,
@@ -707,7 +715,7 @@ describe("the recorder", () => {
   });
 
   it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const mbid = "4f5e6d7c-1111-4222-8333-944455566677";
     const foreignRun = "9a8b7c6d-2222-4333-8444-a55566677788";
     // As sources/identity.ts builds a MusicBrainz recording item, plus long Discogs and
@@ -1218,7 +1226,7 @@ describe("the recorder", () => {
       ["<", ">", "Discovery", page, "markup"],
       ["One More Time", "Daft Punk", page, page, "markup"],
     ];
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const at = (prefix: string) =>
       fixture.events.findIndex(
         ({ event }) => event.type === "status" && event.message.startsWith(prefix),
@@ -1287,7 +1295,7 @@ describe("the recorder", () => {
   });
 
   it("records and loads a track whose title or artist holds < or >, and still refuses markup in a status line", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // The line that names the track: the first status line (a run picked at the track picker
     // has no "Found the track" line; this one stands in for it).
     const found = fixture.events.findIndex(({ event }) => event.type === "status");
@@ -1437,7 +1445,7 @@ describe("the recorded cover from the Cover Art Archive", () => {
 
   /** The dev fixture as a live run that showed Spotify's cover and cited `evidence`. */
   function liveRunWith(evidence: unknown[], extraText = "") {
-    const fixture = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    const fixture = structuredClone(demoReplay());
     const analysis = TrackAnalysis.parse({ ...fixture.analysis, evidence });
     analysis.coverUrl = SPOTIFY_COVER;
     analysis.genealogy.nodes[0].img = SPOTIFY_COVER;
@@ -1624,7 +1632,7 @@ describe("the recorded cover from the Cover Art Archive", () => {
 
 describe("the player", () => {
   it("serves no search match from a record: it belonged to the recorded run", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // A record written before the recorder left the match out.
     const older = { ...fixture, analysis: { ...fixture.analysis, queryMatch: "none" as const } };
     const served = replayedAnalysis(older, "0f0e0d0c-aaaa-4bbb-8ccc-000000000002");
@@ -1951,7 +1959,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("caps the wait between recorded events", async () => {
-    const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const dev = demoReplay();
     const recordedMs = dev.events.at(-1)?.atMs ?? 0;
     expect(recordedMs).toBeGreaterThan(5_000);
     const started = Date.now();
@@ -1972,7 +1980,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("reports no result when the stream did not send the recorded one", async () => {
-    const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const dev = demoReplay();
     const result = await playRecord(
       dev,
       "some-run",
@@ -2068,7 +2076,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("sends a recorded event's own time since the run started over its atMs", async () => {
-    const dev = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    const dev = structuredClone(demoReplay());
     // Times that differ from the stream's: the event's own is what the run measured.
     for (const item of dev.events) {
       (item.event as Record<string, unknown>).elapsedMs = item.atMs + 5_000;

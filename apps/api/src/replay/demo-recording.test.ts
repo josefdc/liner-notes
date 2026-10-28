@@ -228,13 +228,19 @@ describe.each(SLUGS)("the showcase recording %s", (slug) => {
     if (analysis.key) expect(audio?.key, "a key with no measured key").toBeTruthy();
   });
 
-  it("carries the verifier's judgement of every claim the model wrote (the judge's cassette)", () => {
+  it("carries the verifier's judgement of every model claim with evidence (the judge's cassette)", () => {
     const verifier = analysis.run?.verifier;
     expect(verifier, "no verifier counts: recorded with the verifier off").toBeTruthy();
     expect(verifier?.judged).toBeGreaterThan(0);
     expect(verifier?.unjudged).toBe(0);
     for (const claim of (analysis.claims ?? []).filter((c) => c.origin === "model")) {
-      expect(claim.verdict, `claim ${claim.id} has no verdict`).not.toBeNull();
+      if (claim.evidenceIds.length > 0) {
+        expect(claim.verdict, `claim ${claim.id} has no verdict`).not.toBeNull();
+      } else {
+        // Nothing to judge it against: shown as inferred, never as judged.
+        expect(claim.kind, `claim ${claim.id}`).toBe("inferred");
+        expect(claim.verdict, `claim ${claim.id}`).toBeNull();
+      }
     }
     // The judge's calls are in the recorded usage.
     expect(record.usage?.llmCalls ?? 0).toBeGreaterThan(0);

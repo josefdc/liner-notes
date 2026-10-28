@@ -1,0 +1,194 @@
+import type React from 'react';
+import { useId } from 'react';
+import { Square, Volume2, X } from 'lucide-react';
+import type { GenealogyNode } from '../../types';
+import { Button } from '../ui/Button';
+import { LINE, statusText, verdictReasonText } from '../provenance/ClaimChip';
+import type { ResultClaims } from '../provenance/claims';
+import { ProvenanceChip } from '../provenance/ProvenanceChip';
+import { SourceNote } from '../provenance/SourceNote';
+import { cardWords } from './cardWords';
+import { kindLabel, linkProvenanceKind, relationSentence, type ShownLink } from './links';
+import { type Listening, type ListeningPlan, unavailableText } from './useABListening';
+
+/**
+ * The selected track's details, in the map's panel: the track, each shown relation it has (as a
+ * sentence, how it is known, and its evidence), "Analyze this track" (the one way the map starts
+ * an analysis) and A/B listening. Over the bottom of the canvas, or under the compact row.
+ */
+
+/** What the verifier said of a model's link, in words; never a verdict the result lacks. */
+export function verifierText(link: ShownLink, claims: ResultClaims | null | undefined): string {
+  const claim = link.claim;
+  if (!claim) return 'Verifier: not checked; no claim in this result states this relation';
+  const shown = claims?.byId.get(claim.id);
+  const said =
+    verdictReasonText(claim) ?? (shown ? statusText(shown) : null) ?? 'not checked by the verifier';
+  const reason = claim.verdict === 'supported' ? claim.verdictReason?.trim() : '';
+  return `Verifier: ${said.charAt(0).toLowerCase()}${said.slice(1)}${reason ? ` · ${reason}` : ''}`;
+}
+
+/** One relation of the selected track: the sentence, its kind, and where it comes from. */
+const RelationEvidence: React.FC<{
+  link: ShownLink;
+  nameOf: (id: string) => string;
+  claims: ResultClaims | null | undefined;
+}> = ({ link, nameOf, claims }) => {
+  const cited = link.citations.flatMap((citation) =>
+    citation.evidence ? [citation.evidence] : [],
+  );
+  const sourced = link.kind === 'sourced';
+  const notes = cited.map((evidence) => (
+    <SourceNote key={evidence.id} evidence={evidence} showTier={sourced} />
+  ));
+  return (
+    <li data-link-kind={link.kind} className="flex flex-col items-start gap-1">
+      <p className="text-text-secondary">{relationSentence(link, nameOf)}</p>
+      <ProvenanceChip kind={linkProvenanceKind(link)}>{kindLabel(link)}</ProvenanceChip>
+      {link.origin === 'model' ? (
+        <>
+          <p className={LINE} data-verifier>
+            {verifierText(link, claims)}
+          </p>
+          {notes.length > 0 && (
+            <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`}>
+              <span>Cited by the model:</span>
+              {notes}
+            </p>
+          )}
+        </>
+      ) : (
+        // A link built from a record: the record it is built from.
+        notes.length > 0 && (
+          <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`} data-sourced-from>
+            <span>{sourced ? 'Sourced from' : 'Cites'}</span>
+            {notes}
+          </p>
+        )
+      )}
+      {!sourced && link.reasons.length > 0 && (
+        <p className={LINE}>Why it is not sourced: {link.reasons.join('; ')}</p>
+      )}
+    </li>
+  );
+};
+
+export const DetailPanel: React.FC<{
+  node: GenealogyNode;
+  /** Its year as a record dates it (null: undated). */
+  year: number | null;
+  /** Its shown links, best known first. */
+  links: readonly ShownLink[];
+  nameOf: (id: string) => string;
+  claims: ResultClaims | null | undefined;
+  /** A/B listening with the analysed track, or why it cannot play; null when there is none. */
+  plan: ListeningPlan | null;
+  listening: Listening | null;
+  /** Why the last pair stopped short, if it did. */
+  listeningMessage: string | null;
+  onListen: () => void;
+  onStopListening: () => void;
+  onAnalyse: () => void;
+  onClose: () => void;
+  /** Over the bottom of the canvas, or in the flow under the compact row. */
+  layout: 'overlay' | 'inline';
+  panelRef?: React.Ref<HTMLElement>;
+}> = ({
+  node,
+  year,
+  links,
+  nameOf,
+  claims,
+  plan,
+  listening,
+  listeningMessage,
+  onListen,
+  onStopListening,
+  onAnalyse,
+  onClose,
+  layout,
+  panelRef,
+}) => {
+  const headingId = useId();
+  const { title, artist } = cardWords(node, year);
+  const step = listening ? listening.steps[listening.index] : null;
+  const status = step
+    ? `Playing: ${step.name} (${(listening?.index ?? 0) + 1} of ${listening?.steps.length ?? 2})`
+    : (listeningMessage ?? '');
+  const place =
+    layout === 'overlay'
+      ? 'absolute bottom-2 left-2 right-2 z-30 max-h-[60%] md:left-auto md:w-[28rem] md:max-w-[calc(100%-1rem)]'
+      : 'mx-4 mb-3';
+  return (
+    <section
+      ref={panelRef}
+      aria-labelledby={headingId}
+      tabIndex={-1}
+      data-testid="node-detail"
+      className={`${place} flex flex-col gap-2 overflow-y-auto overscroll-contain cursor-auto rounded-sm border border-white/20 bg-void p-3 font-mono text-chrome text-text-chip wrap-anywhere focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 id={headingId} className="text-text-primary">
+            {title}
+          </h3>
+          <p className="text-text-tertiary">
+            {artist ? `${artist} · ` : ''}
+            {year ?? 'undated'}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close details"
+          onClick={onClose}
+          className="shrink-0 rounded-sm p-1 text-text-tertiary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      </div>
+      {/* The actions first: on a phone they are in view without scrolling the panel */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="neutral" size="sm" onClick={onAnalyse}>
+          Analyze this track
+        </Button>
+        {plan?.kind === 'ready' && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={listening ? onStopListening : onListen}
+            leftIcon={
+              listening ? (
+                <Square size={12} aria-hidden="true" />
+              ) : (
+                <Volume2 size={12} aria-hidden="true" />
+              )
+            }
+          >
+            {listening ? 'Stop' : plan.label}
+          </Button>
+        )}
+      </div>
+      {plan && plan.kind !== 'ready' && <p data-listening-unavailable>{unavailableText(plan)}</p>}
+      {/* What plays, step by step, or why the pair stopped short: announced as it changes */}
+      <p
+        aria-live="polite"
+        aria-atomic="true"
+        data-listening-status
+        className={status ? '' : 'sr-only'}
+      >
+        {status}
+      </p>
+      {links.length > 0 ? (
+        <ul aria-label="Its relations" className="flex flex-col gap-2">
+          {links.map((link, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: two tracks may share links
+            <RelationEvidence key={index} link={link} nameOf={nameOf} claims={claims} />
+          ))}
+        </ul>
+      ) : (
+        <p>No link to this track is shown.</p>
+      )}
+    </section>
+  );
+};

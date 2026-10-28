@@ -546,7 +546,7 @@ def shown(value, kind: str) -> str:
 
 
 def controls_section(controls: dict, after: cal.Rules) -> list[str]:
-    from .controls import GROUPS
+    from .controls import GROUPS, group_description
 
     names = controls["estimators"]
     # The controls run's own values: a controls run added to a report of older runs is shown
@@ -604,7 +604,10 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
                 row.append(text + mark)
         rows.append(row)
     present = {ctl["group"] for ctl in controls["controls"]}
-    groups = "; ".join(f"**{k}**: {v}" for k, v in GROUPS.items() if k in present)
+    shown_names = [ctl["name"] for ctl in controls["controls"]]
+    groups = "; ".join(
+        f"**{k}**: {group_description(k, shown_names)}" for k in GROUPS if k in present
+    )
     return [
         "### Controls",
         "",

@@ -328,28 +328,52 @@ GROUPS = {
     "chord families at 800-829; no rule value is chosen on them",
 }
 # Groups the calibration's choice never sees (calibration.select and confirm leave them out).
-# Families added to a group after reports had been made with it. A report names them only when
-# its controls include them, so an older report still describes the controls it ran.
+# Families added to a group after reports had been made with it: a report names them only when
+# its controls include them, so an older report still describes the controls it ran. Each group
+# has (lead, {family: words}, trail): the words of the families present are joined with ", "
+# between the lead and the trail.
 ADDED_FAMILIES = {
-    "one-pitch-class-seeded": {
-        "kit-toms": "two rack toms and a floor tom over a kit",
-        "tubular-bell": "a tubular bell",
-    },
+    "one-pitch-class-seeded": (
+        ", ",
+        {
+            "kit-toms": "two rack toms and a floor tom over a kit",
+            "tubular-bell": "a tubular bell",
+        },
+        "",
+    ),
+    "chord-keyed-seeded": (
+        "; triads ",
+        {
+            "e-piano-chord": "on an electric piano",
+            "flute-chord": "of flute-like tones",
+            "fm-e-piano-chord": "on an FM electric piano",
+            "triangle-chord": "of triangle waves",
+            "mallet-chord": "struck on bars",
+        },
+        ", 30 seeds each",
+    ),
 }
 
 
 def group_description(group: str, names) -> str:
-    """GROUPS[group], with the added families that occur among the control `names`."""
+    """
+    GROUPS[group], with the added families that occur among the control `names`: inside its
+    closing parenthesis when it ends with one, after it otherwise.
+    """
     text = GROUPS[group]
+    lead, families, trail = ADDED_FAMILIES.get(group, ("", {}, ""))
     added = [
         words
-        for family, words in ADDED_FAMILIES.get(group, {}).items()
+        for family, words in families.items()
         if any(name.startswith(f"{family}-s") for name in names)
     ]
     if not added:
         return text
-    head, tail = text.split("), 30 seeds each")
-    return f"{head}, {', '.join(added)}), 30 seeds each{tail}"
+    insert = f"{lead}{', '.join(added)}{trail}"
+    head, paren, tail = text.rpartition(")")
+    if not paren:
+        return text + insert
+    return f"{head}{insert}){tail}"
 
 
 EVALUATION_GROUPS = frozenset({"held-out-seeded"})

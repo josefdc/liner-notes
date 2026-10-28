@@ -13,6 +13,8 @@ from evals_audio.report import (
     add_run,
     count_p_values,
     load,
+    measured,
+    not_run,
     render,
 )
 from evals_audio.runner import compare_pairs, lifted_views, withheld_cost
@@ -225,11 +227,12 @@ def test_there_is_a_committed_report():
     assert COMMITTED, "no evals/reports/audio-*.json"
 
 
-def test_the_newest_controls_run_has_the_services_single_source_rule():
+def test_the_newest_controls_run_is_of_the_service_as_it_is():
     """
     The READMEs quote the control counts of the newest committed controls run, so that run must
-    have been made with the single-source values the service holds now: a change to the rule
-    needs a fresh run (uv run python -m evals_audio --suite controls).
+    have been made with the analyzer version and the single-source values the service holds
+    now: a change to the rule, or any change to the output that bumps the version, needs a
+    fresh run (uv run python -m evals_audio --suite controls).
     """
     runs = [
         (path.name, run)
@@ -240,15 +243,15 @@ def test_the_newest_controls_run_has_the_services_single_source_rule():
     assert runs, "no committed controls run"
     name, newest = max(runs, key=lambda item: item[1]["startedAt"])
     _, est = service.load()
+    assert newest["analyzerVersion"] == service.base_version(), name
     assert newest["rules"].get("one_source") == calibration.source_values(est), name
 
 
 def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
     """An older report keeps describing the controls it ran; a newer one names the added ones."""
-    before = ["tabla-s500", "toms-s501", "cowbell-s502"]
-    old = group_description("one-pitch-class-seeded", before)
-    assert old == GROUPS["one-pitch-class-seeded"]
-    assert "tubular" not in old and "rack toms" not in old
+    before = ["tabla-s500", "toms-s501", "cowbell-s502", "faded-pad-s700"]
+    for group in ("one-pitch-class-seeded", "chord-keyed-seeded", "no-key"):
+        assert group_description(group, before) == GROUPS[group]
     new = group_description(
         "one-pitch-class-seeded", [*before, "kit-toms-s505", "tubular-bell-s507"]
     )
@@ -257,7 +260,46 @@ def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
     )
     only_bells = group_description("one-pitch-class-seeded", [*before, "tubular-bell-s507"])
     assert "a held synth note, a tubular bell)" in only_bells
+    chords = group_description(
+        "chord-keyed-seeded", [*before, "fm-e-piano-chord-s700", "mallet-chord-s801"]
+    )
+    assert chords.endswith(
+        "their key not scored; triads on an FM electric piano, struck on bars, 30 seeds each)"
+    )
     assert group_description("no-key", ["tubular-bell-s507"]) == GROUPS["no-key"]
+
+
+def test_a_group_description_takes_added_families_whatever_its_wording(monkeypatch):
+    """Reworded without a closing parenthesis, a group still names its added families."""
+    monkeypatch.setitem(GROUPS, "one-pitch-class-seeded", "no key: one pitched source")
+    assert (
+        group_description("one-pitch-class-seeded", ["tubular-bell-s500"])
+        == "no key: one pitched source, a tubular bell"
+    )
+    monkeypatch.setitem(GROUPS, "one-pitch-class-seeded", "no key (one source) at 30 seeds")
+    assert (
+        group_description("one-pitch-class-seeded", ["kit-toms-s500"])
+        == "no key (one source, two rack toms and a floor tom over a kit) at 30 seeds"
+    )
+
+
+def test_a_report_says_what_it_measures_and_what_it_does_not_hold():
+    """A report of some suites names those only, and the ones it leaves out."""
+
+    def doc(*suites):
+        return {"runs": [{"suite": suite} for suite in suites]}
+
+    partial = doc("tempo", "calibration", "controls")
+    assert measured(partial) == (
+        "Tempo accuracy of the audio service (`services/audio`) on annotated datasets, the "
+        "calibration of its withholding rules and its answers on generated controls"
+    )
+    assert "key accuracy, the golden set and the estimators' costs" in not_run(partial)
+    for words in ("key accuracy", "golden", "costs"):
+        assert words not in measured(partial)
+    full = doc("tempo", "key", "golden", "cost", "calibration", "controls")
+    assert measured(full).startswith("Tempo and key accuracy") and not_run(full) == ""
+    assert measured(doc("controls")).endswith("its answers on generated controls")
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

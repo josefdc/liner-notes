@@ -656,16 +656,77 @@ def intro(doc: dict) -> list[str]:
             "",
         ]
     return [
-        "Tempo and key accuracy of the audio service (`services/audio`) on annotated datasets, "
-        "its agreement with sourced tempo and key values on the golden set's Deezer previews, "
-        "its style fingerprint against Discogs styles, and what each tempo estimator costs, "
-        "measured by `evals/audio` (`uv run python -m evals_audio`). The harness imports the "
-        "service and calls its own `analyze_signals`, so the numbers are what the service "
-        "returns, gate and withholding rules included. " + results,
+        measured(doc) + ", measured by `evals/audio` (`uv run python -m evals_audio`). The "
+        "harness imports the service and calls its own `analyze_signals`, so the numbers are "
+        "what the service returns, gate and withholding rules included. " + results + not_run(doc),
         "",
         scope(doc),
         "",
     ]
+
+
+FULL_REPORT = {"tempo", "key", "golden", "cost"}
+
+
+def _listed(parts: list[str]) -> str:
+    return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+
+
+def measured(doc: dict) -> str:
+    """What the report measures: every suite, or only those of the runs it holds."""
+    suites = {run["suite"] for run in doc["runs"]}
+    if FULL_REPORT <= suites:
+        return (
+            "Tempo and key accuracy of the audio service (`services/audio`) on annotated "
+            "datasets, its agreement with sourced tempo and key values on the golden set's "
+            "Deezer previews, its style fingerprint against Discogs styles, and what each tempo "
+            "estimator costs"
+        )
+    accuracy = " and ".join(kind for kind in ("tempo", "key") if kind in suites)
+    parts = [
+        words
+        for suite, words in (
+            (
+                "golden",
+                "its agreement with sourced tempo and key values on the golden set's Deezer "
+                "previews (with its style fingerprint against Discogs styles)",
+            ),
+            ("cost", "what each tempo estimator costs"),
+            ("calibration", "the calibration of its withholding rules"),
+            ("controls", "its answers on generated controls"),
+        )
+        if suite in suites
+    ]
+    if accuracy:
+        return _listed(
+            [
+                f"{accuracy.capitalize()} accuracy of the audio service (`services/audio`) on "
+                "annotated datasets",
+                *parts,
+            ]
+        )
+    return "The audio service (`services/audio`): " + _listed(parts)
+
+
+def not_run(doc: dict) -> str:
+    """The suites a report without all of them leaves out, said plainly."""
+    suites = {run["suite"] for run in doc["runs"]}
+    if FULL_REPORT <= suites:
+        return ""
+    missing = [
+        words
+        for suite, words in (
+            ("tempo", "tempo accuracy"),
+            ("key", "key accuracy"),
+            ("golden", "the golden set"),
+            ("cost", "the estimators' costs"),
+        )
+        if suite not in suites
+    ]
+    return (
+        f" Not run for this report: {_listed(missing)}. The earlier reports that hold them "
+        "state the analyzer version they were made with."
+    )
 
 
 def scope(doc: dict) -> str:

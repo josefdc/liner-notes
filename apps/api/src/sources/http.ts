@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { logger } from "../logger.js";
+import { logger, MAX_LOGGED_TEXT } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -1539,6 +1539,27 @@ function keyValuePieces(
 /** Removes credentials from an error message or log line (redactKeyValues). */
 export const redactText = (text: string) => redactKeyValues(text, []);
 
+/** What the HTTP error log keeps of an error's message (logText in http/middleware/errors.ts). */
+const MAX_LOGGED_MESSAGE = 200;
+/** Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. */
+const LOG_PREFIX_ROOM = 1024;
+
+/**
+ * `text` redacted (redactText), for a log that cuts it to `max` characters, keeping `keep`. A
+ * value moreSecretSpans masks can make the text shorter than the other rules leave it, so the
+ * cut would fall further on: where they alone leave the text longer than `max`, it stops where
+ * they would be cut, with "…", and the log never shows what that cut left out.
+ */
+function redactForLog(text: string, max: number, keep: number): string {
+  const more = moreSecretSpans(text);
+  const pieces = keyValuePieces(text, [], [], more);
+  if (more.length === 0) return render(text, pieces);
+  const shown = cutAt(keyValuePieces(text, [], [], []), max, keep);
+  return shown < text.length
+    ? `${render(text, piecesBefore(pieces, shown))}…`
+    : render(text, pieces);
+}
+
 /** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
 const ID_SHAPED =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9A-Za-z]{22}|[A-Z]{2}[A-Z0-9]{3}\d{7})$/i;
@@ -1754,7 +1775,7 @@ export class SourceError extends Error {
     details: { status?: number; retryAfterMs?: number; body?: unknown; cause?: unknown } = {},
   ) {
     super(
-      redactText(`${source}: ${message}`),
+      redactForLog(`${source}: ${message}`, MAX_LOGGED_MESSAGE, MAX_LOGGED_MESSAGE),
       details.cause === undefined ? {} : { cause: details.cause },
     );
     this.status = details.status;
@@ -1767,9 +1788,17 @@ export function isSourceError(error: unknown, kind?: SourceErrorKind): error is 
   return error instanceof SourceError && (kind === undefined || error.kind === kind);
 }
 
-/** One line for logs and tool results, with credentials redacted. */
+/**
+ * One line for logs and tool results, with credentials redacted. A log line keeps
+ * MAX_LOGGED_TEXT characters, its own words before the error included: past that, the line
+ * stops where the other rules alone would leave it with LOG_PREFIX_ROOM to spare (redactForLog).
+ */
 export function describeError(error: unknown): string {
-  return redactText(error instanceof Error ? error.message : String(error));
+  return redactForLog(
+    error instanceof Error ? error.message : String(error),
+    MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+    MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+  );
 }
 
 // =============================================================================

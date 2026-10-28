@@ -11,7 +11,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { captureLogsForTests } from "../logger.js";
+import { logText } from "../http/middleware/errors.js";
+import { captureLogsForTests, scrub } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -2021,6 +2022,26 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     expect(plainReason('Invalid header GITHUB_TOKEN=File "", line 4')).toBeUndefined();
   });
 
+  it("cuts an error message where a log's cap cuts it without the new shapes", () => {
+    // The HTTP error log keeps 200 characters of a message (logText), a log line 16 KiB (scrub).
+    for (let pad = 20; pad < 80; pad += 3) {
+      const message = `GITHUB_TOKEN=${"v".repeat(60)} ${"w ".repeat(pad)}QzTAILQ`;
+      const unmasked = message.replace("GITHUB_TOKEN", "GITHUB_TOKEX");
+      const logged = (text: string) => logText(new SourceError("spotify", "http", text).message);
+      if (!logged(unmasked).includes("Qz")) expect(logged(message), message).not.toContain("Qz");
+    }
+    for (let pad = 8_150; pad < 8_220; pad += 7) {
+      const message = `GITHUB_TOKEN=${"v".repeat(400)} ${"w ".repeat(pad)}QzTAILQ`;
+      const unmasked = message.replace("GITHUB_TOKEN", "GITHUB_TOKEX");
+      const logged = (text: string) => scrub(`Error: ${describeError(new Error(text))}`);
+      if (!logged(unmasked).includes("Qz"))
+        expect(logged(message), String(pad)).not.toContain("Qz");
+    }
+    // Without the new shapes, a message is what it always was.
+    const plain = `spotify: ${"w ".repeat(150)}`;
+    expect(new SourceError("spotify", "http", "w ".repeat(150)).message).toBe(plain);
+  });
+
   it("keeps hidden what a reason's error message hides when it is redacted again", () => {
     // The other rules leave M0017x in the reason, and mask it when the message made from it is
     // redacted again, by the key before it; a mask over that key must not show it.
@@ -2076,6 +2097,10 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
       redactText('Unauthorized\nAuthorization: Digest username="ana", realm="api", response="r1"'),
     ).toBe(
       'Unauthorized\nAuthorization: Digest username="[redacted]", realm="api", response="[redacted]"',
+    );
+    // A string over two lines is as long as its length in bytes says.
+    expect(redactText('["token"]=>\n  string(6) "éé\na"\n}')).toBe(
+      '["token"]=>\n  string(6) "[redacted]"\n}',
     );
     expect(redactText('["token"]=>\n  string(99) "abc"\n  ["name"]=>\n  string(4) "kept"')).toBe(
       '["token"]=>\n  string(99) "[redacted]"\n  ["name"]=>\n  string(4) "kept"',

@@ -587,8 +587,9 @@ export function buildCodeClaims(
   // A code link's direction is its record's. Where the years say otherwise (the record sampled
   // dated after the one sampling it: MusicBrainz knows only a later release of it), the year of
   // the end farther from the analysed track is left off: undated, never moved to fit.
+  // The analysed track's year as the web shows it: its MusicBrainz year, else Spotify's.
   const yearOfNode = (id: string) =>
-    id === "current" ? ownYear : nodes.find((node) => node.id === id)?.year;
+    id === "current" ? (ownYear ?? released) : nodes.find((node) => node.id === id)?.year;
   for (const link of links) {
     const [from, to] = [yearOfNode(link.source), yearOfNode(link.target)];
     if (from === undefined || to === undefined || from <= to) continue;

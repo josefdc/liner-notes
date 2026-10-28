@@ -526,6 +526,13 @@ describe("years the evidence states", () => {
     expect(nodeOf(hopped.nodes, 1)).toMatchObject({ year: 1981 });
     expect(nodeOf(hopped.nodes, 2)).not.toHaveProperty("year");
     expect(nodeOf(hopped.nodes, 3)).toMatchObject({ year: 1999 });
+    // The analysed track with no MusicBrainz year it may take (MusicBrainz dates it 1999,
+    // after Spotify's 1994 release): its year is Spotify's, as the web shows it, and a sampled
+    // record dated 2005 contradicts the link the same.
+    const unstated = { ...juicy, firstReleaseDate: "1999-01-01" };
+    const later = built([relation("samples", 1, "2005-03-01", groove)], unstated).code;
+    expect(later.current).toEqual({ mbid: OWN });
+    expect(nodeOf(later.nodes, 1)).not.toHaveProperty("year");
     // Never moved to fit: no node takes another's year.
     expect(hopped.nodes.map((node) => node.year)).toEqual([1981, undefined, 1999]);
   });

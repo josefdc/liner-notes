@@ -92,8 +92,7 @@ PROTOCOL_NOTES = (
 ONE_SOURCE_NOTE = (
     "The single-source rule (no key for one pitched source: spectral lines that keep their "
     "proportions over the window, rise and fall together and spell one note, or two that are "
-    "not a third or a sixth apart, as a cowbell or one note repeated on a bass, or that are not "
-    "the harmonics of notes, as a tubular bell, since analyzer 2.3.5) was added after "
+    "not a third or a sixth apart, as a cowbell or one note repeated on a bass) was added after "
     "this calibration, from the one-pitch-class and chord controls and the GiantSteps+ keys the "
     "service gave without it. The procedure does not vary it: before is without it, after with "
     "it at the values each run recorded, and the choice below is made without it. The held-out "
@@ -547,7 +546,7 @@ def shown(value, kind: str) -> str:
 
 
 def controls_section(controls: dict, after: cal.Rules) -> list[str]:
-    from .controls import GROUPS, group_description
+    from .controls import GROUPS
 
     names = controls["estimators"]
     # The controls run's own values: a controls run added to a report of older runs is shown
@@ -605,10 +604,7 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
                 row.append(text + mark)
         rows.append(row)
     present = {ctl["group"] for ctl in controls["controls"]}
-    shown_names = [ctl["name"] for ctl in controls["controls"]]
-    groups = "; ".join(
-        f"**{k}**: {group_description(k, shown_names)}" for k in GROUPS if k in present
-    )
+    groups = "; ".join(f"**{k}**: {v}" for k, v in GROUPS.items() if k in present)
     return [
         "### Controls",
         "",

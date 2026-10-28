@@ -894,6 +894,103 @@ def seeded_one_bar_riff(seed: int):
     return y, (PITCH_NAMES[root], "major")
 
 
+# Chords in soft timbres: overtones 17-30 dB under each note (an electric piano, a flute, an FM
+# electric piano, a triangle wave) or the inharmonic modes of a struck bar (a mallet: an untuned
+# bar, 1 : 3.9 : 9.2, or a glockenspiel, 1 : 2.71 : 5.15). (ratio, level) of each partial.
+_SOFT_TIMBRES = {
+    "e-piano": [(1, 1.0), (2, 0.08), (3, 0.03)],
+    "flute": [(1, 1.0), (2, 0.06), (3, 0.03)],
+    "triangle": [(k, 1.0 / k**2) for k in (1, 3, 5, 7)],
+}
+_BARS = ([(1, 1.0), (3.9, 0.25), (9.2, 0.08)], [(1, 1.0), (2.71, 0.2), (5.15, 0.05)])
+
+
+def _fm_tone(f: float, t: np.ndarray, index: float) -> np.ndarray:
+    """An FM electric piano note: carrier and modulator at f, the index decaying over 0.3 s."""
+    return np.sin(2 * np.pi * f * t + index * np.exp(-t / 0.3) * np.sin(2 * np.pi * f * t))
+
+
+def _soft_chord(seed: int, timbre: str):
+    """
+    A triad in a soft timbre (root doubled an octave down on even seeds), held, with tremolo,
+    pumped by a 128 BPM sidechain or struck on the beat, a third of the seeds over drums.
+    """
+    rng = np.random.default_rng(seed)
+    root, mode = _key_draw(rng)
+    notes = _triad(root, mode, (48, 60)[int(rng.integers(0, 2))])
+    if seed % 2 == 0:
+        notes = notes + [notes[0] - 12]
+    shape = ("held", "tremolo", "pumped", "struck")[int(rng.integers(0, 4))]
+    bpm = float(rng.uniform(100.0, 130.0))
+    length = 30.0 if shape != "struck" else 60.0 / bpm
+    t = seconds_of(length)
+    if timbre == "fm-e-piano":
+        index = float(rng.uniform(0.3, 0.8))
+        sound = sum(_fm_tone(hz(m), t, index) for m in notes)
+    elif timbre == "mallet":
+        bar = _BARS[int(rng.integers(0, 2))]
+        decay = float(rng.uniform(0.3, 0.8))
+        sound = sum(
+            w * np.sin(2 * np.pi * hz(m) * r * t) * np.exp(-t * r / decay)
+            for m in notes
+            for r, w in bar
+            if hz(m) * r < 5000
+        )
+    else:
+        sound = sum(
+            w * np.sin(2 * np.pi * hz(m) * r * t)
+            for m in notes
+            for r, w in _SOFT_TIMBRES[timbre]
+            if hz(m) * r < 5000
+        )
+    if shape == "struck" or timbre == "mallet":
+        decay = float(rng.uniform(0.15, 0.5))
+        sound = sound * np.exp(-t / decay) * np.minimum(1, t / 0.004)
+        if shape != "struck":  # a mallet roll: the chord struck on every sixteenth
+            length, t = 15.0 / bpm, seconds_of(15.0 / bpm)
+            sound = sound[: t.size] * np.minimum(1, (length - t) / 0.01)
+        y = np.zeros(30 * SR)
+        for start in np.arange(0.0, 30.0, length):
+            place(y, float(start), sound)
+    else:
+        y = sound * np.minimum(1, t / 0.05) * np.minimum(1, (30 - t) / 0.05)
+        if shape == "tremolo":
+            depth = rng.uniform(0.4, 0.6)
+            y = y * (1 - depth * (0.5 + 0.5 * np.sin(2 * np.pi * rng.uniform(5.5, 6.5) * t)))
+        elif shape == "pumped":
+            beat = 60.0 / 128.0
+            y = y * (1 - rng.uniform(0.7, 0.9) * np.exp(-(t % beat) / rng.uniform(0.08, 0.15)))
+    key = (PITCH_NAMES[root], mode)
+    if rng.uniform() < 1 / 3:
+        return _with_drums(y, seed), key
+    return normalise(y), key
+
+
+def seeded_e_piano_chord(seed: int):
+    """A triad on an electric piano (2nd and 3rd harmonics 22 and 30 dB down)."""
+    return _soft_chord(seed, "e-piano")
+
+
+def seeded_flute_chord(seed: int):
+    """A triad of flute-like tones (2nd and 3rd harmonics 24 and 30 dB down)."""
+    return _soft_chord(seed, "flute")
+
+
+def seeded_fm_e_piano_chord(seed: int):
+    """A triad on an FM electric piano (index 0.3-0.8, decaying)."""
+    return _soft_chord(seed, "fm-e-piano")
+
+
+def seeded_triangle_chord(seed: int):
+    """A triad of triangle waves (odd harmonics at 1/k^2: the 3rd 19 dB down)."""
+    return _soft_chord(seed, "triangle")
+
+
+def seeded_mallet_chord(seed: int):
+    """A triad struck on bars (an untuned bar or a glockenspiel): stabs on the beat or a roll."""
+    return _soft_chord(seed, "mallet")
+
+
 CHORD_KEYED_SEEDED = {
     "faded-pad": seeded_faded_pad,
     "swelling-pad": seeded_swelling_pad,
@@ -903,6 +1000,11 @@ CHORD_KEYED_SEEDED = {
     "c-major-stabs": seeded_c_major_stabs,
     "one-chord-riff": seeded_one_chord_riff,
     "one-bar-riff": seeded_one_bar_riff,
+    "e-piano-chord": seeded_e_piano_chord,
+    "flute-chord": seeded_flute_chord,
+    "fm-e-piano-chord": seeded_fm_e_piano_chord,
+    "triangle-chord": seeded_triangle_chord,
+    "mallet-chord": seeded_mallet_chord,
 }
 CHORD_KEYED_SEEDS = range(700, 730)
 

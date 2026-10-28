@@ -16,8 +16,8 @@ which turns 120 BPM into 117 and 140 into 144), and both withhold a tempo that t
 does not keep (``steady_tempo``). A key is only estimated from tonal evidence that both share
 (``Tonality``): pitchless sound (drums, clicks, noise), a single harmonic series (a tone,
 mains hum) and one pitched source whose partials never change and rise and fall together (a
-cowbell, a tubular bell, one note repeated on a bass: ``SourceEvidence``) get no key, whatever
-an estimator would answer.
+cowbell, a bell, one note repeated on a bass: ``SourceEvidence``) get no key, whatever an
+estimator would answer.
 
 ``measure_tempo`` and ``measure_key`` return the estimate or why there is none (``Withheld``: the
 reason in words and a stable code, the contract's AudioWithheldCode); ``tempo`` and ``key``
@@ -206,9 +206,9 @@ MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is com
 ESSENTIA_MIN_KEY_STRENGTH = 0.4
 LIBROSA_MIN_KEY_STRENGTH = 0.4
 # One pitched source (SourceEvidence) is no key, whatever its strength: a cowbell, one note
-# repeated on a bass, a tubular bell. Its overtones or its modes can spell three pitch classes
-# that the series and pitch-class rules let through, and the estimators then find a key in them.
-# Two questions decide, in this order:
+# repeated on a bass. Its overtones can spell three pitch classes that the series and
+# pitch-class rules let through, and the estimators then find a key in them. Two questions
+# decide, in this order:
 # 1. Time (SourceEvidence.still): the harmonic part's spectral lines keep their proportions and
 #    rise and fall together. The lines are grouped into the bins of the shared STFT (10.8 Hz),
 #    and the bins holding SOURCE_COVER of the line amplitude are followed by their STFT
@@ -235,12 +235,7 @@ LIBROSA_MIN_KEY_STRENGTH = 0.4
 #    and sixths within SOURCE_THIRD_CENTS) between any note of one and any note of the other,
 #    are a chord and keep the key (a seventh chord whose fifth folds into a root doubled below
 #    and whose third is quiet leaves root and seventh); one note, or two a fourth, fifth or
-#    tritone apart, is one source. So are notes that spell a chord when at most
-#    SOURCE_MAX_HARMONICS of the level of the lines (from SOURCE_NOTE_FLOOR of the strongest)
-#    folds into them as overtones (SourceEvidence.inharmonic): a chord's notes, or one note of a
-#    voice, a string, a pipe or a synthesizer, have harmonics among the lines, while the modes
-#    of a struck bar or tube (a tubular bell, whose strike note is heard an octave under its
-#    fourth mode) are not harmonics of one another.
+#    tritone apart, is one source.
 # Measured on the controls of tests/signals.py, with analyzer 2.1.0 as the reference (a lost key
 # is one it served that the rule withholds):
 # - the chords of CHORD_KEYED_SEEDED (seeds 700-729): held chords faded, swelling, getting
@@ -266,22 +261,9 @@ LIBROSA_MIN_KEY_STRENGTH = 0.4
 #   hum, as in a chord. Toms do not pass the time test (two or three drums, each with its own
 #   envelope: shared 0.37-0.55), nor do 27 of 30 tabla (strokes with envelopes of their own);
 #   the other three spell three classes or more;
-# - the harmonics check (analyzer 2.3.5, with 2.3.4 as the reference): of the still lines that
-#   spell a chord, the chord controls (CHORD_KEYED_SEEDED, SOFT_THIRD_GRID, SEVENTH_GRID, the
-#   detuned thirds and the sus chords, 826 that hold still) have 0.397-0.776 of their level in
-#   harmonics, and none loses a key (nor at seeds 800-829, 0.454 and more); tubular bells have
-#   none (0.0 at the 29 of 30 seeds that hold still): of the keys 2.3.4 gave at seeds 500-529
-#   it withholds 19 of 20 with each estimator (the seed kept does not hold still). Church bells
-#   keep theirs: the prime and nominal are octaves of the hum (0.30-0.55). A chord of pure sine
-#   tones that holds still has no harmonics either and would lose its key (none among the
-#   controls, a known limit). Two rack toms and a floor tom over a kit do not pass the time
-#   test (the one seed that does is withheld by an earlier rule);
 # - GiantSteps+ (evals/audio key suite, --limit 250, clip seeds 1-3, 750 windows): no window
 #   whose key the other rules let through passes the time test: the stillest of the 155 keyed
-#   windows moves 0.049 but shares 0.41, the next ones move 0.057 and more. At 2.3.5, of
-#   1,350 more windows (the same 250 GiantSteps+ clips at clip seeds 1-3, 400 GiantSteps Tempo
-#   and 200 Ballroom clips at seed 1, each cut at a start drawn from its file name), the 303
-#   whose key the other rules let through never hold still: the rule changes none of them.
+#   windows moves 0.049 but shares 0.41, the next ones move 0.057 and more.
 SOURCE_COVER = 0.9
 SOURCE_MIN_BINS = 6
 SOURCE_WINDOW_S = 2.0
@@ -302,12 +284,8 @@ SOURCE_OCTAVE_TOLERANCE = 0.01
 SOURCE_OVERTONE_RATIO = 0.5
 SOURCE_NOTE_MAX_HARMONIC = 16
 SOURCE_THIRD_CENTS = 30.0
-SOURCE_MAX_HARMONICS = 0.1
 # The reasons name the check that fired, never a cause it does not test (tests/test_withheld_codes.py).
 ONE_SOURCE = "the partials hold still, rise and fall together and spell no chord"
-INHARMONIC_SOURCE = (
-    "the partials hold still, rise and fall together and are not the harmonics of notes"
-)
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
 HARMONIC_MAX_HZ = 5000.0
@@ -440,9 +418,6 @@ class SourceEvidence:
     depth: float  # coefficient of variation of their summed envelope
     # The notes the lines spell (Hz, see source_notes), measured only when the four above hold.
     notes: tuple[float, ...] | None = None
-    # Share of the lines' level that lies on the harmonics of those notes (see source_partials),
-    # measured with them.
-    harmonics: float | None = None
 
     @property
     def still(self) -> bool:
@@ -459,18 +434,8 @@ class SourceEvidence:
         return self.notes is not None and spells_chord(self.notes)
 
     @property
-    def inharmonic(self) -> bool:
-        """Next to no line is a harmonic of a note: partials of their own (SOURCE_MAX_HARMONICS)."""
-        return self.harmonics is not None and self.harmonics <= SOURCE_MAX_HARMONICS
-
-    @property
     def single(self) -> bool:
-        """
-        What time says, and lines that spell no chord, or whose notes have next to no harmonics
-        among them: the partials of one struck inharmonic body (a tubular bell) spell pitch
-        classes the way a chord's notes do, but no line is another's overtone.
-        """
-        return self.still and self.notes is not None and (not self.chord or self.inharmonic)
+        return self.still and self.notes is not None and not self.chord
 
 
 NO_SOURCE_EVIDENCE = SourceEvidence(0, 1.0, 0.0, 0.0)
@@ -681,9 +646,9 @@ class Signals:
         evidence = source_evidence(self.harmonic_tonality, self.harmonic_stft, self.sr, self.hop)
         if not evidence.still:
             return evidence
-        notes, harmonics = source_partials(self.harmonic_stft, self.sr, self.hop)
+        notes = source_notes(self.harmonic_stft, self.sr, self.hop)
         return SourceEvidence(
-            evidence.bins, evidence.movement, evidence.shared, evidence.depth, notes, harmonics
+            evidence.bins, evidence.movement, evidence.shared, evidence.depth, notes
         )
 
     def key_withheld(self) -> Withheld | None:
@@ -695,8 +660,6 @@ class Signals:
         """
         withheld = self._evidence_withheld()
         if withheld is None and self.source_evidence.single:
-            if self.source_evidence.chord:
-                return Withheld(INHARMONIC_SOURCE, code="one_pitched_source")
             return Withheld(ONE_SOURCE, code="one_pitched_source")
         return withheld
 
@@ -773,11 +736,6 @@ def source_evidence(lines: Tonality, stft: np.ndarray, sr: int, hop: int) -> Sou
 
 
 def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
-    """The notes of source_partials."""
-    return source_partials(stft, sr, hop)[0]
-
-
-def source_partials(stft: np.ndarray, sr: int, hop: int) -> tuple[tuple[float, ...], float]:
     """
     The notes (Hz, lowest first) that the lines of `stft` spell. Every bin of every frame votes
     for the frequency its phase advance between frames gives, weighted by its magnitude: the
@@ -795,16 +753,12 @@ def source_partials(stft: np.ndarray, sr: int, hop: int) -> tuple[tuple[float, .
     root's third harmonic). The other lines are notes, and those of at least SOURCE_NOTE_COUNT
     of the strongest note count: the strongest line can be a root doubled an octave down, and
     a third a few dB softer than root and fifth must still count.
-
-    Also returns the share of the level of the lines from SOURCE_NOTE_FLOOR up that were
-    folded into a note as its overtones: a chord or a note of a voice, string, pipe or
-    synthesizer has harmonics among its lines, the partials of a struck bar or tube have none.
     """
     lo, hi = SERIES_LOW_HZ, HARMONIC_MAX_HZ
     n_fft = 2 * (stft.shape[0] - 1)
     rows = int(min(stft.shape[0], np.ceil(hi * n_fft / sr) + 2))
     if stft.shape[1] < 2 or rows < 3:
-        return (), 0.0
+        return ()
     spectrum = stft[:rows]
     k = np.arange(rows)[:, None]
     advance = np.angle(spectrum[:, 1:]) - np.angle(spectrum[:, :-1]) - 2 * np.pi * k * hop / n_fft
@@ -813,14 +767,14 @@ def source_partials(stft: np.ndarray, sr: int, hop: int) -> tuple[tuple[float, .
     magnitude = np.abs(spectrum)
     weight = np.sqrt(magnitude[:, 1:] * magnitude[:, :-1])
     if not weight.max() > 0:
-        return (), 0.0
+        return ()
     vote = (weight > 1e-3 * weight.max()) & (freqs >= lo) & (freqs <= hi)
     position = 1200 * np.log2(freqs[vote] / lo) / SOURCE_NOTE_CENTS_BIN
     size = int(1200 * np.log2(hi / lo) / SOURCE_NOTE_CENTS_BIN) + 1
     histogram = np.bincount(position.astype(int), weights=weight[vote], minlength=size)
     smooth = scipy.ndimage.gaussian_filter1d(histogram, 2.0)
     if not smooth.max() > 0:
-        return (), 0.0
+        return ()
     found, _ = scipy.signal.find_peaks(smooth, prominence=0.01 * smooth.max())
     lines = [
         (
@@ -834,20 +788,16 @@ def source_partials(stft: np.ndarray, sr: int, hop: int) -> tuple[tuple[float, .
         if all(_cents(f, g) > SOURCE_NOTE_MERGE_CENTS for g, _ in kept):
             kept.append((f, a))
     if not kept:
-        return (), 0.0
+        return ()
     strongest = kept[0][1]
     notes: list[tuple[float, float]] = []
-    level = folded = 0.0
     for f, a in sorted(kept):
         if a < SOURCE_NOTE_FLOOR * strongest:
             continue
-        level += a
-        if any(_overtone(f, a, f0, a0, strongest) for f0, a0 in notes):
-            folded += a
-        else:
+        if not any(_overtone(f, a, f0, a0, strongest) for f0, a0 in notes):
             notes.append((f, a))
     loudest = max(a for _, a in notes)
-    return tuple(f for f, a in notes if a >= SOURCE_NOTE_COUNT * loudest), folded / level
+    return tuple(f for f, a in notes if a >= SOURCE_NOTE_COUNT * loudest)
 
 
 def _overtone(f: float, a: float, f0: float, a0: float, strongest: float) -> bool:

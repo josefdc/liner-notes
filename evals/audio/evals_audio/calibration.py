@@ -182,22 +182,14 @@ SOURCE_CONSTANTS = {
     "overtoneRatio": "SOURCE_OVERTONE_RATIO",
     "noteMaxHarmonic": "SOURCE_NOTE_MAX_HARMONIC",
     "thirdCents": "SOURCE_THIRD_CENTS",
-    "maxHarmonics": "SOURCE_MAX_HARMONICS",
 }
-# Values a run made before the service had them does not record: the rule then had no such check.
-SOURCE_OPTIONAL = frozenset({"maxHarmonics"})
 
 
 def source_values(est) -> dict | None:
     """The single-source rule's values in the imported service (None when it has none)."""
-    required = {n: c for n, c in SOURCE_CONSTANTS.items() if n not in SOURCE_OPTIONAL}
-    if not all(hasattr(est, constant) for constant in required.values()):
+    if not all(hasattr(est, constant) for constant in SOURCE_CONSTANTS.values()):
         return None
-    return {
-        name: getattr(est, constant)
-        for name, constant in SOURCE_CONSTANTS.items()
-        if hasattr(est, constant)
-    }
+    return {name: getattr(est, constant) for name, constant in SOURCE_CONSTANTS.items()}
 
 
 # --- recording (in the worker) -----------------------------------------------------------------
@@ -306,8 +298,6 @@ def evidence(signals) -> dict:
             # Measured only when the time measurements hold at the service's values.
             "notes": None if source.notes is None else [_f(f) for f in source.notes],
             "chord": None if source.notes is None else bool(source.chord),
-            # Share of the lines' level on the notes' harmonics, measured with the notes.
-            "harmonics": _f(getattr(source, "harmonics", None)),
         }
     if voice is not None:
         record["voice"] = {
@@ -478,9 +468,7 @@ def one_source(ev: dict, values: dict) -> bool:
     """
     SourceEvidence.single on the recorded evidence, at the rule's recorded `values` (False when
     nothing was recorded). The notes were recorded only where the time measurements held at
-    the values of the run; where they were not, the rule cannot say one source. Lines that spell
-    a chord are one source too when next to none of their level is the notes' harmonics, in the
-    runs whose values hold that check ("maxHarmonics").
+    the values of the run; where they were not, the rule cannot say one source.
     """
     source = ev.get("source")
     if not source:
@@ -491,14 +479,7 @@ def one_source(ev: dict, values: dict) -> bool:
         and source["shared"] >= values["minShared"]
         and source["depth"] >= values["minDepth"]
     )
-    return still and (source.get("chord") is False or inharmonic(source, values))
-
-
-def inharmonic(source: dict, values: dict) -> bool:
-    """SourceEvidence.inharmonic on a recorded source, at the run's values."""
-    harmonics = source.get("harmonics")
-    limit = values.get("maxHarmonics")
-    return harmonics is not None and limit is not None and harmonics <= limit
+    return still and source.get("chord") is False
 
 
 def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
@@ -506,7 +487,7 @@ def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
     withheld = _evidence_withheld(ev, rules)
     if withheld is None and rules.one_source and one_source(ev, rules.one_source):
         _, est = service.load()
-        return est.INHARMONIC_SOURCE if ev["source"].get("chord") else est.ONE_SOURCE
+        return est.ONE_SOURCE
     return withheld
 
 

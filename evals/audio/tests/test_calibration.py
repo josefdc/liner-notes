@@ -193,47 +193,6 @@ def test_one_pitched_source_is_withheld_under_the_rules_that_have_the_rule():
     assert cal.Rules.from_dict(recorded) == cal.BASELINE
 
 
-def test_lines_that_are_not_the_harmonics_of_notes_are_one_source_in_runs_with_the_check():
-    """
-    Lines that hold still and spell a chord are one source when next to none of their level is
-    the notes' harmonics (SourceEvidence.inharmonic), at the value the run recorded; runs
-    recorded before the check (no "maxHarmonics") keep the key.
-    """
-    stats = {"tonic": "C", "mode": "major", "strength": 0.8}
-    chime = {
-        "bins": 12,
-        "movement": 0.01,
-        "shared": 0.9,
-        "depth": 0.4,
-        "notes": [130.81, 164.81, 196.0],
-        "chord": True,
-        "harmonics": 0.0,
-    }
-    ev = {**evidence(), "source": chime}
-    _, est = cal.service.load()
-    values = cal.source_values(est)
-    assert values["maxHarmonics"] == est.SOURCE_MAX_HARMONICS
-    with_rule = cal.BASELINE.set("one_source", values)
-    assert cal.evidence_withheld(ev, with_rule, "essentia") == est.INHARMONIC_SOURCE
-    assert cal.derive_key(True, ev, stats, "librosa", with_rule) is None
-    # At the limit it is one source, past it a chord.
-    at = {**ev, "source": {**chime, "harmonics": values["maxHarmonics"]}}
-    assert cal.evidence_withheld(at, with_rule, "essentia") == est.INHARMONIC_SOURCE
-    past = {**ev, "source": {**chime, "harmonics": values["maxHarmonics"] + 0.01}}
-    assert cal.evidence_withheld(past, with_rule, "essentia") is None
-    # Not measured (a run recorded before it), or a run whose values do not hold the check.
-    unmeasured = {**ev, "source": {k: v for k, v in chime.items() if k != "harmonics"}}
-    assert cal.evidence_withheld(unmeasured, with_rule, "essentia") is None
-    before = cal.BASELINE.set(
-        "one_source", {k: v for k, v in values.items() if k != "maxHarmonics"}
-    )
-    assert cal.evidence_withheld(ev, before, "essentia") is None
-    assert cal.derive_key(True, ev, stats, "essentia", before) == ["C", "major"]
-    # Time decides first.
-    moving = {**ev, "source": {**chime, "movement": values["maxMovement"] * 1.01}}
-    assert cal.evidence_withheld(moving, with_rule, "essentia") is None
-
-
 def test_a_derivation_that_disagrees_with_the_service_is_reported():
     clips = [tempo_clip("a"), tempo_clip("b", served=None)]
     bad = cal.mismatches(clips, ["essentia"], "tempo", cal.BASELINE)

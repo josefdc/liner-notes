@@ -137,11 +137,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.5+librosa"
-    assert main.analyzer_version("essentia") == "2.3.5+essentia"
+    assert main.analyzer_version("librosa") == "2.3.4+librosa"
+    assert main.analyzer_version("essentia") == "2.3.4+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.5+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.4+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -153,7 +153,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.5+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.4+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -1797,16 +1797,16 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # One pitched source, 30 seeds each (signals.ONE_PITCH_CLASS_SEEDED): a note's overtones, its
 # octaves or a bell's or a drum's partials can spell three pitch classes. The single-source rule
 # (estimators.SourceEvidence) withholds the keys that analyzer 2.1.0 gave most cowbells and
-# one-note basses, and those 2.3.4 gave 19 of 20 tubular bells (modes that are not harmonics of
-# one another; the one kept, 507, does not hold still). The seeds that get a key are pinned
-# exactly, in both directions: a change that keys one more or one fewer fails here. Still
-# keyed: bells, alone and over drums (the tierce is a minor third over the hum: two notes a
-# third apart, as in a chord, and the prime and nominal are the hum's octaves); three cowbells
+# one-note basses. The seeds that get a key are pinned exactly, in both directions: a change
+# that keys one more or one fewer fails here. Still keyed: bells, alone and over drums (the
+# tierce is a minor third over the hum: two notes a third apart, as in a chord); three cowbells
 # whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
-# harmonics the notes test does not fold within its tolerance; toms, alone or two rack toms and
-# a floor tom over a kit (each drum with its own envelope), and tabla whose strokes alternate
-# partials, which do not move together. Seeds 600-629 are an evaluation set (evals/audio
-# controls) and are kept out of these tests.
+# harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
+# with its own envelope, alone or over a kit) and tabla whose strokes alternate partials, which
+# do not move together; and a tubular bell, whose modes hold still and move together but spell
+# three or more pitch classes, as a chord's notes do, and have no harmonics among them, as the
+# notes of a chord in a soft timbre or struck on bars have none (test_chords_keep_the_key...).
+# Seeds 600-629 are an evaluation set (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
     ("one-note-bass", "essentia"): {500, 501},
     ("bell", "essentia"): {503, 507, 509, 513, 514, 521, 527},
@@ -1821,8 +1821,14 @@ ONE_PITCH_CLASS_KEYED = {
     ("cowbell", "librosa"): {508, 528},
     ("kit-toms", "essentia"): {505, 507, 510, 512, 521, 524, 529},
     ("kit-toms", "librosa"): {505, 507, 508, 510, 512, 521, 524, 529},
-    ("tubular-bell", "essentia"): {507},
-    ("tubular-bell", "librosa"): {507},
+    ("tubular-bell", "essentia"): {
+        *{500, 502, 506, 507, 508, 509, 510, 511, 512, 513, 514, 516, 517, 518, 519, 520},
+        *{522, 524, 526, 527},
+    },
+    ("tubular-bell", "librosa"): {
+        *{500, 502, 506, 507, 508, 509, 510, 511, 512, 513, 514, 516, 518, 519, 520, 522},
+        *{524, 526, 527, 528},
+    },
 }
 
 
@@ -1865,41 +1871,19 @@ def test_one_pitched_source_has_no_key(family, seed):
         assert estimators.select_estimator(name).key(signals_) is None
 
 
-@pytest.mark.parametrize("seed", [500, 502, 509, 513])
-def test_a_tubular_bell_has_no_key(seed):
-    """
-    A tubular bell tolling one note (alone on even seeds, over drums on odd ones; analyzer 2.3.4
-    keyed these seeds with both estimators): its lines hold still and move together, and its
-    modes spell pitch classes as a chord's notes do, but none of them is a harmonic of another,
-    so the key is withheld as one source. The fingerprint is kept.
-    """
-    signals_ = estimators.Signals(signals.seeded_tubular_bell(seed), FIXTURE_SR)
-    evidence = signals_.source_evidence
-    assert evidence.still and evidence.chord and evidence.inharmonic, evidence
-    assert evidence.harmonics == 0.0, evidence
-    withheld = signals_.key_withheld()
-    assert str(withheld) == estimators.INHARMONIC_SOURCE
-    assert withheld.code == "one_pitched_source"
-    assert not withheld.one_source and signals_.not_music() is None
-    for name in KEY_ESTIMATORS:
-        assert estimators.select_estimator(name).key(signals_) is None
-
-
 def test_a_bell_holds_still_but_spells_a_minor_third():
-    """
-    A tolling church bell's lines move together, but its hum and tierce are a minor third apart,
-    and its prime and nominal are the hum's octaves: harmonics among the lines, as in a chord
-    (a known limit: its key is not withheld).
-    """
+    """A tolling bell's lines move together, but its hum and tierce are a minor third apart."""
     evidence = estimators.Signals(signals.seeded_bell(509), FIXTURE_SR).source_evidence
     assert evidence.still and evidence.chord and not evidence.single, evidence
-    assert evidence.harmonics > 3 * estimators.SOURCE_MAX_HARMONICS, evidence
 
 
-def one_source_withheld(signals_: estimators.Signals) -> bool:
-    """The single-source rule withheld the key, for either of its reasons."""
-    withheld = signals_.key_withheld()
-    return withheld is not None and withheld.code == "one_pitched_source"
+def test_a_tubular_bell_holds_still_but_spells_a_chord():
+    """
+    A limit: a tubular bell's modes hold still and move together, but they spell pitch classes
+    as a chord's notes do, so the single-source rule keeps the key the other rules give it.
+    """
+    evidence = estimators.Signals(signals.seeded_tubular_bell(500), FIXTURE_SR).source_evidence
+    assert evidence.still and evidence.chord and not evidence.single, evidence
 
 
 @pytest.mark.seeded
@@ -1907,10 +1891,12 @@ def one_source_withheld(signals_: estimators.Signals) -> bool:
 def test_chords_keep_the_key_the_other_rules_give_them(family):
     """
     Held chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs,
-    a bass and chord riff on one chord and one-bar riffs (signals.CHORD_KEYED_SEEDED, seeds
-    700-729): many hold still and move together, but their lines spell a chord, so the
-    single-source rule withholds none of their keys, and what the other rules decide is left
-    as analyzer 2.1.0 had it.
+    a bass and chord riff on one chord, one-bar riffs, and triads in soft timbres (an electric
+    piano, a flute, an FM electric piano, a triangle wave) or struck on bars, whose overtones
+    are 17-30 dB down or not harmonics at all (signals.CHORD_KEYED_SEEDED, seeds 700-729): many
+    hold still and move together, but their lines spell a chord, so the single-source rule
+    withholds none of their keys, and what the other rules decide is left as analyzer 2.1.0
+    had it.
     """
     make = signals.CHORD_KEYED_SEEDED[family]
     fired, still = [], 0
@@ -1918,7 +1904,7 @@ def test_chords_keep_the_key_the_other_rules_give_them(family):
         y, _ = make(seed)
         signals_ = estimators.Signals(y, FIXTURE_SR)
         still += signals_.source_evidence.still
-        if one_source_withheld(signals_):
+        if str(signals_.key_withheld()) == estimators.ONE_SOURCE:
             fired.append(seed)
     assert fired == []
     if family != "one-bar-riff":  # its chords change within a bar: the lines move
@@ -1943,7 +1929,7 @@ def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         if level > -6.0:
             assert estimators.spells_chord(notes), (key, level, notes)
-        assert not one_source_withheld(s), (key, level, notes)
+        assert str(s.key_withheld()) != estimators.ONE_SOURCE, (key, level, notes)
 
 
 @pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)
@@ -1966,7 +1952,7 @@ def test_sus_chords_over_their_root_are_chords(kind):
         s = estimators.Signals(signals.sus_chord(root, kind), FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         assert estimators.spells_chord(notes), (root, notes)
-        assert not one_source_withheld(s)
+        assert str(s.key_withheld()) != estimators.ONE_SOURCE
 
 
 @pytest.mark.seeded
@@ -1994,7 +1980,7 @@ def test_a_seventh_chord_with_a_quiet_third_is_a_chord():
 )
 def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
     s = estimators.Signals(signals.fourth_with_quiet_third(), FIXTURE_SR)
-    assert not one_source_withheld(s), s.source_evidence
+    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
 
 
 @pytest.mark.xfail(
@@ -2005,7 +1991,7 @@ def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
 )
 def test_a_triad_under_a_bass_15_db_louder_keeps_its_key():
     s = estimators.Signals(signals.triad_under_a_loud_sine_bass(), FIXTURE_SR)
-    assert not one_source_withheld(s), s.source_evidence
+    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
 
 
 def test_chord_key_names_each_family_s_key():
@@ -2042,15 +2028,6 @@ def test_held_and_struck_lines_by_the_numbers():
         evidence = estimators.SourceEvidence(**{**one_note, "notes": notes})
         assert evidence.chord == chord and evidence.single == (not chord), notes
     assert not estimators.SourceEvidence(**{**one_note, "notes": None}).single
-    # Lines that spell a chord are one source when at most a tenth of their level is the notes'
-    # harmonics (the partials of a struck bar or tube); a chord's notes have theirs.
-    triad = {**one_note, "notes": (130.81, 164.81, 196.0)}
-    for harmonics, single in ((None, False), (0.0, True), (0.1, True), (0.12, False), (0.4, False)):
-        evidence = estimators.SourceEvidence(**{**triad, "harmonics": harmonics})
-        assert evidence.inharmonic == single and evidence.single == single, harmonics
-    # Time decides first: lines that do not hold still are never one source.
-    moving = {**triad, "movement": 0.06, "harmonics": 0.0}
-    assert not estimators.SourceEvidence(**moving).single
 
 
 def test_intervals_on_the_notes_grid_are_decided_in_whole_steps():
@@ -2101,34 +2078,6 @@ def test_source_notes_folds_overtones_and_keeps_chord_tones():
     # a note (the minor third), not an overtone.
     deep = notes_of(tone(32.70, 4) + 0.4 * np.sin(2 * np.pi * 622.25 * t))
     assert estimators.spells_chord(deep), deep
-
-
-def test_source_partials_measure_the_harmonics_among_the_lines():
-    """
-    The share of the lines' level that folds into notes as their overtones, through the shared
-    STFT: a triad of tones with harmonics has them, a tubular bell's modes (signals.CHIME_MODES,
-    each a sine) have none. Nor has a triad of pure sine tones: one that holds still would be
-    read as one source (a known limit; struck or pumped sine chords are rare in music).
-    """
-    t = np.arange(30 * FIXTURE_SR) / FIXTURE_SR
-    strokes = np.exp(-(t % 0.5) / 0.15)
-
-    def partials(y):
-        s = estimators.Signals((0.2 * y * strokes).astype(np.float32), FIXTURE_SR)
-        return estimators.source_partials(s.harmonic_stft, s.sr, s.hop)
-
-    def tone(f, harmonics=8):
-        return sum(np.sin(2 * np.pi * f * k * t) / k for k in range(1, harmonics + 1))
-
-    notes, harmonics = partials(tone(130.81) + tone(164.81) + tone(196.0))
-    assert estimators.spells_chord(notes) and harmonics > 0.3, (notes, harmonics)
-    first = 2 * 392.0 / signals.CHIME_MODES[3][0]
-    chime = sum(a * np.sin(2 * np.pi * first * r * t) for r, a, _ in signals.CHIME_MODES)
-    notes, harmonics = partials(chime)
-    assert estimators.spells_chord(notes) and harmonics == 0.0, (notes, harmonics)
-    notes, harmonics = partials(tone(130.81, 1) + tone(164.81, 1) + tone(196.0, 1))
-    assert len(notes) == 3 and harmonics == 0.0, (notes, harmonics)
-    assert estimators.source_notes(np.zeros((1025, 1), np.complex64), FIXTURE_SR, 512) == ()
 
 
 def _lines(hz: np.ndarray) -> estimators.Tonality:
@@ -3162,7 +3111,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.5+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.4+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

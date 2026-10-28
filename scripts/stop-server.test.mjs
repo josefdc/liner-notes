@@ -55,10 +55,18 @@ function stopOnFakeClock(options) {
   return { stopping, settled: () => settled };
 }
 
-/** Ends a stopServer left waiting on the fake clock by a failed test, then restores the timers. */
+/**
+ * Ends a stopServer left waiting on the fake clock by a failed test, then restores the timers.
+ * Never throws: a stop that does not end (a loop of timers) must not hide the test's own failure.
+ */
 async function releaseFakeClock() {
-  if (vi.isFakeTimers()) await vi.runAllTimersAsync();
-  vi.useRealTimers();
+  try {
+    if (vi.isFakeTimers()) await vi.runAllTimersAsync();
+  } catch {
+    // The test has already failed; its own error is the one to report.
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 const cleanups = [];

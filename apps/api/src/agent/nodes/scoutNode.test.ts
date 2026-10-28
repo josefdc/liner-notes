@@ -136,19 +136,20 @@ async function onFakeClock<T>(start: () => Promise<T>): Promise<{ out: T; elapse
 
 /**
  * Runs `run` (inside onFakeClock's `start`) with setTimeout watched, and adds the delay of each
- * timer set meanwhile to `delays`. The fake setTimeout is back in place before onFakeClock
- * restores the real timers.
+ * timer set meanwhile to `delays`, whatever the timer is for: a test that bounds the delays fails
+ * on any long timer set during the run, a wait or not. The fake setTimeout is back in place
+ * before onFakeClock restores the real timers.
  */
 async function recordingTimers<T>(run: () => Promise<T>, delays: number[]): Promise<T> {
-  const fakeSetTimeout = globalThis.setTimeout;
-  globalThis.setTimeout = ((handler: () => void, ms?: number) => {
+  const fakeSetTimeout = globalThis.setTimeout as (...args: unknown[]) => unknown;
+  globalThis.setTimeout = ((handler: unknown, ms?: number, ...args: unknown[]) => {
     delays.push(ms ?? 0);
-    return fakeSetTimeout(handler, ms);
+    return fakeSetTimeout(handler, ms, ...args);
   }) as typeof setTimeout;
   try {
     return await run();
   } finally {
-    globalThis.setTimeout = fakeSetTimeout;
+    globalThis.setTimeout = fakeSetTimeout as typeof setTimeout;
   }
 }
 

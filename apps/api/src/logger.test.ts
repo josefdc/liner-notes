@@ -160,13 +160,13 @@ describe("scrub", () => {
     // Host-like text as long as is scrubbed (longer is cut off first), 40 times over: an
     // expression that reads it again from each character takes several seconds on it, the
     // linear ones about ten milliseconds. The fastest of three runs, since a busy machine only adds
-    // time; a run over 10 s is a slow form, not a busy machine, and ends the timing.
+    // time; a run over 2.5 s is a slow form, not a busy machine, and ends the timing.
     const hostLike = ["a-".repeat(8000), "a.".repeat(8000)];
     const { ms } = timed(
       () => {
         for (let i = 0; i < 40; i++) for (const text of hostLike) scrub(text);
       },
-      { runs: 3, stopAboveMs: 10_000 },
+      { runs: 3, stopAboveMs: 2_500 },
     );
     expect(ms).toBeLessThan(1000);
   });

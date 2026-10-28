@@ -96,6 +96,7 @@ export const ReadingValue: React.FC<{
       basis={reading.basis}
       previewSeconds={reading.previewSeconds}
       detail={reading.detail}
+      note={reading.note}
       title={reading.title}
       size={size}
       layout={layout}
@@ -127,8 +128,10 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   // Compact: values further apart than a value from its chip; below md, one value per line,
   // each line starting at the same edge.
   const layout = compact ? 'compact' : 'summary';
-  const list = compact ? 'gap-x-4 gap-y-3' : 'gap-2';
-  const item = compact ? 'max-md:w-full' : undefined;
+  // Summary: values further apart across than down, each in a column of one width, so a
+  // value's label never runs into the next one's and a stack of values shares its left edge.
+  const list = compact ? 'gap-x-4 gap-y-3' : 'gap-x-6 gap-y-2';
+  const item = compact ? 'max-md:w-full' : 'w-60 max-w-full';
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>

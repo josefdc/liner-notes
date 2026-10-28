@@ -311,8 +311,8 @@ describe("the Player hero's labels", () => {
   });
 
   it('say when the basis is unknown, as the chips do, and the preview length as measured', () => {
-    expect(summaryText('measured', null, null)).toBe('Measured, basis unknown');
-    expect(summaryText('estimate', null, null)).toBe('Estimated by an audio model, basis unknown');
+    expect(summaryText('measured', null, null, 'c')).toBe('Measured, basis unknown');
+    expect(summaryText('estimate', null, null, 'c')).toBe('Estimated, basis unknown');
     expect(summaryText('measured', 'signal', null)).toBe('Measured');
     expect(summaryText('measured', 'signal, 22.4 s preview', 22.4)).toBe(
       'Measured from a 22.4 s preview',
@@ -324,6 +324,109 @@ describe("the Player hero's labels", () => {
     expect(summaryText('measured', 'signal, 30 s preview', 30)).toBe(
       'Measured from a 30 s preview',
     );
+  });
+});
+
+describe("the Player hero's disclosures", () => {
+  const recorded = {
+    mode: 'replay',
+    id: 'r1',
+    recordedAt: '2026-10-22T14:03:00.000Z',
+    commit: 'abc1234',
+  };
+  const buttonOf = (name: string) => screen.getByRole('button', { name });
+  const opened = (name: string) => {
+    const button = buttonOf(name);
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    return panelOf(button).textContent ?? '';
+  };
+
+  it('carry no tooltip: the ids and the confidence are only in the panel', () => {
+    const { container } = render(<AudioStats track={measuredTrack()} />);
+    expect(container.querySelectorAll('[title]')).toHaveLength(0);
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.closest('[title]')).toBeNull();
+    }
+  });
+
+  it('say in the panel that a replayed value was measured when the run was recorded', () => {
+    render(
+      <AudioStats track={measuredTrack(audioBlock(), { run: recorded } as Partial<TrackData>)} />,
+    );
+    expect(opened('How this was measured (BPM)')).toContain('measured when this run was recorded');
+    cleanup();
+    render(<AudioStats track={measuredTrack()} />);
+    expect(opened('How this was measured (BPM)')).not.toContain('recorded');
+  });
+
+  it('give the reason a value is not confirmed', () => {
+    render(
+      <AudioStats
+        track={measuredTrack(audioBlock(), { audio: null, valence: 0.4 } as Partial<TrackData>)}
+      />,
+    );
+    expect(opened('Why this is not confirmed (BPM)')).toContain(
+      "the result's measurement is missing or could not be read",
+    );
+  });
+
+  it('say that a model score is an estimate, not a measurement', () => {
+    render(<AudioStats track={measuredTrack()} />);
+    expect(opened('How this was estimated (Dance)')).toContain('an estimate, not a measurement');
+  });
+
+  it("say what the first analyzer's energy score is", () => {
+    render(
+      <AudioStats
+        track={measuredTrack(audioBlock(), { audio: undefined, energy: 0.5 } as Partial<TrackData>)}
+      />,
+    );
+    const panel = opened('About this score (Energy)');
+    expect(panel).toContain('scaled RMS');
+    expect(panel).toContain('how is not known');
+  });
+
+  it('keep a focus outline in forced-colors mode (outline-hidden, not outline-none)', () => {
+    render(<AudioStats track={measuredTrack()} />);
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className).toContain('focus-visible:outline-hidden');
+      expect(button.className).not.toContain('outline-none');
+    }
+  });
+
+  it('show no disclosure when its panel would say nothing beyond the label', () => {
+    const { container } = render(
+      <MeasuredValue label="BPM" value="123" kind="measured" title="Measured" layout="summary" />,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.textContent).toBe('BPM 123Measured, confidence and basis unknown');
+  });
+
+  it('do not name the estimator of an estimate whose basis is unknown', () => {
+    expect(summaryText('estimate', null, null, 'score, not a probability')).toBe(
+      'Estimated, basis unknown',
+    );
+    expect(summaryText('estimate', null, null, null)).toBe(
+      'Estimated, confidence and basis unknown',
+    );
+  });
+
+  it('give no length for a preview shorter than 0.05 s', () => {
+    expect(summaryText('measured', 'signal, 0 s preview', 0, 'c')).toBe('Measured');
+    expect(summaryText('measured', 'signal, 0 s preview', 0.04, 'c')).toBe('Measured');
+    expect(summaryText('measured', 'signal, 0.1 s preview', 0.05, 'c')).toBe(
+      'Measured from a 0.1 s preview',
+    );
+  });
+
+  it('keep neighbouring values apart, each in a column of the same width', () => {
+    render(<AudioStats track={measuredTrack()} />);
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    expect(values.className).toContain('gap-x-6');
+    for (const li of within(values).getAllByRole('listitem')) {
+      expect(li.className).toContain('w-60 max-w-full');
+    }
   });
 });
 
@@ -399,7 +502,10 @@ describe('audio values from a measurement', () => {
       cleanup();
       return text;
     };
-    const expected = [...signal, ...model].map(full);
+    // The full view's lines, then what only its tooltip says.
+    const expected = [...signal, ...model].map(
+      (reading) => full(reading) + (reading.state === 'shown' ? (reading.note ?? '') : ''),
+    );
     render(<AudioStats track={track} />);
     openAll();
     const shown = [
@@ -444,7 +550,8 @@ describe('audio values from a measurement', () => {
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
     expect(opened(scores, 'Dance')).toBe(
       'Dance 0.81Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview' +
-        'analyzer 2.1.0+essentia.models-5c5c0c7f',
+        'analyzer 2.1.0+essentia.models-5c5c0c7f' +
+        'an estimate, not a measurement',
     );
     // DEAM valence is on 1-9: shown on its own scale, with no mood word read off it.
     expect(item(scores, 'Mood')).toContain('Mood 5.60 on 1–9');

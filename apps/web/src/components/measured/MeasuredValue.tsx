@@ -35,6 +35,8 @@ export interface MeasuredValueProps {
   previewSeconds?: number | null;
   /** Method, model and analyzer; null when the result does not say. */
   detail?: string | null;
+  /** What only the tooltip says otherwise; the summary, which has no tooltip, shows it. */
+  note?: string | null;
   /** The full provenance, for the tooltip. */
   title: string;
   icon?: React.ReactNode;
@@ -67,20 +69,28 @@ function article(seconds: string): string {
   return whole.startsWith('8') || whole === '11' || whole === '18' ? 'an' : 'a';
 }
 
+/** Below this, a preview's length rounds to 0 s: the summary gives none. */
+const SHORTEST_PREVIEW = 0.05;
+
 /**
  * The summary's one line: how the value is known, in plain words, with the preview's length when
  * the result says it. A value whose result does not say what it rests on says so, as its chip
- * does; the confidence, method and analyzer are left to the lines behind the disclosure.
+ * does, and does not name an estimator it does not know; the confidence, method and analyzer
+ * are left to the lines behind the disclosure.
  */
 export function summaryText(
   kind: MeasuredValueProps['kind'],
   basis: string | null | undefined,
   previewSeconds: number | null | undefined,
+  confidence?: string | null,
 ): string {
   if (kind === 'unverified' || kind === 'score') return KIND_TEXT[kind];
+  if (!basis) {
+    const known = kind === 'measured' ? 'Measured' : 'Estimated';
+    return confidence ? `${known}, basis unknown` : `${known}, confidence and basis unknown`;
+  }
   const known = kind === 'measured' ? 'Measured' : 'Estimated by an audio model';
-  if (!basis) return `${known}, basis unknown`;
-  if (previewSeconds == null) return known;
+  if (previewSeconds == null || previewSeconds < SHORTEST_PREVIEW) return known;
   const seconds = formatSeconds(previewSeconds);
   return `${known} from ${article(seconds)} ${seconds} s preview`;
 }
@@ -129,7 +139,7 @@ const LINE = 'max-w-60 wrap-anywhere text-chrome font-mono text-text-chip text-l
 
 // The summary's disclosure: the lines' size and colour, a ring on keyboard focus.
 const DISCLOSURE =
-  'relative inline-flex max-w-60 items-center gap-1 rounded-sm text-chrome font-mono text-text-chip text-left underline decoration-dotted underline-offset-2 cursor-pointer hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void';
+  'relative inline-flex max-w-60 items-center gap-1 rounded-sm text-chrome font-mono text-text-chip text-left underline decoration-dotted underline-offset-2 cursor-pointer hover:text-text-secondary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void';
 
 export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   label,
@@ -139,6 +149,7 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   basis = null,
   previewSeconds = null,
   detail = null,
+  note = null,
   title,
   icon,
   size = 'sm',
@@ -151,22 +162,22 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   const chip = chipText(kind, basis);
   const compact = layout === 'compact';
   const summary = layout === 'summary';
+  // The summary has no tooltip: what only the tooltip says goes in its panel.
   const lines = (
     <>
       <span className={LINE}>{provenance}</span>
       {detail && <span className={LINE}>{detail}</span>}
+      {summary && note && <span className={LINE}>{note}</span>}
     </>
   );
+  // A summary panel that would only repeat its label ("Measured, confidence and basis unknown")
+  // is not offered.
+  const more =
+    Boolean(confidence || basis || detail || note) || kind === 'unverified' || kind === 'score';
   return (
     <span
       data-value-kind={kind}
-      title={
-        layout === 'bare'
-          ? `${title} · ${provenance}`
-          : layout === 'full' || summary
-            ? title
-            : undefined
-      }
+      title={layout === 'bare' ? `${title} · ${provenance}` : layout === 'full' ? title : undefined}
       className={
         compact
           ? 'flex w-full flex-col items-start gap-1 md:inline-flex md:w-auto'
@@ -206,25 +217,27 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
       {layout === 'full' && lines}
       {summary && (
         <>
-          <span className={LINE}>{summaryText(kind, basis, previewSeconds)}</span>
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={linesId}
-            onClick={() => setOpen((shown) => !shown)}
-            className={DISCLOSURE}
-          >
-            {DISCLOSURE_TEXT[kind]}
-            <span className="sr-only"> ({label})</span>
-            <ChevronDown
-              size={12}
-              aria-hidden="true"
-              className={`flex-shrink-0 transition-transform duration-(--duration-fast) ${open ? 'rotate-180' : ''}`}
-            />
-          </button>
+          <span className={LINE}>{summaryText(kind, basis, previewSeconds, confidence)}</span>
+          {more && (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={linesId}
+              onClick={() => setOpen((shown) => !shown)}
+              className={DISCLOSURE}
+            >
+              {DISCLOSURE_TEXT[kind]}
+              <span className="sr-only"> ({label})</span>
+              <ChevronDown
+                size={12}
+                aria-hidden="true"
+                className={`flex-shrink-0 transition-transform duration-(--duration-fast) ${open ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
         </>
       )}
-      {(compact || summary) && (
+      {(compact || (summary && more)) && (
         <span id={linesId} hidden={!open} className="flex flex-col items-start gap-1">
           {open && lines}
         </span>

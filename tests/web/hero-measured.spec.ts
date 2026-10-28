@@ -61,6 +61,45 @@ async function tabTo(page: Page, target: Locator) {
   }
 }
 
+/** Expects the focus ring drawn around `target`: a box shadow, or a visible outline. */
+async function expectRing(target: Locator) {
+  const drawn = await target.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      shadow: style.boxShadow,
+      outline: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+    };
+  });
+  expect(drawn.shadow !== "none" || drawn.outline, `ring drawn: ${JSON.stringify(drawn)}`).toBe(
+    true,
+  );
+}
+
+/**
+ * Each value in a column of one width: a stack of values shares its left edge, and values side by
+ * side keep at least 24 px apart, so one label never runs into the next.
+ */
+async function expectColumns(list: Locator) {
+  const boxes = await list
+    .getByRole("listitem")
+    .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().toJSON()));
+  const rows = new Map<number, Array<{ left: number; right: number }>>();
+  for (const box of boxes) {
+    const row = rows.get(Math.round(box.top)) ?? [];
+    row.push(box);
+    rows.set(Math.round(box.top), row);
+  }
+  if ([...rows.values()].every((row) => row.length === 1)) {
+    expect(new Set(boxes.map((box) => Math.round(box.left))).size, "one left edge").toBe(1);
+  }
+  for (const row of rows.values()) {
+    row.sort((a, b) => a.left - b.left);
+    for (let i = 1; i < row.length; i += 1) {
+      expect(row[i].left - row[i - 1].right, "space between values").toBeGreaterThanOrEqual(24);
+    }
+  }
+}
+
 /** The element a disclosure button shows and hides. */
 const panelOf = async (page: Page, button: Locator) =>
   page.locator(`[id="${await button.getAttribute("aria-controls")}"]`);
@@ -147,6 +186,7 @@ for (const width of [390, 1440]) {
       scores.getByText("Estimated by an audio model from a 29.8 s preview", { exact: true }),
     ).toHaveCount(5);
     await expect(scores).not.toContainText("Measured");
+    for (const list of [values, scores]) await expectColumns(list);
     for (const list of [values, scores]) {
       await expect(list).not.toContainText(DETAIL);
       expect(await list.ariaSnapshot()).not.toMatch(DETAIL);
@@ -159,6 +199,7 @@ for (const width of [390, 1440]) {
     await expect(panel).toBeHidden();
     await tabTo(page, how);
     expect(await how.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+    await expectRing(how);
 
     // Enter opens it: every detail is visible and in the accessibility tree.
     await page.keyboard.press("Enter");
@@ -189,7 +230,8 @@ for (const width of [390, 1440]) {
     const dance = scores.getByRole("button", { name: "How this was estimated (Dance)" });
     await dance.click();
     await expect(await panelOf(page, dance)).toHaveText(
-      `Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview${ANALYZER}`,
+      `Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview${ANALYZER}` +
+        "an estimate, not a measurement",
     );
 
     // The open state is not kept: back on the summary and into the Player again, it is closed.
@@ -237,6 +279,9 @@ for (const width of [390, 1440]) {
       };
     });
     expect(overflow).toEqual({ outside: [], page: 0, panel: 0 });
+
+    // With every panel open too, values keep to their columns.
+    for (const list of [values, scores]) await expectColumns(list);
     // Every value's details are shown, at once.
     await expect(values.getByText(/^Measured · /)).toHaveCount(3);
     await expect(scores.getByText(/^Model estimate · /)).toHaveCount(5);
@@ -278,6 +323,7 @@ for (const cover of ["no cover", "a white cover"]) {
     for (const button of [parts[1], parts[3]]) {
       await tabTo(page, button);
       expect(await button.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+      await expectRing(button);
       expect(await contrastOf(page, button), "on focus").toBeGreaterThanOrEqual(4.5);
     }
   });

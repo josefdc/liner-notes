@@ -8,11 +8,13 @@ from evals_audio.controls import GROUPS, added_families, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import (
+    INTERVALS,
     SCHEMA_VERSION,
     OlderResults,
     add_run,
     count_p_values,
     guide,
+    intro,
     load,
     measured,
     not_run,
@@ -346,14 +348,31 @@ def test_the_guide_explains_only_the_tables_a_report_holds():
     def committed(date):
         return json.loads((REPO_ROOT / "evals" / "reports" / f"audio-{date}.json").read_text())
 
+    def runs(doc, *kept):
+        return dict(
+            doc, runs=[r for r in doc["runs"] if (r["suite"], r["dataset"]["name"]) in kept]
+        )
+
     full = committed("2026-10-25")  # every suite
     assert {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"} <= terms(full)
-    partial = dict(full, runs=[r for r in full["runs"] if r["suite"] in ("tempo", "calibration")])
-    held = terms(partial)
+    assert next(line for line in guide(full) if line.startswith("- **Intervals**")) == INTERVALS
+    tempo = runs(full, ("tempo", "ballroom"), ("calibration", "ballroom"))
+    held = terms(tempo)
     assert {"Acc1", "Lifted rules", "Comparability", "Intervals"} <= held
     assert not held & {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"}
-    with_key = dict(full, runs=[r for r in full["runs"] if r["suite"] in ("key", "calibration")])
-    assert {"MIREX", "Paired MIREX difference"} <= terms(with_key)
+    intervals = next(line for line in guide(tempo) if line.startswith("- **Intervals**"))
+    assert "Acc1 and Acc2." in intervals and "MIREX" not in intervals and "exact" not in intervals
+    assert "MIREX" not in " ".join(intro(tempo)) and "an Acc1 hit pins" in " ".join(intro(tempo))
+    # A key calibration shows exact scores, which the MIREX bullet explains; paired MIREX
+    # differences come with the key suite only.
+    key_calibration = runs(full, ("calibration", "giantsteps-key"))
+    assert "MIREX" in terms(key_calibration) and "Paired MIREX difference" not in terms(
+        key_calibration
+    )
+    key = runs(full, ("key", "giantsteps-key"))
+    assert {"MIREX", "Paired MIREX difference"} <= terms(key)
+    assert not terms(key) & {"Acc1", "Lifted rules"}
+    assert "Acc1" not in " ".join(intro(key)) and "a MIREX score of 1" in " ".join(intro(key))
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

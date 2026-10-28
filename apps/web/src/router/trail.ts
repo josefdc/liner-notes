@@ -53,6 +53,7 @@ const isStep = (value: unknown): value is TrailStep => {
     typeof step.trackId === 'string' &&
     step.trackId !== '' &&
     typeof step.title === 'string' &&
+    step.title.trim() !== '' &&
     (step.artist === null || typeof step.artist === 'string') &&
     VIEWS.has(step.view)
   );
@@ -69,7 +70,9 @@ export function trailFromState(state: unknown): Trail {
     typeof trail.earlier === 'number' && Number.isInteger(trail.earlier) && trail.earlier > 0
       ? trail.earlier
       : 0;
-  return { steps: trail.steps.slice(-TRAIL_KEPT), earlier };
+  // Steps past the cap are counted, as `explore` counts them.
+  const over = Math.max(0, trail.steps.length - TRAIL_KEPT);
+  return { steps: trail.steps.slice(over), earlier: earlier + over };
 }
 
 /** The address of a step: its track's Player, or its full-size map. */

@@ -1133,7 +1133,9 @@ const Player: React.FC<PlayerProps> = ({ trackData, ...props }) => {
   // Missing lists default to empty so a partial result renders; memoised so the graph and
   // the factoid list keep their identity between renders.
   const track = useMemo(() => (trackData ? normalizeTrack(trackData) : null), [trackData]);
-  return track ? <PlayerView track={track} {...props} /> : <NoAnalysis {...props} />;
+  // One view per track: another track's Player (a breadcrumb step, Back or Forward) opens
+  // afresh, on the tab its entry has, with none of this one's state.
+  return track ? <PlayerView key={track.id} track={track} {...props} /> : <NoAnalysis {...props} />;
 };
 
 export default Player;

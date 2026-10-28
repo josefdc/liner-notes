@@ -155,8 +155,8 @@ const App: React.FC = () => {
   // The tracks explored before the one on screen (router/trail.ts), as its history entry has
   // them: Back and Forward bring each entry's back.
   const [trail, setTrail] = useState<Trail>(opening.trail);
-  // The trail before the last analysis from a map, for "Back to the last result".
-  const trailBeforeAnalysis = useRef<Trail>(NO_TRAIL);
+  // The trail of the last result left (previousTrackData), for "Back to the last result".
+  const previousTrail = useRef<Trail>(NO_TRAIL);
   // The Player's phone tab, as its history entry has it.
   const [playerTab, setPlayerTab] = useState<string | undefined>(opening.tab);
   // A link to a track whose stored result is loading, missing or failed: shown instead of the
@@ -288,6 +288,10 @@ const App: React.FC = () => {
     focusWait.current = shown;
     loadingView()?.focus();
   }, []);
+  // Another track on the same kind of screen (a breadcrumb step, Back from one map to another)
+  // is a screen change too: the link that had the focus may be gone.
+  const shownResult = isResultScreen(screen) ? (effectiveTrackData?.id ?? null) : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new result moves the focus too
   useLayoutEffect(() => {
     focusWait.current = null;
     if (screen === 'link') return;
@@ -296,7 +300,7 @@ const App: React.FC = () => {
       return;
     }
     if (isResultScreen(screen)) focusResult(screen);
-  }, [screen, focusResult]);
+  }, [screen, shownResult, focusResult]);
   // "Try again" on a result whose code could not be loaded: the focus moves as on opening it.
   const handleScreenRetried = useCallback(() => {
     if (isResultScreen(screen)) focusResult(screen);
@@ -325,6 +329,12 @@ const App: React.FC = () => {
       import('./components/Player').catch(preloadFailed);
     }
   }, [phase]);
+
+  // The full-size map's code, fetched once the Player offers it ("Open the full map").
+  const offersMap = phase === AppPhase.PLAYER && isSpotifyTrackId(effectiveTrackData?.id);
+  useEffect(() => {
+    if (offersMap) import('./components/MapView').catch(preloadFailed);
+  }, [offersMap]);
 
   // ─── P2:19 Preload images during analysis ─────────────────────────────────
   // Keyed by the image addresses: a new result object with the same images loads nothing again.
@@ -371,7 +381,7 @@ const App: React.FC = () => {
     (trackId: string, title: string, artist: string, from?: TrailView) => {
       // The result on screen stays available: Stop, then "Back to the last result", shows it.
       setPreviousTrackData(effectiveTrackData);
-      trailBeforeAnalysis.current = trail;
+      previousTrail.current = trail;
       const left = effectiveTrackData;
       setTrail(
         from && left && isSpotifyTrackId(left.id)
@@ -404,7 +414,7 @@ const App: React.FC = () => {
     if (previousTrackData) {
       setOverrideTrackData(previousTrackData);
       setIsRestoredSession(true);
-      setTrail(trailBeforeAnalysis.current);
+      setTrail(previousTrail.current);
       setPhase(AppPhase.DASHBOARD);
     }
   }, [previousTrackData]);
@@ -414,6 +424,8 @@ const App: React.FC = () => {
     // Save current trackData so user can restore previous session
     if (effectiveTrackData) {
       setPreviousTrackData(effectiveTrackData);
+      // Its trail with it: "Back to the last result" shows the path that led to it.
+      previousTrail.current = trail;
     }
     setOverrideTrackData(null);
     setIsRestoredSession(false);
@@ -422,7 +434,7 @@ const App: React.FC = () => {
     setTrail(NO_TRAIL);
     reset();
     setPhase(AppPhase.ONBOARDING);
-  }, [reset, effectiveTrackData]);
+  }, [reset, effectiveTrackData, trail]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
   // One history entry per screen, at that screen's address; the steps of an analysis add none.
@@ -468,6 +480,8 @@ const App: React.FC = () => {
       index: entry.index + 1,
       url: address,
       trail: trailOfEntry,
+      // The Player's tab, for Back, Forward and a reload to open it again.
+      tab: phase === AppPhase.PLAYER ? playerTab : undefined,
       ...marks,
     };
     if (entry.search && phase === AppPhase.DASHBOARD) {
@@ -475,7 +489,7 @@ const App: React.FC = () => {
     } else {
       writeHistory(next, 'push');
     }
-  }, [phase, address, trailOfEntry, writeHistory]);
+  }, [phase, address, trailOfEntry, playerTab, writeHistory]);
 
   // The Player's phone tab, kept in its entry for Back and Forward to it.
   const handleTabChange = useCallback(
@@ -745,7 +759,11 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
+    <Layout
+      footerFromMd={!link && phase === AppPhase.PLAYER}
+      // The full-size map takes the window down to its bottom edge.
+      footer={link !== null || phase !== AppPhase.MAP}
+    >
       <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
         {/* The tracks explored in this chain, above the result's view */}
         {shownTrailOf && (
@@ -755,6 +773,7 @@ const App: React.FC = () => {
               title: shownTrailOf.title || shownTrailOf.id,
               artist: shownTrailOf.artist || null,
               url: address,
+              view: phase === AppPhase.MAP ? 'map' : 'player',
             }}
             onOpen={handleOpenStep}
           />

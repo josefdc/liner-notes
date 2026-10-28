@@ -51,3 +51,26 @@ function subscribeHover(onChange: () => void): () => void {
 export function useNoHover(): boolean {
   return useSyncExternalStore(subscribeHover, noHover, () => false);
 }
+
+const SHORT = '(max-height: 32rem)';
+
+/**
+ * True where a band above a screen must stay small: below md, or in a window 32rem tall or
+ * less (a phone held sideways).
+ */
+export function compactBand(): boolean {
+  return !(list(MD)?.matches ?? false) || (list(SHORT)?.matches ?? false);
+}
+
+function subscribeCompact(onChange: () => void): () => void {
+  const lists = [list(MD), list(SHORT)];
+  for (const item of lists) item?.addEventListener('change', onChange);
+  return () => {
+    for (const item of lists) item?.removeEventListener('change', onChange);
+  };
+}
+
+/** `compactBand`, following the window's size while the page is open. */
+export function useCompactBand(): boolean {
+  return useSyncExternalStore(subscribeCompact, compactBand, () => true);
+}

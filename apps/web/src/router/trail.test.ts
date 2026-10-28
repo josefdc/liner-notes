@@ -6,6 +6,7 @@ import {
   stepUrl,
   type Trail,
   type TrailStep,
+  TRAIL_KEPT,
   trailBefore,
   trailFromState,
 } from './trail';
@@ -70,8 +71,15 @@ describe('trailFromState', () => {
       { trail: { steps: [{ trackId: '', title: 'x', artist: null, view: 'map' }] } },
       { trail: { steps: [{ trackId: 'a', title: 'x', artist: null, view: 'page' }] } },
       { trail: { steps: [{ trackId: 'a', title: 1, artist: null, view: 'map' }] } },
+      // A step with no title would be a link named by nothing.
+      { trail: { steps: [{ trackId: 'a', title: '  ', artist: null, view: 'map' }] } },
     ];
     for (const state of bad) expect(trailFromState(state)).toEqual(NO_TRAIL);
+    // More steps than an entry keeps: the oldest are counted, not dropped silently.
+    const long = Array.from({ length: TRAIL_KEPT + 3 }, (_, i) => step(i + 1));
+    const kept = trailFromState({ trail: { steps: long, earlier: 2 } });
+    expect(kept.steps).toEqual(long.slice(3));
+    expect(kept.earlier).toBe(5);
     expect(trailFromState({ trail: { steps: [step(1)], earlier: -2 } })).toEqual({
       steps: [step(1)],
       earlier: 0,

@@ -80,7 +80,12 @@ const MapScreen: React.FC<Omit<MapViewProps, 'trackData'> & { track: TrackData }
 
   return (
     <div className="h-full w-full flex flex-col bg-void overflow-hidden" data-map-view>
-      <div className="shrink-0 px-4 md:px-6 py-3 border-b border-white/5 flex flex-col gap-2">
+      {/* In a short window (a phone held sideways) the band is a row that wraps: the way back,
+          the heading and the notices side by side, so the map keeps the height */}
+      <div
+        data-map-band
+        className="shrink-0 px-4 md:px-6 py-3 border-b border-white/5 flex flex-col gap-2 [@media(max-height:32rem)]:flex-row [@media(max-height:32rem)]:flex-wrap [@media(max-height:32rem)]:items-center [@media(max-height:32rem)]:gap-x-4 [@media(max-height:32rem)]:gap-y-1 [@media(max-height:32rem)]:py-2"
+      >
         <a
           href={trackHref}
           onClick={(event) => {

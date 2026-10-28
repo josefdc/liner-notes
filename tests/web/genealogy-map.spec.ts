@@ -58,24 +58,27 @@ const fullAs = (id: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-/** Stored runs of the map's tracks, and the stream that analyses the sample source. */
+/** A third track, analysed from the sample source's Dashboard. */
+const THIRD = "3cDeFgHiJkLmNoPqRsTuVw";
+const thirdResult = () => fullAs(THIRD, { title: "Third Track", artist: "Other Artist" });
+
+/** An analysis stream whose result is `data`. */
+const streamOf = (data: Record<string, unknown>) => [
+  { type: "connected", threadId: `thread-${data.id}` },
+  { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
+  { type: "complete", data },
+  { type: "done" },
+];
+
+/** Stored runs of the map's tracks, and the streams that analyse the tracks it leads to. */
 function mapApi() {
   const full = fullResultData() as { genealogy: { nodes: Array<{ group?: number }> } };
   return {
     suggestions: [],
     eventGapMs: 0,
     streams: {
-      [ANALYZE]: [
-        { type: "connected", threadId: "thread-source" },
-        {
-          type: "status",
-          node: "scout",
-          message: "Searching for the track",
-          code: "SPOTIFY-SEARCH",
-        },
-        { type: "complete", data: fullAs(SOURCE_ID) },
-        { type: "done" },
-      ],
+      // The first analysis is the sample source's; any later one a third track's.
+      [ANALYZE]: { opens: [streamOf(fullAs(SOURCE_ID)), streamOf(thirdResult())] },
     },
     runs: {
       [OMT]: storedRun(omtResult(), "replay"),
@@ -337,3 +340,233 @@ for (const [width, height] of [
     });
   });
 }
+
+// ─── The trail and the screens it opens (review folds) ─────────────────────────────────────
+
+const LONG = "Supercalifragilisticexpialidocious".repeat(3);
+/** A trail of `count` steps with one-word titles far wider than a phone. */
+const longTrail = (count: number) => ({
+  steps: Array.from({ length: count }, (_, i) => ({
+    trackId: `${i}`.repeat(22),
+    title: `${LONG}${i}`,
+    artist: `${LONG} Artist`,
+    view: "map",
+  })),
+  earlier: 0,
+});
+
+/** Reloads the page with `extra` written into its history entry's state. */
+async function reloadWithState(page: Page, extra: Record<string, unknown>) {
+  await page.evaluate((more) => {
+    history.replaceState({ ...(history.state ?? {}), ...more }, "", location.href);
+  }, extra);
+  await page.reload();
+}
+
+/** The height of the map's drawing, in the full-size view or the Player's panel. */
+async function drawingHeight(page: Page, scope: string) {
+  const box = await page.locator(`${scope} svg[aria-label="Connections graph"]`).boundingBox();
+  if (!box) throw new Error("no map drawing");
+  return box.height;
+}
+
+/** The trail's line: one line high, and nothing in it wider than the window. */
+async function expectOneLine(page: Page) {
+  const nav = trailNav(page);
+  await expect(nav).toBeVisible();
+  const { height, scroll, client } = await nav.evaluate((element) => ({
+    height: element.getBoundingClientRect().height,
+    scroll: element.scrollWidth,
+    client: element.clientWidth,
+  }));
+  expect(height, "the trail takes more than one line").toBeLessThanOrEqual(32);
+  expect(scroll, "a name runs past the trail's edge").toBeLessThanOrEqual(client);
+  return height;
+}
+
+/** From OMT's full map, the sample source analysed: its Dashboard, with a trail of two. */
+async function analyseSourceFromMap(page: Page) {
+  await page.goto(`/t/${OMT}/map`);
+  const card = graphOf(page).locator(`g.nodes > g[data-node-id="${SOURCE_NODE}"]`);
+  await card.focus();
+  await page.keyboard.press("Enter");
+  await page.getByTestId("node-detail").getByRole("button", { name: "Analyze this track" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
+  await expect(dashboardHeading(page)).toHaveText("Bright Lines");
+  await expect(trailNav(page).getByRole("link")).toHaveCount(2);
+}
+
+test.describe("at 1440 px", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await useMockApi(page, mapApi());
+  });
+
+  test('"Back to the last result" shows the trail that led to that result', async ({ page }) => {
+    test.setTimeout(120_000);
+    const problems = collectProblems(page);
+    // The source's own trail comes back with it.
+    await analyseSourceFromMap(page);
+    await page.getByRole("button", { name: "New search" }).click();
+    await page.getByRole("button", { name: "Back to the last result" }).click();
+    await expect(dashboardHeading(page)).toHaveText("Bright Lines");
+    await expect(trailNav(page).getByRole("link")).toHaveText([
+      "One More Time · Daft Punk (map)",
+      "Bright Lines · Test Artist",
+    ]);
+    expect(problems).toEqual([]);
+  });
+
+  test('"Back to the last result" gives a track analysed from a Dashboard card no trail', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const problems = collectProblems(page);
+    await analyseSourceFromMap(page);
+    // A track analysed from a Dashboard card starts no chain; back to it, it still has none.
+    await page.getByRole("button").filter({ hasText: "Relation:" }).click();
+    await page.getByRole("button", { name: "Open the results" }).click();
+    await expect(dashboardHeading(page)).toHaveText("Third Track");
+    await expect(trailNav(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "New search" }).click();
+    await page.getByRole("button", { name: "Back to the last result" }).click();
+    await expect(dashboardHeading(page)).toHaveText("Third Track");
+    await expect(trailNav(page)).toHaveCount(0);
+    expect(await page.evaluate(() => history.state?.trail ?? null)).toBeNull();
+    expect(problems).toEqual([]);
+  });
+
+  test("a step or Back to another track's map moves the focus to its heading", async ({ page }) => {
+    test.setTimeout(120_000);
+    const problems = collectProblems(page);
+    await analyseSourceFromMap(page);
+    await page.getByRole("button", { name: "View full analysis" }).click();
+    await page.getByRole("link", { name: "Open the full map" }).click();
+    await expect(mapHeading(page)).toHaveText("Song relations of Bright Lines · Test Artist");
+
+    await trailNav(page).getByRole("link", { name: "One More Time · Daft Punk (map)" }).click();
+    await expect(mapHeading(page)).toHaveText("Song relations of One More Time · Daft Punk");
+    await expect(mapHeading(page)).toBeFocused();
+    await page.goBack();
+    await expect(mapHeading(page)).toHaveText("Song relations of Bright Lines · Test Artist");
+    await expect(mapHeading(page)).toBeFocused();
+    expect(problems).toEqual([]);
+  });
+
+  test("the track on screen is named as the view it is on", async ({ page }) => {
+    await page.goto(`/t/${OMT}/map`);
+    await expect(mapHeading(page)).toBeVisible();
+    await reloadWithState(page, { trail: longTrail(1) });
+    await expect(trailNav(page).locator('[aria-current="page"]')).toHaveText(
+      "One More Time · Daft Punk (map)",
+    );
+  });
+
+  test("the Player fetches the full map's code before it is opened", async ({ page }) => {
+    await page.goto(`/t/${OMT}`);
+    await expect(dashboardHeading(page)).toBeVisible();
+    const fetched = page.waitForRequest(/\/assets\/MapView-[^/]*\.js$/, { timeout: 10_000 });
+    await page.getByRole("button", { name: "View full analysis" }).click();
+    await fetched;
+    await expect(page.getByRole("link", { name: "Open the full map" })).toBeVisible();
+  });
+
+  test("the full map reaches the bottom of the window: no footer under it", async ({ page }) => {
+    await page.goto(`/t/${OMT}/map`);
+    await expect(graphOf(page)).toBeVisible();
+    await expect(page.locator("footer")).toHaveCount(0);
+    const box = await mapView(page).boundingBox();
+    if (!box) throw new Error("no map view");
+    expect(box.y + box.height).toBeGreaterThanOrEqual(899);
+  });
+});
+
+test.describe("at 390 px", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await useMockApi(page, mapApi());
+  });
+
+  test("a step to another track's Player opens it afresh on Connections, through Back, Forward and a reload", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const problems = collectProblems(page);
+    const connections = page.getByRole("tab", { name: "Connections" });
+    const playerTab = page.getByRole("tab", { name: "Player" });
+    await page.goto(`/t/${OMT}`);
+    await page.getByRole("button", { name: "View full analysis" }).click();
+    await connections.click();
+    const card = page.locator(
+      `#panel-genealogy svg[aria-label="Connections graph"] g.nodes > g[data-node-id="${SOURCE_NODE}"]`,
+    );
+    await card.focus();
+    await page.keyboard.press("Enter");
+    await page
+      .getByTestId("node-detail")
+      .getByRole("button", { name: "Analyze this track" })
+      .click();
+    await page.getByRole("button", { name: "Open the results" }).click();
+    await page.getByRole("button", { name: "View full analysis" }).click();
+    await expect(playerTab).toHaveAttribute("aria-selected", "true");
+
+    await trailNav(page).getByRole("link", { name: "One More Time · Daft Punk" }).click();
+    await expect(page).toHaveURL(`/t/${OMT}?q=${OMT_QUERY}`);
+    await expect(connections).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("heading", { level: 1, name: "One More Time" })).toBeFocused();
+
+    await page.goBack();
+    await expect(playerTab).toHaveAttribute("aria-selected", "true");
+    await page.goForward();
+    await expect(connections).toHaveAttribute("aria-selected", "true");
+    await page.reload();
+    await expect(connections).toHaveAttribute("aria-selected", "true");
+    expect(problems).toEqual([]);
+  });
+
+  test("a long trail is one line that takes no more from the Player's map than its own height", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const panel = "#panel-genealogy";
+    await page.goto(`/t/${OMT}`);
+    await expect(dashboardHeading(page)).toBeVisible();
+    await reloadWithState(page, { phase: "PLAYER", tab: "genealogy" });
+    await expect(page.locator(`${panel} svg[aria-label="Connections graph"]`)).toBeVisible();
+    const without = await drawingHeight(page, panel);
+
+    await reloadWithState(page, { trail: longTrail(4) });
+    await expect(page.locator(`${panel} svg[aria-label="Connections graph"]`)).toBeVisible();
+    const line = await expectOneLine(page);
+    // On a phone the line names the step before this one and counts the others.
+    await expect(trailNav(page).getByRole("link")).toHaveCount(2);
+    await expect(trailNav(page)).toContainText("3 earlier");
+    const withTrail = await drawingHeight(page, panel);
+    expect(without - withTrail).toBeLessThanOrEqual(line + 1);
+    await noSidewaysScroll(page);
+    await shot(page, testInfo, "long-trail-player-390");
+  });
+});
+
+test.describe("at 844 x 390 (a phone held sideways)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await useMockApi(page, mapApi());
+  });
+
+  test("the full map keeps a drawing at least 140 px tall, with or without a long trail", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.goto(`/t/${OMT}/map`);
+    await expect(graphOf(page)).toBeVisible();
+    expect(await drawingHeight(page, "[data-map-view]")).toBeGreaterThanOrEqual(140);
+
+    await reloadWithState(page, { trail: longTrail(4) });
+    await expect(graphOf(page)).toBeVisible();
+    await expectOneLine(page);
+    expect(await drawingHeight(page, "[data-map-view]")).toBeGreaterThanOrEqual(140);
+    await noSidewaysScroll(page);
+    await shot(page, testInfo, "long-trail-map-844x390");
+  });
+});

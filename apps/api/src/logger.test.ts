@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomStrings } from "./sources/testing/strings.js";
 import {
   type CapturedLogs,
   captureLogsForTests,
@@ -200,6 +201,42 @@ describe("scrubbedSpans", () => {
       expect(host).not.toContain("contoso");
       const key = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} ${KEY}`);
       expect(key).not.toContain(KEY.slice(0, 4));
+    }
+  });
+
+  it("finds all scrub replaces in texts of keys, hosts, links and values in any order", () => {
+    const parts = [
+      "token: ",
+      "X-Api-Key=",
+      "authorization: ",
+      "Bearer ",
+      "Basic abcdefgh12",
+      "contoso-prod.openai.azure.com",
+      "https://u:p@h.example/x?token=t1&a=b",
+      "p.scdn.co/clip",
+      KEY,
+      ENDPOINT,
+      " ",
+      "\\n",
+      "\n",
+      "a",
+      '"',
+      "'",
+    ];
+    // Every part of the text outside the spans is written as it was, in order: scrub replaced
+    // nothing else but the quotes and scheme words around a value, which the spans leave out.
+    const bare = (text: string) => text.replace(/["']|(?:Bearer|Basic|Discogs)\s+/g, "");
+    for (const text of randomStrings(parts, 3_000, 10)) {
+      const out = bare(scrub(text));
+      let at = 0;
+      let kept = 0;
+      for (const [start, end] of [...scrubbedSpans(text), [text.length, text.length]]) {
+        const part = bare(text.slice(kept, start));
+        const found = out.indexOf(part, at);
+        expect(found, `${JSON.stringify(text)}: ${JSON.stringify(part)}`).not.toBe(-1);
+        at = found + part.length;
+        kept = end;
+      }
     }
   });
 

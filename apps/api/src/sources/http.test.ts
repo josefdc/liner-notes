@@ -2089,6 +2089,26 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("keeps hidden a value the logger reads only once it has replaced a host", () => {
+    // Scrub replaces the host first; its pair rule then reads `X-Api-Key: v` after it.
+    const text =
+      "QzbbQ\n  - token: contoso-prod.openai.azure.com\\n\\r\\nX-Api-Key: QzdbQcookies: QzfbQ";
+    for (const endpoint of [undefined, "https://contoso-prod.openai.azure.com"]) {
+      configureLogger({ AZURE_OPENAI_ENDPOINT: endpoint, LOG_LEVEL: process.env.LOG_LEVEL });
+      try {
+        for (const line of [
+          scrub(`Error: ${describeError(new Error(text))}`),
+          scrub(logText(new SourceError("spotify", "http", text).message)),
+          scrub(scrubText(text)),
+        ]) {
+          expect(line, endpoint).not.toContain("QzdbQ");
+        }
+      } finally {
+        configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+      }
+    }
+  });
+
   it("keeps hidden what the other rules hide when they redact their own text again", () => {
     // A network error's message is a described error, described again when it is logged: the
     // header rule pairs the quotes of the text it left, and hides more the second time.

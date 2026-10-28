@@ -78,9 +78,10 @@ function reduceMotion(reduce: boolean) {
   );
 }
 
+// Three relations, so the map is drawn (with two or fewer it is a compact row).
 const data = {
   nodes: [
-    { id: 'musicbrainz:recording/current', group: 1, label: 'Song', size: 40 },
+    { id: 'musicbrainz:recording/current', group: 1, label: 'Song (2011)', size: 40 },
     {
       id: RELATED,
       group: 4,
@@ -88,6 +89,8 @@ const data = {
       size: 22,
       previewUrl: CLIP,
     },
+    node('peer', 4, 'Peer - Someone (1990)'),
+    node('later', 3, 'Later - Someone (2015)'),
   ],
   links: [
     {
@@ -96,6 +99,8 @@ const data = {
       value: 1,
       type: 'influence' as const,
     },
+    link('peer', 'musicbrainz:recording/current', { type: 'influence' }),
+    link('musicbrainz:recording/current', 'later', { type: 'remix' }),
   ],
 };
 
@@ -122,11 +127,6 @@ const relatedTrack = (container: HTMLElement) => {
   if (!track) throw new Error('the related track is not drawn');
   return track;
 };
-/** Where a drawn track is, from its `translate(x,y)`. */
-const placeOf = (track: Element) =>
-  (/translate\(([-\d.e]+),([-\d.e]+)\)/.exec(track.getAttribute('transform') ?? '') ?? [])
-    .slice(1)
-    .map(Number);
 /** The zoom, from the drawing's `translate(x,y) scale(k)`. */
 function zoomOf(svg: SVGSVGElement) {
   const [x, y, k] = (
@@ -137,33 +137,6 @@ function zoomOf(svg: SVGSVGElement) {
     .slice(1)
     .map(Number);
   return { x, y, k };
-}
-/**
- * Where the graph is on screen, in the svg's pixels: the box of the tracks' discs (their outer
- * ring), and the centre of the box the fit centres (each track with 40 px more round its disc).
- */
-function onScreen(svg: SVGSVGElement) {
-  const { x, y, k } = zoomOf(svg);
-  const discs = [...svg.querySelectorAll('g.nodes > g')].map((track) => {
-    const [cx, cy] = placeOf(track);
-    // The outer ring's radius is the track's size + 4; the fit pads the size by 40.
-    const ring = Number(track.querySelector('circle')?.getAttribute('r'));
-    return { cx: x + k * cx, cy: y + k * cy, r: k * ring, pad: k * (ring - 4 + 40) };
-  });
-  const box = (grow: (disc: (typeof discs)[number]) => number) => ({
-    left: Math.min(...discs.map((d) => d.cx - grow(d))),
-    right: Math.max(...discs.map((d) => d.cx + grow(d))),
-    top: Math.min(...discs.map((d) => d.cy - grow(d))),
-    bottom: Math.max(...discs.map((d) => d.cy + grow(d))),
-  });
-  const fitted = box((d) => d.pad);
-  return {
-    k,
-    /** The fitted box's size in graph units: what the fit divides the panel by. */
-    graph: [(fitted.right - fitted.left) / k, (fitted.bottom - fitted.top) / k],
-    centre: [(fitted.left + fitted.right) / 2, (fitted.top + fitted.bottom) / 2],
-    discs: box((d) => d.r),
-  };
 }
 const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -180,89 +153,56 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph on a resize', () => {
-  it('keeps the zoom, the drawn tracks and their scale, and the graph centred on screen', async () => {
-    reduceMotion(true);
+  it('keeps the drawing, its cards and its zoom, and shifts the view by half the change', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
     if (!svg) throw new Error('no svg');
     const zoomed = svg.querySelector(':scope > g');
     const tracks = drawnTracks(container);
-    expect(tracks).toHaveLength(2);
-    const before = onScreen(svg);
-    // Fitted to 800 by 600 at its largest zoom.
-    expect(before.k).toBe(1.5);
-    expect(before.centre[0]).toBeCloseTo(400, 0);
-    expect(before.centre[1]).toBeCloseTo(300, 0);
-    const ring = relatedTrack(container).querySelector('circle')?.getAttribute('r');
+    expect(tracks).toHaveLength(4);
+    const before = zoomOf(svg);
+    // Drawn at its size: the text at 12 px on screen, never zoomed out.
+    expect(before.k).toBe(1);
+    const card = relatedTrack(container).querySelector('rect.card')?.getAttribute('width');
 
-    await act(async () => report?.(400, 300));
+    await act(async () => report?.(700, 500));
 
     expect(svg.querySelector(':scope > g')).toBe(zoomed);
     const after = drawnTracks(container);
-    expect(after).toHaveLength(2);
     after.forEach((track, i) => {
       expect(track).toBe(tracks[i]);
     });
-    // The node scale is the first size's: no smaller tracks on the narrower panel.
-    expect(relatedTrack(container).querySelector('circle')?.getAttribute('r')).toBe(ring);
-    // The svg takes the new size; on screen the graph keeps its zoom and stays centred on the
-    // panel, every track inside it.
-    expect(svg.getAttribute('width')).toBe('400');
-    expect(svg.getAttribute('height')).toBe('300');
-    const now = onScreen(svg);
-    expect(now.k).toBe(1.5);
-    expect(now.centre[0]).toBeCloseTo(200, 0);
-    expect(now.centre[1]).toBeCloseTo(150, 0);
-    expect(now.discs.left).toBeGreaterThanOrEqual(0);
-    expect(now.discs.right).toBeLessThanOrEqual(400);
-    expect(now.discs.top).toBeGreaterThanOrEqual(0);
-    expect(now.discs.bottom).toBeLessThanOrEqual(300);
+    expect(relatedTrack(container).querySelector('rect.card')?.getAttribute('width')).toBe(card);
+    expect(svg.getAttribute('width')).toBe('700');
+    expect(svg.getAttribute('height')).toBe('500');
+    const now = zoomOf(svg);
+    expect(now.k).toBe(1);
+    // The map is no wider than the panel was: it stays centred across it.
+    expect(now.x).toBeCloseTo(before.x - 50, 0);
   });
-});
 
-describe('GenealogyGraph resized while its fit glides in', () => {
-  it('fits the graph to the new size, centred, instead of stopping the glide halfway', async () => {
+  it('lays the map out again when the panel turns too narrow for years side by side', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
     if (!svg) throw new Error('no svg');
-    // The layout plays out, then the fit glides from the whole view to 1.5: resize halfway.
-    await vi.waitFor(
-      () => {
-        const { k } = zoomOf(svg);
-        expect(k).toBeGreaterThan(1.05);
-        expect(k).toBeLessThan(1.4);
-      },
-      { timeout: 10_000, interval: 2 },
-    );
-    await act(async () => report?.(400, 300));
-    await act(() => waitFor(800));
+    const zoomed = svg.querySelector(':scope > g');
+    const x = (id: string) =>
+      Number(
+        /translate\(([-\d.e]+),/.exec(
+          container.querySelector(`g.nodes > g[data-node-id="${id}"]`)?.getAttribute('transform') ??
+            '',
+        )?.[1],
+      );
+    // Side by side by year at 800 px: 1981, 1990, then this track (2011) and its remix (2015).
+    expect(x(RELATED)).toBeLessThan(x('peer'));
+    expect(x('peer')).toBeLessThan(x('musicbrainz:recording/current'));
 
-    const now = onScreen(svg);
-    // The fit for 400 by 300: 60 px of padding each side, at most 1.5.
-    const [width, height] = now.graph;
-    const fit = Math.max(Math.min((400 - 120) / width, (300 - 120) / height, 1.5), 0.35);
-    expect(now.k).toBeCloseTo(fit, 2);
-    expect(now.centre[0]).toBeCloseTo(200, 0);
-    expect(now.centre[1]).toBeCloseTo(150, 0);
-  });
-});
+    await act(async () => report?.(360, 600));
 
-describe('GenealogyGraph resized once its fit is in', () => {
-  it('keeps the zoom and shifts the view, as without motion', async () => {
-    const { container } = render(<GenealogyGraph data={data} />);
-    const svg = container.querySelector('svg');
-    if (!svg) throw new Error('no svg');
-    // The glide has ended: the fit's 1.5 holds.
-    await vi.waitFor(() => expect(zoomOf(svg).k).toBe(1.5), { timeout: 10_000, interval: 5 });
-    await act(() => waitFor(100));
-
-    await act(async () => report?.(400, 300));
-    await act(() => waitFor(700));
-
-    const now = onScreen(svg);
-    expect(now.k).toBe(1.5);
-    expect(now.centre[0]).toBeCloseTo(200, 0);
-    expect(now.centre[1]).toBeCloseTo(150, 0);
+    // A new drawing, the years from top to bottom: one column of cards.
+    expect(svg.querySelector(':scope > g')).not.toBe(zoomed);
+    expect(x(RELATED)).toBe(x('peer'));
+    expect(x('peer')).toBe(x('later'));
   });
 });
 
@@ -270,14 +210,14 @@ describe("GenealogyGraph's pictures", () => {
   it('clips each picture by a valid id of its own, which its url(#…) names', () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const images = [...container.querySelectorAll('g.nodes image')];
-    expect(images).toHaveLength(2);
+    expect(images).toHaveLength(4);
     const ids = images.map((image) => {
       const id = /^url\(#(.+)\)$/.exec(image.getAttribute('clip-path') ?? '')?.[1] ?? '';
       expect(id).toMatch(/^[A-Za-z][\w-]*$/);
       expect(container.querySelector(`clipPath#${id}`)).not.toBeNull();
       return id;
     });
-    expect(new Set(ids).size).toBe(2);
+    expect(new Set(ids).size).toBe(4);
   });
 
   it('links each picture with href, not xlink:href', () => {
@@ -390,7 +330,7 @@ describe('GenealogyGraph when it goes', () => {
     const view = render(<GenealogyGraph data={withOrigin} evidence={PACK} />);
     const svg = view.container.querySelector('svg');
     if (!svg) throw new Error('no svg');
-    // The pointer on the origin: its hint fades in (a transition), while the layout plays out.
+    // The pointer on the origin: its hint fades in (a transition).
     const origin = view.container.querySelector('g.nodes > g[data-node-id="older"]');
     await act(async () => {
       origin?.dispatchEvent(new MouseEvent('mouseenter'));

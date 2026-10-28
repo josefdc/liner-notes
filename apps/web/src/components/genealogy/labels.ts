@@ -16,15 +16,8 @@ export interface Box {
 export interface LabelChoice {
   candidates: readonly Box[];
   priority: number;
-  /** Its kind (a track's name, a line's label): what other labels may cover it. */
+  /** What it labels (a relation's chip, a hint), for whoever reads the choice. */
   kind: string;
-  /**
-   * Kinds of placed labels this one may sit over when no place clear of every label is left
-   * (it is drawn above them). It never sits over a label of its own kind.
-   */
-  mayCover?: readonly string[];
-  /** False for a label nothing may sit over, whatever its kind. */
-  coverable?: boolean;
 }
 
 const clearOf = (box: Box, other: Box, gap: number) =>
@@ -34,45 +27,32 @@ const clearOf = (box: Box, other: Box, gap: number) =>
 /**
  * Where to put each label: in priority order (then in their own order), each label takes the
  * first of its places that keeps `gap` pixels clear of every label already placed and of the
- * obstacles (the tracks' discs); failing that, the first clear of the labels only; failing that,
- * the first clear of every label but those of the kinds it may cover. Returns the index of the
- * place each label took, or -1 for a label left out, and which labels it covers.
+ * obstacles; failing that, the first clear of the labels only. No label ever sits over another:
+ * one with no clear place is left out. Returns the index of the place each label took, or -1.
  */
 export function placeLabels(
   labels: readonly LabelChoice[],
   obstacles: readonly Box[] = [],
   gap = 2,
-): { at: number[]; covers: number[][] } {
+): { at: number[] } {
   const order = labels
     .map((_, i) => i)
     .sort((a, b) => labels[b].priority - labels[a].priority || a - b);
-  const placed: Array<{ box: Box; kind: string; coverable: boolean; index: number }> = [];
+  const placed: Box[] = [];
   const at = labels.map(() => -1);
-  const covers: number[][] = labels.map(() => []);
   for (const i of order) {
-    const { candidates, kind, mayCover = [], coverable = true } = labels[i];
-    const clearOfLabels = (box: Box, except: readonly string[] = []) =>
-      placed.every(
-        (other) =>
-          (other.coverable && except.includes(other.kind) && other.kind !== kind) ||
-          clearOf(box, other.box, gap),
-      );
+    const clearOfLabels = (box: Box) => placed.every((other) => clearOf(box, other, gap));
     const tiers = [
       (box: Box) => clearOfLabels(box) && obstacles.every((other) => clearOf(box, other, 0)),
-      (box: Box) => clearOfLabels(box),
-      (box: Box) => mayCover.length > 0 && clearOfLabels(box, mayCover),
+      clearOfLabels,
     ];
     for (const fits of tiers) {
-      const found = candidates.findIndex(fits);
+      const found = labels[i].candidates.findIndex(fits);
       if (found === -1) continue;
-      const box = candidates[found];
       at[i] = found;
-      covers[i] = placed
-        .filter((other) => !clearOf(box, other.box, gap))
-        .map((other) => other.index);
-      placed.push({ box, kind, coverable, index: i });
+      placed.push(labels[i].candidates[found]);
       break;
     }
   }
-  return { at, covers };
+  return { at };
 }

@@ -74,7 +74,9 @@ const Graph = (props: Partial<React.ComponentProps<typeof GenealogyGraph>>) => (
 
 // As a claim's chip names the item, with its tier for a sourced link.
 const MB_SOURCED = 'ev-mb-1 (MusicBrainz · primary record)';
-const lines = (container: HTMLElement) => [...container.querySelectorAll('g.links line')];
+const lines = (container: HTMLElement) => [...container.querySelectorAll('g.links path')];
+/** The relation chips drawn now. */
+const chips = (container: HTMLElement) => [...container.querySelectorAll('g.link-chips g.chip')];
 const nodeGroup = (container: HTMLElement, id: string) => {
   const group = container.querySelector(`g.nodes > g[data-node-id="${id}"]`);
   if (!group) throw new Error(`no drawn node ${id}`);
@@ -85,7 +87,7 @@ const subLabel = (container: HTMLElement, id: string) =>
 /** Every element in the graph that keyboard focus can reach, in order. */
 const focusables = (container: HTMLElement) => [
   ...container.querySelectorAll<SVGElement>('g.nodes > g'),
-  ...container.querySelectorAll<SVGElement>('g.link-targets line'),
+  ...container.querySelectorAll<SVGElement>('g.link-targets path'),
 ];
 
 beforeEach(() => {
@@ -97,7 +99,7 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph links', () => {
-  it('draws each link by its kind and relation, names it on the line, and leaves out the rejected', () => {
+  it('draws each link by its kind and relation, names it in a chip on hover, and leaves out the rejected', async () => {
     const { container } = render(<Graph />);
     const drawn = lines(container).map((line) => ({
       kind: line.getAttribute('data-link-kind'),
@@ -112,12 +114,34 @@ describe('GenealogyGraph links', () => {
       { kind: 'inferred', type: 'influence', stroke: LINK_COLOR.influence, dash: '6 4' },
       { kind: 'inferred', type: 'producer', stroke: LINK_COLOR.producer, dash: '6 4' },
     ]);
-    const names = [...container.querySelectorAll('g.link-labels text')].map((t) => t.textContent);
+    // No relation is written on the map at rest: a chip names it while the link is pointed at.
+    expect(chips(container)).toEqual([]);
+    const targets = [...container.querySelectorAll<SVGPathElement>('g.link-targets path')];
+    const names: Array<string | null | undefined> = [];
+    for (const target of targets) {
+      await act(async () => {
+        target.dispatchEvent(new MouseEvent('mouseenter'));
+      });
+      expect(chips(container)).toHaveLength(1);
+      names.push(chips(container)[0].textContent);
+      if (names.length === 2) {
+        // Edged in the colour the link is drawn in: grey for the sample that is not sourced.
+        expect(chips(container)[0].querySelector('rect')?.getAttribute('stroke')).toBe(
+          LINK_COLOR.influence,
+        );
+      }
+      await act(async () => {
+        target.dispatchEvent(new MouseEvent('mouseleave'));
+      });
+      expect(chips(container)).toEqual([]);
+    }
     expect(names).toEqual(['sample', 'possible sample', 'possible shared producer']);
-    const fills = [...container.querySelectorAll('g.link-labels text')].map((t) =>
-      t.getAttribute('fill'),
-    );
-    expect(fills[1]).toBe(LINK_COLOR.influence);
+    // An arrowhead shows the direction of each link but the shared producer's.
+    expect(lines(container).map((line) => line.getAttribute('marker-end') !== null)).toEqual([
+      true,
+      true,
+      false,
+    ]);
     expect(screen.getByTestId('links-hidden').textContent).toBe(
       '1 link not shown: the claim behind it was rejected or cannot be read.',
     );
@@ -126,10 +150,10 @@ describe('GenealogyGraph links', () => {
   it('marks as an origin only a track a sourced link says this one samples', () => {
     const { container } = render(<Graph />);
     expect(subLabel(container, 'older')).toBe('Origin');
-    expect(subLabel(container, 'guess')).toBe('Connected');
-    // A track whose only link was rejected is no origin either, and is not called connected:
-    // no link of its own is drawn.
-    expect(subLabel(container, 'disputed') ?? '').toBe('');
+    expect(subLabel(container, 'current')).toBe('This track');
+    expect(subLabel(container, 'guess')).toBeUndefined();
+    // A track whose only link was rejected is no origin either.
+    expect(subLabel(container, 'disputed')).toBeUndefined();
   });
 
   it('gives its hints in a neutral hue: the measured hue is for measured values', () => {
@@ -165,15 +189,15 @@ describe('GenealogyGraph links', () => {
     const kinds = lines(container).map((line) => line.getAttribute('data-link-kind'));
     expect(kinds.slice(-2)).toEqual(['sourced', 'sourced']);
     for (const id of ['later', 'remix']) {
-      expect(subLabel(container, id)).toBe('Connected');
-      expect((nodeGroup(container, id).querySelector('circle') as SVGElement).style.filter).toBe(
+      expect(subLabel(container, id)).toBeUndefined();
+      expect((nodeGroup(container, id).querySelector('rect') as SVGElement).style.filter).toBe(
         'none',
       );
     }
     expect(subLabel(container, 'older')).toBe('Origin');
   });
 
-  it('shows every link as inferred without the evidence pack', () => {
+  it('shows every link as inferred without the evidence pack', async () => {
     const { container } = render(<Graph evidence={undefined} />);
     expect(lines(container).map((line) => line.getAttribute('data-link-kind'))).toEqual([
       'inferred',
@@ -182,13 +206,17 @@ describe('GenealogyGraph links', () => {
     ]);
     expect(lines(container)[0].getAttribute('data-link-type')).toBe('influence');
     expect(lines(container)[0].getAttribute('stroke')).toBe(LINK_COLOR.influence);
-    expect(container.querySelector('g.link-labels text')?.textContent).toBe('possible sample');
-    expect(subLabel(container, 'older')).toBe('Connected');
+    const target = container.querySelector('g.link-targets path') as SVGPathElement;
+    await act(async () => {
+      target.dispatchEvent(new MouseEvent('mouseenter'));
+    });
+    expect(chips(container)[0].textContent).toBe('possible sample');
+    expect(subLabel(container, 'older')).toBeUndefined();
   });
 
   it('shows a link’s relation and provenance while it is pointed at', async () => {
     const { container } = render(<Graph />);
-    const targets = [...container.querySelectorAll<SVGLineElement>('g.link-targets line')];
+    const targets = [...container.querySelectorAll<SVGPathElement>('g.link-targets path')];
     expect(targets[0].getAttribute('aria-label')).toBe(
       `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
     );
@@ -271,7 +299,7 @@ describe('GenealogyGraph links', () => {
 
   it('keeps the focused link’s detail when the pointer passes over another and leaves', async () => {
     const { container } = render(<Graph />);
-    const targets = [...container.querySelectorAll<SVGLineElement>('g.link-targets line')];
+    const targets = [...container.querySelectorAll<SVGPathElement>('g.link-targets path')];
     await act(async () => targets[2].focus());
     const focusedText = screen.getByTestId('link-detail').textContent;
     expect(focusedText).toContain('may share a producer');
@@ -353,7 +381,7 @@ describe('GenealogyGraph links', () => {
 
   it('hides the drawing’s own words from screen readers', () => {
     const { container } = render(<Graph />);
-    expect(container.querySelector('g.link-labels')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelector('g.link-chips')?.getAttribute('aria-hidden')).toBe('true');
     expect(container.querySelector('g.links')?.getAttribute('aria-hidden')).toBe('true');
     const texts = [...container.querySelectorAll('g.nodes text')];
     expect(texts.length).toBeGreaterThan(0);

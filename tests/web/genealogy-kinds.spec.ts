@@ -22,7 +22,9 @@ import {
 // relation it states ("possible sample", as the fact cards say),
 // its relation stated as a sentence naming both tracks, and its provenance shown on hover and
 // focus and in a list; the Dashboard names a documented relation as known only for a sourced
-// link, and as a possible one otherwise.
+// link, and as a possible one otherwise. The map is a lineage on a year axis: each track a card,
+// drawn over the links, its relation named in a chip only while a link or a card is pointed at
+// or focused.
 const fixture = loadFixture("genealogy-kinds");
 const ANALYZE = "/api/analyze/stream";
 const CURRENT = "Bright Lines (2011)";
@@ -59,8 +61,8 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string, part?: L
   else await page.screenshot({ path, fullPage: true });
 }
 
-// [kind, relation drawn, dash, line label] for each shown link, in the fixture's order (the
-// link whose claim was contradicted is not shown).
+// [kind, relation drawn, dash, chip] for each shown link, in the fixture's order (the link
+// whose claim was contradicted is not shown).
 const DRAWN = [
   ["sourced", "sample", "none", "sample"],
   ["sourced", "interpolation", "none", "interpolation"],
@@ -84,24 +86,24 @@ const DRAWN = [
 const graphOf = (page: Page) =>
   page.locator('#panel-genealogy svg[aria-label="Connections graph"]');
 
-/** The fit's scale of the graph, or NaN before the graph has fitted itself to the panel. */
+/** The zoom's scale of the graph, or NaN before the graph has set its first view. */
 const fitScale = (page: Page) =>
   graphOf(page)
     .locator(":scope > g")
     .evaluate((g) => Number(/scale\(([\d.]+)/.exec(g.getAttribute("transform") ?? "")?.[1]));
 
-/** Page time that covers the force layout (about 300 ticks) and the fit's half-second ease. */
-const LAYOUT_MS = 15_000;
+/** Page time that covers any glide of the view (a double click's zoom is a quarter second). */
+const LAYOUT_MS = 2_000;
 
 /**
  * Where the graph sits in its panel (the svg) on screen: the zoom's scale, the centre of the
- * tracks' discs less the panel's centre (px), and how many discs lie past the panel's edge.
+ * tracks' cards less the panel's centre (px), and how many cards lie past the panel's edge.
  */
 const placeInPanel = (page: Page) =>
   graphOf(page).evaluate((svg) => {
     const panel = svg.getBoundingClientRect();
-    const discs = [...svg.querySelectorAll("g.nodes > g > circle:first-of-type")].map((disc) =>
-      disc.getBoundingClientRect(),
+    const discs = [...svg.querySelectorAll("g.nodes > g > rect.card")].map((card) =>
+      card.getBoundingClientRect(),
     );
     const scale = /scale\(([\d.]+)/.exec(
       svg.querySelector(":scope > g")?.getAttribute("transform") ?? "",
@@ -155,11 +157,8 @@ async function drawingKept(page: Page, before: Awaited<ReturnType<typeof placeIn
 }
 
 /**
- * Waits until the layout has settled and the graph has fitted itself to the panel: the fit's
- * transform is set and holds still (it eases in over half a second). The layout runs on the
- * page's clock (installed in beforeEach), which every check first runs forward through the force
- * ticks and the fit, so a layout moved meanwhile (after a resize) settles on it too: on a
- * loaded machine, waiting for them frame by frame takes most of a minute.
+ * Waits until the graph is drawn and its view is set: the zoom's transform is set and holds
+ * still. The page's clock (installed in beforeEach) is first run forward past any glide.
  */
 async function graphFitted(page: Page) {
   const fitted = async () => {
@@ -205,7 +204,7 @@ test.describe("the genealogy graph", () => {
   }, testInfo) => {
     const problems = collectProblems(page);
     const graph = graphOf(page);
-    const lines = graph.locator("g.links line");
+    const lines = graph.locator("g.links path");
     await expect(lines).toHaveCount(DRAWN.length);
     const drawn = await lines.evaluateAll((elements) =>
       elements.map((line) => [
@@ -215,10 +214,18 @@ test.describe("the genealogy graph", () => {
       ]),
     );
     expect(drawn).toEqual(DRAWN.map(([kind, type, dash]) => [kind, type, dash]));
-    // Each line names its relation in text, hedged when it is not sourced.
-    await expect(graph.locator("g.link-labels text")).toHaveText(
-      DRAWN.map(([, , , label]) => label),
-    );
+    // No relation is written on the map at rest: each link names it, hedged when it is not
+    // sourced, in a chip while it is pointed at.
+    await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
+    const targets = graph.locator("g.link-targets path");
+    for (const [index, [, , , label]] of DRAWN.entries()) {
+      await targets.nth(index).dispatchEvent("mouseenter");
+      await expect(graph.locator(`g.link-chips g.chip[data-link-index="${index}"]`)).toHaveText(
+        label,
+      );
+      await targets.nth(index).dispatchEvent("mouseleave");
+    }
+    await expect(graph.locator("g.link-chips g.chip")).toHaveCount(0);
     await expect(page.getByTestId("links-hidden")).toHaveText(
       "1 link not shown: the claim behind it was rejected or cannot be read.",
     );
@@ -226,12 +233,14 @@ test.describe("the genealogy graph", () => {
     await expect(page.getByTestId("genealogy-kinds")).toHaveText("Sourced and not sourced links");
     // The track only the rejected link related is left out with it.
     await expect(graph.locator('g.nodes > g[data-node-id="rejected"]')).toHaveCount(0);
-    // A track is marked as an origin (amber halo) only when a sourced link says this one uses
-    // it: group 2 is not enough. (The panel is too narrow for the "Origin" sub-label.)
-    const halo = (id: string) =>
-      graph.locator(`g.nodes > g[data-node-id="${id}"] > circle`).first();
+    // A track is marked as an origin (amber glow, and its card says so) only when a sourced
+    // link says this one uses it: group 2 is not enough.
+    const halo = (id: string) => graph.locator(`g.nodes > g[data-node-id="${id}"] > rect.card`);
     await expect(halo("sample-sourced")).toHaveAttribute("style", /glow-amber/);
     await expect(halo("model-verified")).toHaveAttribute("style", /glow-amber/);
+    const tag = (id: string) => graph.locator(`g.nodes > g[data-node-id="${id}"] .sub-label`);
+    await expect(tag("sample-sourced")).toHaveText("Origin");
+    await expect(tag("current")).toHaveText("This track");
     // A track that remixes this one (a sourced link, the other way) is no origin either.
     for (const id of [
       "sample-inferred",
@@ -241,6 +250,7 @@ test.describe("the genealogy graph", () => {
       "remix-sourced",
     ]) {
       await expect(halo(id), id).toHaveAttribute("style", /filter: none/);
+      await expect(tag(id), id).toHaveCount(0);
     }
     expect(problems).toEqual([]);
     await graphFitted(page);
@@ -248,109 +258,130 @@ test.describe("the genealogy graph", () => {
   });
 
   /**
-   * The graph's labels drawn now, each with its box on screen: the tracks' names (with their
-   * tag) and the line labels, the hidden ones apart.
+   * The graph's cards and chips drawn now, each with its box on screen, and whether each card's
+   * words are shown and on top: no link, chip or other card is the topmost element at any point
+   * of a card's text.
    */
-  const graphLabels = (page: Page) =>
-    graphOf(page).evaluate((svg) =>
-      [...svg.querySelectorAll("g.node-label, g.link-labels text")].map((label) => {
-        const box = label.getBoundingClientRect();
+  const graphBoxes = (page: Page) =>
+    graphOf(page).evaluate((svg) => {
+      const panel = svg.getBoundingClientRect();
+      const boxOf = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
+      };
+      const cards = [...svg.querySelectorAll("g.nodes > g")].map((card) => {
+        const words = card.querySelector("g.node-label");
+        // Points along the middle of each line of words that are inside the panel.
+        const covered = [...card.querySelectorAll("tspan, text.sub-label")].flatMap((line) => {
+          const box = line.getBoundingClientRect();
+          return [0.1, 0.5, 0.9].flatMap((at) => {
+            const [x, y] = [box.x + box.width * at, box.y + box.height / 2];
+            if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) return [];
+            const hit = document.elementFromPoint(x, y);
+            return hit && !card.contains(hit) ? [hit.tagName] : [];
+          });
+        });
         return {
-          kind: label.matches("g.node-label") ? "name" : "line",
-          id: label.closest("[data-node-id]")?.getAttribute("data-node-id") ?? null,
-          shown: getComputedStyle(label).visibility !== "hidden",
-          box: { x: box.x, y: box.y, right: box.right, bottom: box.bottom },
+          id: card.getAttribute("data-node-id"),
+          shown: words !== null && getComputedStyle(words).visibility !== "hidden",
+          covered,
+          box: boxOf(card.querySelector("rect.card") as Element),
         };
-      }),
-    );
+      });
+      const chips = [...svg.querySelectorAll("g.link-chips g.chip")].map((chip) => ({
+        text: chip.textContent,
+        box: boxOf(chip.querySelector("rect") as Element),
+      }));
+      return { cards, chips };
+    });
 
-  /** Whether two label boxes overlap on screen. */
+  /** Whether two boxes overlap on screen. */
   const overlap = (
     a: { x: number; y: number; right: number; bottom: number },
     b: { x: number; y: number; right: number; bottom: number },
   ) => a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
 
-  // The line labels main showed at 9 px; at 12 px, a label may move along its line (or below it)
-  // to keep at least as many relation words on the graph.
-  const LINE_LABEL_FLOOR: Record<number, number> = { 320: 8, 768: 4, 1024: 4, 1440: 8 };
-
+  // #217: no line, chip or card over a name, and no name hidden (the map used to let a line's
+  // label sit over a name, and hid the names that gave way).
   for (const width of [320, 768, 1024, 1440]) {
-    test(`at ${width} px shows no two names or two line labels over each other, and keeps this track's name and the pointed one`, async ({
+    test(`at ${width} px shows every name, with no line, chip or other card over it`, async ({
       page,
     }) => {
       if (width !== 1440) {
-        await graphFitted(page);
-        const placed = await markDrawing(page);
         await page.setViewportSize({ width, height: 900 });
         if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
-        await graphFitted(page);
-        await drawingKept(page, placed);
       }
       await graphFitted(page);
-      const labels = await graphLabels(page);
-      const shown = labels.filter((label) => label.shown);
-      // Names never overlap names, nor line labels line labels. A line label may sit over a
-      // name (it is drawn above it, on a band of the page's colour), never over this track's.
-      for (let i = 0; i < shown.length; i += 1) {
-        for (let j = i + 1; j < shown.length; j += 1) {
-          if (shown[i].kind !== shown[j].kind) continue;
-          expect(
-            overlap(shown[i].box, shown[j].box),
-            `${shown[i].kind} ${shown[i].id ?? i} and ${shown[j].id ?? j}`,
-          ).toBe(false);
+      const { cards, chips } = await graphBoxes(page);
+      expect(cards).toHaveLength(18);
+      expect(chips).toEqual([]);
+      for (const card of cards) {
+        // Never hidden, and nothing drawn over its words.
+        expect(card.shown, `${card.id} shown`).toBe(true);
+        expect(card.covered, `what covers ${card.id}`).toEqual([]);
+        for (const other of cards) {
+          if (other !== card) {
+            expect(overlap(card.box, other.box), `${card.id} and ${other.id}`).toBe(false);
+          }
         }
       }
-      const lines = shown.filter((label) => label.kind === "line");
-      expect(lines.length).toBeGreaterThanOrEqual(LINE_LABEL_FLOOR[width]);
-      // This track's name is always shown, and nothing covers it.
-      const current = await graphOf(page)
-        .locator('g.nodes > g[role="img"]')
-        .getAttribute("data-node-id");
-      const currentName = shown.find((label) => label.kind === "name" && label.id === current);
-      expect(currentName).toBeDefined();
-      for (const line of lines) {
-        expect(
-          overlap(line.box, currentName?.box ?? line.box),
-          "a line over this track's name",
-        ).toBe(false);
-      }
-      // A track whose name gave way shows it, uncovered, while the pointer is on the track, and
-      // hides it again after; the name is in the track's label for screen readers either way.
-      const hidden = labels.find((label) => label.kind === "name" && !label.shown);
-      expect(hidden?.id).toBeTruthy();
-      const track = graphOf(page).locator(`g.nodes > g[data-node-id="${hidden?.id}"]`);
+      // Pointing at a track shows its relations in chips, never over a card; the names stay.
+      const track = graphOf(page).locator('g.nodes > g[data-node-id="sample-sourced"]');
       await expect(track).toHaveAttribute("aria-label", /\S/);
       await track.dispatchEvent("mouseenter");
-      const pointedLabels = await graphLabels(page);
-      const pointed = pointedLabels.find((label) => label.id === hidden?.id);
-      expect(pointed?.shown).toBe(true);
-      for (const other of pointedLabels.filter((label) => label.shown && label !== pointed)) {
-        expect(
-          overlap(other.box, pointed?.box ?? other.box),
-          `${other.kind} over the pointed name`,
-        ).toBe(false);
+      const pointed = await graphBoxes(page);
+      expect(pointed.chips.length).toBeGreaterThan(0);
+      for (const chip of pointed.chips) {
+        for (const card of pointed.cards) {
+          expect(overlap(chip.box, card.box), `chip "${chip.text}" over ${card.id}`).toBe(false);
+        }
       }
+      expect(pointed.cards.every((card) => card.shown)).toBe(true);
       await track.dispatchEvent("mouseleave");
-      const after = (await graphLabels(page)).find((label) => label.id === hidden?.id);
-      expect(after?.shown).toBe(false);
+      expect((await graphBoxes(page)).chips).toEqual([]);
     });
   }
 
-  test("keeps the graph centred and whole when its panel narrows, then widens", async ({
+  test("keeps the drawing and its zoom when its panel widens, and lays the years across a wide row", async ({
     page,
   }) => {
-    // Fitted to the panel at 1440 px; then 1024 px (a narrower panel) and 1920 px (a wider one).
+    // At 1440 px the map is a column (years from top to bottom); at 1920 px the column is wider
+    // and the same drawing is kept, as centred; at 1024 px the map is a full-width row, its
+    // years from left to right: drawn again.
     await graphFitted(page);
     const placed = await markDrawing(page);
-    expect(placed.outside).toBe(0);
-    await page.setViewportSize({ width: 1024, height: 900 });
-    await graphFitted(page);
-    await drawingKept(page, placed);
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
     const now = await drawingKept(page, placed);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
-    expect(now.outside).toBe(0);
+    const years = () =>
+      graphOf(page)
+        .locator("text.year-tick")
+        .evaluateAll((ticks) =>
+          ticks.map((tick) => {
+            const box = tick.getBoundingClientRect();
+            return { label: tick.textContent, x: box.x, y: box.y };
+          }),
+        );
+    const column = await years();
+    expect(column.map((tick) => tick.label)).toEqual([
+      "1977",
+      "1979",
+      "1982",
+      "1983",
+      "1984",
+      "1990",
+      "2011",
+      "2015",
+      "2020",
+    ]);
+    expect(column[1].y).toBeGreaterThan(column[0].y);
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await graphFitted(page);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(0);
+    const row = await years();
+    expect(row[1].x).toBeGreaterThan(row[0].x);
+    expect(row[1].y).toBeCloseTo(row[0].y, 0);
   });
 
   test("has a legend in words for the lines and every relation shown", async ({ page }) => {
@@ -376,32 +407,41 @@ test.describe("the genealogy graph", () => {
   test("shows a link's relation and provenance under the mouse", async ({ page }, testInfo) => {
     await graphFitted(page);
     const detail = page.getByTestId("link-detail");
-    // A real pointer on the first link, at the first point along it where nothing else (a
-    // track, another link) is on top: the browser's own hit-testing decides what is hovered.
+    // A real pointer on a link, at the first point along it where nothing else (a track,
+    // another link) is on top: the browser's own hit-testing decides what is hovered. The last
+    // link is drawn above the others (seventeen links meet at this track's card), and lies in
+    // the first view, by this track.
     const point = await graphOf(page)
-      .locator("g.link-targets line")
-      .first()
-      .evaluate((line: SVGLineElement) => {
+      .locator("g.link-targets path")
+      .last()
+      .evaluate((line: SVGPathElement) => {
         const length = line.getTotalLength();
         const matrix = line.getScreenCTM();
-        if (!matrix) throw new Error("no screen matrix");
+        const panel = line.ownerSVGElement?.getBoundingClientRect();
+        if (!matrix || !panel) throw new Error("no screen matrix");
         const seen: string[] = [];
-        for (let step = 2; step <= 8; step += 1) {
-          const at = line.getPointAtLength((length * step) / 10);
+        // Along the part of the link in the panel's view (the map may run past it).
+        for (let step = 1; step <= 19; step += 1) {
+          const at = line.getPointAtLength((length * step) / 20);
           const x = at.x * matrix.a + at.y * matrix.c + matrix.e;
           const y = at.x * matrix.b + at.y * matrix.d + matrix.f;
+          if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) continue;
           const hit = document.elementFromPoint(x, y);
           if (hit === line) return { x, y };
           seen.push(
             `${Math.round(x)},${Math.round(y)}: ${hit?.tagName} ${hit?.outerHTML.slice(0, 80)}`,
           );
         }
-        throw new Error(`the first link is covered all along:\n${seen.join("\n")}`);
+        throw new Error(`the link is covered all along:\n${seen.join("\n")}`);
       });
     await page.mouse.move(point.x, point.y);
     await expect(detail).toHaveText(
-      `${CURRENT} samples Sourced Sample - Someone (1984)Sourced · cites ${MB_SOURCED}`,
+      "Backwards Sample - Someone (2020) and Bright Lines (2011) are related (direction unknown)" +
+        "Model inference · stated as a sample; the years (2020 and 2011) do not fit this " +
+        `direction; cites ${MB}, not checked by a verifier`,
     );
+    // Its chip names it, clear of the cards.
+    await expect(graphOf(page).locator("g.link-chips g.chip")).toHaveText("related");
     await screenshot(page, testInfo, "hover", page.locator("#panel-genealogy"));
     await page.mouse.move(5, 5);
     await expect(detail).toHaveCount(0);
@@ -412,7 +452,7 @@ test.describe("the genealogy graph", () => {
   }, testInfo) => {
     const graph = graphOf(page);
     const tracks = graph.locator("g.nodes > g");
-    const targets = graph.locator("g.link-targets line");
+    const targets = graph.locator("g.link-targets path");
     const detail = page.getByTestId("link-detail");
     // Keys act on the settled graph, not on one still being laid out.
     await graphFitted(page);

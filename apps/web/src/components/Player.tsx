@@ -38,6 +38,7 @@ import {
   yearFrom,
 } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
+import { isSparse } from './genealogy/lineageLayout';
 import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -244,6 +245,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       ),
     [genealogy, track.evidence, track.releaseYear, claims],
   );
+  // Two relations or fewer: the graph is a compact row, and its panel is as tall as its content
+  // (from md up to xl, where it is a row of its own).
+  const sparseGenealogy = isSparse(graphLinks.length);
   const linkKinds = useMemo(
     () => ({
       sourced: graphLinks.some((link) => link.kind === 'sourced'),
@@ -505,6 +509,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // The phone tabs (WAI-ARIA tabs): the arrow keys move to the next or previous tab, Home and End
   // to the first and last; the open tab alone is in the Tab order.
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // The connections' heading lies over the top of the map: its height, which the map keeps clear.
+  const genealogyHeadingRef = useRef<HTMLDivElement>(null);
+  const [genealogyHeadingHeight, setGenealogyHeadingHeight] = useState(0);
+  useEffect(() => {
+    const heading = genealogyHeadingRef.current;
+    if (!heading || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      // A hidden panel (a phone's other tab) measures 0: the last height is kept.
+      if (heading.offsetHeight > 0) setGenealogyHeadingHeight(heading.offsetHeight);
+    });
+    observer.observe(heading);
+    return () => observer.disconnect();
+  }, []);
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = tabKeyTarget(event.key, index, TABS.length);
     if (next === null) return;
@@ -971,17 +989,23 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         {/* Panel C: the connections (xl: the right column; md up to xl: a full-width row below
             the columns, 14rem shorter than the window (the nav, the header and the footer take
             about 12rem), so a strip of the scrolling area always shows beside it to grab, even
-            on a landscape phone; phones: the Connections tab, covering the panels' area,
-            absolute, so it has that area's height for the graph) */}
+            on a landscape phone, or as tall as its content when the connections are a compact
+            row; phones: the Connections tab, covering the panels' area, absolute, so it has
+            that area's height for the graph) */}
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
           className={`
-            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
-            ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
+            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'} xl:col-span-1 xl:border-t-0 xl:border-l xl:h-auto
+            ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >
-          <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
+          {/* Over the top of the map, on a band of the page's colour: the map leaves this band
+              clear (its `topInset`), so no card sits under the heading until it is panned */}
+          <div
+            ref={genealogyHeadingRef}
+            className="absolute top-0 left-0 right-0 z-10 px-4 pt-4 pb-2 bg-void pointer-events-none flex flex-wrap items-center gap-2"
+          >
             <h2 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Connections
             </h2>
@@ -1012,7 +1036,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               key={track.id}
               message="The connections graph could not be drawn"
               action={{ label: 'Try again' }}
-              className="h-full"
+              className="flex-1 min-h-0"
             >
               <GenealogyGraph
                 data={genealogy}
@@ -1020,6 +1044,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 claims={claims}
                 releaseYear={track.releaseYear}
                 hiddenLinks={hiddenLinks}
+                topInset={genealogyHeadingHeight}
                 onNodeClick={handleNodeClick}
                 // From md up to xl the page scrolls past the graph: the wheel and one finger
                 // scroll it, Ctrl or ⌘ with the wheel or two fingers zoom the graph. On phones
@@ -1028,7 +1053,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               />
             </ErrorBoundary>
           ) : (
-            <div className="flex-1 flex items-center justify-center h-full p-6">
+            <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
                 {/* Relations were found, but the verifier rejected every one (they are listed
                     with the rejected claims) */}

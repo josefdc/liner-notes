@@ -1,5 +1,7 @@
+import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useId, useState } from 'react';
+import { formatSeconds } from '../../constants';
 import { type ProvenanceKind, ProvenanceChip } from '../provenance/ProvenanceChip';
 import { Badge, type BadgeVariant } from '../ui/Badge';
 
@@ -12,6 +14,8 @@ import { Badge, type BadgeVariant } from '../ui/Badge';
 //   shows that as unknown.
 // - compact (the Dashboard's summary): the value and a chip saying its kind; the chip is a
 //   button that opens the same lines below it.
+// - summary (the Player's hero): the value and one plain line saying how it is known ("Measured
+//   from a 29.8 s preview"); a "How this was measured" button opens the same lines below it.
 // - bare (a list whose heading states the provenance): the value alone, the provenance in its
 //   tooltip.
 
@@ -27,13 +31,15 @@ export interface MeasuredValueProps {
   confidence?: string | null;
   /** What the value rests on (signal or model, and the preview window); null when unknown. */
   basis?: string | null;
+  /** The length of the preview it was read from, in seconds; null when the result does not say. */
+  previewSeconds?: number | null;
   /** Method, model and analyzer; null when the result does not say. */
   detail?: string | null;
   /** The full provenance, for the tooltip. */
   title: string;
   icon?: React.ReactNode;
   size?: 'sm' | 'md';
-  layout?: 'full' | 'compact' | 'bare';
+  layout?: 'full' | 'compact' | 'summary' | 'bare';
 }
 
 export const KIND_TEXT: Record<MeasuredValueProps['kind'], string> = {
@@ -54,6 +60,38 @@ export function provenanceText(
   else parts.push(confidence || 'confidence unknown', basis || 'basis unknown');
   return parts.join(' · ');
 }
+
+/** "a" or "an" before a number of seconds, as it is read aloud ("an 8 s", "an 11.5 s"). */
+function article(seconds: string): string {
+  const whole = seconds.split('.')[0];
+  return whole.startsWith('8') || whole === '11' || whole === '18' ? 'an' : 'a';
+}
+
+/**
+ * The summary's one line: how the value is known, in plain words, with the preview's length when
+ * the result says it. A value whose result does not say what it rests on says so, as its chip
+ * does; the confidence, method and analyzer are left to the lines behind the disclosure.
+ */
+export function summaryText(
+  kind: MeasuredValueProps['kind'],
+  basis: string | null | undefined,
+  previewSeconds: number | null | undefined,
+): string {
+  if (kind === 'unverified' || kind === 'score') return KIND_TEXT[kind];
+  const known = kind === 'measured' ? 'Measured' : 'Estimated by an audio model';
+  if (!basis) return `${known}, basis unknown`;
+  if (previewSeconds == null) return known;
+  const seconds = formatSeconds(previewSeconds);
+  return `${known} from ${article(seconds)} ${seconds} s preview`;
+}
+
+/** The summary's disclosure button, in words that never call an estimate measured. */
+export const DISCLOSURE_TEXT: Record<MeasuredValueProps['kind'], string> = {
+  measured: 'How this was measured',
+  estimate: 'How this was estimated',
+  unverified: 'Why this is not confirmed',
+  score: 'About this score',
+};
 
 /** The chip of each kind: its colour and icon, and its words, short enough for a chip. */
 const CHIP: Record<MeasuredValueProps['kind'], { kind: ProvenanceKind; text: string }> = {
@@ -89,12 +127,17 @@ const BADGE: Record<MeasuredValueProps['kind'], { variant: BadgeVariant; label: 
 // anywhere, so an analyser name wider than a narrow column breaks instead of being cut off.
 const LINE = 'max-w-60 wrap-anywhere text-chrome font-mono text-text-chip text-left';
 
+// The summary's disclosure: the lines' size and colour, a ring on keyboard focus.
+const DISCLOSURE =
+  'relative inline-flex max-w-60 items-center gap-1 rounded-sm text-chrome font-mono text-text-chip text-left underline decoration-dotted underline-offset-2 cursor-pointer hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void';
+
 export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   label,
   value,
   kind,
   confidence = null,
   basis = null,
+  previewSeconds = null,
   detail = null,
   title,
   icon,
@@ -107,6 +150,7 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   const badge = BADGE[kind];
   const chip = chipText(kind, basis);
   const compact = layout === 'compact';
+  const summary = layout === 'summary';
   const lines = (
     <>
       <span className={LINE}>{provenance}</span>
@@ -116,7 +160,13 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   return (
     <span
       data-value-kind={kind}
-      title={layout === 'bare' ? `${title} · ${provenance}` : layout === 'full' ? title : undefined}
+      title={
+        layout === 'bare'
+          ? `${title} · ${provenance}`
+          : layout === 'full' || summary
+            ? title
+            : undefined
+      }
       className={
         compact
           ? 'flex w-full flex-col items-start gap-1 md:inline-flex md:w-auto'
@@ -154,7 +204,27 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
         )}
       </span>
       {layout === 'full' && lines}
-      {compact && (
+      {summary && (
+        <>
+          <span className={LINE}>{summaryText(kind, basis, previewSeconds)}</span>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={linesId}
+            onClick={() => setOpen((shown) => !shown)}
+            className={DISCLOSURE}
+          >
+            {DISCLOSURE_TEXT[kind]}
+            <span className="sr-only"> ({label})</span>
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              className={`flex-shrink-0 transition-transform duration-(--duration-fast) ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </>
+      )}
+      {(compact || summary) && (
         <span id={linesId} hidden={!open} className="flex flex-col items-start gap-1">
           {open && lines}
         </span>

@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { audioReadings } from '../../constants';
-import { AudioStats, ResultNotices } from '../EstimatedWarning';
+import { AudioStats, ReadingValue, ResultNotices } from '../EstimatedWarning';
 import SmartTimeline from '../SmartTimeline';
 import SonicFingerprint from '../SonicFingerprint';
-import { MeasuredValue } from './MeasuredValue';
+import { MeasuredValue, summaryText } from './MeasuredValue';
 import { MissingValue } from './MissingValue';
 import fullResultRaw from '../../../../../tests/mock-sse/fixtures/full-result.json?raw';
 import type { TrackData } from '../../types';
@@ -19,6 +19,25 @@ const item = (list: HTMLElement, label: string) => {
   if (!found) throw new Error(`No item ${label}`);
   return found.textContent ?? '';
 };
+
+/** Opens every closed provenance disclosure on the page, by its button. */
+const openAll = () => {
+  for (const button of screen.queryAllByRole('button', { expanded: false })) {
+    fireEvent.click(button);
+  }
+};
+
+/** The element a disclosure button shows and hides. */
+const panelOf = (button: HTMLElement) => {
+  const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
+  if (!panel) throw new Error(`No panel for ${button.textContent}`);
+  return panel;
+};
+
+// What the Player's hero must not show until it is asked for: the estimator's raw confidence
+// and its scale, the methods and the analyzer.
+const DETAIL =
+  /confidence|calibrated|probability|strength|essentia|analyzer|discogs|musicnn|\d\.\d\d of/i;
 
 describe('MeasuredValue', () => {
   it('shows a measured value with its confidence and basis', () => {
@@ -215,6 +234,7 @@ describe('the compact view of a result from an older API', () => {
       return found;
     })();
     const { container } = render(<AudioStats track={track} />);
+    openAll();
     const lines = new Map(
       [...container.querySelectorAll('[data-value-kind]')].map((value) => [
         value.firstElementChild?.textContent ?? '',
@@ -253,24 +273,176 @@ describe('MissingValue', () => {
   });
 });
 
+describe("the Player hero's labels", () => {
+  const kinds = ['measured', 'estimate', 'unverified', 'score'] as const;
+  const summaryOf = (kind: (typeof kinds)[number]) => {
+    const { container } = render(
+      <MeasuredValue
+        label="BPM"
+        value="123"
+        kind={kind}
+        confidence="estimator confidence 3.30 of 5.32, not calibrated"
+        basis={kind === 'measured' || kind === 'estimate' ? 'signal, 29.8 s preview' : null}
+        previewSeconds={kind === 'measured' || kind === 'estimate' ? 29.75 : null}
+        title="Provenance"
+        layout="summary"
+      />,
+    );
+    const button = screen.getByRole('button');
+    const text = { line: container.textContent ?? '', button: button.textContent ?? '' };
+    cleanup();
+    return text;
+  };
+
+  it('keep measured, estimated, unconfirmed, scored and missing values apart', () => {
+    const shown = kinds.map(summaryOf);
+    expect(shown.map(({ line }) => line)).toEqual([
+      'BPM 123Measured from a 29.8 s previewHow this was measured (BPM)',
+      'BPM 123Estimated by an audio model from a 29.8 s previewHow this was estimated (BPM)',
+      'BPM 123Not confirmed as measuredWhy this is not confirmed (BPM)',
+      'BPM 123v1 energy score (0–1, saturates on loud masters)About this score (BPM)',
+    ]);
+    // An estimate is never called measured, in its line or its button.
+    expect(shown[1].line).not.toMatch(/measured/i);
+    render(<MissingValue label="BPM" reason="the preview is silent" />);
+    const missing = document.body.textContent ?? '';
+    expect(missing).toBe('BPM not measured— the preview is silent');
+    expect(new Set([...shown.map(({ line }) => line), missing]).size).toBe(5);
+  });
+
+  it('say when the basis is unknown, as the chips do, and the preview length as measured', () => {
+    expect(summaryText('measured', null, null)).toBe('Measured, basis unknown');
+    expect(summaryText('estimate', null, null)).toBe('Estimated by an audio model, basis unknown');
+    expect(summaryText('measured', 'signal', null)).toBe('Measured');
+    expect(summaryText('measured', 'signal, 22.4 s preview', 22.4)).toBe(
+      'Measured from a 22.4 s preview',
+    );
+    expect(summaryText('measured', 'signal, 8 s preview', 8)).toBe('Measured from an 8 s preview');
+    expect(summaryText('estimate', 'model x, 11 s preview', 11)).toBe(
+      'Estimated by an audio model from an 11 s preview',
+    );
+    expect(summaryText('measured', 'signal, 30 s preview', 30)).toBe(
+      'Measured from a 30 s preview',
+    );
+  });
+});
+
 describe('audio values from a measurement', () => {
-  it('show each value with its confidence and basis, loudness in dBFS RMS', () => {
+  it('show each value with a short label saying how it is known, and no estimator details', () => {
     render(<AudioStats track={measuredTrack()} />);
     const values = screen.getByRole('list', { name: 'Audio values' });
+    // The value, one plain line with the preview's real length, and the disclosure's button.
     expect(item(values, 'BPM')).toBe(
+      'BPM 123.1Measured from a 29.8 s previewHow this was measured (BPM)',
+    );
+    expect(item(values, 'Key')).toBe(
+      'Key F# MinorMeasured from a 29.8 s previewHow this was measured (Key)',
+    );
+    expect(item(values, 'Loudness')).toBe(
+      'Loudness -13.6 dBFS RMSMeasured from a 29.8 s previewHow this was measured (Loudness)',
+    );
+    const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
+    expect(item(scores, 'Dance')).toBe(
+      'Dance 0.81Estimated by an audio model from a 29.8 s previewHow this was estimated (Dance)',
+    );
+    expect(scores.textContent).not.toMatch(/measured/i);
+    for (const list of [values, scores]) {
+      for (const li of within(list).getAllByRole('listitem')) {
+        expect(li.textContent, li.textContent ?? '').not.toMatch(DETAIL);
+      }
+    }
+    // Every disclosure is closed, and its panel empty, until it is asked for.
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(8);
+    for (const button of buttons) {
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expect(panelOf(button).hidden).toBe(true);
+      expect(panelOf(button).textContent).toBe('');
+    }
+  });
+
+  it('hold every detail shown before behind "How this was measured", and close again', () => {
+    render(<AudioStats track={measuredTrack()} />);
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    const bpm = within(values).getByRole('button', { name: 'How this was measured (BPM)' });
+    fireEvent.click(bpm);
+    expect(bpm.getAttribute('aria-expanded')).toBe('true');
+    const panel = panelOf(bpm);
+    expect(panel.hidden).toBe(false);
+    // Each detail: the kind, the confidence and its scale, "not calibrated", the basis (signal,
+    // preview), the method, the analyzer, and the note on half or double tempo.
+    for (const detail of [
+      'Measured',
+      'estimator confidence 3.30 of 5.32',
+      'not calibrated',
+      'signal, 29.8 s preview',
+      'essentia.RhythmExtractor2013',
+      'analyzer 2.1.0+essentia.models-5c5c0c7f',
+      'the confidence does not flag half or double tempo',
+    ]) {
+      expect(panel.textContent).toContain(detail);
+    }
+    // Only this value's panel opened.
+    expect(screen.getAllByRole('button', { expanded: true })).toEqual([bpm]);
+    fireEvent.click(bpm);
+    expect(bpm.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(item(values, 'BPM')).not.toMatch(DETAIL);
+  });
+
+  it('show, once opened, exactly the lines the detail views show', () => {
+    const track = measuredTrack();
+    const { signal, model } = audioReadings(track);
+    const full = (reading: (typeof signal)[number]) => {
+      const { container } = render(<ReadingValue reading={reading} />);
+      const text = container.textContent ?? '';
+      cleanup();
+      return text;
+    };
+    const expected = [...signal, ...model].map(full);
+    render(<AudioStats track={track} />);
+    openAll();
+    const shown = [
+      ...within(screen.getByRole('list', { name: 'Audio values' })).getAllByRole('listitem'),
+      ...within(screen.getByRole('list', { name: 'Audio-model estimates' })).getAllByRole(
+        'listitem',
+      ),
+    ].map((li) => {
+      const button = within(li).getByRole('button');
+      const badge = li.querySelector('[data-variant]')?.textContent ?? '';
+      return badge + panelOf(button).textContent;
+    });
+    expect(shown).toEqual(expected);
+  });
+
+  it('show each value with its confidence and basis once opened, loudness in dBFS RMS', () => {
+    render(<AudioStats track={measuredTrack()} />);
+    openAll();
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    const opened = (list: HTMLElement, label: string) => {
+      const found = within(list)
+        .getAllByRole('listitem')
+        .find((li) => li.textContent?.startsWith(label));
+      if (!found) throw new Error(`No item ${label}`);
+      return (
+        (found.querySelector('[data-variant]')?.textContent ?? '') +
+        panelOf(within(found).getByRole('button')).textContent
+      );
+    };
+    expect(opened(values, 'BPM')).toBe(
       'BPM 123.1Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview' +
         'essentia.RhythmExtractor2013 · analyzer 2.1.0+essentia.models-5c5c0c7f · the confidence does not flag half or double tempo',
     );
-    expect(item(values, 'Key')).toBe(
+    expect(opened(values, 'Key')).toBe(
       'Key F# MinorMeasured · key strength 0.71 of 1, not a probability · signal, 29.8 s preview' +
         'essentia.KeyExtractor, edma profile · analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
-    expect(item(values, 'Loudness')).toBe(
+    expect(opened(values, 'Loudness')).toBe(
       'Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview' +
         'essentia.RMS, mean RMS 0.210 · analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
-    expect(item(scores, 'Dance')).toBe(
+    expect(opened(scores, 'Dance')).toBe(
       'Dance 0.81Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview' +
         'analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
@@ -298,6 +470,8 @@ describe('audio values from a measurement', () => {
     );
     const values = screen.getByRole('list', { name: 'Audio values' });
     // "unavailable" does not hide the tempo the measurement has.
+    expect(item(values, 'BPM')).toContain('BPM 123.1Measured from a 29.8 s preview');
+    openAll();
     expect(item(values, 'BPM')).toContain('Measured · estimator confidence 3.30 of 5.32');
     expect(item(values, 'Key')).toBe('Key not measured— not detected in the preview');
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });

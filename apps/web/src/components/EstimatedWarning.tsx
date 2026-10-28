@@ -53,7 +53,11 @@ interface AudioStatsProps {
   size?: 'sm' | 'md';
   /** Classes for each row of values (alignment). */
   rowClassName?: string;
-  /** Each value with a chip of its kind, its provenance behind the chip (the Dashboard). */
+  /**
+   * Each value with a chip of its kind, its provenance behind the chip (the Dashboard). Otherwise
+   * each value with one plain line saying how it is known, its provenance behind a "How this was
+   * measured" button (the Player's hero).
+   */
   compact?: boolean;
   className?: string;
 }
@@ -68,13 +72,14 @@ const ICONS: Partial<Record<AudioField, (size: number) => React.ReactNode>> = {
 
 /**
  * One audio value with its provenance, or marked missing with why. Compact: the provenance
- * opens from the value's kind chip; a missing value still says why.
+ * opens from the value's kind chip; summary: from a button under a plain line saying how the
+ * value is known. A missing value always says why.
  */
 export const ReadingValue: React.FC<{
   reading: Reading;
   size?: 'sm' | 'md';
-  compact?: boolean;
-}> = ({ reading, size = 'sm', compact = false }) =>
+  layout?: 'full' | 'compact' | 'summary';
+}> = ({ reading, size = 'sm', layout = 'full' }) =>
   reading.state === 'missing' ? (
     <MissingValue
       label={reading.label}
@@ -89,19 +94,20 @@ export const ReadingValue: React.FC<{
       kind={reading.kind}
       confidence={reading.confidence}
       basis={reading.basis}
+      previewSeconds={reading.previewSeconds}
       detail={reading.detail}
       title={reading.title}
       size={size}
-      layout={compact ? 'compact' : 'full'}
+      layout={layout}
       icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10)}
     />
   );
 
 /**
  * Measured audio values (BPM, key, loudness or the older energy) and, separately, the
- * audio-model scores. Each value is shown with its confidence and basis (measured, or a model
- * estimate), or marked missing with why. A result without an `audio` block shows only the model
- * scores it has.
+ * audio-model scores. Each value is shown with how it is known (measured, or a model estimate)
+ * and its confidence and basis on demand, or marked missing with why. A result without an
+ * `audio` block shows only the model scores it has.
  */
 export const AudioStats: React.FC<AudioStatsProps> = ({
   track,
@@ -120,6 +126,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   const firstModel = model[0];
   // Compact: values further apart than a value from its chip; below md, one value per line,
   // each line starting at the same edge.
+  const layout = compact ? 'compact' : 'summary';
   const list = compact ? 'gap-x-4 gap-y-3' : 'gap-2';
   const item = compact ? 'max-md:w-full' : undefined;
 
@@ -131,7 +138,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
       >
         {signal.map((reading) => (
           <li key={reading.field} className={item}>
-            <ReadingValue reading={reading} size={size} compact={compact} />
+            <ReadingValue reading={reading} size={size} layout={layout} />
           </li>
         ))}
       </ul>
@@ -160,7 +167,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
             ) : (
               modelRows.map((reading) => (
                 <li key={reading.field} className={item}>
-                  <ReadingValue reading={reading} size={size} compact={compact} />
+                  <ReadingValue reading={reading} size={size} layout={layout} />
                 </li>
               ))
             )}

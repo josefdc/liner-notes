@@ -446,6 +446,8 @@ export interface ShownReading {
   confidence: string | null;
   /** What the value rests on (signal or model, and the preview window); null when unknown. */
   basis: string | null;
+  /** The length of the preview it was read from, in seconds; null when the result does not say. */
+  previewSeconds: number | null;
   /** Method, model and analyzer; null when the result does not say. */
   detail: string | null;
   /** The same provenance, for the tooltip. */
@@ -574,6 +576,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
     value,
     confidence,
     basis,
+    previewSeconds: audio.windowSeconds,
     detail,
     title: titleOf(`${confidence} · ${detail}`),
   });
@@ -644,6 +647,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
       value: head === 'valence' && unit !== null ? `${moodLabel(unit)} ${value}` : value,
       confidence: SCORE_TEXT,
       basis: `model ${score.model.id}, ${window}`,
+      previewSeconds: audio.windowSeconds,
       detail: analyzer,
       title: `Score from the audio model ${score.model.id} on the ${window}: an estimate, not a measurement and not a probability · ${analyzer}`,
     } satisfies ShownReading;
@@ -716,6 +720,7 @@ function copyReadings(track: TrackData, recorded: boolean, state: AudioState): A
     value,
     confidence: kind === 'estimate' ? SCORE_TEXT : null,
     basis: null,
+    previewSeconds: null,
     detail: null,
     title:
       kind === 'unverified'

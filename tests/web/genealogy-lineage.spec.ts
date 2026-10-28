@@ -5,17 +5,20 @@ import {
   analyzeAndOpenDashboard,
   apiRequests,
   collectProblems,
+  DEMO_SLUG,
   loadFixture,
   openPlayer,
   replayedRecording,
+  showcaseRecordings,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
 
 // The song-relations map as a lineage (#217): each track a card on a year axis, across the page
 // from md up (a full-width row below the columns) and down a phone's tab. On every width, for the
-// genealogy-kinds result, the recorded One More Time run and a rich map (MusicBrainz years,
-// second hops, undated tracks, a 92-character title and a 50-letter word):
+// genealogy-kinds result, every recorded showcase run (fixtures/replays: One More Time on every
+// width, the others at 390, 1280, 1440 and 1920 px) and a rich map (MusicBrainz years, second
+// hops, undated tracks, a 92-character title and a 50-letter word):
 // - no two cards overlap;
 // - no relation is written on the map at rest; a chip names it while a card or a link is pointed
 //   at or focused: never over a card, another chip or the detail box, and near its link;
@@ -184,6 +187,31 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string) {
   await page.locator("#panel-genealogy").screenshot({ path: join(dir, `lineage-${name}.png`) });
 }
 
+type Showcase = {
+  open: (page: Page) => Promise<void>;
+  /** The tracks on its map: one card each. */
+  cards: number;
+  widths: ReadonlyArray<readonly [number, number]>;
+  /** Two relations or fewer: a compact row, not a canvas. */
+  sparse?: boolean;
+};
+
+const EVERY_WIDTH = [
+  [390, 844],
+  [820, 1180],
+  [1024, 768],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as const;
+/** A recorded showcase's widths: a phone, and desktop sizes from 1280 px (the demo: all). */
+const RECORDING_WIDTHS = [
+  [390, 844],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as const;
+
 const SHOWCASES = {
   "genealogy-kinds": {
     open: async (page: Page) => {
@@ -192,15 +220,7 @@ const SHOWCASES = {
       await openPlayer(page);
     },
     cards: 18,
-  },
-  "one-more-time": {
-    open: async (page: Page) => {
-      const { events } = replayedRecording();
-      await useMockApi(page, { suggestions: [], eventGapMs: 0, streams: { [ANALYZE]: events } });
-      await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
-      await openPlayer(page);
-    },
-    cards: 10,
+    widths: EVERY_WIDTH,
   },
   rich: {
     open: async (page: Page) => {
@@ -209,19 +229,71 @@ const SHOWCASES = {
       await openPlayer(page);
     },
     cards: 16,
+    widths: EVERY_WIDTH,
   },
-} as const;
+} satisfies Record<string, Showcase>;
 
-for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) {
-  for (const [width, height] of [
-    [390, 844],
-    [820, 1180],
-    [1024, 768],
-    [1280, 800],
-    [1440, 900],
-    [1920, 1080],
-  ] as const) {
+/** Each committed showcase recording, replayed as the API serves it. */
+const RECORDED: Record<string, Showcase> = Object.fromEntries(
+  showcaseRecordings().map(({ slug, query, nodes, links }) => [
+    slug,
+    {
+      open: async (page: Page) => {
+        const { events } = replayedRecording(slug);
+        await useMockApi(page, { suggestions: [], eventGapMs: 0, streams: { [ANALYZE]: events } });
+        await analyzeAndOpenDashboard(page, query);
+        await openPlayer(page);
+      },
+      cards: nodes,
+      widths: slug === DEMO_SLUG ? EVERY_WIDTH : RECORDING_WIDTHS,
+      sparse: links <= 2,
+    },
+  ]),
+);
+
+const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
+
+for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entries(SHOWN)) {
+  for (const [width, height] of widths) {
     const vertical = width < 768;
+    if (sparse) {
+      test(`at ${width} px the ${showcase} map is a compact row of cards, apart and inside its panel`, async ({
+        page,
+      }, testInfo) => {
+        const problems = collectProblems(page);
+        await page.setViewportSize({ width, height });
+        await open(page);
+        if (vertical) await page.getByRole("tab", { name: "Connections" }).click();
+        const panel = page.locator("#panel-genealogy");
+        const row = panel.getByTestId("lineage-row");
+        await expect(row).toBeVisible();
+        const cards = row.locator("[data-lineage-card]");
+        await expect(cards).toHaveCount(cardCount);
+        const box = await panel.boundingBox();
+        const boxes = await cards.evaluateAll((all) =>
+          all.map((card) => {
+            const b = card.getBoundingClientRect();
+            return { x: b.x, y: b.y, right: b.right, bottom: b.bottom };
+          }),
+        );
+        if (!box) throw new Error("no panel");
+        const wrapper = {
+          x: box.x,
+          y: box.y,
+          right: box.x + box.width,
+          bottom: box.y + box.height,
+        };
+        for (const [i, card] of boxes.entries()) {
+          expect(insideX(card, wrapper), `card ${i} past the panel`).toBe(true);
+          for (const other of boxes.slice(i + 1)) {
+            expect(overlap(card, other), `cards ${i} and another`).toBe(false);
+          }
+        }
+        await screenshot(page, testInfo, `${showcase}-${width}`);
+        expect(problems).toEqual([]);
+      });
+      continue;
+    }
     test(`at ${width} px the ${showcase} map keeps cards, chips and the focused item apart and in view${width >= 1280 ? ", and cuts no words" : ""}`, async ({
       page,
     }, testInfo) => {

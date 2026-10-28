@@ -6,8 +6,10 @@ import {
   apiRequests,
   collectProblems,
   loadFixture,
+  DEMO_SLUG,
   openPlayer,
   replayedRecording,
+  showcaseRecordings,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
@@ -98,25 +100,74 @@ const SHOWCASES = {
     },
     replay: false,
   },
-  "one-more-time": {
-    open: async (page: Page) => {
-      const { events } = replayedRecording();
-      await useMockApi(page, { suggestions: [], eventGapMs: 0, streams: { [ANALYZE]: events } });
-      await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
-      await openPlayer(page);
-    },
-    code: { id: "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb", retrieved: "27 Oct 2026" },
-    model: null,
-    replay: true,
-  },
 } as const;
 
-for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES)) {
-  for (const [width, height] of [
+type Showcase = {
+  open: (page: Page) => Promise<void>;
+  /** A card with a code-built link, and the day its record was read ("20 Oct 2026"). */
+  code: { id: string; retrieved: string | RegExp };
+  /** A card with a model link, and the verifier's verdict its panel shows; or none. */
+  model: { id: string; verdict: string } | null;
+  replay: boolean;
+  /** The widths of the selection's checks (the panel clear of the cards). */
+  widths?: ReadonlyArray<readonly [number, number]>;
+};
+
+/**
+ * Each committed showcase recording whose map is a canvas (more than two relations), replayed as
+ * the API serves it, at a phone's width and desktop sizes from 1280 px; One More Time also at
+ * 1024 px. Its sourced card is the first track joined to it by a MusicBrainz relation.
+ */
+const RECORDED: Record<string, Showcase> = Object.fromEntries(
+  showcaseRecordings()
+    .filter(({ links, sourcedNode }) => links > 2 && sourcedNode !== null)
+    .map(({ slug, query, sourcedNode }) => [
+      slug,
+      {
+        open: async (page: Page) => {
+          const { events } = replayedRecording(slug);
+          await useMockApi(page, {
+            suggestions: [],
+            eventGapMs: 0,
+            streams: { [ANALYZE]: events },
+          });
+          await analyzeAndOpenDashboard(page, query);
+          await openPlayer(page);
+        },
+        code: {
+          id: sourcedNode as string,
+          // The demo's sample source was read on the day it was recorded.
+          retrieved: slug === DEMO_SLUG ? "27 Oct 2026" : /\d{1,2} [A-Z][a-z]{2} \d{4}/,
+        },
+        model: null,
+        replay: true,
+        widths:
+          slug === DEMO_SLUG
+            ? [
+                [390, 844],
+                [1024, 768],
+                [1280, 800],
+                [1440, 900],
+                [1920, 1080],
+              ]
+            : [
+                [390, 844],
+                [1280, 800],
+                [1440, 900],
+                [1920, 1080],
+              ],
+      },
+    ]),
+);
+
+const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
+
+for (const [showcase, { open, code, model, replay, widths }] of Object.entries(SHOWN)) {
+  for (const [width, height] of widths ?? [
     [390, 844],
     [1024, 768],
     [1440, 900],
-  ] as const) {
+  ]) {
     test(`at ${width} px on ${showcase} a click or Enter selects, the panel shows the evidence and stays clear, Analyze analyses`, async ({
       page,
     }, testInfo) => {
@@ -145,7 +196,11 @@ for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES
       // The code link: "Sourced from" the record, its source a link, and the day it was read.
       const sourced = panel.locator("[data-sourced-from]").first();
       await expect(sourced).toContainText("Sourced from");
-      await expect(sourced).toContainText(`retrieved ${code.retrieved}`);
+      await expect(sourced).toContainText(
+        typeof code.retrieved === "string"
+          ? `retrieved ${code.retrieved}`
+          : new RegExp(`retrieved ${code.retrieved.source}`),
+      );
       await expect(sourced.locator("a[href^='https://']").first()).toBeVisible();
       // In a replay the pair cannot play, and the panel says where it does.
       if (replay) {

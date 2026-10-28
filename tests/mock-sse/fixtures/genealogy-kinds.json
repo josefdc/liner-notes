@@ -137,37 +137,43 @@
                 "id": "sample-sourced",
                 "group": 2,
                 "label": "Sourced Sample - Someone (1984)",
-                "size": 24
+                "size": 24,
+                "year": 1984
               },
               {
                 "id": "interpolation-sourced",
                 "group": 2,
                 "label": "Sourced Interpolation - Someone (1984)",
-                "size": 24
+                "size": 24,
+                "year": 1984
               },
               {
                 "id": "cover-sourced",
                 "group": 2,
                 "label": "Sourced Cover - Someone (1984)",
-                "size": 24
+                "size": 24,
+                "year": 1984
               },
               {
                 "id": "remix-sourced",
                 "group": 3,
                 "label": "Sourced Remix - Someone (2015)",
-                "size": 24
+                "size": 24,
+                "year": 2015
               },
               {
                 "id": "producer-sourced",
                 "group": 4,
                 "label": "Sourced Producer - Someone (1984)",
-                "size": 24
+                "size": 24,
+                "year": 1984
               },
               {
                 "id": "influence-sourced",
                 "group": 4,
                 "label": "Sourced Influence - Someone (1984)",
-                "size": 24
+                "size": 24,
+                "year": 1984
               },
               {
                 "id": "sample-inferred",
@@ -209,13 +215,15 @@
                 "id": "ghost-cite",
                 "group": 2,
                 "label": "Ghost Citation - Nobody (1979)",
-                "size": 22
+                "size": 22,
+                "year": 1979
               },
               {
                 "id": "no-cite",
                 "group": 2,
                 "label": "No Citation - Nobody (1977)",
-                "size": 22
+                "size": 22,
+                "year": 1977
               },
               {
                 "id": "model-sourced",
@@ -233,7 +241,8 @@
                 "id": "rejected",
                 "group": 2,
                 "label": "Rejected Sample - Someone (1981)",
-                "size": 22
+                "size": 22,
+                "year": 1981
               },
               {
                 "id": "backwards",

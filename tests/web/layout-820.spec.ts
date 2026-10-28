@@ -11,8 +11,8 @@ import {
 import { offline } from "./offline";
 
 // The Player's layout by width. Below md (768 px): one panel at a time, chosen with the tabs, each
-// with a heading of its own on screen. From md up to xl (1280 px): two columns, the notes and the
-// player, with the connections as a full-width row below them. From xl: three columns. At every
+// with a heading of its own on screen. From md up: two columns, the notes and the player, with
+// the connections as a full-width row below them. At every
 // width no line of text is cut and nothing runs past the window sideways. The track's header
 // above the columns stays short: a long title takes no more than two lines of the panels' height.
 
@@ -106,19 +106,23 @@ test("at 820 px the notes and the player are two columns, with the connections b
   await expect(page.locator('#panel-genealogy svg[aria-label="Connections graph"]')).toBeVisible();
 });
 
+// From xl too the connections are a full-width row below the two columns: room for the map's
+// year axis across the page.
 for (const width of [1280, 1440]) {
-  test(`at ${width} px the Player shows three columns`, async ({ page }) => {
+  test(`at ${width} px the notes and the player are two columns, with the connections below`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 900 });
     await openRecording(page);
     const { notes, player, connections } = await panels(page);
     expect(Math.abs(notes.y - player.y)).toBeLessThan(1);
-    expect(Math.abs(player.y - connections.y)).toBeLessThan(1);
     expect(notes.x).toBeLessThan(player.x);
-    expect(player.x).toBeLessThan(connections.x);
-    // A quarter, a half and a quarter of the window.
-    expect(Math.round(notes.width)).toBe(width / 4);
-    expect(Math.round(player.width)).toBe(width / 2);
-    expect(Math.round(connections.width)).toBe(width / 4);
+    expect(Math.round(notes.width + player.width)).toBe(width);
+    expect(connections.x).toBe(0);
+    expect(Math.round(connections.width)).toBe(width);
+    expect(connections.y).toBeGreaterThanOrEqual(
+      Math.max(notes.y + notes.height, player.y + player.height) - 1,
+    );
   });
 }
 
@@ -351,12 +355,13 @@ async function pointAtGraph(page: Page) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-// From md up to xl the connections are a full-width row in a scrolling area: the wheel over the
+// From md up the connections are a full-width row in a scrolling area: the wheel over the
 // graph scrolls the area (it would otherwise be stuck there, zooming), and Ctrl with the wheel
 // zooms the graph. (Touch: below.)
 for (const [width, height] of [
   [1024, 600],
   [820, 1180],
+  [1440, 900],
 ]) {
   test(`at ${width}×${height} the wheel over the graph scrolls the panels, Ctrl with it zooms`, async ({
     page,
@@ -391,20 +396,7 @@ for (const [width, height] of [
   });
 }
 
-// From xl the graph is a column of its own and nothing scrolls behind it (nor on a phone's
-// Connections tab): there the wheel zooms the graph, and the hint says so.
-test("at 1440 px the wheel over the graph zooms it", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await openRecording(page);
-  await pointAtGraph(page);
-  const scale = await graphScale(page);
-  await page.mouse.wheel(0, -100);
-  await expect.poll(() => graphScale(page)).toBeGreaterThan(scale);
-  await page.mouse.move(1, 1);
-  await expect(page.getByText("Scroll to zoom", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ctrl or ⌘ + scroll to zoom")).toHaveCount(0);
-});
-
+// On a phone's Connections tab nothing scrolls behind the graph: there the wheel zooms it.
 test("on a phone's Connections tab the wheel zooms the graph", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openRecording(page);
@@ -460,7 +452,7 @@ function graphPan(page: Page) {
 test.describe("on a touch screen", () => {
   test.use({ hasTouch: true });
 
-  // From md up to xl one finger over the graph scrolls the panels' area, as anywhere else on the
+  // From md up one finger over the graph scrolls the panels' area, as anywhere else on the
   // page (it would otherwise pan the graph, and on a landscape phone the graph fills the view),
   // and the graph's row leaves part of the area beside it to grab. Two fingers pinch the graph.
   for (const [width, height] of [

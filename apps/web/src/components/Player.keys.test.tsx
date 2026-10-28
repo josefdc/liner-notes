@@ -202,7 +202,8 @@ describe('the panels and the graph by width', () => {
   it.each([
     [820, 'modifier'],
     [1024, 'modifier'],
-    [1440, 'plain'],
+    // From xl too the connections are a row the page scrolls past.
+    [1440, 'modifier'],
   ])(
     'at %i px, with the tabs hidden, no panel claims to be a tab panel; the graph takes the wheel: %s',
     (width, wheelZoom) => {

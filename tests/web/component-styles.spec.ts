@@ -616,7 +616,7 @@ for (const cover of ["no cover", "a white cover"]) {
     await summary.click();
     const player = await neutralBadgeContrast(page, GENEALOGY_TEXT.player);
     await summary.click();
-    await page.locator("#panel-genealogy g.link-targets line").first().focus();
+    await page.locator("#panel-genealogy g.link-targets path").first().focus();
     player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail, { keepFocus: true })));
     // Inferred badges, every relation and provenance line (sourced badges are amber, not
     // measured here).

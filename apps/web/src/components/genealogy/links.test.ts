@@ -759,11 +759,15 @@ describe('the relations MusicBrainz states', () => {
 });
 
 describe('relations in words', () => {
-  const nodes = nodesById([
-    { ...node('current', 1, 'Bright Lines - Test Artist (2011)'), trackTitle: 'Bright Lines' },
-    node('old', 2, 'Older Record - Someone (1984)'),
-    node('new', 3, 'Newer Record - Someone (2015)'),
-  ]);
+  // The analysed track dated by the result's release year, as the app reads it.
+  const nodes = nodesById(
+    [
+      { ...node('current', 1, 'Bright Lines - Test Artist (2011)'), trackTitle: 'Bright Lines' },
+      node('old', 2, 'Older Record - Someone (1984)'),
+      node('new', 3, 'Newer Record - Someone (2015)'),
+    ],
+    2011,
+  );
   const nameOf = (id: string) => nodeName(nodes.get(id), id);
   const shown = (source: string, target: string, type: LinkType, value = 2): ShownLink =>
     read(
@@ -914,5 +918,34 @@ describe('link styles', () => {
 
   it('draw sourced links solid and the others dashed', () => {
     expect(LINK_DASH).toEqual({ sourced: 'none', inferred: '6 4' });
+  });
+});
+
+describe('a year a model wrote in a label', () => {
+  it('is not printed after a track title in a relation sentence: only a record dates a track', () => {
+    const genealogy = {
+      nodes: [
+        { ...node('current', 1, 'Bright Lines - Test Artist (2011)'), trackTitle: 'Bright Lines' },
+        // The model's track: its year in its label only, no record's.
+        {
+          ...node('guess', 2, 'Inferred Sample - Someone Else (1990)'),
+          trackTitle: 'Inferred Sample',
+        },
+        // A label with no title of its own is kept as written.
+        node('plain', 2, 'Plain Label - Someone (1985)'),
+      ],
+      links: [
+        link('guess', 'current', { type: 'sample', kind: 'inferred', evidenceIds: [] }),
+        link('plain', 'current', { type: 'sample', kind: 'inferred', evidenceIds: [] }),
+      ],
+    };
+    const nodes = nodesById(genealogy.nodes, 2011);
+    const nameOf = (id: string) => nodeName(nodes.get(id), id);
+    const [guess] = readGenealogy(genealogy, context()).links;
+    expect(relationSentence(guess, nameOf)).toBe(
+      'Possible sample: Bright Lines (2011) may sample Inferred Sample',
+    );
+    expect(relationSentence(guess, nameOf)).not.toContain('(1990)');
+    expect(nameOf('plain')).toBe('Plain Label - Someone (1985)');
   });
 });

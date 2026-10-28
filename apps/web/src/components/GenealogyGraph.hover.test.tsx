@@ -56,14 +56,21 @@ const data = {
       size: 22,
       previewUrl: 'https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y',
     },
+    // Three relations: the map is drawn (with two or fewer it is a compact row).
+    { id: 'n2', group: 4, label: 'Other - Someone (1990)', size: 22 },
+    { id: 'n3', group: 4, label: 'Another - Someone (1995)', size: 22 },
   ],
-  links: [{ source: 'n1', target: 'current', value: 1, type: 'influence' as const }],
+  links: [
+    { source: 'n1', target: 'current', value: 1, type: 'influence' as const },
+    { source: 'n2', target: 'current', value: 1, type: 'influence' as const },
+    { source: 'n3', target: 'current', value: 1, type: 'influence' as const },
+  ],
 };
 
 /** The drawn node for `id`: the group whose label text is the node's. */
 function nodeGroup(container: HTMLElement, label: string): Element {
   const group = [...container.querySelectorAll('g.nodes > g')].find((g) =>
-    g.textContent?.includes(label.slice(0, 10)),
+    g.getAttribute('data-title')?.includes(label.slice(0, 10)),
   );
   if (!group) throw new Error(`no drawn node for ${label}`);
   return group;

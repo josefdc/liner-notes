@@ -3,10 +3,10 @@ import { clippedLines } from "./clipping";
 import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./mock";
 
 // From md (768 px) the Player shows its panels side by side: the notes and the player in two
-// columns up to xl, with the connections in a row below, and three columns from xl (1280 px).
+// columns, with the connections in a row below them (at every width from md up).
 // Provenance lines, measured-value lines and badges must wrap inside their column: the panels'
-// area (and from xl each column) scrolls vertically and clips sideways, so a line wider than its
-// column loses its end (a measured value, an analyser name) without an ellipsis.
+// area scrolls vertically and clips sideways, so a line wider than its column loses its end (a
+// measured value, an analyser name) without an ellipsis.
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
@@ -90,9 +90,10 @@ for (const width of [768, 900, 1024, 1280]) {
   });
 }
 
-// The keyboard follows the page's order: the three columns are in the page in the order they are
-// drawn, left to right (WCAG 2.4.3), so Tab never jumps from the centre column back to the left.
-test("at 1440 px the Player's columns are in the page in the order they are drawn", async ({
+// The keyboard follows the page's order: the panels are in the page in the order they are read,
+// the two columns left to right, then the connections' row below them (WCAG 2.4.3), so Tab never
+// jumps from the right column back to the left.
+test("at 1440 px the Player's panels are in the page in the order they are drawn", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -104,9 +105,15 @@ test("at 1440 px the Player's columns are in the page in the order they are draw
   await expect(panels).toHaveCount(3);
   await expect(page.getByRole("tabpanel", { includeHidden: true })).toHaveCount(0);
   const columns = await panels.evaluateAll((list) =>
-    list.map((panel, index) => ({ id: panel.id, index, x: panel.getBoundingClientRect().x })),
+    list.map((panel, index) => {
+      const box = panel.getBoundingClientRect();
+      return { id: panel.id, index, x: box.x, y: box.y };
+    }),
   );
-  const drawn = [...columns].sort((a, b) => a.x - b.x).map((column) => column.id);
+  // Read row by row (a row is the panels that start at the same height), left to right.
+  const drawn = [...columns]
+    .sort((a, b) => (Math.abs(a.y - b.y) < 1 ? a.x - b.x : a.y - b.y))
+    .map((column) => column.id);
   expect(drawn).toEqual(columns.map((column) => column.id));
   expect(drawn).toEqual(["panel-context", "panel-player", "panel-genealogy"]);
 });

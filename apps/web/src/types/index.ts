@@ -2,6 +2,8 @@ export enum AppPhase {
   ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   PLAYER = 'PLAYER',
+  /** A result's song-relations map, full size (`/t/<id>/map`). */
+  MAP = 'MAP',
 }
 
 export interface SongSegment {

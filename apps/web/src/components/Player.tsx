@@ -29,17 +29,9 @@ import { useReducedMotion } from '../utils/motion';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
-import {
-  kindLabel,
-  linkContext,
-  nodeName,
-  nodesById,
-  relationLabelsByClaim,
-  shownLinks,
-  yearFrom,
-} from './genealogy/links';
+import { nodeName, nodesById, relationLabelsByClaim, yearFrom } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
-import { isSparse } from './genealogy/lineageLayout';
+import { LinkKindsChip, noConnectionsText, useConnections } from './genealogy/connections';
 import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -50,9 +42,8 @@ import {
   ResultOriginLabel,
 } from './EstimatedWarning';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
-import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
-import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
+import { resultClaims, type ShownClaim } from './provenance/claims';
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { linerNotes, relationLinkNotes } from './provenance/notes';
@@ -61,11 +52,12 @@ import { isRelationSubject } from './genealogy/relationWords';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { Attribution, shownProviders } from './provenance/Attribution';
 import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
-import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { moreFactsKey, moreFactsOf } from '../hooks/agent/moreFacts';
 import { type PreviewEvents, usePreviewAudio } from '../hooks/usePreviewAudio';
 import type { MoreFacts, MoreFactsOptions, ResultMode } from '../hooks/agent/types';
 import type { TrackData, Factoid, FactoidUnavailableCode, GenealogyNode } from '../types';
+import type { TrailView } from '../router/trail';
+import { isPlainClick } from '../utils/plainClick';
 
 interface PlayerProps {
   trackData: TrackData | null;
@@ -78,8 +70,19 @@ interface PlayerProps {
    * with an AbortError.
    */
   onMoreFactoidsStream?: (result: TrackData, options?: MoreFactsOptions) => Promise<Factoid[]>;
-  // Callback for navigating to a new track from genealogy graph
-  onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
+  /**
+   * Analyses a connected track chosen on the map (its detail panel's "Analyze this track"),
+   * named as the map left it (`from`: here, the Player's map panel).
+   */
+  onAnalyzeTrack?: (trackId: string, title: string, artist: string, from?: TrailView) => void;
+  /** The address of the result's full-size map (`/t/<id>/map`), when it has one. */
+  mapHref?: string | null;
+  /** Opens the full-size map in this page (a plain click on "Open the full map"). */
+  onOpenMap?: () => void;
+  /** The phone tab the Player opens on (one it had in this history entry). */
+  initialTab?: string;
+  /** Called with the phone tab opened, for the history entry to keep it. */
+  onTabChange?: (tab: string) => void;
   // P0:3 — New search callback
   onNewSearch?: () => void;
   // UX: Focus management on phase transition
@@ -130,6 +133,8 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
 const facts = (count: number) => `${count} ${count === 1 ? 'fact' : 'facts'}`;
 
 type Tab = 'context' | 'player' | 'genealogy';
+const isTab = (value: unknown): value is Tab =>
+  value === 'context' || value === 'player' || value === 'genealogy';
 
 /** The phone tabs, in their order: each names its panel, and its colour when it is open. */
 const TABS: ReadonlyArray<{ id: Tab; label: string; panel: string; open: string }> = [
@@ -151,9 +156,20 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   onAnalyzeTrack,
   onNewSearch,
   headingRef,
+  mapHref,
+  onOpenMap,
+  initialTab,
+  onTabChange,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('player');
+  const [activeTab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : 'player');
+  const setActiveTab = useCallback(
+    (tab: Tab) => {
+      setTab(tab);
+      onTabChange?.(tab);
+    },
+    [onTabChange],
+  );
   const [isDecrypting, setIsDecrypting] = useState(false);
   // Why "More facts" could not add facts (rate limit, budget), shown under the button
   const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
@@ -227,36 +243,17 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
     claims.isHidden(factoid.claimId),
   );
-  const genealogy = useMemo(
-    () => withoutHiddenRelations(track.genealogy, claims.isHidden),
-    [track.genealogy, claims],
-  );
-  // Relations left out because their claim is hidden, said under the graph's legend (entries
-  // that are not links at all are not counted: they had no claim to hide).
-  const hiddenLinks = track.genealogy.links.filter(
-    (link) => typeof link === 'object' && link !== null && claims.isHidden(link.claimId),
-  ).length;
-  // How the shown links are known: the panel's label says "model inference" only when every one
-  // is the model's (each link says its own kind in the graph, its legend and its list).
-  const graphLinks = useMemo(
-    () =>
-      shownLinks(
-        genealogy,
-        linkContext(track.evidence, claims, { releaseYear: track.releaseYear }),
-      ),
-    [genealogy, track.evidence, track.releaseYear, claims],
-  );
-  // Two links or fewer in all: the map is a compact row, and its panel (a row of its own from
-  // md up) is as tall as its content.
-  const sparseGenealogy = isSparse(graphLinks.length);
-  const linkKinds = useMemo(
-    () => ({
-      sourced: graphLinks.some((link) => link.kind === 'sourced'),
-      inferred: graphLinks.some((link) => link.kind !== 'sourced'),
-      notSourced: graphLinks.some((link) => kindLabel(link) === 'Not sourced'),
-    }),
-    [graphLinks],
-  );
+  // The relations the map shows, and how they are known: the panel's label says "model
+  // inference" only when every one is the model's (each link says its own kind in the graph, its
+  // legend and its list). Two links or fewer in all: the map is a compact row, and its panel (a
+  // row of its own from md up) is as tall as its content.
+  const {
+    genealogy,
+    hiddenLinks,
+    graphLinks,
+    sparse: sparseGenealogy,
+    linkKinds,
+  } = useConnections(track, claims);
   // A claim a shown link states is named as its link is, on a fact's card and in the claims
   // list: one set of words for one relation.
   const claimRelations = useMemo(() => relationLabelsByClaim(graphLinks), [graphLinks]);
@@ -503,7 +500,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       if (!onAnalyzeTrack) return;
       const query = nodeQuery(node);
       if (!query) return;
-      onAnalyzeTrack(node.spotifyId || 'search', query, '');
+      onAnalyzeTrack(node.spotifyId || 'search', query, '', 'player');
     },
     [onAnalyzeTrack],
   );
@@ -1034,20 +1031,21 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             {/* How the shown links are known, in the words and chips the legend, the list and
                 the connected-track cards use: sourced, not sourced, or (every link) the model's */}
             {genealogy.nodes.length > 1 && (
-              <span data-testid="genealogy-kinds" className="inline-flex max-w-full">
-                {linkKinds.sourced ? (
-                  linkKinds.inferred ? (
-                    <Badge variant="neutral">Sourced and not sourced links</Badge>
-                  ) : (
-                    <ProvenanceChip kind="sourced">Sourced links</ProvenanceChip>
-                  )
-                ) : linkKinds.notSourced ? (
-                  // Not the model's: built from records whose evidence does not hold.
-                  <ProvenanceChip kind="unconfirmed">Not sourced</ProvenanceChip>
-                ) : (
-                  <ResultOriginLabel fromSourceData={fromSourceData} />
-                )}
-              </span>
+              <LinkKindsChip kinds={linkKinds} fromSourceData={fromSourceData} />
+            )}
+            {/* The map on a page of its own: a real link, to copy or open in a new tab */}
+            {genealogy.nodes.length > 1 && mapHref && (
+              <a
+                href={mapHref}
+                onClick={(event) => {
+                  if (!onOpenMap || !isPlainClick(event)) return;
+                  event.preventDefault();
+                  onOpenMap();
+                }}
+                className="pointer-events-auto ml-auto text-xs font-mono text-text-secondary hover:text-white underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+              >
+                Open the full map
+              </a>
             )}
           </div>
           {genealogy.nodes.length > 1 ? (
@@ -1079,11 +1077,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           ) : (
             <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">
-                {/* Relations were found, but the verifier rejected every one (they are listed
-                    with the rejected claims) */}
-                {hiddenLinks > 0
-                  ? 'No connections to show.'
-                  : 'No connected tracks were found for this track.'}
+                {noConnectionsText(hiddenLinks)}
               </p>
             </div>
           )}

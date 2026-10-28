@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { logger, MAX_LOGGED_TEXT } from "../logger.js";
+import { logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -1505,13 +1505,68 @@ function redactKeyValues(
 /**
  * The pieces of `text` as redactKeyValues masks them, with `more` (by default what
  * moreSecretSpans finds) as the values of the shapes it reads; with none, as the other rules
- * alone mask them.
+ * alone mask them (with `before` in place of `extra`).
+ *
+ * A log line of the text is scrubbed once more by the logger's own rules (scrubbedSpans), which
+ * read a key (`token: v`, `Bearer v`) or a whole configured value: a value masked here can take
+ * that key, or part of that value. So when `more` holds a value, what those rules hide in the
+ * text the other rules alone leave, and would no longer hide in this one, is masked here too
+ * (lostToLog), until nothing is lost.
  */
 function keyValuePieces(
   text: string,
   steps: readonly HideStep[],
   extra: readonly Span[],
   more: readonly Span[] = moreSecretSpans(text),
+  before: readonly Span[] = extra,
+): Piece[] {
+  let pieces = maskedPieces(text, steps, extra, more);
+  if (more.length === 0) return pieces;
+  const other = maskedPieces(text, steps, before, []);
+  const logged = loggedSpans(text, other);
+  let added = extra;
+  for (let round = 0; logged.length > 0 && round < MAX_LOG_ROUNDS; round++) {
+    const lost = lostToLog(text, pieces, logged);
+    if (lost.length === 0) break;
+    added = maskableUnion(added, lost);
+    pieces = maskedPieces(text, steps, added, more);
+  }
+  return pieces;
+}
+
+/** How many times keyValuePieces masks what a log line would lose, at most. */
+const MAX_LOG_ROUNDS = 4;
+
+/** What the logger's rules hide in a log line of the text that `pieces` cover, in that text. */
+const loggedSpans = (text: string, pieces: readonly Piece[]) =>
+  sourceSpans(pieces, scrubbedSpans(render(text, pieces)));
+
+/**
+ * The parts of `logged` (spans of `text`) that a log line of the text `pieces` cover would show:
+ * neither masked there nor hidden by the logger's rules in it.
+ */
+function lostToLog(text: string, pieces: readonly Piece[], logged: readonly Span[]): Span[] {
+  const hidden = new Uint8Array(text.length + 1);
+  for (const piece of pieces) if (piece.mask !== undefined) hidden.fill(1, piece.from, piece.to);
+  for (const [start, end] of loggedSpans(text, pieces)) hidden.fill(1, start, end);
+  const lost: Span[] = [];
+  for (const [start, end] of logged) {
+    for (let i = start; i < end; i++) {
+      if (hidden[i]) continue;
+      const last = lost.at(-1);
+      if (last && last[1] === i) last[1] = i + 1;
+      else lost.push([i, i + 1]);
+    }
+  }
+  return maskableUnion(lost, []);
+}
+
+/** keyValuePieces without what the logger's rules hide. */
+function maskedPieces(
+  text: string,
+  steps: readonly HideStep[],
+  extra: readonly Span[],
+  more: readonly Span[],
 ): Piece[] {
   const quoted = quotedSecretSpans(text);
   const header = /header/i.test(text);
@@ -1541,7 +1596,15 @@ export const redactText = (text: string) => redactKeyValues(text, []);
 
 /** What the HTTP error log keeps of an error's message (logText in http/middleware/errors.ts). */
 const MAX_LOGGED_MESSAGE = 200;
-/** Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. */
+/**
+ * Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. The
+ * callers' own words are under 64 characters ("Error: ", "Suggest failed: ", a search's fixed
+ * label, INTERNAL_ERROR_PREFIX), but for one: agent/enricher.ts logs `Spotify search for
+ * "${label}" failed: ` with a graph node's label, which the model writes ("Song Title - Artist
+ * (Year)") and nothing in the code bounds. The error there is a SourceError, whose message is
+ * already cut where the HTTP error log's cap falls (MAX_LOGGED_MESSAGE); only a label over 16 KiB
+ * could move that line's cap into it.
+ */
 const LOG_PREFIX_ROOM = 1024;
 
 /**
@@ -2278,17 +2341,18 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const lineValues = headerLineSpans(text);
   const more = moreSecretSpans(text);
   const headerValues = inLine(more.length > 0 ? maskableUnion(lineValues, more) : lineValues);
-  let masked = keyValuePieces(short, [], headerValues);
+  const lineOnly = inLine(lineValues);
+  let masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
   let redacted = render(short, masked);
   if (more.length + moreSecretSpans(short).length > 0) {
-    const before = keyValuePieces(short, [], inLine(lineValues), []);
+    const before = keyValuePieces(short, [], lineOnly, []);
     const old = render(short, before);
     // An error message made from the line is redacted again. What the other rules alone hide
     // then in the line they leave stays hidden: a mask here can take the key that made it a
     // value there (`A_SECRET='…"password": "` and the rest of that value).
     const again = sourceOf(before, keyValuePieces(old, [], [], []));
     if (again.length > 0) {
-      masked = keyValuePieces(short, [], maskableUnion(headerValues, again));
+      masked = keyValuePieces(short, [], maskableUnion(headerValues, again), undefined, lineOnly);
       redacted = render(short, masked);
     }
     // A value moreSecretSpans masks can make the line shorter than the other rules leave it:
@@ -2330,6 +2394,19 @@ function cutAt(pieces: readonly Piece[], max = MAX_DETAIL, keep = MAX_DETAIL - 1
  * read as): a kept character is where it was; one of a mask stands for all the mask hides.
  */
 function sourceOf(pieces: readonly Piece[], again: readonly Piece[]): Span[] {
+  const spans: Span[] = [];
+  for (const piece of again) {
+    if (piece.mask !== undefined && piece.to > piece.from) spans.push([piece.from, piece.to]);
+  }
+  return sourceSpans(pieces, spans);
+}
+
+/**
+ * Where, in the text that `pieces` cover, lies each of `spans` (of the text they read as, sorted
+ * by start): a kept character is where it was; one of a mask stands for all the mask hides.
+ */
+function sourceSpans(pieces: readonly Piece[], spans: readonly Span[]): Span[] {
+  if (spans.length === 0) return [];
   const from: number[] = [];
   const to: number[] = [];
   for (const piece of pieces) {
@@ -2338,12 +2415,9 @@ function sourceOf(pieces: readonly Piece[], again: readonly Piece[]): Span[] {
       to.push(piece.mask === undefined ? piece.from + i + 1 : piece.to);
     }
   }
-  const spans: Span[] = [];
-  for (const piece of again) {
-    if (piece.mask === undefined || piece.to <= piece.from) continue;
-    spans.push([from[piece.from] ?? 0, to[piece.to - 1] ?? 0]);
-  }
-  return maskableUnion(spans, []);
+  const out: Span[] = [];
+  for (const [start, end] of spans) out.push([from[start] ?? 0, to[end - 1] ?? 0]);
+  return maskableUnion(out, []);
 }
 
 /** `pieces` that start before `end` in the text as it came, a kept one cut there. */

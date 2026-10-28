@@ -2042,6 +2042,24 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     expect(new SourceError("spotify", "http", "w ".repeat(150)).message).toBe(plain);
   });
 
+  it("keeps hidden in a log line what the logger's own rules hide on the other rules' text", () => {
+    // A mask over the key the logger reads (`token=`, `Bearer`) must not show the value after it.
+    for (const [text, hidden] of [
+      ["<input name=_token value=\ntoken= QzLOGAQ", "QzLOGAQ"],
+      ["deploy X_TOKEN=Bearer QzLOGBQzLOGBQ", "QzLOGBQ"],
+      ["Set-Cookie: password=a; token: QzLOGCQ", "QzLOGCQ"],
+    ]) {
+      for (const line of [
+        scrub(`Error: ${describeError(new Error(text))}`),
+        scrub(new SourceError("spotify", "http", text).message),
+        scrub(redactText(text)),
+        scrub(scrubText(text)),
+      ]) {
+        expect(line, text).not.toContain(hidden);
+      }
+    }
+  });
+
   it("keeps hidden what a reason's error message hides when it is redacted again", () => {
     // The other rules leave M0017x in the reason, and mask it when the message made from it is
     // redacted again, by the key before it; a mask over that key must not show it.

@@ -14,6 +14,7 @@ import {
   logger,
   MAX_LOGGED_TEXT,
   scrub,
+  scrubbedSpans,
   serializeError,
   withRun,
 } from "./logger.js";
@@ -164,6 +165,26 @@ describe("scrub", () => {
     expect(scrub("count 200000, word abc1234")).toBe("count 200000, word abc1234");
     logger("X").info("count", { n: 200000 });
     expect(logs.entries()[0]).toMatchObject({ n: 200000 });
+  });
+});
+
+describe("scrubbedSpans", () => {
+  it("finds each part of a text that scrub replaces, without the quotes around a value", () => {
+    const text = `token: "abc1" Bearer xyz123456 ${KEY} https://u:p@h.example/x?token=t1 api_key=k2`;
+    const hidden = scrubbedSpans(text).map(([start, end]) => text.slice(start, end));
+    expect(hidden).toEqual(expect.arrayContaining(["abc1", "xyz123456", KEY, "u:p", "t1", "k2"]));
+    // With each span masked, scrub has nothing more to replace.
+    let masked = text;
+    for (const [start, end] of [...scrubbedSpans(text)].reverse()) {
+      masked = `${masked.slice(0, start)}[redacted]${masked.slice(end)}`;
+    }
+    expect(scrub(masked)).toBe(masked);
+  });
+
+  it("finds nothing in a text that scrub leaves as it is", () => {
+    const text = "the token count is 5; see https://example.org/a?page=2";
+    expect(scrub(text)).toBe(text);
+    expect(scrubbedSpans(text)).toEqual([]);
   });
 });
 

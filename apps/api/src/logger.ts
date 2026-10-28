@@ -225,6 +225,68 @@ export function scrub(input: unknown): string {
 }
 
 /**
+ * Where scrub replaces something in `text`, as [start, end) spans sorted by start, none
+ * overlapping another: each of its rules read on `text` as it is (configured values and hosts,
+ * links, preview and provider hosts, Authorization values, secret pairs). The spans hold all it
+ * replaces before the cap but the quotes around a value, and may hold more. The redaction of
+ * source errors (sources/http.ts) reads them, so that the log line of a text it redacts further
+ * never shows what the log line of the text it redacted before hid. Reads the text once per rule.
+ */
+export function scrubbedSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const value of [...secretValues, ...escapedSecretValues, ...secretHosts]) {
+    for (let at = text.indexOf(value); at !== -1; at = text.indexOf(value, at + value.length)) {
+      spans.push([at, at + value.length]);
+    }
+  }
+  for (const link of text.matchAll(URL_IN_TEXT)) {
+    const url = link[0];
+    const start = link.index;
+    const host = hostOf(url);
+    if (host && (PREVIEW_HOST.test(host) || secretHosts.includes(host))) {
+      spans.push([start, start + url.length]);
+      continue;
+    }
+    const userinfo = USERINFO.exec(url);
+    if (userinfo) spans.push([start + (userinfo[1] ?? "").length, start + userinfo[0].length - 1]);
+    for (const param of url.matchAll(SECRET_PARAM)) {
+      const from = start + param.index + (param[1] ?? "").length;
+      spans.push([from, start + param.index + param[0].length]);
+    }
+  }
+  for (const pattern of [BARE_PREVIEW, PROVIDER_HOST]) {
+    for (const match of text.matchAll(pattern)) {
+      spans.push([match.index, match.index + match[0].length]);
+    }
+  }
+  // A value, without the quotes the rule replaces with it: they delimit it.
+  const value = (from: number, to: number) => {
+    let start = from;
+    let end = to;
+    if (/["']/.test(text.charAt(start))) start++;
+    if (end > start && /["']/.test(text.charAt(end - 1))) end--;
+    spans.push([start, end]);
+  };
+  for (const pair of text.matchAll(SECRET_PAIR)) {
+    value(
+      pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length,
+      pair.index + pair[0].length,
+    );
+  }
+  for (const auth of text.matchAll(AUTH_SCHEME)) {
+    value(auth.index + (auth[1] ?? auth[3] ?? "").length, auth.index + auth[0].length);
+  }
+  // Sorted by start, those that overlap or touch as one.
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of spans.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
+/**
  * The last pass, over the serialized line: only the configured secret values (as JSON writes
  * them) and endpoint hosts, which no JSON syntax is part of. A line this pass would make
  * unreadable is written as it was (its strings were scrubbed already).

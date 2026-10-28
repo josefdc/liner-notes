@@ -76,6 +76,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -555,16 +556,44 @@ describe("a settle that cannot get the lock at once", () => {
   it("is tried again", async () => {
     const log = join(dir, "spend.jsonl");
     writeFileSync(log, "");
+    const RETRY_MS = 150;
     const guard = new SpendGuard({
       logPath: log,
       caps: CAPS,
       lockWaitMs: 50,
-      settleRetryMs: 150,
+      settleRetryMs: RETRY_MS,
     });
     const reservation = await guard.reserve(request(0.1));
     const release = await acquireLock(await resolveSpendLogPath(log));
-    setTimeout(() => void release(), 100);
-    await guard.settle(reservation, settled(0.02));
+    // The lock is held until the first try has given up, and free before the second starts: it
+    // is released by the first timer set once the first try has failed (the wait before the
+    // retry), and that timer's callback runs only after the release. Timed releases depend on how
+    // busy the machine is: one late misses the retry, one early lets the first try through.
+    const tries = guard as unknown as { locked: (...args: unknown[]) => Promise<unknown> };
+    const locked = tries.locked.bind(guard);
+    let firstTryFailed = false;
+    let calls = 0;
+    tries.locked = (...args) => {
+      const first = ++calls === 1;
+      return locked(...args).catch((error: unknown) => {
+        if (first) firstTryFailed = true;
+        throw error;
+      });
+    };
+    const realSetTimeout = globalThis.setTimeout;
+    const retryWaits: Array<number | undefined> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+      if (!firstTryFailed || retryWaits.length > 0) return realSetTimeout(handler, ms);
+      retryWaits.push(ms);
+      return realSetTimeout(() => void release().then(handler), ms);
+    }) as typeof setTimeout);
+    const error = await guard.settle(reservation, settled(0.02)).catch((e: unknown) => e);
+    vi.restoreAllMocks();
+    await release();
+    // First: a retry sent without its wait gets the lock through the timer of its first poll,
+    // so only the timer it set tells the two apart.
+    expect(retryWaits).toEqual([RETRY_MS]);
+    expect(error).toBeUndefined();
     expect(summarise(parseSpendLog(readFileSync(log, "utf8"))).openReservations).toBe(0);
   });
 });

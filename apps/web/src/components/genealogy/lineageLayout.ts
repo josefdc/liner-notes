@@ -6,9 +6,11 @@ import type { LinkType } from '@liner-notes/contract';
  * give the same map.
  *
  * - The year axis runs left to right (horizontal) or top to bottom (vertical, on a phone or in a
- *   narrow panel). Each year a track carries has a slot on it, in year order; the gap between
- *   two slots grows with the years between them. A track with no year goes in an "Undated" slot
- *   at the end of the axis, never at a year it does not carry.
+ *   narrow panel). Each year a record gives a track has a slot on it, in year order; the gap
+ *   between two slots grows with the years between them (in order, not to scale). A track with
+ *   no year goes in an "Undated" slot, never at a year it does not carry: before the first year
+ *   when it feeds the analysed track, so a source never sits after what it feeds, else after
+ *   the last.
  * - Across the axis the cards sit in lanes by relation (samples, interpolations, covers, this
  *   track, remixes, shared producers, influences, then tracks with no link to this one).
  * - A collision pass moves a card across the axis only, so it never leaves its year's slot.
@@ -49,22 +51,12 @@ export function orientationFor(viewportWidth: number, panelWidth: number): Orien
   return viewportWidth < MD_PX || panelWidth < NARROW_PANEL_PX ? 'vertical' : 'horizontal';
 }
 
-/** With this many relations to the analysed track or fewer the map is a compact row. */
-export const SPARSE_RELATIONS = 2;
-export const isSparse = (relations: number) => relations <= SPARSE_RELATIONS;
-
 /**
- * The relations a map shows to the analysed track: the links that touch it (every link when the
- * genealogy has no analysed track). A second hop between two other tracks is not one.
+ * With this many links or fewer in all the map is a compact row, not a canvas: a map is small
+ * only when the whole of it is (a track with one relation and several second hops is drawn).
  */
-export function relationCount(
-  links: ReadonlyArray<{ source: string; target: string }>,
-  currentId: string | null,
-): number {
-  return currentId === null
-    ? links.length
-    : links.filter((link) => link.source === currentId || link.target === currentId).length;
-}
+export const SPARSE_LINKS = 2;
+export const isSparse = (links: number) => links <= SPARSE_LINKS;
 
 /**
  * `text` in lines of at most `maxChars` characters, broken at spaces. A word longer than a line
@@ -138,6 +130,12 @@ export function charsToWrap(text: string, maxLines = 2): number {
 export interface CardInput {
   id: string;
   year: number | null;
+  /**
+   * For a card with no year: true when it feeds the analysed track (a link from it into the
+   * track or into one of the track's sources), so it goes in the "Undated" slot before the
+   * first year; otherwise in the one after the last.
+   */
+  early?: boolean;
   lane: Lane;
   width: number;
   height: number;
@@ -154,6 +152,8 @@ export interface CardBox {
 /** A year's slot along the axis: where it starts and how long it is (null year: "Undated"). */
 export interface YearSlot {
   year: number | null;
+  /** For an "Undated" slot: before the first year (the undated sources) or after the last. */
+  side: 'before' | 'after' | null;
   label: string;
   start: number;
   size: number;
@@ -192,7 +192,7 @@ export interface LineageLayout {
   height: number;
 }
 
-/** The space between two year slots: more for years far apart, most before "Undated". */
+/** The space between two year slots: more for years far apart, most next to an "Undated" one. */
 function slotSpacing(before: number | null, after: number | null, slotGap: number): number {
   if (after === null || before === null) return slotGap * 2;
   const years = Math.max(1, after - before);
@@ -215,22 +215,34 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   // (a narrow panel has no room for a band per lane).
   const desiredCross = (card: CardInput) => (horizontal ? lanes.indexOf(card.lane) * pitch : 0);
 
-  // Year slots in order, then the undated one.
+  // Year slots in order, between the undated sources before them and the other undated tracks
+  // after them: a track that feeds this one never sits after it.
   const years = [...new Set(cards.flatMap((card) => (card.year === null ? [] : [card.year])))].sort(
     (a, b) => a - b,
   );
-  const keys: Array<number | null> = cards.some((card) => card.year === null)
-    ? [...years, null]
-    : years;
+  type Key = { year: number | null; side: 'before' | 'after' | null };
+  const undated = (side: 'before' | 'after') =>
+    cards.some((card) => card.year === null && (side === 'before') === Boolean(card.early))
+      ? [{ year: null, side }]
+      : [];
+  const keys: Key[] = [
+    ...undated('before'),
+    ...years.map((year) => ({ year, side: null })),
+    ...undated('after'),
+  ];
+  const inSlot = (card: CardInput, key: Key) =>
+    key.year === null
+      ? card.year === null && (key.side === 'before') === Boolean(card.early)
+      : card.year === key.year;
 
   // Each slot's cards across the axis: in lane order, then the order they were given; the
   // collision pass moves a card further across past the one before it, and (vertical) wraps it
   // into a new row of its slot when it would run past `crossSpace`.
   type Row = { cards: Array<{ card: CardInput; cross: number }>; main: number };
-  const slotRows = keys.map((year) => {
+  const slotRows = keys.map((key) => {
     const members = cards
       .map((card, order) => ({ card, order }))
-      .filter(({ card }) => card.year === year)
+      .filter(({ card }) => inSlot(card, key))
       .sort((a, b) => lanes.indexOf(a.card.lane) - lanes.indexOf(b.card.lane) || a.order - b.order)
       .map(({ card }) => card);
     const rows: Row[] = [];
@@ -262,11 +274,11 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   const placed = new Map<string, CardBox>();
   let at = mainStart;
   let crossEnd = 0;
-  keys.forEach((year, index) => {
-    if (index > 0) at += slotSpacing(keys[index - 1], year, slotGap);
+  keys.forEach(({ year, side }, index) => {
+    if (index > 0) at += slotSpacing(keys[index - 1].year, year, slotGap);
     const rows = slotRows[index];
     const size = heading + rows.reduce((sum, row) => sum + row.main, 0) + gap * (rows.length - 1);
-    slots.push({ year, label: year === null ? 'Undated' : String(year), start: at, size });
+    slots.push({ year, side, label: year === null ? 'Undated' : String(year), start: at, size });
     let rowAt = at + heading;
     for (const row of rows) {
       for (const { card, cross } of row.cards) {

@@ -81,16 +81,18 @@ function reduceMotion(reduce: boolean) {
 // Three relations, so the map is drawn (with two or fewer it is a compact row).
 const data = {
   nodes: [
-    { id: 'musicbrainz:recording/current', group: 1, label: 'Song (2011)', size: 40 },
+    // Each dated by a record, as MusicBrainz dates a recording.
+    { id: 'musicbrainz:recording/current', group: 1, label: 'Song (2011)', size: 40, year: 2011 },
     {
       id: RELATED,
       group: 4,
       label: 'Under Pressure - Queen (1981)',
       size: 22,
       previewUrl: CLIP,
+      year: 1981,
     },
-    node('peer', 4, 'Peer - Someone (1990)'),
-    node('later', 3, 'Later - Someone (2015)'),
+    { ...node('peer', 4, 'Peer - Someone (1990)'), year: 1990 },
+    { ...node('later', 3, 'Later - Someone (2015)'), year: 2015 },
   ],
   links: [
     {
@@ -109,7 +111,7 @@ const data = {
  * fades in), with no clip of its own.
  */
 const withOrigin = {
-  nodes: [...data.nodes, node('older', 2, 'Older Record - Someone (1984)')],
+  nodes: [...data.nodes, { ...node('older', 2, 'Older Record - Someone (1984)'), year: 1984 }],
   links: [
     ...data.links,
     link('older', 'musicbrainz:recording/current', {

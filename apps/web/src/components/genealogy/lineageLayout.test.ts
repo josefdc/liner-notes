@@ -11,7 +11,6 @@ import {
   layoutLineage,
   orientationFor,
   placeChips,
-  relationCount,
   routeLinks,
   wrapText,
 } from './lineageLayout';
@@ -217,19 +216,10 @@ describe('a card’s lane', () => {
 });
 
 describe('the compact row', () => {
-  it('stands in for the canvas with two relations to the analysed track or fewer', () => {
+  it('stands in for the canvas only when the whole map is small: two links or fewer', () => {
     expect(isSparse(0)).toBe(true);
     expect(isSparse(2)).toBe(true);
     expect(isSparse(3)).toBe(false);
-    // A second hop between two other tracks is not a relation to the analysed one.
-    const links = [
-      { source: 'a', target: 'current' },
-      { source: 'current', target: 'b' },
-      { source: 'a', target: 'c' },
-      { source: 'c', target: 'd' },
-    ];
-    expect(relationCount(links, 'current')).toBe(2);
-    expect(relationCount(links, null)).toBe(4);
   });
 });
 
@@ -384,5 +374,43 @@ describe('routeLinks', () => {
     expect(route.rail).toBe(false);
     expect(route.start).toEqual({ x: 100, y: 20 });
     expect(route.end).toEqual({ x: 200, y: 120 });
+  });
+});
+
+describe('the undated slots', () => {
+  const opts = { orientation: 'horizontal' as const, margin: { left: 16 } };
+  const cards: CardInput[] = [
+    card('current', 2011, 'current'),
+    card('dated-source', 1984, 'sample'),
+    // Feeds this track, with no year: before the first year.
+    { ...card('undated-source', null, 'sample'), early: true },
+    // Feeds the undated source: before too, never after what it feeds.
+    { ...card('undated-grandsource', null, 'second-hop'), early: true },
+    // Uses this track, with no year: after the last year.
+    card('undated-remix', null, 'remix'),
+  ];
+  const layout = layoutLineage(cards, opts);
+  const x = (id: string) => placed(layout, id).x;
+
+  it('puts an undated source before the first year and an undated later track after the last', () => {
+    expect(layout.slots.map((slot) => [slot.label, slot.side])).toEqual([
+      ['Undated', 'before'],
+      ['1984', null],
+      ['2011', null],
+      ['Undated', 'after'],
+    ]);
+    expect(x('undated-source')).toBeLessThan(x('dated-source'));
+    expect(x('undated-remix')).toBeGreaterThan(x('current'));
+  });
+
+  it('never puts a source to the right of the track it feeds', () => {
+    const feeds: Array<[string, string]> = [
+      ['dated-source', 'current'],
+      ['undated-source', 'current'],
+      ['undated-grandsource', 'undated-source'],
+    ];
+    for (const [source, target] of feeds) {
+      expect(x(source), `${source} feeds ${target}`).toBeLessThanOrEqual(x(target));
+    }
   });
 });

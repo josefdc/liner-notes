@@ -213,6 +213,16 @@ export function yearOf(node: NamedNode | undefined): number | null {
   return node.year ?? labelYear(node.label);
 }
 
+/**
+ * A node's year as a record dates it: the one the API took from MusicBrainz (`year`), or, for the
+ * analysed track, the result's release year (both set by `nodesById`); null otherwise. Never a
+ * year from a label: the model writes its tracks as "Title - Artist (Year)", and a year it wrote
+ * is not a record's. The map places a card and prints its year from this alone.
+ */
+export function recordYear(node: NamedNode | undefined): number | null {
+  return node?.year ?? null;
+}
+
 /** How a relation names a track: its title and year, or its label (which carries both). */
 export function nodeName(node: NamedNode | undefined, id: string): string {
   if (!node) return id;

@@ -66,7 +66,9 @@ export const LineageRow: React.FC<{
     .filter(
       ({ node }) =>
         current !== null || !links.some((l) => l.source === node.id || l.target === node.id),
-    );
+    )
+    // By year, the undated last.
+    .sort((a, b) => byYear(a.node, b.node));
 
   const card = (node: GenealogyNode) => {
     const { title, meta } = cardWords(node, yearOf(node.id));

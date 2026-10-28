@@ -21,7 +21,7 @@ import {
   linkContext,
   readGenealogy,
   yearFrom,
-  yearOf,
+  recordYear,
   relationLabel,
   relationSentence,
   relationToTrack,
@@ -38,7 +38,6 @@ import {
   type Orientation,
   orientationFor,
   placeChips,
-  relationCount,
   routeLinks,
   wrapText,
 } from './genealogy/lineageLayout';
@@ -81,6 +80,8 @@ const PAD = 6;
 const THUMB = 28;
 const TEXT_GAP = 8;
 const LINE_PX = 15;
+// A limit: a title longer than four lines of the widest card (about 110 characters) is cut on
+// its card, with an ellipsis. The whole title is in the card's accessible name and its detail box.
 const TITLE_LINES = 4;
 const META_LINES = 3;
 /** A character's width in the graph's monospace text. */
@@ -162,15 +163,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const hidden = reading.hidden + hiddenLinks;
   const named = useMemo(() => nodesById(data?.nodes, yearFrom(releaseYear)), [data, releaseYear]);
   const nameOf = useMemo(() => (id: string) => nodeName(named.get(id), id), [named]);
-  // A track's year: the one its label ends with or the API took from MusicBrainz (the analysed
-  // track's, else the result's release year); null when it carries none.
-  const yearOfNode = useMemo(() => (id: string) => yearOf(named.get(id)), [named]);
+  // A track's year as a record dates it (MusicBrainz, or the result's release year for the
+  // analysed track), never one a label carries: the map places and dates cards by it alone, and a
+  // track with none is undated.
+  const yearOfNode = useMemo(() => (id: string) => recordYear(named.get(id)), [named]);
   const currentId = useMemo(
     () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
     [data],
   );
-  // With two relations to the analysed track or fewer the map is a compact row, not a canvas.
-  const sparse = isSparse(relationCount(links, currentId));
+  // With two links or fewer in all the map is a compact row, not a canvas.
+  const sparse = isSparse(links.length);
   // What the pointer is on, and what keyboard focus is on: the detail shows the first of them,
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
@@ -361,6 +363,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const detailRef = useRef<HTMLDivElement>(null);
   const detailInsetRef = useRef(0);
   const afterDetailRef = useRef<(() => void) | null>(null);
+  // The detail box goes to the top of the map while the item the pointer is on sits in the
+  // bottom band, where the box would cover it (`detailTopRef` mirrors it for the drawing).
+  const [detailTop, setDetailTop] = useState(false);
+  const detailTopRef = useRef(false);
+  const detailShownRef = useRef('');
 
   useEffect(() => {
     const size = sizeRef.current;
@@ -413,6 +420,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const margin =
       orientation === 'vertical' ? { ...MARGIN.vertical, right: railRoom + 4 } : MARGIN.horizontal;
     const chars = Math.max(MIN_CHARS, Math.floor(textWidth / CHAR_PX));
+    // The tracks that feed this one, at any remove (a link from them into it, or into a track
+    // that feeds it): an undated one goes before the first year, never after what it feeds.
+    const feeds = new Set<string>();
+    for (let added = currentId !== null; added; ) {
+      added = false;
+      for (const l of links) {
+        if ((l.target === currentId || feeds.has(l.target)) && !feeds.has(l.source)) {
+          if (l.source === currentId) continue;
+          feeds.add(l.source);
+          added = true;
+        }
+      }
+    }
     const nodes = graphNodes(data).map((node, i) => {
       const year = yearOfNode(node.id);
       const { title, meta } = cardWords(node, year);
@@ -435,6 +455,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         width: cardWidth(textWidth),
         height: PAD * 2 + Math.max(THUMB, lines * LINE_PX),
         lane: laneOf(node.id === currentId, relations.get(node.id)?.link?.type ?? null),
+        early: year === null && feeds.has(node.id),
       };
     });
     type Card = (typeof nodes)[number];
@@ -496,7 +517,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .on('end', () => drawChips());
     svg.call(zoomBehavior);
 
-    // 5. The year axis: a label for each year a card carries, and "Undated" for the rest.
+    // 5. The year axis: a label for each year a record gives a card, and "Undated" for the rest,
+    // before the first year (the undated sources) or after the last. The axis's line runs along
+    // the dated years only; a dashed divider stands between it and an "Undated" slot.
     // Across the page the labels stay at the top of the view when the map is panned down past
     // them, on a band of the page's colour, over the cards that pass beneath (`pinAxis`).
     const axis = g.append('g').attr('class', 'lineage-axis').attr('aria-hidden', 'true');
@@ -510,15 +533,41 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('fill-opacity', 0);
     const yearLabels: CardBox[] = [];
     const lineColor = colors.gray[600];
+    const dated = layout.slots.filter((slot) => slot.year !== null);
+    const datedFrom = dated[0]?.start ?? 0;
+    const datedTo =
+      dated.length > 0 ? dated[dated.length - 1].start + dated[dated.length - 1].size : 0;
+    /** Where the divider between an "Undated" slot and the dated years goes, along the axis. */
+    const dividers = layout.slots
+      .filter((slot) => slot.year === null && dated.length > 0)
+      .map((slot) =>
+        slot.side === 'before'
+          ? (slot.start + slot.size + datedFrom) / 2
+          : (datedTo + slot.start) / 2,
+      );
     if (orientation === 'horizontal') {
       const y = margin.top + 14;
-      axis
-        .append('line')
-        .attr('x1', margin.left)
-        .attr('x2', layout.width - margin.right)
-        .attr('y1', y + 5)
-        .attr('y2', y + 5)
-        .attr('stroke', lineColor);
+      if (dated.length > 0) {
+        axis
+          .append('line')
+          .attr('class', 'axis-line')
+          .attr('x1', datedFrom)
+          .attr('x2', datedTo)
+          .attr('y1', y + 5)
+          .attr('y2', y + 5)
+          .attr('stroke', lineColor);
+      }
+      for (const at of dividers) {
+        axis
+          .append('line')
+          .attr('class', 'axis-divider')
+          .attr('x1', at)
+          .attr('x2', at)
+          .attr('y1', y - 12)
+          .attr('y2', y + 9)
+          .attr('stroke', lineColor)
+          .attr('stroke-dasharray', '3 3');
+      }
       for (const slot of layout.slots) {
         const x = slot.start + slot.size / 2;
         axis
@@ -536,13 +585,27 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       }
     } else {
       const x = margin.left - 14;
-      axis
-        .append('line')
-        .attr('x1', x)
-        .attr('x2', x)
-        .attr('y1', layout.slots[0]?.start ?? 0)
-        .attr('y2', layout.height - margin.bottom)
-        .attr('stroke', lineColor);
+      if (dated.length > 0) {
+        axis
+          .append('line')
+          .attr('class', 'axis-line')
+          .attr('x1', x)
+          .attr('x2', x)
+          .attr('y1', datedFrom)
+          .attr('y2', datedTo)
+          .attr('stroke', lineColor);
+      }
+      for (const at of dividers) {
+        axis
+          .append('line')
+          .attr('class', 'axis-divider')
+          .attr('x1', x - 6)
+          .attr('x2', x + 30)
+          .attr('y1', at)
+          .attr('y2', at)
+          .attr('stroke', lineColor)
+          .attr('stroke-dasharray', '3 3');
+      }
       for (const slot of layout.slots) {
         axis
           .append('circle')
@@ -569,8 +632,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     }
     /** The year slot a card sits in. */
     const slotOf = (id: string) => {
-      const year = nodes.find((d) => d.id === id)?.year ?? null;
-      return layout.slots.find((slot) => slot.year === year) ?? null;
+      const card = nodes.find((d) => d.id === id);
+      const year = card?.year ?? null;
+      const side = year === null ? (card?.early ? 'before' : 'after') : null;
+      return layout.slots.find((slot) => slot.year === year && slot.side === side) ?? null;
     };
 
     /** The band the pinned labels take at the top of the view (screen px; none down a column). */
@@ -812,8 +877,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       if (!active) return;
       const k = transform.k || 1;
       // What is in view, in the map's units, below the heading and above the detail box.
-      const top = insetRef.current + pinnedBand();
-      const bottom = height - detailInsetRef.current;
+      const top =
+        insetRef.current + pinnedBand() + (detailTopRef.current ? detailInsetRef.current : 0);
+      const bottom = height - (detailTopRef.current ? 0 : detailInsetRef.current);
       const view = {
         x: -transform.x / k,
         y: (top - transform.y) / k,
@@ -986,7 +1052,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             : 0;
       const [dx, dy] = [
         shift(left, right, 0, width),
-        shift(top, bottom, insetRef.current + pinnedBand(), height - detailInsetRef.current),
+        shift(
+          top,
+          bottom,
+          insetRef.current + pinnedBand() + (detailTopRef.current ? detailInsetRef.current : 0),
+          height - (detailTopRef.current ? 0 : detailInsetRef.current),
+        ),
       ];
       if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
@@ -1029,10 +1100,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         setFocused(null);
       });
     });
-    // Once React has drawn the detail box (or taken it away): the focused item clear of it, and
-    // the chips placed again above it.
+    /** True when the item the pointer is on sits in the bottom band the detail box takes. */
+    const pointedLow = () => {
+      if (!pointerOn) return false;
+      const box =
+        pointerOn.kind === 'node'
+          ? boxOf(pointerOn.id)
+          : (() => {
+              const { mid } = drawnLinks[pointerOn.index].route;
+              return { x: mid.x, y: mid.y, width: 0, height: 0 };
+            })();
+      const k = transform.k || 1;
+      const bottom = transform.y + (box.y + box.height) * k;
+      return bottom > height - (detailInsetRef.current || 64);
+    };
+    // Once React has drawn the detail box (or taken it away): the box at the top while the
+    // pointed item is low, the focused item clear of it, and the chips placed again.
     afterDetailRef.current = () => {
-      if (focusOn) bringIntoView(focusOn);
+      const top = pointedLow();
+      if (top !== detailTopRef.current) {
+        detailTopRef.current = top;
+        setDetailTop(top);
+      }
+      if (focusOn && !pointerOn) bringIntoView(focusOn);
       drawChips();
     };
     svg.on('keydown', (event: KeyboardEvent) => {
@@ -1245,8 +1335,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // chips and the focused item clear of it.
   useLayoutEffect(() => {
     const inset = detailRef.current ? detailRef.current.offsetHeight + 8 : 0;
-    if (inset === detailInsetRef.current) return;
+    // What the box shows, and how tall it is: either changing places things again.
+    const shown = active === null ? '' : JSON.stringify(active);
+    if (inset === detailInsetRef.current && shown === detailShownRef.current) return;
     detailInsetRef.current = inset;
+    detailShownRef.current = shown;
     afterDetailRef.current?.();
   });
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
@@ -1379,7 +1472,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               ref={detailRef}
               aria-hidden="true"
               data-testid="link-detail"
-              className="absolute left-2 right-2 bottom-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere"
+              data-at={detailTop ? 'top' : 'bottom'}
+              className={`absolute left-2 right-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere ${detailTop ? '' : 'bottom-2'}`}
+              style={detailTop ? { top: topInset + 4 } : undefined}
             >
               {activeLink && (
                 <>
@@ -1432,6 +1527,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 ),
               }}
             />
+          )}
+          {/* The axis keeps the years' order, not their distance: a gap of forty years is not
+              forty times one of a year. Not on a short screen, where every pixel goes to the
+              map. */}
+          {!sparse && (
+            <p
+              className="text-chrome font-mono text-text-chip [@media(max-height:36rem)]:hidden"
+              data-testid="axis-note"
+            >
+              Years in order, not to scale.
+            </p>
           )}
           {hidden > 0 && (
             <p className="text-chrome font-mono text-text-chip" data-testid="links-hidden">

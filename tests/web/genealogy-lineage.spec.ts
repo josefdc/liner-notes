@@ -260,6 +260,12 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
         const now = await measure(page);
         chipsShown += now.chips.length;
         checkChips(now, `card ${i}`);
+        // The detail box never covers the card pointed at: it goes to the top when the card is
+        // low in the view.
+        const pointed = now.cards[i];
+        if (now.detail && inside(pointed.box, now.wrapper)) {
+          expect(overlap(pointed.box, now.detail), `card ${i} under its detail`).toBe(false);
+        }
         if (i === 0) await screenshot(page, testInfo, `${showcase}-${width}-hover-first`);
         await tracks.nth(i).dispatchEvent("mouseleave");
       }
@@ -376,6 +382,62 @@ test("a narrower phone lays the map out again, keeping the reader's place, insid
   for (const tick of now.ticks) {
     expect(insideX(tick.box, now.wrapper), `label ${tick.label} cut`).toBe(true);
   }
+});
+
+test("from md up a Connections button in the header takes the keyboard to the map", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await SHOWCASES["genealogy-kinds"].open(page);
+  const panel = page.locator("#panel-genealogy");
+  // Far below the first view: the two columns come first.
+  const below = await panel.evaluate((element) => element.getBoundingClientRect().top);
+  expect(below).toBeGreaterThan(900);
+  // From the track's heading, the button is a few Tab presses on, in the header.
+  await page.getByRole("heading", { level: 1 }).focus();
+  const link = page.locator("#player-header").getByRole("button", { name: "Connections" });
+  for (let i = 0; i < 10 && !(await link.evaluate((a) => a === document.activeElement)); i += 1) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(link).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(panel).toBeFocused();
+  await expect
+    .poll(() => panel.evaluate((element) => Math.round(element.getBoundingClientRect().top)))
+    .toBeLessThan(300);
+  // The next Tab goes into the map.
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#panel-genealogy g.nodes > g").first()).toBeFocused();
+});
+
+test("one relation to the track with several second hops is drawn, not a compact row", async ({
+  page,
+}) => {
+  const fixture = loadFixture("genealogy-rich");
+  const complete = fixture.streams[ANALYZE].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  const genealogy = complete.data.genealogy as {
+    nodes: Array<{ id: string }>;
+    links: Array<{ source: string; target: string }>;
+  };
+  // Funky Drummer feeds this track; Public Enemy and N.W.A sample it too, and each other.
+  const keep = new Set(["current", "s2", "h1", "h2"]);
+  genealogy.nodes = genealogy.nodes.filter((node) => keep.has(node.id));
+  genealogy.links = genealogy.links.filter(
+    (link) => keep.has(link.source) && keep.has(link.target),
+  );
+  expect(
+    genealogy.links.filter((l) => l.source === "current" || l.target === "current"),
+  ).toHaveLength(1);
+  expect(genealogy.links.length).toBeGreaterThan(2);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+  await expect(graphOf(page).locator("g.nodes > g")).toHaveCount(4);
+  await expect(page.locator('#panel-genealogy [data-testid="lineage-row"]')).toHaveCount(0);
+  await expect(page.getByTestId("axis-note")).toHaveText("Years in order, not to scale.");
 });
 
 /** The genealogy-kinds result with only its first `count` relations to the analysed track. */

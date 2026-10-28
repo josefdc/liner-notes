@@ -336,9 +336,9 @@ test.describe("the genealogy graph", () => {
     page,
   }) => {
     // At 1440 px the map is a full-width row, its years from left to right, wider than the
-    // panel, this track (2011) near its right end; at 1920 px the same drawing is kept at the
-    // same zoom, its right end still at the panel's (no empty band opens past it). On a phone
-    // the years run from top to bottom: drawn again.
+    // panel; at 1920 px the same drawing is kept at the same zoom, and the row holds the whole
+    // map: it is centred across the panel, no card cut at its sides. On a phone the years run
+    // from top to bottom: drawn again.
     await graphFitted(page);
     const placed = await markDrawing(page);
     expect(placed.outside).toBeGreaterThan(0);
@@ -353,7 +353,6 @@ test.describe("the genealogy graph", () => {
           right: panel.right - Math.max(...cards.map((card) => card.right)),
         };
       });
-    const before = await ends();
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
     await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
@@ -361,8 +360,9 @@ test.describe("the genealogy graph", () => {
     expect(now.k).toBe(placed.k);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
     const after = await ends();
-    expect(after.left).toBeLessThan(0);
-    expect(Math.abs(after.right - before.right)).toBeLessThanOrEqual(2);
+    expect(after.left).toBeGreaterThan(0);
+    expect(after.right).toBeGreaterThan(0);
+    expect(Math.abs(after.left - after.right)).toBeLessThanOrEqual(48);
     const years = () =>
       graphOf(page)
         .locator("text.year-tick")
@@ -373,16 +373,15 @@ test.describe("the genealogy graph", () => {
           }),
         );
     const row = await years();
+    // The years records give the tracks; the model's tracks (their year in their label only)
+    // are undated, before the first year, as they would feed this one.
     expect(row.map((tick) => tick.label)).toEqual([
+      "Undated",
       "1977",
       "1979",
-      "1982",
-      "1983",
       "1984",
-      "1990",
       "2011",
       "2015",
-      "2020",
     ]);
     expect(row[1].x).toBeGreaterThan(row[0].x);
     expect(row[1].y).toBeCloseTo(row[0].y, 0);

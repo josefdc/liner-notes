@@ -38,8 +38,14 @@ class SizedObserver {
 // "Disputed" is joined by a sample whose claim the verifier contradicted: it is not drawn.
 const data = {
   nodes: [
-    { ...node('current', 1, 'Bright Lines - Test Artist (2011)'), trackTitle: 'Bright Lines' },
-    node('older', 2, 'Older Record - Someone (1984)'),
+    // The analysed track and the sourced sample carry a record's year (the result's release year,
+    // MusicBrainz); the model's tracks carry one in their label only: undated on the map.
+    {
+      ...node('current', 1, 'Bright Lines - Test Artist (2011)'),
+      trackTitle: 'Bright Lines',
+      year: 2011,
+    },
+    { ...node('older', 2, 'Older Record - Someone (1984)'), year: 1984 },
     node('guess', 2, 'Guess - Someone (1990)'),
     node('peer', 4, 'Peer - Someone (2001)'),
     node('disputed', 2, 'Disputed - Someone (1979)'),
@@ -420,9 +426,10 @@ describe('GenealogyGraph links', () => {
       'Older Record - Someone (1984): Bright Lines (2011) samples Older Record - Someone (1984) (Sourced).',
     );
     expect(summary).toContain(
-      'Guess - Someone (1990): Possible sample: Bright Lines (2011) may sample Guess - Someone (1990) (Model inference).',
+      // Its year is the model's (in its label), not a record's: its card is undated.
+      'Guess - Someone (1990) (undated): Possible sample: Bright Lines (2011) may sample Guess - Someone (1990) (Model inference).',
     );
-    expect(summary).toContain('Disputed - Someone (1979): no direct link to this track.');
+    expect(summary).toContain('Disputed - Someone (1979) (undated): no direct link to this track.');
   });
 
   it('counts the links the caller left out with those it hides itself', () => {

@@ -3,10 +3,11 @@ import { LABEL_YEAR, labelYear } from './links';
 import { UNTITLED_TRACK } from './nodeTrack';
 
 /**
- * What a track's card says: its title (the node's own, else its label without the year it ends
- * with: the label is shown as the API wrote it, never split into a guessed artist), its artist
- * when the node names one, and its year when it carries one (null otherwise: the card shows none,
- * and its name says "undated").
+ * What a track's card says: its title (the node's own, else its label as the API wrote it, never
+ * split into a guessed artist; the year a label ends with is left out only when it is the year a
+ * record gives the track, so a year the model wrote stays in its own words, never as the card's
+ * year), its artist when the node names one, and its year as a record dates it (`recordYear`;
+ * null otherwise: the card shows none, and its name says "undated").
  */
 export function cardWords(
   node: Partial<Pick<GenealogyNode, 'label' | 'trackTitle' | 'trackArtist'>>,
@@ -16,7 +17,7 @@ export function cardWords(
   const label = text(node.label);
   const title =
     text(node.trackTitle) ||
-    (labelYear(label) === null ? label : label.replace(LABEL_YEAR, '').trim()) ||
+    (year !== null && labelYear(label) === year ? label.replace(LABEL_YEAR, '').trim() : label) ||
     UNTITLED_TRACK;
   const artist = text(node.trackArtist) || null;
   const meta = [artist ?? '', year === null ? '' : String(year)].filter(Boolean).join(' · ');

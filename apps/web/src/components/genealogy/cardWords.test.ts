@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cardName, cardWords } from './cardWords';
-import { labelYear, nodesById, yearOf } from './links';
+import { labelYear, nodesById, recordYear, yearOf } from './links';
+import { layoutLineage } from './lineageLayout';
 
 describe('a node’s year', () => {
   it('takes a label’s year only when it is one a node may carry', () => {
@@ -33,5 +34,45 @@ describe('cardWords and cardName', () => {
     expect(cardName({ label: 'Bright Lines', trackArtist: 'Test Artist' }, 2011)).toBe(
       'Bright Lines by Test Artist (2011)',
     );
+  });
+});
+
+describe('a year only a label carries (the model writes "Title - Artist (Year)")', () => {
+  const nodes = nodesById(
+    [
+      { id: 'current', group: 1, label: 'Song' },
+      { id: 'model', group: 4, label: 'X - Y (1990)' },
+      { id: 'record', group: 2, label: 'Z - W (1984)', year: 1984 },
+    ],
+    2011,
+  );
+
+  it('dates no card: the track goes in an "Undated" slot, its label kept in its own words', () => {
+    expect(recordYear(nodes.get('model'))).toBeNull();
+    expect(recordYear(nodes.get('record'))).toBe(1984);
+    expect(recordYear(nodes.get('current'))).toBe(2011);
+    const layout = layoutLineage(
+      ['current', 'model', 'record'].map((id) => ({
+        id,
+        year: recordYear(nodes.get(id)),
+        lane: 'influence' as const,
+        width: 100,
+        height: 40,
+      })),
+      { orientation: 'horizontal' },
+    );
+    expect(layout.slots.map((slot) => slot.label)).toEqual(['1984', '2011', 'Undated']);
+    const undated = layout.slots.find((slot) => slot.year === null);
+    const x = layout.cards.get('model')?.x ?? 0;
+    expect(x).toBeGreaterThanOrEqual(undated?.start ?? 0);
+    // The card prints no year line for it; the label, the model's words, is its title whole.
+    expect(cardWords({ label: 'X - Y (1990)' }, null)).toMatchObject({
+      title: 'X - Y (1990)',
+      meta: '',
+    });
+    expect(cardWords({ label: 'Z - W (1984)' }, 1984)).toMatchObject({
+      title: 'Z - W',
+      meta: '1984',
+    });
   });
 });

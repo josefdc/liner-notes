@@ -25,6 +25,7 @@ import {
 } from '../constants';
 import { resultModeOf } from '../utils/recording';
 import { usePlayerLayout } from '../utils/layout';
+import { useReducedMotion } from '../utils/motion';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -38,7 +39,7 @@ import {
   yearFrom,
 } from './genealogy/links';
 import { nodeQuery } from './genealogy/nodeTrack';
-import { isSparse, relationCount } from './genealogy/lineageLayout';
+import { isSparse } from './genealogy/lineageLayout';
 import { previewTracksOf } from './genealogy/previewTracks';
 import InteractiveFactoid from './InteractiveFactoid';
 import {
@@ -245,11 +246,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       ),
     [genealogy, track.evidence, track.releaseYear, claims],
   );
-  // Two relations or fewer: the graph is a compact row, and its panel is as tall as its content
-  // (from md up to xl, where it is a row of its own).
-  const sparseGenealogy = isSparse(
-    relationCount(graphLinks, genealogy.nodes.find((node) => node.group === 1)?.id ?? null),
-  );
+  // Two links or fewer in all: the map is a compact row, and its panel (a row of its own from
+  // md up) is as tall as its content.
+  const sparseGenealogy = isSparse(graphLinks.length);
   const linkKinds = useMemo(
     () => ({
       sourced: graphLinks.some((link) => link.kind === 'sourced'),
@@ -347,6 +346,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
   // The Player's layout at this width: the panels are tab panels only while the tabs show.
   const layout = usePlayerLayout();
+  const reducedMotion = useReducedMotion();
   const tabbed = layout === 'tabs';
   // A panel's tab panel role, named by its tab, while the tabs show (none from md up, where the
   // tabs are hidden and the panels are columns, each headed by its own heading).
@@ -611,30 +611,48 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
         {/* Measured values in the measured hue; what was not measured, and the separators, in
             a neutral one */}
-        <p
-          data-testid="player-audio-line"
-          className="hidden md:block shrink-0 whitespace-nowrap text-xs font-mono text-text-tertiary"
-        >
-          {bpm !== null ? (
-            <span className="text-cyber">{formatBpm(bpm)} BPM</span>
-          ) : (
-            'BPM not measured'
-          )}
-          {key !== null && (
-            <>
-              {' · '}
-              <span className="text-cyber">{key}</span>
-            </>
-          )}
-          {measurement && (
-            <>
-              {' · '}
-              <span className="text-cyber">
-                {formatSeconds(measurement.windowSeconds)} s preview
-              </span>
-            </>
-          )}
-        </p>
+        <div className="hidden md:flex shrink-0 flex-col items-end gap-1">
+          <p
+            data-testid="player-audio-line"
+            className="whitespace-nowrap text-xs font-mono text-text-tertiary"
+          >
+            {bpm !== null ? (
+              <span className="text-cyber">{formatBpm(bpm)} BPM</span>
+            ) : (
+              'BPM not measured'
+            )}
+            {key !== null && (
+              <>
+                {' · '}
+                <span className="text-cyber">{key}</span>
+              </>
+            )}
+            {measurement && (
+              <>
+                {' · '}
+                <span className="text-cyber">
+                  {formatSeconds(measurement.windowSeconds)} s preview
+                </span>
+              </>
+            )}
+          </p>
+          {/* From md up the connections are a row below both columns, far down the page: this
+              takes the reader there and puts the focus on them (a button, not a link to
+              #panel-genealogy: the page's address stays the track's) */}
+          <button
+            type="button"
+            aria-controls="panel-genealogy"
+            onClick={() => {
+              const panel = document.getElementById('panel-genealogy');
+              if (!panel) return;
+              panel.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+              panel.focus({ preventScroll: true });
+            }}
+            className="text-xs font-mono text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+          >
+            Connections <span aria-hidden="true">↓</span>
+          </button>
+        </div>
       </div>
 
       {/* On phones only one panel shows at a time: the recording label stays above all of them,
@@ -996,8 +1014,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
+          // Focus lands here from the header's "Connections" link (not a tab stop of its own).
+          tabIndex={-1}
           className={`
-            min-w-0 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            min-w-0 outline-none border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >

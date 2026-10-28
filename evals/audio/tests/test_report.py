@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from evals_audio import calibration, golden, service
+from evals_audio.controls import GROUPS, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import (
@@ -240,6 +241,23 @@ def test_the_newest_controls_run_has_the_services_single_source_rule():
     name, newest = max(runs, key=lambda item: item[1]["startedAt"])
     _, est = service.load()
     assert newest["rules"].get("one_source") == calibration.source_values(est), name
+
+
+def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
+    """An older report keeps describing the controls it ran; a newer one names the added ones."""
+    before = ["tabla-s500", "toms-s501", "cowbell-s502"]
+    old = group_description("one-pitch-class-seeded", before)
+    assert old == GROUPS["one-pitch-class-seeded"]
+    assert "tubular" not in old and "rack toms" not in old
+    new = group_description(
+        "one-pitch-class-seeded", [*before, "kit-toms-s505", "tubular-bell-s507"]
+    )
+    assert new.endswith(
+        "a held synth note, two rack toms and a floor tom over a kit, a tubular bell), 30 seeds each"
+    )
+    only_bells = group_description("one-pitch-class-seeded", [*before, "tubular-bell-s507"])
+    assert "a held synth note, a tubular bell)" in only_bells
+    assert group_description("no-key", ["tubular-bell-s507"]) == GROUPS["no-key"]
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

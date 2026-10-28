@@ -312,8 +312,7 @@ GROUPS = {
     "pitchless-seeded": "no key: drums, noise with a beat, a siren over drums and clicks, 30 "
     "seeds each, drawn from the seed (tempo, kit, levels, sounds)",
     "one-pitch-class-seeded": "no key: one pitched source (a one-note bass, octave riffs, a bell "
-    "alone or over drums, tabla, toms, a cowbell, a held synth note, two rack toms and a floor "
-    "tom over a kit, a tubular bell), 30 seeds each",
+    "alone or over drums, tabla, toms, a cowbell, a held synth note), 30 seeds each",
     "music": "music the service's tests expect a key for",
     "no-tempo": "no single tempo",
     "tempo": "a known tempo (octave and meter)",
@@ -329,6 +328,30 @@ GROUPS = {
     "chord families at 800-829; no rule value is chosen on them",
 }
 # Groups the calibration's choice never sees (calibration.select and confirm leave them out).
+# Families added to a group after reports had been made with it. A report names them only when
+# its controls include them, so an older report still describes the controls it ran.
+ADDED_FAMILIES = {
+    "one-pitch-class-seeded": {
+        "kit-toms": "two rack toms and a floor tom over a kit",
+        "tubular-bell": "a tubular bell",
+    },
+}
+
+
+def group_description(group: str, names) -> str:
+    """GROUPS[group], with the added families that occur among the control `names`."""
+    text = GROUPS[group]
+    added = [
+        words
+        for family, words in ADDED_FAMILIES.get(group, {}).items()
+        if any(name.startswith(f"{family}-s") for name in names)
+    ]
+    if not added:
+        return text
+    head, tail = text.split("), 30 seeds each")
+    return f"{head}, {', '.join(added)}), 30 seeds each{tail}"
+
+
 EVALUATION_GROUPS = frozenset({"held-out-seeded"})
 
 

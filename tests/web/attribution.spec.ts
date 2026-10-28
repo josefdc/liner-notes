@@ -87,12 +87,13 @@ test("the recorded run credits MusicBrainz, its cover's archive, Spotify and Dee
     await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   }
   // Each claim keeps its own source link beside it: one MusicBrainz link per listed claim (the
-  // code-built ones; the model's restatements of them are left out).
+  // code-built ones, and the model's partly supported cover claim; the model's restatements of
+  // them are left out).
   const listedClaims = page
     .getByRole("region", { name: "Samples and covers" })
     .getByRole("listitem")
     .filter({ has: page.locator(":scope > p") });
-  await expect(listedClaims).toHaveCount(13);
+  await expect(listedClaims).toHaveCount(14);
   for (const claim of await listedClaims.all()) {
     await expect(claim.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
   }

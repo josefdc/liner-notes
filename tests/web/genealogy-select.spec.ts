@@ -137,7 +137,7 @@ const RECORDED: Record<string, Showcase> = Object.fromEntries(
         code: {
           id: sourcedNode as string,
           // The demo's sample source was read on the day it was recorded.
-          retrieved: slug === DEMO_SLUG ? "27 Oct 2026" : /\d{1,2} [A-Z][a-z]{2} \d{4}/,
+          retrieved: slug === DEMO_SLUG ? "28 Oct 2026" : /\d{1,2} [A-Z][a-z]{2} \d{4}/,
         },
         model: null,
         replay: true,

@@ -3,10 +3,10 @@
   "slug": "one-more-time-daft-punk",
   "request": {
     "query": "One More Time Daft Punk",
-    "selectedTrackId": "0DiWol3AO6WpXZgp0goxAV"
+    "selectedTrackId": null
   },
-  "recordedAt": "2026-10-27T19:30:19.136Z",
-  "commit": "98e88946b9b5",
+  "recordedAt": "2026-10-28T15:16:31.781Z",
+  "commit": "2b66a5082fc7",
   "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
   "events": [
     {
@@ -15,972 +15,1188 @@
         "type": "connected",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 0,
-        "elapsedMs": 0,
+        "elapsedMs": 3,
         "threadId": "recorded-one-more-time-daft-punk",
-        "timestamp": "2026-10-27T19:29:42.256Z"
+        "timestamp": "2026-10-28T15:15:58.168Z"
       }
     },
     {
-      "atMs": 17,
+      "atMs": 6,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 1,
-        "elapsedMs": 17,
-        "message": "Searching Spotify",
+        "elapsedMs": 9,
+        "message": "Reading the track from Spotify",
         "code": "NET-100",
         "node": "scout",
-        "timestamp": "2026-10-27T19:29:42.270Z"
+        "timestamp": "2026-10-28T15:15:58.173Z"
       }
     },
     {
-      "atMs": 158,
+      "atMs": 188,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 2,
-        "elapsedMs": 737,
-        "message": "Starting the research: Last.fm, MusicBrainz, SecondHandSongs, Genius and a web search",
-        "code": "RESEARCH-START",
-        "node": "historian",
-        "timestamp": "2026-10-27T19:29:48.643Z"
+        "elapsedMs": 191,
+        "message": "Found the track on Spotify: One More Time by Daft Punk",
+        "code": "SPOTIFY-FOUND",
+        "node": "scout",
+        "timestamp": "2026-10-28T15:15:58.356Z"
       }
     },
     {
-      "atMs": 597,
+      "atMs": 196,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 3,
-        "elapsedMs": 1176,
-        "message": "Measuring tempo and key from the preview clip",
-        "code": "AUDIO-INIT",
-        "node": "engineer",
-        "timestamp": "2026-10-27T19:29:49.083Z"
+        "elapsedMs": 199,
+        "message": "Starting the research: Last.fm, MusicBrainz, SecondHandSongs, Genius and a web search",
+        "code": "RESEARCH-START",
+        "node": "historian",
+        "timestamp": "2026-10-28T15:15:58.362Z"
       }
     },
     {
-      "atMs": 4107,
+      "atMs": 388,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 4,
-        "elapsedMs": 4687,
-        "message": "Starting the research steps",
-        "node": "research_manager",
-        "timestamp": "2026-10-27T19:29:52.595Z"
+        "elapsedMs": 392,
+        "message": "Measuring tempo and key from the preview clip",
+        "code": "AUDIO-INIT",
+        "node": "engineer",
+        "timestamp": "2026-10-28T15:15:58.555Z"
       }
     },
     {
-      "atMs": 4113,
+      "atMs": 1859,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 5,
-        "elapsedMs": 4692,
-        "message": "Searching: sample history on the web",
-        "node": "research_tool",
-        "timestamp": "2026-10-27T19:29:52.598Z"
+        "elapsedMs": 1862,
+        "message": "Starting the research steps",
+        "node": "research_manager",
+        "timestamp": "2026-10-28T15:16:00.026Z"
       }
     },
     {
-      "atMs": 4113,
+      "atMs": 1866,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 6,
-        "elapsedMs": 4692,
-        "message": "Searching: production history on the web",
+        "elapsedMs": 1869,
+        "message": "Searching: sample history on the web",
         "node": "research_tool",
-        "timestamp": "2026-10-27T19:29:52.598Z"
+        "timestamp": "2026-10-28T15:16:00.030Z"
       }
     },
     {
-      "atMs": 4113,
+      "atMs": 1866,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 7,
-        "elapsedMs": 4692,
-        "message": "Searching: ListenBrainz similar artists",
+        "elapsedMs": 1870,
+        "message": "Searching: production history on the web",
         "node": "research_tool",
-        "timestamp": "2026-10-27T19:29:52.598Z"
+        "timestamp": "2026-10-28T15:16:00.030Z"
       }
     },
     {
-      "atMs": 4113,
+      "atMs": 1867,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 8,
-        "elapsedMs": 4693,
-        "message": "Searching: MusicBrainz collaborators of the artist",
+        "elapsedMs": 1870,
+        "message": "Searching: ListenBrainz similar artists",
         "node": "research_tool",
-        "timestamp": "2026-10-27T19:29:52.598Z"
+        "timestamp": "2026-10-28T15:16:00.030Z"
       }
     },
     {
-      "atMs": 4456,
+      "atMs": 1867,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 9,
-        "elapsedMs": 5035,
-        "message": "Measured 123 BPM; key not given: one pitch line without stable notes",
-        "code": "AUDIO-COMPLETE",
-        "node": "engineer",
-        "timestamp": "2026-10-27T19:29:52.943Z"
+        "elapsedMs": 1870,
+        "message": "Searching: MusicBrainz collaborators of the artist",
+        "node": "research_tool",
+        "timestamp": "2026-10-28T15:16:00.030Z"
       }
     },
     {
-      "atMs": 10557,
+      "atMs": 5748,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 10,
-        "elapsedMs": 11136,
-        "message": "Choosing follow-up step 1 of at most 2",
-        "node": "research_manager",
-        "timestamp": "2026-10-27T19:29:59.041Z"
+        "elapsedMs": 5751,
+        "message": "Measured 123 BPM; key not given: one pitch line without stable notes",
+        "code": "AUDIO-COMPLETE",
+        "node": "engineer",
+        "timestamp": "2026-10-28T15:16:03.915Z"
       }
     },
     {
-      "atMs": 13769,
+      "atMs": 10537,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 11,
-        "elapsedMs": 14348,
-        "message": "Searching: the planner's lead on the web",
-        "node": "research_tool",
-        "timestamp": "2026-10-27T19:30:02.255Z"
+        "elapsedMs": 10540,
+        "message": "Choosing follow-up step 1 of at most 2",
+        "node": "research_manager",
+        "timestamp": "2026-10-28T15:16:08.704Z"
       }
     },
     {
-      "atMs": 15514,
+      "atMs": 13447,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 12,
-        "elapsedMs": 16093,
-        "message": "Choosing follow-up step 2 of at most 2",
-        "node": "research_manager",
-        "timestamp": "2026-10-27T19:30:04.001Z"
+        "elapsedMs": 13451,
+        "message": "Searching: Last.fm artist info",
+        "node": "research_tool",
+        "timestamp": "2026-10-28T15:16:11.613Z"
       }
     },
     {
-      "atMs": 17379,
+      "atMs": 13526,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 13,
-        "elapsedMs": 17958,
-        "message": "Searching: Last.fm similar artists",
-        "node": "research_tool",
-        "timestamp": "2026-10-27T19:30:05.865Z"
+        "elapsedMs": 13529,
+        "message": "Choosing follow-up step 2 of at most 2",
+        "node": "research_manager",
+        "timestamp": "2026-10-28T15:16:11.693Z"
       }
     },
     {
-      "atMs": 17504,
+      "atMs": 20310,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 14,
+        "elapsedMs": 20314,
+        "message": "Searching: Last.fm similar artists",
+        "node": "research_tool",
+        "timestamp": "2026-10-28T15:16:18.477Z"
+      }
+    },
+    {
+      "atMs": 20417,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 14,
-        "elapsedMs": 18083,
+        "seq": 15,
+        "elapsedMs": 20420,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz recording",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
-          "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053.",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
+          "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053, first released 2000.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"
         }
       }
     },
     {
-      "atMs": 17505,
+      "atMs": 20417,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 15,
-        "elapsedMs": 18084,
+        "seq": 16,
+        "elapsedMs": 20421,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
         }
       }
     },
     {
-      "atMs": 17505,
+      "atMs": 20418,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 16,
-        "elapsedMs": 18084,
+        "seq": 17,
+        "elapsedMs": 20421,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
         }
       }
     },
     {
-      "atMs": 17506,
+      "atMs": 20421,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 17,
-        "elapsedMs": 18085,
+        "seq": 18,
+        "elapsedMs": 20424,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20424,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 18,
-        "elapsedMs": 18091,
+        "seq": 19,
+        "elapsedMs": 20427,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20424,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 19,
-        "elapsedMs": 18091,
+        "seq": 20,
+        "elapsedMs": 20428,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20425,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 20,
-        "elapsedMs": 18091,
+        "seq": 21,
+        "elapsedMs": 20428,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One Whore Time\" by Moustiluigi Random.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/a23583f6-7e90-43ca-80df-a616df69cde1"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20425,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 21,
-        "elapsedMs": 18091,
+        "seq": 22,
+        "elapsedMs": 20428,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20425,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 22,
-        "elapsedMs": 18091,
+        "seq": 23,
+        "elapsedMs": 20428,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20425,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 23,
-        "elapsedMs": 18091,
+        "seq": 24,
+        "elapsedMs": 20429,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
         }
       }
     },
     {
-      "atMs": 17512,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 24,
-        "elapsedMs": 18092,
+        "seq": 25,
+        "elapsedMs": 20429,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/534c1922-0005-4232-857a-c7c0b1da473d",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/534c1922-0005-4232-857a-c7c0b1da473d"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 25,
-        "elapsedMs": 18092,
+        "seq": 26,
+        "elapsedMs": 20429,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 26,
-        "elapsedMs": 18092,
+        "seq": 27,
+        "elapsedMs": 20429,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"LOVER’S TIME\" by Cheryl Stelli.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 27,
-        "elapsedMs": 18092,
+        "seq": 28,
+        "elapsedMs": 20429,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 28,
-        "elapsedMs": 18092,
+        "seq": 29,
+        "elapsedMs": 20430,
         "evidence": {
           "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
           "title": "One More Time — MusicBrainz relationships",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo.",
           "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20426,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 29,
-        "elapsedMs": 18092,
+        "seq": 30,
+        "elapsedMs": 20430,
         "evidence": {
           "id": "musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
           "title": "Discovery — MusicBrainz release",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
           "recordRef": "release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20427,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 30,
-        "elapsedMs": 18092,
+        "seq": 31,
+        "elapsedMs": 20430,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20427,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 31,
-        "elapsedMs": 18092,
+        "seq": 32,
+        "elapsedMs": 20431,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20427,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 32,
-        "elapsedMs": 18092,
+        "seq": 33,
+        "elapsedMs": 20431,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 33,
-        "elapsedMs": 18092,
+        "seq": 34,
+        "elapsedMs": 20431,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 34,
-        "elapsedMs": 18092,
+        "seq": 35,
+        "elapsedMs": 20431,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/811980e6-329f-4893-8083-0d222849b7b4",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Microchip.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/811980e6-329f-4893-8083-0d222849b7b4"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 35,
-        "elapsedMs": 18092,
+        "seq": 36,
+        "elapsedMs": 20431,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/29df9c62-9622-410a-bece-e6c874de2b22",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Vitamin String Quartet.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/29df9c62-9622-410a-bece-e6c874de2b22"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 36,
-        "elapsedMs": 18092,
+        "seq": 37,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/9c101d0d-e7af-45eb-9e3f-33ca0a7ef03e",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Sunset In Ibiza.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/9c101d0d-e7af-45eb-9e3f-33ca0a7ef03e"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 37,
-        "elapsedMs": 18093,
+        "seq": 38,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/7095246c-b187-46f7-939b-c5a5087eac79",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The Madd Wikkid.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/7095246c-b187-46f7-939b-c5a5087eac79"
         }
       }
     },
     {
-      "atMs": 17513,
+      "atMs": 20428,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 38,
-        "elapsedMs": 18093,
+        "seq": 39,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/05a9b041-201e-4118-9e59-b4b3169a4528",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/05a9b041-201e-4118-9e59-b4b3169a4528"
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20429,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 39,
-        "elapsedMs": 18093,
+        "seq": 40,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/c61e9bea-164e-4783-a729-b4dda7f3ec3d",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/c61e9bea-164e-4783-a729-b4dda7f3ec3d"
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20429,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 40,
-        "elapsedMs": 18093,
+        "seq": 41,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/07dd5768-8efc-4052-8b20-349cbe9e05b2",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
           "title": "One More Time — MusicBrainz work",
-          "retrievedAt": "2026-10-27T19:29:57.932Z",
+          "retrievedAt": "2026-10-28T15:16:08.079Z",
           "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Starburkes & The Tea Leaf.",
           "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/07dd5768-8efc-4052-8b20-349cbe9e05b2"
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20429,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 41,
-        "elapsedMs": 18093,
+        "seq": 42,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "tavily:https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
           "title": "One More Time (Daft Punk song) - Wikipedia",
-          "retrievedAt": "2026-10-27T19:29:53.986Z",
+          "retrievedAt": "2026-10-28T15:16:01.695Z",
           "excerpt": "\"One More Time\" was sampled and incorporated in Miliyah Kato's song \"Future Lover (Mirai Koibito) \"Future Lover (Mirai Koibito)\")\" from her album Liberty \"Liberty (Miliyah Kato album)\") in January 2016. The song peaked at number 30 in Japan.. Singer and actor Anthony Ramos covered the song for the 2020 DreamWorks Animation movie Trolls World Tour for his character. The track was also sampled and interpolated in the Drake \"Drake (musician)\") and 21 Savage song \"Circo Loco\" on their album, Her [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20429,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 42,
-        "elapsedMs": 18093,
+        "seq": 43,
+        "elapsedMs": 20432,
         "evidence": {
           "id": "tavily:https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
           "title": "Daft Punk One More Time sample creator has never received any royalty payments | MusicRadar",
-          "retrievedAt": "2026-10-27T19:29:53.986Z",
+          "retrievedAt": "2026-10-28T15:16:01.695Z",
           "excerpt": "It might be one of their biggest hits, but the main hook in Daft Punk’s One More Time is powered by a brass sample from a little-known disco record. However, it turns out that Eddie Johns, the artist who wrote the song that was sampled, has never received any royalties from the French electronic music duo. [...] The sampled track, More Spell On You, was taken from a 1979 album of the same name. Once you’ve heard it, its importance to One More Time’s success becomes clear - the song’s lead hook …",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20429,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 43,
-        "elapsedMs": 18093,
+        "seq": 44,
+        "elapsedMs": 20433,
+        "evidence": {
+          "id": "tavily:https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+          "source": "tavily",
+          "sourceTier": "web",
+          "url": "https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+          "title": "Daft Punk Samples That Shaped the Sound of Discovery | Tracklib",
+          "retrievedAt": "2026-10-28T15:16:01.695Z",
+          "excerpt": "Education # Breakdowns of Daft Punk's Samples on \"One More Time\" & 'Discovery' The legacy of Daft Punk lives on since their break-up in 2021. The albums of the French electronic music duo including 'Homework,' 'Discovery,' and 'Random Access Memories' reached a legendary status, also through their intricate use of samples. These videos show their sampling techniques with music by Eddie Johns, The Alan Parsons Project, Sister Sledge, Electric Light Orchestra, and more. [...] For years, there wer…",
+          "recordRef": null
+        }
+      }
+    },
+    {
+      "atMs": 20429,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 45,
+        "elapsedMs": 20433,
         "evidence": {
           "id": "tavily:https://www.whosampled.com/Daft-Punk/One-More-Time",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.whosampled.com/Daft-Punk/One-More-Time",
           "title": "One More Time by Daft Punk - Samples, Covers and ...",
-          "retrievedAt": "2026-10-27T19:29:53.986Z",
+          "retrievedAt": "2026-10-28T15:16:01.695Z",
           "excerpt": "\"One More Time\" contains samples of \"More Spell on You\" by Eddie Johns, \"Overdub Sensation - Track 31\" by Ueberschall, \"Is It All Over My Face? (Female Vocal)\"",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20430,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 44,
-        "elapsedMs": 18093,
+        "seq": 46,
+        "elapsedMs": 20433,
         "evidence": {
           "id": "tavily:https://www.youtube.com/watch?v=5QwOpRh-IfI",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.youtube.com/watch?v=5QwOpRh-IfI",
           "title": "Sample Breakdown: Daft Punk - One More Time",
-          "retrievedAt": "2026-10-27T19:29:53.986Z",
+          "retrievedAt": "2026-10-28T15:16:01.695Z",
           "excerpt": "# Sample Breakdown: Daft Punk - One More Time ## Channel: TRACKLIB (verified) 817K subscribers 80K likes ### Description 2,148,399 views Posted: 2020-02-21 Inspired? Access samples like this one 🔌 [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one affordable subscription. The service has been used to find and clear samples for releases by Kendrick Lamar, Drake, Future, Kaytra…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
-      "event": {
-        "type": "evidence",
-        "runId": "recorded-one-more-time-daft-punk",
-        "seq": 45,
-        "elapsedMs": 18093,
-        "evidence": {
-          "id": "tavily:https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
-          "title": "How Daft Punk made \"One More Time\"",
-          "retrievedAt": "2026-10-27T19:29:53.986Z",
-          "excerpt": "Thats how @… made their hit single • One More Time • One of the greatest tracks of all time turns 23 today so it's a good reason to",
-          "recordRef": null
-        }
-      }
-    },
-    {
-      "atMs": 17514,
-      "event": {
-        "type": "evidence",
-        "runId": "recorded-one-more-time-daft-punk",
-        "seq": 46,
-        "elapsedMs": 18093,
-        "evidence": {
-          "id": "tavily:https://grumpfox.neocities.org/artists/daftpunk",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://grumpfox.neocities.org/artists/daftpunk",
-          "title": "Everything Spins - Daft Punk",
-          "retrievedAt": "2026-10-27T19:29:54.073Z",
-          "excerpt": "\"One More Time\" which will stand as their ultimate statement. It's a blossoming of pure euphoria, where for around five and a half minutes everything seems possible, the opportunities are endless and everything calls for joyous celebration, inviting the listener to the dancefloor with its triumphant horns and the insistent backbeat to share that feeling with everyone else around you for just one more song. It is undistilled joie de vivre and each time it plays it sounds just as fresh and [...] …",
-          "recordRef": null
-        }
-      }
-    },
-    {
-      "atMs": 17514,
+      "atMs": 20430,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 47,
-        "elapsedMs": 18093,
+        "elapsedMs": 20433,
         "evidence": {
-          "id": "tavily:https://daftpunk.fandom.com/wiki/Around_the_World",
+          "id": "tavily:https://daftpunk.fandom.com/wiki/One_More_Time",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://daftpunk.fandom.com/wiki/Around_the_World",
-          "title": "Around the World - Daft Wiki - Fandom",
-          "retrievedAt": "2026-10-27T19:29:54.073Z",
-          "excerpt": "\"Around the World\" is a song by the French electronic music duo Daft Punk. It appeared on the duo's debut album, Homework in 1997 and was released as a",
+          "url": "https://daftpunk.fandom.com/wiki/One_More_Time",
+          "title": "One More Time | Daft Wiki - Fandom",
+          "retrievedAt": "2026-10-28T15:16:05.223Z",
+          "excerpt": "\"One More Time\" is a song by electronic music duo Daft Punk, first released as a single on November 30, 2000 and later included in the 2001 album Discovery.",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20430,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 48,
-        "elapsedMs": 18093,
+        "elapsedMs": 20433,
         "evidence": {
-          "id": "tavily:https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
+          "id": "tavily:https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
-          "title": "Daft Punk's One More Time and the Eddie Johns sample",
-          "retrievedAt": "2026-10-27T19:30:03.998Z",
-          "excerpt": "The sample in Daft Punk's One More Time comes from Eddie Johns' More Spell On You, 1979. The two tracks side by side, and where the sample",
+          "url": "https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
+          "title": "In Depth History - THE DAFT PUNK HISTORIAN",
+          "retrievedAt": "2026-10-28T15:16:05.223Z",
+          "excerpt": "| Picture | Daft Punk were one of the most mysterious and reclusive acts in the music world and achieved much success over their 28 year career. They were a French duo who formed in 1993 and helped bring electronic music (now primarily known as EDM) to the mainstream. They influenced several generations of artists and helped lay the foundation of today’s LED-laden live music stage productions. Each section in this page covers a significant period in their career and contains ample historical [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20430,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 49,
-        "elapsedMs": 18093,
+        "elapsedMs": 20434,
         "evidence": {
-          "id": "tavily:https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-          "title": "The saga of Daft Punk \"One More Time\" and L.A.'s Eddie Johns - Los Angeles Times",
-          "retrievedAt": "2026-10-27T19:30:03.998Z",
-          "excerpt": "The rights to “More Spell on You” — first released in France on the label Président — were acquired by a French label and publishing company, GM Musipro, that reissues vintage French rock and pop. It’s where Daft Punk pays its royalties for permission to sample “More Spell.” The firm’s founder, Georges Mary, confirmed via phone and email that his company does receive those payments from Daft Punk but did not specify an amount. [...] Advertisement Music # A homeless L.A. musician helped create a…",
-          "recordRef": null
+          "id": "musicbrainz:recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+          "title": "1 more dime (fvlcrvm rwrk) — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"1 more dime (fvlcrvm rwrk)\" by dftpnk, first released 2018-09-05.",
+          "recordRef": "recording/21ad70d5-f123-4546-9cf9-0a672500d185"
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20431,
       "event": {
         "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 50,
-        "elapsedMs": 18093,
+        "elapsedMs": 20435,
         "evidence": {
-          "id": "tavily:https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-          "title": "Artist behind Daft Punk ‘One More Time’ lead sample has never been paid | DJ Mag",
-          "retrievedAt": "2026-10-27T19:30:03.998Z",
-          "excerpt": "DJ Mag News Christian Eede Monday, May 10, 2021 - 16:27 # Artist behind Daft Punk ‘One More Time’ lead sample has never been paid Eddie Johns' story has been newly profiled by the Los Angeles Times Eddie Johns, whose 1979 track 'More Spell On You' was sampled by Daft Punk for their hit single 'One More Time', has never received royalties from the French duo's track. [...] Within the profile, writer August Brown delves deep into the complicated issues around sampling and licensing that have seen…",
-          "recordRef": null
+          "id": "musicbrainz:recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+          "title": "One More Time (Daft Punk) / Swoon (Chemical Brothers) — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:05.336Z",
+          "excerpt": "MusicBrainz recording \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers, first released 2011.",
+          "recordRef": "recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
         }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20431,
       "event": {
-        "type": "status",
+        "type": "evidence",
         "runId": "recorded-one-more-time-daft-punk",
         "seq": 51,
-        "elapsedMs": 18093,
-        "message": "Read 27 records from the primary sources (MusicBrainz 27)",
-        "code": "RESEARCH-FOUND",
-        "node": "historian",
-        "timestamp": "2026-10-27T19:30:05.990Z"
+        "elapsedMs": 20435,
+        "evidence": {
+          "id": "musicbrainz:recording/9d387165-a649-44ae-a388-af256f13b410",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/9d387165-a649-44ae-a388-af256f13b410",
+          "title": "One More Time (TeeVex remix) — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:05.336Z",
+          "excerpt": "MusicBrainz recording \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk, first released 2017-12-08.",
+          "recordRef": "recording/9d387165-a649-44ae-a388-af256f13b410"
+        }
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20432,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 52,
+        "elapsedMs": 20435,
+        "evidence": {
+          "id": "musicbrainz:recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+          "title": "One More Time (Uwe Heinrich Adler remix) — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:05.336Z",
+          "excerpt": "MusicBrainz recording \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk, first released 2011-08-05.",
+          "recordRef": "recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
+        }
+      }
+    },
+    {
+      "atMs": 20432,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 53,
+        "elapsedMs": 20435,
+        "evidence": {
+          "id": "musicbrainz:recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+          "title": "One Whore Time — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"One Whore Time\" by Moustiluigi Random, first released 2021-12-25.",
+          "recordRef": "recording/a23583f6-7e90-43ca-80df-a616df69cde1"
+        }
+      }
+    },
+    {
+      "atMs": 20432,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 54,
+        "elapsedMs": 20435,
+        "evidence": {
+          "id": "musicbrainz:recording/1da61e7a-d61d-4538-bd75-63464988923f",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/1da61e7a-d61d-4538-bd75-63464988923f",
+          "title": "Circo Loco — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"Circo Loco\" by Drake & 21 Savage, first released 2022-11-04.",
+          "recordRef": "recording/1da61e7a-d61d-4538-bd75-63464988923f"
+        }
+      }
+    },
+    {
+      "atMs": 20432,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 55,
+        "elapsedMs": 20436,
+        "evidence": {
+          "id": "musicbrainz:recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+          "title": "DAFT — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"DAFT\" by TAPS, first released 2013-04-20.",
+          "recordRef": "recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
+        }
+      }
+    },
+    {
+      "atMs": 20433,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 56,
+        "elapsedMs": 20436,
+        "evidence": {
+          "id": "musicbrainz:recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+          "title": "Get It Get It — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"Get It Get It\" by Girl Talk, first released 2010-11-15.",
+          "recordRef": "recording/5611aa4c-1ddd-4044-b573-3344405e8536"
+        }
+      }
+    },
+    {
+      "atMs": 20433,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 57,
+        "elapsedMs": 20436,
+        "evidence": {
+          "id": "musicbrainz:recording/534c1922-0005-4232-857a-c7c0b1da473d",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/534c1922-0005-4232-857a-c7c0b1da473d",
+          "title": "Give u kawaii! — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+, first released 2021-10-02.",
+          "recordRef": "recording/534c1922-0005-4232-857a-c7c0b1da473d"
+        }
+      }
+    },
+    {
+      "atMs": 20433,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 58,
+        "elapsedMs": 20437,
+        "evidence": {
+          "id": "musicbrainz:recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+          "title": "Into the Groove (remix) — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"Into the Groove (remix)\" by Discobuster, first released 2002.",
+          "recordRef": "recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+        }
+      }
+    },
+    {
+      "atMs": 20433,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 59,
+        "elapsedMs": 20437,
+        "evidence": {
+          "id": "musicbrainz:recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+          "title": "LOVER’S TIME — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"LOVER’S TIME\" by Cheryl Stelli, first released 2025-09-20.",
+          "recordRef": "recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
+        }
+      }
+    },
+    {
+      "atMs": 20434,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 60,
+        "elapsedMs": 20437,
+        "evidence": {
+          "id": "musicbrainz:recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+          "title": "More Spell on You — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"More Spell on You\" by Eddie Johns, first released 1979-05.",
+          "recordRef": "recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+        }
+      }
+    },
+    {
+      "atMs": 20434,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 61,
+        "elapsedMs": 20437,
+        "evidence": {
+          "id": "musicbrainz:recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+          "source": "musicbrainz",
+          "sourceTier": "primary-record",
+          "url": "https://musicbrainz.org/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+          "title": "Thraxxpunkk — MusicBrainz recording",
+          "retrievedAt": "2026-10-28T15:16:08.077Z",
+          "excerpt": "MusicBrainz recording \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo, first released 2021-11-17.",
+          "recordRef": "recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
+        }
+      }
+    },
+    {
+      "atMs": 20434,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 52,
-        "elapsedMs": 18093,
+        "seq": 62,
+        "elapsedMs": 20437,
+        "message": "Read 40 records from the primary sources (MusicBrainz 40)",
+        "code": "RESEARCH-FOUND",
+        "node": "historian",
+        "timestamp": "2026-10-28T15:16:18.583Z"
+      }
+    },
+    {
+      "atMs": 20434,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 63,
+        "elapsedMs": 20437,
         "message": "Discogs not asked: no key is configured for it",
         "code": "SYS-WARN",
         "node": "historian",
-        "timestamp": "2026-10-27T19:30:05.990Z"
+        "timestamp": "2026-10-28T15:16:18.583Z"
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20434,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 53,
-        "elapsedMs": 18093,
+        "seq": 64,
+        "elapsedMs": 20438,
         "message": "SecondHandSongs could not be read: it gave no usable answer",
         "code": "SYS-WARN",
         "node": "historian",
-        "timestamp": "2026-10-27T19:30:05.990Z"
+        "timestamp": "2026-10-28T15:16:18.583Z"
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20434,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 54,
-        "elapsedMs": 18094,
+        "seq": 65,
+        "elapsedMs": 20438,
+        "message": "MusicBrainz relations map incomplete: part of the second hop or of the related recordings' years could not be read in time; a later run reads them",
+        "code": "SYS-WARN",
+        "node": "historian",
+        "timestamp": "2026-10-28T15:16:18.583Z"
+      }
+    },
+    {
+      "atMs": 20435,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 66,
+        "elapsedMs": 20438,
         "message": "Research finished",
         "code": "RESEARCH-FOUND",
         "node": "historian",
-        "timestamp": "2026-10-27T19:30:05.990Z"
+        "timestamp": "2026-10-28T15:16:18.583Z"
       }
     },
     {
-      "atMs": 17514,
+      "atMs": 20435,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 55,
-        "elapsedMs": 18094,
+        "seq": 67,
+        "elapsedMs": 20438,
         "message": "Writing the liner notes",
         "code": "LLM-CONNECT",
         "node": "composer",
-        "timestamp": "2026-10-27T19:30:05.997Z"
+        "timestamp": "2026-10-28T15:16:18.591Z"
       }
     },
     {
-      "atMs": 28122,
+      "atMs": 29582,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 56,
-        "elapsedMs": 28701,
+        "seq": 68,
+        "elapsedMs": 29586,
         "message": "Checking the written notes against their sources",
         "code": "LLM-CONNECT",
         "node": "verifier",
-        "timestamp": "2026-10-27T19:30:16.605Z"
+        "timestamp": "2026-10-28T15:16:27.746Z"
       }
     },
     {
-      "atMs": 28122,
+      "atMs": 29583,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 57,
-        "elapsedMs": 28701,
+        "seq": 69,
+        "elapsedMs": 29586,
         "message": "Looking up cover art on Spotify for the genealogy",
         "code": "GRAPH-ENRICH",
         "node": "verifier",
-        "timestamp": "2026-10-27T19:30:16.605Z"
+        "timestamp": "2026-10-28T15:16:27.746Z"
       }
     },
     {
-      "atMs": 30648,
+      "atMs": 33613,
       "event": {
         "type": "complete",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 58,
-        "elapsedMs": 31226,
+        "seq": 70,
+        "elapsedMs": 33615,
         "data": {
           "id": "0DiWol3AO6WpXZgp0goxAV",
           "title": "One More Time",
@@ -1140,100 +1356,25 @@
           "samples": [],
           "factoids": [
             {
-              "id": "cc34d8c8-29ad-46a3-b106-3ef0b5244d41",
+              "id": "051f2e67-fdef-4671-be8f-602065bcd467",
               "title": "A disco source in the hook",
-              "content": "MusicBrainz documents Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. Other source material describes the brass figure as chopped and rearranged into the track’s hook.",
+              "content": "MusicBrainz records Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. The source material describes the brass hook as built from rearranged slices of that recording.",
               "type": "sample",
               "entities": [
                 {
-                  "id": "7a327543-9352-4f63-b9a2-3d6ed21055ad",
+                  "id": "9feebdaf-1070-46b4-96c6-4117651b6b5e",
                   "text": "Eddie Johns",
                   "type": "artist",
                   "searchQuery": "Eddie Johns"
                 },
                 {
-                  "id": "2b5e8a79-c691-4bcc-8eab-4d4af9bbff0e",
+                  "id": "44ca87c5-beab-49ca-b4b6-9b79c5cd1a26",
                   "text": "More Spell on You",
-                  "type": "album",
+                  "type": "sample",
                   "searchQuery": "More Spell on You"
-                },
-                {
-                  "id": "d25259f2-108e-46a1-aa89-11ab9293b838",
-                  "text": "brass",
-                  "type": "technique",
-                  "searchQuery": "brass"
                 }
               ],
-              "claimId": "452be048-b51f-46f5-b7c7-8fbc989fb2a0"
-            },
-            {
-              "id": "d493ab7d-967d-4b7b-9f97-0d8121c1ae6d",
-              "title": "A later sample in “Circo Loco”",
-              "content": "MusicBrainz lists Daft Punk’s “One More Time” as sampled in “Circo Loco” by Drake and 21 Savage.",
-              "type": "connection",
-              "entities": [
-                {
-                  "id": "23e5a1b0-3058-4a94-ab9b-30ad0525f772",
-                  "text": "Drake",
-                  "type": "artist",
-                  "searchQuery": "Drake"
-                },
-                {
-                  "id": "21c678c6-74be-4dbe-8246-744014cbde8d",
-                  "text": "21 Savage",
-                  "type": "artist",
-                  "searchQuery": "21 Savage"
-                },
-                {
-                  "id": "53be68a6-bda2-4aaf-bf42-1f89296ebf2c",
-                  "text": "Circo Loco",
-                  "type": "album",
-                  "searchQuery": "Circo Loco"
-                }
-              ],
-              "claimId": "236a628b-8bac-43d4-b024-6338e2d91212"
-            },
-            {
-              "id": "e5ec82ff-5d0a-4483-add6-673517e77de1",
-              "title": "Part of Discovery",
-              "content": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-              "type": "credits",
-              "entities": [
-                {
-                  "id": "84455003-c641-4344-86b3-e68286984bfe",
-                  "text": "Daft Punk",
-                  "type": "artist",
-                  "searchQuery": "Daft Punk"
-                },
-                {
-                  "id": "657dcd01-7921-4d2c-952a-eb023ff79c5f",
-                  "text": "Discovery",
-                  "type": "album",
-                  "searchQuery": "Discovery"
-                },
-                {
-                  "id": "9894d40e-7d4f-4677-981c-c11964109762",
-                  "text": "2001",
-                  "type": "year",
-                  "searchQuery": "2001"
-                }
-              ],
-              "claimId": "e8ac1a76-f748-4526-8051-98ceb352d2ba"
-            },
-            {
-              "id": "df4a305d-064e-44bc-b12c-69fe0a444368",
-              "title": "The song beyond this recording",
-              "content": "MusicBrainz records a cover of the song “One More Time” by The London Elektricity Big Band.",
-              "type": "trivia",
-              "entities": [
-                {
-                  "id": "4c52a6ad-52d8-4285-9b0e-1b1130a63e06",
-                  "text": "The London Elektricity Big Band",
-                  "type": "artist",
-                  "searchQuery": "The London Elektricity Big Band"
-                }
-              ],
-              "claimId": "c2cdc1fe-1e03-460e-ae31-6cd7d7ec87de"
+              "claimId": "c127a17b-c646-4d88-b4c9-d4fd1e371679"
             }
           ],
           "genealogy": {
@@ -1245,7 +1386,17 @@
                 "img": "",
                 "size": 40,
                 "trackTitle": "One More Time",
-                "trackArtist": "Daft Punk"
+                "trackArtist": "Daft Punk",
+                "year": 2000,
+                "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7"
+              },
+              {
+                "id": "london-electricity-cover",
+                "group": 4,
+                "label": "One More Time - The London Elektricity Big Band",
+                "size": 22,
+                "trackTitle": "One More Time",
+                "trackArtist": "The London Elektricity Big Band"
               },
               {
                 "id": "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
@@ -1255,7 +1406,9 @@
                 "size": 22,
                 "spotifyId": "5MIgTjcn94EPeSUUo8dx4q",
                 "trackTitle": "More Spell on You",
-                "trackArtist": "Eddie Johns"
+                "trackArtist": "Eddie Johns",
+                "year": 1979,
+                "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
               },
               {
                 "id": "mb-21ad70d5-f123-4546-9cf9-0a672500d185",
@@ -1263,7 +1416,9 @@
                 "label": "1 more dime (fvlcrvm rwrk) - dftpnk",
                 "size": 22,
                 "trackTitle": "1 more dime (fvlcrvm rwrk)",
-                "trackArtist": "dftpnk"
+                "trackArtist": "dftpnk",
+                "year": 2018,
+                "mbid": "21ad70d5-f123-4546-9cf9-0a672500d185"
               },
               {
                 "id": "mb-f4ea1af6-52b9-43ee-b31f-88f614cc1b7d",
@@ -1271,7 +1426,8 @@
                 "label": "one more karkat - jade",
                 "size": 22,
                 "trackTitle": "one more karkat",
-                "trackArtist": "jade"
+                "trackArtist": "jade",
+                "mbid": "f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
               },
               {
                 "id": "mb-63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
@@ -1279,7 +1435,9 @@
                 "label": "One More Time (Daft Punk) / Swoon (Chemical Brothers) - Daft Punk & The Chemical Brothers",
                 "size": 22,
                 "trackTitle": "One More Time (Daft Punk) / Swoon (Chemical Brothers)",
-                "trackArtist": "Daft Punk & The Chemical Brothers"
+                "trackArtist": "Daft Punk & The Chemical Brothers",
+                "year": 2011,
+                "mbid": "63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
               },
               {
                 "id": "mb-9d387165-a649-44ae-a388-af256f13b410",
@@ -1287,7 +1445,9 @@
                 "label": "One More Time (TeeVex remix) - TeeVex & Daft Punk",
                 "size": 22,
                 "trackTitle": "One More Time (TeeVex remix)",
-                "trackArtist": "TeeVex & Daft Punk"
+                "trackArtist": "TeeVex & Daft Punk",
+                "year": 2017,
+                "mbid": "9d387165-a649-44ae-a388-af256f13b410"
               },
               {
                 "id": "mb-1da61e7a-d61d-4538-bd75-63464988923f",
@@ -1297,7 +1457,9 @@
                 "size": 22,
                 "spotifyId": "7GeTsDIc5ykNB6lORO6Cee",
                 "trackTitle": "Circo Loco",
-                "trackArtist": "Drake & 21 Savage"
+                "trackArtist": "Drake & 21 Savage",
+                "year": 2022,
+                "mbid": "1da61e7a-d61d-4538-bd75-63464988923f"
               },
               {
                 "id": "mb-bbb58075-3e35-4bcc-a465-3e0edc665673",
@@ -1305,7 +1467,9 @@
                 "label": "DAFT - TAPS",
                 "size": 22,
                 "trackTitle": "DAFT",
-                "trackArtist": "TAPS"
+                "trackArtist": "TAPS",
+                "year": 2013,
+                "mbid": "bbb58075-3e35-4bcc-a465-3e0edc665673"
               },
               {
                 "id": "mb-5611aa4c-1ddd-4044-b573-3344405e8536",
@@ -1313,7 +1477,9 @@
                 "label": "Get It Get It - Girl Talk",
                 "size": 22,
                 "trackTitle": "Get It Get It",
-                "trackArtist": "Girl Talk"
+                "trackArtist": "Girl Talk",
+                "year": 2010,
+                "mbid": "5611aa4c-1ddd-4044-b573-3344405e8536"
               },
               {
                 "id": "mb-b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
@@ -1321,10 +1487,24 @@
                 "label": "Into the Groove (remix) - Discobuster",
                 "size": 22,
                 "trackTitle": "Into the Groove (remix)",
-                "trackArtist": "Discobuster"
+                "trackArtist": "Discobuster",
+                "year": 2002,
+                "mbid": "b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
               }
             ],
             "links": [
+              {
+                "source": "current",
+                "target": "london-electricity-cover",
+                "value": 1,
+                "type": "cover",
+                "kind": "inferred",
+                "origin": "model",
+                "claimId": "561b3742-a6d1-44dc-9097-9596951fed8b",
+                "evidenceIds": [
+                  "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
+                ]
+              },
               {
                 "source": "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
                 "target": "current",
@@ -1332,7 +1512,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "469822c2-a7ca-4587-b37d-e0a61729f9ba",
+                "claimId": "4b680e4e-f699-4e10-9a90-762e007bbf01",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
                 ]
@@ -1344,7 +1524,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "91f42b8f-da95-4ac7-b6b9-d0868df03983",
+                "claimId": "94aa68d7-050a-429e-8ae3-a6e8d093fc72",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
                 ]
@@ -1356,7 +1536,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "ab8a1114-6bd5-4363-84a5-5d46fdcd6f0f",
+                "claimId": "9e838c29-602b-4f7b-9871-53039f58f311",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
                 ]
@@ -1368,7 +1548,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "f19b4cd9-28f5-4305-b480-8da27178a002",
+                "claimId": "e65efe25-51e4-43f1-b631-6bb44072adcd",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
                 ]
@@ -1380,7 +1560,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "4c1b5b8f-79f1-4662-9358-32c149632070",
+                "claimId": "e01c4c6b-303b-40a5-aa58-d2d1f502d819",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
                 ]
@@ -1392,7 +1572,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "cfa15eb9-618d-43a1-ab0b-c9bad3d61ccb",
+                "claimId": "45c5316c-8e08-4f7b-9e7e-d30e5770cd71",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
                 ]
@@ -1404,7 +1584,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "0b8198fa-2539-47c0-9469-7bc8bedfde1d",
+                "claimId": "f8848556-ec22-4ece-8e63-6dc7793a8cd6",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
                 ]
@@ -1416,7 +1596,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "eb6b4448-3a0e-48d6-9ecf-7e8f6273d3a3",
+                "claimId": "98f7b9ef-caac-4483-a45d-9e736c4fa578",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
                 ]
@@ -1428,7 +1608,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "667db3a8-5ca4-466f-b053-d938a3a9ebe7",
+                "claimId": "fcace646-84e4-493c-84e0-12cfe633fa7a",
                 "evidenceIds": [
                   "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
                 ]
@@ -1967,8 +2147,8 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz recording",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
-              "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053.",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
+              "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053, first released 2000.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"
             },
             {
@@ -1977,7 +2157,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
             },
@@ -1987,7 +2167,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
             },
@@ -1997,7 +2177,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
             },
@@ -2007,7 +2187,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
             },
@@ -2017,7 +2197,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
             },
@@ -2027,7 +2207,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One Whore Time\" by Moustiluigi Random.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/a23583f6-7e90-43ca-80df-a616df69cde1"
             },
@@ -2037,7 +2217,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
             },
@@ -2047,7 +2227,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
             },
@@ -2057,7 +2237,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
             },
@@ -2067,7 +2247,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/534c1922-0005-4232-857a-c7c0b1da473d"
             },
@@ -2077,7 +2257,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
             },
@@ -2087,7 +2267,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"LOVER’S TIME\" by Cheryl Stelli.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
             },
@@ -2097,7 +2277,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
             },
@@ -2107,7 +2287,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
               "title": "One More Time — MusicBrainz relationships",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo.",
               "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
             },
@@ -2117,7 +2297,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
               "title": "Discovery — MusicBrainz release",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
               "recordRef": "release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"
             },
@@ -2127,7 +2307,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
             },
@@ -2137,7 +2317,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c"
             },
@@ -2147,7 +2327,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205"
             },
@@ -2157,7 +2337,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7"
             },
@@ -2167,7 +2347,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Microchip.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/811980e6-329f-4893-8083-0d222849b7b4"
             },
@@ -2177,7 +2357,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Vitamin String Quartet.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/29df9c62-9622-410a-bece-e6c874de2b22"
             },
@@ -2187,7 +2367,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Sunset In Ibiza.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/9c101d0d-e7af-45eb-9e3f-33ca0a7ef03e"
             },
@@ -2197,7 +2377,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The Madd Wikkid.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/7095246c-b187-46f7-939b-c5a5087eac79"
             },
@@ -2207,7 +2387,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/05a9b041-201e-4118-9e59-b4b3169a4528"
             },
@@ -2217,7 +2397,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/c61e9bea-164e-4783-a729-b4dda7f3ec3d"
             },
@@ -2227,7 +2407,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
               "title": "One More Time — MusicBrainz work",
-              "retrievedAt": "2026-10-27T19:29:57.932Z",
+              "retrievedAt": "2026-10-28T15:16:08.079Z",
               "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Starburkes & The Tea Leaf.",
               "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/07dd5768-8efc-4052-8b20-349cbe9e05b2"
             },
@@ -2237,7 +2417,7 @@
               "sourceTier": "web",
               "url": "https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
               "title": "One More Time (Daft Punk song) - Wikipedia",
-              "retrievedAt": "2026-10-27T19:29:53.986Z",
+              "retrievedAt": "2026-10-28T15:16:01.695Z",
               "excerpt": "\"One More Time\" was sampled and incorporated in Miliyah Kato's song \"Future Lover (Mirai Koibito) \"Future Lover (Mirai Koibito)\")\" from her album Liberty \"Liberty (Miliyah Kato album)\") in January 2016. The song peaked at number 30 in Japan.. Singer and actor Anthony Ramos covered the song for the 2020 DreamWorks Animation movie Trolls World Tour for his character. The track was also sampled and interpolated in the Drake \"Drake (musician)\") and 21 Savage song \"Circo Loco\" on their album, Her [.…",
               "recordRef": null
             },
@@ -2247,8 +2427,18 @@
               "sourceTier": "web",
               "url": "https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
               "title": "Daft Punk One More Time sample creator has never received any royalty payments | MusicRadar",
-              "retrievedAt": "2026-10-27T19:29:53.986Z",
+              "retrievedAt": "2026-10-28T15:16:01.695Z",
               "excerpt": "It might be one of their biggest hits, but the main hook in Daft Punk’s One More Time is powered by a brass sample from a little-known disco record. However, it turns out that Eddie Johns, the artist who wrote the song that was sampled, has never received any royalties from the French electronic music duo. [...] The sampled track, More Spell On You, was taken from a 1979 album of the same name. Once you’ve heard it, its importance to One More Time’s success becomes clear - the song’s lead hook …",
+              "recordRef": null
+            },
+            {
+              "id": "tavily:https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+              "title": "Daft Punk Samples That Shaped the Sound of Discovery | Tracklib",
+              "retrievedAt": "2026-10-28T15:16:01.695Z",
+              "excerpt": "Education # Breakdowns of Daft Punk's Samples on \"One More Time\" & 'Discovery' The legacy of Daft Punk lives on since their break-up in 2021. The albums of the French electronic music duo including 'Homework,' 'Discovery,' and 'Random Access Memories' reached a legendary status, also through their intricate use of samples. These videos show their sampling techniques with music by Eddie Johns, The Alan Parsons Project, Sister Sledge, Electric Light Orchestra, and more. [...] For years, there wer…",
               "recordRef": null
             },
             {
@@ -2257,7 +2447,7 @@
               "sourceTier": "web",
               "url": "https://www.whosampled.com/Daft-Punk/One-More-Time",
               "title": "One More Time by Daft Punk - Samples, Covers and ...",
-              "retrievedAt": "2026-10-27T19:29:53.986Z",
+              "retrievedAt": "2026-10-28T15:16:01.695Z",
               "excerpt": "\"One More Time\" contains samples of \"More Spell on You\" by Eddie Johns, \"Overdub Sensation - Track 31\" by Ueberschall, \"Is It All Over My Face? (Female Vocal)\"",
               "recordRef": null
             },
@@ -2267,151 +2457,179 @@
               "sourceTier": "web",
               "url": "https://www.youtube.com/watch?v=5QwOpRh-IfI",
               "title": "Sample Breakdown: Daft Punk - One More Time",
-              "retrievedAt": "2026-10-27T19:29:53.986Z",
+              "retrievedAt": "2026-10-28T15:16:01.695Z",
               "excerpt": "# Sample Breakdown: Daft Punk - One More Time ## Channel: TRACKLIB (verified) 817K subscribers 80K likes ### Description 2,148,399 views Posted: 2020-02-21 Inspired? Access samples like this one 🔌 [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one affordable subscription. The service has been used to find and clear samples for releases by Kendrick Lamar, Drake, Future, Kaytra…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
+              "id": "tavily:https://daftpunk.fandom.com/wiki/One_More_Time",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
-              "title": "How Daft Punk made \"One More Time\"",
-              "retrievedAt": "2026-10-27T19:29:53.986Z",
-              "excerpt": "Thats how @… made their hit single • One More Time • One of the greatest tracks of all time turns 23 today so it's a good reason to",
+              "url": "https://daftpunk.fandom.com/wiki/One_More_Time",
+              "title": "One More Time | Daft Wiki - Fandom",
+              "retrievedAt": "2026-10-28T15:16:05.223Z",
+              "excerpt": "\"One More Time\" is a song by electronic music duo Daft Punk, first released as a single on November 30, 2000 and later included in the 2001 album Discovery.",
               "recordRef": null
             },
             {
-              "id": "tavily:https://grumpfox.neocities.org/artists/daftpunk",
+              "id": "tavily:https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://grumpfox.neocities.org/artists/daftpunk",
-              "title": "Everything Spins - Daft Punk",
-              "retrievedAt": "2026-10-27T19:29:54.073Z",
-              "excerpt": "\"One More Time\" which will stand as their ultimate statement. It's a blossoming of pure euphoria, where for around five and a half minutes everything seems possible, the opportunities are endless and everything calls for joyous celebration, inviting the listener to the dancefloor with its triumphant horns and the insistent backbeat to share that feeling with everyone else around you for just one more song. It is undistilled joie de vivre and each time it plays it sounds just as fresh and [...] …",
+              "url": "https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
+              "title": "In Depth History - THE DAFT PUNK HISTORIAN",
+              "retrievedAt": "2026-10-28T15:16:05.223Z",
+              "excerpt": "| Picture | Daft Punk were one of the most mysterious and reclusive acts in the music world and achieved much success over their 28 year career. They were a French duo who formed in 1993 and helped bring electronic music (now primarily known as EDM) to the mainstream. They influenced several generations of artists and helped lay the foundation of today’s LED-laden live music stage productions. Each section in this page covers a significant period in their career and contains ample historical [.…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://daftpunk.fandom.com/wiki/Around_the_World",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://daftpunk.fandom.com/wiki/Around_the_World",
-              "title": "Around the World - Daft Wiki - Fandom",
-              "retrievedAt": "2026-10-27T19:29:54.073Z",
-              "excerpt": "\"Around the World\" is a song by the French electronic music duo Daft Punk. It appeared on the duo's debut album, Homework in 1997 and was released as a",
-              "recordRef": null
+              "id": "musicbrainz:recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+              "title": "1 more dime (fvlcrvm rwrk) — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"1 more dime (fvlcrvm rwrk)\" by dftpnk, first released 2018-09-05.",
+              "recordRef": "recording/21ad70d5-f123-4546-9cf9-0a672500d185"
             },
             {
-              "id": "tavily:https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
-              "title": "Daft Punk's One More Time and the Eddie Johns sample",
-              "retrievedAt": "2026-10-27T19:30:03.998Z",
-              "excerpt": "The sample in Daft Punk's One More Time comes from Eddie Johns' More Spell On You, 1979. The two tracks side by side, and where the sample",
-              "recordRef": null
+              "id": "musicbrainz:recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+              "title": "One More Time (Daft Punk) / Swoon (Chemical Brothers) — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:05.336Z",
+              "excerpt": "MusicBrainz recording \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers, first released 2011.",
+              "recordRef": "recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
             },
             {
-              "id": "tavily:https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-              "title": "The saga of Daft Punk \"One More Time\" and L.A.'s Eddie Johns - Los Angeles Times",
-              "retrievedAt": "2026-10-27T19:30:03.998Z",
-              "excerpt": "The rights to “More Spell on You” — first released in France on the label Président — were acquired by a French label and publishing company, GM Musipro, that reissues vintage French rock and pop. It’s where Daft Punk pays its royalties for permission to sample “More Spell.” The firm’s founder, Georges Mary, confirmed via phone and email that his company does receive those payments from Daft Punk but did not specify an amount. [...] Advertisement Music # A homeless L.A. musician helped create a…",
-              "recordRef": null
+              "id": "musicbrainz:recording/9d387165-a649-44ae-a388-af256f13b410",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/9d387165-a649-44ae-a388-af256f13b410",
+              "title": "One More Time (TeeVex remix) — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:05.336Z",
+              "excerpt": "MusicBrainz recording \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk, first released 2017-12-08.",
+              "recordRef": "recording/9d387165-a649-44ae-a388-af256f13b410"
             },
             {
-              "id": "tavily:https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-              "title": "Artist behind Daft Punk ‘One More Time’ lead sample has never been paid | DJ Mag",
-              "retrievedAt": "2026-10-27T19:30:03.998Z",
-              "excerpt": "DJ Mag News Christian Eede Monday, May 10, 2021 - 16:27 # Artist behind Daft Punk ‘One More Time’ lead sample has never been paid Eddie Johns' story has been newly profiled by the Los Angeles Times Eddie Johns, whose 1979 track 'More Spell On You' was sampled by Daft Punk for their hit single 'One More Time', has never received royalties from the French duo's track. [...] Within the profile, writer August Brown delves deep into the complicated issues around sampling and licensing that have seen…",
-              "recordRef": null
+              "id": "musicbrainz:recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+              "title": "One More Time (Uwe Heinrich Adler remix) — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:05.336Z",
+              "excerpt": "MusicBrainz recording \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk, first released 2011-08-05.",
+              "recordRef": "recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
+            },
+            {
+              "id": "musicbrainz:recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+              "title": "One Whore Time — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"One Whore Time\" by Moustiluigi Random, first released 2021-12-25.",
+              "recordRef": "recording/a23583f6-7e90-43ca-80df-a616df69cde1"
+            },
+            {
+              "id": "musicbrainz:recording/1da61e7a-d61d-4538-bd75-63464988923f",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/1da61e7a-d61d-4538-bd75-63464988923f",
+              "title": "Circo Loco — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"Circo Loco\" by Drake & 21 Savage, first released 2022-11-04.",
+              "recordRef": "recording/1da61e7a-d61d-4538-bd75-63464988923f"
+            },
+            {
+              "id": "musicbrainz:recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+              "title": "DAFT — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"DAFT\" by TAPS, first released 2013-04-20.",
+              "recordRef": "recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
+            },
+            {
+              "id": "musicbrainz:recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+              "title": "Get It Get It — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"Get It Get It\" by Girl Talk, first released 2010-11-15.",
+              "recordRef": "recording/5611aa4c-1ddd-4044-b573-3344405e8536"
+            },
+            {
+              "id": "musicbrainz:recording/534c1922-0005-4232-857a-c7c0b1da473d",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/534c1922-0005-4232-857a-c7c0b1da473d",
+              "title": "Give u kawaii! — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+, first released 2021-10-02.",
+              "recordRef": "recording/534c1922-0005-4232-857a-c7c0b1da473d"
+            },
+            {
+              "id": "musicbrainz:recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+              "title": "Into the Groove (remix) — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"Into the Groove (remix)\" by Discobuster, first released 2002.",
+              "recordRef": "recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+            },
+            {
+              "id": "musicbrainz:recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+              "title": "LOVER’S TIME — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"LOVER’S TIME\" by Cheryl Stelli, first released 2025-09-20.",
+              "recordRef": "recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
+            },
+            {
+              "id": "musicbrainz:recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+              "title": "More Spell on You — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"More Spell on You\" by Eddie Johns, first released 1979-05.",
+              "recordRef": "recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+            },
+            {
+              "id": "musicbrainz:recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+              "title": "Thraxxpunkk — MusicBrainz recording",
+              "retrievedAt": "2026-10-28T15:16:08.077Z",
+              "excerpt": "MusicBrainz recording \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo, first released 2021-11-17.",
+              "recordRef": "recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
             }
           ],
           "claims": [
             {
-              "id": "150a6f22-0974-442c-a5e7-7d9275127f5f",
-              "text": "MusicBrainz identifies this Daft Punk recording as 5:21 long.",
+              "id": "06689bee-fd80-44dd-a0eb-326809206a58",
+              "text": "“One More Time” by Daft Punk was first released in 2000.",
               "about": "track",
               "kind": "sourced",
               "origin": "model",
               "evidenceIds": ["musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"],
               "verdict": "supported",
-              "verdictReason": "The MusicBrainz recording excerpt lists Daft Punk’s recording as 5:21.",
+              "verdictReason": "The MusicBrainz recording excerpt says Daft Punk’s recording was first released in 2000.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording"
             },
             {
-              "id": "f665ed7c-b6bf-45c0-a795-2b608dfec691",
-              "text": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-              "about": "track",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": ["musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz Discovery release excerpt lists the track and February 26, 2001 date.",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "release"
-            },
-            {
-              "id": "fdbb79f2-c645-4787-bb86-c58f64171a48",
-              "text": "Daft Punk’s recording samples Eddie Johns’s “More Spell on You.”",
-              "about": "sample",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": [
-                "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
-              ],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz samples relationship excerpt names Eddie Johns’s “More Spell on You.”",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "recording"
-            },
-            {
-              "id": "72c47650-f529-47da-88cf-8d1950ed4d8a",
-              "text": "Daft Punk’s recording is sampled in Drake and 21 Savage’s “Circo Loco.”",
-              "about": "sample",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": [
-                "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
-              ],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz sampled-by excerpt names “Circo Loco” by Drake and 21 Savage.",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "recording"
-            },
-            {
-              "id": "dde71ea1-789c-46bb-aada-f5627ea4b804",
-              "text": "The song “One More Time” has been covered by The London Elektricity Big Band.",
-              "about": "cover",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": [
-                "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
-              ],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz work excerpt names a cover by The London Elektricity Big Band.",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "work"
-            },
-            {
-              "id": "452be048-b51f-46f5-b7c7-8fbc989fb2a0",
-              "text": "MusicBrainz documents Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. Other source material describes the brass figure as chopped and rearranged into the track’s hook.",
+              "id": "c127a17b-c646-4d88-b4c9-d4fd1e371679",
+              "text": "MusicBrainz records Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. The source material describes the brass hook as built from rearranged slices of that recording.",
               "about": "sample",
               "kind": "inferred",
               "origin": "model",
@@ -2419,7 +2637,7 @@
                 "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
               ],
               "verdict": "partial",
-              "verdictReason": "The MusicBrainz samples excerpt names the sample but says nothing about chopped brass.",
+              "verdictReason": "The MusicBrainz samples excerpt confirms the sample, but says nothing about rearranged brass-hook slices.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
@@ -2434,109 +2652,27 @@
                   },
                   {
                     "text": "More Spell on You",
-                    "type": "album"
-                  },
-                  {
-                    "text": "brass",
-                    "type": "technique"
+                    "type": "sample"
                   }
                 ]
               }
             },
             {
-              "id": "236a628b-8bac-43d4-b024-6338e2d91212",
-              "text": "MusicBrainz lists Daft Punk’s “One More Time” as sampled in “Circo Loco” by Drake and 21 Savage.",
-              "about": "connection",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": [
-                "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
-              ],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz sampled-by excerpt lists “Circo Loco” by Drake and 21 Savage.",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "recording",
-              "factoid": {
-                "title": "A later sample in “Circo Loco”",
-                "type": "connection",
-                "entities": [
-                  {
-                    "text": "Drake",
-                    "type": "artist"
-                  },
-                  {
-                    "text": "21 Savage",
-                    "type": "artist"
-                  },
-                  {
-                    "text": "Circo Loco",
-                    "type": "album"
-                  }
-                ]
-              }
-            },
-            {
-              "id": "e8ac1a76-f748-4526-8051-98ceb352d2ba",
-              "text": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-              "about": "credit",
-              "kind": "sourced",
-              "origin": "model",
-              "evidenceIds": ["musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz Discovery release excerpt lists the track and February 26, 2001 date.",
-              "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "release",
-              "factoid": {
-                "title": "Part of Discovery",
-                "type": "credits",
-                "entities": [
-                  {
-                    "text": "Daft Punk",
-                    "type": "artist"
-                  },
-                  {
-                    "text": "Discovery",
-                    "type": "album"
-                  },
-                  {
-                    "text": "2001",
-                    "type": "year"
-                  }
-                ]
-              }
-            },
-            {
-              "id": "c2cdc1fe-1e03-460e-ae31-6cd7d7ec87de",
-              "text": "MusicBrainz records a cover of the song “One More Time” by The London Elektricity Big Band.",
-              "about": "trivia",
-              "kind": "sourced",
+              "id": "561b3742-a6d1-44dc-9097-9596951fed8b",
+              "text": "\"One More Time - The London Elektricity Big Band\" is a cover of \"One More Time - Daft Punk\".",
+              "about": "cover",
+              "kind": "inferred",
               "origin": "model",
               "evidenceIds": [
                 "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
               ],
-              "verdict": "supported",
-              "verdictReason": "The MusicBrainz work excerpt records a cover by The London Elektricity Big Band.",
+              "verdict": "partial",
+              "verdictReason": "The MusicBrainz work excerpt confirms the cover, but does not identify Daft Punk.",
               "numericCheck": "n/a",
-              "numericReason": null,
-              "numericComparison": null,
-              "scope": "work",
-              "factoid": {
-                "title": "The song beyond this recording",
-                "type": "trivia",
-                "entities": [
-                  {
-                    "text": "The London Elektricity Big Band",
-                    "type": "artist"
-                  }
-                ]
-              }
+              "scope": "work"
             },
             {
-              "id": "469822c2-a7ca-4587-b37d-e0a61729f9ba",
+              "id": "4b680e4e-f699-4e10-9a90-762e007bbf01",
               "text": "\"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
               "about": "sample",
               "kind": "sourced",
@@ -2550,7 +2686,7 @@
               "scope": "recording"
             },
             {
-              "id": "91f42b8f-da95-4ac7-b6b9-d0868df03983",
+              "id": "94aa68d7-050a-429e-8ae3-a6e8d093fc72",
               "text": "\"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
               "about": "sample",
               "kind": "sourced",
@@ -2564,7 +2700,7 @@
               "scope": "recording"
             },
             {
-              "id": "ab8a1114-6bd5-4363-84a5-5d46fdcd6f0f",
+              "id": "9e838c29-602b-4f7b-9871-53039f58f311",
               "text": "\"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
               "about": "sample",
               "kind": "sourced",
@@ -2578,7 +2714,7 @@
               "scope": "recording"
             },
             {
-              "id": "f19b4cd9-28f5-4305-b480-8da27178a002",
+              "id": "e65efe25-51e4-43f1-b631-6bb44072adcd",
               "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
               "about": "sample",
               "kind": "sourced",
@@ -2592,7 +2728,7 @@
               "scope": "recording"
             },
             {
-              "id": "4c1b5b8f-79f1-4662-9358-32c149632070",
+              "id": "e01c4c6b-303b-40a5-aa58-d2d1f502d819",
               "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
               "about": "sample",
               "kind": "sourced",
@@ -2606,7 +2742,7 @@
               "scope": "recording"
             },
             {
-              "id": "cfa15eb9-618d-43a1-ab0b-c9bad3d61ccb",
+              "id": "45c5316c-8e08-4f7b-9e7e-d30e5770cd71",
               "text": "\"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
               "about": "sample",
               "kind": "sourced",
@@ -2620,7 +2756,7 @@
               "scope": "recording"
             },
             {
-              "id": "0b8198fa-2539-47c0-9469-7bc8bedfde1d",
+              "id": "f8848556-ec22-4ece-8e63-6dc7793a8cd6",
               "text": "\"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
               "about": "sample",
               "kind": "sourced",
@@ -2634,7 +2770,7 @@
               "scope": "recording"
             },
             {
-              "id": "eb6b4448-3a0e-48d6-9ecf-7e8f6273d3a3",
+              "id": "98f7b9ef-caac-4483-a45d-9e736c4fa578",
               "text": "\"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
               "about": "sample",
               "kind": "sourced",
@@ -2648,7 +2784,7 @@
               "scope": "recording"
             },
             {
-              "id": "667db3a8-5ca4-466f-b053-d938a3a9ebe7",
+              "id": "fcace646-84e4-493c-84e0-12cfe633fa7a",
               "text": "\"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
               "about": "sample",
               "kind": "sourced",
@@ -2662,7 +2798,7 @@
               "scope": "recording"
             },
             {
-              "id": "1cfe5edb-b681-4024-8ea9-c54cc142112a",
+              "id": "58a5f8d4-75c9-4ab3-b3c9-4d78220f2fdb",
               "text": "The work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
               "about": "cover",
               "kind": "sourced",
@@ -2676,7 +2812,7 @@
               "scope": "work"
             },
             {
-              "id": "4f01b87b-d68d-415c-84fc-61da8f02c497",
+              "id": "9b915040-9c67-4013-b8be-1380a705b55b",
               "text": "The work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
               "about": "cover",
               "kind": "sourced",
@@ -2690,7 +2826,7 @@
               "scope": "work"
             },
             {
-              "id": "8178bbac-a734-42a1-96b5-3e75912df18b",
+              "id": "3e1adc59-3a3c-45c0-9478-b5f481589246",
               "text": "The work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
               "about": "cover",
               "kind": "sourced",
@@ -2704,7 +2840,7 @@
               "scope": "work"
             },
             {
-              "id": "7f01587e-7c1c-48bc-b09f-850506efc686",
+              "id": "256ab1fe-8974-4790-8688-24cfede138ef",
               "text": "The work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
               "about": "cover",
               "kind": "sourced",
@@ -2718,7 +2854,7 @@
               "scope": "work"
             },
             {
-              "id": "84520ef5-dbe5-4cfb-85e2-289b3eddc030",
+              "id": "06d4b0af-3525-4b88-b011-3f18b28f965f",
               "text": "\"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
               "about": "track",
               "kind": "sourced",
@@ -2733,21 +2869,22 @@
           "run": {
             "id": "recorded-one-more-time-daft-punk",
             "mode": "replay",
-            "recordedAt": "2026-10-27T19:30:19.136Z",
-            "commit": "98e88946b9b5",
+            "recordedAt": "2026-10-28T15:16:31.781Z",
+            "commit": "2b66a5082fc7",
             "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
             "replayed": "run",
             "fallback": false,
             "usage": {
               "llmCalls": 4,
-              "inputTokens": 16546,
-              "outputTokens": 2042,
-              "reasoningTokens": 264,
-              "usd": 0.010406
+              "inputTokens": 15463,
+              "outputTokens": 2089,
+              "reasoningTokens": 359,
+              "usd": 0.012167
             },
             "verifier": {
               "judged": 9,
-              "unjudged": 0
+              "unjudged": 0,
+              "restated": 6
             },
             "sourceErrors": [
               {
@@ -2766,13 +2903,13 @@
       }
     },
     {
-      "atMs": 30657,
+      "atMs": 33632,
       "event": {
         "type": "done",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 59,
-        "elapsedMs": 31236,
-        "timestamp": "2026-10-27T19:30:19.145Z"
+        "seq": 71,
+        "elapsedMs": 33635,
+        "timestamp": "2026-10-28T15:16:31.800Z"
       }
     }
   ],
@@ -2935,100 +3072,25 @@
     "samples": [],
     "factoids": [
       {
-        "id": "cc34d8c8-29ad-46a3-b106-3ef0b5244d41",
+        "id": "051f2e67-fdef-4671-be8f-602065bcd467",
         "title": "A disco source in the hook",
-        "content": "MusicBrainz documents Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. Other source material describes the brass figure as chopped and rearranged into the track’s hook.",
+        "content": "MusicBrainz records Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. The source material describes the brass hook as built from rearranged slices of that recording.",
         "type": "sample",
         "entities": [
           {
-            "id": "7a327543-9352-4f63-b9a2-3d6ed21055ad",
+            "id": "9feebdaf-1070-46b4-96c6-4117651b6b5e",
             "text": "Eddie Johns",
             "type": "artist",
             "searchQuery": "Eddie Johns"
           },
           {
-            "id": "2b5e8a79-c691-4bcc-8eab-4d4af9bbff0e",
+            "id": "44ca87c5-beab-49ca-b4b6-9b79c5cd1a26",
             "text": "More Spell on You",
-            "type": "album",
+            "type": "sample",
             "searchQuery": "More Spell on You"
-          },
-          {
-            "id": "d25259f2-108e-46a1-aa89-11ab9293b838",
-            "text": "brass",
-            "type": "technique",
-            "searchQuery": "brass"
           }
         ],
-        "claimId": "452be048-b51f-46f5-b7c7-8fbc989fb2a0"
-      },
-      {
-        "id": "d493ab7d-967d-4b7b-9f97-0d8121c1ae6d",
-        "title": "A later sample in “Circo Loco”",
-        "content": "MusicBrainz lists Daft Punk’s “One More Time” as sampled in “Circo Loco” by Drake and 21 Savage.",
-        "type": "connection",
-        "entities": [
-          {
-            "id": "23e5a1b0-3058-4a94-ab9b-30ad0525f772",
-            "text": "Drake",
-            "type": "artist",
-            "searchQuery": "Drake"
-          },
-          {
-            "id": "21c678c6-74be-4dbe-8246-744014cbde8d",
-            "text": "21 Savage",
-            "type": "artist",
-            "searchQuery": "21 Savage"
-          },
-          {
-            "id": "53be68a6-bda2-4aaf-bf42-1f89296ebf2c",
-            "text": "Circo Loco",
-            "type": "album",
-            "searchQuery": "Circo Loco"
-          }
-        ],
-        "claimId": "236a628b-8bac-43d4-b024-6338e2d91212"
-      },
-      {
-        "id": "e5ec82ff-5d0a-4483-add6-673517e77de1",
-        "title": "Part of Discovery",
-        "content": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-        "type": "credits",
-        "entities": [
-          {
-            "id": "84455003-c641-4344-86b3-e68286984bfe",
-            "text": "Daft Punk",
-            "type": "artist",
-            "searchQuery": "Daft Punk"
-          },
-          {
-            "id": "657dcd01-7921-4d2c-952a-eb023ff79c5f",
-            "text": "Discovery",
-            "type": "album",
-            "searchQuery": "Discovery"
-          },
-          {
-            "id": "9894d40e-7d4f-4677-981c-c11964109762",
-            "text": "2001",
-            "type": "year",
-            "searchQuery": "2001"
-          }
-        ],
-        "claimId": "e8ac1a76-f748-4526-8051-98ceb352d2ba"
-      },
-      {
-        "id": "df4a305d-064e-44bc-b12c-69fe0a444368",
-        "title": "The song beyond this recording",
-        "content": "MusicBrainz records a cover of the song “One More Time” by The London Elektricity Big Band.",
-        "type": "trivia",
-        "entities": [
-          {
-            "id": "4c52a6ad-52d8-4285-9b0e-1b1130a63e06",
-            "text": "The London Elektricity Big Band",
-            "type": "artist",
-            "searchQuery": "The London Elektricity Big Band"
-          }
-        ],
-        "claimId": "c2cdc1fe-1e03-460e-ae31-6cd7d7ec87de"
+        "claimId": "c127a17b-c646-4d88-b4c9-d4fd1e371679"
       }
     ],
     "genealogy": {
@@ -3040,7 +3102,17 @@
           "img": "",
           "size": 40,
           "trackTitle": "One More Time",
-          "trackArtist": "Daft Punk"
+          "trackArtist": "Daft Punk",
+          "year": 2000,
+          "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7"
+        },
+        {
+          "id": "london-electricity-cover",
+          "group": 4,
+          "label": "One More Time - The London Elektricity Big Band",
+          "size": 22,
+          "trackTitle": "One More Time",
+          "trackArtist": "The London Elektricity Big Band"
         },
         {
           "id": "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
@@ -3050,7 +3122,9 @@
           "size": 22,
           "spotifyId": "5MIgTjcn94EPeSUUo8dx4q",
           "trackTitle": "More Spell on You",
-          "trackArtist": "Eddie Johns"
+          "trackArtist": "Eddie Johns",
+          "year": 1979,
+          "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
         },
         {
           "id": "mb-21ad70d5-f123-4546-9cf9-0a672500d185",
@@ -3058,7 +3132,9 @@
           "label": "1 more dime (fvlcrvm rwrk) - dftpnk",
           "size": 22,
           "trackTitle": "1 more dime (fvlcrvm rwrk)",
-          "trackArtist": "dftpnk"
+          "trackArtist": "dftpnk",
+          "year": 2018,
+          "mbid": "21ad70d5-f123-4546-9cf9-0a672500d185"
         },
         {
           "id": "mb-f4ea1af6-52b9-43ee-b31f-88f614cc1b7d",
@@ -3066,7 +3142,8 @@
           "label": "one more karkat - jade",
           "size": 22,
           "trackTitle": "one more karkat",
-          "trackArtist": "jade"
+          "trackArtist": "jade",
+          "mbid": "f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
         },
         {
           "id": "mb-63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
@@ -3074,7 +3151,9 @@
           "label": "One More Time (Daft Punk) / Swoon (Chemical Brothers) - Daft Punk & The Chemical Brothers",
           "size": 22,
           "trackTitle": "One More Time (Daft Punk) / Swoon (Chemical Brothers)",
-          "trackArtist": "Daft Punk & The Chemical Brothers"
+          "trackArtist": "Daft Punk & The Chemical Brothers",
+          "year": 2011,
+          "mbid": "63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
         },
         {
           "id": "mb-9d387165-a649-44ae-a388-af256f13b410",
@@ -3082,7 +3161,9 @@
           "label": "One More Time (TeeVex remix) - TeeVex & Daft Punk",
           "size": 22,
           "trackTitle": "One More Time (TeeVex remix)",
-          "trackArtist": "TeeVex & Daft Punk"
+          "trackArtist": "TeeVex & Daft Punk",
+          "year": 2017,
+          "mbid": "9d387165-a649-44ae-a388-af256f13b410"
         },
         {
           "id": "mb-1da61e7a-d61d-4538-bd75-63464988923f",
@@ -3092,7 +3173,9 @@
           "size": 22,
           "spotifyId": "7GeTsDIc5ykNB6lORO6Cee",
           "trackTitle": "Circo Loco",
-          "trackArtist": "Drake & 21 Savage"
+          "trackArtist": "Drake & 21 Savage",
+          "year": 2022,
+          "mbid": "1da61e7a-d61d-4538-bd75-63464988923f"
         },
         {
           "id": "mb-bbb58075-3e35-4bcc-a465-3e0edc665673",
@@ -3100,7 +3183,9 @@
           "label": "DAFT - TAPS",
           "size": 22,
           "trackTitle": "DAFT",
-          "trackArtist": "TAPS"
+          "trackArtist": "TAPS",
+          "year": 2013,
+          "mbid": "bbb58075-3e35-4bcc-a465-3e0edc665673"
         },
         {
           "id": "mb-5611aa4c-1ddd-4044-b573-3344405e8536",
@@ -3108,7 +3193,9 @@
           "label": "Get It Get It - Girl Talk",
           "size": 22,
           "trackTitle": "Get It Get It",
-          "trackArtist": "Girl Talk"
+          "trackArtist": "Girl Talk",
+          "year": 2010,
+          "mbid": "5611aa4c-1ddd-4044-b573-3344405e8536"
         },
         {
           "id": "mb-b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
@@ -3116,10 +3203,24 @@
           "label": "Into the Groove (remix) - Discobuster",
           "size": 22,
           "trackTitle": "Into the Groove (remix)",
-          "trackArtist": "Discobuster"
+          "trackArtist": "Discobuster",
+          "year": 2002,
+          "mbid": "b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
         }
       ],
       "links": [
+        {
+          "source": "current",
+          "target": "london-electricity-cover",
+          "value": 1,
+          "type": "cover",
+          "kind": "inferred",
+          "origin": "model",
+          "claimId": "561b3742-a6d1-44dc-9097-9596951fed8b",
+          "evidenceIds": [
+            "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
+          ]
+        },
         {
           "source": "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
           "target": "current",
@@ -3127,7 +3228,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "469822c2-a7ca-4587-b37d-e0a61729f9ba",
+          "claimId": "4b680e4e-f699-4e10-9a90-762e007bbf01",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
           ]
@@ -3139,7 +3240,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "91f42b8f-da95-4ac7-b6b9-d0868df03983",
+          "claimId": "94aa68d7-050a-429e-8ae3-a6e8d093fc72",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
           ]
@@ -3151,7 +3252,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "ab8a1114-6bd5-4363-84a5-5d46fdcd6f0f",
+          "claimId": "9e838c29-602b-4f7b-9871-53039f58f311",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
           ]
@@ -3163,7 +3264,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "f19b4cd9-28f5-4305-b480-8da27178a002",
+          "claimId": "e65efe25-51e4-43f1-b631-6bb44072adcd",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
           ]
@@ -3175,7 +3276,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "4c1b5b8f-79f1-4662-9358-32c149632070",
+          "claimId": "e01c4c6b-303b-40a5-aa58-d2d1f502d819",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
           ]
@@ -3187,7 +3288,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "cfa15eb9-618d-43a1-ab0b-c9bad3d61ccb",
+          "claimId": "45c5316c-8e08-4f7b-9e7e-d30e5770cd71",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
           ]
@@ -3199,7 +3300,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "0b8198fa-2539-47c0-9469-7bc8bedfde1d",
+          "claimId": "f8848556-ec22-4ece-8e63-6dc7793a8cd6",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
           ]
@@ -3211,7 +3312,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "eb6b4448-3a0e-48d6-9ecf-7e8f6273d3a3",
+          "claimId": "98f7b9ef-caac-4483-a45d-9e736c4fa578",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
           ]
@@ -3223,7 +3324,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "667db3a8-5ca4-466f-b053-d938a3a9ebe7",
+          "claimId": "fcace646-84e4-493c-84e0-12cfe633fa7a",
           "evidenceIds": [
             "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
           ]
@@ -3757,8 +3858,8 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz recording",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
-        "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053.",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
+        "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053, first released 2000.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"
       },
       {
@@ -3767,7 +3868,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
       },
@@ -3777,7 +3878,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
       },
@@ -3787,7 +3888,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
       },
@@ -3797,7 +3898,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
       },
@@ -3807,7 +3908,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
       },
@@ -3817,7 +3918,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One Whore Time\" by Moustiluigi Random.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/a23583f6-7e90-43ca-80df-a616df69cde1"
       },
@@ -3827,7 +3928,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
       },
@@ -3837,7 +3938,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
       },
@@ -3847,7 +3948,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
       },
@@ -3857,7 +3958,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/534c1922-0005-4232-857a-c7c0b1da473d"
       },
@@ -3867,7 +3968,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
       },
@@ -3877,7 +3978,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"LOVER’S TIME\" by Cheryl Stelli.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
       },
@@ -3887,7 +3988,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
       },
@@ -3897,7 +3998,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
         "title": "One More Time — MusicBrainz relationships",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo.",
         "recordRef": "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
       },
@@ -3907,7 +4008,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
         "title": "Discovery — MusicBrainz release",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
         "recordRef": "release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"
       },
@@ -3917,7 +4018,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
       },
@@ -3927,7 +4028,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c"
       },
@@ -3937,7 +4038,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205"
       },
@@ -3947,7 +4048,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7"
       },
@@ -3957,7 +4058,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Microchip.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/811980e6-329f-4893-8083-0d222849b7b4"
       },
@@ -3967,7 +4068,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Vitamin String Quartet.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/29df9c62-9622-410a-bece-e6c874de2b22"
       },
@@ -3977,7 +4078,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Sunset In Ibiza.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/9c101d0d-e7af-45eb-9e3f-33ca0a7ef03e"
       },
@@ -3987,7 +4088,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The Madd Wikkid.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/7095246c-b187-46f7-939b-c5a5087eac79"
       },
@@ -3997,7 +4098,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/05a9b041-201e-4118-9e59-b4b3169a4528"
       },
@@ -4007,7 +4108,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/c61e9bea-164e-4783-a729-b4dda7f3ec3d"
       },
@@ -4017,7 +4118,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
         "title": "One More Time — MusicBrainz work",
-        "retrievedAt": "2026-10-27T19:29:57.932Z",
+        "retrievedAt": "2026-10-28T15:16:08.079Z",
         "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Starburkes & The Tea Leaf.",
         "recordRef": "work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/07dd5768-8efc-4052-8b20-349cbe9e05b2"
       },
@@ -4027,7 +4128,7 @@
         "sourceTier": "web",
         "url": "https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
         "title": "One More Time (Daft Punk song) - Wikipedia",
-        "retrievedAt": "2026-10-27T19:29:53.986Z",
+        "retrievedAt": "2026-10-28T15:16:01.695Z",
         "excerpt": "\"One More Time\" was sampled and incorporated in Miliyah Kato's song \"Future Lover (Mirai Koibito) \"Future Lover (Mirai Koibito)\")\" from her album Liberty \"Liberty (Miliyah Kato album)\") in January 2016. The song peaked at number 30 in Japan.. Singer and actor Anthony Ramos covered the song for the 2020 DreamWorks Animation movie Trolls World Tour for his character. The track was also sampled and interpolated in the Drake \"Drake (musician)\") and 21 Savage song \"Circo Loco\" on their album, Her [.…",
         "recordRef": null
       },
@@ -4037,8 +4138,18 @@
         "sourceTier": "web",
         "url": "https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
         "title": "Daft Punk One More Time sample creator has never received any royalty payments | MusicRadar",
-        "retrievedAt": "2026-10-27T19:29:53.986Z",
+        "retrievedAt": "2026-10-28T15:16:01.695Z",
         "excerpt": "It might be one of their biggest hits, but the main hook in Daft Punk’s One More Time is powered by a brass sample from a little-known disco record. However, it turns out that Eddie Johns, the artist who wrote the song that was sampled, has never received any royalties from the French electronic music duo. [...] The sampled track, More Spell On You, was taken from a 1979 album of the same name. Once you’ve heard it, its importance to One More Time’s success becomes clear - the song’s lead hook …",
+        "recordRef": null
+      },
+      {
+        "id": "tavily:https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+        "source": "tavily",
+        "sourceTier": "web",
+        "url": "https://www.tracklib.com/blog/daftpunk-samplebreakdown-discovery-samples",
+        "title": "Daft Punk Samples That Shaped the Sound of Discovery | Tracklib",
+        "retrievedAt": "2026-10-28T15:16:01.695Z",
+        "excerpt": "Education # Breakdowns of Daft Punk's Samples on \"One More Time\" & 'Discovery' The legacy of Daft Punk lives on since their break-up in 2021. The albums of the French electronic music duo including 'Homework,' 'Discovery,' and 'Random Access Memories' reached a legendary status, also through their intricate use of samples. These videos show their sampling techniques with music by Eddie Johns, The Alan Parsons Project, Sister Sledge, Electric Light Orchestra, and more. [...] For years, there wer…",
         "recordRef": null
       },
       {
@@ -4047,7 +4158,7 @@
         "sourceTier": "web",
         "url": "https://www.whosampled.com/Daft-Punk/One-More-Time",
         "title": "One More Time by Daft Punk - Samples, Covers and ...",
-        "retrievedAt": "2026-10-27T19:29:53.986Z",
+        "retrievedAt": "2026-10-28T15:16:01.695Z",
         "excerpt": "\"One More Time\" contains samples of \"More Spell on You\" by Eddie Johns, \"Overdub Sensation - Track 31\" by Ueberschall, \"Is It All Over My Face? (Female Vocal)\"",
         "recordRef": null
       },
@@ -4057,151 +4168,179 @@
         "sourceTier": "web",
         "url": "https://www.youtube.com/watch?v=5QwOpRh-IfI",
         "title": "Sample Breakdown: Daft Punk - One More Time",
-        "retrievedAt": "2026-10-27T19:29:53.986Z",
+        "retrievedAt": "2026-10-28T15:16:01.695Z",
         "excerpt": "# Sample Breakdown: Daft Punk - One More Time ## Channel: TRACKLIB (verified) 817K subscribers 80K likes ### Description 2,148,399 views Posted: 2020-02-21 Inspired? Access samples like this one 🔌 [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one affordable subscription. The service has been used to find and clear samples for releases by Kendrick Lamar, Drake, Future, Kaytra…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
+        "id": "tavily:https://daftpunk.fandom.com/wiki/One_More_Time",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
-        "title": "How Daft Punk made \"One More Time\"",
-        "retrievedAt": "2026-10-27T19:29:53.986Z",
-        "excerpt": "Thats how @… made their hit single • One More Time • One of the greatest tracks of all time turns 23 today so it's a good reason to",
+        "url": "https://daftpunk.fandom.com/wiki/One_More_Time",
+        "title": "One More Time | Daft Wiki - Fandom",
+        "retrievedAt": "2026-10-28T15:16:05.223Z",
+        "excerpt": "\"One More Time\" is a song by electronic music duo Daft Punk, first released as a single on November 30, 2000 and later included in the 2001 album Discovery.",
         "recordRef": null
       },
       {
-        "id": "tavily:https://grumpfox.neocities.org/artists/daftpunk",
+        "id": "tavily:https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://grumpfox.neocities.org/artists/daftpunk",
-        "title": "Everything Spins - Daft Punk",
-        "retrievedAt": "2026-10-27T19:29:54.073Z",
-        "excerpt": "\"One More Time\" which will stand as their ultimate statement. It's a blossoming of pure euphoria, where for around five and a half minutes everything seems possible, the opportunities are endless and everything calls for joyous celebration, inviting the listener to the dancefloor with its triumphant horns and the insistent backbeat to share that feeling with everyone else around you for just one more song. It is undistilled joie de vivre and each time it plays it sounds just as fresh and [...] …",
+        "url": "https://thedaftpunkhistorian.weebly.com/in-depth-history.html",
+        "title": "In Depth History - THE DAFT PUNK HISTORIAN",
+        "retrievedAt": "2026-10-28T15:16:05.223Z",
+        "excerpt": "| Picture | Daft Punk were one of the most mysterious and reclusive acts in the music world and achieved much success over their 28 year career. They were a French duo who formed in 1993 and helped bring electronic music (now primarily known as EDM) to the mainstream. They influenced several generations of artists and helped lay the foundation of today’s LED-laden live music stage productions. Each section in this page covers a significant period in their career and contains ample historical [.…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://daftpunk.fandom.com/wiki/Around_the_World",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://daftpunk.fandom.com/wiki/Around_the_World",
-        "title": "Around the World - Daft Wiki - Fandom",
-        "retrievedAt": "2026-10-27T19:29:54.073Z",
-        "excerpt": "\"Around the World\" is a song by the French electronic music duo Daft Punk. It appeared on the duo's debut album, Homework in 1997 and was released as a",
-        "recordRef": null
+        "id": "musicbrainz:recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+        "title": "1 more dime (fvlcrvm rwrk) — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"1 more dime (fvlcrvm rwrk)\" by dftpnk, first released 2018-09-05.",
+        "recordRef": "recording/21ad70d5-f123-4546-9cf9-0a672500d185"
       },
       {
-        "id": "tavily:https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://roguemusic.blog/en/one-more-time-daft-punk-eddie-johns",
-        "title": "Daft Punk's One More Time and the Eddie Johns sample",
-        "retrievedAt": "2026-10-27T19:30:03.998Z",
-        "excerpt": "The sample in Daft Punk's One More Time comes from Eddie Johns' More Spell On You, 1979. The two tracks side by side, and where the sample",
-        "recordRef": null
+        "id": "musicbrainz:recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+        "title": "One More Time (Daft Punk) / Swoon (Chemical Brothers) — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:05.336Z",
+        "excerpt": "MusicBrainz recording \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers, first released 2011.",
+        "recordRef": "recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
       },
       {
-        "id": "tavily:https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
-        "title": "The saga of Daft Punk \"One More Time\" and L.A.'s Eddie Johns - Los Angeles Times",
-        "retrievedAt": "2026-10-27T19:30:03.998Z",
-        "excerpt": "The rights to “More Spell on You” — first released in France on the label Président — were acquired by a French label and publishing company, GM Musipro, that reissues vintage French rock and pop. It’s where Daft Punk pays its royalties for permission to sample “More Spell.” The firm’s founder, Georges Mary, confirmed via phone and email that his company does receive those payments from Daft Punk but did not specify an amount. [...] Advertisement Music # A homeless L.A. musician helped create a…",
-        "recordRef": null
+        "id": "musicbrainz:recording/9d387165-a649-44ae-a388-af256f13b410",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/9d387165-a649-44ae-a388-af256f13b410",
+        "title": "One More Time (TeeVex remix) — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:05.336Z",
+        "excerpt": "MusicBrainz recording \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk, first released 2017-12-08.",
+        "recordRef": "recording/9d387165-a649-44ae-a388-af256f13b410"
       },
       {
-        "id": "tavily:https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://djmag.com/news/artist-behind-daft-punk-one-more-time-lead-sample-has-never-been-paid",
-        "title": "Artist behind Daft Punk ‘One More Time’ lead sample has never been paid | DJ Mag",
-        "retrievedAt": "2026-10-27T19:30:03.998Z",
-        "excerpt": "DJ Mag News Christian Eede Monday, May 10, 2021 - 16:27 # Artist behind Daft Punk ‘One More Time’ lead sample has never been paid Eddie Johns' story has been newly profiled by the Los Angeles Times Eddie Johns, whose 1979 track 'More Spell On You' was sampled by Daft Punk for their hit single 'One More Time', has never received royalties from the French duo's track. [...] Within the profile, writer August Brown delves deep into the complicated issues around sampling and licensing that have seen…",
-        "recordRef": null
+        "id": "musicbrainz:recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+        "title": "One More Time (Uwe Heinrich Adler remix) — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:05.336Z",
+        "excerpt": "MusicBrainz recording \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk, first released 2011-08-05.",
+        "recordRef": "recording/63845dcd-526a-424d-bd1f-347b4b9bfa16"
+      },
+      {
+        "id": "musicbrainz:recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+        "title": "One Whore Time — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"One Whore Time\" by Moustiluigi Random, first released 2021-12-25.",
+        "recordRef": "recording/a23583f6-7e90-43ca-80df-a616df69cde1"
+      },
+      {
+        "id": "musicbrainz:recording/1da61e7a-d61d-4538-bd75-63464988923f",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/1da61e7a-d61d-4538-bd75-63464988923f",
+        "title": "Circo Loco — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"Circo Loco\" by Drake & 21 Savage, first released 2022-11-04.",
+        "recordRef": "recording/1da61e7a-d61d-4538-bd75-63464988923f"
+      },
+      {
+        "id": "musicbrainz:recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+        "title": "DAFT — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"DAFT\" by TAPS, first released 2013-04-20.",
+        "recordRef": "recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
+      },
+      {
+        "id": "musicbrainz:recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+        "title": "Get It Get It — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"Get It Get It\" by Girl Talk, first released 2010-11-15.",
+        "recordRef": "recording/5611aa4c-1ddd-4044-b573-3344405e8536"
+      },
+      {
+        "id": "musicbrainz:recording/534c1922-0005-4232-857a-c7c0b1da473d",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/534c1922-0005-4232-857a-c7c0b1da473d",
+        "title": "Give u kawaii! — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+, first released 2021-10-02.",
+        "recordRef": "recording/534c1922-0005-4232-857a-c7c0b1da473d"
+      },
+      {
+        "id": "musicbrainz:recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+        "title": "Into the Groove (remix) — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"Into the Groove (remix)\" by Discobuster, first released 2002.",
+        "recordRef": "recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+      },
+      {
+        "id": "musicbrainz:recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+        "title": "LOVER’S TIME — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"LOVER’S TIME\" by Cheryl Stelli, first released 2025-09-20.",
+        "recordRef": "recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb"
+      },
+      {
+        "id": "musicbrainz:recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "title": "More Spell on You — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"More Spell on You\" by Eddie Johns, first released 1979-05.",
+        "recordRef": "recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+      },
+      {
+        "id": "musicbrainz:recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+        "source": "musicbrainz",
+        "sourceTier": "primary-record",
+        "url": "https://musicbrainz.org/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+        "title": "Thraxxpunkk — MusicBrainz recording",
+        "retrievedAt": "2026-10-28T15:16:08.077Z",
+        "excerpt": "MusicBrainz recording \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo, first released 2021-11-17.",
+        "recordRef": "recording/d177a9af-0d6c-4197-9411-dcb00f3977a1"
       }
     ],
     "claims": [
       {
-        "id": "150a6f22-0974-442c-a5e7-7d9275127f5f",
-        "text": "MusicBrainz identifies this Daft Punk recording as 5:21 long.",
+        "id": "06689bee-fd80-44dd-a0eb-326809206a58",
+        "text": "“One More Time” by Daft Punk was first released in 2000.",
         "about": "track",
         "kind": "sourced",
         "origin": "model",
         "evidenceIds": ["musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"],
         "verdict": "supported",
-        "verdictReason": "The MusicBrainz recording excerpt lists Daft Punk’s recording as 5:21.",
+        "verdictReason": "The MusicBrainz recording excerpt says Daft Punk’s recording was first released in 2000.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording"
       },
       {
-        "id": "f665ed7c-b6bf-45c0-a795-2b608dfec691",
-        "text": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-        "about": "track",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": ["musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz Discovery release excerpt lists the track and February 26, 2001 date.",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "release"
-      },
-      {
-        "id": "fdbb79f2-c645-4787-bb86-c58f64171a48",
-        "text": "Daft Punk’s recording samples Eddie Johns’s “More Spell on You.”",
-        "about": "sample",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": [
-          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
-        ],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz samples relationship excerpt names Eddie Johns’s “More Spell on You.”",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "recording"
-      },
-      {
-        "id": "72c47650-f529-47da-88cf-8d1950ed4d8a",
-        "text": "Daft Punk’s recording is sampled in Drake and 21 Savage’s “Circo Loco.”",
-        "about": "sample",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": [
-          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
-        ],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz sampled-by excerpt names “Circo Loco” by Drake and 21 Savage.",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "recording"
-      },
-      {
-        "id": "dde71ea1-789c-46bb-aada-f5627ea4b804",
-        "text": "The song “One More Time” has been covered by The London Elektricity Big Band.",
-        "about": "cover",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": [
-          "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
-        ],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz work excerpt names a cover by The London Elektricity Big Band.",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "work"
-      },
-      {
-        "id": "452be048-b51f-46f5-b7c7-8fbc989fb2a0",
-        "text": "MusicBrainz documents Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. Other source material describes the brass figure as chopped and rearranged into the track’s hook.",
+        "id": "c127a17b-c646-4d88-b4c9-d4fd1e371679",
+        "text": "MusicBrainz records Eddie Johns’s “More Spell on You” as a sample in Daft Punk’s recording. The source material describes the brass hook as built from rearranged slices of that recording.",
         "about": "sample",
         "kind": "inferred",
         "origin": "model",
@@ -4209,7 +4348,7 @@
           "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
         ],
         "verdict": "partial",
-        "verdictReason": "The MusicBrainz samples excerpt names the sample but says nothing about chopped brass.",
+        "verdictReason": "The MusicBrainz samples excerpt confirms the sample, but says nothing about rearranged brass-hook slices.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
@@ -4224,109 +4363,27 @@
             },
             {
               "text": "More Spell on You",
-              "type": "album"
-            },
-            {
-              "text": "brass",
-              "type": "technique"
+              "type": "sample"
             }
           ]
         }
       },
       {
-        "id": "236a628b-8bac-43d4-b024-6338e2d91212",
-        "text": "MusicBrainz lists Daft Punk’s “One More Time” as sampled in “Circo Loco” by Drake and 21 Savage.",
-        "about": "connection",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": [
-          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
-        ],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz sampled-by excerpt lists “Circo Loco” by Drake and 21 Savage.",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "recording",
-        "factoid": {
-          "title": "A later sample in “Circo Loco”",
-          "type": "connection",
-          "entities": [
-            {
-              "text": "Drake",
-              "type": "artist"
-            },
-            {
-              "text": "21 Savage",
-              "type": "artist"
-            },
-            {
-              "text": "Circo Loco",
-              "type": "album"
-            }
-          ]
-        }
-      },
-      {
-        "id": "e8ac1a76-f748-4526-8051-98ceb352d2ba",
-        "text": "“One More Time” appears on Daft Punk’s album Discovery, released February 26, 2001.",
-        "about": "credit",
-        "kind": "sourced",
-        "origin": "model",
-        "evidenceIds": ["musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz Discovery release excerpt lists the track and February 26, 2001 date.",
-        "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "release",
-        "factoid": {
-          "title": "Part of Discovery",
-          "type": "credits",
-          "entities": [
-            {
-              "text": "Daft Punk",
-              "type": "artist"
-            },
-            {
-              "text": "Discovery",
-              "type": "album"
-            },
-            {
-              "text": "2001",
-              "type": "year"
-            }
-          ]
-        }
-      },
-      {
-        "id": "c2cdc1fe-1e03-460e-ae31-6cd7d7ec87de",
-        "text": "MusicBrainz records a cover of the song “One More Time” by The London Elektricity Big Band.",
-        "about": "trivia",
-        "kind": "sourced",
+        "id": "561b3742-a6d1-44dc-9097-9596951fed8b",
+        "text": "\"One More Time - The London Elektricity Big Band\" is a cover of \"One More Time - Daft Punk\".",
+        "about": "cover",
+        "kind": "inferred",
         "origin": "model",
         "evidenceIds": [
           "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
         ],
-        "verdict": "supported",
-        "verdictReason": "The MusicBrainz work excerpt records a cover by The London Elektricity Big Band.",
+        "verdict": "partial",
+        "verdictReason": "The MusicBrainz work excerpt confirms the cover, but does not identify Daft Punk.",
         "numericCheck": "n/a",
-        "numericReason": null,
-        "numericComparison": null,
-        "scope": "work",
-        "factoid": {
-          "title": "The song beyond this recording",
-          "type": "trivia",
-          "entities": [
-            {
-              "text": "The London Elektricity Big Band",
-              "type": "artist"
-            }
-          ]
-        }
+        "scope": "work"
       },
       {
-        "id": "469822c2-a7ca-4587-b37d-e0a61729f9ba",
+        "id": "4b680e4e-f699-4e10-9a90-762e007bbf01",
         "text": "\"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
         "about": "sample",
         "kind": "sourced",
@@ -4340,7 +4397,7 @@
         "scope": "recording"
       },
       {
-        "id": "91f42b8f-da95-4ac7-b6b9-d0868df03983",
+        "id": "94aa68d7-050a-429e-8ae3-a6e8d093fc72",
         "text": "\"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
         "about": "sample",
         "kind": "sourced",
@@ -4354,7 +4411,7 @@
         "scope": "recording"
       },
       {
-        "id": "ab8a1114-6bd5-4363-84a5-5d46fdcd6f0f",
+        "id": "9e838c29-602b-4f7b-9871-53039f58f311",
         "text": "\"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
         "about": "sample",
         "kind": "sourced",
@@ -4368,7 +4425,7 @@
         "scope": "recording"
       },
       {
-        "id": "f19b4cd9-28f5-4305-b480-8da27178a002",
+        "id": "e65efe25-51e4-43f1-b631-6bb44072adcd",
         "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
         "about": "sample",
         "kind": "sourced",
@@ -4382,7 +4439,7 @@
         "scope": "recording"
       },
       {
-        "id": "4c1b5b8f-79f1-4662-9358-32c149632070",
+        "id": "e01c4c6b-303b-40a5-aa58-d2d1f502d819",
         "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
         "about": "sample",
         "kind": "sourced",
@@ -4396,7 +4453,7 @@
         "scope": "recording"
       },
       {
-        "id": "cfa15eb9-618d-43a1-ab0b-c9bad3d61ccb",
+        "id": "45c5316c-8e08-4f7b-9e7e-d30e5770cd71",
         "text": "\"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
         "about": "sample",
         "kind": "sourced",
@@ -4410,7 +4467,7 @@
         "scope": "recording"
       },
       {
-        "id": "0b8198fa-2539-47c0-9469-7bc8bedfde1d",
+        "id": "f8848556-ec22-4ece-8e63-6dc7793a8cd6",
         "text": "\"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
         "about": "sample",
         "kind": "sourced",
@@ -4424,7 +4481,7 @@
         "scope": "recording"
       },
       {
-        "id": "eb6b4448-3a0e-48d6-9ecf-7e8f6273d3a3",
+        "id": "98f7b9ef-caac-4483-a45d-9e736c4fa578",
         "text": "\"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
         "about": "sample",
         "kind": "sourced",
@@ -4438,7 +4495,7 @@
         "scope": "recording"
       },
       {
-        "id": "667db3a8-5ca4-466f-b053-d938a3a9ebe7",
+        "id": "fcace646-84e4-493c-84e0-12cfe633fa7a",
         "text": "\"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
         "about": "sample",
         "kind": "sourced",
@@ -4452,7 +4509,7 @@
         "scope": "recording"
       },
       {
-        "id": "1cfe5edb-b681-4024-8ea9-c54cc142112a",
+        "id": "58a5f8d4-75c9-4ab3-b3c9-4d78220f2fdb",
         "text": "The work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
         "about": "cover",
         "kind": "sourced",
@@ -4466,7 +4523,7 @@
         "scope": "work"
       },
       {
-        "id": "4f01b87b-d68d-415c-84fc-61da8f02c497",
+        "id": "9b915040-9c67-4013-b8be-1380a705b55b",
         "text": "The work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
         "about": "cover",
         "kind": "sourced",
@@ -4480,7 +4537,7 @@
         "scope": "work"
       },
       {
-        "id": "8178bbac-a734-42a1-96b5-3e75912df18b",
+        "id": "3e1adc59-3a3c-45c0-9478-b5f481589246",
         "text": "The work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
         "about": "cover",
         "kind": "sourced",
@@ -4494,7 +4551,7 @@
         "scope": "work"
       },
       {
-        "id": "7f01587e-7c1c-48bc-b09f-850506efc686",
+        "id": "256ab1fe-8974-4790-8688-24cfede138ef",
         "text": "The work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
         "about": "cover",
         "kind": "sourced",
@@ -4508,7 +4565,7 @@
         "scope": "work"
       },
       {
-        "id": "84520ef5-dbe5-4cfb-85e2-289b3eddc030",
+        "id": "06d4b0af-3525-4b88-b011-3f18b28f965f",
         "text": "\"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
         "about": "track",
         "kind": "sourced",
@@ -4523,21 +4580,22 @@
     "run": {
       "id": "recorded-one-more-time-daft-punk",
       "mode": "replay",
-      "recordedAt": "2026-10-27T19:30:19.136Z",
-      "commit": "98e88946b9b5",
+      "recordedAt": "2026-10-28T15:16:31.781Z",
+      "commit": "2b66a5082fc7",
       "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
       "replayed": "run",
       "fallback": false,
       "usage": {
         "llmCalls": 4,
-        "inputTokens": 16546,
-        "outputTokens": 2042,
-        "reasoningTokens": 264,
-        "usd": 0.010406
+        "inputTokens": 15463,
+        "outputTokens": 2089,
+        "reasoningTokens": 359,
+        "usd": 0.012167
       },
       "verifier": {
         "judged": 9,
-        "unjudged": 0
+        "unjudged": 0,
+        "restated": 6
       },
       "sourceErrors": [
         {
@@ -4555,9 +4613,9 @@
   },
   "usage": {
     "llmCalls": 4,
-    "inputTokens": 16546,
-    "outputTokens": 2042,
-    "reasoningTokens": 264,
-    "usd": 0.010406
+    "inputTokens": 15463,
+    "outputTokens": 2089,
+    "reasoningTokens": 359,
+    "usd": 0.012167
   }
 }

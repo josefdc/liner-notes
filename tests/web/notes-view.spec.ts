@@ -86,27 +86,43 @@ test("the recorded run's notes: sections in order, its samples and covers with t
 
   // The relations no card shows, built from the MusicBrainz records: each named as what it is
   // (no "Possible"), sourced, with the record it cites beside it. The model's claims that only
-  // restated one of them are left out: each fact is listed once.
+  // restated one of them are left out: each fact is listed once by its record. The model's own
+  // cover claim the verifier found partly supported stays, hedged ("Possible cover"), with the
+  // MusicBrainz record it cites.
   const samples = page.getByRole("region", { name: "Samples and covers" });
   const rows = await listed(page, "Samples and covers");
-  expect(rows).toHaveLength(13);
-  expect(rows[0]).toBe(
+  expect(rows).toHaveLength(14);
+  const possible = rows.filter((row) => row.startsWith("Possible"));
+  expect(possible).toEqual([
+    'Possible cover"One More Time - The London Elektricity Big Band" is a cover of "One More Time - Daft Punk".',
+  ]);
+  const recorded = rows.filter((row) => !row.startsWith("Possible"));
+  expect(recorded[0]).toBe(
     'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
   );
-  for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  for (const row of recorded) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
     expect(
-      rows.filter((row) => fact.test(row)),
+      recorded.filter((row) => fact.test(row)),
       String(fact),
     ).toHaveLength(1);
   }
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
-  await expect(items).toHaveCount(13);
+  await expect(items).toHaveCount(14);
   for (const item of await items.all()) {
     await expect(item.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
+  }
+  for (const item of await items.all()) {
+    if (/^Possible/.test((await item.textContent())?.trim() ?? "")) continue;
     await expect(item).toContainText("Sourced");
   }
-  await expect(items.first().locator('a[data-source="musicbrainz"]')).toHaveAttribute(
+
+  await expect(
+    items
+      .filter({ hasText: '"More Spell on You" by Eddie Johns.' })
+      .first()
+      .locator('a[data-source="musicbrainz"]'),
+  ).toHaveAttribute(
     "href",
     "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
   );
@@ -132,7 +148,7 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   // and its links are written out as a list.
   const genealogy = page.locator("#panel-genealogy");
   await expect(genealogy.locator('svg [tabindex="0"]')).toHaveCount(1);
-  await expect(genealogy.getByText(/Links as a list \(9\)/)).toBeVisible();
+  await expect(genealogy.getByText(/Links as a list \(10\)/)).toBeVisible();
 
   // The result is labelled as the recording it is.
   await expect(page.getByText(/Recorded run/).first()).toBeVisible();

@@ -15,7 +15,7 @@ afterEach(cleanup);
 // load still runs; it then finds the module ready.
 beforeAll(async () => {
   await import('./SonicFingerprint');
-}, 120_000);
+}, 30_000);
 
 // A result built without the model and without audio analysis (the shape the API sends).
 const missingTrack = {

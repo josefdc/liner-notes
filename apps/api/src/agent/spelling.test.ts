@@ -67,9 +67,11 @@ describe("the API's spelling of analyze", () => {
   });
 
   // Parses every source file of the API with the TypeScript compiler: about 0.3 s at normal
-  // load, more than the default 5 s on a busy machine. Nothing in it is timed.
+  // load. This file failed under very heavy load (#229: which test, and how, was not recorded,
+  // and the failure was not reproduced); this is its one test with work a busy machine can
+  // stretch past the default 5 s. Nothing in it is timed.
   it("writes no status line or message with 'analysed', 'analyse' or 'analysing'", {
-    timeout: 60_000,
+    timeout: 30_000,
   }, () => {
     const files = sourceFiles().filter(
       (path) => !LEFT_OUT.has(relative(SOURCE_DIR, path).split("\\").join("/")),

@@ -275,9 +275,9 @@ const realSetTimeout = globalThis.setTimeout;
  * `promise` once it settles, on fake timers: meanwhile the timers that are due run, and the clock
  * stays where it is. The graph's store polls its queue with setTimeout(0) until the run ends, so
  * a run on fake timers ends only while those polls run. Moving the clock on to let them run, as
- * advanceTimersByTimeAsync does, costs one poll and one real turn of the event loop for each
- * millisecond moved: minutes of it take seconds of real time, more on a busy machine. Stops
- * polling once the real timers are back (the test has ended).
+ * advanceTimersByTimeAsync does, runs one poll for each millisecond moved: 180,000 for the 3 min
+ * deadline, about half a second at normal load (a few microseconds each) and past the test's
+ * limit on a very busy machine. Stops polling once the real timers are back (the test has ended).
  */
 async function settledOnFakeClock<T>(promise: Promise<T>): Promise<T> {
   let settled = false;
@@ -1228,17 +1228,25 @@ describe("analyze routes", () => {
       // The step's 40 ms start once the scout's line has been sent (each event is stored as it
       // is sent). Events are stamped as they are sent, and a busy machine can send that line
       // late, into a wait that started when it was written: its stamp would then be late too.
+      // A line not sent in time is recorded here and fails the test below, with its reason.
+      let notSent: unknown;
       stub.scoutStep = async (_signal, runId) => {
-        await vi.waitFor(
-          () =>
-            expect(
-              listRunEvents(getDb(), runId).map(({ event }) => (event as Event).type),
-            ).toContain("status"),
-          { timeout: SENT_WITHIN_MS, interval: 1 },
-        );
+        try {
+          await vi.waitFor(
+            () =>
+              expect(
+                listRunEvents(getDb(), runId).map(({ event }) => (event as Event).type),
+              ).toContain("status"),
+            { timeout: SENT_WITHIN_MS, interval: 1 },
+          );
+        } catch (error) {
+          notSent = error;
+        }
         await wait(40);
       };
       const { events } = await sse(streamPath("timed run"));
+
+      expect(notSent).toBeUndefined();
 
       expect(types(events)).toEqual(["connected", "status", "status", "complete", "done"]);
       const times = elapsed(events);

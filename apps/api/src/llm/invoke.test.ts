@@ -38,6 +38,12 @@ import {
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
 
+// Each call reserves and settles its cost in the spend log, flushing each line to disk
+// (budget.ts): from 0.1 ms to 9 ms a flush here, but a flush waits for the disk, and other
+// processes can keep it busy for seconds. So every test of this file, whichever runs first, gets
+// more than the default 5 s; nothing in them is timed.
+vi.setConfig({ testTimeout: 30_000 });
+
 const Schema = z.object({ ok: z.boolean() });
 const OPTIONS: InvokeOptions = {
   purpose: "dev",
@@ -81,18 +87,8 @@ const ok = () =>
   Response.json(responseBody({ ok: true }, { input: 100, output: 20, reasoning: 8 }));
 const spendLines = () => parseSpendLog(readFileSync(log, "utf8"));
 
-/**
- * Each call reserves and settles its cost in the spend log, flushing each line to disk
- * (budget.ts). A flush waits for the disk, and on a disk that other processes keep busy one can
- * take seconds; the first of a run takes the longest. Hence more than the default 5 s for the
- * first tests; nothing in them is timed.
- */
-const FLUSHING_TIMEOUT_MS = 60_000;
-
 describe("the request", () => {
-  it("calls the tier's deployment through the Responses API with strict JSON-schema output", {
-    timeout: FLUSHING_TIMEOUT_MS,
-  }, async () => {
+  it("calls the tier's deployment through the Responses API with strict JSON-schema output", async () => {
     const { llm, net } = setup(ok);
     const result = await llm.invoke("smoke", "research", "say ok", Schema, OPTIONS);
     expect(result.output).toEqual({ ok: true });
@@ -110,9 +106,7 @@ describe("the request", () => {
     expect(call.body.store).toBe(false);
   });
 
-  it("calls the v1 API of the resource named by AZURE_OPENAI_ENDPOINT, with no api-version", {
-    timeout: FLUSHING_TIMEOUT_MS,
-  }, async () => {
+  it("calls the v1 API of the resource named by AZURE_OPENAI_ENDPOINT, with no api-version", async () => {
     const { llm, net } = setup(ok, {
       AZURE_OPENAI_BASE_URL: "",
       AZURE_OPENAI_ENDPOINT: "https://llm.invalid/",

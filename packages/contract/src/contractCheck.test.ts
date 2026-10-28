@@ -38,7 +38,7 @@ let repo = "";
 const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 // Git and the check run as real processes, which a busy machine can make take seconds each. One
 // that hangs is stopped and fails its test, well inside the test's own timeout.
-const CHILD_TIMEOUT_MS = 30_000;
+const CHILD_TIMEOUT_MS = 15_000;
 
 const git = (...args: string[]) =>
   execFileSync(

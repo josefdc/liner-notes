@@ -1106,10 +1106,10 @@ describe("MusicBrainz client", () => {
  * How long a linear step may take on a text built to make a slow form backtrack: well over the
  * few milliseconds it takes, well under the seconds a slow form takes. Timed as the fastest of
  * three runs, since a busy machine only adds time (a stall of one run can pass the bound); a
- * run over 2 s is a slow form, not a busy machine, and ends the timing.
+ * run over twice the bound is a slow form, not a busy machine, and ends the timing.
  */
 const QUICK_MS = 400;
-const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 5 * QUICK_MS };
+const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 2 * QUICK_MS };
 
 describe("withoutEdition", { timeout: 30_000 }, () => {
   // The expressions before #194: polynomial time on a long bracket or " - " part.

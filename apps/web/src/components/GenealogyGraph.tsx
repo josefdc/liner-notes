@@ -1495,7 +1495,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
   // The tracks the filters keep: the summary and the compact row name these.
   const nodeList = shownNodes;
-  const hiddenTracks = graphNodes(data).length - shownNodes.length;
+  const hiddenTracks = filtered.hiddenTracks;
   const related = nodeList.filter((node) => node.group !== 1);
   // The gestures, in words, as the graph takes them here (see the zoom's filter).
   const touch = useNoHover();

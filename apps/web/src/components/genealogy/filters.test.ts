@@ -59,8 +59,47 @@ describe('the map filters', () => {
       off: new Set(['sample']),
       sourcedOnly: false,
     });
-    // Older stays: its second hop is shown.
-    expect(samples.nodes.map((n) => n.id)).toEqual(['current', 'older', 'cover', 'peer']);
+    // Older's second hop goes with its sample: nothing on the map joins Peer to this track.
+    expect(samples.nodes.map((n) => n.id)).toEqual(['current', 'cover']);
+    expect(samples.links.map((l) => filterKindOf(l, 'current'))).toEqual(['cover']);
+    // Older, Guess and Peer had links and lost them; Alone had none, so no filter hid it.
+    expect(samples.hiddenTracks).toBe(3);
+    expect(filterGenealogy(nodes, links, 'current', NO_FILTER).hiddenTracks).toBe(0);
+  });
+
+  it('keep a second hop while the track it hangs from has a shown link to this track', () => {
+    // Older's sample is sourced: "Sourced only" keeps it, and its second hop with it.
+    const sourcedOnly = filterGenealogy(nodes, links, 'current', {
+      off: new Set(),
+      sourcedOnly: true,
+    });
+    expect(sourcedOnly.nodes.map((n) => n.id)).toEqual(['current', 'older', 'cover', 'peer']);
+    expect(sourcedOnly.hiddenTracks).toBe(1);
+    // A chain of second hops (Older, Peer, Far) goes as one when Older's link to this track does.
+    const chain = readGenealogy(
+      {
+        nodes: [...nodes, node('far', 4, 'Far - Someone (1975)')],
+        links: [
+          link('older', 'current', { type: 'sample', ...sourced }),
+          link('current', 'cover', { type: 'cover', ...sourced }),
+          link('older', 'peer', { type: 'sample', ...sourced }),
+          link('far', 'peer', { type: 'sample', ...sourced }),
+        ],
+      },
+      contextOf(),
+    ).links;
+    const covers = { off: new Set(['sample' as const]), sourcedOnly: false };
+    const kept = filterGenealogy([...nodes, node('far', 4, 'Far')], chain, 'current', covers);
+    expect(kept.links.map((l) => filterKindOf(l, 'current'))).toEqual(['cover']);
+    expect(kept.nodes.map((n) => n.id)).toEqual(['current', 'cover']);
+    expect(filterCounts(kept.links, 'current')).toEqual([{ kind: 'cover', count: 1 }]);
+    // With the samples on, the whole chain is kept.
+    const all = filterGenealogy(nodes, chain, 'current', { off: new Set(), sourcedOnly: true });
+    expect(filterCounts(all.links, 'current')).toEqual([
+      { kind: 'sample', count: 1 },
+      { kind: 'cover', count: 1 },
+      { kind: 'second-hop', count: 2 },
+    ]);
   });
 
   it('"sourced only" keeps only sourced links', () => {

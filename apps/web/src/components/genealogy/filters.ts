@@ -2,7 +2,7 @@ import type { ShownLink } from './links';
 
 /**
  * The map's filters: which links it shows, by the relation they are named as and by how they are
- * known. A track is shown while a shown link touches it; the analysed track always is. The
+ * known. A track is shown while shown links join it to the analysed track, which always is. The
  * canvas, the compact row, the list of links and the summary all read the same filtered lists.
  */
 
@@ -66,21 +66,45 @@ export function linkShown(link: ShownLink, currentId: string | null, filter: Lin
 }
 
 /**
- * The tracks and links the filter keeps: the links it keeps, and the tracks one of them touches,
- * with the analysed track always. Without a filter, the lists as given (the same arrays).
+ * The tracks and links the filter keeps: the links it keeps that still reach the analysed track
+ * (a second hop goes while the track it hangs from has no shown link to it: an island joined to
+ * nothing on the map says nothing about this track), and the tracks one of them touches, with
+ * the analysed track always. Without a filter, the lists as given (the same arrays).
+ * `hiddenTracks` counts the tracks a link joined that the filter leaves with none (a track that
+ * had no link to begin with is not one the filter hides).
  */
 export function filterGenealogy<N extends { id: string }>(
   nodes: readonly N[],
   links: readonly ShownLink[],
   currentId: string | null,
   filter: LinkFilter,
-): { nodes: readonly N[]; links: readonly ShownLink[] } {
-  if (!isFiltering(filter)) return { nodes, links };
-  const kept = links.filter((link) => linkShown(link, currentId, filter));
+): { nodes: readonly N[]; links: readonly ShownLink[]; hiddenTracks: number } {
+  if (!isFiltering(filter)) return { nodes, links, hiddenTracks: 0 };
+  let kept = links.filter((link) => linkShown(link, currentId, filter));
+  if (currentId !== null) {
+    // The tracks the kept links join to the analysed track, hop by hop.
+    const reached = new Set([currentId]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const link of kept) {
+        const from = reached.has(link.source);
+        if (from !== reached.has(link.target)) {
+          reached.add(from ? link.target : link.source);
+          grew = true;
+        }
+      }
+    }
+    kept = kept.filter((link) => reached.has(link.source));
+  }
   const touched = new Set(kept.flatMap((link) => [link.source, link.target]));
+  const linked = new Set(links.flatMap((link) => [link.source, link.target]));
+  const shown = nodes.filter((node) => node.id === currentId || touched.has(node.id));
   return {
-    nodes: nodes.filter((node) => node.id === currentId || touched.has(node.id)),
+    nodes: shown,
     links: kept,
+    hiddenTracks: nodes.filter(
+      (node) => node.id !== currentId && linked.has(node.id) && !touched.has(node.id),
+    ).length,
   };
 }
 

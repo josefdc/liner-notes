@@ -373,14 +373,17 @@ describe("the map's filters", () => {
     expect(screen.getByRole('checkbox', { name: /^Sample/ }).parentElement?.textContent).toBe(
       'Sample (0/3)',
     );
-    expect(shownLinks(container)).toBe(2);
-    // Older Record stays: the second hop still joins it.
-    expect(cardIds(container)).toEqual(['current', 'older', 'later', 'peer']);
-    expect(screen.getByTestId('filter-status').textContent).toBe('Showing 2 of 5 links');
-    expect(screen.getByText('Links as a list (2)')).toBeTruthy();
+    expect(shownLinks(container)).toBe(1);
+    // Older Record's second hop goes with its sample: nothing would join Peer to this track.
+    expect(cardIds(container)).toEqual(['current', 'later']);
+    expect(screen.getByRole('checkbox', { name: /^Second hop/ }).parentElement?.textContent).toBe(
+      'Second hop (0/1)',
+    );
+    expect(screen.getByTestId('filter-status').textContent).toBe('Showing 1 of 5 links');
+    expect(screen.getByText('Links as a list (1)')).toBeTruthy();
     // Screen readers hear what the filters hide.
     expect(container.querySelector('.sr-only')?.textContent).toContain(
-      'The filters hide 2 tracks and 3 links.',
+      'The filters hide 4 tracks and 4 links.',
     );
 
     await toggle(/^Remix/);

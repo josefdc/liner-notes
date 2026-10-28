@@ -218,11 +218,19 @@ for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES
       expect(shownOfKind).toBe(count);
       await first.uncheck();
       await expect(first.locator("xpath=..")).toHaveText(new RegExp(`\\(0/${count}\\)$`));
+      // A second hop goes with the link that joined its track to this one.
+      const hop = page.getByRole("checkbox", { name: /^Second hop/ });
+      const [, hopShown, hopAll] = (await hop.count())
+        ? (/\((\d+)\/(\d+)\)$/.exec((await hop.locator("xpath=..").textContent()) ?? "") ?? []).map(
+            Number,
+          )
+        : [0, 0, 0];
+      const left = total - count - (hopAll - hopShown);
       await expect(page.getByTestId("filter-status")).toHaveText(
-        `Showing ${total - count} of ${total} links`,
+        `Showing ${left} of ${total} links`,
       );
-      await expect(lines).toHaveCount(total - count);
-      await expect(page.getByText(`Links as a list (${total - count})`)).toBeVisible();
+      await expect(lines).toHaveCount(left);
+      await expect(page.getByText(`Links as a list (${left})`)).toBeVisible();
       // The analysed track stays, whatever is hidden.
       await expect(graph.locator("g.nodes > g:not([aria-pressed])")).toHaveCount(1);
       await screenshot(page, testInfo, `${showcase}-${width}-filters`);

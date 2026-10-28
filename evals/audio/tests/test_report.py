@@ -267,8 +267,10 @@ def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
         "seeds each)"
     )
     both = group_description("chord-keyed-seeded", [*before, "mallet-chord-s801", "soft-chord-s7"])
-    assert (
-        "; triads in a soft timbre (an electric piano, a flute, an FM electric piano or a " in both
+    assert both.endswith(
+        "; triads in a soft timbre (an electric piano, a flute, an FM electric piano or a "
+        "triangle wave) and triads struck on bars (a marimba-like bar or a glockenspiel), 30 "
+        "seeds each)"
     )
     assert group_description("no-key", ["tubular-bell-s507"]) == GROUPS["no-key"]
     assert added_families(before) == []

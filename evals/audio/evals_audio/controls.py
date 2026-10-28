@@ -327,11 +327,10 @@ GROUPS = {
     "held-out-seeded": "evaluation only: the one-pitch-class families at seeds 600-629 and the "
     "chord families at 800-829; no rule value is chosen on them",
 }
-# Groups the calibration's choice never sees (calibration.select and confirm leave them out).
 # Families added to a group after reports had been made with it: a report names them only when
 # its controls include them, so an older report still describes the controls it ran. Each group
-# has (lead, {family: words}, trail): the words of the families present are joined with ", "
-# between the lead and the trail.
+# has (lead, {family: words}, joint, trail): the words of the families present are joined by
+# the joint, between the lead and the trail.
 ADDED_FAMILIES = {
     "one-pitch-class-seeded": (
         ", ",
@@ -339,15 +338,17 @@ ADDED_FAMILIES = {
             "kit-toms": "two rack toms and a floor tom over a kit",
             "tubular-bell": "a tubular bell",
         },
+        ", ",
         "",
     ),
     "chord-keyed-seeded": (
-        "; triads ",
+        "; ",
         {
-            "soft-chord": "in a soft timbre (an electric piano, a flute, an FM electric piano "
-            "or a triangle wave)",
-            "mallet-chord": "struck on bars (a marimba-like bar or a glockenspiel)",
+            "soft-chord": "triads in a soft timbre (an electric piano, a flute, an FM electric "
+            "piano or a triangle wave)",
+            "mallet-chord": "triads struck on bars (a marimba-like bar or a glockenspiel)",
         },
+        " and ",
         ", 30 seeds each",
     ),
 }
@@ -355,7 +356,7 @@ ADDED_FAMILIES = {
 
 def present_families(group: str, names) -> list[str]:
     """The words of the families added to `group` that occur among the control `names`."""
-    _, families, _ = ADDED_FAMILIES.get(group, ("", {}, ""))
+    _, families, _, _ = ADDED_FAMILIES.get(group, ("", {}, "", ""))
     return [
         words
         for family, words in families.items()
@@ -365,10 +366,7 @@ def present_families(group: str, names) -> list[str]:
 
 def added_families(names) -> list[str]:
     """Every added family among the control `names`, in words that stand on their own."""
-    return [
-        *present_families("one-pitch-class-seeded", names),
-        *(f"triads {words}" for words in present_families("chord-keyed-seeded", names)),
-    ]
+    return [word for group in ADDED_FAMILIES for word in present_families(group, names)]
 
 
 def group_description(group: str, names) -> str:
@@ -377,17 +375,18 @@ def group_description(group: str, names) -> str:
     closing parenthesis when it ends with one, after it otherwise.
     """
     text = GROUPS[group]
-    lead, _, trail = ADDED_FAMILIES.get(group, ("", {}, ""))
+    lead, _, joint, trail = ADDED_FAMILIES.get(group, ("", {}, "", ""))
     added = present_families(group, names)
     if not added:
         return text
-    insert = f"{lead}{', '.join(added)}{trail}"
+    insert = f"{lead}{joint.join(added)}{trail}"
     head, paren, tail = text.rpartition(")")
     if not paren:
         return text + insert
     return f"{head}{insert}){tail}"
 
 
+# Groups the calibration's choice never sees (calibration.select and confirm leave them out).
 EVALUATION_GROUPS = frozenset({"held-out-seeded"})
 
 

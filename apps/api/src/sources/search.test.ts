@@ -365,7 +365,12 @@ describe("web research searches", () => {
    * NAME_LINE without its 64-character bound (as before #166), 7 s to 32 s for Stack Exchange's
    * "share" with a whitespace run on each side of an optional pipe, 4 s for a Songfacts commenter
    * with any number of words before the date. A linear one takes under 50 ms, and up to about
-   * 400 ms on a loaded machine, so the bound leaves room for one.
+   * 400 ms on a loaded machine, so the bound leaves room for one; the fastest of three runs is
+   * timed, since load only adds time.
+   *
+   * The bound is for quadratic forms. A form only a few times slower than the linear one (a
+   * bounded repeat such as {1,3000} that backtracks n·k steps) stays under it: no bound in
+   * milliseconds can tell that apart from a busy machine.
    */
   const LONG = 200_000;
   const LINEAR_MS = 1_000;
@@ -379,7 +384,7 @@ describe("web research searches", () => {
     ["spaces before cite", `share | cite${" ".repeat(LONG)}x`],
   ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    const { ms, result } = timed(() => webTextIssue(text));
+    const { ms, result } = timed(() => webTextIssue(text), 3);
     expect(result).toBeNull();
     expect(ms).toBeLessThan(LINEAR_MS);
   });
@@ -422,7 +427,7 @@ describe("web research searches", () => {
     ["commenters from places", repeated("Jane from Ohio Oct 2, 2009: ")],
   ])("checks a stored text of 200,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
-    expect(timed(() => webTextIssue(text)).ms).toBeLessThan(LINEAR_MS);
+    expect(timed(() => webTextIssue(text), 3).ms).toBeLessThan(LINEAR_MS);
   });
 
   it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {

@@ -519,6 +519,8 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
     test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
       page,
     }) => {
+      // Two views of many lines, a screenshot per few of them: up to 29 s in a full run.
+      test.slow();
       const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
@@ -1012,7 +1014,13 @@ async function sectionBoundaries(page: Page) {
       if (!context) throw new Error("no 2d context");
       context.drawImage(bitmap, 0, 0);
       const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
-      const scale = bitmap.width / clip.width;
+      // The screenshot is the whole clip, at the page's pixel ratio: one cut short (a bar past
+      // the viewport's edge) would put each area on the wrong pixels.
+      const scale = devicePixelRatio;
+      const expected = `${Math.round(clip.width * scale)}×${Math.round(clip.height * scale)}`;
+      if (`${bitmap.width}×${bitmap.height}` !== expected) {
+        throw new Error(`a ${bitmap.width}×${bitmap.height} screenshot of a ${expected} clip`);
+      }
       // The brightest pixel of each section's area.
       return areas.map((area) => {
         const left = Math.round((area.x - clip.x) * scale);

@@ -246,6 +246,8 @@ test("while the server holds the resume, the status never claims a step it has n
     seen.add((await progressStatus(page).textContent()) ?? "");
     await page.waitForTimeout(250);
   }
+  // And once more, at least ten seconds in.
+  seen.add((await progressStatus(page).textContent()) ?? "");
   expect([...seen]).toEqual(["Reading the track you selected..."]);
 
   // The measurement is claimed once the server says it has started, not before.

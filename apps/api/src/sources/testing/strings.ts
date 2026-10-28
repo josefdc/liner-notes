@@ -42,11 +42,19 @@ export function randomStrings(
   });
 }
 
-/** How long one call takes, in milliseconds, with its result. */
-export function timed<T>(call: () => T): { ms: number; result: T } {
-  const start = performance.now();
-  const result = call();
-  return { ms: performance.now() - start, result };
+/**
+ * How long one call takes, in milliseconds, with its result: the fastest of `runs` calls. A busy
+ * machine only ever adds time, so the fastest of a few is the closest to the call's own cost.
+ */
+export function timed<T>(call: () => T, runs = 1): { ms: number; result: T } {
+  let fastest = Number.POSITIVE_INFINITY;
+  let result: T | undefined;
+  for (let run = 0; run < runs; run++) {
+    const start = performance.now();
+    result = call();
+    fastest = Math.min(fastest, performance.now() - start);
+  }
+  return { ms: fastest, result: result as T };
 }
 
 /**

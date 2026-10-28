@@ -438,9 +438,10 @@ describe("SIGNED_URL", () => {
   });
 
   it("answers quickly on a long run of signed-looking parameters before a space", () => {
-    // A few milliseconds; about 3.5 s with QUADRATIC, so the bound leaves room for a loaded machine.
-    const value = `http://x/${"~hdnea=".repeat(30_000)} b`;
-    const { ms, result } = timed(() => isPreviewUrl(value));
+    // A few milliseconds; about 12 s with QUADRATIC, so the bound leaves room for a loaded machine.
+    // The fastest of three runs is timed, since load only adds time.
+    const value = `http://x/${"~hdnea=".repeat(60_000)} b`;
+    const { ms, result } = timed(() => isPreviewUrl(value), 3);
     expect(ms).toBeLessThan(400);
     expect(result).toBe(false);
   });

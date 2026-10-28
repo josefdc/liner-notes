@@ -689,8 +689,6 @@ FULL_REPORT = {"tempo", "key", "golden", "cost"}
 
 
 def _listed(parts: list[str]) -> str:
-    if not parts:
-        return ""
     return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
 
 

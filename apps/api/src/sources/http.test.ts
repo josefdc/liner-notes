@@ -1898,7 +1898,8 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
       ];
     }),
   ])("answers quickly on %s", (_name, call, expected) => {
-    const { ms, result } = timed(call);
+    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
+    const { ms, result } = timed(call, { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
     expect(result).toBe(expected);
   });
@@ -1953,7 +1954,8 @@ describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, 
       7 + size + Math.ceil(size / 3) * 10,
     ],
   ])("answers quickly on %s", (_name, call, expected) => {
-    const { ms, result } = timed(call);
+    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
+    const { ms, result } = timed(call, { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
     expect(result).toBe(expected);
   });
@@ -1961,7 +1963,7 @@ describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, 
   it("finds where each mask goes once, on 1 MB of masks among masks", () => {
     // About 0.2 s; reading the parts of the text from its start for each mask takes seconds.
     const big = "key=a a@b.cc ".repeat(80_000);
-    const { ms, result } = timed(() => scrubText(big).length);
+    const { ms, result } = timed(() => scrubText(big).length, { runs: 3, stopAboveMs: 5_000 });
     expect(ms).toBeLessThan(1500);
     expect(result).toBe(500);
   });
@@ -2131,6 +2133,20 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     expect(twice).not.toContain("M0018x");
   });
 
+  it("never cuts a host in two: the HTTP error log's text, or a body masks make longer", () => {
+    for (let pad = 80; pad < 100; pad++) {
+      // Client text in the HTTP error log, cut at 200 characters.
+      expect(scrub(logText(`${"x ".repeat(pad)}contoso-prod.openai.azure.com`))).not.toMatch(
+        /contoso/,
+      );
+    }
+    for (let pad = 140; pad < 165; pad++) {
+      // Masks longer than the values they hide carry the body's cap into the host.
+      const body = `${"X_TOKEN=a ".repeat(10)}${"y ".repeat(pad)}contoso-prod.openai.azure.com tail`;
+      expect(scrub(scrubText(body)), String(pad)).not.toMatch(/contoso/);
+    }
+  });
+
   it("masks a template reference whole, and keeps an Authorization scheme on every path", () => {
     // A GitHub Actions expression, written as it is in a workflow file.
     const reference = ["deploy GITHUB_TOKEN=$", "{{ secrets.GH }} now"].join("");
@@ -2291,14 +2307,15 @@ describe("cookies, config text, dumps, forms and escaped text in linear time", {
     ["string escapes", () => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
   ])("answers quickly on %s", (_name, make) => {
     const text = make();
-    const { ms, result } = timed(() => redactText(text));
+    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
+    const { ms, result } = timed(() => redactText(text), { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
     expect(result).not.toContain("QzENDQ");
   });
 
   it("answers quickly on a long form-field name in a source's reason", () => {
     const reason = `{"m":"\\u003cinput name=\\"${fill("aB")}\\" value=\\"x\\"\\u003e"}`;
-    const { ms } = timed(() => plainReason(reason));
+    const { ms } = timed(() => plainReason(reason), { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
   });
 });

@@ -303,14 +303,25 @@ class MusicBrainzRateLimiter {
       // Chosen after the wait: a chain request that came in meanwhile goes first, then a map
       // read. A map read refused at its turn sends nothing and takes no slot: the slot goes to
       // the next request.
+      let answered = false;
       for (;;) {
         const task = this.urgent.shift() ?? this.map.shift() ?? this.queue.shift();
         if (!task) break;
         const sentAt = pacingClock();
         const before = this.lastRequestTime;
         this.lastRequestTime = sentAt;
-        if (await task()) break;
+        if (await task()) {
+          answered = true;
+          break;
+        }
         this.lastRequestTime = before;
+      }
+      // The caller of the request just answered queues its next one (a chain reading on) in the
+      // microtasks that follow. When a request of a lower lane is waiting, one macrotask passes
+      // before the next request is chosen, so the chain's next one is in its lane by then. Else,
+      // after an answer slower than the spacing, the lower lane's request would go first.
+      if (answered && this.urgent.length === 0 && this.map.length + this.queue.length > 0) {
+        await this.delay(0);
       }
     }
 

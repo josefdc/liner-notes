@@ -625,6 +625,33 @@ describe("the relations map's place in the MusicBrainz queue", () => {
     expect(sent).toEqual([A, D, C, B]);
   });
 
+  it("keeps the chain's next read ahead of a waiting research read after a slow answer", async () => {
+    // The chain's read takes 1.5 s, longer than the 1.1 s spacing; a research read has waited
+    // meanwhile. The chain's next read, queued as soon as the first is answered, goes first.
+    queueOnFakeClock(1100);
+    const sent: Array<[string, number]> = [];
+    const t0 = performance.now();
+    stubFetch(async (call) => {
+      const id = new URL(call.url).pathname.split("/").at(-1) ?? "";
+      sent.push([id, performance.now() - t0]);
+      if (id === A) await new Promise((resolve) => setTimeout(resolve, 1500));
+      return answer(call);
+    });
+    const chain = withMusicBrainzPriority(async () => {
+      await getRecordingDetails(A);
+      await getRecordingDetails(D);
+    });
+    const research = new Promise((resolve) => setTimeout(resolve, 100)).then(() =>
+      getRecordingDetails(B),
+    );
+    await settleOnFakeClock(Promise.all([chain, research]));
+    expect(sent).toEqual([
+      [A, 0],
+      [D, 1500],
+      [B, 2600],
+    ]);
+  });
+
   it("refuses a map read whose turn comes after its start limit, and keeps its slot free", async () => {
     queueOnFakeClock(1000);
     const sent: Array<[string, number]> = [];

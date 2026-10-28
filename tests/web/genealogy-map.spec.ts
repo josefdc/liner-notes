@@ -7,6 +7,7 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  releaseStream,
   replayedRecording,
   useMockApi,
 } from "./mock";
@@ -341,7 +342,7 @@ for (const [width, height] of [
   });
 }
 
-// ─── The trail and the screens it opens (review folds) ─────────────────────────────────────
+// ─── The explored-tracks trail and the screens it opens ────────────────────────────────────
 
 const LONG = "Supercalifragilisticexpialidocious".repeat(3);
 /** A trail of `count` steps with one-word titles far wider than a phone. */
@@ -433,6 +434,43 @@ test.describe("at 1440 px", () => {
     await expect(dashboardHeading(page)).toHaveText("Third Track");
     await expect(trailNav(page)).toHaveCount(0);
     expect(await page.evaluate(() => history.state?.trail ?? null)).toBeNull();
+    expect(problems).toEqual([]);
+  });
+
+  test('Stop, then "Back to the last result", goes back to it: one more Back leaves it', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const problems = collectProblems(page);
+    const api = mapApi();
+    // The card's analysis holds until the test lets it go.
+    const [connected, scout, complete, done] = streamOf(thirdResult());
+    (api.streams[ANALYZE].opens as unknown[][])[1] = [
+      connected,
+      scout,
+      { $wait: "held" },
+      complete,
+      done,
+    ];
+    await useMockApi(page, api);
+    await analyseSourceFromMap(page);
+
+    await page.getByRole("button").filter({ hasText: "Relation:" }).click();
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await releaseStream(page, "held");
+    await page.getByRole("button", { name: "Back to the last result" }).click();
+    await expect(dashboardHeading(page)).toHaveText("Bright Lines");
+    await expect(dashboardHeading(page)).toBeFocused();
+    await expect(page).toHaveURL(`/t/${SOURCE_ID}?q=Bright+Lines+Test+Artist`);
+    await expect(trailNav(page).getByRole("link")).toHaveText([
+      "One More Time · Daft Punk (map)",
+      "Bright Lines · Test Artist",
+    ]);
+
+    // One Back leaves it for the map it was analysed from.
+    await page.goBack();
+    await expect(mapHeading(page)).toHaveText("Song relations of One More Time · Daft Punk");
+    await expect(page).toHaveURL(`/t/${OMT}/map?q=${OMT_QUERY}`);
     expect(problems).toEqual([]);
   });
 
@@ -541,6 +579,19 @@ test.describe("at 390 px", () => {
     // On a phone the line names the step before this one and counts the others.
     await expect(trailNav(page).getByRole("link")).toHaveCount(2);
     await expect(trailNav(page)).toContainText("3 earlier");
+    // The one step named gets room enough to read: a tap has no tooltip.
+    const step = trailNav(page).getByRole("link").first();
+    const { width, chars } = await step.evaluate((link) => {
+      const style = getComputedStyle(link);
+      const context = document.createElement("canvas").getContext("2d");
+      if (!context) throw new Error("no canvas");
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const charWidth = context.measureText("x").width;
+      // The characters that fit, less the one the ellipsis takes.
+      return { width: link.clientWidth, chars: Math.floor(link.clientWidth / charWidth) - 1 };
+    });
+    expect(width, "the step before this one is too narrow to read").toBeGreaterThanOrEqual(80);
+    expect(chars).toBeGreaterThanOrEqual(8);
     const withTrail = await drawingHeight(page, panel);
     expect(without - withTrail).toBeLessThanOrEqual(line + 1);
     await noSidewaysScroll(page);

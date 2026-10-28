@@ -34,6 +34,11 @@ export interface HistoryEntry {
   tab?: string;
   /** A full-size map opened from its track's Player: "Back to" the track goes back to it. */
   fromPlayer?: boolean;
+  /**
+   * The progress of a track analysed from a result: the entry behind it is that result's, so
+   * "Back to the last result" goes back to it.
+   */
+  fromResult?: boolean;
 }
 
 /**

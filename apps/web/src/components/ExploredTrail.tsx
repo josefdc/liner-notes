@@ -59,7 +59,12 @@ export const ExploredTrail: React.FC<ExploredTrailProps> = ({ trail, current, on
         {steps.map(({ step, index }) => {
           const name = nameOf(step);
           return (
-            <li key={`${index}:${step.trackId}`} className="min-w-0 flex items-center gap-2">
+            <li
+              key={`${index}:${step.trackId}`}
+              // Compact, the one step named gets the room: the heading below names the track
+              // on screen already.
+              className={`min-w-0 flex items-center gap-2 ${compact ? 'flex-1 min-w-[40%]' : ''}`}
+            >
               <a
                 href={stepUrl(step)}
                 title={name}
@@ -78,8 +83,11 @@ export const ExploredTrail: React.FC<ExploredTrailProps> = ({ trail, current, on
             </li>
           );
         })}
-        {/* The track on screen keeps more of its name than the ones before it */}
-        <li className="min-w-0 shrink-0 max-w-[60%] flex">
+        {/* The track on screen keeps more of its name than the ones before it, but where the
+            line is short it gives way first */}
+        <li
+          className={`flex ${compact ? 'min-w-[5ch] max-w-[40%] shrink-[2]' : 'min-w-0 shrink-0 max-w-[60%]'}`}
+        >
           <a
             href={current.url}
             title={currentName}

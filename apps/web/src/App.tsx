@@ -364,7 +364,7 @@ const App: React.FC = () => {
 
   // The next history entry the app writes is pushed, even for the same kind of screen (another
   // track's map from the breadcrumb), with these marks.
-  const nextEntry = useRef<Pick<HistoryEntry, 'search' | 'fromPlayer'> | null>(null);
+  const nextEntry = useRef<Pick<HistoryEntry, 'search' | 'fromPlayer' | 'fromResult'> | null>(null);
 
   // Handle navigation with track data
   const handleNavigate = useCallback((newPhase: AppPhase) => {
@@ -399,7 +399,7 @@ const App: React.FC = () => {
       analyze(`${title} ${artist}`.trim(), isSpotifyTrackId(trackId) ? { trackId } : {});
       // The progress screen's entry is taken over by the result, as a search's is: Back from
       // the result leads to the screen it was analysed from.
-      nextEntry.current = { search: true };
+      nextEntry.current = { search: true, fromResult: left !== null };
       setPhase(AppPhase.ONBOARDING);
     },
     [reset, analyze, effectiveTrackData, trail],
@@ -411,6 +411,12 @@ const App: React.FC = () => {
 
   // UX: Restore previous session (Item 8)
   const handleRestorePrevious = useCallback(() => {
+    // The result is the entry right behind this one (a track analysed from it, then stopped):
+    // back to that entry, as it was, rather than a copy of it in this one's place.
+    if (previousTrackData && entryRef.current.fromResult) {
+      window.history.back();
+      return;
+    }
     if (previousTrackData) {
       setOverrideTrackData(previousTrackData);
       setIsRestoredSession(true);

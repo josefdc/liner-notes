@@ -74,6 +74,15 @@ function uncleanRecordings(dir: string): string[] {
 }
 
 describe("every committed recording", () => {
+  it("are the four showcases, no more and no fewer: a change to the set is made here", () => {
+    expect(SLUGS).toEqual([
+      "bitter-sweet-symphony-the-verve",
+      "hung-up-madonna",
+      "juicy-the-notorious-big",
+      "one-more-time-daft-punk",
+    ]);
+  });
+
   it("loads, and names the clean commit that made it", () => {
     expect(loadReplays(DEFAULT_REPLAY_DIR).records.length).toBeGreaterThan(0);
     expect(uncleanRecordings(DEFAULT_REPLAY_DIR)).toEqual([]);
@@ -201,6 +210,14 @@ describe.each(SLUGS)("the showcase recording %s", (slug) => {
         allowedCover: archiveCoverOf(analysis),
       }),
     ).toEqual([]);
+  });
+
+  it("was recorded from a run that read everything: no line says a later run reads the rest", () => {
+    // A replay never runs again, so a run's promise that a later one completes it is false in a
+    // recording; the run the warning comes from is recorded again instead.
+    const incomplete = /\ba later run\b|\bincomplete\b/i;
+    const errors = (analysis.run?.sourceErrors ?? []).map((error) => error.message ?? "");
+    expect([...appMessages, ...errors].filter((text) => incomplete.test(text))).toEqual([]);
   });
 
   it("writes its progress without the prototype's copy or emoji (the guard's patterns)", () => {

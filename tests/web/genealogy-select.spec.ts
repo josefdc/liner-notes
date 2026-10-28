@@ -114,50 +114,77 @@ type Showcase = {
 };
 
 /**
- * Each committed showcase recording whose map is a canvas (more than two relations), replayed as
- * the API serves it, at a phone's width and desktop sizes from 1280 px; One More Time also at
- * 1024 px. Its sourced card is the first track joined to it by a MusicBrainz relation.
+ * What the panel says the verifier found of a model link, from the recorded claim's own verdict
+ * and reason (DetailPanel's verifierText, written out here so the spec does not take it on trust).
+ */
+function recordedVerdict(verdict: string | null, reason: string | null): string {
+  const why = reason?.trim();
+  if (verdict === "partial") {
+    return `Verifier: partly supported: ${why || "the verifier did not say which part is unsupported"}`;
+  }
+  if (verdict === "unsupported") {
+    return `Verifier: not supported by its sources: ${why || "the verifier gave no reason"}`;
+  }
+  if (verdict === "supported") return `Verifier: supported by its sources${why ? ` · ${why}` : ""}`;
+  if (verdict === null) return "Verifier: not checked by the verifier";
+  throw new Error(`no wording checked here for a "${verdict}" verdict`);
+}
+
+const recordings = showcaseRecordings();
+
+test("every showcase recording is checked here: each map is a canvas with a sourced link, read on a day the panel can give", () => {
+  for (const { slug, links, sourcedNode, sourcedRetrieved } of recordings) {
+    expect(links, `${slug}: links on its map`).toBeGreaterThan(2);
+    expect(sourcedNode, `${slug}: a track with a sourced link`).not.toBeNull();
+    expect(sourcedRetrieved, `${slug}: the day that link's record was read`).not.toBeNull();
+  }
+});
+
+/**
+ * Each committed showcase recording, replayed as the API serves it, at a phone's width and
+ * desktop sizes from 1280 px; One More Time also at 1024 px. Its sourced card is the first track
+ * joined to it by a MusicBrainz relation, with the day that record was read as recorded; its
+ * model card, when the run proposed a link, the first such track, with the recorded verdict.
  */
 const RECORDED: Record<string, Showcase> = Object.fromEntries(
-  showcaseRecordings()
-    .filter(({ links, sourcedNode }) => links > 2 && sourcedNode !== null)
-    .map(({ slug, query, sourcedNode }) => [
-      slug,
-      {
-        open: async (page: Page) => {
-          const { events } = replayedRecording(slug);
-          await useMockApi(page, {
-            suggestions: [],
-            eventGapMs: 0,
-            streams: { [ANALYZE]: events },
-          });
-          await analyzeAndOpenDashboard(page, query);
-          await openPlayer(page);
-        },
-        code: {
-          id: sourcedNode as string,
-          // The demo's sample source was read on the day it was recorded.
-          retrieved: slug === DEMO_SLUG ? "28 Oct 2026" : /\d{1,2} [A-Z][a-z]{2} \d{4}/,
-        },
-        model: null,
-        replay: true,
-        widths:
-          slug === DEMO_SLUG
-            ? [
-                [390, 844],
-                [1024, 768],
-                [1280, 800],
-                [1440, 900],
-                [1920, 1080],
-              ]
-            : [
-                [390, 844],
-                [1280, 800],
-                [1440, 900],
-                [1920, 1080],
-              ],
+  recordings.map(({ slug, query, sourcedNode, sourcedRetrieved, modelLink }) => [
+    slug,
+    {
+      open: async (page: Page) => {
+        const { events } = replayedRecording(slug);
+        await useMockApi(page, {
+          suggestions: [],
+          eventGapMs: 0,
+          streams: { [ANALYZE]: events },
+        });
+        await analyzeAndOpenDashboard(page, query);
+        await openPlayer(page);
       },
-    ]),
+      code: { id: sourcedNode ?? "(none)", retrieved: sourcedRetrieved ?? "(unreadable)" },
+      model: modelLink
+        ? {
+            id: modelLink.node,
+            verdict: recordedVerdict(modelLink.verdict, modelLink.verdictReason),
+          }
+        : null,
+      replay: true,
+      widths:
+        slug === DEMO_SLUG
+          ? [
+              [390, 844],
+              [1024, 768],
+              [1280, 800],
+              [1440, 900],
+              [1920, 1080],
+            ]
+          : [
+              [390, 844],
+              [1280, 800],
+              [1440, 900],
+              [1920, 1080],
+            ],
+    },
+  ]),
 );
 
 const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };

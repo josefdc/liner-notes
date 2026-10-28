@@ -86,34 +86,25 @@ test("the recorded run's notes: sections in order, its samples and covers with t
 
   // The relations no card shows, built from the MusicBrainz records: each named as what it is
   // (no "Possible"), sourced, with the record it cites beside it. The model's claims that only
-  // restated one of them are left out: each fact is listed once by its record. The model's own
-  // cover claim the verifier found partly supported stays, hedged ("Possible cover"), with the
-  // MusicBrainz record it cites.
+  // restated one of them are left out: each fact is listed once, by its record, and never also
+  // as a guess ("Possible …") beside it.
   const samples = page.getByRole("region", { name: "Samples and covers" });
   const rows = await listed(page, "Samples and covers");
-  expect(rows).toHaveLength(14);
-  const possible = rows.filter((row) => row.startsWith("Possible"));
-  expect(possible).toEqual([
-    'Possible cover"One More Time - The London Elektricity Big Band" is a cover of "One More Time - Daft Punk".',
-  ]);
-  const recorded = rows.filter((row) => !row.startsWith("Possible"));
-  expect(recorded[0]).toBe(
+  expect(rows).toHaveLength(13);
+  expect(rows[0]).toBe(
     'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
   );
-  for (const row of recorded) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
     expect(
-      recorded.filter((row) => fact.test(row)),
+      rows.filter((row) => fact.test(row)),
       String(fact),
     ).toHaveLength(1);
   }
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
-  await expect(items).toHaveCount(14);
+  await expect(items).toHaveCount(13);
   for (const item of await items.all()) {
     await expect(item.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
-  }
-  for (const item of await items.all()) {
-    if (/^Possible/.test((await item.textContent())?.trim() ?? "")) continue;
     await expect(item).toContainText("Sourced");
   }
 

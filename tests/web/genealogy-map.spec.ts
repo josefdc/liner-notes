@@ -626,7 +626,7 @@ test.describe("at 844 x 390 (a phone held sideways)", () => {
 });
 
 /** A stored replayed run of each committed showcase recording, as GET /api/runs serves it. */
-for (const { slug, trackId, title, artist, links } of showcaseRecordings()) {
+for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecordings()) {
   for (const [width, height] of [
     [390, 844],
     [1280, 800],
@@ -667,7 +667,14 @@ for (const { slug, trackId, title, artist, links } of showcaseRecordings()) {
             return { id: card.parentElement?.getAttribute("data-node-id"), b };
           }),
         );
-        expect(cards.length).toBeGreaterThan(1);
+        // Every recorded track is on the map, an undated one too: none is dropped or doubled.
+        expect(
+          await graph
+            .locator("g.nodes > g")
+            .evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id"))),
+        ).toEqual(expect.arrayContaining(nodeIds));
+        await expect(graph.locator("g.nodes > g")).toHaveCount(nodeIds.length);
+        expect(cards).toHaveLength(nodeIds.length);
         for (const [i, { id, b }] of cards.entries()) {
           for (const other of cards.slice(i + 1)) {
             const o = other.b;

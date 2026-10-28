@@ -23,6 +23,7 @@ import {
   marksOtherRecording,
   PREVIEW_BUDGET_MS,
   releaseYearFits,
+  searchFailedPrefix,
   START_MARGIN_MS,
   strictlyMatches,
 } from "./enricher.js";
@@ -179,6 +180,18 @@ describe("enrichGenealogyWithArtwork when the run is cancelled", () => {
     );
 
     expect(cache.putArtwork).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the log line of a failed Spotify search", () => {
+  it("keeps a node's label short, so the line's own words stay under 1 KiB", () => {
+    const long = searchFailedPrefix("Song - Artist (1999) ".repeat(5_000));
+    expect(long.length).toBeLessThan(1024);
+    const shown = "Song - Artist (1999) ".repeat(10).slice(0, 200);
+    expect(long).toBe(`Spotify search for "${shown}…" failed: `);
+    expect(searchFailedPrefix("Song - Artist (1999)")).toBe(
+      'Spotify search for "Song - Artist (1999)" failed: ',
+    );
   });
 });
 

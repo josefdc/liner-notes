@@ -1597,13 +1597,11 @@ export const redactText = (text: string) => redactKeyValues(text, []);
 /** What the HTTP error log keeps of an error's message (logText in http/middleware/errors.ts). */
 const MAX_LOGGED_MESSAGE = 200;
 /**
- * Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. The
- * callers' own words are under 64 characters ("Error: ", "Suggest failed: ", a search's fixed
- * label, INTERNAL_ERROR_PREFIX), but for one: agent/enricher.ts logs `Spotify search for
- * "${label}" failed: ` with a graph node's label, which the model writes ("Song Title - Artist
- * (Year)") and nothing in the code bounds. The error there is a SourceError, whose message is
- * already cut where the HTTP error log's cap falls (MAX_LOGGED_MESSAGE); only a label over 16 KiB
- * could move that line's cap into it.
+ * Room for the words a log line puts before a described error, within MAX_LOGGED_TEXT. Every
+ * caller's own words are bounded well under it: fixed words under 64 characters ("Error: ",
+ * "Suggest failed: ", a search's fixed label, INTERNAL_ERROR_PREFIX), and agent/enricher.ts's
+ * `Spotify search for "…" failed: `, whose graph-node label searchFailedPrefix cuts to 200
+ * characters (under 250 in all).
  */
 const LOG_PREFIX_ROOM = 1024;
 

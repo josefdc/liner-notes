@@ -60,10 +60,13 @@
  * only from a node already drawn, at most CODE_HOP_NODES new nodes, what the source samples
  * before its siblings. A second hop's end joins a node by its MBID only, and one that is another
  * recording of the analysed song is never drawn. A node's year is the first release date its
- * item states. The whole map holds at most GENEALOGY_NODES_MAX nodes: the analysed track, then
+ * recording's own item states (`recording/<mbid>`, on the page that shows it; the analysed
+ * track's own `track/` item for its node), the earliest when a node stands for several
+ * recordings of one record. Where a code link's documented direction and its ends' years
+ * disagree, the year of the end farther from the analysed track is left off. The whole map holds at most GENEALOGY_NODES_MAX nodes: the analysed track, then
  * the records this one draws on, then those that draw on it (CODE_NODES_MAX for the two, in that
- * order; a relation past it gets no claim either), then the second hop's, then the model's own
- * nodes; a link to a node left out is left out too.
+ * order; a relation past it keeps its claim, without a node or link), then the second hop's,
+ * then the model's own nodes; a link to a node left out is left out too.
  *
  * Artwork. Each node made from a recording may be searched for its cover, but only the first
  * CODE_ARTWORK_PER_KIND of each relationship kind (`noArtwork` lists the rest, and every node of
@@ -82,9 +85,11 @@ import {
   DISAMBIGUATION_NUMBER,
   normalizeArtist,
   normalizeTitle,
-  quotedDated,
+  quoted,
+  statesFirstRelease,
   titlesMatch,
 } from "../sources/records.js";
+import { dateRecordRef } from "../sources/identity.js";
 import { releaseYearOf } from "../sources/musicbrainz.js";
 import type {
   CreditRelation,
@@ -158,16 +163,15 @@ const partOnly = (relation: RecordingRelation) =>
 
 /**
  * The text of a partial or medley cover's claim, from its item's excerpt, which ends with the
- * relationship and the other record (`${phrase} "Title" by Artist.`, with its first release date
- * when it carries one: what the cache check requires): "B partly covers A." (partial), "B covers part of A in a medley." (partial, in a
+ * relationship and the other record (`${phrase} "Title" by Artist.`, what the cache check
+ * requires): "B partly covers A." (partial), "B covers part of A in a medley." (partial, in a
  * medley), "B covers A in a medley." (a medley not marked partial). Null when the excerpt does
  * not end so: the claim is then not made.
  */
 function partialCoverText(relation: RecordingRelation, item: Evidence): string | null {
   const text = item.excerpt.replace(SOURCE_PREFIX, "").trim();
   const phrase = relation.kind === "covered-by" ? " is covered by " : " is a cover of ";
-  const { title, artist, firstReleaseDate } = relation.other;
-  const other = quotedDated(title, artist, firstReleaseDate);
+  const other = quoted(relation.other.title, relation.other.artist);
   const ending = `${phrase}${other}.`;
   if (!text.endsWith(ending) || text.length === ending.length) return null;
   const subject = text.slice(0, -ending.length);
@@ -441,16 +445,16 @@ export function buildCodeClaims(
       : undefined) ??
     null;
   /**
-   * The year of a record's node: the first release date it carries, only when the item that
-   * states the relation states that date for it.
+   * The year of a record's node: the first release date it carries, only when the recording's
+   * own item (`recording/<mbid>`, on its page) states that date.
    */
-  const statedYear = (other: Other, item: Evidence) => {
+  const statedYear = (other: Other): { year?: number } => {
     const date = other.firstReleaseDate;
-    const named = quotedDated(other.title, other.artist, date);
-    return date && item.excerpt.includes(` ${named}`) ? yearOf(date) : {};
+    const item = date ? items.get(`musicbrainz:${dateRecordRef(other.mbid)}`) : undefined;
+    return date && item && statesFirstRelease(item, date) ? yearOf(date) : {};
   };
   /** A new node for a record. */
-  const addNode = (other: Other, item: Evidence): string => {
+  const addNode = (other: Other): string => {
     const { entity, mbid, title, artist } = other;
     const id = `mb-${mbid}`;
     nodeOfMbid.set(mbid, id);
@@ -473,18 +477,27 @@ export function buildCodeClaims(
         size: CODE_NODE_SIZE,
         // A recording without an artist credit is not searched for as a track.
         ...(artist ? { trackTitle: title, trackArtist: artist } : {}),
-        // Its year from MusicBrainz only, when its item states it; never invented.
-        ...statedYear(other, item),
+        // Its year from MusicBrainz only, when its own item states it; never invented.
+        ...statedYear(other),
         mbid,
       });
     }
     return id;
   };
-  /** The node standing for a relation's other record: one per record. */
-  const nodeFor = (other: Other, item: Evidence): string => {
+  /**
+   * The node standing for a relation's other record: one per record. A node that stands for
+   * several recordings of one record keeps the earliest year their items state: the record's
+   * first release.
+   */
+  const nodeFor = (other: Other): string => {
     const known = knownNode(other);
-    if (known === null) return addNode(other, item);
+    if (known === null) return addNode(other);
     nodeOfMbid.set(other.mbid, known);
+    const { year } = statedYear(other);
+    const node = nodes.find((n) => n.id === known);
+    if (node && year !== undefined && (node.year === undefined || year < node.year)) {
+      node.year = year;
+    }
     return known;
   };
   /** True for a record that is the analysed track, or another recording of it by its names. */
@@ -500,12 +513,12 @@ export function buildCodeClaims(
     const text = partOnly(relation) ? partialCoverText(relation, item) : codeClaimText(item);
     if (text === null) continue;
     const linked = relation.scope === "track" && !partOnly(relation);
-    // The map is full: a relation that would need a node of its own is left out, claim and all.
-    if (linked && nodes.length >= CODE_NODES_MAX && knownNode(relation.other) === null) continue;
     const claim = claimFor(relation, LINK_CLAIM_ABOUT[type][0], text);
-    // A link only for a whole relation of this recording (see the module comment).
+    // A link only for a whole relation of this recording (see the module comment), while the
+    // map has room for its record: past CODE_NODES_MAX, the claim stays without a node or link.
     if (!linked) continue;
-    const id = nodeFor(relation.other, item);
+    if (nodes.length >= CODE_NODES_MAX && knownNode(relation.other) === null) continue;
+    const id = nodeFor(relation.other);
     const [source, target] = otherEarlier ? [id, "current"] : ["current", id];
     const key = `${type} ${source} ${target}`;
     // A second recording of one record: its claim stands, the link is drawn once.
@@ -530,6 +543,8 @@ export function buildCodeClaims(
   // that is the analysed song (another recording of it) is the analysed track, already linked:
   // never a node of its own.
   const hopNodes: string[] = [];
+  /** The end of each second-hop link farther from the analysed track: the hop's other record. */
+  const farEnd = new Map<GenealogyLink, string>();
   for (const hop of hopRelations(present)) {
     const item = items.get(hop.evidenceId);
     const via = nodeOfMbid.get(hop.via.mbid);
@@ -538,7 +553,7 @@ export function buildCodeClaims(
     let id = nodeOfMbid.get(other.mbid);
     if (id === undefined) {
       if (isAnalysed(other) || hopNodes.length >= CODE_HOP_NODES) continue;
-      id = addNode(other, item);
+      id = addNode(other);
       hopNodes.push(id);
     }
     if (id === via) continue;
@@ -548,7 +563,7 @@ export function buildCodeClaims(
     const key = `sample ${source} ${target}`;
     if (drawn.has(key)) continue;
     drawn.add(key);
-    links.push({
+    const link: GenealogyLink = {
       source,
       target,
       value: LINK_VALUE.sample,
@@ -556,7 +571,35 @@ export function buildCodeClaims(
       kind: "sourced",
       origin: "code",
       evidenceIds: [item.id],
-    });
+    };
+    links.push(link);
+    farEnd.set(link, id);
+  }
+  // The analysed track's MusicBrainz year: only when its own item states it, and no later than
+  // the release Spotify shows (a later one belongs to another release of the song).
+  const ownDate = analysed?.firstReleaseDate ?? null;
+  const ownItem = analysed ? items.get(`musicbrainz:track/recording/${analysed.mbid}`) : undefined;
+  const own =
+    ownDate && ownItem && statesFirstRelease(ownItem, ownDate) ? yearOf(ownDate).year : undefined;
+  const released = analysed ? yearOf(analysed.releaseDate).year : undefined;
+  const ownYear =
+    own !== undefined && (released === undefined || own <= released) ? own : undefined;
+  // A code link's direction is its record's. Where the years say otherwise (the record sampled
+  // dated after the one sampling it: MusicBrainz knows only a later release of it), the year of
+  // the end farther from the analysed track is left off: undated, never moved to fit.
+  const yearOfNode = (id: string) =>
+    id === "current" ? ownYear : nodes.find((node) => node.id === id)?.year;
+  for (const link of links) {
+    const [from, to] = [yearOfNode(link.source), yearOfNode(link.target)];
+    if (from === undefined || to === undefined || from <= to) continue;
+    const off =
+      link.source === "current"
+        ? link.target
+        : link.target === "current"
+          ? link.source
+          : farEnd.get(link);
+    const node = nodes.find((n) => n.id === off);
+    if (node) delete node.year;
   }
   for (const credit of curatedCredits(present)) {
     const item = items.get(credit.evidenceId);
@@ -570,12 +613,6 @@ export function buildCodeClaims(
   const noArtwork = nodes
     .filter((node) => node.trackTitle && node.trackArtist && !searched.has(node.id))
     .map((node) => node.id);
-  // Its MusicBrainz year only when no later than the release Spotify shows: a later one belongs
-  // to another release of the song, not to the track's first.
-  const own = analysed ? yearOf(analysed.firstReleaseDate).year : undefined;
-  const released = analysed ? yearOf(analysed.releaseDate).year : undefined;
-  const ownYear =
-    own !== undefined && (released === undefined || own <= released) ? own : undefined;
   const current = analysed
     ? { mbid: analysed.mbid, ...(ownYear !== undefined ? { year: ownYear } : {}) }
     : null;

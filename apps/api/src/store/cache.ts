@@ -129,10 +129,11 @@ export interface CachedEvidence {
    * was not sent ("not_asked": our own pacing left no slot in time, or the run's time for the
    * primary sources ran out first), the MusicBrainz work's recordings not dated ("dates"; its
    * covers are then about the song), the recording's MusicBrainz releases not read
-   * ("releases"; no release is named for it). A hit reads the primary sources again for such a
-   * row.
+   * ("releases"; no release is named for it), the MusicBrainz relations map not read in full
+   * ("map"; its second hop or years are missing). A hit reads the primary sources again for
+   * such a row.
    */
-  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" | "releases" }>;
+  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" | "releases" | "map" }>;
 }
 
 /** Research as the research cache holds it. */
@@ -211,7 +212,7 @@ const CachedEvidenceSchema = z.object({
   errors: z.array(SourceError),
   lasting: z.array(SourceError),
   incomplete: z.array(
-    z.object({ source: SourceId, part: z.enum(["not_asked", "dates", "releases"]) }),
+    z.object({ source: SourceId, part: z.enum(["not_asked", "dates", "releases", "map"]) }),
   ),
 });
 
@@ -234,8 +235,17 @@ const SampleHopSchema = z.object({
   ),
 });
 
+/** When a recording cache row was read from MusicBrainz (ISO 8601). */
+const ReadAt = z.string().refine((value) => Number.isFinite(Date.parse(value)));
+
+/** A recording's sample relationships as the recording cache keeps them, with when they were read. */
+const CachedHopSchema = z.object({ hop: SampleHopSchema, readAt: ReadAt });
+
 /** A first release date as the recording cache keeps it: null when MusicBrainz has none. */
-const RecordingDateSchema = z.object({ date: z.string().regex(RELEASE_DATE).nullable() });
+const RecordingDateSchema = z.object({
+  date: z.string().regex(RELEASE_DATE).nullable(),
+  readAt: ReadAt,
+});
 
 const ResearchSchema = z
   .object({
@@ -588,29 +598,39 @@ export class SonicCache {
     }
   }
 
-  /** The sample relationships cached for a recording's second hop, or null (a miss). */
-  getMbHop(mbid: string): MbSampleHop | null {
-    return this.getRecordingPart(mbid, "hop", SampleHopSchema);
+  /** The sample relationships cached for a recording's second hop, with when they were read. */
+  getMbHop(mbid: string): { hop: MbSampleHop; readAt: string } | null {
+    return this.getRecordingPart(mbid, "hop", CachedHopSchema);
   }
 
-  /** Caches the sample relationships read for a recording's second hop. */
-  putMbHop(mbid: string, hop: MbSampleHop, ttlMs = TTL_MUSICBRAINZ_RECORDING): void {
-    const parsed = SampleHopSchema.safeParse(hop);
+  /** Caches the sample relationships read for a recording's second hop at `readAt`. */
+  putMbHop(
+    mbid: string,
+    hop: MbSampleHop,
+    readAt: string,
+    ttlMs = TTL_MUSICBRAINZ_RECORDING,
+  ): void {
+    const parsed = CachedHopSchema.safeParse({ hop, readAt });
     if (!parsed.success) throw new TypeError("Not a recording's sample relationships");
     this.putRecordingPart(mbid, "hop", parsed.data, ttlMs);
   }
 
   /**
-   * A recording's cached first release date: `{ date }`, null inside when MusicBrainz was asked
-   * and has none; null (a miss) when it was not asked or the row expired.
+   * A recording's cached first release date with when it was read: `date` null when MusicBrainz
+   * was asked and has none; null (a miss) when it was not asked or the row expired.
    */
-  getMbDate(mbid: string): { date: string | null } | null {
+  getMbDate(mbid: string): { date: string | null; readAt: string } | null {
     return this.getRecordingPart(mbid, "date", RecordingDateSchema);
   }
 
-  /** Caches a recording's first release date, or that MusicBrainz has none (null). */
-  putMbDate(mbid: string, date: string | null, ttlMs = TTL_MUSICBRAINZ_RECORDING): void {
-    const parsed = RecordingDateSchema.safeParse({ date });
+  /** Caches a recording's first release date read at `readAt`, or that it has none (null). */
+  putMbDate(
+    mbid: string,
+    date: string | null,
+    readAt: string,
+    ttlMs = TTL_MUSICBRAINZ_RECORDING,
+  ): void {
+    const parsed = RecordingDateSchema.safeParse({ date, readAt });
     if (!parsed.success) throw new TypeError("Not a release date");
     this.putRecordingPart(mbid, "date", parsed.data, ttlMs);
   }

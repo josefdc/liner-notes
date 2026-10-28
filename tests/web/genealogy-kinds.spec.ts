@@ -78,7 +78,7 @@ const DRAWN = [
   ["inferred", "influence", "6 4", "possible sample"], // says sourced, cites nothing
   ["inferred", "influence", "6 4", "possible sample"], // the model's "sourced", no verdict
   ["sourced", "sample", "none", "sample"], // the model's, with a supported claim
-  ["inferred", "influence", "6 4", "related"], // its years contradict its direction
+  ["inferred", "influence", "6 4", "related"], // a model link its years contradict
 ];
 
 const graphOf = (page: Page) =>
@@ -438,7 +438,8 @@ test.describe("the genealogy graph", () => {
     await expect(targets.last()).toBeFocused();
     await expect(detail).toHaveText(
       "Backwards Sample - Someone (2020) and Bright Lines (2011) are related (direction unknown)" +
-        "Not sourced · stated as a sample; the years (2020 and 2011) do not fit this direction; " +
+        "Model inference · stated as a sample; the years (2020 and 2011) do not fit this " +
+        "direction; " +
         `cites ${MB}, not checked by a verifier`,
     );
     await page.mouse.move(5, 5);
@@ -676,7 +677,8 @@ test.describe("connected tracks on the Dashboard", () => {
       "Model inference · no evidence cited",
       "Model inference · proposed by the model; no " +
         `verifier verdict supports it; cites ${MB}, not checked by a verifier`,
-      "Not sourced · stated as a sample; the years (2020 and 2011) do not fit this direction; " +
+      "Model inference · stated as a sample; the years (2020 and 2011) do not fit this " +
+        "direction; " +
         `cites ${MB}, not checked by a verifier`,
     ]);
     await screenshot(page, testInfo, "dashboard-inferred", cards.first().locator(".."));

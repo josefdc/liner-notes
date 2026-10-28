@@ -21,6 +21,7 @@ import { type CachedEvidence, getCache } from "../../store/cache.js";
 import {
   collectPrimarySources,
   DATES_INCOMPLETE,
+  MAP_INCOMPLETE,
   RELEASES_INCOMPLETE,
   type IdentifiedRecording,
   type PrimarySources,
@@ -217,6 +218,9 @@ const cachedNotAskedNote = (source: SourceId, readAt: string) =>
 const RELEASES_NOTE =
   "MusicBrainz releases incomplete: the recording's releases could not be read, so no release is named for it; a later run reads them";
 
+const MAP_NOTE =
+  "MusicBrainz relations map incomplete: part of the second hop or of the related recordings' years could not be read in time; a later run reads them";
+
 const DATES_NOTE =
   "MusicBrainz release dates incomplete: the work's recordings could not be dated, so its covers are not claimed for this recording; a later run reads them";
 
@@ -282,6 +286,11 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(RELEASES_INCOMPLETE)) {
     incomplete.push({ source: "musicbrainz", part: "releases" });
     warnings.push(RELEASES_NOTE);
+  }
+  // The relations map read in part: its records stand, and a later run reads the rest.
+  if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(MAP_INCOMPLETE)) {
+    incomplete.push({ source: "musicbrainz", part: "map" });
+    warnings.push(MAP_NOTE);
   }
   for (const { source, why } of notAskedSources(read.sources)) {
     incomplete.push({ source, part: "not_asked" });
@@ -581,7 +590,9 @@ export function cachedRunEvidence(
           ? DATES_NOTE
           : part.part === "releases"
             ? RELEASES_NOTE
-            : cachedNotAskedNote(part.source, cached.readAt),
+            : part.part === "map"
+              ? MAP_NOTE
+              : cachedNotAskedNote(part.source, cached.readAt),
       ),
     ],
   };

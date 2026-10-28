@@ -31,6 +31,9 @@ import {
   EVIDENCE_EXCERPT_MAX,
   type Evidence,
   evidenceIssues,
+  MAP_DATE_REF,
+  MAP_RELATION_REF,
+  mapRecordKind,
   type SourceError,
   type SourceId,
 } from "@liner-notes/contract";
@@ -252,6 +255,8 @@ const MBID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const SAMPLES_REF = new RegExp(`^track/recording/${MBID}/samples/recording/(${MBID})$`);
 const KIND =
   "(samples|sampled-by|interpolates|interpolated-by|cover-of|covered-by|remix-of|remixed-by)";
+/** The recordRef of any of the recording's own relationships to another recording. */
+const RELATED_REF = new RegExp(`^track/recording/${MBID}/${KIND}/recording/(${MBID})$`);
 
 /**
  * The recordRef and page each source module writes, and how its excerpt starts (an excerpt is
@@ -269,8 +274,10 @@ const STORED_SHAPES: Record<
       new RegExp(`^work/(${MBID})/(covered-by)/recording/${MBID}$`),
       // The release that stands for the recording (sources/identity.ts, pickCoverRelease).
       new RegExp(`^release/(${MBID})$`),
-      // The relations map's second hop: two other recordings, on the first one's page.
-      new RegExp(`^recording/(${MBID})/(samples|sampled-by)/recording/${MBID}$`),
+      // The relations map's records (the contract's shapes): two other recordings, on the
+      // first one's page; another recording's first release date, on its own page.
+      MAP_RELATION_REF,
+      MAP_DATE_REF,
     ],
     // A cover of the work is stated on the work's page, a release on the release's; any other
     // item on the recording's.
@@ -374,18 +381,24 @@ export function restoredEvidence(
     (item) => item.source === "musicbrainz" && evidenceScope(item) === "release",
   );
   if (releases.length > 1) return null;
-  // A relations map item is about a recording this one samples: one its own items name so.
+  // A relations map item about two recordings is about one this recording samples (one its own
+  // items name so); one stating a recording's date is about a recording another item names.
+  const musicbrainz = items.filter((item) => item.source === "musicbrainz");
   const sources = new Set(
-    items.flatMap((item) => {
-      const match = item.recordRef?.match(SAMPLES_REF);
-      return item.source === "musicbrainz" && match ? [match[1]] : [];
-    }),
+    musicbrainz.flatMap((item) => item.recordRef?.match(SAMPLES_REF)?.slice(1, 2) ?? []),
   );
-  if (
-    items.some((item) => isMapRecord(item) && !sources.has(item.recordRef?.split("/")[1] ?? ""))
-  ) {
-    return null;
-  }
+  const named = new Set(
+    musicbrainz.flatMap((item) => [
+      ...(item.recordRef?.match(RELATED_REF)?.slice(2, 3) ?? []),
+      ...(item.recordRef?.match(MAP_RELATION_REF)?.filter((_, i) => i === 1 || i === 3) ?? []),
+    ]),
+  );
+  const unnamed = (item: Evidence) => {
+    if (!isMapRecord(item)) return false;
+    const [, mbid = ""] = item.recordRef?.split("/") ?? [];
+    return mapRecordKind(item.recordRef) === "relation" ? !sources.has(mbid) : !named.has(mbid);
+  };
+  if (items.some(unnamed)) return null;
   const restored: SourcedEvidence[] = [];
   for (const item of items) {
     if (storedItemIssue(item, context) !== null) return null;

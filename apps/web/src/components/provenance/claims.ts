@@ -3,6 +3,7 @@ import {
   type ClaimKind,
   claimIsRejected,
   type Evidence,
+  mapRecordKind,
   type SourceId,
   type SourceTier,
 } from '@liner-notes/contract';
@@ -258,19 +259,17 @@ const SCOPES: Record<string, RecordScope> = {
   release: 'release',
 };
 
-const MBID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const MAP_RECORD_REF = new RegExp(`^recording/${MBID}/(?:samples|sampled-by)/recording/${MBID}$`);
-
 /**
- * True for a relations map record: a MusicBrainz primary record of a relationship between two
- * other recordings (`recording/<a>/<kind>/recording/<b>`), which supports no claim but is the
- * record a link between those two rests on.
+ * True for a relations map record (the contract's `mapRecordKind`): a MusicBrainz primary record
+ * of a relationship between two other recordings, or of another recording's first release date,
+ * which supports no claim but is the record a link between those two, or a node's year, rests
+ * on.
  */
 export function isMapRecord(evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>) {
   return (
     evidence.source === 'musicbrainz' &&
     evidence.sourceTier === 'primary-record' &&
-    MAP_RECORD_REF.test(evidence.recordRef ?? '')
+    mapRecordKind(evidence.recordRef) !== null
   );
 }
 
@@ -303,7 +302,11 @@ export const sourceTierText = (
 export function scopeText(
   evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>,
 ): string | null {
-  if (isMapRecord(evidence)) return 'about two other recordings, not this one';
+  if (isMapRecord(evidence)) {
+    return mapRecordKind(evidence.recordRef) === 'relation'
+      ? 'about two other recordings, not this one'
+      : 'about another recording, not this one';
+  }
   const scope = recordScope(evidence);
   if (scope === 'song') return 'about the song, not this recording';
   if (scope === 'release') return 'about a whole release';

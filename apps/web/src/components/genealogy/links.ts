@@ -248,10 +248,17 @@ export function readLink(
   }));
   const reasons: string[] = [];
 
-  // Direction: the record a link starts from must not be newer than the one it points at.
+  // Direction: the record a link starts from must not be newer than the one it points at. A
+  // code-built sourced link's direction is documented by the record it is built from (which
+  // recording samples which), so years never overrule it; a model's link is checked.
   const [fromYear, toYear] = [yearOf(nodes.get(link.source)), yearOf(nodes.get(link.target))];
+  const documented = origin === 'code' && link.kind === 'sourced';
   const directionKnown =
-    statedType === 'producer' || fromYear === null || toYear === null || fromYear <= toYear;
+    statedType === 'producer' ||
+    documented ||
+    fromYear === null ||
+    toYear === null ||
+    fromYear <= toYear;
   if (!directionKnown) {
     reasons.push(`the years (${fromYear} and ${toYear}) do not fit this direction`);
   }
@@ -307,9 +314,14 @@ export function readLink(
       );
     }
     if (known.length > 0) {
-      reasons.push(
-        `cites ${list(known.map((c) => citationText(c, false)))}${claim?.verdict ? '' : ', not checked by a verifier'}`,
-      );
+      // A code link is sourced on the record it is built from, not on a verifier's verdict.
+      const checked =
+        origin === 'code'
+          ? ', the record it is built from'
+          : claim?.verdict
+            ? ''
+            : ', not checked by a verifier';
+      reasons.push(`cites ${list(known.map((c) => citationText(c, false)))}${checked}`);
     }
     if (citations.length === 0) {
       reasons.push(

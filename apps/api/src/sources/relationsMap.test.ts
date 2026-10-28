@@ -14,11 +14,18 @@ import {
   restoredEvidence,
 } from "../agent/research/evidencePack.js";
 import { primaryRelations, relationsIssue } from "../agent/research/relations.js";
-import { RESEARCH_TTL_MS } from "../agent/research/runEvidence.js";
+import {
+  cachedEvidenceOf,
+  cachedEvidenceUse,
+  RESEARCH_TTL_MS,
+  runEvidence,
+} from "../agent/research/runEvidence.js";
+import { stubLlm, testRuntime } from "../agent/testing/stubLlm.js";
 import { shownEvidence } from "../agent/prompts.js";
+import { captureLogsForTests } from "../logger.js";
 import { runMigrations } from "../store/migrations.js";
 import { SonicCache, TTL_MUSICBRAINZ_RECORDING } from "../store/cache.js";
-import { collectPrimarySources, type RecordingCache } from "./identity.js";
+import { collectPrimarySources, MAP_INCOMPLETE, type RecordingCache } from "./identity.js";
 import {
   getRecordingDetails,
   type MbRelationship,
@@ -177,20 +184,37 @@ describe("the relations map", () => {
       recordRef: `recording/${UNDER_PRESSURE}/sampled-by/recording/${SIBLING}`,
       url: `https://musicbrainz.org/recording/${UNDER_PRESSURE}`,
       excerpt:
-        'MusicBrainz: "Under Pressure" by Queen & David Bowie (first released 1981-10-26) is sampled in "Sibling Song" by Sibling Artist.',
+        'MusicBrainz: "Under Pressure" by Queen & David Bowie is sampled in "Sibling Song" by Sibling Artist.',
     });
     expect(item && evidenceScope(item)).toBeNull();
+    // Each date on the dated recording's own page, as read; the analysed recording's in its
+    // own item. None for the sibling MusicBrainz does not date.
+    expect(mb.evidence.find((e) => e.id === `musicbrainz:recording/${UNDER_PRESSURE}`)).toEqual(
+      expect.objectContaining({
+        recordRef: `recording/${UNDER_PRESSURE}`,
+        url: `https://musicbrainz.org/recording/${UNDER_PRESSURE}`,
+        excerpt:
+          'MusicBrainz recording "Under Pressure" by Queen & David Bowie, first released 1981-10-26.',
+        retrievedAt: now().toISOString(),
+      }),
+    );
+    expect(mb.evidence.some((e) => e.id === `musicbrainz:recording/${SIBLING}`)).toBe(false);
+    expect(mb.evidence[0].excerpt).toBe(
+      'MusicBrainz recording "Ice Ice Baby" by Vanilla Ice (4:31), ISRC USCA29001716, first released 1990-09-04.',
+    );
 
     // The pack takes them, last; the model is never shown them.
     const pack = new EvidencePack();
     pack.addAll(primaryRecordEvidence(sources));
     const items = pack.items();
     const mapItems = items.filter((e) => e.recordRef?.startsWith("recording/"));
-    expect(mapItems).toHaveLength(2);
-    expect(items.slice(-2)).toEqual(mapItems);
+    // Two relations and three dates (the source, what it samples, and a recording sampling
+    // this one).
+    expect(mapItems).toHaveLength(5);
+    expect(items.slice(-mapItems.length)).toEqual(mapItems);
     const shown = new Set(shownEvidence(items).map((e) => e.id));
     expect(mapItems.filter((e) => shown.has(e.id))).toEqual([]);
-    expect(shown.size).toBe(items.length - 2);
+    expect(shown.size).toBe(items.length - mapItems.length);
 
     // The relations carry the dates, and the cache's check accepts what it wrote.
     const relations = primaryRelations(sources);
@@ -252,10 +276,11 @@ describe("the relations map", () => {
     const cache = recordingCache();
     stubFetch(route);
     const first = records(await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } }));
-    expect(cache.getMbHop(UNDER_PRESSURE)?.recording.firstReleaseDate).toBe("1981-10-26");
+    expect(cache.getMbHop(UNDER_PRESSURE)?.hop.recording.firstReleaseDate).toBe("1981-10-26");
     // Asked and not dated: kept as such, so it is not asked again.
-    expect(cache.getMbDate(SIBLING)).toEqual({ date: null });
-    expect(cache.getMbDate(EARLIER)).toEqual({ date: "1975" });
+    const readAt = now().toISOString();
+    expect(cache.getMbDate(SIBLING)).toEqual({ date: null, readAt });
+    expect(cache.getMbDate(EARLIER)).toEqual({ date: "1975", readAt });
 
     const again = stubFetch(primaryRoute);
     const second = records(
@@ -270,10 +295,11 @@ describe("the relations map", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));
     const { cache, db } = recordingCacheWithDb();
-    cache.putMbDate(EARLIER, "1975");
-    cache.putMbDate(SIBLING, null, 1000);
+    const readAt = "2026-10-20T00:00:00.000Z";
+    cache.putMbDate(EARLIER, "1975", readAt);
+    cache.putMbDate(SIBLING, null, readAt, 1000);
     vi.setSystemTime(new Date("2026-10-21T23:59:59Z"));
-    expect(cache.getMbDate(EARLIER)).toEqual({ date: "1975" });
+    expect(cache.getMbDate(EARLIER)).toEqual({ date: "1975", readAt });
     expect(cache.purgeExpired().recordings).toBe(1);
     const left = () =>
       db.prepare("SELECT mbid FROM musicbrainz_recording_cache").pluck().all() as string[];
@@ -294,10 +320,12 @@ describe("the relations map", () => {
   it("keeps a recording's reads as long as the research cache keeps research", () => {
     expect(TTL_MUSICBRAINZ_RECORDING).toBe(RESEARCH_TTL_MS);
     const cache = recordingCache();
-    cache.putMbDate(EARLIER, "1975", -1000);
+    const readAt = now().toISOString();
+    cache.putMbDate(EARLIER, "1975", readAt, -1000);
     expect(cache.getMbDate(EARLIER)).toBeNull();
     expect(cache.getMbHop("not-an-mbid")).toBeNull();
-    expect(() => cache.putMbDate(EARLIER, "the seventies")).toThrow(TypeError);
+    expect(() => cache.putMbDate(EARLIER, "the seventies", readAt)).toThrow(TypeError);
+    expect(() => cache.putMbDate(EARLIER, "1975", "not a time")).toThrow(TypeError);
   });
 
   it("drops the second hop quietly when the chain's time is nearly out", async () => {
@@ -336,7 +364,51 @@ describe("the relations map", () => {
     expect(late.mb.error).toBeUndefined();
     const sample = late.mb.records.find((r) => r.recording?.mbid === UNDER_PRESSURE);
     expect(sample?.recording).not.toHaveProperty("firstReleaseDate");
-    expect(late.mb.incomplete).toBe(inTime.mb.incomplete);
+    // Not complete: the map is read again by a later run.
+    expect(inTime.mb.incomplete).not.toContain(MAP_INCOMPLETE);
+    expect(late.mb.incomplete).toBe(
+      `${inTime.mb.incomplete}; ${MAP_INCOMPLETE}the relations map could not be read in full in this run's time; a later run reads it again`,
+    );
+  });
+
+  it("leaves a map it could not read in full for a later run to read again", async () => {
+    unpaced();
+    const cache = recordingCache();
+    const logs = captureLogsForTests({ level: "warn" });
+    onTestFinished(() => logs.restore());
+    stubFetch((call) => (isDateSearch(call) ? new Response("busy", { status: 503 }) : route(call)));
+    const sources = await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } });
+    const evidence = await runEvidence(
+      Promise.resolve({ status: "read", sources }),
+      [],
+      { writer: () => {} } as never,
+      testRuntime(
+        stubLlm(() => ({})),
+        now().toISOString(),
+      ),
+    );
+    expect(evidence.incomplete).toContainEqual({ source: "musicbrainz", part: "map" });
+    expect(
+      evidence.status.some((line) => line.startsWith("MusicBrainz relations map incomplete")),
+    ).toBe(true);
+    // One log line says what the map did not read.
+    const lines = logs.messages("warn").filter((line) => /Relations map/.test(line));
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^Relations map incomplete for recording\/.+: not read the dates of \d+ recordings/,
+      ),
+    ]);
+    // The research cached from it is read again, not served as is.
+    const cached = cachedEvidenceOf(evidence, ICE_TRACK.isrc, null, now().toISOString());
+    expect(cachedEvidenceUse(cached, ICE_TRACK.isrc)).toBe("refresh");
+    // The second hop read then comes from the cache: only the dates are asked again.
+    const again = stubFetch(route);
+    const second = records(
+      await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } }),
+    );
+    expect(again.calls.filter(isHopRead)).toEqual([]);
+    expect(again.calls.filter(isDateSearch)).toHaveLength(1);
+    expect(second.incomplete).not.toContain(MAP_INCOMPLETE);
   });
 
   it("makes no map request once the chain's own reads end past the map's start limit", async () => {
@@ -396,7 +468,7 @@ describe("the relations map", () => {
     // One that lists a recording without a date says it has none: kept as such.
     stubFetch(route);
     await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } });
-    expect(cache.getMbDate(SIBLING)).toEqual({ date: null });
+    expect(cache.getMbDate(SIBLING)).toEqual({ date: null, readAt: now().toISOString() });
   });
 
   it("does not ask again when MusicBrainz sheds a map read", async () => {
@@ -428,10 +500,10 @@ describe("the relations map", () => {
             : r,
       );
     expect(relationsIssue(tampered("1901", false), items)).toBe(
-      "a relation its item does not state",
+      "a first release date no item states",
     );
     expect(relationsIssue(tampered("2099", true), items)).toBe(
-      "a relation its item does not state",
+      "a first release date no item states",
     );
   });
 

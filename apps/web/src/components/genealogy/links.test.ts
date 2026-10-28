@@ -225,20 +225,23 @@ describe('readLink', () => {
     ).toMatchObject({ link: { kind: 'sourced' } });
   });
 
-  it('gives no direction to a link the release years contradict', () => {
+  it('gives no direction to a model link the release years contradict', () => {
     const nodes = nodesById([
       node('new', 4, 'Newer - X (2020)'),
       node('old', 1, 'Older - Y (1990)'),
     ]);
+    const supported = [
+      claim('cl-1', { verdict: 'supported', kind: 'sourced', evidenceIds: ['ev-mb-1'] }),
+    ];
     const backwards = read(
-      sourced({ source: 'new', target: 'old', origin: 'code' }),
-      context(),
+      sourced({ source: 'new', target: 'old', origin: 'model', claimId: 'cl-1' }),
+      context(supported),
       nodes,
     );
     expect(backwards).toMatchObject({ kind: 'inferred', directionKnown: false, type: 'influence' });
     expect(provenanceText(backwards)).toBe(
-      'Not sourced · stated as a sample; the years (2020 and 1990) do not fit this direction; ' +
-        `cites ${MB}, not checked by a verifier`,
+      'Model inference · stated as a sample; the years (2020 and 1990) do not fit this ' +
+        `direction; the verifier found its claim supported; cites ${MB}`,
     );
     expect(relationLabel(backwards)).toBe('Related, direction unknown');
     const name = (id: string) => nodeName(nodes.get(id), id);
@@ -252,6 +255,30 @@ describe('readLink', () => {
       nodes,
     );
     expect(producer).toMatchObject({ kind: 'sourced', directionKnown: true });
+  });
+
+  it('keeps a code-built sourced link in the direction its record documents, whatever the years', () => {
+    const nodes = nodesById([
+      node('new', 4, 'Newer - X (2020)'),
+      node('old', 1, 'Older - Y (1990)'),
+    ]);
+    const documented = read(
+      sourced({ source: 'new', target: 'old', origin: 'code' }),
+      context(),
+      nodes,
+    );
+    expect(documented).toMatchObject({ kind: 'sourced', directionKnown: true, type: 'sample' });
+    expect(relationLabel(documented)).toBe('Sample');
+    expect(provenanceText(documented)).toBe(`Sourced · cites ${MB_SOURCED}`);
+    // One whose evidence is not all in the pack is not sourced: its reason names its record.
+    const partly = read(
+      sourced({ origin: 'code', evidenceIds: ['ev-mb-1', 'ev-ghost'] }),
+      context(),
+      nodes,
+    );
+    expect(provenanceText(partly)).toBe(
+      `Not sourced · cites ev-ghost, not in the evidence pack; cites ${MB}, the record it is built from`,
+    );
   });
 
   it('names a cited item as its claim chip does, never above the tier the contract allows', () => {
@@ -287,9 +314,13 @@ describe('readLink', () => {
         { id: 'current', group: 1, label: 'Bright Lines', trackTitle: 'Bright Lines', size: 40 },
         node('newer', 4, 'Newer Record - Someone (2020)'),
       ],
-      links: [sourced({ source: 'newer', target: 'current', origin: 'code' })],
+      links: [sourced({ source: 'newer', target: 'current', origin: 'model', claimId: 'cl-1' })],
     };
-    const withYear = linkContext(PACK, null, { releaseYear: '2011-05-02' });
+    const claims = resultClaims({
+      claims: [claim('cl-1', { verdict: 'supported', kind: 'sourced', evidenceIds: ['ev-mb-1'] })],
+      evidence: PACK,
+    } as unknown as TrackData);
+    const withYear = linkContext(PACK, claims, { releaseYear: '2011-05-02' });
     const [backwards] = shownLinks(genealogy, withYear);
     expect(backwards).toMatchObject({ kind: 'inferred', directionKnown: false });
     expect(provenanceText(backwards)).toContain(
@@ -298,7 +329,7 @@ describe('readLink', () => {
     const named = nodesById(genealogy.nodes, yearFrom('2011-05-02'));
     expect(nodeName(named.get('current'), 'current')).toBe('Bright Lines (2011)');
     // Without the result's year the check cannot tell, and says nothing.
-    expect(shownLinks(genealogy, linkContext(PACK, null))[0]).toMatchObject({
+    expect(shownLinks(genealogy, linkContext(PACK, claims))[0]).toMatchObject({
       kind: 'sourced',
       directionKnown: true,
     });
@@ -651,10 +682,62 @@ describe('the relations MusicBrainz states', () => {
     );
   });
 
+  it('keeps a documented sample when MusicBrainz dates the sampled record after the track', () => {
+    // MusicBrainz knows only a later reissue of the sampled record: 2005, after Juicy (1994).
+    const sample = {
+      ...evidenceItem('ev-s'),
+      recordRef:
+        'track/recording/00000000-0000-4000-8000-000000000000/samples/recording/00000000-0000-4000-8000-000000000001',
+    };
+    const sourced = claim('c-s', {
+      kind: 'sourced',
+      origin: 'code',
+      evidenceIds: ['ev-s'],
+      scope: 'recording',
+    });
+    const g = {
+      nodes: [
+        { id: 'current', group: 1, label: 'Juicy', trackTitle: 'Juicy', size: 40, year: 1994 },
+        {
+          id: 'mb-1',
+          group: 2,
+          label: 'Rare Groove - Obscure Band',
+          trackTitle: 'Rare Groove',
+          size: 22,
+          year: 2005,
+        },
+      ],
+      links: [
+        link('mb-1', 'current', {
+          type: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          claimId: 'c-s',
+          evidenceIds: ['ev-s'],
+        }),
+      ],
+    };
+    const ctx = linkContext(
+      [sample],
+      resultClaims({ claims: [sourced], evidence: [sample] } as unknown as TrackData),
+      { releaseYear: '1994-09-13' },
+    );
+    const [shown] = shownLinks(g, ctx);
+    expect(shown).toMatchObject({ kind: 'sourced', directionKnown: true, reasons: [] });
+    expect(relationLabel(shown)).toBe('Sample');
+  });
+
   it('names a relations map record as a MusicBrainz record about two other recordings', () => {
     expect(sourceLabel(hopItem as Evidence)).toBe(
       'MusicBrainz · primary record · about two other recordings, not this one',
     );
+    // A recording's own date record: about another recording.
+    expect(
+      sourceLabel({
+        ...hopItem,
+        recordRef: 'recording/00000000-0000-4000-8000-000000000002',
+      } as Evidence),
+    ).toBe('MusicBrainz · primary record · about another recording, not this one');
     // Not one with any other shape.
     expect(sourceLabel({ ...hopItem, recordRef: 'recording/abc' } as Evidence)).toBe(
       'MusicBrainz · web page',

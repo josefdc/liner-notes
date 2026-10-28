@@ -34,22 +34,37 @@ const AT = "2026-10-20T12:00:00.000Z";
 let ids = 0;
 const newId = () => `claim-${++ids}`;
 
-/** A recording as MusicBrainz's items name it: quoted, with the first release date it states. */
-const named = (title: string, artist: string, date?: string) =>
-  `${quoted(title, artist)}${date ? ` (first released ${date})` : ""}`;
+/**
+ * A recording's own MusicBrainz item, on its page, stating its first release date (what a node's
+ * year rests on).
+ */
+function datedItem(mbidOf: string, title: string, artist: string, date: string): Evidence {
+  return {
+    id: `musicbrainz:recording/${mbidOf}`,
+    source: "musicbrainz",
+    sourceTier: "primary-record",
+    url: `https://musicbrainz.org/recording/${mbidOf}`,
+    title: `${title} — MusicBrainz recording`,
+    retrievedAt: AT,
+    excerpt: `MusicBrainz recording ${quoted(title, artist)}, first released ${date}.`,
+    recordRef: `recording/${mbidOf}`,
+  };
+}
+
+type Part = { relation: PrimaryRelation; item: Evidence; dated?: Evidence[] };
 
 type Names = { title?: string; artist?: string };
 
 /**
- * A relation of this recording to recording `n`, with the item that states it (and its date,
- * unless `unstated`).
+ * A relation of this recording to recording `n`, with the item that states it, and the other
+ * recording's own item stating its date (unless `unstated`).
  */
 function relation(
   kind: RecordingRelation["kind"],
   n: number,
   date?: string,
   names: Names & { unstated?: boolean } = {},
-): { relation: RecordingRelation; item: Evidence } {
+): { relation: RecordingRelation; item: Evidence; dated: Evidence[] } {
   const other = { title: names.title ?? `Record ${n}`, artist: names.artist ?? `Artist ${n}` };
   const item: Evidence = {
     id: `musicbrainz:track/recording/${OWN}/${kind}/recording/${mbid(n)}`,
@@ -58,11 +73,12 @@ function relation(
     url: `https://musicbrainz.org/recording/${OWN}`,
     title: "Track — MusicBrainz relationships",
     retrievedAt: AT,
-    excerpt: `MusicBrainz: "Track" by Own ${RELATION_PHRASE[kind]} ${named(other.title, other.artist, names.unstated ? undefined : date)}.`,
+    excerpt: `MusicBrainz: "Track" by Own ${RELATION_PHRASE[kind]} ${quoted(other.title, other.artist)}.`,
     recordRef: `track/recording/${OWN}/${kind}/recording/${mbid(n)}`,
   };
   return {
     item,
+    dated: date && !names.unstated ? [datedItem(mbid(n), other.title, other.artist, date)] : [],
     relation: {
       type: "relation",
       source: "musicbrainz",
@@ -87,7 +103,7 @@ function hop(
   n: number,
   date?: string,
   names: Names & { via?: Names; viaDate?: string } = {},
-): { relation: HopRelation; item: Evidence } {
+): { relation: HopRelation; item: Evidence; dated: Evidence[] } {
   const end = (m: number, d: string | undefined, given: Names = {}) => ({
     mbid: mbid(m),
     title: given.title ?? `Record ${m}`,
@@ -103,11 +119,16 @@ function hop(
     url: `https://musicbrainz.org/recording/${a.mbid}`,
     title: `${a.title} — MusicBrainz relationships`,
     retrievedAt: AT,
-    excerpt: `MusicBrainz: ${named(a.title, a.artist, a.firstReleaseDate)} ${RELATION_PHRASE[kind]} ${named(b.title, b.artist, b.firstReleaseDate)}.`,
+    excerpt: `MusicBrainz: ${quoted(a.title, a.artist)} ${RELATION_PHRASE[kind]} ${quoted(b.title, b.artist)}.`,
     recordRef: ref,
   };
   return {
     item,
+    dated: [a, b].flatMap((end) =>
+      end.firstReleaseDate
+        ? [datedItem(end.mbid, end.title, end.artist, end.firstReleaseDate)]
+        : [],
+    ),
     relation: {
       type: "hop",
       source: "musicbrainz",
@@ -132,8 +153,30 @@ type Analysed = {
 
 const TRACK: Analysed = { mbid: OWN, firstReleaseDate: null, title: "Track", artist: "Own" };
 
-function built(parts: Array<{ relation: PrimaryRelation; item: Evidence }>, analysed?: Analysed) {
-  const evidence = parts.map((p) => p.item);
+/**
+ * The code-built map of `parts`, with every item they need, and the analysed track's own item
+ * stating its date (unless `ownUnstated`).
+ */
+function built(parts: Part[], analysed?: Analysed, ownUnstated = false) {
+  const own: Evidence[] =
+    analysed?.firstReleaseDate && !ownUnstated
+      ? [
+          {
+            id: `musicbrainz:track/recording/${analysed.mbid}`,
+            source: "musicbrainz",
+            sourceTier: "primary-record",
+            url: `https://musicbrainz.org/recording/${analysed.mbid}`,
+            title: `${analysed.title} — MusicBrainz recording`,
+            retrievedAt: AT,
+            excerpt: `MusicBrainz recording ${quoted(analysed.title, analysed.artist)} (3:00), ISRC XX0000000000, first released ${analysed.firstReleaseDate}.`,
+            recordRef: `track/recording/${analysed.mbid}`,
+          },
+        ]
+      : [];
+  const seen = new Set<string>();
+  const evidence = [...own, ...parts.flatMap((p) => [p.item, ...(p.dated ?? [])])].filter(
+    (item) => !seen.has(item.id) && seen.add(item.id),
+  );
   const code = buildCodeClaims(
     parts.map((p) => p.relation),
     evidence,
@@ -302,8 +345,10 @@ describe("the map's cap", () => {
     // then samples), until the 15 places are taken; none of what draws on it.
     const kindOf = (node: GenealogyNode) => Math.floor(Number(node.mbid?.slice(-12)) / 100);
     expect(recordNodes.map(kindOf)).toEqual([...Array(6).fill(2), ...Array(6).fill(1), 0, 0, 0]);
-    // A relation past the cap has no claim either.
-    expect(code.claims).toHaveLength(CODE_NODES_MAX);
+    // A relation past the cap keeps its claim, with no node or link: six of each kind it draws
+    // on, four of each that draws on it.
+    expect(code.claims).toHaveLength(3 * 6 + 2 * 4);
+    expect(code.links).toHaveLength(CODE_NODES_MAX);
   });
 
   it("holds the whole map to GENEALOGY_NODES_MAX: sourced records first, the model's last", () => {
@@ -441,5 +486,47 @@ describe("years the evidence states", () => {
     tampered.relation.other.firstReleaseDate = "2099";
     const withHop = built([relation("samples", 2, "1981"), tampered]).code;
     expect(nodeOf(withHop.nodes, 3)).not.toHaveProperty("year");
+  });
+
+  it("gives no year to the analysed track when its own item does not state it", () => {
+    const analysed = { ...TRACK, firstReleaseDate: "1990-08-01" };
+    expect(built([relation("samples", 1)], analysed).code.current).toEqual({
+      mbid: OWN,
+      year: 1990,
+    });
+    expect(built([relation("samples", 1)], analysed, true).code.current).toEqual({ mbid: OWN });
+  });
+
+  it("keeps the earliest year of the recordings one node stands for", () => {
+    const groove = { title: "Rare Groove", artist: "Obscure Band" };
+    const { code } = built([
+      relation("samples", 1, "2005-03-01", groove),
+      relation("samples", 2, "1973-05-01", groove),
+    ]);
+    expect(code.nodes).toHaveLength(1);
+    expect(nodeOf(code.nodes, 1)).toMatchObject({ year: 1973 });
+  });
+
+  it("leaves off a year that contradicts a sourced link's documented direction", () => {
+    // MusicBrainz dates the sampled record 2005 (a later reissue): the track (1994) samples it.
+    const juicy = { ...TRACK, firstReleaseDate: "1994-08-09", releaseDate: "1994-09-13" };
+    const groove = { title: "Rare Groove", artist: "Obscure Band" };
+    const { code } = built([relation("samples", 1, "2005-03-01", groove)], juicy);
+    expect(code.current).toEqual({ mbid: OWN, year: 1994 });
+    expect(nodeOf(code.nodes, 1)).not.toHaveProperty("year");
+    expect(code.links).toEqual([
+      expect.objectContaining({ source: `mb-${mbid(1)}`, target: "current", kind: "sourced" }),
+    ]);
+    // A second-hop link the same: the source (1981) samples a record dated 1990, whose year goes.
+    const hopped = built([
+      relation("samples", 1, "1981"),
+      hop(1, "samples", 2, "1990", { viaDate: "1981" }),
+      hop(1, "sampled-by", 3, "1999", { viaDate: "1981" }),
+    ]).code;
+    expect(nodeOf(hopped.nodes, 1)).toMatchObject({ year: 1981 });
+    expect(nodeOf(hopped.nodes, 2)).not.toHaveProperty("year");
+    expect(nodeOf(hopped.nodes, 3)).toMatchObject({ year: 1999 });
+    // Never moved to fit: no node takes another's year.
+    expect(hopped.nodes.map((node) => node.year)).toEqual([1981, undefined, 1999]);
   });
 });

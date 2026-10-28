@@ -12,6 +12,7 @@
 import {
   EVIDENCE_EXCERPT_MAX,
   type Evidence,
+  mapRecordKind,
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
@@ -512,20 +513,18 @@ export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceSc
   return scope === "track" || scope === "work" || scope === "release" ? scope : null;
 }
 
-const MAP_RECORD_REF =
-  /^recording\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(?:samples|sampled-by)\/recording\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
 /**
- * True for an item of the relations map (sources/identity.ts, the second hop): a MusicBrainz
- * primary record of a relationship between two other recordings, whose recordRef has no scope.
- * It is about neither this recording, its song nor a release, so it supports no claim and the
- * model is never shown it; a code-built link rests on it.
+ * True for an item of the relations map (sources/identity.ts): a MusicBrainz primary record of a
+ * relationship between two other recordings (the second hop), or of another recording's first
+ * release date, whose recordRef has no scope (the contract's `mapRecordKind`). It is about
+ * neither this recording, its song nor a release, so it supports no claim and the model is never
+ * shown it; a code-built link or a node's year rests on it.
  */
 export function isMapRecord(evidence: Pick<Evidence, "source" | "sourceTier" | "recordRef">) {
   return (
     evidence.source === "musicbrainz" &&
     evidence.sourceTier === "primary-record" &&
-    MAP_RECORD_REF.test(evidence.recordRef ?? "")
+    mapRecordKind(evidence.recordRef) !== null
   );
 }
 
@@ -569,12 +568,16 @@ export const quoted = (title: string, artist?: string | null) =>
   artist ? `"${title}" by ${artist}` : `"${title}"`;
 
 /**
- * A recording as an item names it, with the first release date MusicBrainz files for it when
- * it has one: `"Title" by Artist (first released 1981-10-26)`. A node's year is taken only from a
- * date its item states so.
+ * How a recording's own MusicBrainz item states its first release date, the page that shows it:
+ * ", first released 1981-10-26" (nothing when MusicBrainz has none). A node's year is taken only
+ * from a date such an item states.
  */
-export const quotedDated = (title: string, artist?: string | null, date?: string | null) =>
-  `${quoted(title, artist)}${date ? ` (first released ${date})` : ""}`;
+export const firstReleased = (date: string | null | undefined) =>
+  date ? `, first released ${date}` : "";
+
+/** True when a recording's own item states `date` as its first release date. */
+export const statesFirstRelease = (item: Pick<Evidence, "excerpt">, date: string) =>
+  item.excerpt.endsWith(`${firstReleased(date)}.`);
 
 /** Relationship kinds the sources share, read from the track's side. */
 export type RelationKind =

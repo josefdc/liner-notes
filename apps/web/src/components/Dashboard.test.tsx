@@ -300,9 +300,21 @@ describe('Dashboard connected tracks', () => {
     expect(byTitle('Guessed Sample')).toBeUndefined();
   });
 
-  it('gives no direction to a relation the release years contradict', async () => {
+  it('gives no direction to a model relation the release years contradict', async () => {
     // "Later Track" (2015) as the record this 2011 track samples: the years say otherwise.
-    renderDashboard(connected([sourcedSample('later', 'current')]));
+    const modelSample = link('later', 'current', {
+      type: 'sample',
+      kind: 'sourced',
+      origin: 'model',
+      claimId: 'cl-1',
+      evidenceIds: ['ev-mb-1'],
+    });
+    const supported = claim('cl-1', {
+      verdict: 'supported',
+      kind: 'sourced',
+      evidenceIds: ['ev-mb-1'],
+    });
+    renderDashboard(connected([modelSample], { claims: [supported] }));
     const later = (await cards()).find((card) => card.textContent?.includes('Later Track'));
     expect(later?.querySelector('[data-link-kind]')?.textContent).toBe(
       'Relation: Related, direction unknown',
@@ -310,6 +322,12 @@ describe('Dashboard connected tracks', () => {
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) and Quiet Signal (2011) are related (direction unknown)',
     );
+  });
+
+  it('keeps the direction a code-built sourced relation documents, whatever the years', async () => {
+    renderDashboard(connected([sourcedSample('later', 'current')]));
+    const later = (await cards()).find((card) => card.textContent?.includes('Later Track'));
+    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('Relation: Sample');
   });
 
   it('relates tracks to each other when the analyzed track is not in the graph', async () => {

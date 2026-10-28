@@ -30,12 +30,16 @@ const complete = (seq: number, runId = 'run-1') => ({ type: 'complete', runId, s
 
 let warn: ReturnType<typeof vi.spyOn>;
 // The first import of the schemas (zod and the contract) is transformed cold, which on a busy
-// machine can take far longer than the 10 s a hook gets by default; nothing here is timed.
+// machine can take far longer than the 10 s a hook gets by default: it is done first, in a hook
+// given time for it. Only the module is imported, so the schemas are still not loaded after it.
+beforeAll(async () => {
+  await import('./eventSchemas');
+}, 120_000);
 beforeAll(async () => {
   expect(eventSchemasLoaded()).toBe(false);
   await loadEventSchemas();
   expect(eventSchemasLoaded()).toBe(true);
-}, 120_000);
+});
 beforeEach(() => {
   resetSkippedReports();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

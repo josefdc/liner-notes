@@ -150,19 +150,23 @@ describe("scrub", () => {
     }
   });
 
-  it("cuts text off past MAX_LOGGED_TEXT, and takes linear time on long host-like text", () => {
+  // The slow form a regression would bring takes several seconds a run, hence the timeout.
+  it("cuts text off past MAX_LOGGED_TEXT, and takes linear time on long host-like text", {
+    timeout: 60_000,
+  }, () => {
     const long = scrub("x".repeat(MAX_LOGGED_TEXT + 100));
     expect(long).toHaveLength(MAX_LOGGED_TEXT + "…[truncated]".length);
     expect(long.endsWith("…[truncated]")).toBe(true);
-    // Host-like text as long as is scrubbed, ten times over: an expression that reads it again
-    // from each character takes seconds on it, the linear ones a few milliseconds. The fastest of
-    // three runs, since a busy machine only adds time.
+    // Host-like text as long as is scrubbed (longer is cut off first), 40 times over: an
+    // expression that reads it again from each character takes several seconds on it, the
+    // linear ones about ten milliseconds. The fastest of three runs, since a busy machine only adds
+    // time; a run over 10 s is a slow form, not a busy machine, and ends the timing.
     const hostLike = ["a-".repeat(8000), "a.".repeat(8000)];
     const { ms } = timed(
       () => {
-        for (let i = 0; i < 10; i++) for (const text of hostLike) scrub(text);
+        for (let i = 0; i < 40; i++) for (const text of hostLike) scrub(text);
       },
-      { runs: 3, stopAboveMs: 1000 },
+      { runs: 3, stopAboveMs: 10_000 },
     );
     expect(ms).toBeLessThan(1000);
   });

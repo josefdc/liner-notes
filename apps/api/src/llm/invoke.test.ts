@@ -426,9 +426,6 @@ describe("per-run call cap", () => {
     expect(net.calls).toHaveLength(3);
   });
 
-  // Thirteen calls through the provider client, two at a time, each writing its spend line: a
-  // few hundred milliseconds on an idle machine, more than the default 5 s on a busy one. Nothing
-  // in it is timed.
   it("makes a twelve-call fan-out in one run impossible with the default cap", async () => {
     const { llm, net } = setup(ok);
     const results = await Promise.allSettled(
@@ -436,7 +433,7 @@ describe("per-run call cap", () => {
     );
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(12);
     expect(net.calls).toHaveLength(12);
-  }, 60_000);
+  });
 });
 
 describe("accounting", () => {

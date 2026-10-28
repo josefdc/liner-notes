@@ -838,6 +838,8 @@ describe("baselines", { timeout: 60_000 }, () => {
     Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
   );
   Object.assign(isolatedEnv, { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
+  // A process that hangs is stopped and fails its test, well inside the test's own timeout.
+  const CHILD_TIMEOUT_MS = 20_000;
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
   const script = join(repoRoot, "scripts", "guard-honest.mjs");
   let dir;
@@ -874,19 +876,28 @@ describe("baselines", { timeout: 60_000 }, () => {
     symlinkSync(join(repoRoot, "node_modules"), join(dir, "node_modules"), "dir");
     writeFileSync(join(dir, ".gitignore"), "node_modules\n");
     const git = (...args) =>
-      execFileSync("git", args, { cwd: dir, stdio: "ignore", env: isolatedEnv });
+      execFileSync("git", args, {
+        cwd: dir,
+        stdio: "ignore",
+        env: isolatedEnv,
+        timeout: CHILD_TIMEOUT_MS,
+      });
     git("init", "-q");
     git("add", ".");
     git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
     return dir;
   }
 
-  const run = (...args) =>
-    spawnSync("node", ["scripts/guard-honest.mjs", ...args], {
+  const run = (...args) => {
+    const result = spawnSync("node", ["scripts/guard-honest.mjs", ...args], {
       cwd: dir,
       encoding: "utf8",
       env: isolatedEnv,
+      timeout: CHILD_TIMEOUT_MS,
     });
+    if (result.error) throw result.error; // ETIMEDOUT when it hung
+    return result;
+  };
 
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });

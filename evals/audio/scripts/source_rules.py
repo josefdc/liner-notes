@@ -1,11 +1,12 @@
 """
 Two rules that could withhold a tubular bell's key, measured on the newest committed controls
-run: what each would separate, and what the one tried for analyzer 2.3.5 would cost. Neither
-is shipped (services/audio/README.md states the tubular bell as a limit).
+run: what each would separate, and which served keys each would withhold. Neither is shipped
+(services/audio/README.md states the tubular bell as a limit).
 
 - **Off the grid**: the share of note pairs, among the notes a still control spells, whose
   interval is more than 20 cents off the equal-tempered semitones. Read from the run's
-  recorded evidence (`evidence.source.notes`); no audio is analysed.
+  recorded evidence (`evidence.source.notes`); no audio is analysed. As a rule: one pitched
+  source when a still control spells a chord and the share is at least OFF_GRID_RULE.
 - **Few harmonics** (tried for 2.3.5): the share of the level of the lines from
   SOURCE_NOTE_FLOOR up that are overtones of the notes they spell. The service no longer
   records it, so it is measured again here on each still control that spells a chord, from
@@ -15,7 +16,8 @@ is shipped (services/audio/README.md states the tubular bell as a limit).
 
     uv run python scripts/source_rules.py [evals/reports/audio-<date>.json] [--jobs J]
 
-Prints one line per family and seed range; nothing is written. Deterministic: the controls are
+Prints one line per family and seed range, then the off-grid rule on every other control that
+would lose a key to it; nothing is written. Deterministic: the controls are
 drawn from their seeds.
 """
 
@@ -36,6 +38,7 @@ import numpy as np
 REPORTS = Path(__file__).resolve().parents[2] / "reports"
 FEW_HARMONICS = 0.1  # the 2.3.5 value (SOURCE_MAX_HARMONICS, not shipped)
 OFF_GRID_CENTS = 20.0
+OFF_GRID_RULE = 0.65  # above the bar triads' 0.60, under the tubular bells' 0.67
 FAMILIES = re.compile(r"^(?P<family>.+)-s(?P<seed>\d+)$")
 
 
@@ -135,14 +138,18 @@ def main() -> None:
     print(f"{name}: controls run of {run['startedAt']}, analyzer {run['analyzerVersion']}")
     rows = []
     for c in run["controls"]:
-        m = FAMILIES.match(c["name"])
         source = c["evidence"].get("source") or {}
-        if not m or not source.get("notes") or not still(source, values):
+        if not source.get("notes") or not still(source, values):
             continue
-        if not re.search(args.only, m["family"]):
+        m = FAMILIES.match(c["name"])
+        if m:
+            family, seed = m["family"], int(m["seed"])
+        else:  # one line for the detuned thirds, one per group for the other controls
+            third = c["name"].startswith("detuned-third-")
+            family = "detuned thirds" if third else f"the other {c['group']} controls"
+            seed = None
+        if not re.search(args.only, family):
             continue
-        seed = int(m["seed"])
-        span = {5: "500-529", 6: "600-629", 7: "700-729", 8: "800-829"}.get(seed // 100)
         truth = c["truth"]["key"]
         served = {
             est: (c["estimators"][est]["key"] or {}).get("served")
@@ -155,15 +162,8 @@ def main() -> None:
             )
             for est in served
         }
-        rows.append((m["family"], span, c["name"], source, keys))
-    detuned = [
-        (c["name"], c["evidence"]["source"])
-        for c in run["controls"]
-        if c["name"].startswith("detuned-third-")
-        and (c["evidence"].get("source") or {}).get("notes")
-        and still(c["evidence"]["source"], values)
-    ]
-    chords = [r[2] for r in rows if r[3].get("chord")]
+        rows.append((family, seed, c["name"], source, keys))
+    chords = [r[2] for r in rows if r[1] is not None and r[3].get("chord")]
     _init()
     with ProcessPoolExecutor(args.jobs, mp_context=get_context("spawn"), initializer=_init) as pool:
         share = dict(zip(chords, pool.map(harmonics_share, chords, chunksize=2), strict=True))
@@ -173,29 +173,41 @@ def main() -> None:
             return "-"
         return f"{min(values):.2f}-{max(values):.2f} (median {statistics.median(values):.2f})"
 
-    print(
-        f"\nfamily, seeds: still controls with notes; off the grid (>{OFF_GRID_CENTS:g} c); "
-        f"harmonics share of those that spell a chord; the served keys a share <= {FEW_HARMONICS} "
-        "would withhold, and how many of them are right (Essentia / librosa)"
-    )
-    for family, span in sorted({(r[0], r[1]) for r in rows}):
-        group = [r for r in rows if r[0] == family and r[1] == span]
-        offs = [off_grid(r[3]["notes"]) for r in group if len(r[3]["notes"]) > 1]
-        shares = [share[r[2]] for r in group if r[2] in share]
-        taken = [r for r in group if r[2] in share and share[r[2]] <= FEW_HARMONICS]
-        lost = " / ".join(
+    def withholds(taken: list) -> str:
+        return " / ".join(
             f"{sum(r[4][est][0] for r in taken)} (right {sum(r[4][est][1] for r in taken)})"
             for est in ("essentia", "librosa")
         )
-        print(
-            f"{family}, {span}: {len(group)}; off the grid {spread(offs)}; harmonics "
-            f"{spread(shares)}; keys it would withhold {lost}"
-        )
-    offs = {n: off_grid(s["notes"]) for n, s in detuned if len(s["notes"]) > 1}
+
+    def off_rule(group: list) -> list:
+        return [r for r in group if r[3].get("chord") and off_grid(r[3]["notes"]) >= OFF_GRID_RULE]
+
     print(
-        f"detuned thirds (10-25 c, still): {len(offs)}; off the grid {spread(list(offs.values()))};"
-        f" at 25 c: {spread([v for n, v in offs.items() if n.endswith('25')])}"
+        f"\nfamily, seeds: still controls with notes; off the grid (>{OFF_GRID_CENTS:g} c); "
+        f"harmonics share of those that spell a chord; the served keys each rule would withhold "
+        f"(harmonics share <= {FEW_HARMONICS}; still chord off the grid >= {OFF_GRID_RULE}), and "
+        "how many of them are right (Essentia / librosa)"
     )
+    spans = sorted({(r[0], r[1] // 100) for r in rows if r[1] is not None})
+    for family, hundred in spans:
+        group = [r for r in rows if r[0] == family and r[1] is not None and r[1] // 100 == hundred]
+        seeds = [r[1] for r in group]
+        offs = [off_grid(r[3]["notes"]) for r in group if len(r[3]["notes"]) > 1]
+        shares = [share[r[2]] for r in group if r[2] in share]
+        taken = [r for r in group if r[2] in share and share[r[2]] <= FEW_HARMONICS]
+        print(
+            f"{family}, seeds {min(seeds)}-{max(seeds)}: {len(group)}; off the grid "
+            f"{spread(offs)}; harmonics {spread(shares)}; withheld by the harmonics rule "
+            f"{withholds(taken)}, by the off-grid rule {withholds(off_rule(group))}"
+        )
+    for family in sorted({r[0] for r in rows if r[1] is None}):
+        group = [r for r in rows if r[0] == family and r[1] is None]
+        offs = {r[2]: off_grid(r[3]["notes"]) for r in group if len(r[3]["notes"]) > 1}
+        line = f"{family}: {len(group)}; off the grid {spread(list(offs.values()))}"
+        if family == "detuned thirds":
+            at25 = [v for n, v in offs.items() if n.endswith("25")]
+            line += f", at 25 c {spread(at25)}"
+        print(f"{line}; withheld by the off-grid rule {withholds(off_rule(group))}")
 
 
 if __name__ == "__main__":

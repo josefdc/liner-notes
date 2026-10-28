@@ -79,7 +79,7 @@ describe("the judge batch", () => {
       claims.slice(0, 20).map((claim) => [claim.id, "supported", "sourced"]),
     );
     expect(shown.slice(20)).toEqual(claims.slice(20).map((claim) => [claim.id, null, "inferred"]));
-    expect(result.run?.verifier).toEqual({ judged: 20, unjudged: 5 });
+    expect(result.run?.verifier).toEqual({ judged: 20, unjudged: 5, restated: 0 });
     // A run whose batch overflowed is stored: the next run would send the same 20.
     expect(store.put).toHaveBeenCalledTimes(1);
   });
@@ -117,7 +117,7 @@ describe("the judge batch", () => {
     expect(sent).toHaveLength(20);
     expect(sent[0].text).toBe("A samples B.");
     expect(out.trackData?.genealogy.links[0]).toMatchObject({ kind: "sourced", type: "sample" });
-    expect(out.trackData?.run?.verifier).toEqual({ judged: 20, unjudged: 3 });
+    expect(out.trackData?.run?.verifier).toEqual({ judged: 20, unjudged: 3, restated: 0 });
   });
 
   it("counts a claim the judge left out as unjudged, marks the check incomplete, and sends nothing when nothing cites", async () => {
@@ -142,7 +142,12 @@ describe("the judge batch", () => {
     ]);
     // cl-3 cites nothing: there is nothing to judge it against, so it is not counted. The
     // answer left cl-1 out: the check did not complete, and the run says so.
-    expect(out.trackData?.run?.verifier).toEqual({ judged: 1, unjudged: 1, failed: true });
+    expect(out.trackData?.run?.verifier).toEqual({
+      judged: 1,
+      unjudged: 1,
+      failed: true,
+      restated: 0,
+    });
     expect(out.statusMessages?.[0]).toBe(
       "The check of the notes against their sources was incomplete: 1 statement got no verdict; " +
         "they are shown as model inference, not checked against their sources",
@@ -156,6 +161,6 @@ describe("the judge batch", () => {
       config,
     );
     expect(none.calls).toHaveLength(0);
-    expect(quiet.trackData?.run?.verifier).toEqual({ judged: 0, unjudged: 0 });
+    expect(quiet.trackData?.run?.verifier).toEqual({ judged: 0, unjudged: 0, restated: 0 });
   });
 });

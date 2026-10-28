@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AnalyzeStreamEvent, FactoidStreamEvent, RunResponse } from "@liner-notes/contract";
+import {
+  AnalyzeStreamEvent,
+  FactoidStreamEvent,
+  ReplayRecord,
+  RunResponse,
+} from "@liner-notes/contract";
 import { expect, type Page } from "@playwright/test";
+import { replayedAnalysis, replayNotice } from "../../apps/api/src/replay/player";
 import {
   contractMisfits,
   type MockConfig,
@@ -154,37 +160,22 @@ export function fullResultData() {
  * The recorded demo run (fixtures/replays/one-more-time-daft-punk.json) as the API replays it
  * (apps/api/src/replay/player.ts): its events without their run id and `seq` and without the
  * recorded `done`, each with its time since the run started (its own `elapsedMs`, else its
- * `atMs`), the replay notice right after `connected`, and the result as a replay of run
- * `runId`, with the recording's date and commit. Returns the analysis stream's events, ending
- * with `complete` and `done`.
+ * `atMs`), the replay notice right after `connected`, and the result the API's own
+ * `replayedAnalysis` serves: a replay of run `runId`, with the recording's date and commit, each
+ * fact stated once. Returns the analysis stream's events, ending with `complete` and `done`.
  */
 export function replayedRecording(runId = "replay-run") {
-  const record = JSON.parse(
-    readFileSync(
-      join(mockDir, "..", "..", "fixtures", "replays", "one-more-time-daft-punk.json"),
-      "utf8",
+  const record = ReplayRecord.parse(
+    JSON.parse(
+      readFileSync(
+        join(mockDir, "..", "..", "fixtures", "replays", "one-more-time-daft-punk.json"),
+        "utf8",
+      ),
     ),
   );
-  const { queryMatch: _match, ...analysis } = record.analysis;
-  const result = {
-    ...analysis,
-    run: {
-      ...analysis.run,
-      id: runId,
-      mode: "replay",
-      replayed: "run",
-      recordedAt: record.recordedAt,
-      commit: record.commit,
-      analyzerVersion: record.analyzerVersion,
-      usage: { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 },
-    },
-  };
-  const notice = {
-    type: "status",
-    message: `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); nothing below runs live.`,
-    code: "SYS-INIT",
-    node: "replay",
-  };
+  const result = replayedAnalysis(record, runId);
+  // The API's own notice, without its send time.
+  const { timestamp: _sent, ...notice } = replayNotice(record) as Record<string, unknown>;
   const events: Array<Record<string, unknown>> = [];
   for (const { atMs, event } of record.events as Array<{
     atMs: number;

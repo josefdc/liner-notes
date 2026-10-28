@@ -6,6 +6,7 @@ import {
   type StoredRun,
 } from "@liner-notes/contract";
 import { Router } from "express";
+import { oneClaimPerFact, type ResultClaims } from "../../agent/restatements.js";
 import { heldTextIssue } from "../../agent/storedResults.js";
 import { replayedAnalysis } from "../../replay/player.js";
 import { replays } from "../../replay/records.js";
@@ -24,12 +25,38 @@ const isoTime = (unixSeconds: number) => new Date(unixSeconds * 1000).toISOStrin
 export const BY_TRACK_CANDIDATES = 5;
 
 /**
+ * A run's stored result with each fact stated once (restatements.ts): one stored before that
+ * step loses the model's restatements and their cards, counted in its verifier summary and in
+ * the log. A result that is not an object with a list of claims, or that the step cannot read, is
+ * returned as it is, for the contract check; the step's failure is logged.
+ */
+function withOneClaimPerFact(runId: string, stored: unknown): unknown {
+  if (typeof stored !== "object" || stored === null) return stored;
+  const result = stored as ResultClaims;
+  if (!Array.isArray(result.claims)) return stored;
+  try {
+    const { result: served, restated } = oneClaimPerFact(result);
+    if (restated > 0) log.info(`Run ${runId}: left out ${restated} claim(s) that restate another`);
+    return served;
+  } catch (error) {
+    // A result of a shape the step cannot read: the contract check refuses it, not this step.
+    log.warn(
+      `Run ${runId}: its stored result could not be read for repeated claims; served as stored`,
+      {
+        err: error,
+      },
+    );
+    return stored;
+  }
+}
+
+/**
  * The result a run sent: its stored result, or for a replayed run the recording it was sent,
  * with its id, while a record with that same content (digest) is served and is of the run's
- * track; else null.
+ * track; else null. Either with each fact stated once.
  */
 export function resultOf(record: RunRecord): unknown {
-  if (record.analysis !== null) return record.analysis;
+  if (record.analysis !== null) return withOneClaimPerFact(record.runId, record.analysis);
   const replayOf = replayOfRun(record);
   if (!replayOf || record.status !== "completed") return null;
   const recorded = replays().forDigest(replayOf.slug, replayOf.digest);

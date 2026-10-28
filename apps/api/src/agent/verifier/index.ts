@@ -49,7 +49,12 @@
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
  *    influence that keeps its stated type.
  * 5. Claims (the model's and the code-built ones, as their node labels are) and factoid cards
- *    have their @handles masked.
+ *    have their @handles masked. Then one claim per fact (restatements.ts): a model claim that
+ *    restates a code-built one on the same record, or a second copy of a statement the model
+ *    wrote twice, is left out with its fact card and counted in `run.verifier.restated` (0
+ *    included); no claim that adds information goes, and a kept claim keeps its verdict. The
+ *    judge's counts (`judged`, `unjudged`) and its status lines are taken before this step: a
+ *    claim judged and then left out is still counted as judged.
  * 6. The result: the measurement written in by finalize.ts, the contract's checks, then
  *    `complete` and, when nothing a later run may do better is missing, the long-term store. A
  *    result whose check did not complete is stored too, served for a shorter time
@@ -81,6 +86,7 @@ import { replayedRecording, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { emittableAudio, finalizeResult, type ResultDraft } from "../finalize.js";
+import { withoutRestatements } from "../restatements.js";
 import { promptTrack } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import type { Factoid, Genealogy, TrackData } from "../schema.js";
@@ -664,7 +670,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
       judged.verdicts,
     );
     const tooLong = new Set(judged.tooLong);
-    const { claims, factoids } = maskedText(
+    const masked = maskedText(
       verified.claims.map((claim) =>
         tooLong.has(claim.id)
           ? { ...claim, verdictReason: "Not judged: longer than the judge reads whole." }
@@ -672,6 +678,16 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
       ),
       draft.factoids,
     );
+    // One claim per fact, on the claims as the result shows them (masked, as a replay or a stored
+    // result reads them): a model claim that restates a code-built one, or a second copy of one
+    // statement, is left out with its card, and counted (restatements.ts).
+    const { claims, factoids, restated } = withoutRestatements(
+      masked.claims,
+      masked.factoids,
+      [...verified.genealogy.links, ...draft.samples],
+      state.evidence,
+    );
+    if (restated > 0) log.info(`Run ${runId}: left out ${restated} claim(s) that restate another`);
 
     // 6. The result.
     const runErrors = enriched.sourceErrors;
@@ -693,6 +709,8 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
         judged: judged.judged,
         unjudged: judged.unjudged,
         ...(checkFailed ? { failed: true } : {}),
+        // Counted even when none: a result that says so is one the step ran on.
+        restated,
       },
       // Each message as a plain line, so the result is served again when it is read back.
       sourceErrors: [...state.sourceErrors, ...runErrors].map(plainSourceError),

@@ -2418,12 +2418,14 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const masked = keyValuePieces(short, [], headerValues, undefined, lineOnly);
   let redacted = render(short, masked);
   let stop = short.length;
-  if (more.length + moreSecretSpans(short).length > 0) {
-    const before = keyValuePieces(short, [], lineOnly, []);
+  const shapes = more.length + moreSecretSpans(short).length > 0;
+  if (shapes || (cut && redacted.length > MAX_DETAIL)) {
+    const before = shapes ? keyValuePieces(short, [], lineOnly, []) : masked;
     const old = render(short, before);
-    // A value moreSecretSpans masks can make the line shorter than the other rules leave it, or
-    // longer: it stops no further than they cut it, and never inside a host or a configured
-    // value a log line hides whole (safeCut).
+    // A value moreSecretSpans masks can make the line shorter than the other rules leave it, and
+    // a mask longer than what it hides makes it longer: it stops no further than the other rules
+    // alone cut it, and never inside a host or a configured value a log line hides whole
+    // (safeCut), so the last cut below only takes a mask's own characters.
     const shown = cut ? safeCut(short, masked, before, MAX_DETAIL, MAX_DETAIL - 1) : short.length;
     if (shown < short.length) {
       redacted = `${render(short, piecesBefore(masked, shown))}…`;
@@ -2437,7 +2439,8 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const out =
     cut && redacted.length > MAX_DETAIL ? `${redacted.slice(0, MAX_DETAIL - 1)}…` : redacted;
   if (reasonIssue(out) !== null) return undefined;
-  // A configured value, a link or a host the cut splits is left out from its start (lineCut);
+  // A configured value, a link, a host or an Authorization credential the cut splits is left
+  // out from its start (lineCut);
   // the line is redacted as it was cut, so what it hides before that stays hidden.
   const end = kept < line.length ? lineCut(line, kept) : kept;
   if (end >= Math.min(stop, kept)) return out;
@@ -2448,9 +2451,10 @@ function plainLine(text: string, cut: boolean): string | undefined {
 
 /**
  * Where a line's cut to `at` characters falls: there, or at the start of a configured value
- * (knownSecrets) or of what a log line replaces whole (a link, a host: logCut) that it would
- * split. A part of one is no longer known to the rules that hide it; a secret pair or header
- * value cut is still masked up to the cut.
+ * (knownSecrets), of what a log line replaces whole (a link, a host) or of an Authorization
+ * credential (logCut) that it would split. A part of one is no longer known to the rules that
+ * hide it, or too short for them; a secret pair or header value cut is still masked up to the
+ * cut.
  */
 function lineCut(line: string, at: number): number {
   const values = knownSecrets().flatMap((secret) =>
@@ -2458,7 +2462,7 @@ function lineCut(line: string, at: number): number {
       ([start, end]): Span => [start, end],
     ),
   );
-  return logCut(line, at, values, false);
+  return logCut(line, at, values, { pairs: false });
 }
 
 /**

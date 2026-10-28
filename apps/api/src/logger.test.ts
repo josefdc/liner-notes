@@ -195,13 +195,26 @@ describe("scrubbedSpans", () => {
   });
 
   it("replaces a host or a configured value the cap would cut through", () => {
-    // Hosts and configured values are replaced before the cap, so none is cut in two.
+    // Configured values are replaced before the cap, and the cap falls before a host it would
+    // cut, so none is cut in two.
     for (const shift of [6, 12, 20]) {
       const host = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} contoso-prod.openai.azure.com`);
       expect(host).not.toContain("contoso");
       const key = scrub(`${"x".repeat(MAX_LOGGED_TEXT - shift)} ${KEY}`);
       expect(key).not.toContain(KEY.slice(0, 4));
     }
+  });
+
+  it("logs nothing past the cap, however much its links and hosts are shortened", () => {
+    // The endpoint's link is replaced by a shorter marker: measured after that, the cap would
+    // fall later in the text and let in what lies past it.
+    const link = `"${ENDPOINT}/x?k=1a`;
+    for (let past = 0; past < 30; past++) {
+      const text = `${"w".repeat(MAX_LOGGED_TEXT - 200)}${link}${"y".repeat(200 - link.length + past)}M0001x tail`;
+      expect(scrub(text), String(past)).not.toContain("M00");
+    }
+    const cookie = `${"w ".repeat(8156)}${link}Set-Cookie: s=M0000x; Path=/, t=M0001x`;
+    expect(scrub(cookie)).not.toContain("M0001x");
   });
 
   it("finds all scrub replaces in texts of keys, hosts, links and values in any order", () => {

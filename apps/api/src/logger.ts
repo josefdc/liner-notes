@@ -202,9 +202,13 @@ function asText(value: unknown): string {
  */
 export function scrub(input: unknown): string {
   try {
-    // Configured values, links and hosts are replaced before the cap: one it cut through would
-    // no longer be known, and a part of it would be written.
     let out = replaceAll(asText(input), secretValues, REDACTED);
+    // The cap falls on the text as it came, never inside a link or a host (logCut), whose part
+    // the rules below would no longer know. Replaced first, they would shorten the text and let
+    // in more of it.
+    if (out.length > MAX_LOGGED_TEXT) {
+      out = `${out.slice(0, logCut(out, MAX_LOGGED_TEXT, [], { pairs: false, auth: false }))}${TRUNCATED}`;
+    }
     out = out.replace(URL_IN_TEXT, (url) => {
       const host = hostOf(url);
       if (host && PREVIEW_HOST.test(host)) return PREVIEW_LINK;
@@ -214,7 +218,6 @@ export function scrub(input: unknown): string {
     out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT)
       .replace(BARE_PREVIEW, PREVIEW_LINK)
       .replace(PROVIDER_HOST, PROVIDER_ENDPOINT);
-    if (out.length > MAX_LOGGED_TEXT) out = `${out.slice(0, MAX_LOGGED_TEXT)}${TRUNCATED}`;
     return out
       .replace(SECRET_PAIR, `$1$2${REDACTED}`)
       .replace(
@@ -332,10 +335,15 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * there. The cap is not applied: past it, a span holds text scrub cuts off. The redaction
  * of source errors (sources/http.ts) reads them, so that the log line of a text it redacts
  * further never shows what the log line of the text it redacted before hid. Reads the text once
- * per rule. With `pairs` false, only what scrub replaces whole, which a part of no longer
- * matches: configured values, links and hosts, not secret pairs or Authorization values.
+ * per rule. With `pairs` or `auth` false, secret pairs or Authorization values are left out:
+ * what is left is what scrub replaces whole, which a part of no longer matches (configured
+ * values, links, hosts). With `cut`, the span of a link's user info takes its "@" too, without
+ * which the rest is no longer read as user info.
  */
-export function scrubbedSpans(text: string, pairs = true): Array<[number, number]> {
+export function scrubbedSpans(
+  text: string,
+  { pairs = true, auth = true, cut = false }: SpanRules = {},
+): Array<[number, number]> {
   const hidden: Array<[number, number]> = [];
   for (const value of escapedSecretValues) {
     for (const [start, end] of occurrences(text, value, REDACTED)) hidden.push([start, end]);
@@ -361,7 +369,7 @@ export function scrubbedSpans(text: string, pairs = true): Array<[number, number
     if (userinfo) {
       const from = start + (userinfo[1] ?? "").length;
       const to = start + userinfo[0].length - 1;
-      links.push([from, to, REDACTED, from, to]);
+      links.push([from, to, REDACTED, from, cut ? to + 1 : to]);
       shift = REDACTED.length - (to - from);
       after = (userinfo[1] ?? "").length + REDACTED.length + 1;
     }
@@ -388,7 +396,7 @@ export function scrubbedSpans(text: string, pairs = true): Array<[number, number
     }
     current = rewrite(current, parts, hidden);
   }
-  if (pairs) readPairs(current, hidden);
+  readPairs(current, hidden, pairs, auth);
   // Sorted by start, those that overlap or touch as one.
   const merged: Array<[number, number]> = [];
   for (const [start, end] of hidden.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
@@ -399,11 +407,23 @@ export function scrubbedSpans(text: string, pairs = true): Array<[number, number
   return merged;
 }
 
+/** Which of scrub's rules scrubbedSpans reads, and whether for a cut. */
+interface SpanRules {
+  pairs?: boolean;
+  auth?: boolean;
+  cut?: boolean;
+}
+
 /** scrubbedSpans' last two rules, secret pairs and Authorization values, on `current`. */
-function readPairs(before: Rewritten, hidden: Array<[number, number]>): void {
+function readPairs(
+  before: Rewritten,
+  hidden: Array<[number, number]>,
+  withPairs: boolean,
+  withAuth: boolean,
+): void {
   let current = before;
   const pairs: Rewrite[] = [];
-  for (const pair of current.text.matchAll(SECRET_PAIR)) {
+  for (const pair of withPairs ? current.text.matchAll(SECRET_PAIR) : []) {
     const from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
     const part = valueRewrite(current.text, from, pair.index + pair[0].length);
     // An Authorization scheme before the value names it; it is not in the span.
@@ -414,7 +434,7 @@ function readPairs(before: Rewritten, hidden: Array<[number, number]>): void {
   }
   current = rewrite(current, pairs, hidden);
   const auths: Rewrite[] = [];
-  for (const auth of current.text.matchAll(AUTH_SCHEME)) {
+  for (const auth of withAuth ? current.text.matchAll(AUTH_SCHEME) : []) {
     const from = auth.index + (auth[1] ?? auth[3] ?? "").length;
     auths.push(valueRewrite(current.text, from, auth.index + auth[0].length));
   }
@@ -422,25 +442,36 @@ function readPairs(before: Rewritten, hidden: Array<[number, number]>): void {
 }
 
 /**
- * How far past a cut logCut reads a text. A rule's match that runs on past it starts where it
- * does in the whole text, which is all a cut needs.
+ * How far past a cut logCut reads a text for the rules other than configured values: links,
+ * hosts, pairs and Authorization values that cross the cut are found there. A link whose user
+ * info runs on past it is the one such match it can miss.
  */
 export const LOG_CUT_WINDOW = 4096;
 
 /**
- * Where a cut of `text` at `at` falls when it never splits what scrub replaces whole
- * (scrubbedSpans) or one of the `extra` spans: at the start of the first such span it would
- * split, since a part of one no longer matches. Reads the text up to LOG_CUT_WINDOW characters
- * past `at`. With `pairs` false, a secret pair or an Authorization value may be cut (scrubbedSpans).
+ * Where a cut of `text` at `at` falls when it never splits what scrub hides (scrubbedSpans, the
+ * rules `rules` names, all by default) or one of the `extra` spans: at the start of the first
+ * such span it would split, since a part of one no longer matches. A configured value that
+ * crosses the cut is looked up in the whole text; the other rules read it up to LOG_CUT_WINDOW
+ * characters past `at`.
  */
 export function logCut(
   text: string,
   at: number,
   extra: ReadonlyArray<readonly [number, number]> = [],
-  pairs = true,
+  rules: Omit<SpanRules, "cut"> = {},
 ): number {
   if (at <= 0 || at >= text.length) return at;
-  const spans = [...scrubbedSpans(text.slice(0, at + LOG_CUT_WINDOW), pairs), ...extra];
+  const spans: Array<readonly [number, number]> = [
+    ...scrubbedSpans(text.slice(0, at + LOG_CUT_WINDOW), { ...rules, cut: true }),
+    ...extra,
+  ];
+  for (const value of [...secretValues, ...escapedSecretValues]) {
+    const first = text.indexOf(value, Math.max(0, at - value.length + 1));
+    for (let i = first; i !== -1 && i < at; i = text.indexOf(value, i + 1)) {
+      spans.push([i, i + value.length]);
+    }
+  }
   let end = at;
   for (let moved = true; moved; ) {
     moved = false;

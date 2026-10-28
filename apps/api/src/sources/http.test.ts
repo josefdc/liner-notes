@@ -2221,6 +2221,60 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
     }
   });
 
+  it("never cuts a reason through a host or a configured value the masks before it push across", () => {
+    // `api_key=a` becomes `api_key=[redacted]`: the line grows past the cut with no new shape.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const host = "contoso-prod.openai.azure.com";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (let pairs = 4; pairs < 9; pairs++) {
+        for (const value of [salt, host]) {
+          const reason = plainReason(`${"api_key=a ".repeat(pairs)}${value} tail`) ?? "";
+          for (const shown of [reason, scrub(reason)]) {
+            for (let k = 2; k < value.length; k++) {
+              expect(shown, `${pairs} ${k}`).not.toContain(`${value.slice(0, k)}…`);
+            }
+          }
+        }
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
+  it("never keeps part of an Authorization credential where a reason's cut falls", () => {
+    for (let at = 60; at < 100; at++) {
+      const bearer = plainReason(
+        `${"x".repeat(at)} Authorization: Bearer abcdefghijklmnopqrstuvwx tail ${"z ".repeat(60)}`,
+      );
+      expect(bearer ?? "", String(at)).not.toMatch(/Bearer a[a-x]*…/);
+      const basic = plainReason(
+        `401\n${"x".repeat(at)} Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ== tail ${"z ".repeat(60)}`,
+      );
+      for (const shown of [basic ?? "", scrub(basic ?? "")]) {
+        expect(shown, String(at)).not.toMatch(/Basic Q[\w+/=]*…/);
+      }
+    }
+  });
+
+  it("never cuts a log line or a reason through a long configured value, or before a link's @", () => {
+    const userinfo = "https://u:P1xP2xP3xP4xP5xP6xP7xP8x@h.example/";
+    const atSign = `${"x ".repeat(83).slice(0, 165)} ${userinfo} tail ${"x ".repeat(100)}`;
+    expect(scrub(logText(atSign))).not.toContain("P1xP2");
+    // A configured value longer than the window logCut reads past a cut.
+    const long = "Q7".repeat(2_500);
+    configureLogger({ LOG_IP_SALT: long, LOG_LEVEL: process.env.LOG_LEVEL });
+    try {
+      for (const before of [10, 60, 118, 150, 199]) {
+        const text = `${"x".repeat(before)}${long} tail`;
+        expect(scrub(logText(text)), String(before)).not.toContain("Q7Q7");
+        expect(scrub(plainReason(text) ?? ""), String(before)).not.toContain("Q7Q7");
+      }
+    } finally {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    }
+  });
+
   it("never cuts a body's cap through a host when nothing else in it is masked", () => {
     for (let pad = 225; pad < 250; pad++) {
       const body = `<html>${"y ".repeat(pad)} upstream contoso-prod.openai.azure.com timed out</html>`;

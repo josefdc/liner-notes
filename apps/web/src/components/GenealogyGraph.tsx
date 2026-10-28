@@ -1516,17 +1516,23 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const selectedNode =
     selectedId === null ? null : (shownNodes.find((node) => node.id === selectedId) ?? null);
   // A filter that hides the selected track closes its details, and the filters' status says so.
+  // A track gone for another reason (a new map without it) just leaves no selection.
   const [filterNote, setFilterNote] = useState<string | null>(null);
   const changeFilter = (next: LinkFilter) => {
     setFilterNote(null);
     setFilter(next);
   };
+  const filtering = isFiltering(filter);
   useEffect(() => {
     if (selectedId !== null && selectedNode === null) {
       setSelectedId(null);
-      setFilterNote(`The details of ${nameOf(selectedId)} closed: the filters hide that track`);
+      setFilterNote(
+        filtering
+          ? `The details of ${nameOf(selectedId)} closed: the filters hide that track`
+          : null,
+      );
     }
-  }, [selectedId, selectedNode, nameOf]);
+  }, [selectedId, selectedNode, nameOf, filtering]);
   // Read by the drawing (its chips, the view it keeps the card in) as it is drawn now.
   selectedRef.current = selectedNode?.id ?? null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: draws the selection when it changes

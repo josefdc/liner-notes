@@ -429,6 +429,21 @@ describe("the map's filters", () => {
       'Showing 4 of 5 links. The details of Guess - Someone (1990) closed: the filters hide that track',
     );
   });
+
+  it('a track gone from a new map closes its panel quietly: the filters did not hide it', async () => {
+    const { container, rerender } = render(<Graph />);
+    await click(card(container, 'guess'));
+    expect(panel()).toBeTruthy();
+    const without = {
+      ...data,
+      nodes: data.nodes.filter((n) => n.id !== 'guess'),
+      links: data.links.filter((l) => l.source !== 'guess' && l.target !== 'guess'),
+    };
+    rerender(<Graph data={without} />);
+    await act(async () => {});
+    expect(screen.queryByTestId('node-detail')).toBeNull();
+    expect(screen.getByTestId('filter-status').textContent).toBe('');
+  });
 });
 
 describe('the panel, as the review asked', () => {

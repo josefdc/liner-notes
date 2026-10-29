@@ -130,6 +130,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
         id="activity-log-content"
         role="region"
         aria-label="Activity log entries"
+        // Collapsed, its entries are out of sight: out of the Tab order and the reading order
+        // too (the scroller would otherwise be a Tab stop that shows nothing).
+        inert={!isExpanded}
         className={`relative z-10 overflow-hidden transition-all duration-(--duration-normal) ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
       >
         <div className="border-t border-white/5">

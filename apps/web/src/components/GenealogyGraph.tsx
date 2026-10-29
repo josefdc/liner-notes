@@ -531,6 +531,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     transform: ZoomTransform;
     /** True while the view is the first view: the reader has not moved it. */
     rest: boolean;
+    /** True while the view left rest only for a hover (see `held` in the drawing). */
+    held: boolean;
     /** Where the first view ended when the map was laid out (see `planFirstView`). */
     breaks: ViewBreaks | undefined;
   } | null>(null);
@@ -740,16 +742,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     /**
      * True while the view left rest only for a pointer passing over the map, or a finger on it
      * (no press of a mouse, focus, selection, pan or zoom since): it is held only while that
-     * lasts, and then the view is at rest again (`backToRest`).
+     * lasts, and then the view is at rest again (`backToRest`). A drawing anew under the
+     * pointer keeps it, so the pointer leaving still brings the first view back.
      */
-    let held = false;
+    let held = kept !== null && !kept.rest && kept.held;
     /** True once the drawing has gone (a timer of its own may still fire). */
     let gone = false;
     const leaveRest = (hold = false) => {
       if (rest) held = hold;
       else if (!hold) held = false;
       rest = false;
-      if (viewRef.current?.data === shownNodes) viewRef.current = { ...viewRef.current, rest };
+      if (viewRef.current?.data === shownNodes)
+        viewRef.current = { ...viewRef.current, rest, held };
       svg.attr('data-view', 'reader');
     };
     /** The pointer gone (or the finger lifted) with nothing done: the first view again. */
@@ -757,7 +761,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       if (!held || rest || gone) return;
       held = false;
       rest = true;
-      if (viewRef.current?.data === shownNodes) viewRef.current = { ...viewRef.current, rest };
+      if (viewRef.current?.data === shownNodes)
+        viewRef.current = { ...viewRef.current, rest, held };
       svg.attr('data-view', 'first');
       refit();
     };
@@ -812,7 +817,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         // theirs from now on.
         if (event.sourceEvent) leaveRest();
         g.attr('transform', event.transform.toString());
-        viewRef.current = { data: shownNodes, orientation, transform, rest, breaks };
+        viewRef.current = { data: shownNodes, orientation, transform, rest, held, breaks };
         pinAxis();
         showTicks();
       })
@@ -2080,11 +2085,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // The panel lies over the bottom of the map, unless the map is a compact row or too short to
   // leave its card room above it (a landscape phone): then it follows the map, in the flow.
   const inlinePanel = sparse || (panel !== null && panel.height < SHORT_MAP_PX);
+  // A box at the map's top goes below "↑ N more" while that cue shows, never over it.
+  const detailBelowCue = detailTop && cues.up > 0 ? mapInset - topInset + 2 + CUE_PX : 0;
   const detailPanel = selectedNode && (
     <DetailPanel
       panelRef={panelRef}
       layout={inlinePanel ? 'inline' : detailTop ? 'top' : 'overlay'}
-      topOffset={topInset + 4}
+      topOffset={topInset + 4 + detailBelowCue}
       node={selectedNode}
       year={yearOfNode(selectedNode.id)}
       links={links
@@ -2140,7 +2147,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   useLayoutEffect(() => {
     // The panel's height (on the canvas), else the hover box's.
     const box = (inlinePanel ? null : panelRef.current) ?? detailRef.current;
-    const inset = box ? box.offsetHeight + 8 : 0;
+    const inset = box ? box.offsetHeight + 8 + detailBelowCue : 0;
     detailAcrossRef.current = box ? [box.offsetLeft, box.offsetLeft + box.offsetWidth] : [0, 0];
     // What the box shows, and how tall it is: either changing places things again.
     const shown = `${
@@ -2376,7 +2383,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               data-testid="link-detail"
               data-at={detailTop ? 'top' : 'bottom'}
               className={`absolute left-2 right-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere ${detailTop ? '' : 'bottom-2'}`}
-              style={detailTop ? { top: topInset + 4 } : undefined}
+              style={detailTop ? { top: topInset + 4 + detailBelowCue } : undefined}
             >
               {activeLink && (
                 <>

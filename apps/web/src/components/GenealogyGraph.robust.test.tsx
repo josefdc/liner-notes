@@ -255,6 +255,29 @@ describe('GenealogyGraph on a resize', () => {
     }
   });
 
+  it('brings the first view back when the pointer leaves, though the map was drawn anew under it', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    const later = () =>
+      drawnTracks(container).find((g) => g.getAttribute('data-node-id') === 'later') as SVGGElement;
+    // A column of years (a phone's width).
+    await act(async () => report?.(360, 600));
+    // The pointer passes over a card: the view is held, not the reader's for good.
+    await act(async () => fireEvent.mouseEnter(later()));
+    expect(svg.getAttribute('data-view')).toBe('reader');
+    const zoomed = svg.querySelector(':scope > g');
+
+    // A resize that changes the cards' width: the map is drawn anew, the view kept.
+    await act(async () => report?.(380, 600));
+    expect(svg.querySelector(':scope > g')).not.toBe(zoomed);
+    expect(svg.getAttribute('data-view')).toBe('reader');
+
+    // The pointer leaves, having done nothing: the first view again.
+    await act(async () => fireEvent.pointerLeave(svg));
+    expect(svg.getAttribute('data-view')).toBe('first');
+  });
+
   it('lays the map out again when the panel turns too narrow for years side by side', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');

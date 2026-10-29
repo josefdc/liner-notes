@@ -1100,6 +1100,13 @@ test("the first pan down the wide map at 1920 px keeps the analysed card in view
   expect(await cardsCutAtRest(graph, headingBand(page))).toEqual([]);
   const after = await cardsInView(graph, headingBand(page));
   expect(after.filter((id) => !before.includes(id)).length, "cards brought in").toBeGreaterThan(0);
+  // The focused card's box at the top of the map lies below "↑ N more", never over it.
+  const up = page.getByTestId("map-cues").locator('[data-cue="up"]');
+  const detail = page.getByTestId("link-detail");
+  await expect(up).toBeVisible();
+  await expect(detail).toHaveAttribute("data-at", "top");
+  const [cue, box] = [await up.boundingBox(), await detail.boundingBox()];
+  expect(cue && box && box.y >= cue.y + cue.height, "the box below the cue").toBe(true);
   expect(problems).toEqual([]);
 });
 

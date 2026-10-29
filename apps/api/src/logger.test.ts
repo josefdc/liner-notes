@@ -911,6 +911,13 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
       expect(out, String(at)).not.toContain("L1x");
       expect(out).not.toContain("abcdefghij");
     }
+    // Across scrub's own cap, in a text long enough that only a prefix of it is read.
+    for (const at of [10, 2_000, 4_000]) {
+      const text = `${"w ".repeat((MAX_LOGGED_TEXT - at) / 2)}${long.replaceAll("\n", " ")} ${"t ".repeat(40_000)}`;
+      const out = scrub(text);
+      expect(out, String(at)).not.toContain("L1x");
+      expect(out).not.toContain("abcdefghij");
+    }
   });
 
   it("cuts a long text no later than before, where a value it now replaces shortens it", () => {
@@ -1004,6 +1011,11 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
       head + piece.repeat(Math.ceil(size / piece.length)) + tail;
   it.each([
     ["a long value's own start, repeated", filled("ab"), { LONG_KEY: `${"ab".repeat(2_000)}Z` }],
+    [
+      "a long value's own start, repeated, the value in the text too",
+      filled(`${"ab".repeat(1_999)}Z`, "", `${"ab".repeat(2_000)}Z`),
+      { LONG_KEY: `${"ab".repeat(2_000)}Z` },
+    ],
     ["text with 40 configured values", filled("V1xV2x-V3x "), undefined],
     ["backslashes", filled("\\"), undefined],
     ["escaped quotes and \\u escapes", filled('\\"\\\\u00'), undefined],

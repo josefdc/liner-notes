@@ -200,16 +200,23 @@ test("Tab with nothing highlighted closes the list and moves to Analyze, in view
 test("a list closed with Escape stays closed when the answer for newer text comes", async ({
   page,
 }) => {
+  // The page's timers run on a clock the test holds while it types: on a slow machine the 300 ms
+  // pause after typing that asks for suggestions must not pass before Escape is pressed.
+  await page.clock.install();
   await useMockApi(page, { suggestions: candidates, streams: {} });
   await page.goto("/");
   await box(page).fill("Hurt");
   await expect(page.getByRole("option")).toHaveCount(candidates.length);
   const requestsBefore = await suggestRequests(page);
 
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await box(page).pressSequentially(" N");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await page.waitForTimeout(800);
+  // Well past that pause: suggestions still asked for are asked for now, and their answer has
+  // time to come.
+  await page.clock.runFor(1000);
+  await page.waitForTimeout(200);
   await expect(page.getByRole("listbox")).toHaveCount(0);
   expect(await suggestRequests(page)).toBe(requestsBefore);
 });

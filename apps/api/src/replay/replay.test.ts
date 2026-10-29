@@ -975,13 +975,14 @@ describe("the recorder", () => {
       "https://example.org/dl/token=abc123def456/file",
       "https://example.org/people/jane.doe@example.com",
       "https://example.org/s/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7d/view",
-      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
     ];
     for (const url of refused) {
       expect(leaks({ evidence: [webItem(url)] }, check), url).not.toEqual([]);
     }
-    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too.
+    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too, and so
+    // is a hex id in a path (a document's or a file's name).
     for (const url of [
+      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
       "https://www.example.com/music/news/ice-ice-baby-under-pressure-lawsuit-1234/",
       "https://example.org/wiki/List_of_songs_recorded_by_Vanilla_Ice_and_others",
       "https://example.org/articles/2024/10/a1b2c3",

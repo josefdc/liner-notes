@@ -59,8 +59,31 @@ export const SPARSE_LINKS = 2;
 export const isSparse = (links: number) => links <= SPARSE_LINKS;
 
 /**
- * `text` in lines of at most `maxChars` characters, broken at spaces. A word longer than a line
- * is broken inside, its piece ending in a hyphen (`hyphenated` says which lines end so). At most
+ * The text's graphemes: what a reader sees as one character (an emoji with its modifiers, a
+ * letter with its accents), never split.
+ */
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+export const graphemes = (text: string): string[] =>
+  Array.from(segmenter.segment(text), (part) => part.segment);
+
+/**
+ * Code points drawn about two monospace cells wide: East Asian Wide and Fullwidth characters
+ * (Hangul, CJK, kana, fullwidth forms) and emoji.
+ */
+const WIDE =
+  /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]|[\u{1b000}-\u{1b2ff}\u{1f200}-\u{1f2ff}\u{20000}-\u{3fffd}]|\p{Extended_Pictographic})/u;
+
+/** How many monospace cells a grapheme takes on a card: two for a wide one, else one. */
+export const graphemeUnits = (grapheme: string): number => (WIDE.test(grapheme) ? 2 : 1);
+
+/** How many monospace cells a text takes on a card (see `graphemeUnits`). */
+export const textUnits = (text: string): number =>
+  graphemes(text).reduce((sum, grapheme) => sum + graphemeUnits(grapheme), 0);
+
+/**
+ * `text` in lines of at most `maxChars` monospace cells (a wide character takes two, see
+ * `graphemeUnits`), broken at spaces. A word longer than a line is broken inside, between two
+ * graphemes, its piece ending in a hyphen (`hyphenated` says which lines end so). At most
  * `maxLines` lines: text that needs more is cut, its last line ending in "…", and said to be
  * `truncated`.
  */
@@ -74,21 +97,36 @@ export function wrapText(
   const lines: string[] = [];
   const hyphenated: boolean[] = [];
   let line = '';
+  let lineUnits = 0;
+  /** The graphemes of `parts` that fit `room` cells (at least one), and the rest. */
+  const fitting = (parts: string[], room: number) => {
+    let units = 0;
+    let count = 0;
+    while (count < parts.length && units + graphemeUnits(parts[count]) <= room) {
+      units += graphemeUnits(parts[count]);
+      count += 1;
+    }
+    return Math.max(1, count);
+  };
   for (const word of words) {
-    let rest = word;
+    let rest = graphemes(word);
     while (rest.length > 0) {
-      const room = line ? width - line.length - 1 : width;
-      if (rest.length <= room) {
-        line = line ? `${line} ${rest}` : rest;
-        rest = '';
+      const room = line ? width - lineUnits - 1 : width;
+      const units = rest.reduce((sum, part) => sum + graphemeUnits(part), 0);
+      if (units <= room) {
+        line = line ? `${line} ${rest.join('')}` : rest.join('');
+        lineUnits += (lineUnits > 0 ? 1 : 0) + units;
+        rest = [];
       } else if (line) {
         lines.push(line);
         hyphenated.push(false);
         line = '';
+        lineUnits = 0;
       } else {
-        lines.push(`${rest.slice(0, width - 1)}-`);
+        const count = fitting(rest, width - 1);
+        lines.push(`${rest.slice(0, count).join('')}-`);
         hyphenated.push(true);
-        rest = rest.slice(width - 1);
+        rest = rest.slice(count);
       }
     }
   }
@@ -98,8 +136,9 @@ export function wrapText(
   }
   if (lines.length <= maxLines) return { lines, hyphenated, truncated: false };
   const kept = lines.slice(0, maxLines);
-  const last = kept[maxLines - 1].replace(/-$/, '');
-  kept[maxLines - 1] = `${last.slice(0, Math.max(0, width - 1))}…`;
+  const last = graphemes(kept[maxLines - 1].replace(/-$/, ''));
+  kept[maxLines - 1] =
+    `${last.slice(0, Math.min(last.length, fitting(last, width - 1))).join('')}…`;
   return {
     lines: kept,
     hyphenated: hyphenated.slice(0, maxLines - 1).concat(false),
@@ -108,17 +147,17 @@ export function wrapText(
 }
 
 /**
- * The fewest characters a line needs for `text` to wrap into `maxLines` lines uncut, never
+ * The fewest monospace cells a line needs for `text` to wrap into `maxLines` lines uncut, never
  * fewer than its longest word (a word is not broken to save width).
  */
 export function charsToWrap(text: string, maxLines = 2): number {
-  const length = text.trim().length;
+  const length = textUnits(text.trim());
   const longest = Math.max(
     0,
     ...text
       .trim()
       .split(/\s+/)
-      .map((word) => word.length),
+      .map((word) => textUnits(word)),
   );
   for (let chars = Math.max(longest, Math.ceil(length / maxLines)); chars < length; chars += 1) {
     if (!wrapText(text, chars, maxLines).truncated) return chars;
@@ -181,11 +220,12 @@ export interface LayoutOptions {
   axisSize?: number;
   margin?: Partial<Margin>;
   /**
-   * Where the first view ends (map px), along the axis (`main`) and across it (`cross`): no card
-   * straddles such a line. A year's slot (down a column, a row of its cards) that would run over
-   * it starts just past it instead, and so does a card across the row's lanes, so the first view
-   * shows each card whole or not at all. The first slot, row or lane is never moved: one too big
-   * for the view stays where it is.
+   * Where the first view's room for cards ends (map px), along the axis (`main`) and across it
+   * (`cross`): no card straddles such a line. A year's slot (down a column, a row of its cards)
+   * that would run over it starts just past the view's end instead (`mainPast`, `crossPast`:
+   * the line itself when not given), and so does a card across the row's lanes, so the first
+   * view shows each card whole or not at all. The first slot in the view (from `mainFrom`), its
+   * first row and the first lane are never moved: one too big for the view stays where it is.
    */
   breakAt?: ViewBreaks;
 }
@@ -193,7 +233,18 @@ export interface LayoutOptions {
 /** Where a first view ends, along and across the axis (map px); none where the map fits. */
 export interface ViewBreaks {
   main?: number;
+  /** Where the view ends along the axis, past `main` (a strip under the room for cards). */
+  mainPast?: number;
+  /** Where the view starts along the axis (the map's start when not given). */
+  mainFrom?: number;
   cross?: number;
+  /** Where the view ends across the axis, past `cross`. */
+  crossPast?: number;
+  /**
+   * Where the room for cards starts across the axis (horizontal), when the view starts below the
+   * map's top: a card over the line starts at it instead, wholly in the view.
+   */
+  crossFrom?: number;
 }
 
 /** How far past a break a moved card starts (px): a hair, so it is wholly out of the view. */
@@ -229,17 +280,36 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   const lanes = LANES.filter((lane) => cards.some((card) => card.lane === lane));
   const pitch = Math.max(0, ...cards.map(crossOf)) + gap;
   const breakMain = options.breakAt?.main;
+  /** Where a slot or a row moved past the main break starts. */
+  const pastMain = (options.breakAt?.mainPast ?? breakMain ?? 0) + BREAK_CLEAR;
+  const viewFrom = options.breakAt?.mainFrom ?? Number.NEGATIVE_INFINITY;
   // Across the row's lanes, measured from where the lanes start.
   const crossStart = horizontal ? margin.top + axisSize : margin.left;
   const breakCross =
     horizontal && options.breakAt?.cross !== undefined
       ? options.breakAt.cross - crossStart
       : undefined;
-  /** A card's place across, moved past the break when it would run over it (not from 0). */
-  const pastBreak = (cross: number, size: number) =>
-    breakCross !== undefined && cross > 0 && cross < breakCross && cross + size > breakCross
-      ? breakCross + BREAK_CLEAR
+  const pastCross =
+    (options.breakAt?.crossPast ?? options.breakAt?.cross ?? 0) - crossStart + BREAK_CLEAR;
+  const fromCross =
+    horizontal && options.breakAt?.crossFrom !== undefined
+      ? options.breakAt.crossFrom - crossStart
+      : undefined;
+  /**
+   * A card's place across: one over the line the view's room starts at starts at it, and one
+   * that would run over the break goes past it (not from 0).
+   */
+  const pastBreak = (at: number, size: number) => {
+    const cross =
+      fromCross !== undefined && at < fromCross && at + size > fromCross ? fromCross : at;
+    // (A card that starts in the strip between the break and the view's end goes past it too.)
+    return breakCross !== undefined &&
+      cross > 0 &&
+      cross < pastCross - BREAK_CLEAR &&
+      cross + size > breakCross
+      ? pastCross
       : cross;
+  };
   // Horizontal: each lane a band. Vertical: the cards start right after the axis, in lane order
   // (a narrow panel has no room for a band per lane).
   const desiredCross = (card: CardInput) => (horizontal ? lanes.indexOf(card.lane) * pitch : 0);
@@ -303,22 +373,33 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   const placed = new Map<string, CardBox>();
   let at = mainStart;
   let crossEnd = 0;
-  /** True when [from, to] runs over the main break, and starts past `after` (not the first). */
+  /** True when [from, to] runs over the main break, starting in the view past `after`. */
   const overBreak = (from: number, to: number, after: number) =>
-    breakMain !== undefined && from > after && from < breakMain && to > breakMain;
+    breakMain !== undefined &&
+    from > after &&
+    from >= viewFrom &&
+    from < pastMain - BREAK_CLEAR &&
+    to > breakMain;
+  /** Where the first slot in the view starts (none yet). */
+  let firstInView = Number.NaN;
   keys.forEach(({ year, side }, index) => {
     if (index > 0) at += slotSpacing(keys[index - 1].year, year, slotGap);
     const rows = slotRows[index];
-    // A slot whose heading and first row would run over the break starts past it.
-    if (rows.length > 0 && overBreak(at, at + heading + rows[0].main, mainStart)) {
-      at = (breakMain as number) + BREAK_CLEAR;
+    // A slot whose heading and first row would run over the break starts past it, but for the
+    // first slot in the view.
+    if (Number.isNaN(firstInView) && at >= viewFrom) firstInView = at;
+    if (
+      rows.length > 0 &&
+      overBreak(at, at + heading + rows[0].main, Math.max(mainStart, firstInView))
+    ) {
+      at = pastMain;
     }
     const start = at;
     let rowAt = at + heading;
     rows.forEach((row, r) => {
       // Down a column, a later row of the slot that would run over the break starts past it.
       if (r > 0 && overBreak(rowAt, rowAt + row.main, start)) {
-        rowAt = (breakMain as number) + BREAK_CLEAR;
+        rowAt = pastMain;
       }
       for (const { card, cross } of row.cards) {
         const main = rowAt + (row.main - mainOf(card)) / 2;

@@ -522,14 +522,25 @@ test.describe("the genealogy graph", () => {
     await expect(detail).toContainText("direction unknown");
     await screenshot(page, testInfo, "focus-link", page.locator("#panel-genealogy"));
 
+    // Out of the graph: the edge cues (each says how many cards lie past its edge of the view),
+    // then the links as a list.
     await page.keyboard.press("Tab");
+    const cues = page.getByTestId("map-cues").getByRole("button");
+    for (let i = 0; i < (await cues.count()); i += 1) {
+      await expect(cues.nth(i)).toBeFocused();
+      await expect(cues.nth(i)).toHaveAccessibleName(
+        /^\d+ more tracks? .*: pan (left|right|up|down) to them$/,
+      );
+      await page.keyboard.press("Tab");
+    }
     await expect(page.getByText("Links as a list (17)")).toBeFocused();
     await expect(detail).toHaveCount(0);
 
     // Enter on a track selects it and opens its details, with the focus; it analyses nothing.
     const analyses = async () =>
       (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`));
-    await page.keyboard.press("Shift+Tab");
+    // Back past the edge cues to the graph.
+    for (let i = await cues.count(); i >= 0; i -= 1) await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");

@@ -5,6 +5,8 @@ import {
   type CardBox,
   type CardInput,
   charsToWrap,
+  graphemes,
+  graphemeUnits,
   isSparse,
   LANES,
   type Lane,
@@ -13,6 +15,7 @@ import {
   orientationFor,
   placeChips,
   routeLinks,
+  textUnits,
   wrapText,
 } from './lineageLayout';
 
@@ -298,6 +301,55 @@ describe('layoutLineage, where the first view ends (#240)', () => {
     expect(moved.slots.find((s) => s.year === 2011)?.start).toBe(yearEdge + BREAK_CLEAR);
   });
 
+  it('moves a card past a break by a hair: wholly out of the view, with no more gap than that', () => {
+    expect(BREAK_CLEAR).toBe(2);
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    const edge = slot.start + slot.size / 2;
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { main: edge } });
+    expect(placed(broken, 'sibling').x).toBe(edge + BREAK_CLEAR);
+    expect(placed(broken, 'sibling').x).toBeGreaterThan(edge);
+    // With a strip between the room for cards and the view's end (the edge cues'), past the
+    // strip; a card that starts in the strip goes past it too.
+    const strip = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: edge, mainPast: edge + 30 },
+    });
+    expect(placed(strip, 'sibling').x).toBe(edge + 30 + BREAK_CLEAR);
+    const inStrip = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: slot.start - 10, mainPast: slot.start + 20 },
+    });
+    expect(placed(inStrip, 'sibling').x).toBe(slot.start + 20 + BREAK_CLEAR);
+  });
+
+  it('never moves the first year in a view that starts past the map’s start', () => {
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    // A view from 1999 too narrow for its column: the column stays, the next years move.
+    const narrow = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: slot.start + 20, mainFrom: slot.start - 8 },
+    });
+    expect(placed(narrow, 'sibling')).toEqual(placed(free, 'sibling'));
+    // From the map's start, the same line moves 1999.
+    const fromStart = layoutLineage(CARDS, { ...options, breakAt: { main: slot.start + 20 } });
+    expect(placed(fromStart, 'sibling').x).toBe(slot.start + 20 + BREAK_CLEAR);
+  });
+
+  it('starts a card across the view’s top line (a view below the map’s top) at the line', () => {
+    const current = placed(free, 'current');
+    const line = current.y + current.height / 2;
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { crossFrom: line } });
+    expect(straddling(broken, 'y', line)).toEqual([]);
+    expect(placed(broken, 'current').y).toBe(line);
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      if (was.y + was.height <= line) expect(placed(broken, card.id), card.id).toEqual(was);
+    }
+    expect(overlaps(broken)).toEqual([]);
+  });
+
   it('lays the map out as before with no break, or one past the map', () => {
     expect(layoutLineage(CARDS, { ...options, breakAt: {} })).toEqual(free);
     expect(layoutLineage(CARDS, { ...options, breakAt: { main: free.width + 10 } })).toEqual(free);
@@ -317,6 +369,46 @@ describe('the compact row', () => {
     expect(isSparse(0)).toBe(true);
     expect(isSparse(2)).toBe(true);
     expect(isSparse(3)).toBe(false);
+  });
+});
+
+describe('wrapText, character by character (#240)', () => {
+  it('counts a wide character (CJK, kana, Hangul, fullwidth, an emoji) as two cells', () => {
+    expect(textUnits('abc')).toBe(3);
+    expect(textUnits('夜明け')).toBe(6);
+    expect(textUnits('シティポップ')).toBe(12);
+    expect(textUnits('한국')).toBe(4);
+    expect(textUnits('ＡＢ')).toBe(4);
+    expect(textUnits('😀')).toBe(2);
+    // A letter with its accent, and an emoji with its modifier, are one grapheme each.
+    expect(graphemes('e\u0301')).toEqual(['e\u0301']);
+    expect(graphemes('👍🏽')).toHaveLength(1);
+    expect(graphemeUnits('👍🏽')).toBe(2);
+    expect(graphemeUnits('e\u0301')).toBe(1);
+  });
+
+  it('wraps wide characters by the cells they take, never past the line', () => {
+    const title = '夜明けの街角で踊る二人の物語シティポップリミックス';
+    const wrapped = wrapText(title, 20, 4);
+    for (const line of wrapped.lines) expect(textUnits(line), line).toBeLessThanOrEqual(20);
+    expect(wrapped.lines.map((line) => line.replace(/-$/, '')).join('')).toBe(title);
+  });
+
+  it('never splits an emoji or a letter from its accent when it breaks a word', () => {
+    const word = `${'a'.repeat(45)}😀${'b'.repeat(150)}`;
+    const wrapped = wrapText(word, 47, 6);
+    for (const line of wrapped.lines) {
+      expect(line, line).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/);
+      expect(line, line).not.toMatch(/(?<![\ud800-\udbff])[\udc00-\udfff]/);
+      expect(textUnits(line)).toBeLessThanOrEqual(47);
+    }
+    expect(wrapped.lines.map((line) => line.replace(/-$/, '')).join('')).toBe(word);
+    const accents = wrapText('e\u0301'.repeat(30), 10, 6);
+    for (const line of accents.lines) expect(line.startsWith('\u0301'), line).toBe(false);
+    // Cut to fit: the ellipsis never follows half an emoji.
+    const cut = wrapText('😀'.repeat(40), 9, 2);
+    expect(cut.truncated).toBe(true);
+    expect(cut.lines[1]).toMatch(/^(😀)+…$/);
   });
 });
 

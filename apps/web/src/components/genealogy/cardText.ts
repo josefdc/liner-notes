@@ -19,7 +19,10 @@ export interface CardTextOptions {
   widest: number;
   /** The steps the width grows in (px). */
   step: number;
-  /** A character's width (px), and the fewest characters a line holds. */
+  /**
+   * A monospace cell's width (px), and the fewest cells a line holds. A wide character (CJK, an
+   * emoji) takes two cells (`graphemeUnits`).
+   */
   charPx: number;
   minChars: number;
   titleLines: number;
@@ -43,7 +46,9 @@ export interface CardText {
  * own, never rewritten; only where a line breaks changes.
  */
 export function fitCardText(title: string, meta: string, options: CardTextOptions): CardText {
-  const { width, step, charPx, minChars, titleLines, metaLines } = options;
+  const { width, charPx, minChars, titleLines, metaLines } = options;
+  // A step of a pixel at least: the search ends.
+  const step = Math.max(1, options.step);
   const widest = Math.max(width, options.widest);
   const at = (textWidth: number) => {
     const chars = Math.max(minChars, Math.floor(textWidth / charPx));

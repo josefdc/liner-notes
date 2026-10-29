@@ -43,7 +43,14 @@ import {
   wrapText,
 } from './genealogy/lineageLayout';
 import { fitCardText, SHORTENED_TEXT } from './genealogy/cardText';
-import { firstView, sameBreaks, viewBreaks } from './genealogy/firstView';
+import {
+  type EdgeCounts,
+  edgeCounts,
+  effectiveBreaks,
+  planFirstView,
+  sameBreaks,
+  sameCounts,
+} from './genealogy/firstView';
 import { cardName, cardWords } from './genealogy/cardWords';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
@@ -123,6 +130,38 @@ const chipHeight = LINE_LABEL_PX + 6;
 const chipWidth = (text: string) => labelWidth(text, LINE_LABEL_PX) + 10;
 /** Room kept round a card or a link the keyboard brings into view (screen px). */
 const VIEW_PAD = 12;
+/**
+ * The strip at the bottom of the map's view that the edge cues take ("4 more →"): at rest no
+ * card lies under it (px).
+ */
+const CUE_PX = 24;
+/** The line over the axis that says the years are in order, not to scale (across the page, px). */
+const AXIS_NOTE_PX = 18;
+/** A map shorter than this (px) gives the line no room: it goes under the map, with the legend. */
+const AXIS_NOTE_MIN_PX = 280;
+/** Room kept before a year's cards where the first view starts at that year (map px). */
+const VIEW_START_PAD = 16;
+/** No card past any edge of the view. */
+const NO_CUES: EdgeCounts = { left: 0, right: 0, up: 0, down: 0 };
+/** What an edge cue shows: how many cards lie past its edge, and which way. */
+const CUE_TEXT: Record<keyof EdgeCounts, (count: number) => string> = {
+  left: (count) => `← ${count} more`,
+  right: (count) => `${count} more →`,
+  up: (count) => `↑ ${count} more`,
+  down: (count) => `${count} more ↓`,
+};
+/** An edge cue's name: the cards past its edge, where they are, and what it does. */
+function cueLabel(side: keyof EdgeCounts, count: number, orientation: Orientation): string {
+  const tracks = `${count} more ${count === 1 ? 'track' : 'tracks'}`;
+  const along = orientation === 'horizontal' ? ['left', 'right'] : ['up', 'down'];
+  const where = along.includes(side)
+    ? side === along[0]
+      ? 'in earlier years'
+      : 'in later years'
+    : { left: 'to the left', right: 'to the right', up: 'above', down: 'below' }[side];
+  const pan = { left: 'left', right: 'right', up: 'up', down: 'down' }[side];
+  return `${tracks} ${where}: pan ${pan} to them`;
+}
 /**
  * How far from its link's middle a chip may go (map px): no chip far from what it names. One
  * that is not by its link is joined to it by a leader, drawn under the cards.
@@ -381,11 +420,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // again.
   const insetRef = useRef(topInset);
   const insetShiftRef = useRef<((by: number) => void) | null>(null);
-  useEffect(() => {
-    const by = topInset - insetRef.current;
-    insetRef.current = topInset;
-    if (by !== 0) insetShiftRef.current?.(by);
-  }, [topInset]);
   const sizeRef = useRef<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<((size: { width: number; height: number }) => void) | null>(null);
   const [panel, setPanel] = useState<{ width: number; height: number; viewport: number } | null>(
@@ -409,6 +443,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   }, [sparse]);
 
   const orientation = panel ? orientationFor(panel.viewport, panel.width) : null;
+  // Across the page the line "Years in order, not to scale." sits over the axis, under the
+  // heading, where the map has the room: the map starts below both.
+  const noteOverAxis =
+    orientation === 'horizontal' && panel !== null && panel.height >= AXIS_NOTE_MIN_PX;
+  const mapInset = topInset + (noteOverAxis ? AXIS_NOTE_PX : 0);
+  useEffect(() => {
+    const by = mapInset - insetRef.current;
+    insetRef.current = mapInset;
+    if (by !== 0) insetShiftRef.current?.(by);
+  }, [mapInset]);
   const textWidth =
     panel && orientation ? textWidthFor(panel.width, orientation, needChars, links.length) : null;
   // The cards a year's row holds side by side (vertical): a layout input, so a resize that
@@ -437,12 +481,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     transform: ZoomTransform;
     /** True while the view is the first view: the reader has not moved it. */
     rest: boolean;
-    /** Where the first view ended when the map was laid out (see `viewBreaks`). */
+    /** Where the first view ended when the map was laid out (see `planFirstView`). */
     breaks: ViewBreaks | undefined;
   } | null>(null);
   // A resize or a new heading height while the view is at rest, where the first view now ends
-  // elsewhere: the map is laid out again for it (a count, read by the drawing's effect).
+  // elsewhere across the map's cards: the map is laid out again for it (a count, read by the
+  // drawing's effect).
   const [restLayout, setRestLayout] = useState(0);
+  // The map item that had the keyboard focus when the drawing went: the next drawing gives it
+  // the focus back (a new layout keeps the reader's place).
+  const refocusRef = useRef<Item | null>(null);
+  // How many cards lie past each edge of the view (the edge cues), and the pan a cue asks for.
+  const [cues, setCues] = useState<EdgeCounts>(NO_CUES);
+  const cuePanRef = useRef<((side: keyof EdgeCounts) => void) | null>(null);
+  const cuesRef = useRef<HTMLDivElement>(null);
   // The detail box's height while it is shown: chips are not placed under it, and a focused item
   // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
   const detailRef = useRef<HTMLDivElement>(null);
@@ -582,15 +634,53 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // The map as laid out for no view, and its size: what the first view fits, or not.
     const free = layoutLineage(nodes, layoutOptions);
     const freeSize = sizeOf(free);
-    /** Where the first view ends, for the room the map has now (see `viewBreaks`). */
+    const freeCards = [...free.cards.values()];
+    const anchorId = currentId ?? nodes[0]?.id ?? '';
+    /** The first view for a room (see `planFirstView`). */
+    const planFor = (size: { width: number; height: number }) =>
+      planFirstView({
+        orientation,
+        map: freeSize,
+        slots: free.slots,
+        cards: freeCards,
+        anchor: free.cards.get(anchorId) ?? null,
+        room: { ...size, inset: insetRef.current },
+        pad: VIEW_START_PAD,
+        cue: CUE_PX,
+        // The pinned year labels' band (`pinnedBand`, at zoom 1).
+        band: layoutOptions.axisSize + 6,
+      });
+    /** True when a layout with these breaks moves a card from where the free one has it. */
+    const moves = (only: ViewBreaks) => {
+      const laid = layoutLineage(nodes, { ...layoutOptions, breakAt: only });
+      return nodes.some((d) => {
+        const [a, b] = [laid.cards.get(d.id), free.cards.get(d.id)];
+        return a?.x !== b?.x || a?.y !== b?.y;
+      });
+    };
+    /**
+     * Where the first view's room for cards ends, for the room the map has now: only the breaks
+     * that move a card (so the map is laid out again only when one moves).
+     */
     const breaksFor = (size: { width: number; height: number }) =>
-      viewBreaks(orientation, freeSize, { ...size, inset: insetRef.current });
+      effectiveBreaks(planFor(size).breaks, moves);
     // The view the map was left at: kept (with the layout it was drawn for) once the reader has
     // moved it; at rest (no pan, zoom or move to a focused card yet) it is the first view again,
     // laid out for the room the map has now.
     const last = viewRef.current;
     const kept = last && last.data === shownNodes && last.orientation === orientation ? last : null;
     let rest = kept === null || kept.rest;
+    /**
+     * The reader is at work in the map (a focus, a hover, a press, a selection, a pan): the view
+     * and the layout are theirs, kept as they are through a resize.
+     */
+    const leaveRest = () => {
+      rest = false;
+      if (viewRef.current?.data === shownNodes) viewRef.current = { ...viewRef.current, rest };
+      svg.attr('data-view', 'reader');
+    };
+    // Whose the view is, for tests and tools: the first view, or the reader's.
+    svg.attr('data-view', rest ? 'first' : 'reader');
     const breaks = kept === null || kept.rest ? breaksFor({ width, height }) : kept.breaks;
     const layout = breaks ? layoutLineage(nodes, { ...layoutOptions, breakAt: breaks }) : free;
     const boxOf = (id: string) => layout.cards.get(id) ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -638,12 +728,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         transform = event.transform;
         // The reader's own pan or zoom (a wheel, a drag, a pinch, a double click): the view is
         // theirs from now on.
-        if (event.sourceEvent) rest = false;
+        if (event.sourceEvent) leaveRest();
         g.attr('transform', event.transform.toString());
         viewRef.current = { data: shownNodes, orientation, transform, rest, breaks };
         pinAxis();
+        showTicks();
       })
-      .on('end', () => drawChips());
+      .on('end', () => {
+        drawChips();
+        countCues();
+      });
     svg.call(zoomBehavior);
 
     // 5. The year axis: a label for each year a record gives a card, and "Undated" for the rest,
@@ -697,11 +791,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .attr('stroke', lineColor)
           .attr('stroke-dasharray', '3 3');
       }
-      for (const slot of layout.slots) {
+      for (const [index, slot] of layout.slots.entries()) {
         const x = slot.start + slot.size / 2;
         axis
           .append('text')
           .attr('class', 'year-tick')
+          .attr('data-slot', index)
           .attr('x', x)
           .attr('y', y)
           .attr('text-anchor', 'middle')
@@ -766,6 +861,38 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const side = year === null ? (card?.early ? 'before' : 'after') : null;
       return layout.slots.find((slot) => slot.year === year && slot.side === side) ?? null;
     };
+    /** Each year slot's cards (their boxes), in the slots' order. */
+    const slotCards = layout.slots.map((slot) =>
+      nodes.filter((d) => slotOf(d.id) === slot).map((d) => boxOf(d.id)),
+    );
+    /** The part of the map in view (map px): below the band over its top. */
+    const inView = () => {
+      const k = transform.k || 1;
+      return {
+        left: -transform.x / k,
+        right: (width - transform.x) / k,
+        top: (insetRef.current - transform.y) / k,
+        bottom: (height - transform.y) / k,
+      };
+    };
+    /**
+     * Across the page, a year's label is shown only while one of its cards is in view, at least
+     * in part: a label over an empty column would say that nothing is known for that year.
+     */
+    function showTicks() {
+      if (orientation !== 'horizontal') return;
+      const view = inView();
+      axis.selectAll<SVGTextElement, unknown>('text.year-tick').attr('visibility', function () {
+        const boxes = slotCards[Number(this.getAttribute('data-slot'))] ?? [];
+        const shown = boxes.some((box) => box.y < view.bottom && box.y + box.height > view.top);
+        return shown ? null : 'hidden';
+      });
+    }
+    /** The cards past each edge of the view, for the edge cues. */
+    function countCues() {
+      const counts = edgeCounts(cardBoxes, inView());
+      setCues((was) => (sameCounts(was, counts) ? was : counts));
+    }
 
     /** The band the pinned labels take at the top of the view (screen px; none down a column). */
     const pinnedBand = () =>
@@ -776,7 +903,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const k = transform.k || 1;
       const below = Math.max(0, (insetRef.current - transform.y) / k - (margin.top - 6));
       axis.attr('transform', below > 0 ? `translate(0,${below})` : null);
-      axisBackdrop.attr('fill-opacity', below > 0 ? 0.95 : 0);
+      axisBackdrop.attr('fill-opacity', below > 0 ? 1 : 0);
     }
 
     // 6. Links: the colour is the relation a link is shown as, the line its kind (solid when
@@ -1000,13 +1127,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('font-size', `${SUB_LABEL_PX}px`)
       .text((d) => d.tag ?? '');
     // Words cut on the card, said in words: "Title shortened" (the ellipsis alone is easy to
-    // miss). The whole title is in the card's name, its detail box and its details.
+    // miss), set apart from the record's words. The whole title is in the card's name, its detail box and its details.
     lineText(
       'card-shortened',
       (d) => d.shortenedWrap,
       (d) => d.titleWrap.lines.length + d.metaWrap.lines.length + (d.tag ? 1 : 0),
       colors.gray[400],
     );
+    // In italics: the map's own words, not the record's.
+    words.selectAll('text.card-shortened').attr('font-style', 'italic');
 
     // A card's own drawing is decorative for screen readers: its name says it all.
     node.selectChildren().attr('aria-hidden', 'true');
@@ -1162,6 +1291,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       drawActive();
     };
     const pointAt = (item: Item | null) => {
+      // The pointer on a card or a link: the reader is at work in the map.
+      if (item !== null) leaveRest();
       pointerOn = item;
       drawActive();
       setHovered(item);
@@ -1209,10 +1340,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           height - (detailTopRef.current ? 0 : detailInsetRef.current),
         ),
       ];
-      if (dx !== 0 || dy !== 0) {
-        rest = false;
-        svg.call(zoomBehavior.translateBy, dx / k, dy / k);
-      }
+      // (The focus on the item ended the first view already: `leaveRest`.)
+      if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
 
     /**
@@ -1261,10 +1390,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         const room = [heading + VIEW_PAD, beside ? height - VIEW_PAD : edge - VIEW_PAD] as const;
         dy = clearOfPanel(selected.y, room, under, [edge, height]);
       }
-      if (dx !== 0 || dy !== 0) {
-        rest = false;
-        svg.call(zoomBehavior.translateBy, dx / k, dy / k);
-      }
+      // (The selection ended the first view already: `drawSelected`.)
+      if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
     };
 
     // Keyboard: one tab stop for the whole graph (roving tabindex). The arrow keys move between
@@ -1301,6 +1428,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let pressing = false;
     const svgElement = svg.node() as SVGSVGElement;
     listen(svgElement, 'pointerdown', (event) => {
+      // A press on the map (a card, a link, a drag): the reader is at work in it.
+      leaveRest();
       pressing = true;
       touching = (event as PointerEvent).pointerType === 'touch';
     });
@@ -1341,6 +1470,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     }
     items.forEach(({ item, element }, i) => {
       listen(element, 'focus', () => {
+        // The focus on a card or a link: the reader is at work in the map, and a resize keeps
+        // the drawing (and so the focus) as it is.
+        leaveRest();
         setRoving(i);
         focusOn = item;
         if (!pressing) bringIntoView(item);
@@ -1382,7 +1514,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       else if (focusOn && !pointerOn) bringIntoView(focusOn);
       drawChips();
     };
-    drawSelectedRef.current = drawSelected;
+    // A track selected: the reader is at work in the map (the view and the layout are kept).
+    drawSelectedRef.current = () => {
+      if (selectedRef.current !== null) leaveRest();
+      drawSelected();
+    };
     drawSelected();
     svg.on('keydown', (event: KeyboardEvent) => {
       // Escape the map's root handled already (a selection or a pair playing).
@@ -1442,11 +1578,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         selectRef.current(d.id);
       });
 
-    // The first view, unless the reader has moved the view and the map is laid out again for the
-    // same tracks and axis (then the reader's view is kept). The map at its size, below the
-    // panel's heading: whole and centred along the axis where it fits, else from its earliest
-    // year, with the axis's labels in view (`firstView`); the layout ends no card across the
-    // view's far edges (`breaks`), so at rest each card is wholly in view or wholly out of it.
+    // The first view, unless the reader has been at work in the map and it is laid out again for
+    // the same tracks and axis (then the reader's view is kept). The map at its size, below the
+    // panel's heading: whole and centred along the axis where it fits, else with the analysed
+    // track's card whole in view (`planFirstView`); the layout ends no card across the view's
+    // far edges (`breaks`), so at rest each card is wholly in view or wholly out of it, and the
+    // edge cues say how many lie past each edge.
     /**
      * Holds the view to the map after a resize or a new layout: across each direction, a map
      * that fits the room sits where the first view puts it (centred along the axis, at the top of
@@ -1469,11 +1606,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
     /** Puts the view at the first view, for the room the map has now. */
     const showFirstView = () => {
-      const at = firstView(
-        orientation,
-        { width: mapWidth, height: mapHeight },
-        { width, height, inset: insetRef.current },
-      );
+      const at = planFor({ width, height });
       svg.call(zoomBehavior.transform, zoomIdentity.translate(at.x, at.y));
     };
     if (rest) {
@@ -1485,7 +1618,34 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // Laid out again with a track selected (a filter, a resize): the selected card back in view
     // and clear of its panel. A filter lays the map out afresh, so the pan and zoom start over
     // (accepted: the cards have new places).
-    if (selectedRef.current !== null) afterDetailRef.current?.();
+    if (selectedRef.current !== null) {
+      leaveRest();
+      afterDetailRef.current?.();
+    }
+    // The item that had the focus in the last drawing has it again, wherever it now is.
+    const refocus = refocusRef.current;
+    refocusRef.current = null;
+    if (refocus) {
+      items.find(({ item }) => sameItem(item, refocus))?.element.focus({ preventScroll: true });
+    }
+
+    // An edge cue pans the view most of its room that way (the reader's view from then on).
+    cuePanRef.current = (side) => {
+      leaveRest();
+      const k = transform.k || 1;
+      const across = 0.8 * width;
+      const along = 0.8 * Math.max(0, height - insetRef.current - CUE_PX);
+      const [dx, dy] =
+        side === 'left'
+          ? [across, 0]
+          : side === 'right'
+            ? [-across, 0]
+            : side === 'up'
+              ? [0, along]
+              : [0, -along];
+      svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      holdView();
+    };
 
     /**
      * At rest, the first view again for the room the map has now: laid out again where the view
@@ -1521,6 +1681,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const k = transform.k || 1;
       svg.call(zoomBehavior.translateBy, dx / k, dy / k);
       holdView();
+      countCues();
       // A selected card stays clear of its panel in the new size (the legend's filters opening
       // below the map shorten it, for one).
       if (selectedRef.current !== null) afterDetailRef.current?.();
@@ -1530,7 +1691,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // Everything the drawing started stops with it: transitions (the hint's fade, a double
     // click's zoom) and their timers, and every listener on the svg and its elements.
     return () => {
+      // The item with the focus gets it back in the next drawing (`refocus`).
+      const active = document.activeElement;
+      refocusRef.current =
+        focusOn !== null && active !== null && svgElement.contains(active) ? focusOn : null;
       resizeRef.current = null;
+      cuePanRef.current = null;
       insetShiftRef.current = null;
       afterDetailRef.current = null;
       drawSelectedRef.current = null;
@@ -1930,6 +2096,62 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             aria-label="Connections graph"
           ></svg>
 
+          {/* Across the page, over the axis: the years keep their order, not their distance */}
+          {noteOverAxis && (
+            <p
+              className="absolute inset-x-0 z-10 pointer-events-none bg-void px-3 text-right text-chrome font-mono text-text-chip"
+              style={{ top: topInset, height: AXIS_NOTE_PX, lineHeight: `${AXIS_NOTE_PX}px` }}
+              data-testid="axis-note"
+            >
+              Years in order, not to scale.
+            </p>
+          )}
+
+          {/* The edge cues: how many cards lie past each edge of the view, in a strip at its
+              bottom that no card takes at rest; each pans the view that way */}
+          {orientation !== null && cues.left + cues.right + cues.up + cues.down > 0 && (
+            <div
+              ref={cuesRef}
+              data-testid="map-cues"
+              className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-2 px-2 pointer-events-none"
+              style={{ height: CUE_PX }}
+            >
+              {(
+                [
+                  ['left', 'up'],
+                  ['down', 'right'],
+                ] as const
+              ).map((group) => (
+                <div key={group[0]} className="flex items-center gap-2">
+                  {group
+                    .filter((side) => cues[side] > 0)
+                    .map((side) => (
+                      <button
+                        key={side}
+                        type="button"
+                        data-cue={side}
+                        aria-label={cueLabel(side, cues[side], orientation)}
+                        onClick={() => {
+                          cuePanRef.current?.(side);
+                          // A cue with nothing left past its edge goes: the focus moves to
+                          // another cue.
+                          requestAnimationFrame(() => {
+                            const strip = cuesRef.current;
+                            if (strip && !strip.contains(document.activeElement)) {
+                              strip.querySelector('button')?.focus();
+                            }
+                          });
+                        }}
+                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
+                      >
+                        {CUE_TEXT[side](cues[side])}
+                      </button>
+                    ))}
+                </div>
+              ))}
+            </div>
+          )}
+
           {summary}
 
           {/* What the pointer or keyboard focus is on: a link's relation and where it comes
@@ -2015,7 +2237,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           {/* The axis keeps the years' order, not their distance: a gap of forty years is not
               forty times one of a year. Not on a short screen, where every pixel goes to the
               map. */}
-          {!sparse && (
+          {!sparse && !noteOverAxis && (
             <p
               className="text-chrome font-mono text-text-chip [@media(max-height:36rem)]:hidden"
               data-testid="axis-note"

@@ -212,6 +212,30 @@ describe('GenealogyGraph on a resize', () => {
     expect(now.x).toBeCloseTo(before.x - 50, 0);
   });
 
+  it('ends the first view at a selection, a focus or a hover: a resize then keeps the drawing', async () => {
+    for (const act_ of ['select', 'focus', 'hover'] as const) {
+      const { container, unmount } = render(<GenealogyGraph data={data} />);
+      const svg = container.querySelector('svg');
+      if (!svg) throw new Error('no svg');
+      const zoomed = svg.querySelector(':scope > g');
+      expect(svg.getAttribute('data-view')).toBe('first');
+      // The related track's card is in the first view: none of these moves the view.
+      const before = zoomOf(svg);
+      const track = relatedTrack(container) as SVGGElement;
+      if (act_ === 'select') await act(async () => fireEvent.click(track));
+      if (act_ === 'focus') await act(async () => track.focus());
+      if (act_ === 'hover') await act(async () => fireEvent.mouseEnter(track));
+      expect(zoomOf(svg), act_).toEqual(before);
+      expect(svg.getAttribute('data-view'), act_).toBe('reader');
+
+      await act(async () => report?.(700, 500));
+
+      expect(svg.querySelector(':scope > g'), act_).toBe(zoomed);
+      if (act_ === 'focus') expect(document.activeElement).toBe(track);
+      unmount();
+    }
+  });
+
   it('lays the map out again when the panel turns too narrow for years side by side', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');

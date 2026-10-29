@@ -13,7 +13,7 @@ import {
   showcaseRecordings,
   useMockApi,
 } from "./mock";
-import { cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
+import { analysedAtRest, cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
 import { offline } from "./offline";
 
 // The song-relations map on a page of its own (#217): `/t/<id>/map` opens a stored result's map
@@ -39,6 +39,9 @@ const BARE = "2bCdEfGhIjKlMnOpQrStUv";
 const MISSING = "7ouMYWpwJ422jRcDASZB7P";
 /** A stored result with a wide map (genealogy-wide: 13 tracks over thirty years). */
 const WIDE = "4dEfGhIjKlMnOpQrStUvWx";
+/** Stored results with the genealogy-kinds and genealogy-rich maps. */
+const KINDS = "5eFgHiJkLmNoPqRsTuVwXy";
+const RICH = "6fGhIjKlMnOpQrStUvWxYz";
 
 const omtResult = () =>
   replayedRecording().events.find((event) => event.type === "complete")?.data as Record<
@@ -80,11 +83,16 @@ const streamOf = (data: Record<string, unknown>) => [
 
 /** The genealogy-wide fixture's result under the track id WIDE. */
 function wideResult() {
-  const events = loadFixture("genealogy-wide").streams[ANALYZE] as Array<{
+  return fixtureResult("genealogy-wide", WIDE);
+}
+
+/** A fixture's analysis result, stored under the track id `id`. */
+function fixtureResult(name: string, id: string) {
+  const events = loadFixture(name).streams[ANALYZE] as Array<{
     type: string;
     data?: Record<string, unknown>;
   }>;
-  return { ...events.find((event) => event.type === "complete")?.data, id: WIDE };
+  return { ...events.find((event) => event.type === "complete")?.data, id };
 }
 
 /** Stored runs of the map's tracks, and the streams that analyse the tracks it leads to. */
@@ -103,6 +111,8 @@ function mapApi() {
       [SOURCE_ID]: storedRun(fullAs(SOURCE_ID), "live"),
       [SPARSE]: storedRun(fullAs(SPARSE), "live"),
       [WIDE]: storedRun(wideResult(), "live"),
+      [KINDS]: storedRun(fixtureResult("genealogy-kinds", KINDS), "live"),
+      [RICH]: storedRun(fixtureResult("genealogy-rich", RICH), "live"),
       [BARE]: storedRun(
         fullAs(BARE, {
           genealogy: { nodes: full.genealogy.nodes.filter((node) => node.group === 1), links: [] },
@@ -360,7 +370,8 @@ for (const [width, height] of [
 }
 
 // The full-size map's first view (#240): at rest each card is wholly in the window's map or
-// wholly out of it, never cut by its edge, for the recorded One More Time run and a wide map.
+// wholly out of it, never cut by its edge, and the analysed track's card is in it, for the
+// recorded One More Time run, a wide map, the genealogy-kinds map and a rich one.
 for (const [width, height] of [
   [390, 844],
   [1280, 800],
@@ -377,6 +388,8 @@ for (const [width, height] of [
     for (const [id, cards] of [
       [OMT, 10],
       [WIDE, 13],
+      [KINDS, 18],
+      [RICH, 16],
     ] as const) {
       await page.goto(`/t/${id}/map`);
       await expect(mapHeading(page)).toBeFocused();
@@ -385,6 +398,7 @@ for (const [width, height] of [
       await mapAtRest(graph);
       expect(await cardsCutAtRest(graph), `${id}: cards cut at rest`).toEqual([]);
       expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
+      expect(await analysedAtRest(graph), `${id}: the analysed track at rest`).toBe("in");
       await shot(page, testInfo, `rest-${id}-${width}`);
     }
     expect(problems).toEqual([]);

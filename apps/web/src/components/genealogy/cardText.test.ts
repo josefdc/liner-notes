@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fitCardText, SHORTENED_TEXT } from './cardText';
+import { textUnits } from './lineageLayout';
 
 // A 137-character title, as long as a real MusicBrainz remix's (#240).
 const LONG =
@@ -60,6 +61,35 @@ describe('a card’s words (#240)', () => {
       widest: 208,
     });
     expect(artist.shortened).toBe('artist');
+  });
+
+  it('fits a Japanese title by the cells its characters take: whole on a wider card, else cut', () => {
+    const title =
+      '夜明けの街角で踊る二人の物語（シティポップ・リミックス・エクステンデッド・バージョン）〜真夜中のサウンドトラック・スペシャル・エディション〜';
+    const artist = '山田花子とミッドナイト・オーケストラ · 2013';
+    // Across the page (from 1280 px): a wider card holds it whole, no line wider than the card.
+    const wide = fitCardText(title, artist, options);
+    expect(wide.shortened).toBeNull();
+    expect(wide.title.lines.map((line) => line.replace(/-$/, '')).join('')).toBe(title);
+    const cells = Math.floor(wide.width / options.charPx);
+    for (const line of [...wide.title.lines, ...wide.meta.lines]) {
+      expect(textUnits(line) * options.charPx, line).toBeLessThanOrEqual(wide.width);
+      expect(textUnits(line)).toBeLessThanOrEqual(cells);
+    }
+    // Down a phone's column (no wider card): cut, and said so.
+    const column = fitCardText(title, artist, { ...options, widest: 208 });
+    expect(column.shortened).toBe('title');
+    for (const line of column.title.lines) {
+      expect(textUnits(line) * options.charPx, line).toBeLessThanOrEqual(208);
+    }
+  });
+
+  it('ends its search for a width whatever the step (none, or backwards)', () => {
+    for (const step of [0, -16]) {
+      const fit = fitCardText(LONG, 'DJ Somebody Famous · 2006', { ...options, step });
+      expect(fit.width).toBeGreaterThanOrEqual(208);
+      expect(fit.width).toBeLessThanOrEqual(352);
+    }
   });
 
   it('never rewrites the words: a line break moves, the text stays the record’s', () => {

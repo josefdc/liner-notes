@@ -12,7 +12,13 @@ import {
   showcaseRecordings,
   useMockApi,
 } from "./mock";
-import { cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
+import {
+  analysedAtRest,
+  cardsCutAtRest,
+  labelsOverEmptyColumns,
+  mapAtRest,
+  wholeCardsAtRest,
+} from "./mapAtRest";
 import { offline } from "./offline";
 
 // The song-relations map as a lineage (#217): each track a card on a year axis, across the page
@@ -21,7 +27,8 @@ import { offline } from "./offline";
 // width, the others at 390, 1280, 1440 and 1920 px), a rich map (MusicBrainz years, second
 // hops, undated tracks, a 92-character title and a 50-letter word) and a wide one (13 tracks
 // over thirty years, a 137-character title):
-// - at rest, each card is wholly in the visible map area or wholly out of it (#240);
+// - at rest, each card is wholly in the visible map area or wholly out of it, the analysed
+//   track's card in it, and no year's label over a column with no card in view (#240);
 // - no two cards overlap;
 // - no relation is written on the map at rest; a chip names it while a card or a link is pointed
 //   at or focused: never over a card, another chip or the detail box, and near its link;
@@ -214,6 +221,30 @@ async function checkCutsSaid(page: Page, what: string) {
   }
 }
 
+/**
+ * Across the page, the line that says the years are in order, not to scale: in the window, in
+ * the map's box over its year labels, just above them.
+ */
+async function checkAxisNote(page: Page) {
+  const note = page.locator("#panel-genealogy").getByTestId("axis-note");
+  await expect(note).toHaveText("Years in order, not to scale.");
+  await expect(note).toBeInViewport();
+  const [box, wrapper, tick] = await Promise.all([
+    note.boundingBox(),
+    graphOf(page).evaluate((svg) => {
+      const box = (svg.parentElement as Element).getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }),
+    graphOf(page)
+      .locator("text.year-tick")
+      .evaluateAll((ticks) => Math.min(...ticks.map((tick) => tick.getBoundingClientRect().top))),
+  ]);
+  if (!box) throw new Error("no axis note");
+  expect(box.y).toBeGreaterThanOrEqual(wrapper.top);
+  expect(box.y + box.height, "over the year labels").toBeLessThanOrEqual(tick + 1);
+  expect(tick - (box.y + box.height), "just above the year labels").toBeLessThanOrEqual(40);
+}
+
 async function screenshot(page: Page, testInfo: TestInfo, name: string) {
   const dir = process.env.GENEALOGY_SHOTS_DIR ?? testInfo.project.outputDir;
   mkdirSync(dir, { recursive: true });
@@ -363,6 +394,12 @@ for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entr
       await mapAtRest(graph);
       expect(await cardsCutAtRest(graph, headingBand(page)), "cards cut at rest").toEqual([]);
       expect(await wholeCardsAtRest(graph, headingBand(page))).toBeGreaterThan(0);
+      expect(await analysedAtRest(graph, headingBand(page)), "the analysed track at rest").toBe(
+        "in",
+      );
+      expect(await labelsOverEmptyColumns(graph, headingBand(page))).toEqual([]);
+      // Across the page, "not to scale" is said over the axis, in view at rest.
+      if (!vertical) await checkAxisNote(page);
       // No word is cut unsaid.
       await checkCutsSaid(page, `${showcase} at ${width} px`);
 
@@ -546,44 +583,313 @@ for (const [width, height] of [
   });
 }
 
-test("a resize at rest shows the first view for the new room, cutting no card; the reader's view is kept", async ({
-  page,
-}) => {
+/** `from` to `to` (both kept) in steps of `step`. */
+const steps = (from: number, to: number, step: number) =>
+  Array.from({ length: Math.floor((from - to) / step) + 1 }, (_, i) => from - i * step);
+
+/** The window sizes a resize at rest is swept over (#240), from where each sweep starts. */
+const SWEEPS = {
+  width: { start: [1440, 900], sizes: steps(1900, 1000, 37).map((w) => [w, 900]) },
+  height: { start: [1440, 900], sizes: steps(1000, 560, 23).map((h) => [1440, h]) },
+  phone: { start: [390, 844], sizes: steps(900, 560, 17).map((h) => [390, h]) },
+} as const;
+
+/** Each card's place and size on the map (map px, the drawing's own units), by id. */
+const cardPlaces = (page: Page) =>
+  graphOf(page).evaluate((svg) =>
+    [...svg.querySelectorAll("g.nodes > g")]
+      .map((card) => {
+        const rect = card.querySelector("rect.card") as Element;
+        return `${card.getAttribute("data-node-id")} ${card.getAttribute("transform")} ${rect.getAttribute("width")}x${rect.getAttribute("height")}`;
+      })
+      .join("\n"),
+  );
+
+for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) {
+  for (const [sweep, { start, sizes }] of Object.entries(SWEEPS)) {
+    test(`a ${sweep} sweep at rest keeps the ${showcase} map's first view: no card cut, the analysed track in view, the drawing kept while no card moves`, async ({
+      page,
+    }) => {
+      test.setTimeout(240_000);
+      const problems = collectProblems(page);
+      // The pointer off the map before it is drawn: at rest, nothing is pointed at.
+      await page.mouse.move(0, 0);
+      await page.setViewportSize({ width: start[0], height: start[1] });
+      await open(page);
+      await page.mouse.move(0, 0);
+      if (sweep === "phone") await page.getByRole("tab", { name: "Connections" }).click();
+      const graph = graphOf(page);
+      await expect(graph.locator("g.nodes > g")).toHaveCount(cardCount);
+      await mapAtRest(graph);
+      const drawing = graph.locator(":scope > g");
+      await drawing.evaluate((g) => g.setAttribute("data-kept", ""));
+      let places = await cardPlaces(page);
+      // The sizes the map's drawing takes in a step: the page around it may settle in two
+      // (the legend's lines that a short window hides), each a room of its own.
+      await graph.evaluate((svg) => {
+        const sizes: string[] = [];
+        (window as unknown as { mapSizes: string[] }).mapSizes = sizes;
+        new MutationObserver(() => {
+          const size = `${svg.getAttribute("width")}x${svg.getAttribute("height")}`;
+          if (sizes.at(-1) !== size) sizes.push(size);
+        }).observe(svg, { attributes: true, attributeFilter: ["width", "height"] });
+      });
+      for (const [width, height] of sizes) {
+        const at = `${showcase} at ${width}×${height}`;
+        await page.evaluate(() => {
+          (window as unknown as { mapSizes: string[] }).mapSizes.length = 0;
+        });
+        await page.setViewportSize({ width, height });
+        await mapAtRest(graph);
+        // (Polled: the map is laid out for the new room once the browser reports its size.)
+        await expect
+          .poll(() => cardsCutAtRest(graph, headingBand(page)), { message: `${at}: cut cards` })
+          .toEqual([]);
+        expect(await analysedAtRest(graph, headingBand(page)), `${at}: the analysed track`).toBe(
+          "in",
+        );
+        await expect(graph, `${at}: still the first view`).toHaveAttribute("data-view", "first");
+        // Laid out again only when a card moves: no card moved, the same drawing (unless the
+        // map took a room in between).
+        const now = await cardPlaces(page);
+        const rooms = await page.evaluate(
+          () => (window as unknown as { mapSizes: string[] }).mapSizes.length,
+        );
+        if (now === places && rooms <= 1) {
+          await expect(graph.locator(":scope > g[data-kept]"), `${at}: drawn again`).toHaveCount(1);
+        } else {
+          places = now;
+          await drawing.evaluate((g) => g.setAttribute("data-kept", ""));
+        }
+      }
+      expect(problems).toEqual([]);
+    });
+  }
+}
+
+/** The wide map's card with a Japanese title and artist (wide characters: two cells each). */
+const CJK_TITLE =
+  "夜明けの街角で踊る二人の物語（シティポップ・リミックス・エクステンデッド・バージョン）〜真夜中のサウンドトラック・スペシャル・エディション〜";
+
+for (const [width, height] of [
+  [390, 844],
+  [1280, 800],
+] as const) {
+  test(`at ${width} px a Japanese title stays inside its card, ${width >= 1280 ? "whole" : "cut and said so"}`, async ({
+    page,
+  }) => {
+    await page.mouse.move(0, 0);
+    await page.setViewportSize({ width, height });
+    await SHOWCASES.wide.open(page);
+    if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+    const graph = graphOf(page);
+    await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+    const card = graph.locator('g.nodes > g[data-node-id="h4"]');
+    expect(await card.getAttribute("data-title")).toBe(CJK_TITLE);
+    await card.focus();
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
+    const words = (await cardWords(page)).find((each) => each.id === "h4");
+    if (!words) throw new Error("no card h4");
+    // Drawn inside the card, as it is measured: a wide character takes two cells.
+    expect(words.title.past, words.title.joined).toBeLessThanOrEqual(0);
+    expect(words.meta.past, words.meta.joined).toBeLessThanOrEqual(0);
+    if (width >= 1280) {
+      expect(words.title.whole, words.title.joined).toBe(true);
+      expect(words.shortened).toBeNull();
+    } else {
+      expect(words.title.cut).toBe(true);
+      expect(words.shortened).toBe("title");
+      expect(words.said).toBe("Title shortened");
+      // In italics: the map's own words, not the record's.
+      await expect(card.locator("text.card-shortened")).toHaveAttribute("font-style", "italic");
+    }
+  });
+}
+
+test("the reader's view is kept through a resize once they have moved it", async ({ page }) => {
   const problems = collectProblems(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await SHOWCASES.wide.open(page);
   const graph = graphOf(page);
   await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
   const view = () => graph.locator(":scope > g").evaluate((g) => g.getAttribute("transform") ?? "");
-  // Wider, narrower, then shorter: each time the first view, from the earliest year.
-  for (const [width, height] of [
-    [1440, 900],
-    [1920, 1080],
-    [1280, 800],
-    [1366, 700],
-  ] as const) {
-    await page.setViewportSize({ width, height });
-    await mapAtRest(graph);
-    // (Polled: the map is laid out for the new room once the browser reports its size.)
-    await expect
-      .poll(() => cardsCutAtRest(graph, headingBand(page)), { message: `at ${width}×${height}` })
-      .toEqual([]);
-    expect(await wholeCardsAtRest(graph, headingBand(page))).toBeGreaterThan(0);
-    const first = await graph
-      .locator("text.year-tick")
-      .first()
-      .evaluate((tick) => tick.getBoundingClientRect().left);
-    expect(first, `at ${width}×${height}: the earliest year in view`).toBeGreaterThanOrEqual(0);
-  }
   // The reader moves the view (the keyboard brings the last card in): a resize keeps it.
   await graph.locator('g.nodes > g[data-node-id="h4"]').focus();
   await graph.locator('g.nodes > g[data-node-id="h4"]').blur();
+  await expect(graph).toHaveAttribute("data-view", "reader");
   const moved = await view();
   await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
   await page.setViewportSize({ width: 1280, height: 760 });
   await expect.poll(view).not.toBe(moved);
   await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(1);
   expect(problems).toEqual([]);
+});
+
+// A card focused at rest (the first Tab stop, already in view: the view does not move) and the
+// window resized: the reader is at work in the map, so the drawing, the focus, its detail box
+// and the keyboard's place are kept.
+for (const [what, from, to] of [
+  ["wider", [1440, 900], [1480, 900]],
+  ["narrower", [1440, 900], [1400, 900]],
+  ["shorter", [1440, 900], [1440, 860]],
+  ["shorter phone", [390, 844], [390, 800]],
+] as const) {
+  test(`a card focused at rest keeps the focus, its detail box and the arrow keys through a ${what} window`, async ({
+    page,
+  }) => {
+    const problems = collectProblems(page);
+    await page.mouse.move(0, 0);
+    await page.setViewportSize({ width: from[0], height: from[1] });
+    await SHOWCASES.wide.open(page);
+    await page.mouse.move(0, 0);
+    if (from[0] < 768) await page.getByRole("tab", { name: "Connections" }).click();
+    const graph = graphOf(page);
+    const tracks = graph.locator("g.nodes > g");
+    await expect(tracks).toHaveCount(SHOWCASES.wide.cards);
+    await mapAtRest(graph);
+    await expect(graph).toHaveAttribute("data-view", "first");
+    const first = graph.locator('g.nodes > g[tabindex="0"]');
+    const id = await first.getAttribute("data-node-id");
+    await first.focus();
+    const card = graph.locator(`g.nodes > g[data-node-id="${id}"]`);
+    const detail = page.getByTestId("link-detail");
+    await expect(card).toBeFocused();
+    await expect(detail).toBeVisible();
+    await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
+
+    await page.setViewportSize({ width: to[0], height: to[1] });
+    await expect
+      .poll(() => graph.evaluate((svg) => Math.round(svg.getBoundingClientRect().height)))
+      .not.toBe(0);
+    await mapAtRest(graph);
+    await expect(card).toBeFocused();
+    await expect(detail).toBeVisible();
+    await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(1);
+    // The arrow keys move on from it.
+    const order = await tracks.evaluateAll((cards) =>
+      cards.map((each) => each.getAttribute("data-node-id")),
+    );
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      graph.locator(`g.nodes > g[data-node-id="${order[order.indexOf(id) + 1]}"]`),
+    ).toBeFocused();
+    expect(problems).toEqual([]);
+  });
+}
+
+test("a hover or a press on the map ends its first view: a resize then keeps the drawing", async ({
+  page,
+}) => {
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await SHOWCASES.wide.open(page);
+  await page.mouse.move(0, 0);
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  await mapAtRest(graph);
+  await expect(graph).toHaveAttribute("data-view", "first");
+  await graph.locator('g.nodes > g[tabindex="0"]').hover();
+  await expect(graph).toHaveAttribute("data-view", "reader");
+  await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
+  await page.setViewportSize({ width: 1400, height: 860 });
+  await mapAtRest(graph);
+  await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(1);
+
+  // A press on an empty part of the map, after a fresh first view.
+  await page.reload();
+  await page.mouse.move(0, 0);
+  await SHOWCASES.wide.open(page);
+  await page.mouse.move(0, 0);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  await mapAtRest(graph);
+  await expect(graph).toHaveAttribute("data-view", "first");
+  const box = await graph.boundingBox();
+  if (!box) throw new Error("no map");
+  await graph.dispatchEvent("pointerdown", {
+    pointerType: "mouse",
+    clientX: box.x + 5,
+    clientY: box.y + box.height - 40,
+  });
+  await expect(graph).toHaveAttribute("data-view", "reader");
+});
+
+test("a card focused when the map is laid out again (a narrower phone) keeps the focus", async ({
+  page,
+}) => {
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await SHOWCASES.wide.open(page);
+  await page.getByRole("tab", { name: "Connections" }).click();
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  const card = graph.locator('g.nodes > g[data-node-id="s2"]');
+  await card.focus();
+  await expect(card).toBeFocused();
+  await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
+  // Narrower cards: a new drawing, the same card focused, its detail box shown.
+  await page.setViewportSize({ width: 340, height: 844 });
+  await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(0);
+  await expect(card).toBeFocused();
+  await expect(page.getByTestId("link-detail")).toBeVisible();
+});
+
+test("the edge cues say how many cards lie past each edge, and pan to them from the keyboard", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await SHOWCASES.wide.open(page);
+  await page.mouse.move(0, 0);
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  await mapAtRest(graph);
+  const cues = page.getByTestId("map-cues");
+  const right = cues.locator('[data-cue="right"]');
+  // As many as the cards wholly past the right edge (none is cut at rest).
+  const past = await graph.evaluate((svg) => {
+    const edge = (svg.parentElement as Element).getBoundingClientRect().right;
+    return [...svg.querySelectorAll("g.nodes > g > rect.card")].filter(
+      (card) => card.getBoundingClientRect().left >= edge - 0.5,
+    ).length;
+  });
+  expect(past).toBeGreaterThan(0);
+  await expect(right).toHaveText(`${past} more →`);
+  await expect(right).toHaveAccessibleName(
+    `${past} more ${past === 1 ? "track" : "tracks"} in later years: pan right to them`,
+  );
+  await expect(cues.locator('[data-cue="left"]')).toHaveCount(0);
+  const view = () => graph.locator(":scope > g").evaluate((g) => g.getAttribute("transform") ?? "");
+  // A click pans the view right: the reader's view from then (a resize keeps it).
+  const before = await view();
+  await right.click();
+  await expect.poll(view).not.toBe(before);
+  await expect(graph).toHaveAttribute("data-view", "reader");
+  // From the map, the next Tab stop is a cue; Enter pans the view too.
+  await graph.locator('g.nodes > g[tabindex="0"]').focus();
+  await page.keyboard.press("Tab");
+  const first = cues.getByRole("button").first();
+  await expect(first).toBeFocused();
+  const then = await view();
+  await page.keyboard.press("Enter");
+  await expect.poll(view).not.toBe(then);
+  // Cards now lie past the left edge: a cue for them, and the focus still on a cue.
+  await expect(cues.locator('[data-cue="left"]')).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.activeElement?.closest('[data-testid="map-cues"]') !== null),
+    )
+    .toBe(true);
+  expect(problems).toEqual([]);
+});
+
+test("the map-at-rest checks fail on a map with no card", async ({ page }) => {
+  await page.setContent('<div><svg aria-label="Connections graph"></svg></div>');
+  const graph = page.locator("svg");
+  await expect(cardsCutAtRest(graph)).rejects.toThrow(/the map has cards/);
+  await expect(wholeCardsAtRest(graph)).rejects.toThrow(/the map has cards/);
 });
 
 test("a narrower phone lays the map out again, keeping the reader's place, inside the panel", async ({

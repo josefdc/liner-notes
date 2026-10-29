@@ -60,32 +60,74 @@ export const isSparse = (links: number) => links <= SPARSE_LINKS;
 
 /**
  * The text's graphemes: what a reader sees as one character (an emoji with its modifiers, a
- * letter with its accents), never split.
+ * flag, a letter with its accents), never split. Where the browser has no `Intl.Segmenter`, its
+ * code points (a surrogate pair still kept whole).
  */
-const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const segmenter =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
 export const graphemes = (text: string): string[] =>
-  Array.from(segmenter.segment(text), (part) => part.segment);
+  segmenter ? Array.from(segmenter.segment(text), (part) => part.segment) : Array.from(text);
 
 /**
  * Code points drawn about two monospace cells wide: East Asian Wide and Fullwidth characters
- * (Hangul, CJK, kana, fullwidth forms) and emoji.
+ * (Hangul, CJK, kana, fullwidth forms) and emoji, a flag (two regional indicators) and a keycap
+ * among them.
  */
 const WIDE =
-  /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]|[\u{1b000}-\u{1b2ff}\u{1f200}-\u{1f2ff}\u{20000}-\u{3fffd}]|\p{Extended_Pictographic})/u;
+  /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]|[\u{1b000}-\u{1b2ff}\u{1f1e6}-\u{1f1ff}\u{1f200}-\u{1f2ff}\u{20000}-\u{3fffd}]|\p{Extended_Pictographic})/u;
+/** An emoji's presentation (U+FE0F) or a keycap (U+20E3) anywhere in a grapheme. */
+const EMOJI_PART = /[\ufe0f\u20e3]/u;
 
 /** How many monospace cells a grapheme takes on a card: two for a wide one, else one. */
-export const graphemeUnits = (grapheme: string): number => (WIDE.test(grapheme) ? 2 : 1);
+export const graphemeUnits = (grapheme: string): number =>
+  WIDE.test(grapheme) || EMOJI_PART.test(grapheme) ? 2 : 1;
 
 /** How many monospace cells a text takes on a card (see `graphemeUnits`). */
 export const textUnits = (text: string): number =>
   graphemes(text).reduce((sum, grapheme) => sum + graphemeUnits(grapheme), 0);
 
+/** Marks that never start a line in Japanese (kinsoku): closing brackets, stops, the long vowel. */
+const NO_LINE_START = new Set([...'、。，．：；！？」』）］】〕〉》・ー〜…‥']);
+/** Marks that never end a line in Japanese: opening brackets. */
+const NO_LINE_END = new Set([...'「『（［【〔〈《']);
+/**
+ * True when a line may break between two graphemes of a word with no hyphen: next to a wide
+ * character (CJK has no spaces between its words), unless the break would start a line with a
+ * closing mark or end one with an opening mark.
+ */
+const softBreak = (before: string, after: string) =>
+  (graphemeUnits(before) === 2 || graphemeUnits(after) === 2) &&
+  !NO_LINE_START.has(after) &&
+  !NO_LINE_END.has(before);
+/** True when a line may break there with no hyphen, the marks' rule aside. */
+const wideBreak = (before: string, after: string) =>
+  graphemeUnits(before) === 2 || graphemeUnits(after) === 2;
+
+/**
+ * A text's words, broken at spaces; a lone "·" (the card's separator) is kept with the word
+ * after it, so no line ends in one.
+ */
+function wordsOf(text: string): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const joined: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (words[i] === '·' && i + 1 < words.length) {
+      joined.push(`· ${words[i + 1]}`);
+      i += 1;
+    } else joined.push(words[i]);
+  }
+  return joined;
+}
+
 /**
  * `text` in lines of at most `maxChars` monospace cells (a wide character takes two, see
- * `graphemeUnits`), broken at spaces. A word longer than a line is broken inside, between two
- * graphemes, its piece ending in a hyphen (`hyphenated` says which lines end so). At most
- * `maxLines` lines: text that needs more is cut, its last line ending in "…", and said to be
- * `truncated`.
+ * `graphemeUnits`), broken at spaces and, in CJK text, between characters (with no hyphen, and
+ * not before a closing mark nor after an opening one). A word longer than a line is broken
+ * inside, between two graphemes, its piece ending in a hyphen (`hyphenated` says which lines end
+ * so). At most `maxLines` lines: text that needs more is cut, its last line ending in "…", and
+ * said to be `truncated`.
  */
 export function wrapText(
   text: string,
@@ -93,11 +135,12 @@ export function wrapText(
   maxLines = 2,
 ): { lines: string[]; hyphenated: boolean[]; truncated: boolean } {
   const width = Math.max(2, Math.floor(maxChars));
-  const words = text.trim().split(/\s+/).filter(Boolean);
+  const words = wordsOf(text);
   const lines: string[] = [];
   const hyphenated: boolean[] = [];
   let line = '';
   let lineUnits = 0;
+  const unitsOf = (parts: string[]) => parts.reduce((sum, part) => sum + graphemeUnits(part), 0);
   /** The graphemes of `parts` that fit `room` cells (at least one), and the rest. */
   const fitting = (parts: string[], room: number) => {
     let units = 0;
@@ -108,35 +151,58 @@ export function wrapText(
     }
     return Math.max(1, count);
   };
+  /** The most graphemes of `parts` that fit `room` cells and end where `may` lets a line break. */
+  const breakingAt = (parts: string[], room: number, may: typeof softBreak) => {
+    let best = 0;
+    let units = 0;
+    for (let i = 1; i < parts.length; i += 1) {
+      units += graphemeUnits(parts[i - 1]);
+      if (units > room) break;
+      if (may(parts[i - 1], parts[i])) best = i;
+    }
+    return best;
+  };
+  const push = (text: string, hyphen: boolean) => {
+    lines.push(text);
+    hyphenated.push(hyphen);
+    line = '';
+    lineUnits = 0;
+  };
   for (const word of words) {
     let rest = graphemes(word);
     while (rest.length > 0) {
       const room = line ? width - lineUnits - 1 : width;
-      const units = rest.reduce((sum, part) => sum + graphemeUnits(part), 0);
+      const units = unitsOf(rest);
       if (units <= room) {
         line = line ? `${line} ${rest.join('')}` : rest.join('');
         lineUnits += (lineUnits > 0 ? 1 : 0) + units;
         rest = [];
+        continue;
+      }
+      // CJK: as much as fits on this line, broken between characters.
+      const soft = breakingAt(rest, room, softBreak);
+      if (soft > 0) {
+        const piece = rest.slice(0, soft).join('');
+        push(line ? `${line} ${piece}` : piece, false);
+        rest = rest.slice(soft);
       } else if (line) {
-        lines.push(line);
-        hyphenated.push(false);
-        line = '';
-        lineUnits = 0;
+        push(line, false);
       } else {
-        const count = fitting(rest, width - 1);
-        lines.push(`${rest.slice(0, count).join('')}-`);
-        hyphenated.push(true);
+        // A line of its own that no break fits: next to a wide character with no hyphen (the
+        // marks' rule given up), else with one.
+        const wide = breakingAt(rest, width, wideBreak);
+        const count = wide > 0 ? wide : fitting(rest, width - 1);
+        push(`${rest.slice(0, count).join('')}${wide > 0 ? '' : '-'}`, wide === 0);
         rest = rest.slice(count);
       }
     }
   }
-  if (line) {
-    lines.push(line);
-    hyphenated.push(false);
-  }
+  if (line) push(line, false);
   if (lines.length <= maxLines) return { lines, hyphenated, truncated: false };
   const kept = lines.slice(0, maxLines);
-  const last = graphemes(kept[maxLines - 1].replace(/-$/, ''));
+  const last = graphemes(
+    hyphenated[maxLines - 1] ? kept[maxLines - 1].slice(0, -1) : kept[maxLines - 1],
+  );
   kept[maxLines - 1] =
     `${last.slice(0, Math.min(last.length, fitting(last, width - 1))).join('')}…`;
   return {
@@ -146,18 +212,32 @@ export function wrapText(
   };
 }
 
+/** A word's pieces a line never breaks inside: between them a CJK line may break. */
+function unbroken(word: string): string[] {
+  const parts = graphemes(word);
+  const pieces: string[] = [];
+  let piece = '';
+  parts.forEach((part, i) => {
+    if (i > 0 && softBreak(parts[i - 1], part)) {
+      pieces.push(piece);
+      piece = '';
+    }
+    piece += part;
+  });
+  if (piece) pieces.push(piece);
+  return pieces;
+}
+
 /**
  * The fewest monospace cells a line needs for `text` to wrap into `maxLines` lines uncut, never
- * fewer than its longest word (a word is not broken to save width).
+ * fewer than its longest word (a word is not broken to save width; CJK text breaks between its
+ * characters).
  */
 export function charsToWrap(text: string, maxLines = 2): number {
   const length = textUnits(text.trim());
   const longest = Math.max(
     0,
-    ...text
-      .trim()
-      .split(/\s+/)
-      .map((word) => textUnits(word)),
+    ...wordsOf(text).flatMap((word) => unbroken(word).map((piece) => textUnits(piece))),
   );
   for (let chars = Math.max(longest, Math.ceil(length / maxLines)); chars < length; chars += 1) {
     if (!wrapText(text, chars, maxLines).truncated) return chars;

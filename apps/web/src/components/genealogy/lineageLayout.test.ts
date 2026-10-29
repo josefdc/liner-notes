@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BREAK_CLEAR,
   boxesMeet,
@@ -409,6 +409,81 @@ describe('wrapText, character by character (#240)', () => {
     const cut = wrapText('😀'.repeat(40), 9, 2);
     expect(cut.truncated).toBe(true);
     expect(cut.lines[1]).toMatch(/^(😀)+…$/);
+  });
+
+  it('counts a flag and a keycap as two cells', () => {
+    expect(graphemes('🇯🇵')).toHaveLength(1);
+    expect(graphemeUnits('🇯🇵')).toBe(2);
+    expect(graphemeUnits('1️⃣')).toBe(2);
+    expect(graphemeUnits('#️⃣')).toBe(2);
+    expect(textUnits(`${'🇯🇵'.repeat(20)} Tokyo`)).toBe(46);
+    const flags = wrapText(`${'🇯🇵'.repeat(20)} Tokyo`, 20, 4);
+    for (const line of flags.lines) expect(textUnits(line), line).toBeLessThanOrEqual(20);
+  });
+
+  it('breaks CJK text between characters with no hyphen, and keeps closing marks off a line’s start', () => {
+    const title =
+      '夜明けの街角で踊る二人の物語（シティポップ・リミックス・エクステンデッド・バージョン）〜真夜中のサウンドトラック・スペシャル・エディション〜';
+    for (const width of [10, 13, 20, 27, 34]) {
+      const wrapped = wrapText(title, width, 20);
+      // Every character on the card is the record's: no hyphen, nothing added, nothing lost.
+      expect(wrapped.lines.join(''), `${width}`).toBe(title);
+      expect(wrapped.hyphenated.every((h) => !h)).toBe(true);
+      for (const [i, line] of wrapped.lines.entries()) {
+        expect(textUnits(line), line).toBeLessThanOrEqual(width);
+        if (i > 0)
+          expect('、。，．」』）・ー〜！？'.includes(line[0]), `${width}: ${line}`).toBe(false);
+        if (i < wrapped.lines.length - 1) {
+          expect('「『（'.includes(line.at(-1) ?? ''), `${width}: ${line}`).toBe(false);
+        }
+      }
+    }
+    // Latin then CJK: the CJK fills the line it starts on.
+    expect(wrapText('Remix 夜明けの街角で踊る', 14, 3).lines).toEqual([
+      'Remix 夜明けの',
+      '街角で踊る',
+    ]);
+    // Where kinsoku allows no break in a line (closing marks only), the line still breaks
+    // between two characters, with no hyphen.
+    const marks = wrapText('」」」」」」」」」」', 6, 5);
+    expect(marks.lines).toEqual(['」」」', '」」」', '」」」', '」']);
+    expect(marks.hyphenated.every((h) => !h)).toBe(true);
+    // A width CJK text needs is no wider than its widest character.
+    expect(charsToWrap('夜明けの街角で踊る二人の物語', 2)).toBe(14);
+  });
+
+  it('never ends a line on the card’s "·" separator', () => {
+    const meta = '山田花子とミッドナイト・オーケストラ · 2013';
+    for (const width of [10, 20, 30, 37, 38, 40]) {
+      const { lines } = wrapText(meta, width, 6);
+      for (const line of lines) expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
+      expect(lines.join('').replaceAll(' ', ''), `${width}`).toBe(meta.replaceAll(' ', ''));
+    }
+    expect(wrapText('Band · 2016', 20).lines).toEqual(['Band · 2016']);
+    expect(wrapText('A Very Long Band Name · 2016', 22).lines).toEqual([
+      'A Very Long Band Name',
+      '· 2016',
+    ]);
+  });
+
+  it('wraps where the browser has no Intl.Segmenter: never a crash, never a split pair', async () => {
+    const segmenter = Intl.Segmenter;
+    // The browser without it, as Firefox before 125.
+    delete (Intl as { Segmenter?: unknown }).Segmenter;
+    try {
+      vi.resetModules();
+      const fresh = await import('./lineageLayout');
+      const wrapped = fresh.wrapText(`${'a'.repeat(45)}😀${'b'.repeat(30)} 夜明けの街角`, 20, 8);
+      expect(wrapped.lines.length).toBeGreaterThan(1);
+      for (const line of wrapped.lines) {
+        expect(line, line).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/);
+        expect(fresh.textUnits(line)).toBeLessThanOrEqual(20);
+      }
+      expect(fresh.graphemes('😀a')).toEqual(['😀', 'a']);
+    } finally {
+      (Intl as { Segmenter?: unknown }).Segmenter = segmenter;
+      vi.resetModules();
+    }
   });
 });
 

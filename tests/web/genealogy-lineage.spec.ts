@@ -165,14 +165,23 @@ const cardWords = (page: Page) =>
       const right = (card.querySelector("rect.card") as Element).getBoundingClientRect().right;
       const read = (name: string, whole: string | null) => {
         const lines = [...card.querySelectorAll<SVGTSpanElement>(`text.${name} tspan`)];
-        // The lines joined back: a space between two lines, none after a hyphen the wrap put in.
-        const joined = lines
-          .map((line, i) => {
-            const text = line.textContent ?? "";
-            if (line.hasAttribute("data-hyphen")) return text.slice(0, -1);
-            return i < lines.length - 1 ? `${text} ` : text;
-          })
-          .join("");
+        // The lines joined back: a space between two lines where the words had one (none
+        // between two lines of CJK text, broken between its characters), none after a hyphen
+        // the wrap put in.
+        const record = (whole ?? "").trim().replace(/\s+/g, " ");
+        let joined = "";
+        lines.forEach((line, i) => {
+          const text = line.textContent ?? "";
+          const hyphen = line.hasAttribute("data-hyphen");
+          joined += hyphen ? text.slice(0, -1) : text;
+          if (
+            i < lines.length - 1 &&
+            !hyphen &&
+            !record.startsWith(`${joined}${lines[i + 1].textContent?.[0] ?? ""}`)
+          ) {
+            joined += " ";
+          }
+        });
         return {
           lines: lines.length,
           cut: lines.some((line) => line.textContent?.includes("…")),
@@ -706,6 +715,47 @@ for (const [width, height] of [
     });
     const words = (await cardWords(page)).find((each) => each.id === "h4");
     if (!words) throw new Error("no card h4");
+    // Nothing on a card but the record's words: no hyphen inside Japanese (it breaks between
+    // characters), no line ending on the "·" before the year; a cut title ends in "…". Every
+    // card of the map, the marker line ("Title shortened") and the tag aside; a hyphen only
+    // where the card breaks a long word written in Latin letters.
+    const drawn = await graph.locator("g.nodes > g").evaluateAll((cards) =>
+      cards.map((g) => {
+        const lines = (kind: string) =>
+          [...g.querySelectorAll(`text.${kind} tspan`)].map((tspan) => ({
+            text: tspan.textContent ?? "",
+            hyphen: tspan.hasAttribute("data-hyphen"),
+          }));
+        return {
+          id: g.getAttribute("data-node-id") ?? "",
+          record: g.getAttribute("data-title") ?? "",
+          title: lines("card-title"),
+          meta: lines("card-meta"),
+        };
+      }),
+    );
+    const bare = (text: string) => text.replace(/\s+/g, "");
+    for (const { id, record, title, meta } of drawn) {
+      for (const line of title) {
+        if (line.hyphen) {
+          expect(line.text, `${id}: a hyphen only in a word not in CJK`).not.toMatch(
+            /[\u2e80-\u9fff\uac00-\ud7a3\uff00-\uffef]-$/,
+          );
+        }
+      }
+      const joined = bare(
+        title.map((line) => (line.hyphen ? line.text.slice(0, -1) : line.text)).join(""),
+      );
+      if (joined.endsWith("…")) expect(bare(record).startsWith(joined.slice(0, -1)), id).toBe(true);
+      else expect(joined, id).toBe(bare(record));
+      for (const line of meta)
+        expect(line.text.trimEnd().endsWith("·"), `${id}: ${line.text}`).toBe(false);
+    }
+    const h4 = drawn.find((each) => each.id === "h4");
+    expect(h4?.title.some((line) => line.text.includes("-"))).toBe(false);
+    expect(bare((h4?.meta ?? []).map((line) => line.text).join(""))).toMatch(
+      /^山田花子とミッドナイト・オーケストラ·\d{4}$/,
+    );
     // Drawn inside the card, as it is measured: a wide character takes two cells.
     expect(words.title.past, words.title.joined).toBeLessThanOrEqual(0);
     expect(words.meta.past, words.meta.joined).toBeLessThanOrEqual(0);

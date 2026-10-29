@@ -1241,13 +1241,33 @@ describe("configured values in what a client is shown, in a token and in any whi
         "[redacted][provider endpoint]https://u:SECRETTOKEN1234@h.example/x?token=[redacted]",
         "[redacted][provider endpoint]https://[redacted]@h.example/x?token=[redacted]",
       ],
-      [`https://${V}.example.com/p?sig=SECRETTOKEN1234`, "https://[redacted]?sig=[redacted]"],
+      [`https://${V}.example.com/p?sig=SECRETTOKEN1234`, "https://[redacted]/p?sig=[redacted]"],
     ]) {
       expect(scrub(text)).toBe(once);
       expect(scrub(scrub(text))).toBe(twice);
     }
     for (const [surface, out] of Object.entries(surfaces(`xx ${V}Bearer SECRETTOKEN1234 yy`))) {
       expect(out, `${surface}: ${JSON.stringify(out)}`).not.toMatch(/SECRET/);
+    }
+  });
+
+  it("keeps a link's host and the rest of its path around a value in it", () => {
+    const V = "Zq9Wk3Xv7Tn5Rb";
+    configure({ DISCOGS_TOKEN: V });
+    const link = "https://api.discogs.com/database/search";
+    for (const [text, out] of [
+      [`see ${link}/${V}/more?q=1`, `see ${link}/[redacted]/more?q=1`],
+      // A token glued to the value in its part of the path is hidden with it.
+      [`see ${link}/ab${V}cd/more?q=1`, `see ${link}/[redacted]/more?q=1`],
+      [`see ${link}/${V}-x.y/a/b#top next`, `see ${link}/[redacted]/a/b#top next`],
+      [`see https://${V}.example.com/p?q=1 x`, "see https://[redacted]/p?q=1 x"],
+    ]) {
+      for (const [surface, shownText] of Object.entries(surfaces(text))) {
+        if (surface === "plainReason") expect(shownText, text).not.toContain(V.slice(0, 6));
+        else if (surface === "sourceError") expect(shownText).toBe(`discogs: ${out}`);
+        else if (surface === "logLine") expect(shownText).toBe(`source failed: ${out}`);
+        else expect(shownText, `${surface}: ${text}`).toBe(out);
+      }
     }
   });
 

@@ -616,20 +616,26 @@ const isTokenStart = (c: number) => c !== 0x3d && isTokenChar(c);
  * `found` (sorted by start) as spans that each take the token characters (isTokenChar) written
  * right before (up to an "=", and never a link's "//") and after them (up to the start of a rule,
  * beforeRule) as well: a value glued to more of a token (`<key>.<signature>`, a composite token)
- * hides the whole token. Before a span, a character that ends an escape (`\n`, `\u00e9`) is not
- * taken: the escape stays whole. Spans that overlap after that as one. Each character is read at
- * most twice, and the gap after a run of token characters once (closerAfter): linear time.
+ * hides the whole token. In a link (after a "://" with no break since, inLink), a "/" ends the
+ * token too: the host and the rest of the path stay. Before a span, a character that ends an
+ * escape (`\n`, `\u00e9`) is not taken: the escape stays whole. Spans that overlap after that as
+ * one. Each character is read at most twice, and the gap after a run of token characters once
+ * (closerAfter): linear time.
  */
 function withTokens(text: string, found: ReadonlyArray<readonly [number, number]>) {
   const spans: Array<[number, number]> = [];
+  const link = inLink(text);
   const closer = closerAfter(text);
   let scanned = 0;
   for (const [from, to] of found) {
     const last = spans.at(-1);
+    const inUrl = link(from);
+    const takes = (c: number) => isTokenChar(c) && !(inUrl && c === SLASH);
     let start = from;
     while (
       start > (last?.[1] ?? 0) &&
       isTokenStart(text.charCodeAt(start - 1)) &&
+      takes(text.charCodeAt(start - 1)) &&
       !text.startsWith("://", start - 3)
     ) {
       start--;
@@ -638,7 +644,7 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
     // Inside the span before it, whose token characters are read already.
     if (last && to <= last[1]) continue;
     let end = Math.max(to, scanned);
-    while (end < text.length && isTokenChar(text.charCodeAt(end))) end++;
+    while (end < text.length && takes(text.charCodeAt(end))) end++;
     scanned = end;
     end = beforeRule(text, to, end, closer(end));
     if (last && start < last[1]) last[1] = Math.max(last[1], end);
@@ -647,6 +653,28 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
   return spans;
 }
 
+/**
+ * Whether a place in `text` is in a link: after a "://" with no character that ends a link
+ * (whitespace, a quote, "<" or ">") since. Asked for places in order, it reads each character
+ * once.
+ */
+function inLink(text: string): (at: number) => boolean {
+  let read = 0;
+  let scheme = -1;
+  let broken = -1;
+  return (at) => {
+    for (; read < at; read++) {
+      const c = text.charCodeAt(read);
+      if (c <= 0x20 || (c >= 0x7f && c <= 0xa0) || LINK_ENDS.includes(c)) broken = read;
+      else if (c === 0x3a && text.startsWith("//", read + 1)) scheme = read;
+    }
+    return scheme > broken;
+  };
+}
+
+/** The characters that end a link: a quote, a backtick, "<" and ">". */
+const LINK_ENDS = [0x22, 0x27, 0x60, 0x3c, 0x3e];
+const SLASH = 0x2f;
 const EQUALS = 0x3d;
 const COLON = 0x3a;
 

@@ -71,22 +71,29 @@ def limited(monkeypatch):
     return make
 
 
+def slot_guard(client, *, slots, queued, wait_s):
+    """The running application's slot guard, which must carry the configured limits."""
+    guard = client.app.state.analysis_slots
+    assert (guard.limit, guard.max_waiting, guard.wait_s) == (slots, queued, wait_s)
+    return guard
+
+
 def post(client):
     return client.post("/analyze", json={"preview_url": DEEZER_URL})
 
 
-def wait_until(condition, what):
-    deadline = time.monotonic() + PATIENCE_S
+def wait_until(condition, what, within=PATIENCE_S):
+    deadline = time.monotonic() + within
     while not condition():
         if time.monotonic() > deadline:
-            raise AssertionError(f"timed out waiting until {what}")
+            raise AssertionError(f"timed out after {within} s waiting until {what}")
         time.sleep(0.005)
 
 
 def test_requests_beyond_the_slots_wait_instead_of_failing(limited):
     client, held = limited(slots=4, queued=16, wait_s=PATIENCE_S)
     with client, ThreadPoolExecutor(max_workers=5) as pool:
-        slots = client.app.state.analysis_slots
+        slots = slot_guard(client, slots=4, queued=16, wait_s=PATIENCE_S)
         try:
             requests = [pool.submit(post, client) for _ in range(5)]
             wait_until(
@@ -106,7 +113,7 @@ def test_requests_beyond_the_slots_wait_instead_of_failing(limited):
 def test_full_queue_answers_503_with_retry_after(limited, caplog):
     client, held = limited(slots=1, queued=0, wait_s=PATIENCE_S)
     with client, ThreadPoolExecutor(max_workers=2) as pool:
-        slots = client.app.state.analysis_slots
+        slots = slot_guard(client, slots=1, queued=0, wait_s=PATIENCE_S)
         try:
             first = pool.submit(post, client)
             wait_until(lambda: held.running == 1, "the first request holds the slot")
@@ -129,23 +136,35 @@ def test_full_queue_answers_503_with_retry_after(limited, caplog):
 
 def test_wait_beyond_the_limit_answers_503(limited, caplog):
     wait_s = 0.1
+    # Far above the wait plus the trip of a request on a loaded machine, far below 50 waits.
+    ceiling_s = 5.0
     client, held = limited(slots=1, queued=4, wait_s=wait_s)
     with client, ThreadPoolExecutor(max_workers=2) as pool:
+        slots = slot_guard(client, slots=1, queued=4, wait_s=wait_s)
         try:
             first = pool.submit(post, client)
             wait_until(lambda: held.running == 1, "the first request holds the slot")
             asked = time.monotonic()
             # The slot stays held, so only the wait limit can answer the second request.
-            busy = pool.submit(post, client).result(timeout=PATIENCE_S)
+            second = pool.submit(post, client)
+            wait_until(
+                lambda: second.done() or held.running > 1,
+                "the second request is answered or starts",
+                within=ceiling_s,
+            )
             waited = time.monotonic() - asked
+            assert second.done()
             assert not first.done()
         finally:
             held.release.set()
         assert first.result(timeout=PATIENCE_S).status_code == 200
+        assert slots.waiting == 0  # the request that gave up no longer counts as waiting
+        assert post(client).status_code == 200
+    busy = second.result()
     assert busy.status_code == 503
     assert busy.headers["retry-after"] == str(main.RETRY_AFTER_S)
     assert "service busy: no slot within the wait limit" in caplog.text
-    assert waited >= wait_s
+    assert wait_s <= waited < ceiling_s
 
 
 def test_executor_has_one_thread_per_slot():

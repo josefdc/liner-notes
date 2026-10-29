@@ -11,7 +11,8 @@
  *   secret (keys, tokens, passwords, Authorization and other headers, preview links, the
  *   provider endpoint, request and response objects) are replaced; errors are reduced to a few
  *   known properties; and every string (the message, string fields, error messages and stacks)
- *   is scrubbed of configured secret values, Authorization values and Bearer tokens, keys and
+ *   is scrubbed of configured secret values (as they came, escaped as JSON writes them, or with
+ *   their line breaks folded into spaces), Authorization values and Bearer tokens, keys and
  *   signatures in URLs, the provider endpoint and preview links (Spotify p.scdn.co, Deezer
  *   dzcdn.net). The serialized line is then searched once more for the configured secret values
  *   and endpoint hosts only, so a line is always valid JSON.
@@ -94,6 +95,16 @@ export function currentRunTimeLeft(): number | undefined {
 // =============================================================================
 
 const REDACTED = "[redacted]";
+/**
+ * What a configured value is written as while scrub's rules read the text (MASK), as long as
+ * REDACTED, which it becomes once they have. The rules read a token through it, and never through
+ * a REDACTED the text already held: such a text was redacted before (sources/http.ts masks what a
+ * log line of it would not hide, by what these rules hide in it). Its two private-use characters,
+ * where a text holds them, are read and written as U+FFFD (asRead).
+ */
+const HIDDEN_VALUE = "\uE000redacted\uE001";
+/** The characters of HIDDEN_VALUE that a text can hold too. */
+const PRIVATE_MARKS = /[\uE000\uE001]/g;
 const PREVIEW_LINK = "[preview link]";
 const PROVIDER_ENDPOINT = "[provider endpoint]";
 /** What a log call writes when the fields it was given cannot be read. */
@@ -117,9 +128,6 @@ const USERINFO = /^(https?:\/\/)[^/?#@\s]+@/i;
 /** Query parameters that carry a key, a token or a signature (run tokens and Turnstile's too). */
 const SECRET_PARAM =
   /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
-/** Authorization values: a Bearer token, Basic credentials, a Discogs token; quoted or not. */
-const AUTH_SCHEME =
-  /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
 /** Names whose value is secret, in `name: value` and `name=value` pairs (SECRET_PAIR). */
 const PAIR_NAMES =
   "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
@@ -127,8 +135,42 @@ const PAIR_NAMES =
 const SCHEMES = "(?:Bearer|Basic|Discogs)";
 /** A quote that can open a value: util.inspect writes backticks when a string holds both others. */
 const QUOTE = "[`\"']";
-/** A character of a pair's value. */
-const VALUE_CHAR = String.raw`[^\s"'&,;}\]]`;
+/** A character of a pair's value; never the end of a MASK, as never the end of a REDACTED. */
+const VALUE_CHAR = String.raw`[^\s"'&,;}\]\uE001]`;
+/**
+ * A configured value (configuredSpans) as the rules that read keys and schemes see it: replaced
+ * before them, by HIDDEN_VALUE. In a token, it stands for part of the token.
+ */
+const MASK = String.raw`\uE000redacted\uE001`;
+/** A REDACTED the text held already: a value that starts with one is left, as it always was. */
+const MASKED_BEFORE = String.raw`\[redacted\]`;
+/** A character of an Authorization value. */
+const AUTH_CHAR = String.raw`[^\s"',;}\]\uE001]`;
+/**
+ * After a MASK, whether the rest of the word holds an Authorization scheme followed by a space,
+ * which the Authorization rule reads as the start of a value of its own.
+ */
+const SCHEME_IN_REST = String.raw`${AUTH_CHAR}*?\b${SCHEMES}\s`;
+/**
+ * Authorization values: a Bearer token, Basic credentials, a Discogs token; quoted or not. A token
+ * that holds a configured value (a MASK) is taken whole, the part after the MASK too, unless the
+ * rest of the word holds another scheme (SCHEME_IN_REST), whose value this rule then reads; a
+ * value that is a MASK alone is left as it is, and so is a Bearer or Discogs value that starts
+ * with a REDACTED the text held already (MASKED_BEFORE).
+ */
+const AUTH_SCHEME = new RegExp(
+  String.raw`\b(Bearer\s+|Discogs\s+token=)(?!["']?${MASK}(?:(?!${AUTH_CHAR})|${SCHEME_IN_REST})|["']?${MASKED_BEFORE})` +
+    String.raw`["']?(?:${MASK}(?!${SCHEME_IN_REST})|${AUTH_CHAR})+["']?` +
+    String.raw`|\b(Basic\s+)(?!["']?${MASK}(?:(?!${MASK}|[A-Za-z0-9+/=])|${SCHEME_IN_REST}))` +
+    String.raw`["']?(?=[A-Za-z0-9+/=]{8}|[A-Za-z0-9+/=]*${MASK}(?!${SCHEME_IN_REST}))` +
+    String.raw`(?:${MASK}(?!${SCHEME_IN_REST})|[A-Za-z0-9+/=])+["']?`,
+  "gi",
+);
+/**
+ * Whether the word ahead holds the start of a rule that would run on past it: an Authorization
+ * scheme followed by a space, or a pair's name whose value lies beyond the word.
+ */
+const RULE_IN_WORD = String.raw`["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_NAMES})(?:["'\s]\s*[:=]|[:=](?!${VALUE_CHAR})))`;
 /**
  * After a scheme, whether the next word (quoted or not) holds the start of a rule that would run
  * on past it: an Authorization scheme followed by a space, a pair's name whose value lies beyond
@@ -136,7 +178,7 @@ const VALUE_CHAR = String.raw`[^\s"'&,;}\]]`;
  * secret after it would stay. A pair's value stops at `&` and the Authorization rule's does not:
  * taken by the pair, a token that holds one would show what follows it.
  */
-const RULE_IN_NEXT_WORD = String.raw`(?:["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_NAMES})(?:["'\s]\s*[:=]|[:=](?!${VALUE_CHAR})))|["']?${VALUE_CHAR}*&)`;
+const RULE_IN_NEXT_WORD = String.raw`(?:${RULE_IN_WORD}|["']?${VALUE_CHAR}*&)`;
 /**
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
  * whitespace after ":" or "=" is taken whole (a value never starts with a space), so a long run
@@ -153,13 +195,22 @@ const RULE_IN_NEXT_WORD = String.raw`(?:["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?
  * `'Bearer Bearer abc&<token>'`); otherwise the pair takes what it always did, the first scheme
  * word (with its quote) or an unquoted scheme and one word, and the rules after it find the rest:
  * the Authorization rule reads a token past an `&`, where a pair's value stops.
+ *
+ * A value that holds a configured value (a MASK) is taken whole, the part after the MASK too,
+ * unless the rest of the word holds the start of another rule (RULE_IN_WORD), which then finds
+ * the rest; a value that is a MASK alone is left as it is. After a scheme, a MASK that starts the
+ * value is also left when an `&` follows it in the word (RULE_IN_NEXT_WORD): the Authorization
+ * rule reads that token past the `&`. A value that starts with a REDACTED the text held already
+ * (MASKED_BEFORE), after a scheme or not, is left as it always was.
  */
 export const SECRET_PAIR = new RegExp(
   String.raw`\b(${PAIR_NAMES})(["']?\s*[:=]\s*(?!\s))` +
-    String.raw`(?!\s*(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)?["']?\[redacted\])` +
+    String.raw`(?!\s*(?:(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)["']?${MASK}(?:(?!${VALUE_CHAR})|${RULE_IN_NEXT_WORD})` +
+    String.raw`|["']?${MASK}(?:(?!${VALUE_CHAR})|${RULE_IN_WORD})` +
+    String.raw`|(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)?["']?${MASKED_BEFORE}))` +
     String.raw`((?:${QUOTE}${SCHEMES}[ \t]+(?:${SCHEMES}[ \t]+)*(?!${RULE_IN_NEXT_WORD})` +
     String.raw`|${SCHEMES}\s+(?:(?:${SCHEMES}\s+)+(?!${RULE_IN_NEXT_WORD}))?))?` +
-    `["']?${VALUE_CHAR}+["']?`,
+    String.raw`["']?(?:${MASK}(?!${RULE_IN_WORD})|${VALUE_CHAR})+["']?`,
   "gi",
 );
 
@@ -169,9 +220,23 @@ const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;
 const MIN_SECRET_LENGTH = 8;
 const NUMERIC = /^[\d.]+$/;
 
-let secretValues: string[] = [];
-/** The same values as they appear inside a JSON string, where they differ. */
-let escapedSecretValues: string[] = [];
+/** A configured value as configuredSpans matches it: its folded units (fold), and their KMP table. */
+interface ValuePattern {
+  units: Uint16Array;
+  /** For each prefix of `units`, the length of its longest proper prefix that is also a suffix. */
+  next: Int32Array;
+}
+
+/** The configured values, longest first: as they were replaced before (cappedValues). */
+let secretStrings: string[] = [];
+let secretValues: ValuePattern[] = [];
+/** The longest run of folded characters (isFolded) in a configured value, at least 1. */
+let foldedRun = 1;
+/**
+ * How long a configured value can be in a text, written escaped ESCAPE_DEPTH times with each of
+ * its folded runs as long as foldedRun: logCut looks that far past a cut for one that crosses it.
+ */
+let valueReach = 0;
 let secretHosts: string[] = [];
 
 /** Reads the values to scrub from the environment: secrets, and the hosts of endpoint URLs. */
@@ -196,12 +261,306 @@ function collectSecrets(env: NodeJS.ProcessEnv): void {
       }
     }
   }
-  // Longest first, so a value that contains another is replaced whole.
-  secretValues = [...values].sort((a, b) => b.length - a.length);
-  escapedSecretValues = secretValues
-    .map((value) => JSON.stringify(value).slice(1, -1))
-    .filter((escaped, i) => escaped !== secretValues[i]);
+  foldedRun = 1;
+  let longest = 0;
+  for (const value of values) {
+    longest = Math.max(longest, value.length);
+    for (let i = 0, run = 0; i < value.length; i++) {
+      run = isFolded(value.charCodeAt(i)) ? run + 1 : 0;
+      foldedRun = Math.max(foldedRun, run);
+    }
+  }
+  secretStrings = [...values].sort((a, b) => b.length - a.length);
+  secretValues = secretStrings.map(valuePattern);
+  valueReach = ESCAPED_CHAR * foldedRun * longest;
   secretHosts = [...hosts].sort((a, b) => b.length - a.length);
+}
+
+// =============================================================================
+// Configured values in a text
+// =============================================================================
+
+/**
+ * A text as configuredSpans reads it: UTF-16 units, each standing for [from[i], to[i]) of the text
+ * as it came (for unit i itself when there is no `from`, `to`).
+ */
+interface Units {
+  units: Uint16Array;
+  length: number;
+  from?: Int32Array;
+  to?: Int32Array;
+}
+
+/** How many times a configured value is looked for unescaped: twice, JSON in a JSON string. */
+const ESCAPE_DEPTH = 2;
+/** The most characters one character takes escaped ESCAPE_DEPTH times (`\u` escapes of one). */
+const ESCAPED_CHAR = 6 ** ESCAPE_DEPTH;
+/** A run of folded characters in a folded text: up to foldedRun of them, or more. */
+const SHORT_RUN = 0;
+const LONG_RUN = 1;
+const BACKSLASH = 0x5c;
+/** The one-character escapes of JSON and JavaScript (util.inspect writes `\'` and `\v` too). */
+const SIMPLE_ESCAPES: ReadonlyMap<number, number> = new Map(
+  [
+    ['"', '"'],
+    ["\\", "\\"],
+    ["/", "/"],
+    ["'", "'"],
+    ["b", "\b"],
+    ["f", "\f"],
+    ["n", "\n"],
+    ["r", "\r"],
+    ["t", "\t"],
+    ["v", "\v"],
+  ].map(([written, char]) => [(written as string).charCodeAt(0), (char as string).charCodeAt(0)]),
+);
+
+/**
+ * Whether a character is one that logText or plainReason (sources/http.ts) folds into a space:
+ * whitespace (`\s`) or a control character (`\p{Cc}`).
+ */
+function isFolded(c: number): boolean {
+  return (
+    c <= 0x20 ||
+    (c >= 0x7f && c <= 0xa0) ||
+    c === 0x1680 ||
+    (c >= 0x2000 && c <= 0x200a) ||
+    c === 0x2028 ||
+    c === 0x2029 ||
+    c === 0x202f ||
+    c === 0x205f ||
+    c === 0x3000 ||
+    c === 0xfeff
+  );
+}
+
+/** `text` as units of a folded text (fold), with the KMP table configuredSpans matches it by. */
+function valuePattern(text: string): ValuePattern {
+  const { units, length } = fold(unitsOf(text));
+  const pattern = units.slice(0, length);
+  const next = new Int32Array(length);
+  for (let i = 1, k = 0; i < length; i++) {
+    while (k > 0 && pattern[i] !== pattern[k]) k = next[k - 1] as number;
+    if (pattern[i] === pattern[k]) k++;
+    next[i] = k;
+  }
+  return { units: pattern, next };
+}
+
+function unitsOf(text: string): Units {
+  const units = new Uint16Array(text.length);
+  for (let i = 0; i < text.length; i++) units[i] = text.charCodeAt(i);
+  return { units, length: text.length };
+}
+
+/**
+ * `text` with each run of folded characters (isFolded) as one unit: SHORT_RUN for a run of up to
+ * foldedRun of them, LONG_RUN for a longer one. A configured value's run matches a short run of
+ * any folded characters: logText writes a space for each, plainReason one space for a run.
+ */
+function fold(text: Units): Units {
+  const { units, length } = text;
+  const out = new Uint16Array(length);
+  const from = new Int32Array(length);
+  const to = new Int32Array(length);
+  let n = 0;
+  for (let i = 0; i < length; n++) {
+    const c = units[i] as number;
+    let end = i + 1;
+    if (isFolded(c)) {
+      while (end < length && isFolded(units[end] as number)) end++;
+      out[n] = end - i <= foldedRun ? SHORT_RUN : LONG_RUN;
+    } else out[n] = c;
+    from[n] = text.from ? (text.from[i] as number) : i;
+    to[n] = text.to ? (text.to[end - 1] as number) : end;
+    i = end;
+  }
+  return { units: out, length: n, from, to };
+}
+
+/** The value of `count` hex digits at `at` of `text`, or -1. */
+function hexAt(text: Units, at: number, count: number): number {
+  if (at + count > text.length) return -1;
+  let value = 0;
+  for (let i = at; i < at + count; i++) {
+    const c = text.units[i] as number;
+    const letter = c | 0x20;
+    const digit =
+      c >= 0x30 && c <= 0x39 ? c - 0x30 : letter >= 0x61 && letter <= 0x66 ? letter - 0x57 : -1;
+    if (digit < 0) return -1;
+    value = value * 16 + digit;
+  }
+  return value;
+}
+
+/**
+ * `text` with its escapes read, left to right, as a JSON or JavaScript string's are: `\"`, `\\`,
+ * `\n` and the other one-character escapes, `\uXXXX` and `\xXX`. A backslash that starts none is
+ * kept. Undefined when the text holds no escape.
+ */
+function unescaped(text: Units): Units | undefined {
+  const { units, length } = text;
+  const out = new Uint16Array(length);
+  const from = new Int32Array(length);
+  const to = new Int32Array(length);
+  let any = false;
+  let n = 0;
+  for (let i = 0; i < length; n++) {
+    let c = units[i] as number;
+    let width = 1;
+    if (c === BACKSLASH && i + 1 < length) {
+      const kind = units[i + 1] as number;
+      const simple = SIMPLE_ESCAPES.get(kind);
+      const code =
+        kind === 0x75 ? hexAt(text, i + 2, 4) : kind === 0x78 ? hexAt(text, i + 2, 2) : -1;
+      if (simple !== undefined) [c, width] = [simple, 2];
+      else if (code >= 0) [c, width] = [code, kind === 0x75 ? 6 : 4];
+    }
+    any ||= width > 1;
+    out[n] = c;
+    from[n] = text.from ? (text.from[i] as number) : i;
+    to[n] = text.to ? (text.to[i + width - 1] as number) : i + width;
+    i += width;
+  }
+  return any ? { units: out, length: n, from, to } : undefined;
+}
+
+/**
+ * Where the configured values lie in `text`, as [start, end) spans sorted by start; spans that
+ * overlap (values that overlap, or one value twice) as one. A value is found as it came, with its
+ * runs of whitespace and control characters folded (logText, plainReason), and with its characters
+ * escaped once or twice as JSON writes a string (a PEM key in a JSON error body), `\u` and `\x`
+ * escapes included. Each reading of the text is matched once per value (KMP): linear time. The
+ * redaction of source errors (sources/http.ts) reads them too: a value a log line hides in a form
+ * its own rules do not know is still masked in the text it shows.
+ */
+export function configuredSpans(text: string): Array<[number, number]> {
+  if (secretValues.length === 0 || text.length === 0) return [];
+  const found: Array<[number, number]> = [];
+  let reading: Units | undefined = unitsOf(text);
+  for (let depth = 0; reading && depth <= ESCAPE_DEPTH; depth++) {
+    const folded = fold(reading);
+    for (const value of secretValues) occurrencesIn(folded, value, found);
+    reading = depth < ESCAPE_DEPTH ? unescaped(reading) : undefined;
+  }
+  found.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const spans: Array<[number, number]> = [];
+  for (const [start, end] of found) {
+    const last = spans.at(-1);
+    if (last && start < last[1]) last[1] = Math.max(last[1], end);
+    else spans.push([start, end]);
+  }
+  return spans;
+}
+
+/** Adds each place `value` matches in `text` (a folded text), overlapping ones too, to `found`. */
+function occurrencesIn(text: Units, value: ValuePattern, found: Array<[number, number]>): void {
+  const { units, next } = value;
+  const m = units.length;
+  const from = text.from as Int32Array;
+  const to = text.to as Int32Array;
+  for (let i = 0, k = 0; i < text.length; i++) {
+    const c = text.units[i];
+    while (k > 0 && units[k] !== c) k = next[k - 1] as number;
+    if (units[k] === c) k++;
+    if (k === m) {
+      found.push([from[i - m + 1] as number, to[i] as number]);
+      k = next[k - 1] as number;
+    }
+  }
+}
+
+/** `text` up to `end` with each of `spans` (sorted, not overlapping) before it replaced by `mask`. */
+function hideSpans(
+  text: string,
+  spans: ReadonlyArray<readonly [number, number]>,
+  end = text.length,
+  mask = REDACTED,
+): string {
+  const parts: string[] = [];
+  let at = 0;
+  for (const [start, stop] of spans) {
+    if (stop > end) break;
+    parts.push(text.slice(at, start), mask);
+    at = stop;
+  }
+  parts.push(text.slice(at, end));
+  return parts.join("");
+}
+
+/** `text` with each configured value in it (configuredSpans) replaced by REDACTED. */
+const hideValues = (text: string) => hideSpans(text, configuredSpans(text));
+
+/** A text as scrub's rules read it: HIDDEN_VALUE's characters in it as U+FFFD (as long). */
+const asRead = (text: string) => text.replace(PRIVATE_MARKS, "\uFFFD");
+
+/**
+ * `text` (asRead) with what scrub replaces first replaced by HIDDEN_VALUE (valueSpans), cut off
+ * past MAX_LOGGED_TEXT.
+ * The cut is placed as logCut places it on this text, and as it was placed before configured
+ * values were found escaped, folded or overlapping, on the text with only each value as it came
+ * replaced, longest first: the earlier of the two, moved by logCut in each until neither moves
+ * it. A value found here and not before can make the text shorter, and its cut fall later; text
+ * cut off before is never let in.
+ */
+function cappedValues(text: string): string {
+  const spans = valueSpans(text);
+  const read = asRead(text);
+  const length = spans.reduce((sum, [start, end]) => sum + REDACTED.length - (end - start), 0);
+  // Each value before took at least MIN_SECRET_LENGTH characters, and REDACTED's in their place.
+  const before =
+    text.length * REDACTED.length > MAX_LOGGED_TEXT * MIN_SECRET_LENGTH
+      ? replaceAll(text, secretStrings, REDACTED).length
+      : 0;
+  if (text.length + length <= MAX_LOGGED_TEXT && before <= MAX_LOGGED_TEXT) {
+    return spans.length > 0 ? hideSpans(read, spans, read.length, HIDDEN_VALUE) : read;
+  }
+  const hidden: Array<[number, number]> = [];
+  const readings = [
+    rewrite({ text: read }, asRewrites(spans), []),
+    secretStrings.reduce(
+      (current, value) => rewrite(current, occurrences(current.text, value, REDACTED), hidden),
+      { text } as Rewritten,
+    ),
+  ];
+  const sourceAt = (reading: Rewritten, at: number) =>
+    at >= reading.text.length ? text.length : reading.from ? (reading.from[at] as number) : at;
+  let at = text.length;
+  for (const reading of readings) {
+    if (reading.text.length > MAX_LOGGED_TEXT) {
+      const cut = logCut(reading.text, MAX_LOGGED_TEXT, [], { pairs: false });
+      at = Math.min(at, sourceAt(reading, cut));
+    }
+  }
+  for (let moved = true; moved; ) {
+    moved = false;
+    at = settle([...spans, ...hidden], at);
+    for (const reading of readings) {
+      const there = renderedAt(reading, at);
+      const cut = logCut(reading.text, there, [], { pairs: false });
+      if (cut < there) {
+        at = sourceAt(reading, cut);
+        moved = true;
+      }
+    }
+  }
+  return at < text.length
+    ? `${hideSpans(read, spans, at, HIDDEN_VALUE)}${TRUNCATED}`
+    : hideSpans(read, spans, read.length, HIDDEN_VALUE);
+}
+
+/** Where `at`, a place in the text `reading` rewrote, falls in it: before what starts there. */
+function renderedAt(reading: Rewritten, at: number): number {
+  const from = reading.from;
+  if (!from) return at;
+  let low = 0;
+  let high = reading.text.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((from[middle] as number) < at) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 function hostOf(url: string): string | null {
@@ -237,14 +596,11 @@ function asText(value: unknown): string {
  */
 export function scrub(input: unknown): string {
   try {
-    let out = replaceAll(asText(input), secretValues, REDACTED);
     // The cap falls on the text as it came, never inside a link or a host (logCut), whose part
     // the rules below would no longer know, nor inside an Authorization credential, whose part
     // can be too short for its rule (a Basic one needs 8 characters). Replaced first, they would
     // shorten the text and let in more of it.
-    if (out.length > MAX_LOGGED_TEXT) {
-      out = `${out.slice(0, logCut(out, MAX_LOGGED_TEXT, [], { pairs: false }))}${TRUNCATED}`;
-    }
+    let out = cappedValues(asText(input));
     out = out.replace(URL_IN_TEXT, (url) => {
       const host = hostOf(url);
       if (host && PREVIEW_HOST.test(host)) return PREVIEW_LINK;
@@ -259,7 +615,8 @@ export function scrub(input: unknown): string {
       .replace(
         AUTH_SCHEME,
         (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
-      );
+      )
+      .replaceAll(HIDDEN_VALUE, REDACTED);
   } catch {
     return "[unreadable]";
   }
@@ -366,11 +723,9 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * (`'` and `"`) around a value and the scheme words before one, which scrub replaces with it, are
  * not in them: they hold no secret, and the redaction that reads these spans keeps them. Two
  * exceptions only hide more: a backtick around a value stays in its span, and so does the word
- * Basic before a credential that scrub's Authorization rule replaces (see readPairs). The configured
- * values as JSON writes them (with `"`, `\` or a control character escaped) are in them too,
- * although scrub does not replace them in a text: the last pass over a line replaces only what
- * it writes itself from a value, and one written already escaped in a text is escaped again
- * there. The cap is not applied: past it, a span holds text scrub cuts off. The redaction
+ * Basic before a credential that scrub's Authorization rule replaces (see readPairs). The
+ * configured values are found as scrub finds them (valueSpans): escaped, folded, overlapping ones
+ * as one span. The cap is not applied: past it, a span holds text scrub cuts off. The redaction
  * of source errors (sources/http.ts) reads them, so that the log line of a text it redacts
  * further never shows what the log line of the text it redacted before hid. Reads the text once
  * per rule. With `pairs` or `auth` false, secret pairs or Authorization values are left out:
@@ -378,18 +733,94 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * values, links, hosts). With `cut`, the span of a link's user info takes its "@" too, without
  * which the rest is no longer read as user info.
  */
-export function scrubbedSpans(
-  text: string,
-  { pairs = true, auth = true, cut = false }: SpanRules = {},
-): Array<[number, number]> {
+export function scrubbedSpans(text: string, rules: SpanRules = {}): Array<[number, number]> {
   const hidden: Array<[number, number]> = [];
-  for (const value of escapedSecretValues) {
-    for (const [start, end] of occurrences(text, value, REDACTED)) hidden.push([start, end]);
+  const read = { text: asRead(text) };
+  return spansAfterValues(rewrite(read, asRewrites(valueSpans(text)), hidden), hidden, rules);
+}
+
+/** Configured values' spans as Rewrites, each by HIDDEN_VALUE as scrub writes it for its rules. */
+const asRewrites = (spans: ReadonlyArray<readonly [number, number]>) =>
+  spans.map(([start, end]): Rewrite => [start, end, HIDDEN_VALUE, start, end]);
+
+/**
+ * What scrub replaces first in `text`, as [start, end) spans sorted by start, none overlapping
+ * another: its configured values (configuredSpans) and, where those differ from the values as
+ * they came (one is found escaped, folded or overlapping), whatever the other rules hide in the
+ * text with only the values as they came replaced, longest first, as they were before, and would
+ * not hide in the text with these replaced. A value replaced where it was not before can end a
+ * word or take a quote: in `R6x\"password: password: <secret>`, with the value before the first
+ * `password` found escaped, that `password` starts a pair, which takes the second's name as its
+ * value and leaves the secret. What the rules hid before is replaced too, and the text read
+ * again; if anything is still lost, all they hid before is replaced.
+ */
+function valueSpans(text: string): Array<[number, number]> {
+  let spans = configuredSpans(text);
+  const hidden: Array<[number, number]> = [];
+  const before = secretStrings.reduce(
+    (current, value) => rewrite(current, occurrences(current.text, value, REDACTED), hidden),
+    { text } as Rewritten,
+  );
+  hidden.sort((a, b) => a[0] - b[0]);
+  if (
+    hidden.length === spans.length &&
+    hidden.every(([start, end], i) => spans[i]?.[0] === start && spans[i]?.[1] === end)
+  ) {
+    return spans;
   }
-  let current: Rewritten = { text };
-  for (const value of secretValues) {
-    current = rewrite(current, occurrences(current.text, value, REDACTED), hidden);
+  const old = spansAfterValues(before, hidden, {});
+  const read = { text: asRead(text) };
+  for (let round = 0; round < 2; round++) {
+    const now: Array<[number, number]> = [];
+    const lost = lostSpans(old, spansAfterValues(rewrite(read, asRewrites(spans), now), now, {}));
+    if (lost.length === 0) return spans;
+    spans = unionSpans(spans, round === 0 ? lost : old);
   }
+  return spans;
+}
+
+/** The parts of `old` (sorted, not overlapping) that none of `now` (the same) covers. */
+function lostSpans(
+  old: ReadonlyArray<readonly [number, number]>,
+  now: ReadonlyArray<readonly [number, number]>,
+): Array<[number, number]> {
+  const lost: Array<[number, number]> = [];
+  let j = 0;
+  for (const [start, end] of old) {
+    let at = start;
+    while (j < now.length && (now[j] as [number, number])[1] <= at) j++;
+    for (let k = j; k < now.length && at < end; k++) {
+      const [from, to] = now[k] as [number, number];
+      if (from >= end) break;
+      if (from > at) lost.push([at, from]);
+      at = Math.max(at, to);
+    }
+    if (at < end) lost.push([at, end]);
+  }
+  return lost;
+}
+
+/** Two lists of spans as one, sorted by start, spans that overlap as one. */
+function unionSpans(
+  a: ReadonlyArray<readonly [number, number]>,
+  b: ReadonlyArray<readonly [number, number]>,
+): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const [start, end] of [...a, ...b].sort((x, y) => x[0] - y[0])) {
+    const last = out.at(-1);
+    if (last && start < last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+
+/** scrubbedSpans' rules after the configured values, on `current`; `hidden` holds the values'. */
+function spansAfterValues(
+  before: Rewritten,
+  hidden: Array<[number, number]>,
+  { pairs = true, auth = true, cut = false }: SpanRules,
+): Array<[number, number]> {
+  let current = before;
   const links: Rewrite[] = [];
   for (const link of current.text.matchAll(URL_IN_TEXT)) {
     const url = link[0];
@@ -521,24 +952,23 @@ export function logCut(
   if (at <= 0 || at >= text.length) return at;
   const window = text.slice(0, at + LOG_CUT_WINDOW);
   const spans = [...scrubbedSpans(window, { ...rules, cut: true }), ...extra];
-  const end = settle(text, spans, at);
+  // A configured value longer than the window, escaped or folded, is read up to its own reach.
+  if (valueReach > LOG_CUT_WINDOW) spans.push(...configuredSpans(text.slice(0, at + valueReach)));
+  const end = settle(spans, at);
   if (end === at) return at;
   const credentials: Array<[number, number]> = [];
   for (const auth of window.matchAll(AUTH_SCHEME)) {
     credentials.push([auth.index + (auth[1] ?? auth[2] ?? "").length, auth.index + auth[0].length]);
   }
-  return settle(text, [...spans, ...credentials], end);
+  return settle([...spans, ...credentials], end);
 }
 
-/**
- * `at`, moved to the start of each of `spans`, or of a configured value of `text`, that it falls
- * inside, until it falls inside none.
- */
-function settle(text: string, spans: ReadonlyArray<readonly [number, number]>, at: number): number {
+/** `at`, moved to the start of each of `spans` that it falls inside, until it falls inside none. */
+function settle(spans: ReadonlyArray<readonly [number, number]>, at: number): number {
   let end = at;
   for (let moved = true; moved; ) {
     moved = false;
-    for (const [start, stop] of [...spans, ...valuesAcross(text, end)]) {
+    for (const [start, stop] of spans) {
       if (start < end && end < stop) {
         end = start;
         moved = true;
@@ -548,30 +978,14 @@ function settle(text: string, spans: ReadonlyArray<readonly [number, number]>, a
   return end;
 }
 
-/** Where a configured value (or its escaped form) of `text` crosses `at`: read around it only. */
-function valuesAcross(text: string, at: number): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  for (const value of [...secretValues, ...escapedSecretValues]) {
-    if (value.length < 2) continue;
-    const from = Math.max(0, at - value.length + 1);
-    const around = text.slice(from, at + value.length - 1);
-    for (let i = around.indexOf(value); i !== -1; i = around.indexOf(value, i + 1)) {
-      out.push([from + i, from + i + value.length]);
-    }
-  }
-  return out;
-}
-
 /**
- * The last pass, over the serialized line: only the configured secret values (as JSON writes
- * them) and endpoint hosts, which no JSON syntax is part of. A line this pass would make
- * unreadable is written as it was (its strings were scrubbed already).
+ * The last pass, over the serialized line: only the configured secret values (configuredSpans,
+ * which reads the line's escapes as JSON writes them) and endpoint hosts, which no JSON syntax is
+ * part of. A line this pass would leave invalid JSON is withheld (withheldLine).
  */
 function scrubLine(line: string): string {
   try {
-    let out = replaceAll(line, secretValues, REDACTED);
-    out = replaceAll(out, escapedSecretValues, REDACTED);
-    out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT);
+    const out = replaceAll(hideValues(line), secretHosts, PROVIDER_ENDPOINT);
     if (out === line) return line;
     JSON.parse(out);
     return out;

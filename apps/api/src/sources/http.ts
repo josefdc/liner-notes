@@ -24,7 +24,7 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
+import { configuredSpans, logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -1585,14 +1585,29 @@ const MAX_LOG_ROUNDS = 4;
 const loggedSpans = (text: string, pieces: readonly Piece[]) =>
   sourceSpans(pieces, scrubbedSpans(render(text, pieces)));
 
+/** loggedSpans, but those that hold a configured value (configuredSpans) in the rendered text. */
+function loggedWithoutValues(text: string, pieces: readonly Piece[]): Span[] {
+  const rendered = render(text, pieces);
+  const values = configuredSpans(rendered);
+  let j = 0;
+  const spans = scrubbedSpans(rendered).filter(([start, end]) => {
+    while (j < values.length && (values[j] as [number, number])[1] <= start) j++;
+    return !(j < values.length && (values[j] as [number, number])[0] < end);
+  });
+  return sourceSpans(pieces, spans);
+}
+
 /**
  * The parts of `logged` (spans of `text`) that a log line of the text `pieces` cover would show:
- * neither masked there nor hidden by the logger's rules in it.
+ * neither masked there nor hidden by the logger's rules in it. What those rules hide with a
+ * configured value in it counts as shown: the logger finds a value written escaped, folded or in
+ * part (configuredSpans) where these rules do not, and the text these pieces render is not only
+ * logged; it can be a reason shown to a client (plainReason).
  */
 function lostToLog(text: string, pieces: readonly Piece[], logged: readonly Span[]): Span[] {
   const hidden = new Uint8Array(text.length + 1);
   for (const piece of pieces) if (piece.mask !== undefined) hidden.fill(1, piece.from, piece.to);
-  for (const [start, end] of loggedSpans(text, pieces)) hidden.fill(1, start, end);
+  for (const [start, end] of loggedWithoutValues(text, pieces)) hidden.fill(1, start, end);
   const lost: Span[] = [];
   for (const [start, end] of logged) {
     for (let i = start; i < end; i++) {

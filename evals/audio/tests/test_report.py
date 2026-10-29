@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from evals_audio import calibration, golden, service
+from evals_audio import calibration, calibration_report, golden, service
 from evals_audio.controls import GROUPS, added_families, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
@@ -373,6 +373,52 @@ def test_the_guide_explains_only_the_tables_a_report_holds():
     assert {"MIREX", "Paired MIREX difference"} <= terms(key)
     assert not terms(key) & {"Acc1", "Lifted rules"}
     assert "Acc1" not in " ".join(intro(key)) and "a MIREX score of 1" in " ".join(intro(key))
+
+
+# Words of the calibration section that are only true of a calibration of the key rules.
+KEY_RULE_WORDS = (
+    "exact for key",
+    "MIREX 0",
+    "key strength minimum",
+    "key evidence rule",
+    "key: unrelated",
+    "39 of 50 GiantSteps+ keys",
+    "gave keys to material with no key",
+    "pitch-class level of 0.1",
+    "key exact",
+)
+
+
+def test_the_calibration_section_says_only_what_its_runs_calibrate():
+    """
+    Without a calibration run of the key rules, the section says nothing about them: no key
+    scores, minimums or history; with one (the 2026-10-25 report holds both kinds) it does.
+    """
+    full = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-25.json").read_text())
+    tempo_only = dict(
+        full,
+        runs=[
+            r
+            for r in full["runs"]
+            if r["suite"] == "controls" or (r["suite"] == "calibration" and r["kind"] == "tempo")
+        ],
+    )
+    both = "\n".join(calibration_report.section(full))
+    tempo = "\n".join(calibration_report.section(tempo_only))
+    for words in KEY_RULE_WORDS:
+        assert words in both, words
+        assert words not in tempo, words
+    assert "(Acc1 for tempo)" in tempo and "The service withholds a tempo when" in tempo
+    assert "choosing the tightening that fixes most controls and requiring" in tempo
+    assert "a tolerance of 0.04 that librosa's clips reject" in tempo
+    # The controls run itself is still shown: its key column is a measurement, not a rule.
+    assert "`librosa` key" in tempo
+    newest = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json").read_text())
+    if not any(r["suite"] == "calibration" and r["kind"] == "key" for r in newest["runs"]):
+        text = "\n".join(calibration_report.section(newest))
+        assert not [words for words in KEY_RULE_WORDS if words in text]
+        # Its runs were made with the single-source rule, a key rule: not described either.
+        assert "single-source rule" not in text and "Added to the controls" not in text
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

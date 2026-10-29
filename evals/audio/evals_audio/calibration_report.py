@@ -58,35 +58,99 @@ def value_label(family: str, value) -> str:
 
 
 # How this calibration's values came about, beyond the procedure (the plan the procedure was
-# written in is not part of the repository).
-PROTOCOL_NOTES = (
-    "The procedure is applied as written before the calibration runs. After a first sweep of "
-    "the calibration clips, revisions were proposed and used in a first version of this "
-    "calibration: judging the key strength before the key evidence rules, a family that drops "
-    "the spectral-line rules over a beat for Essentia, choosing the tightening that fixes most "
-    "controls, and requiring a tightening to break no control. They were made after "
-    "calibration results had been seen; the line-rule family decided that version's main "
-    "result and let Essentia key a pitchless drum track (the service's own drum kit at 128 "
-    "BPM, kit seed 3). None of them is used here.",
-    'A second version read the plan\'s "librosa checked" as librosa shown only, where the '
-    "first had read it as a veto; the change was made after the numbers had been seen. It let "
-    "through a pitch-class level of 0.1, which gave keys to one pitched source (a one-note "
-    "bass over drums, a church bell, a tabla), and a tolerance of 0.04 that librosa's clips "
-    "reject. The veto is restored here, and no loosening is shipped.",
-    "The evaluation clips were scored in each version: the first time from measurements "
-    "rounded to six decimals, which made a 0.04 tolerance look as if it fixed a librosa control "
-    "(one third was 0.96 of the tempo to the last bit). The values here follow from the "
-    "written procedure on the full-precision recording, applying only changes that withhold "
-    "more; none was chosen or changed in response to an evaluation score.",
-    "Before the plan was written, earlier reports had shown why 39 of 50 GiantSteps+ keys were "
-    "withheld, some of them on clips that are now evaluation clips; that is what drew "
-    "attention to the key evidence rules.",
-    "The pitchless controls drawn at 30 seeds each (two drum kits, noise with a beat, a siren "
-    "over drums, clicks) were added after the drum track above was found, and the "
-    "one-pitch-class ones (a one-note bass, octave riffs, bells alone and over drums, tabla, "
-    "toms, a cowbell, a held synth note) after the level of 0.1 was. No value had been set on "
-    "them; the choice sees them like the other controls.",
-)
+# written in is not part of the repository). The parts about the key rules are shown only in a
+# report that calibrates them, the parts about the tempo rules only in one that calibrates those.
+def protocol_notes(kinds: set) -> list[str]:
+    key, tempo = "key" in kinds, "tempo" in kinds
+    revisions = [
+        *(
+            [
+                "judging the key strength before the key evidence rules",
+                "a family that drops the spectral-line rules over a beat for Essentia",
+            ]
+            if key
+            else []
+        ),
+        "choosing the tightening that fixes most controls",
+        "requiring a tightening to break no control",
+    ]
+    let_through = [
+        *(
+            [
+                "a pitch-class level of 0.1, which gave keys to one pitched source (a one-note "
+                "bass over drums, a church bell, a tabla)"
+            ]
+            if key
+            else []
+        ),
+        *(["a tolerance of 0.04 that librosa's clips reject"] if tempo else []),
+    ]
+    notes = [
+        "The procedure is applied as written before the calibration runs. After a first sweep of "
+        "the calibration clips, revisions were proposed and used in a first version of this "
+        f"calibration: {_series(revisions)}. They were made after calibration results had been "
+        "seen"
+        + (
+            "; the line-rule family decided that version's main result and let Essentia key a "
+            "pitchless drum track (the service's own drum kit at 128 BPM, kit seed 3)"
+            if key
+            else ""
+        )
+        + ". None of them is used here.",
+        'A second version read the plan\'s "librosa checked" as librosa shown only, where the '
+        "first had read it as a veto; the change was made after the numbers had been seen."
+        + (f" It let through {', and '.join(let_through)}." if let_through else "")
+        + " The veto is restored here, and no loosening is shipped.",
+        "The evaluation clips were scored in each version"
+        + (
+            ": the first time from measurements rounded to six decimals, which made a 0.04 "
+            "tolerance look as if it fixed a librosa control (one third was 0.96 of the tempo to "
+            "the last bit)"
+            if tempo
+            else ""
+        )
+        + ". The values here follow from the written procedure on the full-precision recording, "
+        "applying only changes that withhold more; none was chosen or changed in response to an "
+        "evaluation score.",
+    ]
+    if key:
+        notes += [
+            "Before the plan was written, earlier reports had shown why 39 of 50 GiantSteps+ keys "
+            "were withheld, some of them on clips that are now evaluation clips; that is what drew "
+            "attention to the key evidence rules.",
+            "The pitchless controls drawn at 30 seeds each (two drum kits, noise with a beat, a "
+            "siren over drums, clicks) were added after the drum track above was found, and the "
+            "one-pitch-class ones (a one-note bass, octave riffs, bells alone and over drums, "
+            "tabla, toms, a cowbell, a held synth note) after the level of 0.1 was. No value had "
+            "been set on them; the choice sees them like the other controls.",
+        ]
+    else:
+        notes += [
+            "The pitchless controls drawn at 30 seeds each (two drum kits, noise with a beat, a "
+            "siren over drums, clicks) were added after the first version of this calibration, "
+            "and the one-pitch-class ones (a one-note bass, octave riffs, bells alone and over "
+            "drums, tabla, toms, a cowbell, a held synth note) after the second. No value had "
+            "been set on them; the choice sees them like the other controls.",
+        ]
+    return notes
+
+
+def _series(items: list[str]) -> str:
+    """'a and b', or 'a, b, and c'."""
+    if len(items) < 3:
+        return " and ".join(items)
+    return ", ".join(items[:-1]) + ", and " + items[-1]
+
+
+def _and(items: list[str]) -> str:
+    """'a and b', or 'a, b and c'."""
+    return ", ".join(items[:-1]) + (" and " if len(items) > 1 else "") + items[-1]
+
+
+def right_words(kinds: set) -> str:
+    """'Acc1 for tempo, exact for key', for the kinds calibrated."""
+    return ", ".join(f"{KIND_RIGHT[k]} for {k}" for k in ("tempo", "key") if k in kinds)
+
 
 # Shown when the runs were made with the single-source rule (Rules.one_source).
 ONE_SOURCE_NOTE = (
@@ -148,12 +212,27 @@ def section(doc: dict) -> list[str]:
     selected = cal.Rules.from_dict(choice["rules"])
     confirmed = cal.Rules.from_dict(confirmation["rules"])
     kinds = {r["kind"] for r in runs}
+    key, tempo = "key" in kinds, "tempo" in kinds
+    withheld = " or ".join(f"a {k}" for k in ("tempo", "key") if k in kinds)
+    rules = [
+        *(["the steadiness check", "the confidence and periodicity minimums"] if tempo else []),
+        *(["the key evidence rule", "the key strength minimum"] if key else []),
+    ]
+    gross = (
+        "wrong even forgiving octave and meter (key: unrelated)"
+        if tempo and key
+        else (
+            "wrong even forgiving octave and meter" if tempo else "unrelated to the reference key"
+        )
+    )
+    minimums = " and ".join(
+        w for k, w in (("tempo", "confidence"), ("key", "strength")) if k in kinds
+    )
     out = [
         "## Calibration of the withholding rules",
         "",
-        "The service withholds a tempo or a key when its rules say the evidence is too weak "
-        "(the steadiness check, the confidence and periodicity minimums, the key evidence rule "
-        "and the key strength minimum). This section sets those rules from measured results: on "
+        f"The service withholds {withheld} when its rules say the evidence is too weak "
+        f"({_and(rules)}). This section sets those rules from measured results: on "
         "the annotated clips of the calibration runs below and on generated controls whose "
         "truth is known by construction. Each selected clip is a **calibration** clip or an "
         "**evaluation** clip, fixed by a SHA-256 of the dataset and its track id (about half "
@@ -165,29 +244,35 @@ def section(doc: dict) -> list[str]:
         f"- The procedure was written down before the calibration runs. A **loosening** (a "
         f"value under which a clip or a control gets a value it did not have) is accepted when "
         f"its extra answers on the annotated clips are right "
-        f"({KIND_RIGHT['tempo']} for tempo, exact for key) with a Wilson 95 % lower bound of at "
+        f"({right_words(kinds)}) with a Wilson 95 % lower bound of at "
         f"least {100 * cal.L1_MIN_LOWER:g} % (L1), at most {100 * cal.L2_MAX_DROP:g} points less "
-        f"often than the old answers (L2), wrong even forgiving octave and meter (key: "
-        f"unrelated) at most {100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3); the "
+        f"often than the old answers (L2), {gross} at most "
+        f"{100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3); the "
         f"loosest value that passes is taken. A **tightening** is accepted when it removes a "
         f"value a control shows wrongly (T1), "
         f"lowers correct / n by at most {100 * cal.T2_MAX_DROP:g} points on each dataset and "
         "withholds answers that are right less often than those it keeps (T2); the least "
         "strict value that passes is taken. Either way, no control may go from right to wrong "
-        "(L4). A rule the service keeps per estimator (the "
-        "confidence and strength minimums) is decided on that estimator's clips; a shared rule "
+        f"(L4). A rule the service keeps per estimator (the {minimums} "
+        f"minimum{'s' if tempo and key else ''}) is decided on that estimator's clips; a shared rule "
         "on Essentia's (the default) and checked on librosa's: a change librosa's clips reject "
         "is not made. beat-this is shown under the service's rules and decides nothing.",
         "- Only changes that withhold more are shipped. A loosening the procedure picks is shown "
-        "but not shipped: it rests on these clips alone, and two loosenings chosen this way in "
-        "earlier versions of this calibration gave keys to material with no key.",
+        "but not shipped: it rests on these clips alone"
+        + (
+            ", and two loosenings chosen this way in earlier versions of this calibration gave "
+            "keys to material with no key."
+            if key
+            else "."
+        ),
         "- Each change is then judged on the evaluation clips: a loosening that fails L1-L3 or "
         "a tightening that fails T2 there is reverted to the value before it. The controls are "
         "the ones the choice saw, so a change made for a control is not tested on new controls "
         "there; a change that alters no evaluation clip stays.",
-        *(f"- {note}" for note in PROTOCOL_NOTES),
-        *([f"- {ONE_SOURCE_NOTE}"] if after.one_source else []),
-        *added_note(controls),
+        *(f"- {note}" for note in protocol_notes(kinds)),
+        # The single-source rule and the controls added after it are about the key rules.
+        *([f"- {ONE_SOURCE_NOTE}"] if after.one_source and key else []),
+        *(added_note(controls) if key else []),
         "- The families are taken in turn, each with the earlier choices in place: "
         + "; ".join(f"{f['title']}" for f in choice["families"])
         + ".",
@@ -205,14 +290,21 @@ def section(doc: dict) -> list[str]:
     ]
     out += clips_table(runs, controls)
     out += mismatch_lines(runs, controls)
-    out += choice_section(choice)
-    out += confirmation_section(confirmation)
+    out += choice_section(choice, kinds)
+    out += confirmation_section(confirmation, kinds)
     out += agreement_table(selected, confirmed, after, kinds)
-    out += evaluation_section(runs, after)
+    out += evaluation_section(runs, after, kinds)
     out += controls_section(controls, after)
     out += octave_section(runs, after)
     out += gate_section(runs, controls, after)
     return out
+
+
+RECORDED = {
+    "tempo": "the confidence, onset periodicity, each third's beat and onset tempo, the beat drift",
+    "key": "the key strength, the share of energy in spectral lines, the pitch classes they spell "
+    "and the pitch track's verdicts",
+}
 
 
 def clips_table(runs: list[dict], controls: dict) -> list[str]:
@@ -245,11 +337,9 @@ def clips_table(runs: list[dict], controls: dict) -> list[str]:
         *table(["data", "rules", "estimators", "calibration", "evaluation", "command"], rows),
         "",
         "Each calibration run records, per clip and estimator, what the service served and the "
-        "estimate with every rule lifted, with the measurements each rule compares (the "
-        "confidence, onset periodicity, each third's beat and onset tempo, the beat drift; the "
-        "key strength, the share of energy in spectral lines, the pitch classes they spell and "
-        "the pitch track's verdicts). Its scores against the reference are kept; the reference "
-        "is not.",
+        "estimate with every rule lifted, with the measurements each rule compares ("
+        + "; ".join(RECORDED[k] for k in ("tempo", "key") if k in {r["kind"] for r in runs})
+        + "). Its scores against the reference are kept; the reference is not.",
         "",
     ]
 
@@ -314,7 +404,7 @@ def candidate_cells(family: str, kind: str, row: dict) -> list[str]:
     ]
 
 
-def choice_section(choice: dict) -> list[str]:
+def choice_section(choice: dict, kinds: set) -> list[str]:
     out = ["### The choice, rule by rule (calibration clips and controls)", ""]
     for fam in choice["families"]:
         family, kind = fam["family"], fam["kind"]
@@ -368,7 +458,8 @@ def choice_section(choice: dict) -> list[str]:
         "datasets, with the value in place; *extra answers* are those the value gives and the "
         "previous one withheld, *answers withheld* the reverse; a control broken fails any "
         "value (L4). Gross errors: "
-        f"tempo {KIND_GROSS['tempo']}, key {KIND_GROSS['key']}.",
+        + ", ".join(f"{k} {KIND_GROSS[k]}" for k in ("tempo", "key") if k in kinds)
+        + ".",
         "",
     ]
     return out
@@ -402,7 +493,7 @@ def field_value(rules: cal.Rules, field: str, name: str | None) -> str:
     return str(value) if isinstance(value, str) else f"{value:g}"
 
 
-def confirmation_section(confirmation: dict) -> list[str]:
+def confirmation_section(confirmation: dict, kinds: set) -> list[str]:
     head = [
         "rule",
         "estimator",
@@ -451,8 +542,8 @@ def confirmation_section(confirmation: dict) -> list[str]:
     return [
         "### Each change on the evaluation clips",
         "",
-        f"Each change judged again on the evaluation clips ({KIND_RIGHT['tempo']} for tempo, "
-        "exact for key), pooled over the rule's datasets: L1-L3 for a loosening, T2 for a "
+        f"Each change judged again on the evaluation clips ({right_words(kinds)}), "
+        "pooled over the rule's datasets: L1-L3 for a loosening, T2 for a "
         "tightening; a shared change is reverted when either estimator's clips reject it.",
         "",
         *table(head, rows),
@@ -470,7 +561,6 @@ def agreement_table(
             b = field_value(cal.BASELINE, field, name)
             a = field_value(after, field, name)
             if kind not in kinds:
-                rows.append([label, b, "–", "–", a, "–"])
                 continue
             s = field_value(selected, field, name)
             c = field_value(confirmed, field, name)
@@ -483,7 +573,7 @@ def agreement_table(
         "choice was not applied as made, or the runs predate a change."
     )
     if kinds != {"tempo", "key"}:
-        note += " Rules of a kind without a calibration run here are not judged (–)."
+        note += " Only the rules this report calibrates are listed."
     head = [
         "rule",
         "before",
@@ -495,7 +585,7 @@ def agreement_table(
     return ["### Chosen values and the service's values", "", *table(head, rows), "", note, ""]
 
 
-def evaluation_section(runs: list[dict], after: cal.Rules) -> list[str]:
+def evaluation_section(runs: list[dict], after: cal.Rules, kinds: set) -> list[str]:
     rows = []
     for r in cal.evaluate(runs, cal.BASELINE, after):
         trained = any(
@@ -533,7 +623,9 @@ def evaluation_section(runs: list[dict], after: cal.Rules) -> list[str]:
         "### Held-out evaluation (evaluation clips)",
         "",
         "The rules before against the rules after, on the same evaluation clips: correct / n "
-        "(tempo Acc1, key exact; a withheld clip counts as not correct), the paired exact "
+        "("
+        + ", ".join(f"{k} {KIND_RIGHT[k]}" for k in ("tempo", "key") if k in kinds)
+        + "; a withheld clip counts as not correct), the paired exact "
         "McNemar test on the clips only one side gets right, and the answers the change adds "
         "or withholds with how often they are right. Gross errors as above.",
         "",

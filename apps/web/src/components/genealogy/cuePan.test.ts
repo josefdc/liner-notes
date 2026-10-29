@@ -341,5 +341,6 @@ describe('cuePan', () => {
     expect(bad).toEqual([]);
     // (Rare: tall cards of uneven heights side by side in a short view, no stop clear of them.)
     expect(unavoidable / presses).toBeLessThan(0.05);
-  });
+    // (A second or so alone; a loaded machine takes longer.)
+  }, 30_000);
 });

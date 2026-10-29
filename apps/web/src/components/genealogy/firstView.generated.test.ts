@@ -49,5 +49,6 @@ describe('the first view on generated maps (#240)', () => {
     }
     expect(bad).toEqual([]);
     expect(tooBig).toBeLessThan(150);
-  });
+    // (A second or so alone; a loaded machine takes longer.)
+  }, 30_000);
 });

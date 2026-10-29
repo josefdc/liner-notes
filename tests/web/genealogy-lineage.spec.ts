@@ -880,7 +880,10 @@ test("a hover holds the layout only while the pointer is on the map; a press hol
   await graph.locator('g.nodes > g[tabindex="0"]').hover();
   await expect(graph).toHaveAttribute("data-view", "reader");
   await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
+  const wide = await graph.getAttribute("width");
   await page.setViewportSize({ width: 1400, height: 860 });
+  // (Once the map has taken the new room.)
+  await expect(graph).not.toHaveAttribute("width", wide ?? "");
   await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(1);
   // Off the map, having done nothing: the first view again, for the room the map has now.
   await page.mouse.move(0, 0);
@@ -898,7 +901,10 @@ test("a hover holds the layout only while the pointer is on the map; a press hol
     await page.setViewportSize({ width: w, height: h });
     await mapAtRest(graph);
     await expect(graph).toHaveAttribute("data-view", "first");
-    expect(await cardsCutAtRest(graph, headingBand(page)), `${w}x${h}`).toEqual([]);
+    // (Polled: the map is laid out for the new room once the browser reports its size.)
+    await expect
+      .poll(() => cardsCutAtRest(graph, headingBand(page)), { message: `${w}x${h}` })
+      .toEqual([]);
   }
   // A finger on the map that scrolls the page (no tap): at rest again once it lifts.
   const box = await graph.boundingBox();
@@ -1028,7 +1034,8 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
           await page.keyboard.press("Enter");
           pressed += 1;
           await mapAtRest(graph);
-          // Where the review saw the analysed card pushed out for one more card below.
+          // At these sizes the first "↓" used to drop the analysed card for one more card below:
+          // it keeps it.
           if (
             side === "down" &&
             press === 0 &&

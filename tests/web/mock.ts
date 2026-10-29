@@ -328,6 +328,33 @@ export async function openResults(page: Page, opened: Locator = dashboardHeading
   }).toPass();
 }
 
+/**
+ * Holds the page's time from before a run completes, so that its progress screen stays: the
+ * screen would otherwise open the results by itself 3.5 s after the result. The page's clock
+ * must have been installed (`page.clock.install()`) before the page loaded;
+ * `page.clock.resume()` lets its time run again.
+ */
+export async function holdClock(page: Page) {
+  // A moment ahead of the page's time, which runs on meanwhile: tried again if it has passed.
+  await expect(async () => {
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
+  }).toPass();
+}
+
+/**
+ * With the page's time held (`holdClock`), runs it on 50 ms at a time (the mocked stream's
+ * pace) until "Open the results" shows, 0.4 s after the result: well short of the 3.5 s after
+ * which the results open by themselves, so the progress screen is still there to be read.
+ */
+export async function runUntilResultsButton(page: Page) {
+  const button = page.getByRole("button", { name: "Open the results" });
+  for (let step = 0; !(await button.isVisible()); step += 1) {
+    expect(step, '"Open the results" shows').toBeLessThan(200);
+    await page.clock.runFor(50);
+  }
+  await expect(button).toBeVisible();
+}
+
 /** Runs a search against the mocked stream and continues to the Dashboard. */
 export async function analyzeAndOpenDashboard(
   page: Page,

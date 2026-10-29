@@ -3,8 +3,10 @@ import {
   analyzeAndOpenDashboard,
   collectProblems,
   fullResultData,
+  holdClock,
   loadFixture,
   releaseStream,
+  runUntilResultsButton,
   useMockApi,
 } from "./mock";
 
@@ -76,6 +78,8 @@ const candidates = [
 
 test("the picker and the progress screen do not move under reduced motion", async ({ page }) => {
   const problems = collectProblems(page);
+  // The page's time is held once the run waits (see `holdClock`).
+  await page.clock.install();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 600 });
   await watchMotion(page);
@@ -130,8 +134,12 @@ test("the picker and the progress screen do not move under reduced motion", asyn
   await page.waitForTimeout(500);
   expect(await frames(page)).toBe(before);
 
+  // The run completes, its time held: the completion screen is read before the results open by
+  // themselves.
+  await holdClock(page);
   await releaseStream(page, "end");
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
+  await expect(page.getByRole("log")).toBeVisible();
   await expect.poll(() => playing(page)).toEqual([]);
   expect(problems).toEqual([]);
 });

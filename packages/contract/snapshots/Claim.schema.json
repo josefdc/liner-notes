@@ -94,7 +94,7 @@
         "required": ["title", "type", "entities"]
       },
       "documentedBy": {
-        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states plainly and only, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it, or the claim's words do not plainly state it",
         "type": "array",
         "items": { "type": "string" }
       }
@@ -209,7 +209,7 @@
         "additionalProperties": false
       },
       "documentedBy": {
-        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states plainly and only, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it, or the claim's words do not plainly state it",
         "type": "array",
         "items": { "type": "string" }
       }

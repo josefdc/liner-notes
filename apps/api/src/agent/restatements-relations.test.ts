@@ -73,6 +73,16 @@ const card = (claimId: string): Card => ({ id: `card-${claimId}`, claimId });
 const ids = (claims: readonly Claim[]) => claims.map((claim) => claim.id);
 
 const omt = { title: "One More Time", artist: "Daft Punk" };
+/** A Discogs credit, and the code-built claim on it. */
+const credit: Evidence = {
+  ...trackRecord(
+    "ev-credit",
+    'Discogs release 1234 ("Confessions on a Dance Floor", 2005) credits Stuart Price as Producer on "Hung Up".',
+  ),
+  source: "discogs",
+  recordRef: "track/release/1234/credit/stuart-price",
+};
+const codeCredit = codeClaim("code-credit", credit, { about: "credit", text: credit.excerpt });
 const hungUp = { title: "Hung Up", artist: "Madonna" };
 const juicy = { title: "Juicy", artist: "The Notorious B.I.G." };
 
@@ -86,7 +96,11 @@ const modelCover = judged("m-cover", {
 });
 /** The model's map: its own node for the cover, and its link, which states its claim. */
 const coverMap = () => ({
-  nodes: [{ id: "current" }, { id: "mb-x" }, { id: "lebb" }],
+  nodes: [
+    { id: "current" },
+    { id: "mb-x" },
+    { id: "lebb", label: "One More Time - The London Elektricity Big Band" },
+  ],
   links: [
     {
       source: "current",
@@ -119,6 +133,13 @@ describe("documentedRelation", () => {
       title: "Hung Up (SDP extended vocal)",
     });
     expect(documentedRelation(trackRecord("ev-plain"))).toBeNull();
+    // A relations map's second hop joins two other recordings: it documents none of this track.
+    expect(
+      documentedRelation({
+        recordRef: "recording/v1/samples/recording/o1",
+        excerpt: 'MusicBrainz: "Other" by Someone samples "Juicy Fruit" by Mtume.',
+      }),
+    ).toBeNull();
   });
 });
 
@@ -167,7 +188,12 @@ describe("a model claim that restates a record-built relation", () => {
     };
     const run = (link: typeof model) => {
       const map = {
-        nodes: [{ id: "current" }, { id: "c-node" }, { id: "m-node" }],
+        nodes: [
+          { id: "current" },
+          { id: "c-node" },
+          { id: "m-node", label: "Juicy Fruit - Mtume" },
+          { id: "isley", label: "Between the Sheets - The Isley Brothers" },
+        ],
         links: [link, coded],
       };
       return withoutRestatements([claim, codeFruit], [], map.links, evidence, {
@@ -184,10 +210,30 @@ describe("a model claim that restates a record-built relation", () => {
       expect(ids(kept.claims), JSON.stringify(link)).toEqual(["m-1", "code-fruit"]);
       expect(kept.genealogy?.links, JSON.stringify(link)).toEqual([link, coded]);
     }
-    // The link that draws the record's relation, as the code link does, goes with its claim.
-    const gone = run(model);
-    expect(ids(gone.claims)).toEqual(["code-fruit"]);
-    expect(gone.genealogy?.links).toEqual([coded]);
+    // A link to another record's node (as its label names it) stays, and so does its claim.
+    const isley = { ...model, source: "isley" };
+    const kept = run(isley);
+    expect(ids(kept.claims)).toEqual(["m-1", "code-fruit"]);
+    expect(kept.genealogy?.links).toEqual([isley, coded]);
+    // The link that draws the record's relation, as the code link does, to the record's own node
+    // (the code link's, or one its label names), goes with its claim.
+    for (const link of [model, { ...model, source: "c-node" }]) {
+      const gone = run(link);
+      expect(ids(gone.claims), link.source).toEqual(["code-fruit"]);
+      expect(gone.genealogy?.links, link.source).toEqual([coded]);
+    }
+    // A record the map draws no code link for (past the map's cap): the model's link is the only
+    // one that draws it, so it stays, with its claim, even to a node its label names.
+    const alone = {
+      nodes: [{ id: "current" }, { id: "m-node", label: "Juicy Fruit - Mtume" }],
+      links: [model],
+    };
+    const uncoded = withoutRestatements([claim, codeFruit], [], alone.links, evidence, {
+      genealogy: alone,
+      track: juicy,
+    });
+    expect(ids(uncoded.claims)).toEqual(["m-1", "code-fruit"]);
+    expect(uncoded.genealogy?.links).toEqual([model]);
     // A cover of the song, which the map never draws: a link of another type stays too.
     for (const type of ["sample", "remix"]) {
       const map = coverMap();
@@ -317,10 +363,8 @@ describe("a model claim on a record-built relation that says something else", ()
     const kept = withoutRestatements(claims, [card("m-more")], [], evidence, { track: hungUp });
     expect(ids(kept.claims)).toEqual(ids(claims));
     expect(kept.factoids).toEqual([card("m-more")]);
-    // The one that states its record's relation is marked with the code claim that documents it;
-    // the others are as they were.
-    expect(kept.claims[0]).toEqual({ ...claims[0], documentedBy: ["code-abba"] });
-    for (const [i, claim] of kept.claims.entries()) if (i > 0) expect(claim).toBe(claims[i]);
+    // Each is as it was: none states its record's relation and nothing else, so none is marked.
+    for (const [i, claim] of kept.claims.entries()) expect(claim).toBe(claims[i]);
     expect(kept.restated).toBe(0);
   });
 });
@@ -333,45 +377,46 @@ describe("two model claims that state one relation in other words", () => {
     evidenceIds: ["ev-fruit"],
   });
   const carded = judged("m-card", {
-    text: "This recording samples Mtume’s “Juicy Fruit,” linking the track to the earlier song.",
+    text: "The recording samples “Juicy Fruit” by Mtume.",
     about: "sample",
     evidenceIds: ["ev-fruit"],
     factoid: { title: "A familiar groove reworked", type: "sample", entities: [] },
   });
 
-  it("are shown once: the one that says only what its record says goes", () => {
-    const kept = withoutRestatements([plain, carded], [card("m-card")], [], evidence, {
-      track: juicy,
-    });
-    expect(ids(kept.claims)).toEqual(["m-card"]);
-    expect(kept.factoids).toEqual([card("m-card")]);
-    expect(kept.restated).toBe(1);
-    expect(
-      withoutRestatements(kept.claims, kept.factoids, [], evidence, { track: juicy }).restated,
-    ).toBe(0);
+  it("are shown once: the better copy (on a card) stays", () => {
+    for (const claims of [
+      [plain, carded],
+      [carded, plain],
+    ]) {
+      const kept = withoutRestatements(claims, [card("m-card")], [], evidence, { track: juicy });
+      expect(ids(kept.claims)).toEqual(["m-card"]);
+      expect(kept.factoids).toEqual([card("m-card")]);
+      expect(kept.restated).toBe(1);
+      expect(
+        withoutRestatements(kept.claims, kept.factoids, [], evidence, { track: juicy }).restated,
+      ).toBe(0);
+    }
   });
 
-  it("both stay when the one that says more names what its records do not", () => {
-    // "Biggie" is in no record: nothing shows the card's claim states the record's relation.
-    const biggie = { ...carded, text: carded.text.replace("the track", "Biggie’s track") };
-    const kept = withoutRestatements([plain, biggie], [card("m-card")], [], evidence, {
-      track: juicy,
-    });
-    expect(ids(kept.claims)).toEqual(["m-plain", "m-card"]);
-    expect(kept.restated).toBe(0);
+  it("both stay when one says more than its record, or names what its records do not", () => {
+    // Read in doubt, the one that says more states nothing for certain: it covers no other claim.
+    for (const text of [
+      "This recording samples Mtume’s “Juicy Fruit,” linking the track to the earlier song.",
+      "This recording samples Mtume’s “Juicy Fruit,” linking Biggie’s track to the earlier song.",
+    ]) {
+      const more = { ...carded, text };
+      for (const claims of [
+        [plain, more],
+        [more, plain],
+      ]) {
+        const kept = withoutRestatements(claims, [card("m-card")], [], evidence, { track: juicy });
+        expect(ids(kept.claims).sort(), text).toEqual(["m-card", "m-plain"]);
+        expect(kept.restated).toBe(0);
+      }
+    }
   });
 
-  it("both stay when the one that would go says more, reads as another kind or another relation", () => {
-    // The better copy (now the one on a card) says only what the record says; the other names
-    // what the record does not ("Biggie").
-    const { factoid, ...uncarded } = {
-      ...carded,
-      text: carded.text.replace("the track", "Biggie’s track"),
-    };
-    const plainOnCard = { ...plain, factoid };
-    expect(
-      ids(withoutRestatements([plainOnCard, uncarded], [], [], evidence, { track: juicy }).claims),
-    ).toEqual(["m-plain", "m-card"]);
+  it("both stay when they read as different kinds or are about another subject", () => {
     // A stricter copy is never dropped for a lenient one.
     const strict = { ...plain, verdict: "partial" as const, kind: "inferred" as const };
     expect(
@@ -382,9 +427,31 @@ describe("two model claims that state one relation in other words", () => {
       ids(withoutRestatements([plain, history], [], [], evidence, { track: juicy }).claims),
     ).toEqual(["m-plain", "m-card"]);
   });
+
+  it("never drop a supported copy for a partly supported one, whatever their kinds", () => {
+    // Read as the same kind (a supported claim whose citation did not fit its scope reads
+    // inferred), the partly supported one, which cites one more record, never covers it.
+    const supported = { ...plain, kind: "inferred" as const };
+    const partial = {
+      ...carded,
+      verdict: "partial" as const,
+      kind: "inferred" as const,
+      evidenceIds: ["ev-fruit", "ev-duke"],
+    };
+    for (const claims of [
+      [supported, partial],
+      [partial, supported],
+    ]) {
+      expect(
+        ids(withoutRestatements(claims, [], [], evidence, { track: juicy }).claims).sort(),
+      ).toEqual(["m-card", "m-plain"]);
+    }
+  });
 });
 
-// The cases each of the rules below was written for: each one stays, or goes, as said.
+// The cases each of the rules below was written for: each one stays, or goes, as said. A claim
+// goes only when the whole of it is one of the templates of relationText.ts; anything else is
+// read in doubt: it stays, judged as it was, unmarked.
 describe("a model claim on a relation, read word by word", () => {
   const sampledByRecord = record(
     "ev-sby",
@@ -396,29 +463,98 @@ describe("a model claim on a relation, read word by word", () => {
     "track/recording/s1/samples/recording/t1",
     'MusicBrainz: "Track" by Someone samples "Shout" by Tears for Fears.',
   );
-  const all = [...evidence, sampledByRecord, shoutRecord];
-  const codeSby = codeClaim("code-sby", sampledByRecord, { about: "sample" });
-  const codeShout = codeClaim("code-shout", shoutRecord, { about: "sample" });
-  const code = [codeAbba, codeRemix, codeFruit, codeDuke, codeSby, codeShout];
+  const coverMeRecord = record(
+    "ev-coverme",
+    "track/recording/h1/cover-of/recording/s1",
+    'MusicBrainz: "Hung Up" by Madonna is a cover of "Cover Me" by Bruce Springsteen.',
+  );
+  const standRecord = record(
+    "ev-stand",
+    "track/recording/h1/samples/recording/s2",
+    'MusicBrainz: "Hung Up" by Madonna samples "Stand by Me" by Ben E. King.',
+  );
+  const circoRecord = record(
+    "ev-circo",
+    "track/recording/o1/sampled-by/recording/c1",
+    'MusicBrainz: "One More Time" by Daft Punk is sampled in "Circo Loco" by Drake & 21 Savage.',
+  );
+  const all = [...evidence, sampledByRecord, shoutRecord, coverMeRecord, standRecord, circoRecord];
+  const code = [
+    codeAbba,
+    codeRemix,
+    codeFruit,
+    codeDuke,
+    codeCover,
+    codeClaim("code-sby", sampledByRecord, { about: "sample" }),
+    codeClaim("code-shout", shoutRecord, { about: "sample" }),
+    codeClaim("code-coverme", coverMeRecord, { about: "cover" }),
+    codeClaim("code-stand", standRecord, { about: "sample" }),
+    codeClaim("code-circo", circoRecord, { about: "sample" }),
+  ];
   const tracks: Record<string, { title: string; artist: string }> = {
     "ev-abba": hungUp,
     "ev-remix": hungUp,
+    "ev-coverme": hungUp,
+    "ev-stand": hungUp,
     "ev-fruit": juicy,
     "ev-duke": juicy,
     "ev-sby": juicy,
     "ev-shout": { title: "Track", artist: "Someone" },
+    "ev-cover": omt,
+    "ev-circo": omt,
   };
-  /** Whether a model claim with `text` on `cited`, at `verdict`, is left as it is or goes. */
-  const read = (text: string, cited: string[], verdict: "supported" | "partial") => {
-    const claim = judged("m-1", { text, about: "sample", verdict, evidenceIds: cited });
-    const kept = withoutRestatements([claim, ...code], [], [], all, { track: tracks[cited[0]] });
+  /**
+   * What becomes of a model claim with `text` on `cited`, at `verdict`: it goes, or it stays
+   * (marked or not). `stated`: a timeline sample states it, so it stays, and its mark shows.
+   */
+  const read = (
+    text: string,
+    cited: string[],
+    verdict: "supported" | "partial",
+    { stated = false, pack = all } = {},
+  ) => {
+    const about = cited[0] === "ev-cover" || cited[0] === "ev-coverme" ? "cover" : "sample";
+    const scope = cited[0] === "ev-cover" ? "work" : "recording";
+    const claim = judged("m-1", { text, about, scope, verdict, evidenceIds: cited });
+    const kept = withoutRestatements(
+      [claim, ...code],
+      [],
+      stated ? [{ claimId: "m-1" }] : [],
+      pack,
+      { track: tracks[cited[0]] },
+    );
     const left = kept.claims.find((each) => each.id === "m-1");
     if (!left) return "goes";
     return left.documentedBy === undefined ? "stays" : `stays, marked ${left.documentedBy}`;
   };
+  const both = ["supported", "partial"] as const;
 
-  it("stays when it states the relation the other way round", () => {
-    for (const verdict of ["supported", "partial"] as const) {
+  it("goes when the whole of it states its record's relation, in the record's direction", () => {
+    for (const verdict of both) {
+      for (const [text, cited] of [
+        ["Juicy samples Juicy Fruit by Mtume.", "ev-fruit"],
+        ["This recording samples Mtume’s “Juicy Fruit”.", "ev-fruit"],
+        ["The Notorious B.I.G.’s Juicy sampled Juicy Fruit.", "ev-fruit"],
+        ["Juicy does sample Juicy Fruit.", "ev-fruit"],
+        ["Juicy is sampled in Big Poppa Remix by Someone Else.", "ev-sby"],
+        ["Juicy was sampled by Big Poppa Remix.", "ev-sby"],
+        ["Big Poppa Remix by Someone Else samples Juicy.", "ev-sby"],
+        ["Hung Up samples ABBA.", "ev-abba"],
+        ["Hung Up is a cover of Cover Me by Bruce Springsteen.", "ev-coverme"],
+        ["Hung Up samples Stand by Me by Ben E. King.", "ev-stand"],
+        ["Hung Up samples Stand by Me.", "ev-stand"],
+        ["One More Time is sampled in Circo Loco by Drake.", "ev-circo"],
+        ["One More Time is sampled in Drake's Circo Loco.", "ev-circo"],
+        ["One More Time is sampled in Circo Loco by Drake and 21 Savage.", "ev-circo"],
+        ["The song One More Time is covered by The London Elektricity Big Band.", "ev-cover"],
+      ]) {
+        expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("goes");
+      }
+    }
+  });
+
+  it("stays, unmarked, when it reads the relation the other way round, or cannot be read so", () => {
+    for (const verdict of both) {
       for (const [text, cited] of [
         ["Juicy Fruit by Mtume samples Juicy by The Notorious B.I.G.", "ev-fruit"],
         ["Juicy is sampled by Mtume.", "ev-fruit"],
@@ -429,49 +565,74 @@ describe("a model claim on a relation, read word by word", () => {
           "ev-abba",
         ],
         ["ABBA sampling Madonna: Hung Up.", "ev-abba"],
+        ["Cover Me by Bruce Springsteen covers Hung Up.", "ev-coverme"],
+        // A relative clause or a comma clause between a name and the verb.
+        ["Big Poppa Remix by Someone Else is the track that Juicy samples.", "ev-sby"],
+        ["Big Poppa Remix by Someone Else is the funk track that Juicy samples.", "ev-sby"],
+        ["Juicy Fruit by Mtume is the track that Juicy samples.", "ev-fruit"],
+        ["Juicy Fruit by Mtume, which Juicy samples, is a funk song.", "ev-fruit"],
+        ["Juicy, whose producer liked Mtume, samples Juicy Fruit.", "ev-fruit"],
+        // "has X sampled in it", an adverb before "by" or "in", "on" or "into" after the verb.
+        ["ABBA has Hung Up sampled in it.", "ev-abba"],
+        ["Hung Up has ABBA sampled in it.", "ev-abba"],
+        ["Hung Up was sampled heavily by ABBA.", "ev-abba"],
+        ["Hung Up was itself sampled by ABBA.", "ev-abba"],
+        ["Hung Up is used in ABBA's Gimme! Gimme! Gimme! as a sample.", "ev-abba"],
+        ["Hung Up was sampled on ABBA's Gimme! Gimme! Gimme!.", "ev-abba"],
+        ["One More Time was sampled on Circo Loco.", "ev-circo"],
+        ["One More Time was sampled into Circo Loco.", "ev-circo"],
+        ["Circo Loco was later sampled in One More Time.", "ev-circo"],
       ]) {
         expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("stays");
       }
     }
-    // Read in the record's direction, it goes.
-    for (const text of [
-      "Juicy is sampled in Big Poppa Remix by Someone Else.",
-      "Big Poppa Remix by Someone Else samples Juicy.",
-    ]) {
-      expect(read(text, ["ev-sby"], "partial"), text).toBe("goes");
-    }
   });
 
-  it("stays, unmarked, when it states another relation than its record's, or denies it", () => {
-    for (const verdict of ["supported", "partial"] as const) {
+  it("stays, unmarked, when it states another relation, hedges or denies it, or says more", () => {
+    for (const verdict of both) {
       for (const [text, cited] of [
         ['"Hung Up (SDP extended vocal)" samples "Hung Up" by Madonna.', "ev-remix"],
         ["Hung Up interpolates Gimme! Gimme! Gimme! by ABBA.", "ev-abba"],
         ["Juicy does not sample Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy doesn't sample Juicy Fruit by Mtume.", "ev-fruit"],
         ["Juicy never sampled Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy samples nothing; Juicy Fruit by Mtume samples Juicy.", "ev-fruit"],
+        ["Hung Up allegedly samples ABBA.", "ev-abba"],
+        ["Hung Up is rumoured to sample ABBA.", "ev-abba"],
+        ["Hung Up is often wrongly said to sample ABBA.", "ev-abba"],
+        ["Hung Up reportedly samples ABBA.", "ev-abba"],
+        // A word that holds, or starts with, the relation's word is not it.
         ["Juicy resamples Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy samples Mtume’s sampler.", "ev-fruit"],
+        ["Hung Up is a coverage of Cover Me by Bruce Springsteen.", "ev-coverme"],
+        ["Hung Up (SDP extended vocal) is a remixer of Hung Up.", "ev-remix"],
+        ["Notably, Hung Up samples ABBA.", "ev-abba"],
+        // The base form alone ("sample:"), and the record named on the track's side too.
+        ["Juicy — sample: Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy Fruit and Juicy sampled Juicy Fruit by Mtume.", "ev-fruit"],
         ["Hung Up and ABBA's Gimme! Gimme! Gimme!.", "ev-abba"],
         ["Track samples Shout by will.i.am.", "ev-shout"],
+        ["Hung Up samples Stand by Me by John Lennon.", "ev-stand"],
+        [
+          "Juicy samples the bass line and chorus of Juicy Fruit by Mtume, slowed down.",
+          "ev-fruit",
+        ],
+        ["Juicy samples the instrumental extended mix of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume and a drum break by will.i.am.", "ev-fruit"],
+        ["Juicy samples a live version of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy samples Mtume's 1983 hit Juicy Fruit.", "ev-fruit"],
+        ["Biggie's Juicy samples Juicy Fruit.", "ev-fruit"],
+        // A cover of the song named without its title.
+        ["Daft Punk is covered by The London Elektricity Big Band.", "ev-cover"],
       ]) {
         expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("stays");
+        expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
       }
-      // A word that only starts as the relation's is a word of its own.
-      expect(read("Juicy samples Mtume’s sampler.", ["ev-fruit"], verdict)).toMatch(/^stays/);
     }
-  });
-
-  it("stays, marked, when found supported but it says more than its record", () => {
-    for (const text of [
-      "Juicy samples the bass line and chorus of Juicy Fruit by Mtume, slowed down and looped.",
-      "Juicy samples the instrumental extended mix of Juicy Fruit by Mtume.",
-    ]) {
-      expect(read(text, ["ev-fruit"], "supported"), text).toBe("stays, marked code-fruit");
-    }
-    expect(read("Juicy samples Juicy Fruit by Mtume.", ["ev-fruit"], "supported")).toBe("goes");
   });
 
   it("stays when it cites two records and names one", () => {
-    for (const verdict of ["supported", "partial"] as const) {
+    for (const verdict of both) {
       expect(
         read("This recording samples Mtume’s “Juicy Fruit”.", ["ev-fruit", "ev-duke"], verdict),
         verdict,
@@ -479,31 +640,80 @@ describe("a model claim on a relation, read word by word", () => {
     }
   });
 
-  it("never reads a negation as the relation, even in the analysed track's title", () => {
+  it("is marked with the code claims of its records when it stays and states only their relations", () => {
+    expect(
+      read("Juicy samples Juicy Fruit by Mtume.", ["ev-fruit"], "partial", { stated: true }),
+    ).toBe("stays, marked code-fruit");
+    expect(
+      read(
+        "This recording samples Mtume’s “Juicy Fruit” and “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+        ["ev-fruit", "ev-duke"],
+        "supported",
+        { stated: true },
+      ),
+    ).toBe("stays, marked code-fruit,code-duke");
+  });
+
+  it("reads a negation or a relation word inside a name as part of the name", () => {
+    const named = (title: string, artist: string, text: string) => {
+      const item = record(
+        "ev-s",
+        "track/recording/t/samples/recording/o",
+        `MusicBrainz: "Song" by Artist samples "${title}" by ${artist}.`,
+      );
+      return ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-s"] }),
+            codeClaim("code-s", item, { about: "sample" }),
+          ],
+          [],
+          [],
+          [item],
+          { track: { title: "Song", artist: "Artist" } },
+        ).claims,
+      );
+    };
+    for (const [title, artist, text] of [
+      ["No Scrubs", "TLC", "Song samples No Scrubs by TLC."],
+      ["Without Me", "Eminem", "Song samples Without Me by Eminem."],
+      ["Ain't No Sunshine", "Bill Withers", "Song samples Ain't No Sunshine by Bill Withers."],
+      ["Never Too Much", "Luther Vandross", "Song samples Never Too Much."],
+      ["Cover Girl", "Someone", "Song samples Cover Girl by Someone."],
+    ]) {
+      expect(named(title, artist, text), text).toEqual(["code-s"]);
+    }
+    expect(named("No Scrubs", "TLC", "Song never sampled No Scrubs by TLC."), "never").toEqual([
+      "m-1",
+      "code-s",
+    ]);
+    // In the analysed track's title, too.
     const never = record(
       "ev-never",
       "track/recording/n1/samples/recording/f1",
       'MusicBrainz: "Never Gonna Give You Up" by Rick Astley samples "Funk Groove" by The Band.',
     );
-    const kept = withoutRestatements(
-      [
-        judged("m-1", {
-          text: "Never Gonna Give You Up samples Funk Groove by The Band.",
-          about: "sample",
-          verdict: "partial",
-          evidenceIds: ["ev-never"],
-        }),
-        codeClaim("code-never", never, { about: "sample" }),
-      ],
-      [],
-      [],
-      [never],
-      { track: { title: "Never Gonna Give You Up", artist: "Rick Astley" } },
-    );
-    expect(ids(kept.claims)).toEqual(["m-1", "code-never"]);
+    const run = (text: string) =>
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-never"] }),
+            codeClaim("code-never", never, { about: "sample" }),
+          ],
+          [],
+          [],
+          [never],
+          { track: { title: "Never Gonna Give You Up", artist: "Rick Astley" } },
+        ).claims,
+      );
+    expect(run("Never Gonna Give You Up samples Funk Groove by The Band.")).toEqual(["code-never"]);
+    expect(run("Never Gonna Give You Up never sampled Funk Groove by The Band.")).toEqual([
+      "m-1",
+      "code-never",
+    ]);
   });
 
-  it("names a record by its artist when its title tells nothing apart", () => {
+  it("names a record by its title, or by an artist no other record of the result credits", () => {
     for (const title of ["It", "Sample", "A", "Cover"]) {
       const item = record(
         "ev-it",
@@ -523,13 +733,114 @@ describe("a model claim on a relation, read word by word", () => {
             { track: hungUp },
           ).claims,
         );
+      // A title that tells nothing apart names nothing.
       expect(run(`Hung Up samples ${title.toLowerCase()}.`), title).toEqual(["m-1", "code-it"]);
+      expect(run(`Hung Up samples ${title} by The Band.`), title).toEqual(["m-1", "code-it"]);
       expect(run("Hung Up samples a cover."), title).toEqual(["m-1", "code-it"]);
-      expect(run(`Hung Up samples ${title} by The Band.`), title).toEqual(["code-it"]);
+      // Its artist, the only one of the result, does.
+      expect(run("Hung Up samples The Band."), title).toEqual(["code-it"]);
     }
+    // Another record by the same artist, in the pack or on the map: the artist alone names none.
+    const queen = record(
+      "ev-queen",
+      "track/recording/h1/samples/recording/q9",
+      'MusicBrainz: "Hung Up" by Madonna samples "Dancing Queen" by ABBA.',
+    );
+    expect(read("Hung Up samples ABBA.", ["ev-abba"], "partial", { pack: [...all, queen] })).toBe(
+      "stays",
+    );
+    const drawn = withoutRestatements(
+      [
+        judged("m-1", {
+          text: "Hung Up samples ABBA.",
+          about: "sample",
+          verdict: "partial",
+          evidenceIds: ["ev-abba"],
+        }),
+        codeAbba,
+      ],
+      [],
+      [],
+      all,
+      {
+        track: hungUp,
+        genealogy: {
+          nodes: [{ id: "current" }, { id: "dq", label: "Dancing Queen - ABBA" }],
+          links: [],
+        },
+      },
+    );
+    expect(ids(drawn.claims)).toEqual(["m-1", "code-abba"]);
+    // Two records with one title, by different artists, both cited: the title alone names
+    // neither of them.
+    const richie = record(
+      "ev-richie",
+      "track/recording/x1/samples/recording/l1",
+      'MusicBrainz: "Track Ten" by Some Band samples "Hello" by Lionel Richie.',
+    );
+    const adele = record(
+      "ev-adele",
+      "track/recording/x1/samples/recording/a1",
+      'MusicBrainz: "Track Ten" by Some Band samples "Hello" by Adele.',
+    );
+    const hellos = (text: string) =>
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", evidenceIds: ["ev-richie", "ev-adele"] }),
+            codeClaim("code-richie", richie, { about: "sample" }),
+            codeClaim("code-adele", adele, { about: "sample" }),
+          ],
+          [],
+          [],
+          [richie, adele],
+          { track: { title: "Track Ten", artist: "Some Band" } },
+        ).claims,
+      );
+    expect(hellos("Track Ten samples Hello.")).toEqual(["m-1", "code-richie", "code-adele"]);
+    expect(hellos("Track Ten samples Hello by Lionel Richie and Hello by Adele.")).toEqual([
+      "code-richie",
+      "code-adele",
+    ]);
+    // With no analysed track given, the record's own side names it: its title and artist.
+    expect(
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", {
+              text: "Juicy samples Mtume’s Juicy Fruit.",
+              about: "sample",
+              verdict: "partial",
+              evidenceIds: ["ev-fruit"],
+            }),
+            codeFruit,
+          ],
+          [],
+          [],
+          evidence,
+        ).claims,
+      ),
+    ).toEqual(["code-fruit"]);
+    // Drake credits another record of the result: "Drake" alone names neither.
+    const other = record(
+      "ev-drake",
+      "track/recording/o1/sampled-by/recording/d2",
+      'MusicBrainz: "One More Time" by Daft Punk is sampled in "Other Song" by Drake.',
+    );
+    expect(read("One More Time is sampled in Drake.", ["ev-circo"], "partial")).toBe("goes");
+    expect(
+      read("One More Time is sampled in Drake.", ["ev-circo"], "partial", {
+        pack: [...all, other],
+      }),
+    ).toBe("stays");
+    expect(
+      read("One More Time is sampled in Circo Loco by Drake.", ["ev-circo"], "partial", {
+        pack: [...all, other],
+      }),
+    ).toBe("goes");
   });
 
-  it("reads names without accents, and a title with or without its subtitle", () => {
+  it("reads names without accents, tonos, ß or the dotless ı, and a title without its subtitle", () => {
     const chiLites = record(
       "ev-chi",
       "track/recording/c1/samples/recording/w1",
@@ -553,31 +864,123 @@ describe("a model claim on a relation, read word by word", () => {
       );
       expect(ids(kept.claims), text).toEqual(["code-chi"]);
     }
+    const named = (title: string, artist: string, text: string) => {
+      const item = record(
+        "ev-s",
+        "track/recording/t/samples/recording/o",
+        `MusicBrainz: "Song" by Artist samples "${title}" by ${artist}.`,
+      );
+      return ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-s"] }),
+            codeClaim("code-s", item, { about: "sample" }),
+          ],
+          [],
+          [],
+          [item],
+          { track: { title: "Song", artist: "Artist" } },
+        ).claims,
+      );
+    };
+    for (const [title, artist, text] of [
+      ["Ρόδα", "Μίκης", "Song samples Ροδα by Μικης."],
+      ["Straße", "Kraftwerk", "Song samples Strasse by Kraftwerk."],
+      ["Işık", "Sezen", "Song samples Isik by Sezen."],
+      ["Elevation", "U2", "Song samples U2."],
+      ["Lean On", "MØ", "Song samples MØ."],
+    ]) {
+      expect(named(title, artist, text), text).toEqual(["code-s"]);
+    }
+    // A mark that changes a letter in another script is kept: "Й" is not "И".
+    expect(named("Песня", "Йолка", "Song samples Песня by Иолка.")).toEqual(["m-1", "code-s"]);
   });
 
   it("names the analysed track's names only in a claim on a relation, never in a credit", () => {
-    const credit: Evidence = {
-      ...trackRecord(
-        "ev-credit",
-        'Discogs release 1234 ("Confessions on a Dance Floor", 2005) credits Stuart Price as Producer on "Hung Up".',
-      ),
-      source: "discogs",
-      recordRef: "track/release/1234/credit/stuart-price",
-    };
-    const codeCredit = codeClaim("code-credit", credit, { about: "credit", text: credit.excerpt });
+    const kept = (text: string) =>
+      ids(
+        withoutRestatements(
+          [judged("m-1", { text, about: "credit", evidenceIds: ["ev-credit"] }), codeCredit],
+          [],
+          [],
+          [credit],
+          { track: hungUp },
+        ).claims,
+      );
     for (const text of [
       "Madonna and Stuart Price produced Hung Up.",
       "Stuart Price produced Hung Up for Madonna.",
     ]) {
-      const kept = withoutRestatements(
-        [judged("m-1", { text, about: "credit", evidenceIds: ["ev-credit"] }), codeCredit],
-        [],
-        [],
-        [credit],
-        { track: hungUp },
-      );
-      expect(ids(kept.claims), text).toEqual(["m-1", "code-credit"]);
+      expect(kept(text), text).toEqual(["m-1", "code-credit"]);
     }
+    expect(kept("Stuart Price produced Hung Up.")).toEqual(["code-credit"]);
+  });
+
+  it("never reads a hedged or denied claim as restating its record, whatever its subject", () => {
+    const kept = (text: string) =>
+      ids(
+        withoutRestatements(
+          [judged("m-1", { text, about: "credit", evidenceIds: ["ev-credit"] }), codeCredit],
+          [],
+          [],
+          [credit],
+          { track: hungUp },
+        ).claims,
+      );
+    for (const hedge of [
+      "nothing",
+      "none",
+      "neither",
+      "nor",
+      "without",
+      "never",
+      "not",
+      "no",
+      "cannot",
+      "allegedly",
+      "reportedly",
+      "rumoured",
+      "rumored",
+      "supposedly",
+      "wrongly",
+      "falsely",
+      "mistakenly",
+      "claimed",
+      "disputed",
+      "often said",
+    ]) {
+      expect(kept(`Stuart Price ${hedge} produced Hung Up.`), hedge).toEqual([
+        "m-1",
+        "code-credit",
+      ]);
+    }
+    expect(kept("Stuart Price didn't produce Hung Up.")).toEqual(["m-1", "code-credit"]);
+    // A negation inside a name its record quotes is part of the name.
+    const scrubs: Evidence = {
+      ...credit,
+      id: "ev-scrubs",
+      excerpt:
+        'Discogs release 99 ("FanMail", 1999) credits Kandi Burruss as Writer on "No Scrubs".',
+    };
+    const codeScrubs = codeClaim("code-scrubs", scrubs, { about: "credit", text: scrubs.excerpt });
+    expect(
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", {
+              text: "Kandi Burruss wrote No Scrubs.",
+              about: "credit",
+              evidenceIds: ["ev-scrubs"],
+            }),
+            codeScrubs,
+          ],
+          [],
+          [],
+          [scrubs],
+          { track: { title: "No Scrubs", artist: "TLC" } },
+        ).claims,
+      ),
+    ).toEqual(["code-scrubs"]);
   });
 
   it("marks only what states its record's relation, and reads a mark it came with again", () => {
@@ -759,13 +1162,14 @@ describe("the model's copies of a relation no code-built claim states", () => {
     }
   });
 
-  it("keep the one that says more, whatever their order", () => {
+  it("keep both when one says more or reads the other way, whatever their order", () => {
     const bare = judged("m-a", {
       text: "Hung Up samples ABBA.",
       about: "sample",
       verdict: "partial",
       evidenceIds: ["ev-abba"],
     });
+    // Read in doubt: it states nothing for certain, so it covers nothing.
     const more = judged("m-b", {
       text: "Hung Up samples ABBA, turning the riff into a dance-floor hook.",
       about: "sample",
@@ -778,22 +1182,39 @@ describe("the model's copies of a relation no code-built claim states", () => {
       verdict: "partial",
       evidenceIds: ["ev-abba"],
     });
+    for (const other of [more, reversed]) {
+      for (const claims of [
+        [bare, other],
+        [other, bare],
+      ]) {
+        expect(
+          ids(withoutRestatements(claims, [], [], pack, { track: hungUp }).claims).sort(),
+          other.text,
+        ).toEqual(["m-a", other.id]);
+      }
+    }
+  });
+
+  it("keep the copy that states more records, whatever their ids", () => {
+    const one = judged("m-a", {
+      text: "Hung Up samples ABBA.",
+      about: "sample",
+      verdict: "partial",
+      evidenceIds: ["ev-abba"],
+    });
+    const two = judged("m-b", {
+      text: "Hung Up samples ABBA and Popcorn by Hot Butter.",
+      about: "sample",
+      verdict: "partial",
+      evidenceIds: ["ev-abba", "ev-popcorn"],
+    });
     for (const claims of [
-      [bare, more],
-      [more, bare],
+      [one, two],
+      [two, one],
     ]) {
       expect(ids(withoutRestatements(claims, [], [], pack, { track: hungUp }).claims)).toEqual([
         "m-b",
       ]);
-    }
-    // One that states the relation the other way round states another fact: both stay.
-    for (const claims of [
-      [bare, reversed],
-      [reversed, bare],
-    ]) {
-      expect(
-        ids(withoutRestatements(claims, [], [], pack, { track: hungUp }).claims).sort(),
-      ).toEqual(["m-a", "m-c"]);
     }
   });
 
@@ -902,14 +1323,18 @@ describe("the step on many claims", () => {
     );
     expect(togetherMs).toBeLessThan(1_500);
     expect(togetherResult.claims).toHaveLength(500);
-    for (const all of [claims, [...claims, code]]) {
+    for (const [all, left] of [
+      [claims, 2],
+      [[...claims, code], 1],
+    ] as const) {
       const { ms, result } = timed(
         () => withoutRestatements(all, [], [], [item], { track: hungUp }),
         { runs: 2, stopAboveMs: 5_000, clock: threadCpuMs },
       );
       expect(ms).toBeLessThan(1_500);
-      // One copy of the claim that says more stays; the ones that say only the record's words go.
-      expect(result.claims.filter((claim) => claim.origin === "model")).toHaveLength(1);
+      // One copy of the claim that says more stays (copies of one text); the ones that say only
+      // the record's words go, but for the best of them when no code-built claim states it.
+      expect(result.claims.filter((claim) => claim.origin === "model")).toHaveLength(left);
     }
   });
 });

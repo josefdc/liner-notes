@@ -611,8 +611,7 @@ export async function writeFactoids(
       context.evidence,
       { track },
     );
-    // A kept fact on a relation the run's records document carries their mark (documentedBy).
-    const kept = new Map(keptClaims.map((claim) => [claim.id, claim.documentedBy]));
+    const kept = new Set(keptClaims.map((claim) => claim.id));
 
     const answered = answers.find((answer) => answer.ok);
     const model = answered?.ok ? answered.model : null;
@@ -622,10 +621,7 @@ export async function writeFactoids(
         outcomes.push({ index, status: "none", reason: "repeat" });
         continue;
       }
-      const { documentedBy: _model, ...judgedClaim } =
-        claimsById.get(draft.claim.id) ?? draft.claim;
-      const documentedBy = kept.get(draft.claim.id);
-      const claim = documentedBy ? { ...judgedClaim, documentedBy } : judgedClaim;
+      const claim = claimsById.get(draft.claim.id) ?? draft.claim;
       outcomes.push({ index, status: "written", ...masked(draft.factoid, claim) });
     }
     outcomes.sort((a, b) => a.index - b.index);

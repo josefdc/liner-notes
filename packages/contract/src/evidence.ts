@@ -235,8 +235,9 @@ export const Claim = z.object({
     .catch(undefined)
     .describe(
       "On a model claim about a sample or a cover: the code-built claims, each on a record it " +
-        "cites, whose relation it states, in the record's direction. Readers name its relation " +
-        "as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+        "cites, whose relation it states plainly and only, in the record's direction. Readers " +
+        "name its relation as theirs; its own kind and verdict are unchanged. Absent: no record " +
+        "documents it, or the claim's words do not plainly state it",
     ),
 });
 export type Claim = z.infer<typeof Claim>;

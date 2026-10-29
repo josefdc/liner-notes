@@ -79,15 +79,12 @@ describe("the One More Time recording, replayed", () => {
       expect(claims).toHaveLength(recorded.length - 7);
       const keys = claims.map((claim) => wordsOf(claim.text));
       expect(new Set(keys).size).toBe(keys.length);
-      // The kept claims are as recorded: verdicts, kinds and evidence untouched. The one model
-      // claim on a relation a code-built claim documents is marked with that claim.
-      for (const { documentedBy, ...claim } of claims) {
+      // The kept claims are as recorded: verdicts, kinds and evidence untouched. None is marked
+      // as stating its record's relation: the brass figure's claim names the sample in words no
+      // template reads ("documents … as a sample in"), so it keeps its own label.
+      for (const claim of claims) {
+        expect(claim.documentedBy, claim.id).toBeUndefined();
         expect(recorded.find((other) => other.id === claim.id)).toEqual(claim);
-        if (documentedBy === undefined) continue;
-        expect(claim.id.startsWith(BRASS_FIGURE)).toBe(true);
-        expect(documentedBy.map((id) => claims.find((other) => other.id === id)?.origin)).toEqual([
-          "code",
-        ]);
       }
     }
   });

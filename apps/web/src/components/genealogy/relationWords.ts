@@ -78,7 +78,7 @@ interface ClaimShown {
  * The words of the relations records document, by the id of each model claim that states one,
  * added to `linked` (the words of the shown links that state claims, which stay as they are). The
  * API marks such a claim (`documentedBy`: the code-built claims whose relation it states, in
- * its record's direction, naming the record's other side and no other; restatements.ts). It is
+ * its record's direction, in one of a few plain templates and nothing more; restatements.ts). It is
  * named as those claims are (their link's words, else "Sample", "Cover"), never "Possible
  * sample", when each is shown sourced and about the same relation and the judge found the claim
  * supported or partly supported. Only the relation's name: the claim's own kind and verdict are

@@ -249,7 +249,7 @@ describe("withoutRestatements", () => {
   });
 
   it("removes nothing more when run on its own output", () => {
-    const text = "It samples Under Pressure.";
+    const text = "This recording samples Under Pressure.";
     const claims = [
       // The best copy restates the code claim; the two left are copies of each other.
       judged("m-best", { text, about: "sample", evidenceIds: ["ev-sample"] }),
@@ -297,7 +297,7 @@ describe("two model claims with one text", () => {
   });
 
   it("both stay when they are about other scopes and both cite something", () => {
-    const text = "It samples Under Pressure.";
+    const text = "This recording samples Under Pressure.";
     const kept = withoutRestatements(
       [
         judged("m-recording", { text, about: "sample", evidenceIds: ["ev-other"] }),
@@ -431,7 +431,7 @@ describe("two model claims with one text", () => {
   });
 
   it("keep the one that cites evidence over one that cites nothing, the first of the two", () => {
-    const text = "It samples Under Pressure.";
+    const text = "This recording samples Under Pressure.";
     const kept = withoutRestatements(
       [
         judged("m-none", { text, about: "sample", evidenceIds: [] }),
@@ -459,7 +459,7 @@ describe("two model claims with one text", () => {
   });
 
   it("both stay when the one that would go cites more", () => {
-    const text = "It samples Under Pressure.";
+    const text = "This recording samples Under Pressure.";
     const kept = withoutRestatements(
       [
         judged("m-one", { text, about: "sample", evidenceIds: ["ev-other"] }),

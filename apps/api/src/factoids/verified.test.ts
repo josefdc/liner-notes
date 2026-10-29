@@ -330,11 +330,10 @@ describe("a new sample fact that restates a code-built sample of the run", () =>
   it("is sent, judged as it was, when it adds a word of its own", async () => {
     const more = "Daft Punk’s recording samples the horns of “More Spell on You” by Eddie Johns.";
     expect(await sent(more)).toEqual([more]);
-    // Marked with the code-built claim whose relation it states: the page names that relation as
-    // the record does. Its own kind and verdict stay.
-    expect(sentClaims).toEqual([
-      expect.objectContaining({ verdict: "partial", kind: "inferred", documentedBy: ["code-s"] }),
-    ]);
+    // Judged as it was, and unmarked: a fact that says more than its record is read in doubt,
+    // and the page hedges its relation ("Possible sample").
+    expect(sentClaims).toEqual([expect.objectContaining({ verdict: "partial", kind: "inferred" })]);
+    expect(sentClaims[0]).not.toHaveProperty("documentedBy");
   });
 
   it("is sent unmarked when it names another record", async () => {

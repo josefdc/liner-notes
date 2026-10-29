@@ -114,6 +114,14 @@ async function verified(
   return out.trackData;
 }
 const idsOf = (data: TrackData) => (data.claims ?? []).map((claim) => claim.id);
+/** `draft` with the map's node `id` labelled as the track it draws ("<title> - <artist>"). */
+const labelled = (draft: ComposedDraft, id: string, label: string): ComposedDraft => ({
+  ...draft,
+  genealogy: {
+    ...draft.genealogy,
+    nodes: draft.genealogy.nodes.map((node) => (node.id === id ? { ...node, label } : node)),
+  },
+});
 /** What a link joins, how, and whose it is: the verifier sets its weight and kind. */
 const ends = ({ source, target, type, origin, claimId }: GenealogyLink) => ({
   source,
@@ -338,12 +346,17 @@ describe("a claim that a link or a timeline sample states", () => {
       claimId: "code-sample",
       evidenceIds: ["ev-sample"],
     };
-    const draft = draftOf([linked, timed, codeSample], [link, coded], {
-      // A timeline sample that names its claim, as the contract's Sample can.
-      samples: [
-        { time: 12, description: "The bass line", claimId: "m-timed" },
-      ] as unknown as ComposedDraft["samples"],
-    });
+    // The model's node for the record it cites, as its label names it.
+    const draft = labelled(
+      draftOf([linked, timed, codeSample], [link, coded], {
+        // A timeline sample that names its claim, as the contract's Sample can.
+        samples: [
+          { time: 12, description: "The bass line", claimId: "m-timed" },
+        ] as unknown as ComposedDraft["samples"],
+      }),
+      "up",
+      "Under Pressure - Queen & David Bowie",
+    );
     const llm = judging((sent) =>
       sent.map(({ claimId }) => ({ claimId, verdict: "supported", reason: "It says so." })),
     );
@@ -434,7 +447,10 @@ describe("a partly supported model claim that restates a code-built relation", (
       sent.map(({ claimId }) => ({ claimId, verdict: "partial", reason: "In part." })),
     );
     const out = await createVerifierNode(testRuntime(llm))(
-      stateFor(draftOf([cover, codeCover], [link]), [...evidence, coverRecord]),
+      stateFor(
+        labelled(draftOf([cover, codeCover], [link]), "ice-band", "Ice Ice Baby - Ice Band"),
+        [...evidence, coverRecord],
+      ),
       config,
     );
     const data = out.trackData!;

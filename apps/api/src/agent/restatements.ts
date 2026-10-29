@@ -11,26 +11,31 @@
  *    - its text is a code claim's (`statementKey`), citing only that claim's items, whatever the
  *      judge said;
  *    - or it is about a relation (a sample or a cover), the judge found it supported or partly
- *      supported, and it states only the relations its records document
+ *      supported, and it states exactly the relations its records document
  *      (`statesOnlyItsRelations`), each record cited by a code claim about the same relation, at
  *      the same scope. The same fact is the same relation between the same two records, read the
  *      same way: the record gives the pair, the relation's kind and its direction
- *      (`documentedRelation`: its recordRef and excerpt, MusicBrainz, Genius or
- *      SecondHandSongs). The claim must say the relation by its word ("samples", "a cover of"),
- *      name the other record (its artist, or a title that tells it apart: `namesOf`) on the
- *      record's side of that word (`statesRelationIn`), never deny it, name nothing its records
- *      or the analysed track do not, and use no word of its own: each of its words is its
- *      records', the analysed track's, a form of the relation's word, or a connective. A relation
- *      record says only that one record draws on another, so a claim that says how ("the bass
- *      line") says more, whatever the judge found;
+ *      (`documentedRelation`: a record of this recording or of its song, `track/…` or `work/…`,
+ *      from MusicBrainz, Genius or SecondHandSongs; a record of a related track, the map's second
+ *      hop, is not one). The claim must be, word for word, one of the strict templates of
+ *      relationText.ts (`readRelations`): "<one> samples <other>", "<one> is sampled by|in
+ *      <other>" and their forms, one side the analysed track and the other each record it cites,
+ *      named by its title (or by an artist no other record of the result shares; a cover always
+ *      by its title), in the record's direction. Anything else (a relative clause, an adverb, a
+ *      hedge or a negation, a word of its own, a name it does not cite) is unknown, and an
+ *      unknown claim states nothing: it stays. A relation record says only that one record draws
+ *      on another, so a claim that says how ("the bass line") says more, whatever the judge
+ *      found;
  *    - or, about anything else, the judge found it wholly supported by one code claim's items
  *      and it names nothing they do not (`namesOnlyWhatItCites`: every capitalised word and
  *      every number it holds is in their excerpts, a month read as its number). Here the analysed
  *      track's names count as names like any other: a credit may add its artist.
  *    A link the model drew on the map that states such a claim goes with it, and so does a node
  *    only those links drew, when the link draws the record's relation (its type and direction)
- *    and the map draws it already (a code link on the record) or never does (a relation of the
- *    song: codeClaims.ts draws no link for one). Otherwise the link, and its claim, stay.
+ *    between the analysed track and that record's own node (the code link's node, or a node
+ *    whose title and artist are the record's), and the map draws it already (a code link on the
+ *    record) or never does (a relation of the song: codeClaims.ts draws no link for one).
+ *    Otherwise the link, and its claim, stay.
  * 2. Then, of the model claims left:
  *    a. a claim that states only its records' relations goes when another model claim states
  *       each of them too (in the record's direction), about the same relation, at the same
@@ -45,9 +50,11 @@
  *    verdict (supported, partial, unsupported, then none: a copy the judge checked, and what it
  *    said of it, is never dropped for one it did not check), then the one on a fact card, then
  *    the one citing more records, then the smaller id.
- * 3. A model claim kept that states the relations its records document (as in 1, words of its
- *    own allowed) is marked with the code claims that document them (`documentedBy`): the page
- *    names its relation as theirs. Its kind and verdict stay; a mark it came with is read again.
+ * 3. A model claim kept that states exactly the relations its records document, as 1 reads them,
+ *    is marked with the code claims that document them (`documentedBy`): the page names its
+ *    relation as theirs. Only a claim a link or a timeline sample states is kept so (the others
+ *    went in 1), and a claim the templates cannot read is never marked. Its kind and verdict
+ *    stay; a mark it came with is read again.
  *
  * Nothing that adds information goes: a claim that cites another item, or more items, one that
  * names what its records do not, adds a word of its own, states another relation than its
@@ -73,13 +80,18 @@ import {
   scopeSupports,
   type Verdict,
 } from "@liner-notes/contract";
-import { normalizeName } from "../sources/musicbrainz.js";
+import { normalizeTitle, RELATION_PHRASE, type RelationKind } from "../sources/records.js";
 import {
-  normalizeArtist,
-  normalizeTitle,
-  RELATION_PHRASE,
-  type RelationKind,
-} from "../sources/records.js";
+  artistNames,
+  foldText,
+  hedged,
+  LINK_TYPE,
+  type NamedRecord,
+  otherDrawsOn,
+  type ReadingContext,
+  readRelations,
+  titleNames,
+} from "./relationText.js";
 
 /** The subjects of a claim that states a relation between two records: a sample or a cover. */
 const RELATION_SUBJECTS: ReadonlySet<ClaimAbout> = new Set([
@@ -178,16 +190,6 @@ function monthOf(word: string): number | null {
   return index === -1 ? null : index + 1;
 }
 
-/**
- * `text` without the accents of its Latin letters ("Beyoncé" reads "Beyonce"), as `normalizeName`
- * reads names: in another script a combining mark changes the letter, and is kept.
- */
-const foldLatin = (text: string) =>
-  text
-    .normalize("NFKD")
-    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
-    .normalize("NFC");
-
 /** Words that open a sentence capitalised and name nothing. */
 const FUNCTION_WORDS = new Set(
   "a an the it its this that these those in on at by of and as for to with from his her their our".split(
@@ -201,13 +203,13 @@ const FUNCTION_WORDS = new Set(
  * its value ("02" is 2); a month also by its number ("February" is in "2001-02-26"). A word in a
  * script without case (Chinese, Japanese, Arabic, Hebrew, Thai: `\p{Lo}`) may be a name too, and
  * must be found in the excerpts as it is written (such a script may write no spaces between
- * words). A Latin letter's accents do not count ("Beyonce" is "Beyoncé"), as `normalizeName`
- * compares names; another script's marks do. A capitalised word that names nothing ("The",
+ * words). A Latin letter's accents and Greek tonos do not count ("Beyonce" is "Beyoncé"), as
+ * `foldText` reads names; another script's marks do. A capitalised word that names nothing ("The",
  * "It") is not counted.
  */
 export function namesOnlyWhatItCites(text: string, excerpts: readonly string[]): boolean {
   const tokens = (from: string) =>
-    foldLatin(from.normalize("NFKC"))
+    foldText(from.normalize("NFKC"))
       .split(/[^\p{L}\p{N}]+/u)
       .filter(Boolean);
   const words = new Set<string>();
@@ -241,36 +243,6 @@ export function namesOnlyWhatItCites(text: string, excerpts: readonly string[]):
 const RECORD_RELATION = new RegExp(
   `/(${Object.keys(RELATION_PHRASE).join("|")})/(?:(?:recording|work|song|performance)/)?[^/]+$`,
 );
-/** Each relation kind's word, in every form a statement of it uses ("samples", "covered"). */
-const FORMS = {
-  sample: ["sample", "samples", "sampled", "sampling"],
-  interpolation: [
-    "interpolate",
-    "interpolates",
-    "interpolated",
-    "interpolating",
-    "interpolation",
-    "interpolations",
-  ],
-  cover: ["cover", "covers", "covered", "covering"],
-  remix: ["remix", "remixes", "remixed", "remixing"],
-};
-/** The map's link type of each relation kind, which names its word's forms (`FORMS`). */
-const LINK_TYPE: Record<RelationKind, keyof typeof FORMS> = {
-  samples: "sample",
-  "sampled-by": "sample",
-  interpolates: "interpolation",
-  "interpolated-by": "interpolation",
-  "cover-of": "cover",
-  "covered-by": "cover",
-  "remix-of": "remix",
-  "remixed-by": "remix",
-};
-/** Every form of every relation's word. */
-const ALL_FORMS: ReadonlySet<string> = new Set(Object.values(FORMS).flat());
-/** True for a kind whose other record draws on this one (it samples, covers … this one). */
-const otherDrawsOn = (kind: RelationKind) => kind.endsWith("-by");
-
 /** A relation a primary record documents: its kind, and the other record's title and artist. */
 export interface DocumentedRelation {
   kind: RelationKind;
@@ -281,14 +253,17 @@ export interface DocumentedRelation {
 /**
  * The relation an evidence item documents, read from its recordRef (the kind) and its excerpt
  * (`<this record> <RELATION_PHRASE> "<title>" by <artist>.`, the other record last, with the
- * date SecondHandSongs gives it in brackets); null for an item that documents none, whose
- * excerpt is not written so, or holds the relation's phrase twice (a title may hold it, and
- * then which is the record's cannot be told).
+ * date SecondHandSongs gives it in brackets); null for an item that documents none, or none of
+ * this track or its song (its recordRef's scope is `track/` or `work/`: a relations map's second
+ * hop joins two other recordings), whose excerpt is not written so, or holds the relation's
+ * phrase twice (a title may hold it, and then which is the record's cannot be told).
  */
 export function documentedRelation(
   item: Pick<Evidence, "recordRef" | "excerpt">,
 ): DocumentedRelation | null {
-  const kind = RECORD_RELATION.exec(item.recordRef ?? "")?.[1] as RelationKind | undefined;
+  const ref = item.recordRef ?? "";
+  if (!ref.startsWith("track/") && !ref.startsWith("work/")) return null;
+  const kind = RECORD_RELATION.exec(ref)?.[1] as RelationKind | undefined;
   if (!kind) return null;
   const phrase = ` ${RELATION_PHRASE[kind]} `;
   const at = item.excerpt.indexOf(phrase);
@@ -301,144 +276,66 @@ export function documentedRelation(
   return { kind, title: names[1], artist: names[2] ?? null };
 }
 
+/**
+ * The record's own side of the relation an item documents (`documentedRelation`): its title and
+ * artist as its excerpt writes them (`"<title>" by <artist>`, the work's or song's title, a
+ * SecondHandSongs performer); this track or its song, which a statement may name so.
+ */
+export function recordSubject(
+  item: Pick<Evidence, "recordRef" | "excerpt">,
+): { title: string; artist: string | null } | null {
+  const relation = documentedRelation(item);
+  if (!relation) return null;
+  const phrase = ` ${RELATION_PHRASE[relation.kind]} `;
+  const own = item.excerpt.slice(0, item.excerpt.indexOf(phrase));
+  const names = /"([^"]+)"(?: by (.+)| \(as performed by (.+)\))?$/su.exec(own) ?? null;
+  return names ? { title: names[1], artist: names[2] ?? names[3] ?? null } : null;
+}
+
 /** The analysed track, as a statement may name it. */
 export interface AnalysedTrack {
   title?: string | null;
   artist?: string | null;
 }
 
-/** Where the word sequence `part` first starts in `words`; -1 when it is not there. */
-function indexOfWords(words: readonly string[], part: readonly string[]): number {
-  if (part.length === 0) return -1;
-  for (let at = 0; at + part.length <= words.length; at++) {
-    if (part.every((word, i) => words[at + i] === word)) return at;
-  }
-  return -1;
+/** The analysed track's names, as `readRelations` reads them. */
+function trackNamesOf(track: AnalysedTrack) {
+  return {
+    titles: track.title ? titleNames(track.title) : [],
+    artists: track.artist ? artistNames(track.artist) : [],
+  };
 }
 
-/** Words after a relation's word that make its subject the record drawn on ("sampled in"). */
-const PASSIVE_AFTER = new Set(["in", "by", "on", "into"]);
-
-/** A statement's words as names are compared (`normalizeName`: no case, accents or marks). */
-const nameWords = (text: string) => normalizeName(text).split(" ").filter(Boolean);
-
-/**
- * True when a name can be told apart in a statement: two letters or more, and not only words that
- * name nothing on their own ("It", "The", "A") or a relation's word ("Sample", "Cover").
- */
-const telling = (name: readonly string[]) =>
-  name.join("").length >= 3 &&
-  !name.every((word) => CONNECTIVES.has(word) || FUNCTION_WORDS.has(word) || ALL_FORMS.has(word));
-
-/** A title without a bracketed subtitle at its end ("Are You My Woman? (Tell Me So)"). */
-const SUBTITLE = /\s*[([][^()[\]]*[)\]]\s*$/u;
-
-/**
- * The ways a statement may name the other record of `relation`, as word sequences, the artist's
- * first: its artist (`normalizeArtist`), its title (`normalizeTitle`: without featured-artist and
- * remaster suffixes) and that title without its bracketed subtitle. A name the analysed track
- * shares (a cover's title is often the track's own) is left out: it cannot say which record is
- * meant. So is a title that cannot be told apart in a statement (`telling`): a record titled "It"
- * or "Sample" is named by its artist.
- */
-function namesOf(relation: DocumentedRelation, track: AnalysedTrack): string[][] {
-  const own = new Set(
-    [
-      track.title ? normalizeTitle(track.title) : "",
-      track.artist ? normalizeArtist(track.artist) : "",
-    ].filter(Boolean),
-  );
-  const candidates = [
-    relation.artist === null ? "" : normalizeArtist(relation.artist),
-    normalizeTitle(relation.title),
-    normalizeTitle(relation.title.replace(SUBTITLE, "")),
-  ];
-  const names: string[][] = [];
-  for (const name of candidates) {
-    if (name === "" || own.has(name) || names.some((each) => each.join(" ") === name)) continue;
-    const words = name.split(" ");
-    if (telling(words)) names.push(words);
-  }
-  return names;
+/** A documented relation's other record, as `readRelations` names it. */
+function namedRecord(id: string, relation: DocumentedRelation): NamedRecord {
+  return {
+    id,
+    kind: relation.kind,
+    title: relation.title,
+    key: `${normalizeTitle(foldText(relation.title))}|${relation.artist ?? ""}`,
+    titles: titleNames(relation.title),
+    artists: relation.artist === null ? [] : artistNames(relation.artist),
+  };
 }
 
 /**
- * True when a statement's words (`nameWords`) state `relation` as its record documents it: they
- * say the relation by its word, in any of its forms ("samples", "a cover of", "remixed"), name
- * the other record (`namesOf`), and name it on the record's side of that word. The side: in "A
- * samples B" or "A is a cover of B" the record named first draws on the other; in "A is sampled
- * in B" or "A, as a sample in B" (the word followed by "in", "by", "on" or "into") the one named
- * after it does. A "samples" record must be stated with this track drawing on the other record,
- * a "sampled-by" one the other way round. A statement that names the other record only by a name
- * that cannot tell it apart states nothing here, nor does one that says its title is by another
- * artist than the record's.
+ * True when `text` states `relation` as its record documents it (`readRelations`), with no other
+ * record of the result to tell apart from it.
  */
-function statesRelationIn(
-  words: readonly string[],
-  relation: DocumentedRelation,
-  names: readonly string[][],
-): boolean {
-  const forms = FORMS[LINK_TYPE[relation.kind]];
-  const word = words.findIndex((each) => forms.includes(each));
-  if (word === -1) return false;
-  const artist = relation.artist === null ? null : normalizeArtist(relation.artist).split(" ");
-  for (const name of names) {
-    const at = indexOfWords(words, name);
-    if (at === -1 || (at <= word && word < at + name.length)) continue;
-    // A title said to be by someone else than the record's artist ("Shout by will.i.am").
-    const after = at + name.length;
-    if (
-      artist !== null &&
-      words[after] === "by" &&
-      after !== word &&
-      !artist.every((each, i) => words[after + 1 + i] === each)
-    ) {
-      return false;
-    }
-    const passive = PASSIVE_AFTER.has(words[word + 1] ?? "");
-    const otherDraws = passive ? at > word : at < word;
-    return otherDraws === otherDrawsOn(relation.kind);
-  }
-  return false;
-}
-
-/** True when `text` states `relation` as its record documents it (`statesRelationIn`). */
 export function statesRelationOf(
   text: string,
   relation: DocumentedRelation,
   track: AnalysedTrack = {},
 ): boolean {
-  return statesRelationIn(nameWords(text), relation, namesOf(relation, track));
+  const record = namedRecord("record", relation);
+  const artistIndex = new Map(record.artists.map((name) => [name.join(" "), new Set(["record"])]));
+  const stated = readRelations(text, {
+    track: trackNamesOf(track),
+    cited: new Map([["record", record]]),
+    artistIndex,
+  });
+  return stated?.has("record") ?? false;
 }
-
-/** A statement's words, without case or the accents of Latin letters, as a record's are read. */
-const wordsOf = (text: string) =>
-  foldLatin(text.normalize("NFKC"))
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
-
-/**
- * Words a statement may use beside its records' own when it only restates them: articles,
- * auxiliaries, prepositions and what names a record ("song", "recording", the possessive "s").
- */
-const CONNECTIVES: ReadonlySet<string> = new Set(
-  "a an the is was are were has have had been be of by and in on to from with this that it its s song track recording work".split(
-    " ",
-  ),
-);
-
-/**
- * A negation: a statement that holds one is never read as stating its record's relation, even
- * when the word is in a name ("Never Gonna Give You Up").
- */
-const NEGATION = /\b(?:not|no|never|nor|neither|without)\b|n['’]t\b/iu;
-
-/**
- * Capitalised words that open a sentence and name nothing, beside `namesOnlyWhatItCites`' own
- * ("Other source material describes…"): read as cited, so they are no new name.
- */
-const SENTENCE_OPENERS = "Other Another Some Such";
 
 // =============================================================================
 // The step
@@ -457,6 +354,21 @@ interface MapLink {
 interface MapLike {
   nodes: readonly { id: string }[];
   links: readonly object[];
+}
+
+/**
+ * The track a map's node draws, by its title and artist (`trackTitle` and `trackArtist`, else
+ * its label, "<title> - <artist>"); null for the analysed track's node or one that names none.
+ */
+function nodeRecord(node: object | undefined): { title: string; artist: string } | null {
+  const { id, trackTitle, trackArtist, label } = (node ?? {}) as Record<string, unknown>;
+  if (node === undefined || id === "current") return null;
+  if (typeof trackTitle === "string" && typeof trackArtist === "string") {
+    return { title: trackTitle, artist: trackArtist };
+  }
+  if (typeof label !== "string") return null;
+  const at = label.lastIndexOf(" - ");
+  return at === -1 ? null : { title: label.slice(0, at), artist: label.slice(at + 3) };
 }
 
 export interface WithoutRestatements<F, G> {
@@ -479,11 +391,13 @@ type CitedItem = Pick<Evidence, "id" | "sourceTier" | "recordRef" | "excerpt">;
 export interface RestatementContext<G> {
   /**
    * The result's map. A model link that states a claim restating a code-built one goes with the
-   * claim when the link states the record's relation in its type and direction, and the map draws
-   * that relation already (a code link on the same record, of the same type) or never draws it (a
-   * relation of the song, not of this recording); so does a node of the model's that only such
-   * links drew. Otherwise the link stays, and so does its claim. Without the map, a claim any link
-   * states stays.
+   * claim when the link states the record's relation in its type and direction, its other end is
+   * the record's own node (the code link's, or one whose title and artist are the record's), and
+   * the map draws that relation already (a code link on the same record, of the same type) or
+   * never draws it (a relation of the song, not of this recording); so does a node of the model's
+   * that only such links drew. Otherwise the link stays, and so does its claim. Without the map,
+   * a claim any link states stays. Its nodes and pack also give the artists of the result: an
+   * artist alone names a record only when no other record has it.
    */
   genealogy?: G;
   /** The analysed track: in a claim about a relation, its title and artist are no new name. */
@@ -495,8 +409,8 @@ interface CitedRelation extends DocumentedRelation {
   id: string;
   /** A record of the song (`work/…`): the map draws no link for it (codeClaims.ts). */
   ofSong: boolean;
-  /** The ways a statement may name its other record (`namesOf`). */
-  names: string[][];
+  /** Its other record, as a statement names it (`readRelations`). */
+  named: NamedRecord;
 }
 
 /** Whether two lists hold the same ids, in the same order. */
@@ -543,19 +457,30 @@ export function withoutRestatements<
   const trackNames = [track.title, track.artist].filter(
     (name): name is string => typeof name === "string" && name !== "",
   );
-  const trackWords = trackNames.flatMap(wordsOf);
+  const trackNamed = trackNamesOf(track);
   const within = (ids: readonly string[], of: readonly string[]) =>
     ids.every((id) => of.includes(id));
   const sameScope = (a: Claim, b: Claim) => (a.scope ?? "recording") === (b.scope ?? "recording");
   const excerpts = (claim: Claim) => claim.evidenceIds.map((id) => pack.get(id)?.excerpt);
-  /** Every name and number of the claim is in what it cites (and `more`). */
-  const namesOnlyItsRecord = (claim: Claim, more: readonly string[] = []) => {
+  /** Every name and number of the claim is in what it cites. */
+  const namesOnlyItsRecord = (claim: Claim) => {
     const cited = excerpts(claim);
     return (
       cited.every((excerpt) => excerpt !== undefined) &&
-      namesOnlyWhatItCites(claim.text, [...(cited as string[]), ...more])
+      namesOnlyWhatItCites(claim.text, cited as string[])
     );
   };
+  /**
+   * Whether a claim denies or hedges what it says (`hedged`), outside the names it may hold: the
+   * titles its records quote and the analysed track's title and artist.
+   */
+  const hedges = (claim: Claim) =>
+    hedged(claim.text, [
+      ...trackNames,
+      ...(excerpts(claim) as (string | undefined)[]).flatMap((excerpt) =>
+        [...(excerpt ?? "").matchAll(/"([^"]+)"/gu)].map((quoted) => quoted[1]),
+      ),
+    ]);
 
   /** What each relation record documents, read once. */
   const records = new Map<string, CitedRelation | null>();
@@ -570,7 +495,7 @@ export function withoutRestatements<
               ...relation,
               id,
               ofSong: (item.recordRef ?? "").startsWith("work/"),
-              names: namesOf(relation, track),
+              named: namedRecord(id, relation),
             }
           : null,
       );
@@ -585,27 +510,57 @@ export function withoutRestatements<
       : null;
   });
   /**
-   * Whether a claim may state a relation as its records document it: about a sample or a cover,
-   * found supported or partly supported, with no negation, naming nothing its records or the
-   * analysed track do not.
+   * The other sides of the result's records, by each artist name they credit: its relation
+   * records and the tracks its map draws (but the analysed one). An artist names a record alone
+   * only when it credits one of them.
    */
-  const mayState = perClaim(
-    (claim) =>
-      statesRelation(claim) &&
-      (claim.verdict === "supported" || claim.verdict === "partial") &&
-      !NEGATION.test(claim.text) &&
-      namesOnlyItsRecord(claim, [...trackNames, SENTENCE_OPENERS]),
-  );
-  /** The records a claim cites whose relation it states, in their direction (`statesRelationIn`). */
-  const statesOf = perClaim((claim) => {
-    const stated = new Set<string>();
-    if (!mayState(claim)) return stated;
-    const words = nameWords(claim.text);
-    for (const id of claim.evidenceIds) {
-      const relation = recordOf(id);
-      if (relation && statesRelationIn(words, relation, relation.names)) stated.add(id);
+  const artistIndex = new Map<string, Set<string>>();
+  const indexArtist = (title: string, artist: string) => {
+    const key = normalizeTitle(foldText(title));
+    for (const name of artistNames(artist)) {
+      const credit = name.join(" ");
+      artistIndex.set(credit, new Set([...(artistIndex.get(credit) ?? []), key]));
     }
-    return stated;
+  };
+  for (const item of evidence) {
+    const relation = documentedRelation(item);
+    if (relation?.artist) indexArtist(relation.title, relation.artist);
+  }
+  for (const node of genealogy?.nodes ?? []) {
+    const other = nodeRecord(node);
+    if (other) indexArtist(other.title, other.artist);
+  }
+  /**
+   * Whether a claim may state a relation as its records document it: about a sample or a cover,
+   * found supported or partly supported.
+   */
+  const mayState = (claim: Claim) =>
+    statesRelation(claim) && (claim.verdict === "supported" || claim.verdict === "partial");
+  /**
+   * The records a claim cites whose relation it states, in their direction, and nothing else
+   * (`readRelations`): none when it is not one of the templates, so a claim read in doubt
+   * states nothing, never goes, is never marked and never covers another.
+   */
+  const statesOf = perClaim((claim) => {
+    const relations = mayState(claim) ? relationsOf(claim) : null;
+    if (!relations) return new Set<string>();
+    const subjects = claim.evidenceIds.flatMap((id) => {
+      const item = pack.get(id);
+      const subject = item ? recordSubject(item) : null;
+      return subject ? [subject] : [];
+    });
+    const reading: ReadingContext = {
+      track: {
+        titles: [...trackNamed.titles, ...subjects.flatMap((each) => titleNames(each.title))],
+        artists: [
+          ...trackNamed.artists,
+          ...subjects.flatMap((each) => (each.artist ? artistNames(each.artist) : [])),
+        ],
+      },
+      cited: new Map(relations.map((relation) => [relation.id, relation.named])),
+      artistIndex,
+    };
+    return readRelations(claim.text, reading) ?? new Set<string>();
   });
   /** The relations a claim cites, when it states each of them; null when it does not. */
   const statedRelations = (claim: Claim) => {
@@ -614,23 +569,12 @@ export function withoutRestatements<
     return relations?.every((relation) => stated.has(relation.id)) ? relations : null;
   };
   /**
-   * Whether a claim states its records' relations and says nothing else: each of its words is
-   * one of its records', the analysed track's, a form of a relation's word or a connective
-   * (`CONNECTIVES`). A claim with a word of its own ("the bass line", "an extended mix") stays,
-   * whatever the judge found: a relation record says only that one record draws on another.
+   * Whether a claim states its records' relations and says nothing else: the templates of
+   * `readRelations` hold nothing but names, the relation's verb and words that name nothing. A
+   * claim with a word of its own ("the bass line", "an extended mix") is read in doubt, whatever
+   * the judge found: a relation record says only that one record draws on another.
    */
-  const statesOnlyItsRelations = perClaim((claim) => {
-    const relations = statedRelations(claim);
-    if (!relations) return false;
-    const forms = new Set(relations.flatMap((relation) => FORMS[LINK_TYPE[relation.kind]]));
-    const own = new Set([
-      ...CONNECTIVES,
-      ...forms,
-      ...(excerpts(claim) as string[]).flatMap(wordsOf),
-      ...trackWords,
-    ]);
-    return wordsOf(claim.text).every((word) => own.has(word));
-  });
+  const statesOnlyItsRelations = (claim: Claim) => statedRelations(claim) !== null;
 
   // 1. A model claim that restates code-built claims.
   const code = claims.filter((claim) => claim.origin === "code" && claim.evidenceIds.length > 0);
@@ -647,28 +591,61 @@ export function withoutRestatements<
     }
     return ids.length > 0 ? ids : null;
   };
+  const nodes = new Map((genealogy?.nodes ?? []).map((node) => [node.id, node]));
+  /** The other end of a link that joins this track to `relation`'s record in its direction. */
+  const otherEnd = (link: MapLink, relation: CitedRelation) =>
+    otherDrawsOn(relation.kind)
+      ? link.source === "current"
+        ? link.target
+        : null
+      : link.target === "current"
+        ? link.source
+        : null;
+  /** Whether the map's node `id` is the record's own: the node of its code link, or named so. */
+  const isRecordNode = (id: string, relation: CitedRelation, type: string | undefined) => {
+    const coded = mapLinks.some(
+      (each) =>
+        each.origin === "code" &&
+        each.type === type &&
+        (each.evidenceIds ?? []).includes(relation.id) &&
+        otherEnd(each, relation) === id,
+    );
+    if (coded) return true;
+    const drawn = nodeRecord(nodes.get(id));
+    if (!drawn || relation.artist === null) return false;
+    const credits = new Set(relation.named.artists.map((name) => name.join(" ")));
+    return (
+      titleNames(drawn.title).some((title) =>
+        relation.named.titles.some((own) => own.join(" ") === title.join(" ")),
+      ) && artistNames(drawn.artist).some((name) => credits.has(name.join(" ")))
+    );
+  };
   /**
-   * Whether a model link that states `claim` may go with it: it joins this track in the type
-   * and direction each record the claim cites documents, and the map draws that relation
-   * already (a code link on the record, of that type) or never does (a relation of the song).
+   * Whether a model link that states `claim` may go with it: it joins this track to each record
+   * the claim cites, in the type and direction the record documents, its other end the record's
+   * own node, and the map draws that relation already (a code link on the record, of that type)
+   * or never does (a relation of the song).
    */
   const linkMayGo = (link: MapLink, claim: Claim) => {
     if (!onMap.has(link) || link.origin === "code") return false;
     const relations = relationsOf(claim) ?? [];
     return (
       relations.length > 0 &&
-      relations.every(
-        (relation) =>
+      relations.every((relation) => {
+        const end = otherEnd(link, relation);
+        return (
           link.type === LINK_TYPE[relation.kind] &&
-          (otherDrawsOn(relation.kind) ? link.source === "current" : link.target === "current") &&
+          end !== null &&
+          isRecordNode(end, relation, link.type) &&
           (relation.ofSong ||
             mapLinks.some(
               (each) =>
                 each.origin === "code" &&
                 each.type === link.type &&
                 (each.evidenceIds ?? []).includes(relation.id),
-            )),
-      )
+            ))
+        );
+      })
     );
   };
   /**
@@ -700,6 +677,7 @@ export function withoutRestatements<
       model.verdict === "supported" &&
       model.evidenceIds.length > 0 &&
       namesOnlyItsRecord(model) &&
+      !hedges(model) &&
       code.some((built) => sameScope(model, built) && within(model.evidenceIds, built.evidenceIds))
     );
   };

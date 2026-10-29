@@ -454,7 +454,9 @@ const NONE_OF_HOP_DATED = { [SIBLING]: null, [UNDATED_SIBLING]: null, [EARLIER]:
  * own lookup, the second hop's), then the second hop's three.
  */
 const ASKED_IDS = [...DIRECT_IDS, ...HOP_IDS].filter((id) => id !== PASTIME);
-const { [PASTIME]: _pastimeDate, ...ASKED_DATED } = { ...EXPECTED_DIRECT, ...HOP_DATED };
+const ASKED_DATED: Record<string, string | null> = Object.fromEntries(
+  Object.entries({ ...EXPECTED_DIRECT, ...HOP_DATED }).filter(([id]) => id !== PASTIME),
+);
 const PASTIME_ONLY = { ...NONE_DATED, [PASTIME]: "1976-09-28" };
 /** The chain's own MusicBrainz requests and the map's, in the order they were sent. */
 const mbOrder = (calls: readonly FetchCall[]) =>

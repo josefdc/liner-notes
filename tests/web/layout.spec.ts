@@ -5,6 +5,7 @@ import {
   animationsSettled,
   dashboardHeading,
   loadFixture,
+  openResults,
   useMockApi,
 } from "./mock";
 
@@ -151,7 +152,7 @@ for (const [width, height] of [
     await page.goto("/");
     await page.getByPlaceholder(/Song title/).fill("Quiet Signal");
     await page.getByRole("button", { name: "Analyze", exact: true }).click();
-    await page.getByRole("button", { name: "Open the results" }).click();
+    await openResults(page, page.locator("[data-loading-view]"));
     await expect.poll(() => holding).toBe(true);
     const skeletonHero = await page
       .locator("[data-loading-view] > div")

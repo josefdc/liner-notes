@@ -7,7 +7,7 @@ import {
   ReplayRecord,
   RunResponse,
 } from "@liner-notes/contract";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { replayedAnalysis, replayNotice } from "../../apps/api/src/replay/player";
 import {
   contractMisfits,
@@ -312,16 +312,18 @@ export function dashboardHeading(page: Page) {
 }
 
 /**
- * Opens the Dashboard of a run that has completed, with "Open the results". The progress screen
- * also opens it by itself 3.5 s after the run completes: on a busy machine, a click still being
- * retried then (the button not yet where a click lands) finds the button gone, and would wait
- * for it until the test times out. So the click is tried a little at a time, until the
- * Dashboard is open, by the click or by itself.
+ * Opens the results of a run that has completed, with "Open the results": `opened` is what shows
+ * once they are open (the Dashboard's heading, or the screen that says its code could not be
+ * loaded). The progress screen also opens them by itself 3.5 s after the run completes: on a
+ * busy machine, a click still being retried then (the button not yet where a click lands) finds
+ * the button gone, and would wait for it until the test times out. So the click is tried a
+ * little at a time, until the results are open, by the click or by themselves. A test of the
+ * button itself clicks it directly, with the page's clock held so that nothing else opens them.
  */
-export async function openResults(page: Page) {
+export async function openResults(page: Page, opened: Locator = dashboardHeading(page)) {
   const button = page.getByRole("button", { name: "Open the results" });
   await expect(async () => {
-    if (await dashboardHeading(page).isVisible()) return;
+    if (await opened.isVisible()) return;
     await button.click({ timeout: 2_000 });
   }).toPass();
 }

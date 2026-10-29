@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { collectProblems, releaseStream, replayedRecording, useMockApi } from "./mock";
+import { collectProblems, openResults, releaseStream, replayedRecording, useMockApi } from "./mock";
 import { offline } from "./offline";
 
 // The recorded run's cover, and any other outside address, are answered on the page: nothing
@@ -153,7 +153,7 @@ for (const [width, height] of [
     expect.soft(await page.locator("#root").innerText()).not.toMatch(MODEL_ID);
 
     await releaseStream(page, "finish");
-    await page.getByRole("button", { name: "Open the results" }).click();
+    await openResults(page);
     const notice = page.getByRole("region", { name: "Recorded run" }).first();
     await expect(notice).toBeVisible();
     const date = new Date(recordedAt).toLocaleDateString("en-GB", {

@@ -4,6 +4,7 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  openResults,
   releaseStream,
   replayedRecording,
   streamLog,
@@ -108,7 +109,7 @@ test("Stop closes the run's stream, brings the search back, and a new search run
   await search(page, "One More Time");
   await expect(page.getByRole("log")).toContainText("Found the track on Spotify");
   await expect(page.getByRole("log")).not.toContainText("A line after the stop");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   expect(problems).toEqual([]);
 });

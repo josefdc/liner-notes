@@ -4,6 +4,7 @@ import {
   dashboardHeading,
   fullResultData,
   loadFixture,
+  openResults,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -33,7 +34,7 @@ async function search(page: Page, query: string) {
 }
 
 async function openDashboard(page: Page) {
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
 }
 

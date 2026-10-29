@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { collectProblems, dashboardHeading, loadFixture, useMockApi } from "./mock";
+import { collectProblems, dashboardHeading, loadFixture, openResults, useMockApi } from "./mock";
 import { offline } from "./offline";
 
 // A part of the page whose code chunk failed to load (a dropped connection, a deploy that
@@ -117,7 +117,7 @@ test("a Dashboard whose code failed to load is shown on Try again, without a rel
   await page.goto("/");
   await markDocument(page);
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page, screenFallback(page));
 
   const fallback = screenFallback(page);
   await expect(fallback).toBeVisible();
@@ -154,7 +154,7 @@ test("a new search that reaches the Dashboard shows it once its code can be load
   await page.goto("/");
   await markDocument(page);
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page, screenFallback(page));
   const fallback = screenFallback(page);
   await expect(fallback).toBeVisible();
 
@@ -164,7 +164,7 @@ test("a new search that reaches the Dashboard shows it once its code can be load
 
   chunk.allow();
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeFocused();
   await expect(fallback).toHaveCount(0);
   expect(await sameDocument(page)).toBe(true);
@@ -182,7 +182,7 @@ test("a Player whose code failed to load is shown on Try again, without a reload
   await page.goto("/");
   await markDocument(page);
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   await page.getByRole("button", { name: "View full analysis" }).click();
 
@@ -212,7 +212,7 @@ test("Reload the page reloads it", async ({ page }) => {
   await page.goto("/");
   await markDocument(page);
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page, screenFallback(page));
   const fallback = screenFallback(page);
   await expect(fallback).toBeVisible();
   const address = page.url();
@@ -233,7 +233,7 @@ test("a Sonic Fingerprint whose code failed to load leaves the Dashboard, and lo
   const chunk = await failChunk(page, /\/assets\/SonicFingerprint-[\w-]+\.js$/);
   await page.goto("/");
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
 
   const region = page.getByRole("region", { name: "Sonic Fingerprint" });
   const fallback = region.getByRole("alert");
@@ -269,7 +269,7 @@ test("a Sonic Fingerprint whose code fails after the Dashboard is in leaves the 
   chunk.hold();
   await page.goto("/");
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeFocused();
   await expect.poll(() => chunk.waiting()).toBe(1);
 
@@ -311,7 +311,7 @@ test("a Sonic Fingerprint that fails to draw again keeps the focus on its Try ag
   );
   await page.goto("/");
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeFocused();
   const region = page.getByRole("region", { name: "Sonic Fingerprint" });
   await expect(region.getByRole("alert")).toContainText("The Sonic Fingerprint could not be drawn");

@@ -5,6 +5,7 @@ import {
   loadFixture,
   openPlayer,
   replayedRecording,
+  showcaseRecordings,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
@@ -55,15 +56,36 @@ function listed(page: Page, section: string) {
     );
 }
 
-async function openRecording(page: Page) {
-  const { events } = replayedRecording();
+async function openRecording(page: Page, slug?: string, query = "One More Time Daft Punk") {
+  const { events } = replayedRecording(slug);
   await useMockApi(page, {
     suggestions: [],
     eventGapMs: 0,
     streams: { "/api/analyze/stream": events },
   });
-  await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
+  await analyzeAndOpenDashboard(page, query);
   await openPlayer(page);
+}
+
+/** The fact cards above the notes: each as its badge and its text, and how many badges it shows. */
+function shownCards(page: Page) {
+  return page.locator("#panel-context [data-factoid-category]").evaluateAll((found) =>
+    found.map((card) => ({
+      badges: card.querySelectorAll("[data-factoid-type]").length,
+      text: `${card.querySelector("[data-factoid-type]")?.textContent?.trim()}: ${card.textContent}`,
+    })),
+  );
+}
+
+/** Every claim the notes list, in any section: each as its label and its text. */
+function everyClaimListed(page: Page) {
+  return page
+    .locator("#panel-context li")
+    .evaluateAll((items) =>
+      items
+        .filter((item) => item.querySelector(":scope > p"))
+        .map((item) => item.querySelector(":scope > p")?.textContent?.trim() ?? ""),
+    );
 }
 
 test("the recorded run's notes: sections in order, its samples and covers with their sources", async ({
@@ -97,38 +119,19 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
   // Every claim the notes list, in any section, and every fact card, "Possible" ones included: a
   // relation a record documents is listed once, by its record, and never named "Possible" beside
-  // it. The sample's card is a known duplicate, tracked in #247: in the model's own words
-  // ("MusicBrainz documents … as a source sampled in …") it restates the record and adds
-  // nothing, but no template reads that sentence, so it stays today, named as the record names
-  // it ("Sample", never "Possible sample"). #247's fix removes this card (then 0 cards here, and
-  // no claim of this section shown with the facts above). Every card shows its badge.
-  const cards = await page.locator("#panel-context [data-factoid-category]").evaluateAll((found) =>
-    found.map((card) => ({
-      badges: card.querySelectorAll("[data-factoid-type]").length,
-      text: `${card.querySelector("[data-factoid-type]")?.textContent?.trim()}: ${card.textContent}`,
-    })),
-  );
-  expect(cards).toHaveLength(1);
-  for (const card of cards) expect(card.badges, card.text).toBe(1);
-  const everyClaim = await page
-    .locator("#panel-context li")
-    .evaluateAll((items) =>
-      items
-        .filter((item) => item.querySelector(":scope > p"))
-        .map((item) => item.querySelector(":scope > p")?.textContent?.trim() ?? ""),
-    );
+  // it. The model's one card ("MusicBrainz documents … as a source sampled in this recording of
+  // …") only restated the Eddie Johns record: it is left out with its claim, so no card is shown.
+  const cards = await shownCards(page);
+  expect(cards).toEqual([]);
+  const everyClaim = await everyClaimListed(page);
   expect(everyClaim.length).toBeGreaterThan(rows.length);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
     expect(
       everyClaim.filter((claim) => fact.test(claim)),
       String(fact),
     ).toHaveLength(1);
-    for (const card of cards.filter((each) => fact.test(each.text))) {
-      expect(card.text, String(fact)).not.toMatch(/^possible/i);
-    }
   }
   for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
-  expect(cards[0].text).toMatch(/^SAMPLE: .*"More Spell on You"/i);
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
   await expect(items).toHaveCount(13);
   for (const item of await items.all()) {
@@ -145,8 +148,8 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     "href",
     "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
   );
-  // The sample claim on a fact card (the #247 duplicate above) is counted, not listed twice.
-  await expect(samples).toContainText("1 claim of this section is shown with the facts above.");
+  // No claim of this section is on a card.
+  await expect(samples).not.toContainText("shown with the facts above");
 
   // The release the track appears on is stated once, in "More claims", by its MusicBrainz record:
   // the model's two copies (one filed as a credit, on a fact card) are left out. The recording has
@@ -187,6 +190,65 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   await expect(page.getByText(/Recorded run/).first()).toBeVisible();
   expect(problems).toEqual([]);
 });
+
+// Each showcase recording: every relation its records document is listed once in the notes, by
+// its record, and never named "Possible" there or on a card. The model's claims and cards that
+// only restated records are left out (Juicy's lists of the tracks that sample it, its two sample
+// cards, the Coldplay cover of Bitter Sweet Symphony stated as a claim and as a card); a card
+// that says more than its record stays, named as the record names the relation. Each fact is
+// found by its other track's artist: the map's second hop lists other tracks that sample the
+// same records, by title alone.
+const DOCUMENTED: Record<string, { facts: RegExp[]; cards: RegExp[] }> = {
+  "bitter-sweet-symphony-the-verve": {
+    facts: [/Andrew Oldham/, /Coldplay (feat\.|featuring) Richard Ashcroft/],
+    // Its second sentence adds detail "around that sample": named "Sample", not "Possible sample".
+    cards: [/^SAMPLE: .*The Last Time.*around that sample/i],
+  },
+  "hung-up-madonna": {
+    facts: [/ABBA/, /SDP extended vocal/],
+    // It names the remixers inside the records' titles: it is not read as the records, and stays.
+    cards: [/^PRODUCTION: .*remixes, including versions by Chus & Ceballos/i],
+  },
+  "juicy-the-notorious-big": {
+    facts: [/Jay.Z/, /RBX/, /Talib Kweli/, /Apathy/, /Mtume/, /The Rappin. Duke/],
+    cards: [],
+  },
+  "one-more-time-daft-punk": {
+    facts: [/More Spell on You/, /Circo Loco/, /London Elektricity/],
+    cards: [],
+  },
+};
+
+for (const { slug, query } of showcaseRecordings()) {
+  test(`the ${slug} recording lists each documented relation once, never as possible`, async ({
+    page,
+  }) => {
+    const problems = collectProblems(page);
+    const expected = DOCUMENTED[slug];
+    expect(expected, slug).toBeDefined();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openRecording(page, slug, query);
+
+    const cards = await shownCards(page);
+    expect(cards).toHaveLength(expected.cards.length);
+    cards.forEach((card, i) => {
+      expect(card.badges, card.text).toBe(1);
+      expect(card.text).toMatch(expected.cards[i]);
+      expect(card.text).not.toMatch(/^possible/i);
+    });
+    const everyClaim = await everyClaimListed(page);
+    for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
+    for (const fact of expected.facts) {
+      const listed = everyClaim.filter((claim) => fact.test(claim));
+      expect(listed, String(fact)).toHaveLength(1);
+      expect(listed[0], String(fact)).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+      // Shown with the facts above only by a card that says more, as expected above.
+      const carded = cards.filter((card) => fact.test(card.text));
+      expect(carded.length, String(fact)).toBeLessThanOrEqual(1);
+    }
+    expect(problems).toEqual([]);
+  });
+}
 
 // A sample the model reported that no verifier verdict supports is hedged ("Possible sample"),
 // whether it is a claim or a drawn link, and keeps the record it cites beside it.

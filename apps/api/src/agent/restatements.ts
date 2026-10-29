@@ -10,7 +10,8 @@
  *    nothing beyond them:
  *    - its text is a code claim's (`statementKey`), citing only that claim's items, whatever the
  *      judge said;
- *    - or it is about a relation (a sample or a cover), the judge found it supported or partly
+ *    - or it is about a relation (a sample or a cover) or a connection (a list of the tracks that
+ *      sample this one), the judge found it supported or partly
  *      supported, and it states exactly the relations its records document
  *      (`statesOnlyItsRelations`), each record cited by a code claim about the same relation, at
  *      the same scope. The same fact is the same relation between the same two records, read the
@@ -19,11 +20,15 @@
  *      from MusicBrainz, Genius or SecondHandSongs; a record of a related track, the map's second
  *      hop, is not one). The claim must be, word for word, one of the strict templates of
  *      relationText.ts (`readRelations`): "<one> samples <other>", "<one> is sampled by|in
- *      <other>" and their forms, one side the analysed track and the other each record it cites,
- *      named by its title (or by an artist no other record of the result shares; a cover always
- *      by its title), in the record's direction. Anything else (a relative clause, an adverb, a
+ *      <other>" and their forms, a list of records ("is sampled in A, B and C"), one side the
+ *      analysed track and the other each record it cites,
+ *      named by its title (or by an artist no other record of the result shares; a cover so
+ *      only beside the song named by more than its artist), in the record's direction. Anything else (a relative clause, an adverb, a
  *      hedge or a negation, a word of its own, a name it does not cite) is unknown, and an
- *      unknown claim states nothing: it stays. A relation record says only that one record draws
+ *      unknown claim states nothing: it stays. A claim on records of the song may also say, in
+ *      sentences of their own, only that the relation is the song's (`readStatedRelations`). A
+ *      connection is compared with the code claims about a sample or a cover on its records. A
+ *      relation record says only that one record draws
  *      on another, so a claim that says how ("the bass line") says more, whatever the judge
  *      found;
  *    - or, about anything else, the judge found it wholly supported by one code claim's items
@@ -50,10 +55,12 @@
  *    verdict (supported, partial, unsupported, then none: a copy the judge checked, and what it
  *    said of it, is never dropped for one it did not check), then the one on a fact card, then
  *    the one citing more records, then the smaller id.
- * 3. A model claim kept that states exactly the relations its records document is marked with
+ * 3. A model claim kept about a sample or a cover that states exactly the relations its records
+ *    document is marked with
  *    the code claims that document them (`documentedBy`): the page names its relation as
  *    theirs. It states them as 1 reads them, or in exactly one of its sentences while each other
- *    sentence only adds detail: no "?", relation word, hedge, negation or doubting word, and no
+ *    sentence only adds detail: no "?", relation word (but "that sample", "the sample", "this
+ *    cover", referring back to it), hedge, negation or doubting word, and no
  *    capitalised name but the track's, its records', the result's and a source's
  *    (`readMarkedRelations`). A claim the templates cannot read is never marked.
  *    Its kind and verdict stay (a partly supported one still shows so); a mark it came with is
@@ -94,6 +101,7 @@ import {
   type ReadingContext,
   readMarkedRelations,
   readRelations,
+  readStatedRelations,
   titleNames,
 } from "./relationText.js";
 
@@ -105,6 +113,11 @@ const RELATION_SUBJECTS: ReadonlySet<ClaimAbout> = new Set([
   ...LINK_CLAIM_ABOUT.cover,
 ]);
 const statesRelation = (claim: Claim) => RELATION_SUBJECTS.has(claim.about);
+/**
+ * Whether a claim may be read as stating the relations its records document: one about a sample
+ * or a cover, or a connection (a list of the tracks that sample this one, on a "connection" card).
+ */
+const mayReadRelations = (claim: Claim) => statesRelation(claim) || claim.about === "connection";
 
 /** How a verdict ranks when two copies of one statement compete: higher stays. */
 const VERDICT_RANK: Record<Verdict, number> = {
@@ -311,9 +324,15 @@ function trackNamesOf(track: AnalysedTrack) {
 }
 
 /** A documented relation's other record, as `readRelations` names it. */
-function namedRecord(id: string, relation: DocumentedRelation, source?: string): NamedRecord {
+function namedRecord(
+  id: string,
+  relation: DocumentedRelation,
+  source?: string,
+  ofSong = false,
+): NamedRecord {
   return {
     source,
+    ofSong,
     id,
     kind: relation.kind,
     title: relation.title,
@@ -495,15 +514,11 @@ export function withoutRestatements<
     if (!records.has(id)) {
       const item = pack.get(id);
       const relation = item ? documentedRelation(item) : null;
+      const ofSong = (item?.recordRef ?? "").startsWith("work/");
       records.set(
         id,
         item && relation
-          ? {
-              ...relation,
-              id,
-              ofSong: (item.recordRef ?? "").startsWith("work/"),
-              named: namedRecord(id, relation, item.source),
-            }
+          ? { ...relation, id, ofSong, named: namedRecord(id, relation, item.source, ofSong) }
           : null,
       );
     }
@@ -561,11 +576,11 @@ export function withoutRestatements<
     recordNames.push(...titleNames(other.title), ...artistNames(other.artist));
   }
   /**
-   * Whether a claim may state a relation as its records document it: about a sample or a cover,
-   * found supported or partly supported.
+   * Whether a claim may state a relation as its records document it: about a sample, a cover or
+   * a connection (`mayReadRelations`), found supported or partly supported.
    */
   const mayState = (claim: Claim) =>
-    statesRelation(claim) && (claim.verdict === "supported" || claim.verdict === "partial");
+    mayReadRelations(claim) && (claim.verdict === "supported" || claim.verdict === "partial");
   /** How a claim that may state its records' relations is read; null for one that may not. */
   const readingOf = perClaim((claim): ReadingContext | null => {
     const relations = mayState(claim) ? relationsOf(claim) : null;
@@ -590,12 +605,14 @@ export function withoutRestatements<
   });
   /**
    * The records a claim cites whose relation it states, in their direction, and nothing else
-   * (`readRelations`): none when it is not one of the templates, so a claim read in doubt
-   * states nothing, never goes, is never marked and never covers another.
+   * (`readStatedRelations`: the whole claim one of the templates of `readRelations`, or one such
+   * sentence beside others that only say the relation is the song's, for records of the song):
+   * none otherwise, so a claim read in doubt states nothing, never goes, is never marked and never
+   * covers another.
    */
   const statesOf = perClaim((claim) => {
     const reading = readingOf(claim);
-    return (reading && readRelations(claim.text, reading)) ?? new Set<string>();
+    return (reading && readStatedRelations(claim.text, reading)) ?? new Set<string>();
   });
   /**
    * Whether a kept claim is marked as stating its records' relations: the whole of it does, or
@@ -604,7 +621,7 @@ export function withoutRestatements<
    * rejected claim (a value checked and found wrong) is never marked.
    */
   const marks = perClaim((claim) => {
-    const reading = readingOf(claim);
+    const reading = statesRelation(claim) ? readingOf(claim) : null;
     if (!reading || claimIsRejected(claim)) return false;
     const read = readMarkedRelations(claim.text, reading, recordNames);
     return [...reading.cited.keys()].every((id) => read?.has(id) ?? false);
@@ -625,13 +642,19 @@ export function withoutRestatements<
 
   // 1. A model claim that restates code-built claims.
   const code = claims.filter((claim) => claim.origin === "code" && claim.evidenceIds.length > 0);
+  /**
+   * Whether a code claim is about the relation a model claim states: about the same subject, or,
+   * for a connection, about a sample or a cover.
+   */
+  const sameSubject = (model: Claim, built: Claim) =>
+    built.about === model.about || (model.about === "connection" && statesRelation(built));
   /** The code claim about the same relation, at its scope, citing each record it cites. */
   const documenting = (model: Claim) => {
     const ids: string[] = [];
     for (const id of model.evidenceIds) {
       const built = code.find(
         (each) =>
-          each.about === model.about && sameScope(model, each) && each.evidenceIds.includes(id),
+          sameSubject(model, each) && sameScope(model, each) && each.evidenceIds.includes(id),
       );
       if (!built) return null;
       if (!ids.includes(built.id)) ids.push(built.id);
@@ -719,6 +742,11 @@ export function withoutRestatements<
     if (sameText(model)) return true;
     if (statesRelation(model)) {
       return statesOnlyItsRelations(model) && documenting(model) !== null;
+    }
+    // A connection that only lists the relations its records document ("Juicy is sampled in
+    // A, B and C"); one that says anything else is read as any other claim below.
+    if (mayReadRelations(model) && statesOnlyItsRelations(model) && documenting(model) !== null) {
+      return true;
     }
     return (
       model.verdict === "supported" &&

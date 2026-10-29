@@ -16,7 +16,6 @@ import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
-  demoRecord,
   evidenceItem,
   fakeModel,
   focusOf,
@@ -691,11 +690,15 @@ describe("each fact's claim", () => {
 
   it("of a recorded fact is its recorded claim, served with no model call", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
+    // The showcase's own cards all restate its records, so its replay serves none: the pinned
+    // recording serves one (the brass figure, which says more than its record).
+    vi.stubEnv("REPLAY_DIR", PINNED_DIR);
     onTestFinished(() => {
       vi.unstubAllEnvs();
     });
     // The recording as a replay serves it: each fact stated once.
-    const served = replayedAnalysis(demoRecord(), "run-served");
+    const served = replayedAnalysis(restatingRecord(), "run-served");
+    expect(served.factoids).toHaveLength(1);
     const recordedClaim = (claimId: string) => served.claims?.find((claim) => claim.id === claimId);
 
     const stream = await openStream(streamQuery({ runId: RUN_ID }));
@@ -784,7 +787,8 @@ describe("each fact's claim", () => {
   });
 
   it("sends a recorded fact without a claim link when the recording has not its claim", () => {
-    const record = demoRecord();
+    // Its first card (the brass figure) is served; the showcase's own card restates its record.
+    const record = restatingRecord();
     const [kept, ...dropped] = record.analysis.factoids;
     const withoutClaim = {
       ...record,

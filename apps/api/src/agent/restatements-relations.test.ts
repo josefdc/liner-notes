@@ -1704,6 +1704,9 @@ describe("the model's copies of a relation no code-built claim states", () => {
       "Hung Up samples ABBA, turning the riff into a hook.",
       "Hung Up samples Popcorn by Hot Butter.",
       "Hung Up samples ABBA and Popcorn by Hot Butter.",
+      // Lists, read with their commas.
+      "Hung Up samples Gimme! Gimme! Gimme! by ABBA, and Popcorn by Hot Butter.",
+      "Hung Up samples Popcorn by Hot Butter, ABBA, and a drum break.",
       "Hung Up is remixed in Hung Up (SDP extended vocal).",
       "Gimme! Gimme! Gimme! by ABBA samples Hung Up.",
     ];

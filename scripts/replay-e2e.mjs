@@ -53,6 +53,13 @@ const REPORT_ENTRY = "apps/api/src/scripts/report.ts";
 
 const TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
 const SHOWCASE_QUERY = "One More Time Daft Punk";
+// The showcase whose replay serves a fact card ("More facts"): its sample card says more than its
+// record, so it is kept. One More Time's own card only restated its record, and is left out.
+const FACTS_TRACK = {
+  trackId: "57iDDD9N9tTWe75x6qhStw",
+  trackTitle: "Bitter Sweet Symphony - Remastered 2016",
+  trackArtist: "The Verve",
+};
 const TYPED_QUERY = "DAFT punk: one MORE time";
 const START_TIMEOUT_MS = 120_000;
 const STOP_TIMEOUT_MS = 20_000;
@@ -414,12 +421,7 @@ try {
   const more = await json("/api/factoids/more", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      trackId: TRACK_ID,
-      trackTitle: "One More Time",
-      trackArtist: "Daft Punk",
-      existingFactoidIds: [],
-    }),
+    body: JSON.stringify({ ...FACTS_TRACK, existingFactoidIds: [] }),
   });
   console.log(`factoids: ${more.status} ${more.body.factoids?.length} recorded facts`);
   check(more.status === 200 && more.body.factoids?.length > 0, "factoids come from the recording");
@@ -439,7 +441,10 @@ try {
 
   // The other replay paths, so an outbound call added to any of them is counted below.
   const factoidStream = await sseTypes(
-    "/api/factoids/more/stream?trackTitle=One%20More%20Time&trackArtist=Daft%20Punk",
+    `/api/factoids/more/stream?${new URLSearchParams({
+      trackTitle: FACTS_TRACK.trackTitle,
+      trackArtist: FACTS_TRACK.trackArtist,
+    })}`,
   );
   console.log(`factoid stream: ${factoidStream}`);
   check(/^connected( factoid)+ done$/.test(factoidStream), "the factoid stream replays them");

@@ -1,0 +1,549 @@
+[
+  {
+    "value": "https://www.discogs.com/release/1234567-The-Verve-Bitter-Sweet-Symphony",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.discogs.com/master/23456-The-Verve-Urban-Hymns",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?si=1f8e2b6c9a0d4e7f",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?si=Xk3Jd9fPq2LmN8aBcD4eFg",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://open.spotify.com/intl-de/album/2cWBwpqMsDJC1ZUwz813lo?si=0a1b2c3d4e5f6a7b&nd=1&dlsi=d3a5e7f8c9b04a2e",
+    "places": ["page", "text"]
+  },
+  { "value": "https://www.youtube.com/watch?v=1lyu1KKwC74", "places": ["page"] },
+  {
+    "value": "https://www.youtube.com/watch?v=1lyu1KKwC74&list=RD1lyu1KKwC74&start_radio=1",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.youtube.com/watch?v=1lyu1KKwC74&pp=ygUVYml0dGVyIHN3ZWV0IHN5bXBob255",
+    "places": ["page"]
+  },
+  { "value": "https://youtu.be/1lyu1KKwC74?si=Xk3Jd9fPq2LmN8aB", "places": ["page"] },
+  { "value": "https://www.youtube.com/channel/UCVfwlh9XpX2Y_tQfjeln9QA", "places": ["page"] },
+  { "value": "https://music.youtube.com/browse/MPREb_2SuNzRkJ7qS", "places": ["page"] },
+  {
+    "value": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+    "places": ["page", "text"]
+  },
+  { "value": "https://genius.com/albums/The-verve/Urban-hymns", "places": ["page", "text"] },
+  {
+    "value": "https://genius.com/2248838/The-verve-bitter-sweet-symphony/Cause-its-a-bitter-sweet-symphony-thats-life",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Lawsuit",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/List_of_UK_Singles_Chart_number_ones_of_the_2000s",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Hip_hop_music#1970s_1980s_1990s_and_2000s",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://ja.wikipedia.org/wiki/%E3%83%93%E3%82%BF%E3%83%BC%E3%83%BB%E3%82%B9%E3%82%A6%E3%82%A3%E3%83%BC%E3%83%88%E3%83%BB%E3%82%B7%E3%83%B3%E3%83%95%E3%82%A9%E3%83%8B%E3%83%BC",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/w/index.php?title=Bitter_Sweet_Symphony&oldid=1234567890",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)#cite_note-:0-12",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/2Pac_discography#Studio_albums",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://music.apple.com/us/album/bitter-sweet-symphony/1440841186?i=1440841451",
+    "places": ["page"]
+  },
+  {
+    "value": "https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://music.apple.com/gb/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb?l=en-GB",
+    "places": ["page"]
+  },
+  {
+    "value": "https://Music.Apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://music.apple.com/us/playlist/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://itunes.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://embed.music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://geo.music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  { "value": "https://music.apple.com/us/playlist/my-mix/pl.u-AkAmPlyUxDM7D4", "places": ["page"] },
+  {
+    "value": "https://www.last.fm/music/The+Verve/_/Bitter+Sweet+Symphony",
+    "places": ["page", "text"]
+  },
+  { "value": "https://www.last.fm/music/Beyonc%C3%A9/_/Halo", "places": ["page", "text"] },
+  {
+    "value": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://musicbrainz.org/release/D63F9A2C-AEA5-4B77-875E-EEE7CE1FD734",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://listenbrainz.org/player/?recording_mbids=d63f9a2c-aea5-4b77-875e-eee7ce1fd734,746b556a-b951-4ae6-95ee-685380f93108",
+    "places": ["page", "text"]
+  },
+  { "value": "https://www.wikidata.org/wiki/Q1229393", "places": ["page", "text"] },
+  {
+    "value": "https://www.whosampled.com/sample/12345/The-Verve-Bitter-Sweet-Symphony-The-Andrew-Oldham-Orchestra-The-Last-Time/",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.whosampled.com/The-Verve/Bitter-Sweet-Symphony/",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.whosampled.com/sample/98765/2Pac-feat.-K-Ci-JoJo-How-Do-U-Want-It-Quincy-Jones-Body-Heat/",
+    "places": ["page", "text"]
+  },
+  { "value": "https://secondhandsongs.com/performance/12345", "places": ["page", "text"] },
+  {
+    "value": "https://www.allmusic.com/song/bitter-sweet-symphony-mt0001234567",
+    "places": ["page"]
+  },
+  { "value": "https://www.allmusic.com/album/urban-hymns-mw0000098765", "places": ["page"] },
+  {
+    "value": "https://www.songfacts.com/facts/the-verve/bitter-sweet-symphony",
+    "places": ["page"]
+  },
+  { "value": "https://www.azlyrics.com/lyrics/verve/bittersweetsymphony.html", "places": ["page"] },
+  {
+    "value": "https://tabs.ultimate-guitar.com/tab/the-verve/bitter-sweet-symphony-chords-1234567",
+    "places": ["page"]
+  },
+  {
+    "value": "https://chordify.net/chords/the-verve-bitter-sweet-symphony-official-music-video-thevervevevo",
+    "places": ["page"]
+  },
+  {
+    "value": "https://chordu.com/chords-tabs-the-verve-bitter-sweet-symphony-official-music-video--id_1lyu1KKwC74",
+    "places": ["page"]
+  },
+  {
+    "value": "https://chordu.com/chords-tabs-daft-punk-one-more-time-official-video-id_FGBhQbmPwH8",
+    "places": ["page"]
+  },
+  {
+    "value": "https://tunebat.com/Info/Bitter-Sweet-Symphony-The-Verve/57iDDD9N9tTWe75x6qhStw",
+    "places": ["page"]
+  },
+  { "value": "https://example-bpm.com/song/The-Verve-57iDDD9N9tTWe75x6qhStw", "places": ["page"] },
+  { "value": "https://kworb.net/spotify/track/57iDDD9N9tTWe75x6qhStw.html", "places": ["page"] },
+  {
+    "value": "https://www.setlist.fm/setlist/the-verve/1998/slane-castle-slane-ireland-3bd6b4c8.html",
+    "places": ["page"]
+  },
+  {
+    "value": "https://apnews.com/article/the-verve-bitter-sweet-symphony-rolling-stones-royalties-4b8e3e5c3f9c4a2e8e2f1d9a6b7c8d9e",
+    "places": ["page"]
+  },
+  {
+    "value": "https://apnews.com/article/music-lawsuits-sampling-0d3f1e2c9b8a7d6e5f4a3b2c1d0e9f8a",
+    "places": ["page"]
+  },
+  {
+    "value": "https://someone.notion.site/The-Verve-Discography-1a2b3c4d5e6f47a8b9c0d1e2f3a4b5c6",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.huffpost.com/entry/the-verve-bitter-sweet-symphony_n_5ce6f9e4e4b0547bd1338a2d",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.washingtonpost.com/arts-entertainment/2019/05/23/2f4d1c62-7d6a-11e9-a5b3-34f3edf1351e_story.html",
+    "places": ["page"]
+  },
+  { "value": "https://www.smh.com.au/culture/music/slug-20190524-p51qkl.html", "places": ["page"] },
+  {
+    "value": "https://www.musixmatch.com/lyrics/The-Verve/Bitter-Sweet-Symphony",
+    "places": ["page"]
+  },
+  {
+    "value": "https://medium.com/@writer/why-bitter-sweet-symphony-matters-1a2b3c4d5e6f",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.bbc.co.uk/music/artists/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+    "places": ["page"]
+  },
+  { "value": "https://www.example-chords.com/song?key=C%23m", "places": ["page"] },
+  { "value": "https://www.example-bpm.com/song?key=8A-A-minor", "places": ["page"] },
+  { "value": "https://www.example-cms.com/news?key=2019-05-23T12:00", "places": ["page"] },
+  {
+    "value": "https://www.example-chords.com/song?key=bitter-sweet-symphony-1997",
+    "places": ["page"]
+  },
+  { "value": "https://www.example-chords.com/song?key=VUSCD82-UK1997", "places": ["page"] },
+  {
+    "value": "https://en.wikipedia.org/wiki/Secret_(Madonna_song)#secret=yes",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.spiegel.de/kultur/musik/a-6f7e1c3b-0002-0001-0000-000000123456",
+    "places": ["page"]
+  },
+  { "value": "https://theverve.bandcamp.com/track/bitter-sweet-symphony", "places": ["page"] },
+  {
+    "value": "https://archive.org/details/mbid-76df3287-6cda-33eb-8e9a-044b5e15ffdd",
+    "places": ["page"]
+  },
+  {
+    "value": "https://archive.org/details/78_bitter-sweet_the-verve_gbia0012345a",
+    "places": ["page"]
+  },
+  { "value": "https://books.google.com/books?id=AbCdEfGhIjK&pg=PA123", "places": ["page"] },
+  {
+    "value": "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCd/edit",
+    "places": ["page"]
+  },
+  {
+    "value": "https://imslp.org/wiki/Symphony_No.5,_Op.67_(Beethoven,_Ludwig_van)",
+    "places": ["page"]
+  },
+  {
+    "value": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+    "places": ["id", "text"]
+  },
+  {
+    "value": "musicbrainz:track/recording/D63F9A2C-AEA5-4B77-875E-EEE7CE1FD734",
+    "places": ["id", "text"]
+  },
+  { "value": "d63f9a2caea54b77875eeee7ce1fd734", "places": ["id"] },
+  { "value": "genius:work/song/50429/samples/2248838", "places": ["id", "text"] },
+  { "value": "spotify:track:57iDDD9N9tTWe75x6qhStw", "places": ["id", "text"] },
+  { "value": "57iDDD9N9tTWe75x6qhStw", "places": ["id", "text"] },
+  { "value": "37i9dQZF1DXcBWIGoYBM5M", "places": ["id", "text"] },
+  { "value": "pl.f4d106fed2bd41149aaacabb233eb5eb", "places": ["id"] },
+  {
+    "value": "Apple Music's editorial playlist pl.f4d106fed2bd41149aaacabb233eb5eb features it.",
+    "places": ["excerpt"]
+  },
+  { "value": "1440841451", "places": ["id", "text"] },
+  { "value": "GBAAA9700123", "places": ["id", "text"] },
+  { "value": "GB-AAA-97-00123", "places": ["id", "text"] },
+  { "value": "T-010.140.236-1", "places": ["id", "text"] },
+  { "value": "VUSCD 82", "places": ["id", "text"] },
+  { "value": "7243 8 44913 2 8", "places": ["id", "text"] },
+  { "value": "724384491328", "places": ["id", "text"] },
+  { "value": "VUSCD82 01 % 3 PMDC FRANCE", "places": ["text", "excerpt", "mbexcerpt"] },
+  { "value": "2a96cbd8b46e442fc41c2b86b821562f", "places": ["id"] },
+  { "value": "2e018122cb56986277102d2041a592c8", "places": ["id"] },
+  {
+    "value": "tavily:https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony",
+    "places": ["id", "text"]
+  },
+  {
+    "value": "wikipedia:track/List_of_UK_Singles_Chart_number_ones_of_the_2000s",
+    "places": ["id"]
+  },
+  { "value": "wikipedia:track/UK_1960s_1970s_1980s_1990s_2000s", "places": ["id", "text"] },
+  { "value": "2.3.4+essentia.models-5c5c0c7f", "places": ["id", "text"] },
+  { "value": "discogs-effnet-bs64-1", "places": ["id", "text"] },
+  { "value": "fc-1a2b3c4d5e6f", "places": ["id", "text"] },
+  { "value": "acoustid:9f2b6c3a-1d4e-4b8a-9c2d-3e4f5a6b7c8d", "places": ["id", "text"] },
+  { "value": "youtube:video/1lyu1KKwC74", "places": ["id", "text"] },
+  {
+    "value": "The single \"Password\": a 2009 club track by Example.",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Tracklist: 1. \"Intro\" 2. \"Password\": 3:41",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  { "value": "ASIA1982GEFFENGHS2008", "places": ["text", "excerpt", "mbexcerpt"] },
+  {
+    "value": "Home/TheVerve/UrbanHymns/LuckyMan/OneDay/SonNet2/",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Genres/HipHop/RnB/NewJack/GFunk/BoomBap/Year1994/",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Home/DaftPunk/OneMoreTime/Discovery2001/",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Am/G/Fmaj7/C/Dm7/G7sus4/Cmaj7/Em7/Am7/Bm7b5/E7",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Bitter+Sweet+Symphony+The+Verve+1997+Urban+Hymns",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Music/TheVerve/UrbanHymns/01BitterSweet/02SonNet.mp3",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  { "value": "StudioPiano2NotesGuitar2TabsUkuleleChordsBass4Tabs", "places": ["excerpt"] },
+  { "value": "Track file checksum (MD5): 5d41402abc4b2a76b9719d911017c592", "places": ["excerpt"] },
+  {
+    "value": "Commit 3f786850e387550fdab836ed7e6dc881de23001b fixed the lyrics parser.",
+    "places": ["excerpt"]
+  },
+  {
+    "value": "Listen: open.spotify.com/track/57iDDD9N9tTWe75x6qhStw",
+    "places": ["excerpt", "text"]
+  },
+  { "value": "cover ab67616d0000b2738e6551a2944708ab1f5a4bf3 loaded", "places": ["excerpt"] },
+  {
+    "value": "ID 6F9619FF-8B86-D011-B42D-00C04FC964FF",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  { "value": "_ga=GA1.2.1234567890.1234567890", "places": ["text", "excerpt", "mbexcerpt"] },
+  { "value": "Tune it in #key=Am for the chords", "places": ["text", "excerpt", "mbexcerpt"] },
+  { "value": "key=11A/12B mix", "places": ["text", "excerpt", "mbexcerpt"] },
+  {
+    "value": "Chords at chords.example/song?key=Ab7b9-13#11",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "https://www.youtube.com/watch?v=1lyu1KKwC74&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG&index=3",
+    "places": ["page"]
+  },
+  { "value": "https://www.youtube.com/playlist?list=PL55713C70BA91BD6E", "places": ["page"] },
+  {
+    "value": "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+    "places": ["page"]
+  },
+  { "value": "https://youtu.be/1lyu1KKwC74?si=Xk3Jd9fPq2LmN8aB", "places": ["page"] },
+  { "value": "https://youtu.be/1lyu1KKwC74?si=bG9L8Tz3Qd5v7XkN-JpR2a", "places": ["page"] },
+  {
+    "value": "https://www.youtube.com/watch?v=1lyu1KKwC74&pp=ygUVYml0dGVyIHN3ZWV0IHN5bXBob255",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.youtube.com/watch?v=1lyu1KKwC74&feature=youtu.be&t=42",
+    "places": ["page"]
+  },
+  {
+    "value": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?si=1f8e2b6c9a0d4e7f",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?si=Xk3Jd9fPq2LmN8aBcD4eFg",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?context=spotify%3Aplaylist%3A37i9dQZF1DXcBWIGoYBM5M&si=0a1b2c3d4e5f6a7b",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.billboard.com/music/rock/the-verve-bitter-sweet-symphony-8512345/?utm_source=twitter&utm_medium=social&utm_campaign=2019-05-23-verve&utm_content=bbsocial",
+    "places": ["page"]
+  },
+  {
+    "value": "https://pitchfork.com/news/the-verve-regain-rights/?fbclid=IwAR0abcDEF123ghiJKL456mnoPQR789stu",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.example-store.com/vinyl?msclkid=2f4b8c1d9e3a4b5c6d7e8f9a0b1c2d3e",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.example-news.com/a?mc_cid=1a2b3c4d5e&mc_eid=9f8e7d6c5b",
+    "places": ["page"]
+  },
+  { "value": "https://pitchfork.com/news/x/?igshid=MzRlODBiNWFlZA==", "places": ["page"] },
+  {
+    "value": "https://www.amazon.com/dp/B000001ABC?tag=musicblog-20&linkCode=ogi&th=1&psc=1&pd_rd_r=4b8e3e5c-3f9c-4a2e-8e2f-1d9a6b7c8d9e",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.amazon.com/Urban-Hymns-Verve/dp/B000001ABC/ref=sr_1_1?crid=2X8KQ1ZP3LM9V&keywords=urban+hymns&qid=1716400000&sprefix=urban+hym%2Caps%2C150&sr=8-1",
+    "places": ["page"]
+  },
+  {
+    "value": "https://en.wikipedia.org/w/index.php?search=Bitter+Sweet+Symphony+The+Verve+1997+Urban+Hymns&title=Special:Search",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/w/index.php?title=Special:Search&search=Pop%2FRock%2FElectronic%2FInstrumental%2F2001",
+    "places": ["page", "text"]
+  },
+  { "value": "https://genius.com/search?q=Bitter%20Sweet%20Symphony", "places": ["page", "text"] },
+  {
+    "value": "https://www.last.fm/search?q=The+Verve+Bitter+Sweet+Symphony",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#:~:text=The%20song%20samples%20an%20orchestral%20cover",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#:~:text=In%201999%2C%20Allen%20Klein,the%202019%20agreement",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.songfacts.com/facts/the-verve/bitter-sweet-symphony#:~:text=Andrew%20Loog%20Oldham%20Orchestra%2FRolling%20Stones%2FTheLastTime1965",
+    "places": ["page"]
+  },
+  {
+    "value": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics#note-2248838",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://genius.com/2248838/The-verve-bitter-sweet-symphony/Cause-its-a-bitter-sweet-symphony-thats-life",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics#about",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#cite_note-:0-12",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)#cite_ref-RS500_3-0",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Hip_hop_music#1970s_1980s_1990s_and_2000s",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://en.wikipedia.org/wiki/Madonna#2005%E2%80%932007:_Confessions_on_a_Dance_Floor_and_21st_century",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://apnews.com/article/music-lawsuits-sampling-0d3f1e2c9b8a7d6e5f4a3b2c1d0e9f8a",
+    "places": ["page"]
+  },
+  {
+    "value": "https://itunes.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+    "places": ["page"]
+  },
+  {
+    "value": "https://listenbrainz.org/player/?recording_mbids=d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+    "places": ["page", "text"]
+  },
+  {
+    "value": "https://www.example-news.com/a?v=3f786850e387550fdab836ed7e6dc881",
+    "places": ["page"]
+  },
+  {
+    "value": "https://theverve.bandcamp.com/track/bitter-sweet-symphony?from=search&search_item_id=1234567&search_item_type=t&search_match_part=%3F&search_page_id=2345678901&search_page_no=1&search_rank=1&search_sig=4b8e3e5c3f9c4a2e8e2f1d9a6b7c8d9e",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.youtube.com/watch?v=FGBhQbmPwH8&list=PLvU_Hi1F6uN3jQmTGxYSrd5pAN4xqRx2m&index=1&pp=iAQB8AUB",
+    "places": ["page"]
+  },
+  {
+    "value": "https://soundcloud.com/theverve/bitter-sweet-symphony?in=user-123/sets/90s&utm_source=clipboard&utm_campaign=wtshare&utm_medium=widget&si=4b8e3e5c3f9c4a2e8e2f1d9a6b7c8d9e",
+    "places": ["page"]
+  },
+  {
+    "value": "https://www.deezer.com/track/3135556?utm_campaign=clipboard-generic&utm_source=user_sharing&deferredFl=1&host=0&stoken=0",
+    "places": ["page"]
+  },
+  {
+    "value": "https://music.apple.com/us/album/urban-hymns/1440841186?at=1000lHKX&ct=gnews&itscg=30200&itsct=music_box_link&ls=1&app=music",
+    "places": ["page"]
+  },
+  { "value": "https://www.billboard.com/x/?sharetoken=abc", "places": ["page"] },
+  {
+    "value": "He was the bearer of bad news when Klein's lawyers called in 1997.",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  { "value": "Basic Channel released Phylyps Trak in 1994.", "places": ["text", "excerpt"] },
+  { "value": "Basic Channel BC-01/BCD-1 on Basic Channel1993", "places": ["text"] },
+  { "value": "https://www.discogs.com/label/1234-Basic-Channel", "places": ["page", "text"] },
+  { "value": "https://www.last.fm/music/Basic+Channel/+wiki", "places": ["page", "text"] },
+  { "value": "Basic Instinct2 soundtrack by Jerry Goldsmith", "places": ["text"] },
+  { "value": "Basic Element12 had a hit with The Promise.", "places": ["text"] },
+  { "value": "bearer 4u2c-the-world tour", "places": ["text"] },
+  { "value": "Basic Channel's 1993-1995 run on Chain Reaction", "places": ["text"] },
+  { "value": "Their single secret=love remix", "places": ["text"] },
+  { "value": "the hidden track (password=swordfish) on the CD-ROM", "places": ["text", "excerpt"] },
+  { "value": "Festival pass=sold out in 1998", "places": ["text"] },
+  { "value": "tavily:https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony", "places": ["id"] },
+  {
+    "value": "tavily:https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw?si=1f8e2b6c9a0d4e7f",
+    "places": ["id"]
+  },
+  {
+    "value": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108",
+    "places": ["id"]
+  },
+  {
+    "value": "musicbrainz:work/0383dadf-2a4e-4d10-a46a-e9e041da8eb3/covered-by/recording/5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+    "places": ["id"]
+  },
+  { "value": "musicbrainz:release/76df3287-6cda-33eb-8e9a-044b5e15ffdd", "places": ["id"] },
+  { "value": "track/recording/D63F9A2C-AEA5-4B77-875E-EEE7CE1FD734", "places": ["id"] },
+  { "value": "secondhandsongs:track/performance/12345/covered-by/67890", "places": ["id"] },
+  { "value": "discogs:track/release/1234567/credit/3", "places": ["id"] },
+  { "value": "genius:work/song/50429/samples/2248838", "places": ["id"] },
+  { "value": "recorded from 0fdfdccc509c0123456789abcdef0123456789ab", "places": ["text"] },
+  { "value": "recorded from 0fdfdccc509c", "places": ["text"] },
+  { "value": "Apple Music playlist pl.f4d106fed2bd41149aaacabb233eb5eb", "places": ["excerpt"] },
+  { "value": "MD5 5d41402abc4b2a76b9719d911017c592", "places": ["excerpt"] },
+  {
+    "value": "Styles: Pop/Rock/Electronic/Instrumental/Soundtrack/2001",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Genres: Rock/AltRock/BritPop/PostPunk/NewWave/TripHop/1990s",
+    "places": ["text", "excerpt"]
+  },
+  { "value": "The single \"Password\": a 2009 club track.", "places": ["text", "excerpt"] },
+  { "value": "Tracks: \"Password\": \"Hidden\" (remix)", "places": ["text"] },
+  { "value": "Madonna's 'Secret': 'Bedtime Story' followed in 1995", "places": ["text"] },
+  { "value": "\"Secret\": \"Take a Bow\" and \"Bedtime Story\" were singles", "places": ["text"] },
+  { "value": "ASIA1982GEFFENGHS20080 tour", "places": ["text"] },
+  { "value": "Pressing AKIA0000000000000001 matrix", "places": ["text"] },
+  { "value": "Mr. Brightside.MrBrig.ThisIsTheEndOfTheSongThatYouLove", "places": ["text"] },
+  { "value": "rk_live_session at the Brixton Academy 2001", "places": ["text"] },
+  { "value": "xoxo-the-band, xoxb-side records", "places": ["text"] },
+  { "value": "0x4AAAAAAAAAAAAAAAAAAAAAAAA hex demo", "places": ["text"] },
+  { "value": "ghp_ is a filename prefix", "places": ["text"] },
+  {
+    "value": "Built on a basic verse-chorus-verse structure with a four-on-the-floor kick.",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Ashcroft wrote it as a basic singer-songwriter demo.",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  }
+]

@@ -28,7 +28,6 @@ const check = { secrets: [], typedQuery: "", publicTexts: [] };
 /** `n` characters cycled from `from`: a stand-in for a random value of that alphabet. */
 const chars = (n: number, from = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0LmNb") =>
   from.repeat(Math.ceil(n / from.length)).slice(0, n);
-const letters = (n: number) => chars(n, "QwErTyUiOpAsDfGhJkLzXcVbNm");
 
 /** A random run of 44 letters and digits, as a long token is. */
 const TOKEN = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
@@ -50,7 +49,7 @@ const VENDOR_KEYS: Array<[string, string]> = [
   ["a Stripe key", `sk_live_${chars(24)}`],
   ["a Stripe key", `rk_live_${chars(24)}`],
   ["a Turnstile secret", `0x4AAAAAAA${chars(25)}`],
-  ["a Hugging Face token", `hf_${letters(34)}`],
+  ["a Hugging Face token", `hf_${chars(34, "QWertYUiopASdfGHjklZXcvBNm")}`],
   ["a GitLab token", `glpat-${chars(20)}`],
   ["a GitHub token", `ghp_${chars(36)}`],
   ["a GitHub token", `github_pat_${chars(22)}_${chars(59)}`],
@@ -123,10 +122,19 @@ describe("precise rules: refused in every field", () => {
         expect(found.join(" "), `${name} in ${field}`).not.toContain(key);
       }
     }
-    // After an escaped line break, as JSON-escaped text writes one.
-    expect(inClaim(`line\\n${AWS_KEY_ID}`)).toContain(
-      "analysis.claims[0].text: an AWS access key id",
-    );
+    // After an escaped line break, as JSON-escaped text writes one, or glued to a digit.
+    for (const text of [`line\\n${AWS_KEY_ID}`, `7${AWS_KEY_ID}`]) {
+      expect(inClaim(text), text).toContain("analysis.claims[0].text: an AWS access key id");
+    }
+    // A hashtag or a catalogue number in capitals, and a lookalike made of words.
+    for (const text of [
+      "#ASIATOUR2023SEOULKPOP",
+      "Asia: ASIA1982GEFFENGHS2008 on vinyl",
+      "Pressing AKIA0000000000000001 matrix",
+      "hf_ThisIsTheHalfwayPointOfTheRecord mixes",
+    ]) {
+      expect(inClaim(text), text).toEqual([]);
+    }
   });
 
   it("refuses password, secret, token and key parameters under any of their names, in links and text", () => {
@@ -151,6 +159,12 @@ describe("precise rules: refused in every field", () => {
       "access_token",
       "token",
       "jsessionid",
+      "clientSecret",
+      "apiSecret",
+      "dbPassword",
+      "userPassword",
+      "passphrase",
+      "DB_PASSWORD",
       "oauth_token",
       "oauth_signature",
       "X-Goog-Signature",
@@ -171,8 +185,31 @@ describe("precise rules: refused in every field", () => {
       `secret_key=${chars(30)}`,
       "password=Tr0ub4dor&3",
       "Server=db.example.org;Password=Tr0ub4dor3x;",
+      `apiSecret=${VALUE}`,
     ]) {
       expect(inClaim(text), text).not.toEqual([]);
+    }
+  });
+
+  it("refuses any value under a password's or a token's name, and under a bare pass or secret only a credential", () => {
+    for (const text of [
+      "See https://genius.com/x?pwd=ab now.",
+      "See https://genius.com/x?password=a now.",
+      "See https://genius.com/x?db_password=x now.",
+      "See https://genius.com/x?client_secret=x now.",
+      "See https://genius.com/x?pass=Tr0ub4dor now.",
+      "See https://genius.com/x#secret=QwErTyUiOpAsDf now.",
+      "Their single secret=hunter2 remix",
+    ]) {
+      expect(inClaim(text), text).not.toEqual([]);
+    }
+    for (const text of [
+      "Tickets: https://genius.com/tickets?pass=weekend-camping",
+      "Festival pass=sold out in 1998",
+      "Their single secret=love remix",
+      "See https://en.wikipedia.org/wiki/Secret_(Madonna_song)#secret=yes now.",
+    ]) {
+      expect(inClaim(text), text).toEqual([]);
     }
   });
 
@@ -216,9 +253,20 @@ describe("precise rules: refused in every field", () => {
     ).not.toEqual([]);
   });
 
-  it("refuses a quoted password or secret field with a quoted value, as JSON, PHP or HTML write it", () => {
+  it("refuses a password or secret field whose value looks like a credential, however it is written", () => {
     for (const text of [
       '{"password": "opensesame1"}',
+      '{"password": 83746592}',
+      '{"apiSecret": "opensesame1"}',
+      '{"clientSecret": "opensesame1"}',
+      '{"dbPassword": "opensesame1"}',
+      "['userPassword' => 'opensesame1']",
+      '{"passphrase": "opensesame1"}',
+      "password: opensesame1",
+      'password: "opensesame1"',
+      "PASSWORD = opensesame1",
+      ":password => 'opensesame1'",
+      "<password>opensesame1</password>",
       '{"db_password": "opensesame1"}',
       '{"pass": "opensesame1"}',
       '{"pwd": "opensesame1"}',
@@ -230,6 +278,19 @@ describe("precise rules: refused in every field", () => {
     ]) {
       expect(inClaim(text), text).not.toEqual([]);
       expect(excerpt(`Login: ${text}`), text).not.toEqual([]);
+    }
+    // Songs called "Secret" or "Password", followed by another title, a year or a time.
+    for (const text of [
+      'Madonna\'s 1994 single "Secret": "Bedtime Story" followed in 1995.',
+      '"Secret": "Take a Bow" and "Bedtime Story" were singles.',
+      "Madonna's 'Secret': 'Bedtime Story' followed in 1995",
+      'Tracks: "Password": "Hidden" (remix)',
+      'The single "Password": a 2009 club track.',
+      'Tracklist: "Password": 3:41',
+      "Secret: 1994-10-18, Maverick.",
+      "Password: Swordfish, the 1999 B-side.",
+    ]) {
+      expect(inClaim(text), text).toEqual([]);
     }
   });
 
@@ -251,18 +312,35 @@ describe("precise rules: refused in every field", () => {
   });
 
   it("refuses a bearer or basic credential in any case, and keeps the words in prose", () => {
-    expect(inClaim(`authorization: bearer ${chars(30)}`)).toContain(
-      "analysis.claims[0].text: a bearer or basic credential",
-    );
-    expect(inClaim(`BEARER ${chars(30)}`)).toContain(
-      "analysis.claims[0].text: a bearer or basic credential",
-    );
+    for (const text of [
+      `authorization: bearer ${chars(30)}`,
+      `BEARER ${chars(30)}`,
+      `Authorization: Bearer "${VALUE}"`,
+      `Bearer: ${VALUE}`,
+      "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+      "authorization: basic dXNlcjpwYXNzd29yZA==",
+      'Basic "dXNlcjpwYXNz"',
+    ]) {
+      expect(inClaim(text), text).toContain(
+        "analysis.claims[0].text: a bearer or basic credential",
+      );
+    }
     for (const text of [
       "It needs a basic understanding of harmony to hear it.",
       "The bearer of bad news, in the second verse.",
       "Basic Channel and Phylyps Trak, 1993.",
+      "a basic drum-and-bass groove",
+      "built on a basic verse-chorus-verse structure",
+      "a basic singer-songwriter arrangement",
+      "a basic call-and-response hook",
+      "a basic four-on-the-floor beat",
+      "the standard bearer singer-songwriter",
+      "the Basic Channel-affiliated label",
+      "Basic Instructions, Basic Element12 and Basic Instinct2",
+      "bearer 4u2c-the-world tour",
     ]) {
       expect(inClaim(text), text).toEqual([]);
+      expect(excerpt(text), text).toEqual([]);
     }
   });
 
@@ -298,12 +376,49 @@ describe("precise rules: refused in every field", () => {
       expect(inClaim(text), text).toEqual(["analysis.claims[0].text: a hex key"]);
     }
   });
+
+  it("refuses a base64 value made of random bytes in free text and ids, and keeps breadcrumbs", () => {
+    // As `openssl rand -base64 32` and `-base64 48` print them.
+    for (const value of [
+      "JwIEe7YA/GQ0oqeuJZJHWBU7vYJEHeAz3++doKpQxOE=",
+      "TsY6PElmsmbs3x/A1FLvC/KFQfIzPpyG1uinpOvY5C8=",
+      "Podhn+fqpAB5BMBVqZsvcWFtxOTFFvo7/pSXi3PZCTogE/tbd2hgZIc9iV9gdc5S",
+      "EEuY6WF4mwQ0mR1FrLv8BQwetPR/TpyxvA/oXnvH1OEPTsTOd5r/8piiyqFJ1xt7",
+    ]) {
+      for (const [field, record] of [
+        ["claim", claim(`The liner notes print ${value} under the credits.`)],
+        ["verdictReason", { analysis: { claims: [{ text: "x", verdictReason: `see ${value}` }] } }],
+        ["title", { evidence: [{ id: "musicbrainz:x", title: `Key ${value}` }] }],
+        ["id", { evidence: [{ id: `genius:song/${value}` }] }],
+      ] as const) {
+        expect(judge(record), `${value} in ${field}`).toEqual(
+          expect.arrayContaining([expect.stringMatching(/: a base64 value$/)]),
+        );
+      }
+    }
+    for (const text of [
+      "Styles: Pop/Rock/Electronic/Instrumental/Soundtrack/2001",
+      "Genres: Rock/AltRock/BritPop/PostPunk/NewWave/TripHop/1990s",
+      "Home/TheVerve/UrbanHymns/BitterSweetSymphony/1997/Remastered2016",
+      "Released on Hut/Virgin/EMI/Caroline/VUSCD82/VUSCX82/1997",
+      "Home/Music/TheVerveUrbanHymns1997/Remastered2016Deluxe",
+      "Discography/DaftPunk/Discovery2001OneMoreTime",
+      "Music/Madonna/ConfessionsOnADanceFloor2005/HungUp",
+      "Formats/CDSingle1997UK/12InchVinyl1997EU/Cassette",
+      "Charts/UKSinglesChart1997/BillboardHot100/1998",
+      "Samples/LastTime1965Rolling/StonesOrchestra1965Oldham",
+    ]) {
+      expect(inClaim(text), text).toEqual([]);
+      expect(judge({ evidence: [{ id: text }] }), text).toEqual([]);
+    }
+  });
 });
 
 describe("heuristic shapes: only where a secret is plausible", () => {
   it("withholds a web search page's excerpt that holds a hex run, a base64 value or a random run, never refuses it for that", () => {
     for (const text of [
       `Track file checksum (MD5): 5d41402abc4b2a76b9719d911017c592`,
+      `Track file checksum (MD5): ${"5d41402abc4b2a76b9719d911017c592".toUpperCase()}`,
       `Commit 3f786850e387550fdab836ed7e6dc881de23001b fixed the player.`,
       `cover ab67616d0000b2738e6551a2944708ab1f5a4bf3 loaded`,
       "Apple Music's editorial playlist pl.f4d106fed2bd41149aaacabb233eb5eb has it.",
@@ -364,6 +479,34 @@ describe("heuristic shapes: only where a secret is plausible", () => {
     expect(asWebPage(`https://example.org/a?k=${encodeURIComponent(SHORT_PIECES)}`)).toContain(
       "evidence[0].url: a base64 value in a link",
     );
+    // A share id, a click id, a search signature or a cache-buster in hex is not a key.
+    for (const name of [
+      "si",
+      "msclkid",
+      "search_sig",
+      "v",
+      "cb",
+      "cachebust",
+      "_",
+      "hash",
+      "etag",
+      "rev",
+      "version",
+    ]) {
+      expect(
+        asWebPage(`https://soundcloud.com/x/y?in=a&${name}=${HEX_32}&utm_source=b`),
+        name,
+      ).toEqual([]);
+    }
+    // Only a hex value is let through under those names: a token there is still one.
+    expect(asWebPage(`https://soundcloud.com/x/y?si=${TOKEN}`)).toContain(
+      "evidence[0].url: a long token in a link",
+    );
+    for (const name of ["id", "k", "apisig", "si_key"]) {
+      expect(asWebPage(`https://example.org/a?${name}=${HEX_32}`), name).toContain(
+        "evidence[0].url: a hex key in a link",
+      );
+    }
     // A breadcrumb or a search with a few capitals inside words is not base64.
     for (const query of [
       "dir=Music/DaftPunk/Discovery/OneMoreTime/2001/Live",
@@ -402,7 +545,7 @@ describe("heuristic shapes: only where a secret is plausible", () => {
       "https://apnews.com/article/music-lawsuits-sampling-0d3f1e2c9b8a7d6e5f4a3b2c1d0e9f8a",
       "https://someone.notion.site/The-Verve-Discography-1a2b3c4d5e6f47a8b9c0d1e2f3a4b5c6",
       `https://example.org/files/${HEX_32}/cover.html`,
-      `https://example.org/md5/${HEX_64}`,
+      `https://www.last.fm/music/The+Verve/+images/${HEX_32}`,
       "https://itunes.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
       "https://embed.music.apple.com/us/playlist/hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
       "https://geo.music.apple.com/us/playlist/hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
@@ -411,10 +554,22 @@ describe("heuristic shapes: only where a secret is plausible", () => {
       expect(asWebPage(url), url).toEqual([]);
     }
     expect(judge({ evidence: [{ id: `genius:song/${HEX_32}` }] })).toEqual([]);
+    // More than 32 hex digits alone is a key or a digest, not a page's name.
+    for (const url of [
+      `https://example.org/md5/${HEX_64}`,
+      `https://genius.com/${HEX_64}`,
+      `https://genius.com/Daft-punk-one-more-time-lyrics/${HEX_64.toUpperCase()}`,
+      "https://www.semanticscholar.org/paper/3f786850e387550fdab836ed7e6dc881de23001b",
+    ]) {
+      expect(asWebPage(url), url).toContain("evidence[0].url: a token in a link's path");
+    }
+    expect(judge({ evidence: [{ id: "x", recordRef: `track/${HEX_64}` }] })).toEqual([
+      "evidence[0].recordRef: a token in an id",
+    ]);
     for (const value of [TOKEN, URL_KEY]) {
-      expect(judge({ evidence: [{ id: `genius:song/${value}` }] }), value).toEqual([
+      expect(judge({ evidence: [{ id: `genius:song/${value}` }] }), value).toContain(
         "evidence[0].id: a token in an id",
-      ]);
+      );
       expect(asWebPage(`https://songs.example.com/file/${value}/view`), value).toContain(
         "evidence[0].url: a token in a link's path",
       );
@@ -599,6 +754,60 @@ describe("the committed recordings, scanned with these rules", () => {
       });
       // Main took 14 to 27 s here; the checks take well under one.
       expect(performance.now() - started, unit).toBeLessThan(5000);
+    }
+  });
+
+  it("decode a text dense in escapes that are not UTF-8 in linear time", () => {
+    for (const unit of ["%E3%", "%zz", "%FF%41"]) {
+      const text = unit.repeat(Math.ceil(200000 / unit.length)).slice(0, 200000);
+      for (const record of [
+        claim(text),
+        { evidence: [{ id: text }] },
+        claim(`https://genius.com/x?q=${text}`),
+      ]) {
+        const started = performance.now();
+        leaks(record, check);
+        expect(performance.now() - started, unit).toBeLessThan(1000);
+      }
+    }
+  });
+});
+
+describe("texts that pages and records carry, scanned with these rules", () => {
+  /** Links, ids and prose seen in search results and source records, and where each is held. */
+  const kept: Array<{ value: string; places: string[] }> = JSON.parse(
+    readFileSync(join(import.meta.dirname, "testing", "keptTexts.json"), "utf8"),
+  );
+
+  it("are kept wherever they are held", () => {
+    expect(kept.length).toBeGreaterThan(200);
+    const base = { commit: "0fdfdccc509c" };
+    for (const { value, places } of kept) {
+      for (const place of places) {
+        const analysis =
+          place === "text"
+            ? { claims: [{ text: value }] }
+            : place === "id"
+              ? { evidence: [{ id: value, source: "x", sourceTier: "primary-record" }] }
+              : place === "page"
+                ? { evidence: [webItem(value)] }
+                : place === "excerpt"
+                  ? { evidence: [webItem("https://en.wikipedia.org/wiki/X", { excerpt: value })] }
+                  : {
+                      evidence: [
+                        {
+                          id: "musicbrainz:x",
+                          source: "musicbrainz",
+                          sourceTier: "primary-record",
+                          url: "https://musicbrainz.org/recording/x",
+                          excerpt: value,
+                        },
+                      ],
+                    };
+        const found = new PageExcerpts();
+        const record = withoutPageTokens({ ...base, analysis }, [], found);
+        expect([...found.refused, ...leaks(record, check)], `${value} (${place})`).toEqual([]);
+      }
     }
   });
 });

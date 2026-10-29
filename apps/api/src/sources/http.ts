@@ -32,6 +32,7 @@ import {
   readingOnce,
   logger,
   MAX_LOGGED_TEXT,
+  pairShapeSpans,
   scrubbedSpans,
 } from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
@@ -719,6 +720,43 @@ function headerLineSpans(text: string): Span[] {
 }
 
 /**
+ * A name and its ":" or "=" after other text on its line (`… sent X-Api-Key: v and …`,
+ * `… failed: password: v`): group 1 is the name, letters, digits, "_", "." and "-". A name starts
+ * where no name character comes before it, so a long run is read from its start once.
+ */
+const MID_LINE_NAME = /(?<![\w.-])([A-Za-z0-9_.-]{1,64})[ \t]*[:=][ \t]*/g;
+/** A value written mid-line: one token-shaped run, then a space, a "," a ";" a ")" or the end. */
+const MID_LINE_VALUE = /[A-Za-z0-9._~+/=-]{8,}(?=[\s,;)]|$)/y;
+/** The secret keys a name glued to a word can end in (`wpassword`, `db_password`, `xtoken`). */
+const GLUED_SECRET_KEYS = [...SECRET_KEYS].filter((key) => key.length >= 5);
+
+/**
+ * Where the value of each pair or header for a secret written after other text on its line lies
+ * (headerLineSpans reads one at the start of a line): its name is a secret field name
+ * (isSecretFieldName: `X-Api-Key`, `X-Auth-Token`, `password`, `db_password`) or ends in a secret
+ * key glued to a word before it (`userpassword`), and its value is one token-shaped run of 8
+ * characters or more, with a digit or 16 characters long, that is not a status word. Prose that
+ * only looks like a pair stays: `Password: must be 8 characters`, `X-Api-Key: missing`, `token:
+ * expired`, `X-Api-Key: required here`. Reads the text once.
+ */
+function midLinePairSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  MID_LINE_NAME.lastIndex = 0;
+  for (let pair = MID_LINE_NAME.exec(text); pair; pair = MID_LINE_NAME.exec(text)) {
+    const name = pair[1] ?? "";
+    const form = keyForm(name);
+    if (!isSecretFieldName(name) && !GLUED_SECRET_KEYS.some((key) => form.endsWith(key))) continue;
+    const start = pair.index + pair[0].length;
+    MID_LINE_VALUE.lastIndex = start;
+    const value = MID_LINE_VALUE.exec(text)?.[0];
+    if (!value || isStatusWord(value) || !(/\d/.test(value) || value.length >= 16)) continue;
+    spans.push([start, start + value.length]);
+    MID_LINE_NAME.lastIndex = start + value.length;
+  }
+  return spans;
+}
+
+/**
  * Where each secret value of a key without quotes lies in text that was not parsed: after an
  * object key, inside an element named after a secret key, or on a header line. A value without
  * quotes that is a status word (STATUS_WORD: `token: invalid`, `Token: expired.`) is a reason a
@@ -731,7 +769,8 @@ function headerLineSpans(text: string): Span[] {
  * - a header line counts only at the start of a line, and only with a value of one run to the end
  *   of the line: "Invalid token: abc123" mid-line, "Password: must be 8 characters" and
  *   "Authorization: Basic …" (the Bearer|Basic rule reads that one) are left, and so are lines
- *   written with escaped line breaks (`\n` inside a JSON string);
+ *   written with escaped line breaks (`\n` inside a JSON string); moreSecretSpans reads a pair
+ *   or a header after other text when its value is one token-shaped run (`X-Api-Key: v`);
  * - an element needs its closing tag (a body cut off inside one keeps the rest), and tags written
  *   as entities (`&lt;token&gt;`) are not read;
  * - an "X-" prefix is dropped only from a header line's name: `{ x_auth_token: v }` and
@@ -1320,6 +1359,7 @@ const inlineShapeSpans = (text: string): Span[] =>
     varDumpSpans(text),
     elementSpans(text, isSecretFieldName),
     formFieldSpans(text),
+    midLinePairSpans(text),
   ].reduce(maskableUnion);
 
 /** The shapes moreSecretSpans reads line by line: fields, print_r entries, pydantic inputs. */
@@ -1500,8 +1540,16 @@ function decodedSpans(text: string): Span[] {
  *   element name that ends in a secret key (`X-Vault-Token`, `<SessionToken>`), an "X-" prefix
  *   or an index (`x_auth_token`, S3's `<Token-0>`);
  * - pydantic's `input_value=…` under the line that names a secret field;
+ * - a pair or a header for a secret after other text on its line, whose value is one token-shaped
+ *   run (`… sent X-Api-Key: v and …`, `… failed: password: v`; midLinePairSpans);
  * - all of these, and the quoted and unquoted keys above, in text written with HTML entities or
- *   string escapes (decodedSpans).
+ *   string escapes (decodedSpans);
+ * - the pair and scheme shapes the logger reads besides its two rules (pairShapeSpans): a
+ *   credential after a scheme in curly quotes, after `Token` or `Digest`, a comma, a closing quote
+ *   or a line break inside quotes, or holding an `&`, and a pair written with HTML entities
+ *   (`password&#61;v`);
+ * - the user info of a link that holds a password (userInfoSpans), whatever characters it holds:
+ *   the e-mail rule of scrubText stops at a character outside ASCII (`https://u:pä55@host`).
  *
  * Known limits, left to the other rules:
  * - a field or an assignment counts only at the start of a line (an environment variable named
@@ -1537,7 +1585,9 @@ function decodedSpans(text: string): Span[] {
  *   secrets, and a configured key is caught by its value (knownSecrets).
  */
 function moreSecretSpans(text: string): Span[] {
-  return maskableUnion(shapeSpans(text), decodedSpans(text));
+  return [shapeSpans(text), decodedSpans(text), pairShapeSpans(text), userInfoSpans(text)].reduce(
+    maskableUnion,
+  );
 }
 
 /**
@@ -1686,7 +1736,9 @@ function loggedWithoutValues(text: string, pieces: readonly Piece[]): Span[] {
   const rendered = render(text, pieces);
   const values = configuredSpans(rendered);
   let j = 0;
-  const spans = scrubbedSpans(rendered).filter(([start, end]) => {
+  // What the logger's other rules hide is not counted as hidden here: a line can read as it was
+  // logged before them, and the text is also shown to a client (pairShapeSpans masks those).
+  const spans = scrubbedSpans(rendered, { shapes: false }).filter(([start, end]) => {
     while (j < values.length && (values[j] as [number, number])[1] <= start) j++;
     return !(j < values.length && (values[j] as [number, number])[0] < end);
   });
@@ -1976,8 +2028,60 @@ export const withoutEscapedMediaUrls = (text: string) => redactWith(text, [escap
  */
 export function scrubReadText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = withoutMediaUrls(withCredentials(() => redactSecrets(text)));
-  return out.length > MAX_TEXT ? out.slice(0, MAX_TEXT) : out;
+  return withoutUserInfo(withoutMediaUrls(withCredentials(() => redactSecrets(text))), MAX_TEXT);
+}
+
+/**
+ * The user info of a link that holds a password (`https://user:password@host`), also glued to the
+ * word before it: group 1 is the link's scheme, and what follows it up to the "@" is hidden,
+ * whatever characters it holds (a password with an "é" or an "ü" in it).
+ */
+const USER_INFO = /(https?:\/\/)[^\s/?#@"'<>:]*:[^\s/?#@"'<>]*@/gi;
+
+/** Where the user info of each link that holds a password (USER_INFO) lies in `text`. */
+function userInfoSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  USER_INFO.lastIndex = 0;
+  for (let link = USER_INFO.exec(text); link; link = USER_INFO.exec(text)) {
+    spans.push([link.index + (link[1] ?? "").length, link.index + link[0].length - 1]);
+  }
+  return spans;
+}
+
+/**
+ * `text` (scrubReadText's, once its other rules ran) with the user info of each link that holds
+ * a password (USER_INFO) as "[redacted]", cut to `max` characters, and no further into `text` than
+ * a cut of `text` itself to `max` would reach: a mask shorter than the user info it stands for
+ * never shows what that cut left out.
+ */
+function withoutUserInfo(text: string, max: number): string {
+  const parts: string[] = [];
+  let kept = 0;
+  let length = 0;
+  // How much of the text with the user info hidden shows no more than `text` cut to `max`.
+  let cap = max;
+  USER_INFO.lastIndex = 0;
+  for (let link = USER_INFO.exec(text); link; link = USER_INFO.exec(text)) {
+    const start = link.index + (link[1] ?? "").length;
+    const end = link.index + link[0].length - 1;
+    if (start >= max) break;
+    parts.push(text.slice(kept, start), "[redacted]");
+    length += start - kept;
+    // A cut inside the user info falls before its mask.
+    if (end > max) {
+      cap = Math.min(cap, length);
+      kept = end;
+      break;
+    }
+    length += "[redacted]".length;
+    kept = end;
+  }
+  if (kept === 0) return text.length > max ? text.slice(0, max) : text;
+  parts.push(text.slice(kept));
+  // Past the last mask, the text shows as far as `text` cut to `max` reaches.
+  cap = Math.min(cap, length + Math.max(0, max - kept));
+  const out = parts.join("");
+  return out.length > cap ? out.slice(0, cap) : out;
 }
 
 /**
@@ -2569,14 +2673,22 @@ function plainLineOf(text: string, cut: boolean): string | undefined {
     }
     return out;
   };
-  const lineValues = headerLineSpans(text);
+  // A credential after Bearer or Basic too, where it lies in the text as it came, when the line's
+  // link rule took the scheme glued to a link (`…/token=Basic <credential>`) and left it.
+  const inMask = maskedAt(pieces);
+  const credentials = hidesOf(text, BEARER, (m) =>
+    inMask(m.index) ? [m.index + (m[1] ?? "").length + 1, m.index + m[0].length] : undefined,
+  ).map(([start, end]): Span => [start, end]);
+  const lineValues = maskableUnion(headerLineSpans(text), credentials);
   const more = moreSecretSpans(text);
   // A credential (knownSecretSpans) too, where it lies in the text as it came: the line's link
   // rule can take its start (a link written right before a PEM key's first line). One inside a
   // link the line writes as "[link]" is hidden with it, and the line says it was a link.
   const known = outsideMasks(pieces, knownSecretSpans(text));
   const values = known.length > 0 ? maskableUnion(lineValues, known) : lineValues;
-  const headerValues = inLine(more.length > 0 ? maskableUnion(values, more) : values);
+  // A value inside a link the line writes as "[link]" is hidden with it (a `token=` parameter).
+  const outside = more.length > 0 ? outsideMasks(pieces, more) : more;
+  const headerValues = inLine(outside.length > 0 ? maskableUnion(values, outside) : values);
   const lineOnly = inLine(lineValues);
   // keyValuePieces also keeps hidden what the other rules hide when an error message made from
   // the line is redacted again (redactedAgain).
@@ -2612,6 +2724,19 @@ function plainLineOf(text: string, cut: boolean): string | undefined {
   const shorter = render(short, piecesBefore(masked, end));
   const cutAgain = `${shorter.length > MAX_DETAIL - 1 ? shorter.slice(0, MAX_DETAIL - 1) : shorter}…`;
   return reasonIssue(cutAgain) === null ? cutAgain : undefined;
+}
+
+/**
+ * Whether the character at `at` is inside a mask of `pieces`, asked of places in order: the
+ * pieces are read once.
+ */
+function maskedAt(pieces: readonly Piece[]): (at: number) => boolean {
+  let index = 0;
+  return (at) => {
+    while (index < pieces.length && (pieces[index] as Piece).to <= at) index++;
+    const piece = pieces[index];
+    return piece?.mask !== undefined && piece.from <= at;
+  };
 }
 
 /** `spans` (sorted by start) but those inside one mask of `pieces`, which hides them whole. */

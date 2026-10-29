@@ -253,6 +253,19 @@ describe("scrubbedSpans", () => {
       "'Bearer abc.def1'",
       '"Basic abcdefgh12"',
       "proxy-authorization: ",
+      // The shapes of moreSpans: curly quotes, entities, other schemes, odd separators, glued names.
+      "‘",
+      "”",
+      "&quot;",
+      "password&#61;",
+      "authorization: 'Token ",
+      'Digest a="1", response=',
+      "'Bearer, ",
+      "'Bearer'",
+      "Bearer Bearer '",
+      "wpassword: ",
+      "xBasic ",
+      "QWxhZGRpbjpvcGVu1",
       "contoso-prod.openai.azure.com",
       "https://u:p@h.example/x?token=t1&a=b",
       "p.scdn.co/clip",
@@ -687,6 +700,248 @@ describe("Authorization values in quotes and at the cap", () => {
     // and one read again from each value to its end about 64 times, or takes seconds on 1 MB.
     const call = (text: string) =>
       text.replace(SECRET_PAIR, "$1$2[R]").length + scrubbedSpans(text).length + scrub(text).length;
+    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+    expect(ratio).toBeLessThan(20);
+  });
+});
+
+describe("pair and scheme shapes the two rules leave (#237)", () => {
+  const TOKEN = "V7qW6rE5tY4uI3oP2aS1";
+  const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+  /** Whether `out` shows any 4 characters of the token or the credential. */
+  const shows = (out: string) =>
+    [TOKEN, CRED].some((secret) =>
+      Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
+        out.includes(part),
+      ),
+    );
+  /** Every path to a log line: scrub, logText, serializeError, and a line written to LOG_FILE. */
+  const leaks = (text: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "log-shapes-"));
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      logger("Probe").warn(text);
+      logger("Probe").warn("failed", { err: new Error(text) });
+      return [
+        scrub(text),
+        scrub(logText(text)),
+        JSON.stringify(serializeError(new Error(text))),
+        readFileSync(file, "utf8"),
+      ].filter(shows);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it.each([
+    ["curly single quotes", `{ authorization: ‘Bearer ${TOKEN}’ }`],
+    ["curly double quotes", `authorization: “Bearer ${TOKEN}”`],
+    ["a curly-quoted name and value", `“password”: “${TOKEN}”`],
+    ["a name and value in curly single quotes", `‘token’: ‘${TOKEN}’`],
+    ["a quoted Token scheme", `{ authorization: 'Token ${TOKEN}' }`],
+    ["a Token scheme", `Authorization: Token ${TOKEN}`],
+    ["a quoted Digest scheme", `{ authorization: 'Digest username="u", response="${TOKEN}"' }`],
+    ["a Digest scheme", `Authorization: Digest response=${TOKEN}, nonce="n1"`],
+    [
+      "a Digest scheme in JSON",
+      `{"authorization":"Digest username=\\"u\\", response=\\"${TOKEN}\\""}`,
+    ],
+    ["a comma after a quoted scheme", `authorization: 'Bearer, ${TOKEN}'`],
+    ["a token glued to the quote after a scheme", `authorization: 'Bearer'${TOKEN}`],
+    ["a line break inside the quotes", `authorization: 'Basic\n${CRED}'`],
+    ["a line break and an indent inside the quotes", `authorization: 'Bearer\n    ${TOKEN}'`],
+    ["a token with & after a scheme", `authorization: Bearer abc&${TOKEN}`],
+    ["a quoted token with & after a scheme", `authorization: 'Bearer abc&${TOKEN}'`],
+    ["a Discogs token with & after two schemes", `'Discogs Discogs token=abc&${TOKEN}'`],
+    ["a quoted token with & after two schemes", `authorization: Bearer Bearer 'abc&${TOKEN}'`],
+    ["an entity for =", `login failed: password&#61;${TOKEN} for user`],
+    ["a hexadecimal entity for =", `password&#x3d;${TOKEN} x`],
+    ["entities for quotes in JSON", `{&quot;token&quot;:&quot;${TOKEN}&quot;,&quot;a&quot;:1}`],
+    ["entities for an api_key's quotes", `body &quot;api_key&quot;:&quot;${TOKEN}&quot; end`],
+    ["entities around a value", `password=&quot;${TOKEN}&quot; x`],
+    ["a secret key at the end of a longer name", `connect failed: db_password: ${TOKEN}`],
+    ["a scheme glued to the word before it", `call failedBasic ${CRED}`],
+  ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
+    expect(leaks(text)).toEqual([]);
+    expect(scrub(text)).toContain("[redacted]");
+  });
+
+  it("writes what the two rules wrote, with what the new shapes add hidden as well", () => {
+    for (const [text, expected] of [
+      [`{ authorization: ‘Bearer ${TOKEN}’ }`, "{ authorization: [redacted] [redacted] }"],
+      [`authorization: 'Bearer abc&${TOKEN}'`, "authorization: [redacted] [redacted]'"],
+      [`authorization: Bearer abc&${TOKEN}`, "authorization: [redacted]"],
+      [`{&quot;token&quot;:&quot;${TOKEN}&quot;}`, "{&quot;token&quot;:&quot;[redacted]&quot;}"],
+      [`token: Bearer ${TOKEN}`, "token: [redacted]"],
+      [`Bearer ${TOKEN} and Basic ${CRED}`, "Bearer [redacted] and Basic [redacted]"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("keeps readable text readable", () => {
+    for (const text of [
+      "the token count is 5; don’t retry",
+      "Token expired, please sign in again",
+      "authorization missing: ‘Bearer’ expected",
+      "scheme 'Basic', then 'Bearer'",
+      "the scheme is Bearer, then Basic",
+      "&quot;hello&quot; &amp; &lt;b&gt;goodbye&lt;/b&gt;",
+      "Digest of the week: 5 songs",
+      "{ authorization: '' }",
+      "“Bohemian Rhapsody” by Queen",
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+    // A quoted scheme followed by prose on the next line keeps the line, as before.
+    for (const [text, expected] of [
+      [
+        "authorization: 'Bearer\n    at Object.<anonymous> (app.js:1:1)'",
+        "authorization: [redacted]\n    at Object.<anonymous> (app.js:1:1)'",
+      ],
+      [
+        "password: 'Basic\n\nThe server then retried'",
+        "password: [redacted]\n\nThe server then retried'",
+      ],
+      ["authorization: 'Bearer, then retried'", "authorization: [redacted], then retried'"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("does not replace a value it replaced before", () => {
+    for (const text of ["password&#61;[redacted]", "&quot;token&quot;:&quot;[redacted]&quot;"]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("finds the new shapes' credentials in scrubbedSpans, and cuts before them", () => {
+    const text = `x authorization: 'Token ${TOKEN}' and ‘token’: ‘${TOKEN}’ y`;
+    // The scheme word is the pair rule's (`authorization: 'Token`), as before.
+    expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
+      "Token",
+      TOKEN,
+      TOKEN,
+    ]);
+    for (const shape of [
+      `authorization: 'Basic\n${CRED}'`,
+      `authorization: 'Bearer, ${TOKEN}'`,
+      `password&#61;${TOKEN}`,
+    ]) {
+      const long = `${"w ".repeat(40)}${shape} tail`;
+      const start = long.length - shape.length - 5;
+      for (let at = start; at < long.length - 5; at++) {
+        expect(shows(scrub(long.slice(0, logCut(long, at)))), `${shape} cut at ${at}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps hidden what the value, pair and Authorization rules at 908cc14 hid (generated texts)", () => {
+    // main's rules (908cc14), frozen: what they hid in a text, scrub hides too.
+    const N =
+      "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
+    const S = "(?:Bearer|Basic|Discogs)";
+    const Q = "[`\"']";
+    const V = String.raw`[^\s"'&,;}\]]`;
+    const NEXT = String.raw`(?:["']?${V}*?\b(?:${S}\s|(?:${N})(?:["'\s]\s*[:=]|[:=](?!${V})))|["']?${V}*&)`;
+    const MAIN_SECRET_PAIR = new RegExp(
+      String.raw`\b(${N})(["']?\s*[:=]\s*(?!\s))(?!\s*(?:${Q}${S}[ \t]+|${S}\s+)?["']?\[redacted\])` +
+        String.raw`((?:${Q}${S}[ \t]+(?:${S}[ \t]+)*(?!${NEXT})|${S}\s+(?:(?:${S}\s+)+(?!${NEXT}))?))?` +
+        // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
+        String.raw`["']?${V}+["']?`,
+      "gi",
+    );
+    const MAIN_AUTH_SCHEME =
+      /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+    const main = (text: string) =>
+      text
+        .split(SALT)
+        .join("[redacted]")
+        .replace(MAIN_SECRET_PAIR, "$1$2[redacted]")
+        .replace(
+          MAIN_AUTH_SCHEME,
+          (_m, scheme?: string, basic?: string) => `${scheme ?? basic}[redacted]`,
+        );
+    const SALT = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: SALT });
+    const markers = /M\d{3}x|S\dx/g;
+    const shown = (out: string) => new Set(out.match(markers) ?? []);
+    const parts = [
+      "authorization: ",
+      "token=",
+      "password&#61;",
+      "&quot;token&quot;:&quot;",
+      "&quot;",
+      "&#x3d;",
+      "&amp;",
+      "‘",
+      "’",
+      "“",
+      "”",
+      "'",
+      '"',
+      "`",
+      "Bearer ",
+      "Bearer, ",
+      "Basic ",
+      "Basic\n",
+      "Token ",
+      "Digest ",
+      "response=",
+      "Discogs token=",
+      "\n",
+      "  ",
+      ",",
+      "&",
+      "[redacted]",
+      "x",
+      SALT,
+      "M001x",
+      "M002xQWxhZGRp",
+      "M003x",
+    ];
+    const texts = randomStrings(parts, 30_000, 10, 2372);
+    const missed = texts.filter((text) => {
+      const hidden = shown(main(text));
+      return [...shown(scrub(text))].some((marker) => !hidden.has(marker));
+    });
+    expect(missed.slice(0, 5)).toEqual([]);
+    // The texts hold what main hid often enough for the comparison to mean something.
+    expect(
+      texts.filter((text) => shown(main(text)).size < shown(text).size).length,
+    ).toBeGreaterThan(5_000);
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  it.each([
+    ["a run of schemes", filled("Bearer ", "authorization: '", "x")],
+    ["a run of schemes and commas", filled("Bearer, ", "authorization: '")],
+    ["quoted schemes and line breaks", filled("'Basic\n")],
+    ["quoted Token schemes", filled("authorization: 'Token ")],
+    ["Digest parameters", filled('a="1", ', "authorization: Digest ")],
+    ["Digest parameters without an end", filled("a=", "authorization: Digest ")],
+    ["an open parameter quote", filled("x", 'authorization: Digest a="')],
+    ["a long credential", filled("x&", "authorization: 'Bearer ")],
+    ["schemes glued to quotes", filled("'Bearer'")],
+    ["entities", filled("&quot;")],
+    ["entities for =", filled("password&#61;")],
+    ["entity starts", filled("&#1")],
+    ["curly quotes", filled("‘")],
+    ["curly-quoted pairs", filled("“token”: “Bearer ")],
+    ["glued runs, then long gaps", filled(`${"x".repeat(64)}Bearer${" ".repeat(64)}`)],
+    ["quote-only values", filled("'", "authorization: Bearer ")],
+    ["many links", filled("://", "Bearer ")],
+  ])("reads the new shapes in linear time, up to 1 MB: %s", (_name, make) => {
+    // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+    // from each place about 64 times, or takes seconds on 1 MB.
+    const call = (text: string) =>
+      scrub(text).length + scrubbedSpans(text).length + logText(text).length;
     const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
     expect(ratio).toBeLessThan(20);
   });

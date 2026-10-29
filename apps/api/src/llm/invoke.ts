@@ -96,7 +96,7 @@ import {
   UNSOURCED_PRICE_MULTIPLIER,
 } from "./prices.js";
 import { type LlmUsageRow, recordToOpenDatabase } from "./usage.js";
-import { hideKnownValues, logger } from "../logger.js";
+import { hideScrubbed, logger } from "../logger.js";
 
 const log = logger("llm");
 
@@ -471,10 +471,12 @@ export function classifyError(error: unknown, state: ErrorState): LlmError {
     headers?: HeaderSource;
     error?: { code?: unknown; type?: unknown };
   };
-  // The values are hidden before the message is cut below: one written escaped or folded, cut,
-  // is a part that no longer matches when the logger reads it.
+  // The values, and what the logger's rules hide, are hidden before the message is cut below: a
+  // value written escaped or folded, or a credential after a scheme, cut, is a part that no rule
+  // reads when the logger gets it; and scrubSecrets' own rules can take a scheme word and leave
+  // the credential after it.
   const text = typeof e.message === "string" ? e.message : String(error);
-  const detail = scrubSecrets(hideKnownValues(text, secrets), secrets);
+  const detail = scrubSecrets(hideScrubbed(text, secrets), secrets);
   const message = `${state.callSite}: ${detail}`.slice(0, 500);
   const code = errorCode(error);
   const cause: LlmErrorDetails["cause"] = {

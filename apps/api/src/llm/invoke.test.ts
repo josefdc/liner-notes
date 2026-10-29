@@ -426,6 +426,40 @@ describe("retries", () => {
     }
     expect(shown).toEqual([]);
   });
+
+  it("never shows part of a credential in a pair or scheme shape (#237), cut at any offset", () => {
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const basic = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const shown: string[] = [];
+    for (const head of ["", salt]) {
+      for (const tail of [
+        `authorization: 'Token ${token}'`,
+        `authorization: \u2018Bearer ${token}\u2019`,
+        `authorization: 'Bearer, ${token}'`,
+        `authorization: 'Basic\n${basic}'`,
+        `authorization: Bearer abc&${token}`,
+        `&quot;token&quot;:&quot;${token}&quot;`,
+        `password&#61;${token}`,
+        `call failedBasic ${basic}`,
+      ]) {
+        for (let n = 140; n < 510; n += 3) {
+          const error = Object.assign(new Error(`${words(n)}${head}${tail}`), { status: 400 });
+          const llm = classifyError(error, state);
+          for (const out of [llm.message, String((llm.cause as Error).message)]) {
+            if (/QWx|T9z/.test(out)) shown.push(`${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+  });
 });
 
 describe("timeout", () => {

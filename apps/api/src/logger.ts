@@ -532,6 +532,22 @@ export function hideKnownValues(text: string, values: readonly string[] = []): s
   );
 }
 
+/**
+ * `text` with what scrub replaces in it (scrubbedSpans: configured values, links, hosts, pairs,
+ * Authorization values and the shapes of moreSpans) and `values` (knownValueSpans) replaced by
+ * "[redacted]": for a text cut to a length before the logger sees it (llm/invoke.ts). A plain cut
+ * of the text as it came can leave a part of a credential that no rule reads any more (a Basic
+ * one shorter than 8 characters, a quoted one without its closing quote), and another redaction
+ * before the cut can take the scheme word and leave the credential.
+ */
+export function hideScrubbed(text: string, values: readonly string[] = []): string {
+  const spans = scrubbedSpans(text);
+  return hideSpans(
+    text,
+    values.length > 0 ? unionSpans(spans, knownValueSpans(text, values)) : spans,
+  );
+}
+
 /** Runs of the characters isFolded folds, for a quick look (spansOf): each one FOLDED_RUN. */
 const FOLDED_RUNS = /[\0-\x20\x7f-\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/g;
 
@@ -1000,13 +1016,19 @@ export function scrub(input: unknown): string {
     out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT)
       .replace(BARE_PREVIEW, PREVIEW_LINK)
       .replace(PROVIDER_HOST, PROVIDER_ENDPOINT);
-    out = out
-      .replace(SECRET_PAIR, `$1$2${REDACTED}`)
-      .replace(
-        AUTH_SCHEME,
-        (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
-      )
-      .replaceAll(HIDDEN_VALUE, REDACTED);
+    // What the rules of moreSpans hide is read on the text the two rules below read, and hidden
+    // in what they write: they only add to what is hidden.
+    const more = moreSpans(out);
+    out = (
+      more.length > 0
+        ? withMoreSpans(out, more)
+        : out
+            .replace(SECRET_PAIR, `$1$2${REDACTED}`)
+            .replace(
+              AUTH_SCHEME,
+              (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
+            )
+    ).replaceAll(HIDDEN_VALUE, REDACTED);
     return writtenBack(out, marks);
   } catch {
     return "[unreadable]";
@@ -1222,7 +1244,8 @@ function unionSpans(
 function spansAfterValues(
   before: Rewritten,
   hidden: Array<[number, number]>,
-  { pairs = true, auth = true, cut = false }: SpanRules,
+  { pairs = true, auth = true, cut = false, shapes = true }: SpanRules,
+  added?: Array<[number, number]>,
 ): Array<[number, number]> {
   let current = before;
   const links: Rewrite[] = [];
@@ -1269,7 +1292,7 @@ function spansAfterValues(
     }
     current = rewrite(current, parts, hidden);
   }
-  readPairs(current, hidden, pairs, auth);
+  readPairs(current, hidden, pairs, auth, { shapes, added });
   // Sorted by start, those that overlap or touch as one.
   const merged: Array<[number, number]> = [];
   for (const [start, end] of hidden.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
@@ -1287,18 +1310,81 @@ interface SpanRules {
   cut?: boolean;
   /** False for a text whose configured values are replaced already (cappedValues' readings). */
   values?: boolean;
+  /** False to leave out what moreSpans adds to the pair and Authorization rules. */
+  shapes?: boolean;
 }
 
-/** scrubbedSpans' last two rules, secret pairs and Authorization values, on `current`. */
+/**
+ * scrubbedSpans' last two rules, secret pairs and Authorization values, on `current`, and what
+ * the rules of moreSpans hide in it.
+ */
 function readPairs(
   before: Rewritten,
   hidden: Array<[number, number]>,
   withPairs: boolean,
   withAuth: boolean,
+  { shapes = true, added }: { shapes?: boolean; added?: Array<[number, number]> } = {},
+): void {
+  const fromOf = (i: number) => (before.from ? (before.from[i] ?? 0) : i);
+  const toOf = (i: number) => (before.to ? (before.to[i] ?? 0) : i + 1);
+  if (added) {
+    // What moreSpans adds to the two rules (pairShapeSpans), but pairs glued to a word; and a
+    // credential after a scheme that looks like one, which the Authorization rule hides and the
+    // redaction of source errors does not read (it needs 12 token characters after one space).
+    const more = moreSpans(before.text, false);
+    if (more.length === 0) return;
+    const two: Array<[number, number]> = [];
+    pairRules({ text: before.text }, two, true, true);
+    const credentials = schemeSpans(before.text).filter(([start, end]) => {
+      const credential = before.text.slice(start, end);
+      const read =
+        READ_THERE.test(before.text.slice(Math.max(0, start - 8), start)) &&
+        BEARER_TOKEN.test(credential);
+      return CREDENTIAL_LIKE.test(credential) && (credential.includes("&") || !read);
+    });
+    for (const [start, end] of unionSpans(lostSpans(more, unionSpans(two, [])), credentials)) {
+      added.push([fromOf(start), toOf(end - 1)]);
+    }
+    return;
+  }
+  if (shapes && (withPairs || withAuth)) {
+    const more = moreSpans(before.text);
+    if (more.length > 0) {
+      // What the two rules leave of them is hidden with the whole of what those rules rewrite
+      // around it (withWholeRewrites).
+      const two: Array<[number, number]> = [];
+      pairRules({ text: before.text }, two, withPairs, withAuth);
+      const lost = lostSpans(more, unionSpans(two, []));
+      const whole = lost.length > 0 ? withWholeRewrites(before.text, lost) : lost;
+      for (const [start, end] of unionSpans(more, whole)) {
+        hidden.push([fromOf(start), toOf(end - 1)]);
+      }
+    }
+  }
+  pairRules(before, hidden, withPairs, withAuth);
+}
+
+/**
+ * A credential the redaction of source errors reads itself: 12 token characters after Bearer or
+ * Basic and one space, not glued to a word before.
+ */
+const READ_THERE = /(?:^|[^A-Za-z0-9_])(?:Bearer|Basic) $/;
+const BEARER_TOKEN = /^[A-Za-z0-9._~+/=-]{12}/;
+
+/**
+ * readPairs' two rules of scrub, secret pairs and Authorization values, on `current`; with
+ * `pairPattern`, pairs of another shape (GLUED_PAIR).
+ */
+function pairRules(
+  before: Rewritten,
+  hidden: Array<[number, number]>,
+  withPairs: boolean,
+  withAuth: boolean,
+  pairPattern = SECRET_PAIR,
 ): void {
   let current = before;
   const pairs: Rewrite[] = [];
-  for (const pair of withPairs ? current.text.matchAll(SECRET_PAIR) : []) {
+  for (const pair of withPairs ? current.text.matchAll(pairPattern) : []) {
     const from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
     const part = valueRewrite(current.text, from, pair.index + pair[0].length);
     // An Authorization scheme the pair took before the value names it; it is not in the span.
@@ -1316,6 +1402,377 @@ function readPairs(
     auths.push(valueRewrite(current.text, from, auth.index + auth[0].length));
   }
   rewrite(current, auths, hidden);
+}
+
+// =============================================================================
+// Pair and scheme shapes the two rules do not read
+// =============================================================================
+
+/**
+ * A character as moreSpans reads it written another way: a curly quote (`‘ ’ ‚ ‛ “ ” „ ‟`), or an
+ * HTML entity (`&quot;`, `&#61;`, `&#x3d;`, `&colon;`), also without its ";" where no letter or
+ * digit follows. Group 1 is a named entity, 2 a decimal one, 3 a hexadecimal one.
+ */
+const WRITTEN_AS =
+  /[\u2018-\u201f]|&(?:(lt|gt|amp|quot|apos|equals|colon)|#(\d{1,7})|#x([0-9a-f]{1,6}))(?:;|(?![0-9a-z]))/gi;
+const NAMED_CHARS: Readonly<Record<string, string>> = {
+  lt: "<",
+  gt: ">",
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  equals: "=",
+  colon: ":",
+};
+
+/** What a match of WRITTEN_AS stands for; undefined for a private-use character or none. */
+function writtenChar(match: RegExpExecArray | RegExpMatchArray): string | undefined {
+  const written = match[0];
+  if (!written.startsWith("&")) return written <= "\u201b" ? "'" : '"';
+  if (match[1]) return NAMED_CHARS[match[1].toLowerCase()];
+  const code = match[2] ? Number(match[2]) : Number.parseInt(match[3] ?? "", 16);
+  // A private-use character could stand for the start or the end of a HIDDEN_VALUE.
+  if (code > 0x10ffff || (code >= 0xe000 && code <= 0xf8ff)) return undefined;
+  return String.fromCodePoint(code);
+}
+
+/**
+ * `text` with its curly quotes as straight ones and its HTML entities as the characters they
+ * stand for (WRITTEN_AS), each character of it standing for what it was written as; undefined
+ * when nothing is written another way.
+ */
+function readAsWritten(text: string): Rewritten | undefined {
+  if (!/[\u2018-\u201f&]/.test(text)) return undefined;
+  const parts: Rewrite[] = [];
+  for (const match of text.matchAll(WRITTEN_AS)) {
+    const char = writtenChar(match);
+    const end = match.index + match[0].length;
+    if (char !== undefined) parts.push([match.index, end, char, match.index, end]);
+  }
+  return parts.length > 0 ? rewrite({ text }, parts, []) : undefined;
+}
+
+/**
+ * The Authorization schemes besides SCHEMES: read (moreSpans) only right after an Authorization
+ * name and its ":" or "=" (and a quote), since most of them are words of prose too (`Token`).
+ */
+const MORE_SCHEMES =
+  "Token|Digest|Bot|ApiKey|Api-Key|OAuth|SSWS|JWT|DPoP|MAC|Hawk|Negotiate|NTLM|AWS4-HMAC-SHA256";
+/**
+ * Where an Authorization scheme starts (group 1: one of SCHEMES), or one of MORE_SCHEMES after an
+ * Authorization name. The name is looked for at most a few characters back.
+ */
+const SCHEME_AT = new RegExp(
+  String.raw`\b(?:(Bearer|Basic|Discogs)|(?<=authorization["']?[ \t]{0,8}[:=][ \t]{0,8}${QUOTE}?)(?:${MORE_SCHEMES}))(?![\w-])`,
+  "gi",
+);
+/**
+ * Bearer or Basic glued to the word before it (`failedBasic <credential>`), as written: read only
+ * before a credential that looks like one (GLUED_CREDENTIAL), not before a word of prose.
+ */
+const GLUED_SCHEME = /(?<=[A-Za-z0-9_])(Bearer|Basic)(?=[ \t])/g;
+/**
+ * A credential after a glued scheme: 12 characters or more, with a digit, a "+", "/" or "=", or
+ * two capital letters (`VisualBasic Programming` is prose).
+ */
+const GLUED_CREDENTIAL = /^(?=.{12})(?:.*[0-9+/=]|.*[A-Z].*[A-Z])/s;
+/** A credential that looks like one (GLUED_CREDENTIAL), or that holds an `&`. */
+const CREDENTIAL_LIKE = /&|^(?=.{12})(?:.*[0-9+/=]|.*[A-Z].*[A-Z])/s;
+/** The next scheme of a run of them (`Bearer Bearer <token>`): any, or SCHEMES only (group 1). */
+const NEXT_SCHEME = new RegExp(String.raw`(?:(${SCHEMES})|(?:${MORE_SCHEMES}))(?![\w-])`, "iy");
+/** After `Discogs`: its `token=`. */
+const DISCOGS_TOKEN = /[ \t]+token=[ \t]*/iy;
+/** Between a scheme and what follows it: spaces and tabs. */
+const SCHEME_SPACE = /[ \t]+/y;
+/** Inside quotes only: a comma, or one line break, between a scheme and its credential. */
+const SCHEME_COMMA = /[ \t]*,[ \t]*/y;
+const SCHEME_BREAK = /[ \t]*(?:\r\n|[\r\n\v\f\u0085\u2028\u2029])[ \t]*/y;
+/** An Authorization value's parameters (`Digest username="u", response="v"`), quoted or not. */
+const AUTH_PARAM = String.raw`[A-Za-z0-9_.-]+[ \t]*=[ \t]*(?:\\?"[^"\r\n]*?\\?"|[^\s,"'\`;}\]]*)`;
+const AUTH_PARAMS = new RegExp(String.raw`${AUTH_PARAM}(?:[ \t]*,[ \t]*${AUTH_PARAM})*`, "y");
+/** Each parameter of a list AUTH_PARAMS read: group 1 its name, group 2 or 3 its value. */
+const AUTH_PARAM_VALUE = /([A-Za-z0-9_.-]+)[ \t]*=[ \t]*(?:\\?"([^"\r\n]*?)\\?"|([^\s,"'`;}\]]*))/g;
+/** A word in place of a credential, which says it is missing or bad (`Token expired`). */
+const STATUS_WORD =
+  /^(?:invalid|required|missing|expired|undefined|null|none|empty|true|false|unknown|revoked|nil|unset)[.!,;]*$/i;
+/** A credential written as one token (RFC 7235's token68), "=" only at its end. */
+const TOKEN68 = /[A-Za-z0-9._~+/-]+=*/y;
+/** A credential: what an Authorization value holds after its scheme, to a quote or a space. */
+const CREDENTIAL = /[^\s"'`,;}\]]+/y;
+/** A Basic credential's start, as AUTH_SCHEME reads one: 8 characters of base64. */
+const BASIC_START = /[A-Za-z0-9+/=]{8}/y;
+/** A character of a token, glued to a closing quote after a scheme (`'Bearer'<token>`). */
+const GLUED = /[A-Za-z0-9._~+/=-]/;
+
+/** Whether `pattern` (sticky) matches at `at`; where it ends, or -1. */
+function stickyEnd(pattern: RegExp, text: string, at: number): number {
+  pattern.lastIndex = at;
+  return pattern.test(text) ? pattern.lastIndex : -1;
+}
+
+/**
+ * Where the credential lies after the Authorization scheme that SCHEME_AT found at `at`, in the
+ * shapes the two rules leave it in, and where reading stopped. A run of schemes is read whole
+ * (`Bearer Bearer '<token>'`, `Discogs Discogs token=<token>`); in quotes (the one before the
+ * first scheme), a comma or one line break can follow a scheme (`'Bearer, <token>'`, `'Basic
+ * <line break> <credential>'`), and then only a credential that ends at the closing quote is
+ * taken: a line of prose after a quoted scheme stays. The quote can close right after the scheme,
+ * with the token glued to it (`'Bearer'<token>`). The credential is one run to a space, a quote, a
+ * comma or a ";" (an `&` too: `Bearer abc&<token>`), or the value of each parameter of a list but
+ * the realm (`Digest a="u", realm="r", response="v"`); a Basic one starts with 8 characters of
+ * base64, as AUTH_SCHEME reads it. A value that starts with a REDACTED or a configured value (a
+ * MASK) is left, and so is a status word (`Token expired`).
+ */
+function credentialAt(
+  text: string,
+  at: number,
+  scheme: RegExpExecArray,
+  glued = false,
+): { spans: Array<[number, number]>; end: number } {
+  const quote = at > 0 && /["'`]/.test(text.charAt(at - 1)) ? text.charAt(at - 1) : "";
+  const anyScheme = scheme[1] === undefined;
+  let last = scheme[0].toLowerCase();
+  let p = at + scheme[0].length;
+  let open = quote;
+  let shape: "space" | "comma" | "break" | "glued" = "space";
+  for (;;) {
+    if (last === "discogs") {
+      const end = stickyEnd(DISCOGS_TOKEN, text, p);
+      if (end !== -1) {
+        p = end;
+        shape = "space";
+        break;
+      }
+    }
+    if (open && text.charAt(p) === open && GLUED.test(text.charAt(p + 1))) {
+      p++;
+      open = "";
+      shape = "glued";
+      break;
+    }
+    let end = stickyEnd(SCHEME_SPACE, text, p);
+    shape = "space";
+    if (open) {
+      for (const [pattern, kind] of [
+        [SCHEME_COMMA, "comma"],
+        [SCHEME_BREAK, "break"],
+      ] as const) {
+        const other = stickyEnd(pattern, text, p);
+        if (other > end) [end, shape] = [other, kind];
+      }
+    }
+    if (end === -1) return { spans: [], end: p };
+    p = end;
+    NEXT_SCHEME.lastIndex = p;
+    const next = NEXT_SCHEME.exec(text);
+    if (!next || (next[1] === undefined && !anyScheme)) break;
+    last = next[0].toLowerCase();
+    p = NEXT_SCHEME.lastIndex;
+  }
+  let inner = "";
+  if (shape === "space" && /["'`]/.test(text.charAt(p))) {
+    inner = text.charAt(p);
+    p++;
+  }
+  if (text.startsWith(REDACTED, p) || text.startsWith(HIDDEN_VALUE, p))
+    return { spans: [], end: p };
+  if (last === "basic" && stickyEnd(BASIC_START, text, p) === -1) return { spans: [], end: p };
+  // A list of parameters reads further than the token its first name starts: one token
+  // (`Basic <base64>==`) is a credential, not a parameter.
+  const list = stickyEnd(AUTH_PARAMS, text, p);
+  const params = list > stickyEnd(TOKEN68, text, p) ? list : -1;
+  const end = params > p ? params : stickyEnd(CREDENTIAL, text, p);
+  if (end <= p) return { spans: [], end: p };
+  const credential = text.slice(p, end);
+  const closer = inner || open;
+  if (glued && !GLUED_CREDENTIAL.test(credential)) return { spans: [], end };
+  if (params <= p && STATUS_WORD.test(credential)) return { spans: [], end };
+  const quoted = shape === "comma" || shape === "break";
+  // Taken only before the closing quote, which the last span holds too: a cut between the two
+  // would leave a credential no longer read as one.
+  if (quoted && text.charAt(end) !== closer) return { spans: [], end };
+  const spans: Array<[number, number]> = [];
+  if (params > p) {
+    for (const param of credential.matchAll(AUTH_PARAM_VALUE)) {
+      const value = param[2] ?? param[3] ?? "";
+      if (!value || (param[1] ?? "").toLowerCase() === "realm" || STATUS_WORD.test(value)) continue;
+      const close = param[2] === undefined ? 0 : param[0].endsWith('\\"') ? 2 : 1;
+      const stop = p + param.index + param[0].length - close;
+      spans.push([stop - value.length, stop]);
+    }
+  } else spans.push([p, end]);
+  const lastSpan = spans.at(-1);
+  if (quoted && lastSpan) lastSpan[1] = end + 1;
+  return { spans, end: quoted ? end + 1 : end };
+}
+
+/** Each credential credentialAt finds in `text`, as spans of it. */
+function schemeSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const pattern of [SCHEME_AT, GLUED_SCHEME]) {
+    pattern.lastIndex = 0;
+    for (let scheme = pattern.exec(text); scheme; scheme = pattern.exec(text)) {
+      const found = credentialAt(text, scheme.index, scheme, pattern === GLUED_SCHEME);
+      for (const span of found.spans) spans.push(span);
+      const end = found.end;
+      // The schemes of the run and the credential are read once: a later scheme of the run finds
+      // the same credential, or none.
+      pattern.lastIndex = Math.max(pattern.lastIndex, end);
+    }
+  }
+  return spans;
+}
+
+/**
+ * A pair whose name is glued to the word before it (`db_password: v`, `xapi_key=v`), which
+ * SECRET_PAIR, starting at a word's first character, does not read: SECRET_PAIR from any
+ * character after a letter, a digit or "_".
+ */
+const GLUED_PAIR = new RegExp(`(?<=[A-Za-z0-9_])${SECRET_PAIR.source.replace(/^\\b/, "")}`, "gi");
+/** A pair's name glued to the word before it and its ":" or "=", for a quick look first. */
+const GLUED_NAME = new RegExp(String.raw`[A-Za-z0-9_](?:${PAIR_NAMES})["']?\s*[:=]`, "i");
+/** The user info of a link glued to the word before it (`failedhttps://user:password@host`). */
+const GLUED_USERINFO = /(?<=[A-Za-z0-9_])https?:\/\/([^/?#@\s"'<>\\`]+)@/gi;
+
+/**
+ * What scrub hides besides its pair and Authorization rules, in `text` (as those two rules read
+ * it, after links and hosts), as spans of it sorted by start, those that overlap as one:
+ * - the credential after a scheme in the shapes those rules leave (credentialAt): a run of
+ *   schemes before a token that holds an `&` or opens a quote, `'Bearer, <token>'`,
+ *   `'Bearer'<token>`, a line break inside the quotes, and the other schemes of an Authorization
+ *   value (`'Token <token>'`, `Digest response="<hash>"`);
+ * - what the two rules and these hide in the text read with straight quotes for curly ones and
+ *   the characters HTML entities stand for (`‘Bearer <token>’`, `&quot;token&quot;:&quot;v&quot;`,
+ *   `password&#61;v`);
+ * - with `glued`, what those rules leave where a word is glued before them: a pair's name
+ *   (GLUED_PAIR), Bearer or Basic before a credential (GLUED_SCHEME) and a link with user info.
+ * scrub hides them in what the two rules write; what they hid stays hidden. A scheme word alone
+ * (what a pair's value is read as before quotes with nothing in them) is not a credential.
+ */
+function moreSpans(text: string, glued = true): Array<[number, number]> {
+  if (!SHAPE_HINT.test(text)) return [];
+  const spans = schemeSpans(text);
+  if (glued) {
+    if (GLUED_NAME.test(text)) pairRules({ text }, spans, true, false, GLUED_PAIR);
+    for (const link of text.matchAll(GLUED_USERINFO)) {
+      const start = link.index + link[0].indexOf("//") + 2;
+      spans.push([start, start + (link[1] ?? "").length]);
+    }
+  }
+  const read = readAsWritten(text);
+  if (read) {
+    const from = read.from as Int32Array;
+    const to = read.to as Int32Array;
+    pairRules(read, spans, true, true);
+    if (glued) pairRules(read, spans, true, false, GLUED_PAIR);
+    for (const [start, end] of schemeSpans(read.text)) {
+      spans.push([from[start] as number, to[end - 1] as number]);
+    }
+  }
+  const credentials = spans.filter(
+    ([start, end]) => !QUOTED_SCHEME_WORD.test(text.slice(start, end)),
+  );
+  return unionSpans(credentials, []);
+}
+
+/** A scheme word alone, in any quotes. */
+const QUOTED_SCHEME_WORD = new RegExp(
+  String.raw`^[\s"'\`\u2018-\u201f]*(?:${SCHEMES}|${MORE_SCHEMES})[\s"'\`\u2018-\u201f]*$`,
+  "i",
+);
+
+/**
+ * What moreSpans adds in `text` to scrub's pair and Authorization rules, read as scrub reads
+ * them (after configured values, links and hosts): the parts of its spans that those two rules do
+ * not hide, but a pair glued to a word, whose value can be prose. The redaction of source errors
+ * (sources/http.ts) masks them in the text it shows a client, whose own rules read none of these
+ * shapes; what the two rules alone hide there is left to it, as it was (`Bearer token`, a pair in
+ * prose).
+ */
+export function pairShapeSpans(text: string): Array<[number, number]> {
+  if (!SHAPE_HINT.test(text)) return [];
+  const added: Array<[number, number]> = [];
+  const values = valueSpans(text);
+  spansAfterValues(rewrite({ text: asRead(text) }, asRewrites(values), []), [], {}, added);
+  return unionSpans(added, []);
+}
+
+/** What a text holds when moreSpans can find anything in it. */
+const SHAPE_HINT = new RegExp(
+  String.raw`bearer|basic|discogs|authorization|https?:\/\/|[&\u2018-\u201f]|${PAIR_NAMES}`,
+  "i",
+);
+
+/** `text` as scrub's pair and Authorization rules write it, each REDACTED where it stands. */
+function twoRules(text: string): Rewritten {
+  const pairs: Rewrite[] = [];
+  for (const pair of text.matchAll(SECRET_PAIR)) {
+    const from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
+    pairs.push([from, pair.index + pair[0].length, REDACTED, from, from]);
+  }
+  const current = rewrite({ text }, pairs, []);
+  const auths: Rewrite[] = [];
+  for (const auth of current.text.matchAll(AUTH_SCHEME)) {
+    const from = auth.index + (auth[1] ?? auth[2] ?? "").length;
+    auths.push([from, auth.index + auth[0].length, REDACTED, from, from]);
+  }
+  return rewrite(current, auths, []);
+}
+
+/**
+ * `more` (spans of `text`, sorted, not overlapping), each with the whole of what scrub's pair or
+ * Authorization rule writes as one REDACTED where it overlaps one: scrub hides that REDACTED, so
+ * none of what it stands for is written (a pair's value `Bearer Bearer '<token>'`, scheme words
+ * and spaces too).
+ */
+function withWholeRewrites(
+  text: string,
+  more: ReadonlyArray<readonly [number, number]>,
+): Array<[number, number]> {
+  const current = twoRules(text);
+  const out: Array<[number, number]> = more.map(([start, end]) => [start, end]);
+  if (!current.from || !current.to) return out;
+  let span = 0;
+  for (
+    let at = current.text.indexOf(REDACTED);
+    at !== -1;
+    at = current.text.indexOf(REDACTED, at + 1)
+  ) {
+    const end = at + REDACTED.length;
+    const from = current.from[at] as number;
+    const to = current.to[end - 1] as number;
+    // Only a REDACTED a rule wrote stands for more than its own characters.
+    if (to - from === REDACTED.length && text.startsWith(REDACTED, from)) continue;
+    while (span < more.length && (more[span] as readonly [number, number])[1] <= from) span++;
+    if (span < more.length && (more[span] as readonly [number, number])[0] < to)
+      out.push([from, to]);
+  }
+  return unionSpans(out, []);
+}
+
+/**
+ * `text` as scrub's pair and Authorization rules write it, with each character that stands for a
+ * part of one of `more` (spans of `text`) hidden too: a run of them as one REDACTED.
+ */
+function withMoreSpans(text: string, more: ReadonlyArray<readonly [number, number]>): string {
+  const current = twoRules(text);
+  const out: string[] = [];
+  let span = 0;
+  let hiding = false;
+  let kept = 0;
+  for (let i = 0; i < current.text.length; i++) {
+    const from = current.from ? (current.from[i] as number) : i;
+    const to = current.to ? (current.to[i] as number) : i + 1;
+    while (span < more.length && (more[span] as readonly [number, number])[1] <= from) span++;
+    const hidden = span < more.length && (more[span] as readonly [number, number])[0] < to;
+    if (hidden !== hiding) {
+      out.push(hiding ? REDACTED : current.text.slice(kept, i));
+      kept = i;
+      hiding = hidden;
+    }
+  }
+  out.push(hiding ? REDACTED : current.text.slice(kept));
+  return out.join("");
 }
 
 /**

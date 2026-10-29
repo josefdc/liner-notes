@@ -54,11 +54,12 @@
  * what follows that comma only add detail (no "?", no hedge, doubting word or unknown
  * capitalised name, and no relation word but the relation's own noun as the last words of a
  * sentence that names nothing and describes no record ("the original", "a later hit"), after a
- * preposition of place: "…around that sample", "…over the cover"). As a subject ("The sample is fake"), after "from", "on" or "in" ("taken from this
- * cover", "based on this sample"), or followed by any word, it may dispute or move the relation,
- * and the sentence is not detail. A sentence that disputes the relation in words none of those
- * lists holds can still let a partly supported claim be marked; the mark then names only the
- * relation its record documents, and the claim's own verdict shows beside it.
+ * preposition of place: "…around that sample", "…over the cover"). As a subject ("The sample
+ * is fake"), after "from", "on" or "in" ("taken from this cover", "based on this sample"), or
+ * followed by any word, it may dispute or move the relation, and the sentence is not detail. A
+ * sentence that disputes the relation in words none of those lists holds can still let a partly
+ * supported claim be marked; the mark then names only the relation its record documents, and the
+ * claim's own verdict shows beside it.
  */
 
 import { normalizeName } from "../sources/musicbrainz.js";
@@ -543,7 +544,7 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
  * each name between two commas whole. A statement that ends in "?" asks: it states nothing.
  */
 export function readRelations(text: string, context: ReadingContext): Set<string> | null {
-  if (QUESTION.test(text)) return null;
+  if (asks(text, context)) return null;
   const { words, names, plainItems, listItems } = parsed(text, context);
   return readTokens(words, names, context, listItems, plainItems);
 }
@@ -583,10 +584,31 @@ function parse(text: string, context: ReadingContext) {
 }
 
 /**
- * A statement that ends in a question mark, before or after a closing quote: "…in “History?”"
- * may ask, or end on a title that does; it is kept either way.
+ * True when a statement asks: a question mark outside a quoted title ("…“History” (?)",
+ * "…“History”?!"), or one at its end before a closing quote ("…in “History?”", which may ask or
+ * end on a title that does: it is kept either way). A cited record's title that holds one ("Are
+ * You My Woman? (Tell Me So)") is its name, not a question.
  */
-const QUESTION = /\?["”’']?\s*$/u;
+function asks(text: string, context: ReadingContext): boolean {
+  if (!text.includes("?")) return false;
+  let rest = text;
+  for (const record of context.cited.values()) {
+    for (const title of [record.title, record.title.replace(SUBTITLE, "")]) {
+      if (!title.includes("?")) continue;
+      rest = rest.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), " ");
+    }
+  }
+  if (/\?["”’']?\s*$/u.test(rest)) return true;
+  let curly = 0;
+  let straight = false;
+  for (const char of rest) {
+    if (char === "\u201c") curly++;
+    else if (char === "\u201d") curly = Math.max(0, curly - 1);
+    else if (char === '"') straight = !straight;
+    else if (char === "?" && curly === 0 && !straight) return true;
+  }
+  return false;
+}
 
 /**
  * `readRelations` on a statement's words with its list commas (`tokensOf`): read without the
@@ -612,9 +634,7 @@ function readTokens(
  * quoted title (“A Dream,”) is between names. A name never runs across a comma item.
  */
 function tokensOf(text: string): { words: string[]; commas: { at: number; outside: boolean }[] } {
-  let marked = "";
   const commas: { at: number; outside: boolean }[] = [];
-  let start = 0;
   let curly = 0;
   let straight = false;
   for (let i = 0; i < text.length; i++) {
@@ -627,22 +647,23 @@ function tokensOf(text: string): { words: string[]; commas: { at: number; outsid
       const inside = curly > 0 || straight;
       const ends = (curly > 0 && next === "\u201d") || (straight && next === '"');
       if (inside && !ends) continue;
-      marked += `${text.slice(start, i)} ${COMMA_MARK} `;
       commas.push({ at: i, outside: !inside });
-      start = i + 1;
     }
   }
-  marked += text.slice(start);
-  // One pass over the whole text: each comma marked by a word no statement writes.
-  const words =
-    commas.length === 0
-      ? nameWords(text)
-      : nameWords(marked).map((word) => (word === COMMA_MARK ? LIST_COMMA : word));
+  // Each part between two commas split on its own, a comma item between them: no word of the
+  // text can stand for a comma.
+  const words: string[] = [];
+  let start = 0;
+  for (const { at } of commas) {
+    // A part of no letter or digit has no word (",,," splits into commas alone).
+    if (/[\p{L}\p{N}]/u.test(text.slice(start, at)))
+      words.push(...nameWords(text.slice(start, at)));
+    words.push(LIST_COMMA);
+    start = at + 1;
+  }
+  words.push(...nameWords(text.slice(start)));
   return { words, commas };
 }
-
-/** The word `tokensOf` marks a list comma with before splitting a text into words. */
-const COMMA_MARK = "0listcomma0";
 
 /** `readRelations` on a statement's items. */
 function readRelationItems(all: readonly Item[], context: ReadingContext): Set<string> | null {
@@ -927,7 +948,7 @@ function accordingTo(items: readonly Item[]): { items: Item[]; source: string | 
     if (at < 1) continue;
     if (wordOf(items[at]) !== "according" || wordOf(items[at + 1]) !== "to") continue;
     if (!words.every((each, i) => wordOf(items[at + 2 + i]) === each)) continue;
-    // The comma before it, as a list is read (`listWords`).
+    // The comma before it, as a list is read (`tokensOf`).
     const end = wordOf(items[at - 1]) === LIST_COMMA ? at - 1 : at;
     return { items: items.slice(0, end), source };
   }
@@ -1024,29 +1045,51 @@ const BACK_REFERENCE_PLACES: ReadonlySet<string> = new Set(
 );
 
 /**
- * Words that may describe a record in a sentence that refers back to the relation: the other
- * record, or a third one ("The orchestral original was itself built around that sample", "A
- * later hit was built around that sample"), which may turn the relation round or add one. Such a
- * sentence is not detail; but for "source material" (what was written about the track), and the
- * analysed track's own possessive ("the track's arrangement").
+ * Words that may describe a record, or records, in a sentence that refers back to the relation:
+ * the other record, or others ("The orchestral original was itself built around that sample",
+ * "Countless records were built around that sample"), which may turn the relation round or add
+ * one. Each is read singular too ("records", "hits"). Such a sentence is not detail; but for the
+ * source material it was described in ("…in the source material"), and the analysed track's own
+ * possessive ("the track's arrangement").
  */
-const RECORD_WORDS: ReadonlySet<string> = new Set(
-  "original earlier older later another previous prior itself subsequent record recording song hit single track version cover remix source".split(
-    " ",
-  ),
-);
+const RECORD_WORDS: ReadonlySet<string> = new Set([
+  ...["original", "earlier", "older", "later", "previous", "prior", "subsequent", "itself"],
+  ...["another", "other", "many", "several", "countless", "numerous", "rival"],
+  ...["record", "recording", "song", "hit", "single", "track", "version", "cover", "remix"],
+  ...["tune", "album", "composition", "predecessor", "release", "side", "source"],
+]);
 /** The nouns "the" or "this" and a possessive make the analysed track's ("the track's …"). */
 const TRACK_NOUNS: ReadonlySet<string> = new Set(["track", "song", "recording"]);
+/** The words before "the source material" a fact was taken from ("described in the source …"). */
+const SOURCE_PLACES: ReadonlySet<string> = new Set(["in", "from", "by"]);
+
+/** A word as `RECORD_WORDS` holds it: itself, or without a plural's "s" or "es". */
+const recordWord = (word: string) =>
+  [word, word.replace(/s$/u, ""), word.replace(/es$/u, "")].find((each) => RECORD_WORDS.has(each));
 
 /** True when a sentence that refers back to the relation describes a record (`RECORD_WORDS`). */
 function describesRecord(items: readonly Item[], relating: readonly number[]): boolean {
   return items.some((item, i) => {
     const word = wordOf(item);
-    if (word === undefined || relating.includes(i) || !RECORD_WORDS.has(word)) return false;
+    if (word === undefined || relating.includes(i)) return false;
+    const found = recordWord(word);
+    if (found === undefined) return false;
     const next = wordOf(items[i + 1]);
-    if (word === "source" && next === "material") return false;
     const before = wordOf(items[i - 1]) ?? "";
-    return !(TRACK_NOUNS.has(word) && (before === "the" || before === "this") && next === "s");
+    if (
+      word === "source" &&
+      next === "material" &&
+      before === "the" &&
+      SOURCE_PLACES.has(wordOf(items[i - 2]) ?? "")
+    ) {
+      return false;
+    }
+    return !(
+      word === found &&
+      TRACK_NOUNS.has(word) &&
+      (before === "the" || before === "this") &&
+      next === "s"
+    );
   });
 }
 
@@ -1172,7 +1215,7 @@ function statingPart(
   context: ReadingContext,
   wholeRead = false,
 ): { stated: Set<string>; tail: string | null } | null {
-  if (QUESTION.test(sentence)) return null;
+  if (asks(sentence, context)) return null;
   const { words, commas, names, plainItems, listItems: listed } = parsed(sentence, context);
   const listItems = listed ?? plainItems;
   const reads = (part: readonly string[], items: readonly Item[], plain?: readonly Item[]) => {

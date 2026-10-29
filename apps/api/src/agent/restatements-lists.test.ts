@@ -401,7 +401,8 @@ describe("a detail sentence that refers back to the relation", () => {
       "Guitar and percussion were added alongside that sample.",
       // The analysed track's own, and what was written about it.
       "The track’s strings were layered over the sample.",
-      "The source material describes strings layered over the sample.",
+      "As described in the source material, strings were layered over the sample.",
+      "Strings, as taken from the source material, were layered over the sample.",
     ]) {
       expect(withDetail(detail), detail).toBe(sampleMark());
     }
@@ -473,6 +474,25 @@ describe("a detail sentence that refers back to the relation", () => {
     }
   });
 
+  it("is not detail beside a list's records in other words", () => {
+    const change = {
+      text: "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.” and Mos Def feat. Talib Kweli’s “History”. Countless tracks were built around that sample.",
+      about: "sample",
+      verdict: "partial",
+      kind: "inferred",
+    } as Partial<Claim>;
+    expect(fate(JUICY, "5ed3b846", change)).toBe("stays");
+  });
+
+  it("is not detail after a comma that closes a quoted title (“…,”): that comma ends no part", () => {
+    const text =
+      "The Verve’s recording samples The Andrew Oldham Orchestra’s “The Last Time,” its strings swelling over the drums.";
+    expect(fate(BSS, SAMPLE, { text })).toBe("stays");
+    // After the closing quote, the comma ends the part.
+    const after = text.replace("Time,”", "Time”,");
+    expect(fate(BSS, SAMPLE, { text: after })).toBe(sampleMark());
+  });
+
   it("is not detail with a name beside it, more than one sample, or a word that ties it elsewhere", () => {
     for (const detail of [
       // A name the result does not hold, the track's, or a cited record's.
@@ -495,6 +515,40 @@ describe("a detail sentence that refers back to the relation", () => {
       "The source was built around that sample.",
       "A track was built around that sample.",
       "The song was layered over the sample.",
+      // Records in the plural, or other words for one.
+      "Other songs were built around that sample.",
+      "Many hits were built around that sample.",
+      "Countless records were built around that sample.",
+      "Several tracks were built around that sample.",
+      "The originals were built around that sample.",
+      "The 1965 tune was built around that sample.",
+      "The album was built around that sample.",
+      "The composition was built around that sample.",
+      "Its predecessor was built around that sample.",
+      "Their next album was built around that sample.",
+      "The rival band’s songs were built around that sample.",
+      "Numerous releases were built around that sample.",
+      "The B-side was built around that sample.",
+      "Later versions were built around that sample.",
+      // The source material, not as what the fact was taken from.
+      "The source material was built around that sample.",
+      "The source material describes strings layered over the sample.",
+      // One record word alone.
+      "An older arrangement was built around that sample.",
+      "The prior arrangement was built around that sample.",
+      "A subsequent arrangement was built around that sample.",
+      "The arrangement was itself built around that sample.",
+      "The hit was built around that sample.",
+      "The single was built around that sample.",
+      "Another arrangement was built around that sample.",
+      "Other strings were layered over the sample.",
+      "Many strings were layered over the sample.",
+      "Several strings were layered over the sample.",
+      "Countless strings were layered over the sample.",
+      "A rival arrangement was built around that sample.",
+      // A possessive other than the track's own.
+      "The original’s riff was rebuilt around that sample.",
+      "The album’s strings were layered over the sample.",
       // Not the sample stated, or more than one.
       "The arrangement was built around a sample.",
       "The arrangement was built around one sample.",
@@ -538,6 +592,8 @@ describe("a detail sentence that refers back to the relation", () => {
       "The arrangement is based on this cover.",
       "Strings were added over this cover in 2005.",
       "The original song was later rebuilt around this cover.",
+      "Many songs were built around this cover.",
+      "Other bands recorded songs over this cover.",
       "The original was written atop this cover.",
       "Strings were added with this cover.",
     ]) {
@@ -673,9 +729,37 @@ describe("a question", () => {
         "Is “Juicy” sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History”?",
       ],
       [OMT, "78acfe08", 'This track samples Eddie Johns\'s "More Spell on You"?'],
+      [
+        JUICY,
+        "5ed3b846",
+        "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History” (?)",
+      ],
+      [
+        JUICY,
+        "5ed3b846",
+        "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History”?!",
+      ],
+      [
+        JUICY,
+        "49a56b45",
+        "The recording also samples “Rappin’ Duke (vocal)” by The Rappin’ Duke (?)",
+      ],
+      [
+        JUICY,
+        "49a56b45",
+        "The recording also samples (?) “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+      ],
       [JUICY, "f3a2ae6f", "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit”? "],
     ] as const) {
       expect(fate(slug, prefix, { text }), text).toBe("stays");
+    }
+    // Nor marked: a stating sentence that asks, beside detail.
+    for (const text of [
+      "The Verve’s recording samples “The Last Time” by The Andrew Oldham Orchestra? Strings were layered over the sample.",
+      "The Verve’s recording samples “The Last Time” (?) by The Andrew Oldham Orchestra. Strings were layered over the sample.",
+      "The Verve’s recording samples “The Last Time” by The Andrew Oldham Orchestra (?), strings layered over the sample.",
+    ]) {
+      expect(fate(BSS, "71a2da2e", { text }), text).toBe("stays");
     }
     // Its statement, the same words, goes.
     expect(
@@ -683,6 +767,18 @@ describe("a question", () => {
         text: "The song’s work has been covered by Coldplay featuring Richard Ashcroft.",
       }),
     ).toBe("goes");
+  });
+});
+
+describe("a claim whose text holds any word", () => {
+  it("is read as words, never as a comma: a word a statement could hold stands for nothing", () => {
+    const forged =
+      "The Verve’s 0listcomma0 recording samples “The Last Time” by The Andrew Oldham Orchestra, adding strings.";
+    expect(() => fate(BSS, "71a2da2e", { text: forged })).not.toThrow();
+    expect(fate(BSS, "71a2da2e", { text: forged })).toBe("stays");
+    const listed =
+      "“Juicy” is sampled in Jay-Z’s “A Dream,” 0LISTCOMMA0 RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”";
+    expect(fate(JUICY, "5ed3b846", { text: listed })).toBe("stays");
   });
 });
 

@@ -1983,6 +1983,32 @@ describe("a list followed by detail", () => {
   });
 });
 
+describe("the step on a claim it cannot read", () => {
+  it("keeps every claim, card and link as it came, unmarked, and leaves nothing out", () => {
+    const unreadable = judged("m-bad", { about: "sample", evidenceIds: ["ev-abba"] });
+    Object.defineProperty(unreadable, "text", {
+      enumerable: true,
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+    const copy = judged("m-copy", {
+      text: "Hung Up samples ABBA.",
+      about: "sample",
+      evidenceIds: ["ev-abba"],
+      documentedBy: ["code-abba"],
+    });
+    const cards = [card("m-copy"), card("m-bad")];
+    const kept = withoutRestatements([copy, unreadable, codeAbba], cards, [], evidence, {
+      track: hungUp,
+    });
+    expect(kept.restated).toBe(0);
+    expect(kept.claims.map((claim) => claim.id)).toEqual(["m-copy", "m-bad", "code-abba"]);
+    expect(kept.claims[0]).not.toHaveProperty("documentedBy");
+    expect(kept.factoids).toEqual(cards);
+  });
+});
+
 describe("the step on claims of many commas", () => {
   it("reads claims of hundreds of commas at the judge's 1,000-character cap in a few milliseconds each", () => {
     // Each comma ends a part read on its own ("…, bringing the earlier song in"), a list or a

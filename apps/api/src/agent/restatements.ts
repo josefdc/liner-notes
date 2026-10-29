@@ -462,8 +462,53 @@ function perClaim<T>(read: (claim: Claim) => T): (claim: Claim) => T {
  * the timeline's samples): a claim one of them states is never left out, but for a claim only
  * the model's links of `context.genealogy` state, when each of those links may go with it.
  * `evidence` is the result's pack. The result does not depend on the claims' order.
+ *
+ * The step only ever leaves out or marks: should it fail on some text, every claim, card and
+ * link is kept as it came, unmarked (a mark is never kept unread), and nothing is left out.
  */
 export function withoutRestatements<
+  F extends { claimId?: string },
+  G extends MapLike | undefined = undefined,
+>(
+  claims: readonly Claim[],
+  factoids: readonly F[],
+  stating: readonly object[],
+  evidence: readonly CitedItem[],
+  context: RestatementContext<G> = {},
+): WithoutRestatements<F, G> {
+  try {
+    return restatementsLeftOut(claims, factoids, stating, evidence, context);
+  } catch {
+    return {
+      claims: claims.map(unmarked),
+      factoids: [...factoids],
+      genealogy: context.genealogy as G,
+      restated: 0,
+    };
+  }
+}
+
+/**
+ * A claim's reading, or null (it states nothing) when its text cannot be read: the claim is then
+ * kept, unmarked, and the others are read as ever.
+ */
+function readSafely(read: () => Set<string> | null): Set<string> | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+/** A claim without a mark it came with; as it came when it holds none. */
+function unmarked(claim: Claim): Claim {
+  if (claim.documentedBy === undefined) return claim;
+  const { documentedBy: _mark, ...rest } = claim;
+  return rest;
+}
+
+/** `withoutRestatements`, unguarded. */
+function restatementsLeftOut<
   F extends { claimId?: string },
   G extends MapLike | undefined = undefined,
 >(
@@ -615,7 +660,9 @@ export function withoutRestatements<
    */
   const statesOf = perClaim((claim) => {
     const reading = readingOf(claim);
-    return (reading && readStatedRelations(claim.text, reading)) ?? new Set<string>();
+    return (
+      (reading && readSafely(() => readStatedRelations(claim.text, reading))) ?? new Set<string>()
+    );
   });
   /**
    * Whether a kept claim is marked as stating its records' relations: the whole of it does, or
@@ -626,7 +673,7 @@ export function withoutRestatements<
   const marks = perClaim((claim) => {
     const reading = statesRelation(claim) ? readingOf(claim) : null;
     if (!reading || claimIsRejected(claim)) return false;
-    const read = readMarkedRelations(claim.text, reading, recordNames);
+    const read = readSafely(() => readMarkedRelations(claim.text, reading, recordNames));
     return [...reading.cited.keys()].every((id) => read?.has(id) ?? false);
   });
   /** The relations a claim cites, when it states each of them; null when it does not. */

@@ -1138,7 +1138,11 @@ test("the first pan down the wide map at 1920 px keeps the analysed card in view
   expect(problems).toEqual([]);
 });
 
-/** The edge cues' buttons not wholly on top at their centre (another element covers them). */
+/**
+ * The edge cues' buttons a detail box or the selected track's panel overlaps (the box takes no
+ * pointer, so it is never what a point hits: their boxes are compared), or another element
+ * covers at their centre.
+ */
 const coveredCues = async (page: Page) => {
   await page.evaluate(
     () =>
@@ -1147,25 +1151,52 @@ const coveredCues = async (page: Page) => {
   return page
     .getByTestId("map-cues")
     .locator("[data-cue]")
-    .evaluateAll((buttons) =>
-      buttons
+    .evaluateAll((buttons) => {
+      const overs = [
+        ...document.querySelectorAll('[data-testid="link-detail"], [data-testid="node-detail"]'),
+      ]
+        .map((over) => over.getBoundingClientRect())
+        .filter((over) => over.width > 0 && over.height > 0);
+      return buttons
         .filter((button) => {
           button.scrollIntoView({ block: "nearest" });
           const box = button.getBoundingClientRect();
+          const overlapped = overs.some(
+            (over) =>
+              over.left < box.right &&
+              box.left < over.right &&
+              over.top < box.bottom &&
+              box.top < over.bottom,
+          );
           const at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-          return at === null || at.closest("[data-cue]") !== button;
+          return overlapped || at === null || at.closest("[data-cue]") !== button;
         })
-        .map((button) => button.getAttribute("data-cue")),
-    );
+        .map((button) => button.getAttribute("data-cue"));
+    });
 };
+
+/** The bottom edge cues' buttons, as their left and right (px). */
+const bottomCues = (page: Page) =>
+  page
+    .getByTestId("map-cues")
+    .locator('[data-cue="left"], [data-cue="right"], [data-cue="down"]')
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return [box.left, box.right] as const;
+      }),
+    );
 
 // A detail box or the selected track's panel at the bottom of the map never covers an edge
 // cue: it sits above the cues there, where a mouse and the keyboard find them.
-for (const [showcase, width, height] of [
-  // (The rich map's panel opens at the bottom right, where "N more ↓" sits.)
-  ["rich", 1440, 900],
-  ["wide", 1440, 900],
-  ["rich", 390, 844],
+// Down a phone's column the selected track's panel takes the map's width: on the wide map and
+// One More Time's, a track selected below the analysed one has it over "N more ↓".
+for (const [showcase, width, height, panelOverCues] of [
+  ["rich", 1440, 900, false],
+  ["wide", 1440, 900, false],
+  ["rich", 390, 844, false],
+  ["wide", 390, 844, true],
+  [DEMO_SLUG, 390, 844, true],
 ] as const) {
   test(`at ${width} px on the ${showcase} map no box or panel covers an edge cue`, async ({
     page,
@@ -1173,16 +1204,26 @@ for (const [showcase, width, height] of [
     const problems = collectProblems(page);
     await page.mouse.move(0, 0);
     await page.setViewportSize({ width, height });
-    await SHOWCASES[showcase].open(page);
+    await SHOWN[showcase].open(page);
     if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
     await page.mouse.move(0, 0);
     const graph = graphOf(page);
-    await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES[showcase].cards);
+    await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWN[showcase].cards);
     await graph.scrollIntoViewIfNeeded();
     await mapAtRest(graph);
     const cues = page.getByTestId("map-cues").locator("[data-cue]");
     expect(await cues.count()).toBeGreaterThan(0);
     expect(await coveredCues(page), "at rest").toEqual([]);
+
+    // A card focused high in the view: its detail box at the map's bottom, above the cues there.
+    const topmost = (await cardsInView(graph, headingBand(page)))[0];
+    await graph.locator(`g.nodes > g[data-node-id="${topmost}"]`).focus();
+    await mapAtRest(graph);
+    const box = page.getByTestId("link-detail");
+    await expect(box).toHaveAttribute("data-at", "bottom");
+    expect(await bottomCues(page), "a cue at the bottom, with the box").not.toEqual([]);
+    expect(await coveredCues(page), "a card focused").toEqual([]);
+    await page.locator("body").focus();
 
     // A cue pressed from the keyboard: the card it gives the focus to has its box, which
     // covers no cue, the one that just appeared included.
@@ -1196,25 +1237,35 @@ for (const [showcase, width, height] of [
       expect(await coveredCues(page), `press ${press}`).toEqual([]);
     }
 
-    // A track selected: its panel opens over the map's bottom, above the cues.
+    // A track selected: its panel opens over the map's bottom, above the cues. The tracks in
+    // view are selected in turn until one's panel lies over the bottom cues' strip, a cue there.
     const related = async (each: string) =>
       (await graph.locator(`g.nodes > g[data-node-id="${each}"][role="button"]`).count()) > 0;
-    let id: string | undefined;
-    for (const each of await cardsInView(graph, headingBand(page))) {
-      if (await related(each)) {
-        id = each;
-        break;
-      }
+    let overCues = false;
+    let tried = 0;
+    for (const id of await cardsInView(graph, headingBand(page))) {
+      if (overCues || tried === 6) break;
+      if (!(await related(id))) continue;
+      tried += 1;
+      const card = graph.locator(`g.nodes > g[data-node-id="${id}"]`);
+      await card.focus();
+      await card.blur();
+      await card.click();
+      const panel = page.getByTestId("node-detail");
+      await expect(panel).toBeVisible();
+      await mapAtRest(graph);
+      expect(await coveredCues(page), `${id} selected`).toEqual([]);
+      const across = await panel.boundingBox();
+      overCues =
+        across !== null &&
+        (await panel.getAttribute("data-at")) === "overlay" &&
+        (await bottomCues(page)).some(
+          ([left, right]) => left < across.x + across.width && across.x < right,
+        );
+      await page.keyboard.press("Escape");
+      await expect(panel).toHaveCount(0);
     }
-    if (!id) throw new Error("no related card in view");
-    const card = graph.locator(`g.nodes > g[data-node-id="${id}"]`);
-    await card.focus();
-    await card.blur();
-    await card.click();
-    await expect(page.getByTestId("node-detail")).toBeVisible();
-    await mapAtRest(graph);
-    expect(await cues.count(), "cues with a track selected").toBeGreaterThan(0);
-    expect(await coveredCues(page), "a track selected").toEqual([]);
+    if (panelOverCues) expect(overCues, "a panel over the bottom cues' strip").toBe(true);
     expect(problems).toEqual([]);
   });
 }

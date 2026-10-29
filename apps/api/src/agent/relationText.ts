@@ -8,7 +8,11 @@
  *   "sampled", "is sampling", "does sample", "is a cover of", "is a remix of", "is an
  *   interpolation of");
  * - `<one> is sampled|covered|remixed|interpolated by|in <other>`: the second draws on the
- *   first, "by" or "in" coming right after the verb.
+ *   first, "by" or "in" coming right after the verb;
+ * - `<source> documents|lists|credits|records <one> as a sample in|on|of <other>`: the second
+ *   draws on the first; `… <one> as a cover|remix of <other>`: the first draws on the second. The
+ *   source is MusicBrainz, Discogs, Genius, SecondHandSongs, WhoSampled, "the record" or "a
+ *   record"; the preposition alone gives the direction.
  *
  * One side is the analysed track (its title, its artist, "this recording", "the song"); the other
  * names one or more of the records the claim cites, each by its title, with or without its
@@ -18,6 +22,9 @@
  * X sampled in it", a hedge or a negation, a second relation word, a name the claim does not
  * cite. A relation word or a negation inside a name is part of the name ("Cover Me", "No
  * Scrubs"). An unknown claim is read as stating nothing: doubt keeps it as it is.
+ *
+ * To mark a claim (and only to mark it), `readMarkedRelations` also reads it a sentence at a
+ * time: one sentence states its records' relations, and the others only add detail.
  */
 
 import { normalizeName } from "../sources/musicbrainz.js";
@@ -198,12 +205,14 @@ interface Span {
   artistOf: Set<string>;
   /** The words, as an artist name is looked up (`artistIndex`). */
   words: string;
+  /** A name of another record of the result (`readMarkedRelations`). */
+  other: boolean;
 }
 type Item = { span: Span } | { word: string };
 
 interface Name {
   words: string[];
-  role: "trackTitle" | "trackArtist" | "title" | "artist";
+  role: "trackTitle" | "trackArtist" | "title" | "artist" | "other";
   id?: string;
 }
 
@@ -243,10 +252,12 @@ function itemsOf(words: readonly string[], names: readonly Name[]): Item[] {
       titleOf: new Set(),
       artistOf: new Set(),
       words: words.slice(at, at + longest).join(" "),
+      other: false,
     };
     for (const name of found) {
       if (name.role === "trackTitle") span.trackTitle = true;
       else if (name.role === "trackArtist") span.trackArtist = true;
+      else if (name.role === "other") span.other = true;
       else if (name.role === "title") span.titleOf.add(name.id as string);
       else span.artistOf.add(name.id as string);
     }
@@ -387,15 +398,7 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
  * or the other direction for a record it names. A cover is stated only with its title named.
  */
 export function readRelations(text: string, context: ReadingContext): Set<string> | null {
-  const names: Name[] = [
-    ...context.track.titles.map((words) => ({ words, role: "trackTitle" as const })),
-    ...context.track.artists.map((words) => ({ words, role: "trackArtist" as const })),
-  ];
-  for (const record of context.cited.values()) {
-    for (const words of record.titles) names.push({ words, role: "title", id: record.id });
-    for (const words of record.artists) names.push({ words, role: "artist", id: record.id });
-  }
-  const items = itemsOf(nameWords(text), names);
+  const items = itemsOf(nameWords(text), namesOf(context));
   if (hedgedItems(items)) return null;
 
   // The one relation word outside the names, and the verb it makes.
@@ -405,38 +408,193 @@ export function readRelations(text: string, context: ReadingContext): Set<string
   const word = wordOf(items[at]) as string;
   const type = RELATION_WORDS.get(word) as LinkType;
   const verb = VERBS[type];
-  let start = at;
-  let end = at + 1;
-  let passive = false;
-  const article = wordOf(items[at - 1]);
-  if (
-    word === verb.noun &&
-    (article === "a" || article === "an") &&
-    wordOf(items[at + 1]) === "of"
-  ) {
-    start = at - 1;
-    end = at + 2;
-  } else if (word === verb.participle && PASSIVE_MARKERS.has(wordOf(items[at + 1]) ?? "")) {
-    passive = true;
-    end = at + 2;
-  } else if (word === verb.base ? !DO.has(article ?? "") : !verb.active.includes(word)) {
-    return null;
+  // The words before and after the relation, and whether the first side draws on the second.
+  let first: readonly Item[];
+  let second: readonly Item[];
+  let firstDraws: boolean;
+  const documented = documentedForm(items, at, word, type);
+  if (documented) {
+    ({ first, second, firstDraws } = documented);
+  } else {
+    let start = at;
+    let end = at + 1;
+    let passive = false;
+    const article = wordOf(items[at - 1]);
+    if (
+      word === verb.noun &&
+      (article === "a" || article === "an") &&
+      wordOf(items[at + 1]) === "of"
+    ) {
+      start = at - 1;
+      end = at + 2;
+    } else if (word === verb.participle && PASSIVE_MARKERS.has(wordOf(items[at + 1]) ?? "")) {
+      passive = true;
+      end = at + 2;
+    } else if (word === verb.base ? !DO.has(article ?? "") : !verb.active.includes(word)) {
+      return null;
+    }
+    while (AUXILIARIES.has(wordOf(items[start - 1]) ?? "")) start--;
+    first = items.slice(0, start);
+    second = items.slice(end);
+    // Active: the left side draws on the right; passive: the right on the left.
+    firstDraws = !passive;
   }
-  while (AUXILIARIES.has(wordOf(items[start - 1]) ?? "")) start--;
 
-  const left = readSide(items.slice(0, start), context);
-  const right = readSide(items.slice(end), context);
+  const left = readSide(first, context);
+  const right = readSide(second, context);
   if (left === null || right === null) return null;
   const [one, other] = "track" in left ? [left, right] : [right, left];
   if (!("track" in one) || !("records" in other)) return null;
-  // Active: the left side draws on the right; passive: the right on the left.
-  const trackDraws = passive ? one === right : one === left;
+  const trackDraws = one === left ? firstDraws : !firstDraws;
   const stated = new Set<string>();
   for (const id of other.records) {
     const record = context.cited.get(id) as NamedRecord;
     if (LINK_TYPE[record.kind] !== type || otherDrawsOn(record.kind) === trackDraws) return null;
     if (type === "cover" && !items.some((item) => spanOf(item)?.titleOf.has(id))) return null;
     stated.add(id);
+  }
+  return stated;
+}
+
+/** The names a statement may hold: the analysed track's and the cited records'. */
+function namesOf(context: ReadingContext): Name[] {
+  const names: Name[] = [
+    ...context.track.titles.map((words) => ({ words, role: "trackTitle" as const })),
+    ...context.track.artists.map((words) => ({ words, role: "trackArtist" as const })),
+  ];
+  for (const record of context.cited.values()) {
+    for (const words of record.titles) names.push({ words, role: "title", id: record.id });
+    for (const words of record.artists) names.push({ words, role: "artist", id: record.id });
+  }
+  return names;
+}
+
+/** The sources a "record documents" statement starts with ("MusicBrainz lists …"). */
+const SOURCES: readonly (readonly string[])[] = [
+  "musicbrainz",
+  "discogs",
+  "genius",
+  "secondhandsongs",
+  "whosampled",
+  "the record",
+  "a record",
+].map((source) => source.split(" "));
+/** The verbs of a "record documents" statement. */
+const DOCUMENTS: ReadonlySet<string> = new Set(["documents", "lists", "credits", "records"]);
+/**
+ * The words after "as a sample|cover|remix" that join it to the second side, and whether the
+ * first side draws on the second: "<one> as a sample in|on|of <two>" (two samples one), "<one>
+ * as a cover|remix of <two>" (one covers or remixes two). The preposition alone gives the
+ * direction.
+ */
+const AS_A: Partial<Record<LinkType, { joins: ReadonlySet<string>; firstDraws: boolean }>> = {
+  sample: { joins: new Set(["in", "on", "of"]), firstDraws: false },
+  cover: { joins: new Set(["of"]), firstDraws: true },
+  remix: { joins: new Set(["of"]), firstDraws: true },
+};
+
+/**
+ * The two sides of a "record documents" statement, `<source> documents|lists|credits|records
+ * <one> as a sample|cover|remix <join> <two>`, its relation word at `at`; null for another form.
+ */
+function documentedForm(
+  items: readonly Item[],
+  at: number,
+  word: string,
+  type: LinkType,
+): { first: readonly Item[]; second: readonly Item[]; firstDraws: boolean } | null {
+  const form = AS_A[type];
+  if (!form || word !== VERBS[type].base) return null;
+  if (wordOf(items[at - 1]) !== "a" || wordOf(items[at - 2]) !== "as") return null;
+  if (!form.joins.has(wordOf(items[at + 1]) ?? "")) return null;
+  const source = SOURCES.find((words) => words.every((each, i) => wordOf(items[i]) === each));
+  if (!source || !DOCUMENTS.has(wordOf(items[source.length]) ?? "")) return null;
+  return {
+    first: items.slice(source.length + 1, at - 2),
+    second: items.slice(at + 2),
+    firstDraws: form.firstDraws,
+  };
+}
+
+/** Words after which a full stop ends no sentence ("feat.", "Mr."), as a single initial does. */
+const ABBREVIATIONS: ReadonlySet<string> = new Set(["feat", "ft", "mr", "st", "vs"]);
+
+/**
+ * A statement's sentences: split after ".", ";" or "!" followed by a space, but not after an
+ * abbreviation (`ABBREVIATIONS`) or a single capital letter ("Ben E. King", "B.I.G."), and not
+ * inside a quoted title ("…" or “…”).
+ */
+export function sentencesOf(text: string): string[] {
+  const sentences: string[] = [];
+  let start = 0;
+  let curly = 0;
+  let straight = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === "\u201c") curly++;
+    else if (char === "\u201d") curly = Math.max(0, curly - 1);
+    else if (char === '"') straight = !straight;
+    else if (
+      (char === "." || char === ";" || char === "!") &&
+      curly === 0 &&
+      !straight &&
+      /\s/u.test(text[i + 1] ?? "")
+    ) {
+      if (char === ".") {
+        const last = /(\p{L}+)$/u.exec(text.slice(start, i))?.[1] ?? "";
+        if (ABBREVIATIONS.has(last.toLowerCase()) || /^\p{Lu}$/u.test(last)) continue;
+      }
+      sentences.push(text.slice(start, i + 1).trim());
+      start = i + 1;
+    }
+  }
+  const rest = text.slice(start).trim();
+  if (rest !== "") sentences.push(rest);
+  return sentences;
+}
+
+/**
+ * The cited records whose relation a statement states, for marking it: the whole statement as
+ * `readRelations` reads it, or exactly one of its sentences reading each cited record's relation
+ * while every other sentence only adds detail. No other sentence may hold a relation word, a
+ * hedge or a negation outside the names, or a name of `others` (the result's other records) that
+ * is not the analysed track's or a cited record's. Null otherwise. Leaving a claim out, or
+ * letting it stand for another, still needs the whole statement to be read.
+ */
+export function readMarkedRelations(
+  text: string,
+  context: ReadingContext,
+  others: readonly (readonly string[])[],
+): Set<string> | null {
+  const whole = readRelations(text, context);
+  if (whole !== null) return whole;
+  let stated: Set<string> | null = null;
+  const rest: string[] = [];
+  for (const sentence of sentencesOf(text)) {
+    const read = readRelations(sentence, context);
+    if (read !== null && read.size === context.cited.size) {
+      if (stated !== null) return null;
+      stated = read;
+    } else {
+      rest.push(sentence);
+    }
+  }
+  if (stated === null) return null;
+  const names: Name[] = [
+    ...namesOf(context),
+    ...others.map((words) => ({ words: [...words], role: "other" as const })),
+  ];
+  for (const sentence of rest) {
+    const items = itemsOf(nameWords(sentence), names);
+    if (hedgedItems(items)) return null;
+    if (items.some((item) => RELATION_WORDS.has(wordOf(item) ?? ""))) return null;
+    const another = (span: Span | undefined) =>
+      span?.other === true &&
+      !span.trackTitle &&
+      !span.trackArtist &&
+      span.titleOf.size === 0 &&
+      span.artistOf.size === 0;
+    if (items.some((item) => another(spanOf(item)))) return null;
   }
   return stated;
 }

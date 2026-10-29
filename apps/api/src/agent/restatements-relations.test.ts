@@ -654,6 +654,110 @@ describe("a model claim on a relation, read word by word", () => {
     ).toBe("stays, marked code-fruit,code-duke");
   });
 
+  it("reads a record's documenting a relation, in the direction its preposition gives", () => {
+    for (const verdict of both) {
+      for (const [text, cited] of [
+        ["MusicBrainz documents Mtume’s “Juicy Fruit” as a sample in Juicy.", "ev-fruit"],
+        ["Discogs lists Juicy Fruit by Mtume as a sample on this recording.", "ev-fruit"],
+        ["The record lists Juicy Fruit by Mtume as a sample of Juicy.", "ev-fruit"],
+        // Swapped: the analysed track is the sample, the other record draws on it.
+        ["WhoSampled lists Juicy as a sample in Big Poppa Remix by Someone Else.", "ev-sby"],
+        ["Genius credits The Notorious B.I.G.’s Juicy as a sample on Big Poppa Remix.", "ev-sby"],
+        ["MusicBrainz lists Hung Up as a cover of Cover Me by Bruce Springsteen.", "ev-coverme"],
+        [
+          "SecondHandSongs records The London Elektricity Big Band’s One More Time as a cover of the song One More Time.",
+          "ev-cover",
+        ],
+        ["A record lists Hung Up (SDP extended vocal) as a remix of Hung Up.", "ev-remix"],
+      ]) {
+        expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("goes");
+      }
+      for (const [text, cited] of [
+        // The other direction.
+        ["MusicBrainz documents Juicy as a sample in Juicy Fruit by Mtume.", "ev-fruit"],
+        ["WhoSampled lists Big Poppa Remix by Someone Else as a sample in Juicy.", "ev-sby"],
+        ["MusicBrainz lists Cover Me by Bruce Springsteen as a cover of Hung Up.", "ev-coverme"],
+        ["MusicBrainz lists Hung Up as a remix of Hung Up (SDP extended vocal).", "ev-remix"],
+        // Another source, verb or preposition, or more words.
+        ["Wikipedia documents Juicy Fruit by Mtume as a sample in Juicy.", "ev-fruit"],
+        ["MusicBrainz describes Juicy Fruit by Mtume as a sample in Juicy.", "ev-fruit"],
+        ["MusicBrainz documents Juicy Fruit by Mtume as a sample from Juicy.", "ev-fruit"],
+        ["MusicBrainz lists Hung Up as a cover in Cover Me by Bruce Springsteen.", "ev-coverme"],
+        ["MusicBrainz documents Juicy Fruit by Mtume as a looped sample in Juicy.", "ev-fruit"],
+        ["MusicBrainz wrongly documents Juicy Fruit by Mtume as a sample in Juicy.", "ev-fruit"],
+      ]) {
+        expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("stays");
+        expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
+      }
+    }
+  });
+
+  it("is marked when one sentence states its record's relation and the others only add detail", () => {
+    for (const verdict of both) {
+      for (const [text, cited, by] of [
+        [
+          "Juicy samples Juicy Fruit by Mtume. The bass line is slowed down and looped.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        [
+          "MusicBrainz documents Mtume’s “Juicy Fruit” as a sample in Juicy. Other sources describe its bass line as looped into the track’s hook.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        [
+          "The groove is built from a funk loop; Juicy samples Juicy Fruit by Mtume.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        // A stop that ends no sentence: an initial, or inside a quoted title.
+        [
+          "Hung Up samples Stand by Me by Ben E. King. The bass line is looped.",
+          "ev-stand",
+          "code-stand",
+        ],
+        [
+          "Hung Up samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA. The riff is looped.",
+          "ev-abba",
+          "code-abba",
+        ],
+      ]) {
+        // It says more than its record: it stays, judged as it was, and is marked.
+        for (const stated of [false, true]) {
+          expect(read(text, [cited], verdict, { stated }), `${verdict}: ${text}`).toBe(
+            `stays, marked ${by}`,
+          );
+        }
+      }
+    }
+  });
+
+  it("is not marked when another sentence names another record, hedges, denies or relates", () => {
+    for (const verdict of both) {
+      for (const [text, cited] of [
+        [
+          "Juicy samples Juicy Fruit by Mtume. It also borrows from Rappin’ Duke (vocal).",
+          "ev-fruit",
+        ],
+        ["Juicy samples Juicy Fruit by Mtume. But this is disputed.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Reportedly, the loop came first.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It is not the only source.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The loop never changes.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. And it also covers a later song.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. A remix followed.", "ev-fruit"],
+        // The relation stated twice, or a sentence for each of two records.
+        ["Juicy samples Juicy Fruit by Mtume. Juicy samples Juicy Fruit.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, slowed down. The bass line is looped.", "ev-fruit"],
+        ["Juicy Fruit by Mtume samples Juicy. The bass line is looped.", "ev-fruit"],
+      ]) {
+        expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
+      }
+      const two =
+        "Juicy samples Juicy Fruit by Mtume. Juicy samples Rappin’ Duke (vocal) by The Rappin’ Duke.";
+      expect(read(two, ["ev-fruit", "ev-duke"], verdict, { stated: true }), verdict).toBe("stays");
+    }
+  });
+
   it("reads a negation or a relation word inside a name as part of the name", () => {
     const named = (title: string, artist: string, text: string) => {
       const item = record(

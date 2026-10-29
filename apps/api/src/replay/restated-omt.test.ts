@@ -79,13 +79,20 @@ describe("the One More Time recording, replayed", () => {
       expect(claims).toHaveLength(recorded.length - 7);
       const keys = claims.map((claim) => wordsOf(claim.text));
       expect(new Set(keys).size).toBe(keys.length);
-      // The kept claims are as recorded: verdicts, kinds and evidence untouched. None is marked
-      // as stating its record's relation: the brass figure's claim names the sample in words no
-      // template reads ("documents … as a sample in"), so it keeps its own label.
-      for (const claim of claims) {
-        expect(claim.documentedBy, claim.id).toBeUndefined();
+      // The kept claims are as recorded: verdicts, kinds and evidence untouched. The brass
+      // figure's claim is marked with the Eddie Johns sample's code-built claim: its first
+      // sentence ("MusicBrainz documents … as a sample in …") states the record's relation, and
+      // its second only adds how the sample is used. No other claim is marked.
+      const eddieJohns = claims.find(
+        (claim) => claim.origin === "code" && claim.evidenceIds[0] === FACTS["Eddie Johns sample"],
+      );
+      for (const { documentedBy, ...claim } of claims) {
         expect(recorded.find((other) => other.id === claim.id)).toEqual(claim);
+        expect(documentedBy, claim.id).toEqual(
+          claim.id.startsWith(BRASS_FIGURE) ? [eddieJohns?.id] : undefined,
+        );
       }
+      expect(eddieJohns).toBeDefined();
     }
   });
 

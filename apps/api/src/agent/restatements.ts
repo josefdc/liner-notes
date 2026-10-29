@@ -50,11 +50,13 @@
  *    verdict (supported, partial, unsupported, then none: a copy the judge checked, and what it
  *    said of it, is never dropped for one it did not check), then the one on a fact card, then
  *    the one citing more records, then the smaller id.
- * 3. A model claim kept that states exactly the relations its records document, as 1 reads them,
- *    is marked with the code claims that document them (`documentedBy`): the page names its
- *    relation as theirs. Only a claim a link or a timeline sample states is kept so (the others
- *    went in 1), and a claim the templates cannot read is never marked. Its kind and verdict
- *    stay; a mark it came with is read again.
+ * 3. A model claim kept that states exactly the relations its records document is marked with
+ *    the code claims that document them (`documentedBy`): the page names its relation as
+ *    theirs. It states them as 1 reads them, or in exactly one of its sentences while each other
+ *    sentence only adds detail: no relation word, no hedge or negation, no name of another record
+ *    of the result (`readMarkedRelations`). A claim the templates cannot read is never marked.
+ *    Its kind and verdict stay (a partly supported one still shows so); a mark it came with is
+ *    read again.
  *
  * Nothing that adds information goes: a claim that cites another item, or more items, one that
  * names what its records do not, adds a word of its own, states another relation than its
@@ -89,6 +91,7 @@ import {
   type NamedRecord,
   otherDrawsOn,
   type ReadingContext,
+  readMarkedRelations,
   readRelations,
   titleNames,
 } from "./relationText.js";
@@ -522,13 +525,22 @@ export function withoutRestatements<
       artistIndex.set(credit, new Set([...(artistIndex.get(credit) ?? []), key]));
     }
   };
+  /** The names of the result's records (`readMarkedRelations`). */
+  const recordNames: string[][] = [];
   for (const item of evidence) {
     const relation = documentedRelation(item);
-    if (relation?.artist) indexArtist(relation.title, relation.artist);
+    if (!relation) continue;
+    recordNames.push(...titleNames(relation.title));
+    if (relation.artist) {
+      indexArtist(relation.title, relation.artist);
+      recordNames.push(...artistNames(relation.artist));
+    }
   }
   for (const node of genealogy?.nodes ?? []) {
     const other = nodeRecord(node);
-    if (other) indexArtist(other.title, other.artist);
+    if (!other) continue;
+    indexArtist(other.title, other.artist);
+    recordNames.push(...titleNames(other.title), ...artistNames(other.artist));
   }
   /**
    * Whether a claim may state a relation as its records document it: about a sample or a cover,
@@ -541,9 +553,10 @@ export function withoutRestatements<
    * (`readRelations`): none when it is not one of the templates, so a claim read in doubt
    * states nothing, never goes, is never marked and never covers another.
    */
-  const statesOf = perClaim((claim) => {
+  /** How a claim that may state its records' relations is read; null for one that may not. */
+  const readingOf = perClaim((claim): ReadingContext | null => {
     const relations = mayState(claim) ? relationsOf(claim) : null;
-    if (!relations) return new Set<string>();
+    if (!relations) return null;
     const subjects = claim.evidenceIds.flatMap((id) => {
       const item = pack.get(id);
       const subject = item ? recordSubject(item) : null;
@@ -560,7 +573,22 @@ export function withoutRestatements<
       cited: new Map(relations.map((relation) => [relation.id, relation.named])),
       artistIndex,
     };
-    return readRelations(claim.text, reading) ?? new Set<string>();
+    return reading;
+  });
+  const statesOf = perClaim((claim) => {
+    const reading = readingOf(claim);
+    return (reading && readRelations(claim.text, reading)) ?? new Set<string>();
+  });
+  /**
+   * Whether a kept claim is marked as stating its records' relations: the whole of it does, or
+   * one of its sentences does and the others only add detail (`readMarkedRelations`: no relation
+   * word, hedge or other record's name). Leaving a claim out still needs the whole of it.
+   */
+  const marks = perClaim((claim) => {
+    const reading = readingOf(claim);
+    if (!reading) return false;
+    const read = readMarkedRelations(claim.text, reading, recordNames);
+    return [...reading.cited.keys()].every((id) => read?.has(id) ?? false);
   });
   /** The relations a claim cites, when it states each of them; null when it does not. */
   const statedRelations = (claim: Claim) => {
@@ -757,7 +785,7 @@ export function withoutRestatements<
     .filter((claim) => !gone.has(claim.id))
     .map((claim) => {
       if (claim.origin !== "model") return claim;
-      const by = statedRelations(claim) ? documenting(claim) : null;
+      const by = marks(claim) ? documenting(claim) : null;
       const before = claim.documentedBy;
       if (by === null ? before === undefined : sameIds(before, by)) return claim;
       const { documentedBy: _before, ...rest } = claim;

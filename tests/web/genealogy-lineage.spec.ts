@@ -1110,6 +1110,87 @@ test("the first pan down the wide map at 1920 px keeps the analysed card in view
   expect(problems).toEqual([]);
 });
 
+/** The edge cues' buttons not wholly on top at their centre (another element covers them). */
+const coveredCues = async (page: Page) => {
+  await page.evaluate(
+    () =>
+      new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))),
+  );
+  return page
+    .getByTestId("map-cues")
+    .locator("[data-cue]")
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          button.scrollIntoView({ block: "nearest" });
+          const box = button.getBoundingClientRect();
+          const at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+          return at === null || at.closest("[data-cue]") !== button;
+        })
+        .map((button) => button.getAttribute("data-cue")),
+    );
+};
+
+// A detail box or the selected track's panel at the bottom of the map never covers an edge
+// cue: it sits above the cues there, where a mouse and the keyboard find them.
+for (const [showcase, width, height] of [
+  // (The rich map's panel opens at the bottom right, where "N more ↓" sits.)
+  ["rich", 1440, 900],
+  ["wide", 1440, 900],
+  ["rich", 390, 844],
+] as const) {
+  test(`at ${width} px on the ${showcase} map no box or panel covers an edge cue`, async ({
+    page,
+  }) => {
+    const problems = collectProblems(page);
+    await page.mouse.move(0, 0);
+    await page.setViewportSize({ width, height });
+    await SHOWCASES[showcase].open(page);
+    if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+    await page.mouse.move(0, 0);
+    const graph = graphOf(page);
+    await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES[showcase].cards);
+    await graph.scrollIntoViewIfNeeded();
+    await mapAtRest(graph);
+    const cues = page.getByTestId("map-cues").locator("[data-cue]");
+    expect(await cues.count()).toBeGreaterThan(0);
+    expect(await coveredCues(page), "at rest").toEqual([]);
+
+    // A cue pressed from the keyboard: the card it gives the focus to has its box, which
+    // covers no cue, the one that just appeared included.
+    const side = width < 768 ? "up" : "right";
+    for (let press = 1; press <= 3; press += 1) {
+      const cue = page.getByTestId("map-cues").locator(`[data-cue="${side}"]`);
+      if ((await cue.count()) === 0) break;
+      await cue.focus();
+      await page.keyboard.press("Enter");
+      await mapAtRest(graph);
+      expect(await coveredCues(page), `press ${press}`).toEqual([]);
+    }
+
+    // A track selected: its panel opens over the map's bottom, above the cues.
+    const related = async (each: string) =>
+      (await graph.locator(`g.nodes > g[data-node-id="${each}"][role="button"]`).count()) > 0;
+    let id: string | undefined;
+    for (const each of await cardsInView(graph, headingBand(page))) {
+      if (await related(each)) {
+        id = each;
+        break;
+      }
+    }
+    if (!id) throw new Error("no related card in view");
+    const card = graph.locator(`g.nodes > g[data-node-id="${id}"]`);
+    await card.focus();
+    await card.blur();
+    await card.click();
+    await expect(page.getByTestId("node-detail")).toBeVisible();
+    await mapAtRest(graph);
+    expect(await cues.count(), "cues with a track selected").toBeGreaterThan(0);
+    expect(await coveredCues(page), "a track selected").toEqual([]);
+    expect(problems).toEqual([]);
+  });
+}
+
 // A long title in the analysed track's own year makes that year wider than the analysed card:
 // the first view is judged on the map laid out for it (the year moves at the view's edge as a
 // whole), so the analysed card is still wholly in view.

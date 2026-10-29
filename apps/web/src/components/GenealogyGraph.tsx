@@ -555,6 +555,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
   const detailRef = useRef<HTMLDivElement>(null);
   const detailInsetRef = useRef(0);
+  // How far up the box reaches when it is at the bottom, wherever it is now: what is "low" does
+  // not change with where the box goes (it would go back and forth).
+  const lowInsetRef = useRef(0);
   // Where the box or the panel lies across the map (px from the map's left): a card beside it,
   // not under it, is clear of it.
   const detailAcrossRef = useRef<readonly [number, number]>([0, 0]);
@@ -1634,7 +1637,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             })();
       const k = transform.k || 1;
       const bottom = transform.y + (box.y + box.height) * k;
-      return bottom > height - (detailInsetRef.current || 64);
+      return bottom > height - (lowInsetRef.current || 64);
     };
     // Once React has drawn the detail box (or taken it away): the box at the top while the
     // pointed item is low, the focused item clear of it, and the chips placed again.
@@ -2098,11 +2101,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const inlinePanel = sparse || (panel !== null && panel.height < SHORT_MAP_PX);
   // A box at the map's top goes below "↑ N more" while that cue shows, never over it.
   const detailBelowCue = detailTop && cues.up > 0 ? mapInset - topInset + 2 + CUE_PX : 0;
+  // And one at its bottom goes above the bottom cues ("← N more", "N more ↓/→") while they show.
+  const bottomRoom = cues.left + cues.right + cues.down > 0 ? CUE_PX + 4 : 8;
+  const detailBottom = detailTop ? 8 : bottomRoom;
   const detailPanel = selectedNode && (
     <DetailPanel
       panelRef={panelRef}
       layout={inlinePanel ? 'inline' : detailTop ? 'top' : 'overlay'}
       topOffset={topInset + 4 + detailBelowCue}
+      bottomOffset={detailBottom}
       node={selectedNode}
       year={yearOfNode(selectedNode.id)}
       links={links
@@ -2158,12 +2165,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   useLayoutEffect(() => {
     // The panel's height (on the canvas), else the hover box's.
     const box = (inlinePanel ? null : panelRef.current) ?? detailRef.current;
-    const inset = box ? box.offsetHeight + 8 + detailBelowCue : 0;
+    const inset = box ? box.offsetHeight + (detailTop ? 8 + detailBelowCue : detailBottom) : 0;
     detailAcrossRef.current = box ? [box.offsetLeft, box.offsetLeft + box.offsetWidth] : [0, 0];
     // What the box shows, and how tall it is: either changing places things again.
     const shown = `${
       selectedNode ? `selected:${selectedNode.id}` : active === null ? '' : JSON.stringify(active)
     }|${detailTop ? 'top' : 'bottom'}`;
+    lowInsetRef.current = box ? box.offsetHeight + bottomRoom : 0;
     if (inset === detailInsetRef.current && shown === detailShownRef.current) return;
     detailInsetRef.current = inset;
     detailShownRef.current = shown;
@@ -2395,8 +2403,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               aria-hidden="true"
               data-testid="link-detail"
               data-at={detailTop ? 'top' : 'bottom'}
-              className={`absolute left-2 right-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere ${detailTop ? '' : 'bottom-2'}`}
-              style={detailTop ? { top: topInset + 4 + detailBelowCue } : undefined}
+              className="absolute left-2 right-2 z-20 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip wrap-anywhere"
+              style={detailTop ? { top: topInset + 4 + detailBelowCue } : { bottom: detailBottom }}
             >
               {activeLink && (
                 <>

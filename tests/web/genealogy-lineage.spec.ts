@@ -351,6 +351,8 @@ const RECORDED: Record<string, Showcase> = Object.fromEntries(
 );
 
 const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
+/** The showcases drawn as a map (more than two relations), not a compact row. */
+const DRAWN = Object.fromEntries(Object.entries(SHOWN).filter(([, { sparse }]) => !sparse));
 
 /**
  * The cards main's first view showed whole at rest on the rich map in the Player's panel (at
@@ -645,7 +647,7 @@ const cardPlaces = (page: Page) =>
       .join("\n"),
   );
 
-for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) {
+for (const [showcase, { open, cards: cardCount }] of Object.entries(DRAWN)) {
   for (const [sweep, { start, sizes }] of Object.entries(SWEEPS)) {
     test(`a ${sweep} sweep at rest keeps the ${showcase} map's first view: no card cut, the analysed track in view, the drawing kept while no card moves`, async ({
       page,
@@ -1003,7 +1005,7 @@ test("the edge cues say how many cards lie past each edge, and pan to them from 
 // stops where no card is cut (nor lies under a cue), the analysed track's card kept in view
 // while a stop allows it; once nothing is left past its edge, the focus is on the first card
 // that came into view, and its name says what arrived.
-for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) {
+for (const [showcase, { open, cards: cardCount }] of Object.entries(DRAWN)) {
   for (const [width, height] of [
     [390, 844],
     [1280, 800],

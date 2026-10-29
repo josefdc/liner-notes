@@ -21,7 +21,7 @@ import { offline } from "./offline";
 // from a map's detail panel shows the tracks explored before it as a breadcrumb, kept in the
 // history entries (Back and Forward bring it back) and cleared by a new search. Every recorded
 // showcase's full map is laid out at 390, 1280, 1440 and 1920 px: as wide as the window, its
-// cards apart and nothing scrolling sideways.
+// cards apart, none cut at rest, the analysed track's card in view and nothing scrolling sideways.
 
 test.use({ reducedMotion: "reduce" });
 
@@ -693,7 +693,7 @@ for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecording
     [1440, 900],
     [1920, 1080],
   ] as const) {
-    test(`at ${width} px the recorded ${slug} map opens full size, its cards apart, nothing sideways`, async ({
+    test(`at ${width} px the recorded ${slug} map opens full size, its cards apart and none cut at rest, nothing sideways`, async ({
       page,
     }, testInfo) => {
       test.setTimeout(90_000);
@@ -735,6 +735,11 @@ for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecording
         ).toEqual(expect.arrayContaining(nodeIds));
         await expect(graph.locator("g.nodes > g")).toHaveCount(nodeIds.length);
         expect(cards).toHaveLength(nodeIds.length);
+        // At rest no card is cut by the window's map, and the analysed track's card is in it.
+        await mapAtRest(graph);
+        expect(await cardsCutAtRest(graph), `${slug}: cards cut at rest`).toEqual([]);
+        expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
+        expect(await analysedAtRest(graph), `${slug}: the analysed track at rest`).toBe("in");
         for (const [i, { id, b }] of cards.entries()) {
           for (const other of cards.slice(i + 1)) {
             const o = other.b;

@@ -24,7 +24,8 @@
  * Each long token-shaped word in a web search page's excerpt is recorded as "[redacted]"
  * (recorder.ts `withoutPageTokens`); the recorder prints how many it replaced, and in which
  * evidence items. The record itself does not say so (the replay format has no place for it):
- * the commit that adds the recording does.
+ * the commit that adds the recording does. The whole word goes, so ordinary text glued to a
+ * run (a schemeless path, a slug) may go with it; only web search excerpts are touched.
  *
  * The file is written as `JSON.stringify(record, null, 2)`. A committed recording is that file
  * formatted with Biome afterwards (`npx biome format --write fixtures/replays/<slug>.json`, as

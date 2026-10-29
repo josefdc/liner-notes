@@ -23,8 +23,9 @@
  *   out: a viewer of the replay did neither;
  * - in the excerpt of a web search result (a `tavily` item of the web or editorial tier: text
  *   the search fetched from a third-party page, never a source's API, the model or the app),
- *   each word outside the page's links that the long-token rule matches, or that is a long
- *   base64 value, becomes "[redacted]", whole (`withoutPageTokens`). A page's text may run
+ *   each word outside the page's links (up to a space, a quote or a bracket) that the
+ *   long-token rule matches, or that holds a long base64 value, becomes "[redacted]", whole
+ *   (`withoutPageTokens`). A page's text may run
  *   words together ("StudioPiano2NotesGuitar2Tabs…") into that shape; the record keeps neither
  *   such a word nor any piece of a real token a page printed. An excerpt that holds a
  *   configured credential or any other secret shape is not touched, and is refused by that
@@ -176,7 +177,7 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
  * message may not: reasonIssue).
  */
 const SIGNED_URL =
-  /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key|key)=/i;
+  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=[A-Za-z0-9_-]{16})/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -278,11 +279,19 @@ const LONG_TOKEN = (SECRET_SHAPES.find(([what]) => what === "a long token") as [
 const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
 
 /**
- * The words of a text a token can hide in: letters, digits and the characters a token, its
- * base64 or its URL encoding hold ("-", "_", "+", "/", "=", ".", "%", "~"), up to a space, a
- * quote, a bracket or other punctuation.
+ * The words of a text a token can hide in: every character up to a space, a quote or a bracket,
+ * so a token's pieces glued by "-", "_", "+", "/", "=", ".", "%", "~", ":", ",", "#" or an
+ * invisible character (a soft hyphen, a zero-width space or joiner, a word joiner, a
+ * byte-order mark; none of them a space here) are one word.
  */
-const TOKEN_WORDS = /[A-Za-z0-9_\-+/=.%~]+/g;
+const TOKEN_WORDS =
+  /[^\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"'<>()[\]{}]+/g;
+
+/** A word's leading and trailing characters that no token holds, around its core. */
+const EDGES = /^([^A-Za-z0-9_\-+/=.%~]*)(.*?)([^A-Za-z0-9_\-+/=.%~]*)$/su;
+
+/** The pieces of a word a base64 value can be (letters, digits, "+", "/" and "="). */
+const BASE64_PIECES = /[A-Za-z0-9+/=]+/g;
 
 /**
  * A base64 value of 40 or more characters with a "+" or "/" in it, mixed case and a digit
@@ -307,18 +316,23 @@ export interface RedactedRuns {
   runs: number;
 }
 
-/** True when `text` holds one of `secrets`, as `leaks` reads it (also URL-encoded). */
+/**
+ * True when `text` holds one of `secrets`: as it is, URL-decoded (with "+" read as a space, as
+ * a query is, and kept as "+", as a base64 value holds one), or URL-encoded.
+ */
 function holdsSecret(text: string, secrets: readonly string[]): boolean {
-  const plain = decoded(text);
+  const forms = [text, decoded(text), decodedKeepingPlus(text)];
   return secrets.some(
-    (secret) => secret && (plain.includes(secret) || text.includes(encodeURIComponent(secret))),
+    (secret) =>
+      secret &&
+      (forms.some((form) => form.includes(secret)) || text.includes(encodeURIComponent(secret))),
   );
 }
 
 /**
- * `text` with each word outside its links that the long-token rule matches, or that is a long
- * base64 value, as REDACTED_RUN, whole (no piece of it around the run is kept), and how many
- * there were. A text that holds a configured credential, or that any other rule of
+ * `text` with each word outside its links (TOKEN_WORDS) that the long-token rule matches, or
+ * that holds a long base64 value, as REDACTED_RUN, whole (no piece glued to the run is kept),
+ * and how many there were. A text that holds a configured credential, or that any other rule of
  * SECRET_SHAPES matches (a JSON web token, a bearer credential, an "sk-" key, an e-mail
  * address …), is left as it is: `leaks` refuses it, by that rule's name.
  */
@@ -331,9 +345,12 @@ function redactRuns(text: string, secrets: readonly string[]): { text: string; r
   let runs = 0;
   const swap = (part: string) =>
     part.replace(TOKEN_WORDS, (word) => {
-      if (!LONG_TOKEN.test(word) && !BASE64_VALUE.test(word)) return word;
+      const base64 = (word.match(BASE64_PIECES) ?? []).some((piece) => BASE64_VALUE.test(piece));
+      if (!LONG_TOKEN.test(word) && !base64) return word;
       runs++;
-      return REDACTED_RUN;
+      // The punctuation a word starts or ends with ("…,", "(…") is no piece of a token: kept.
+      const [, before, , after] = word.match(EDGES) as RegExpMatchArray;
+      return `${before}${REDACTED_RUN}${after}`;
     });
   let out = "";
   let at = 0;
@@ -411,6 +428,8 @@ function linkSecret(url: string): string | null {
   } catch {
     return null;
   }
+  // A user name or a password in a link is a credential, whatever it looks like.
+  if (parsed.username || parsed.password) return "credentials in a link";
   const scan = (text: string, shapes: Array<[string, RegExp]>) =>
     shapes.find(([, pattern]) => pattern.test(text) || pattern.test(decoded(text)))?.[0] ?? null;
   const inQuery = scan(`${parsed.search}${parsed.hash}`, SECRET_SHAPES);
@@ -463,6 +482,15 @@ function strings(
 function decoded(text: string): string {
   try {
     return decodeURIComponent(text.replace(/\+/g, " "));
+  } catch {
+    return text;
+  }
+}
+
+/** `text` URL-decoded with each "+" kept (as it is, when it is not URL-encoded). */
+function decodedKeepingPlus(text: string): string {
+  try {
+    return decodeURIComponent(text);
   } catch {
     return text;
   }
@@ -550,13 +578,7 @@ export function leaks(
     // The kept cover, as the whole value of the result's cover: an allowed link there only.
     const isCover = cover !== null && text === cover && coverPaths.has(path);
     const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
-    if (
-      secrets.some(
-        (secret) => secret && (plain.includes(secret) || text.includes(encodeURIComponent(secret))),
-      )
-    ) {
-      found.push(`${path}: a configured credential`);
-    }
+    if (holdsSecret(text, secrets)) found.push(`${path}: a configured credential`);
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
     // those are their own); an id field's value may be a long source id.
     const scanned = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));

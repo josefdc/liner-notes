@@ -1896,7 +1896,7 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       `https://genius.com/${token}`,
       "https://www.discogs.com/search?api_key=Zx9Qw3Er7Ty1",
       "https://www.discogs.com/search?apikey=Zx9Qw3Er7Ty1",
-      "https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1",
+      "https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5Op",
       "https://genius.com/search?access_token=Zx9Qw3Er7Ty1",
     ]) {
       const reasons = refusal(() => build(liveRunWith([page(`See ${link} now.`)])));
@@ -1910,6 +1910,99 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       liveRunWith([page("See https://genius.com/Daft-punk-one-more-time-lyrics now.")]),
     );
     expect(excerpts(fine.record)[0]).toContain("https://genius.com/Daft-punk-one-more-time-lyrics");
+  });
+
+  it("refuses a configured credential with a \"+\" in it by name, in a page's excerpt and in the model's text", () => {
+    // As `openssl rand -base64 48` makes RUN_TOKEN_SECRET: a "+" and a "/", every piece short.
+    const configured = "Ab3dEf6hIj9lMn2pQr5t+Uv8xYz1bCd4fGh7K0mNqRs/Tu9Vw2Xy5Za8Bc1De3Fg4Hi5J";
+    const options = { slug: "one-more-time-daft-punk", commit: "abc1234", secrets: [configured] };
+    const inPage = liveRunWith([page(`Leak ${configured} end`)]);
+    const onPage = refusal(() => buildRecord(inPage.run, inPage.events, options)).filter((r) =>
+      /evidence(\[\d+\])?\.excerpt: /.test(r),
+    );
+    expect(onPage).toHaveLength(3);
+    for (const reason of onPage) expect(reason).toMatch(/: a configured credential$/);
+    const inClaim = liveRunWith([], (analysis) => {
+      analysis.claims![0].text = `${analysis.claims![0].text} ${configured}`;
+    });
+    expect(refusal(() => buildRecord(inClaim.run, inClaim.events, options))).toContain(
+      "analysis.claims[0].text: a configured credential",
+    );
+  });
+
+  it("refuses a link with a user name or password, in a page's excerpt and as a record's url", () => {
+    for (const link of [
+      "https://Ab3dEf6hIj9l:Zx9Qw3Er7Ty1Ui5Op@www.discogs.com/release/1",
+      "https://someone@www.discogs.com/release/1",
+    ]) {
+      const reasons = refusal(() => build(liveRunWith([page(`See ${link} now.`)])));
+      const onPage = reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+      expect(onPage, link).toHaveLength(3);
+      for (const reason of onPage) expect(reason, link).toMatch(/: credentials in a link$/);
+    }
+    const record = page("A plain record.", {
+      id: "discogs:release/1",
+      source: "discogs",
+      sourceTier: "primary-record",
+      url: "https://admin:Zx9Qw3Er7Ty1Ui5Op@www.discogs.com/release/1",
+      recordRef: "release/1",
+    });
+    expect(
+      refusal(() => build(liveRunWith([record]))).filter((r) =>
+        /evidence(\[\d+\])?\.url: credentials in a link$/.test(r),
+      ),
+    ).toHaveLength(3);
+  });
+
+  it('replaces a run with what is glued to it across ":", ",", "#", a soft hyphen or a zero-width character', () => {
+    const token = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
+    const tail = "Zx9Qw3Er7Ty1Ui5Op";
+    for (const glue of [
+      ":",
+      ",",
+      "#",
+      "\u00AD",
+      "\u200B",
+      "\u200C",
+      "\u200D",
+      "\u2060",
+      "\uFEFF",
+    ]) {
+      const what = `U+${glue.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`;
+      const built = build(liveRunWith([page(`creds ${token}${glue}${tail} end`)]));
+      expect(excerpts(built.record), what).toEqual(Array(3).fill("creds [redacted] end"));
+      const text = JSON.stringify(built.record);
+      for (const secret of [token, tail]) {
+        for (let at = 0; at + 8 <= secret.length; at++) {
+          expect(text, what).not.toContain(secret.slice(at, at + 8));
+        }
+      }
+    }
+    // Words with no long run in them are kept as they are, glued or not.
+    const plain = build(liveRunWith([page("Genre:POP,ROCK#indie and Tempo:85 BPM")]));
+    expect(excerpts(plain.record)[0]).toBe("Genre:POP,ROCK#indie and Tempo:85 BPM");
+  });
+
+  it("refuses a key parameter only with a token-shaped value: a musical key is text", () => {
+    const tunebat = "https://tunebat.com/Info/Bitter-Sweet-Symphony?key=Am";
+    const kept = build(
+      liveRunWith([
+        page("Transpose with ?key=G to play it in G. Settings: capo=2&Key=A minor", {
+          id: `tavily:${tunebat}`,
+          url: tunebat,
+        }),
+      ]),
+    );
+    expect(excerpts(kept.record)).toEqual([]);
+    expect(kept.record.analysis.evidence?.at(-1)?.url).toBe(tunebat);
+    const value = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz";
+    expect(value).toHaveLength(32);
+    const reasons = refusal(() =>
+      build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
+    );
+    expect(
+      reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
+    ).toHaveLength(3);
   });
 
   it("counts every run it replaced, in items that share an id", () => {

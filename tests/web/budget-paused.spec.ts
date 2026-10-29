@@ -168,7 +168,7 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await expect(page.getByRole("log")).toContainText("nothing below runs live");
   await expect(page.getByText(/Searching Spotify for your track/)).toHaveCount(0);
 
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 5000));
   const sent = async () =>
     (await streamLog(page)).filter((entry) => entry === "/api/analyze/stream done").length;
   const before = await sent();

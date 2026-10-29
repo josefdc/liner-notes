@@ -1,5 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
-import { animationsSettled, apiRequests, loadFixture, useMockApi } from "./mock";
+import { SUGGEST_DELAY_MS } from "../../apps/web/src/components/search/useSuggestions";
+import {
+  abortedRequests,
+  animationsSettled,
+  apiRequests,
+  loadFixture,
+  releaseStream,
+  useMockApi,
+} from "./mock";
 
 // The search box is a labelled combobox (WAI-ARIA 1.2): the focus stays in the box while the
 // arrow keys move through its suggestions, which aria-activedescendant names.
@@ -197,28 +205,57 @@ test("Tab with nothing highlighted closes the list and moves to Analyze, in view
   expect(inView).toBe(true);
 });
 
-test("a list closed with Escape stays closed when the answer for newer text comes", async ({
-  page,
-}) => {
-  // The page's timers run on a clock the test holds while it types: on a slow machine the 300 ms
-  // pause after typing that asks for suggestions must not pass before Escape is pressed.
+/**
+ * Opens the list for "Hurt", then holds the page's clock: on a slow machine the pause after
+ * typing that asks for suggestions (SUGGEST_DELAY_MS) must not pass while the test types. The
+ * margin of the jump to the paused time covers a runner that stalls for a few seconds.
+ */
+async function openSuggestionsOnHeldClock(page: Page, fixture: Record<string, unknown> = {}) {
   await page.clock.install();
-  await useMockApi(page, { suggestions: candidates, streams: {} });
+  await useMockApi(page, { suggestions: candidates, streams: {}, ...fixture });
   await page.goto("/");
   await box(page).fill("Hurt");
   await expect(page.getByRole("option")).toHaveCount(candidates.length);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 5000));
+}
+
+test("Escape before typing pauses cancels the pending request for the newer text, and the list stays closed", async ({
+  page,
+}) => {
+  await openSuggestionsOnHeldClock(page);
   const requestsBefore = await suggestRequests(page);
 
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await box(page).pressSequentially(" N");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  // Well past that pause: suggestions still asked for are asked for now, and their answer has
-  // time to come.
-  await page.clock.runFor(1000);
-  await page.waitForTimeout(200);
-  await expect(page.getByRole("listbox")).toHaveCount(0);
+  // Well past that pause: a request still waiting for it is made inside runFor, and logged
+  // before runFor returns.
+  await page.clock.runFor(3 * SUGGEST_DELAY_MS);
   expect(await suggestRequests(page)).toBe(requestsBefore);
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+});
+
+test("Escape while the newer text is being asked for drops that request, and its answer does not open the list", async ({
+  page,
+}) => {
+  // The answer for "Hurt N" is held until the test lets it go.
+  await openSuggestionsOnHeldClock(page, { suggestWaits: { "Hurt N": "hurt-n" } });
+  const requestsBefore = await suggestRequests(page);
+
+  await box(page).pressSequentially(" N");
+  await page.clock.runFor(SUGGEST_DELAY_MS);
+  expect(await suggestRequests(page)).toBe(requestsBefore + 1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect.poll(() => abortedRequests(page)).toEqual(["/api/search/suggest?query=Hurt N"]);
+
+  // The answer comes anyway. The abort above is the check this test rests on: an answer that got
+  // through arrives by promises, not on the page's clock, so the list check below may run before
+  // it and only guards it.
+  await releaseStream(page, "hurt-n");
+  await page.clock.runFor(3 * SUGGEST_DELAY_MS);
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  expect(await suggestRequests(page)).toBe(requestsBefore + 1);
 });
 
 test("Enter after editing searches the typed text, not the suggestion highlighted before", async ({

@@ -169,19 +169,17 @@ const cardWords = (page: Page) =>
         const lines = [...card.querySelectorAll<SVGTSpanElement>(`text.${name} tspan`)];
         // The lines joined back: a space between two lines where the words had one (none
         // between two lines of CJK text, broken between its characters), none after a hyphen
-        // the wrap put in.
+        // the wrap put in, and the "·" separator the wrap leaves out where a line breaks at it.
         const record = (whole ?? "").trim().replace(/\s+/g, " ");
         let joined = "";
         lines.forEach((line, i) => {
           const text = line.textContent ?? "";
           const hyphen = line.hasAttribute("data-hyphen");
           joined += hyphen ? text.slice(0, -1) : text;
-          if (
-            i < lines.length - 1 &&
-            !hyphen &&
-            !record.startsWith(`${joined}${lines[i + 1].textContent?.[0] ?? ""}`)
-          ) {
-            joined += " ";
+          const next = lines[i + 1]?.textContent?.[0] ?? "";
+          if (i < lines.length - 1 && !hyphen && next !== "·") {
+            if (record.startsWith(`${joined} · ${next}`)) joined += " · ";
+            else if (!record.startsWith(`${joined}${next}`)) joined += " ";
           }
         });
         return {
@@ -750,13 +748,16 @@ for (const [width, height] of [
       );
       if (joined.endsWith("…")) expect(bare(record).startsWith(joined.slice(0, -1)), id).toBe(true);
       else expect(joined, id).toBe(bare(record));
-      for (const line of meta)
+      for (const line of meta) {
         expect(line.text.trimEnd().endsWith("·"), `${id}: ${line.text}`).toBe(false);
+        expect(line.text.trimStart().startsWith("·"), `${id}: ${line.text}`).toBe(false);
+      }
     }
     const h4 = drawn.find((each) => each.id === "h4");
     expect(h4?.title.some((line) => line.text.includes("-"))).toBe(false);
+    // The "·" before the year where both share a line, left out where the year starts one.
     expect(bare((h4?.meta ?? []).map((line) => line.text).join(""))).toMatch(
-      /^山田花子とミッドナイト・オーケストラ·\d{4}$/,
+      /^山田花子とミッドナイト・オーケストラ·?\d{4}$/,
     );
     // Drawn inside the card, as it is measured: a wide character takes two cells.
     expect(words.title.past, words.title.joined).toBeLessThanOrEqual(0);

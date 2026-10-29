@@ -107,7 +107,7 @@ const wideBreak = (before: string, after: string) =>
 
 /**
  * A text's words, broken at spaces; a lone "·" (the card's separator) is kept with the word
- * after it, so no line ends in one.
+ * after it, so no line ends in one (and `wrapText` drops it where that word starts a line).
  */
 function wordsOf(text: string): string[] {
   const words = text.trim().split(/\s+/).filter(Boolean);
@@ -124,7 +124,8 @@ function wordsOf(text: string): string[] {
 /**
  * `text` in lines of at most `maxChars` monospace cells (a wide character takes two, see
  * `graphemeUnits`), broken at spaces and, in CJK text, between characters (with no hyphen, and
- * not before a closing mark nor after an opening one). A word longer than a line is broken
+ * not before a closing mark nor after an opening one). The card's "·" separator neither ends
+ * nor starts a line: where the line breaks at it, it is left out. A word longer than a line is broken
  * inside, between two graphemes, its piece ending in a hyphen (`hyphenated` says which lines end
  * so). At most `maxLines` lines: text that needs more is cut, its last line ending in "…", and
  * said to be `truncated`.
@@ -169,8 +170,13 @@ export function wrapText(
     lineUnits = 0;
   };
   for (const word of words) {
-    let rest = graphemes(word);
+    const whole = graphemes(word);
+    let rest = whole;
     while (rest.length > 0) {
+      // The separator never starts a line: the word after it starts it alone.
+      if (rest === whole && !line && lines.length > 0 && rest[0] === '·' && rest[1] === ' ') {
+        rest = rest.slice(2);
+      }
       const room = line ? width - lineUnits - 1 : width;
       const units = unitsOf(rest);
       if (units <= room) {

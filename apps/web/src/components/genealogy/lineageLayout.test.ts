@@ -452,17 +452,34 @@ describe('wrapText, character by character (#240)', () => {
     expect(charsToWrap('夜明けの街角で踊る二人の物語', 2)).toBe(14);
   });
 
-  it('never ends a line on the card’s "·" separator', () => {
-    const meta = '山田花子とミッドナイト・オーケストラ · 2013';
-    for (const width of [10, 20, 30, 37, 38, 40]) {
-      const { lines } = wrapText(meta, width, 6);
-      for (const line of lines) expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
-      expect(lines.join('').replaceAll(' ', ''), `${width}`).toBe(meta.replaceAll(' ', ''));
+  it('never ends nor starts a line on the card’s "·" separator, nor adds a word', () => {
+    for (const meta of [
+      '山田花子とミッドナイト・オーケストラ · 2013',
+      'Group featuring Rapper · 1997',
+      'A Very Long Band Name · 2016',
+    ]) {
+      for (let width = 4; width <= 44; width += 1) {
+        const { lines } = wrapText(meta, width, 20);
+        for (const line of lines) {
+          expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
+          expect(line.startsWith('·'), `${width}: ${line}`).toBe(false);
+        }
+        // The text, its "·" kept where it sits inside a line, left out where the line breaks.
+        const [name, year] = meta.split(' · ');
+        const joined = lines.join(' ').replaceAll('- ', '');
+        expect(
+          [`${name} · ${year}`, `${name} ${year}`].map((text) => text.replaceAll(' ', '')),
+        ).toContain(joined.replaceAll(' ', ''));
+      }
     }
     expect(wrapText('Band · 2016', 20).lines).toEqual(['Band · 2016']);
     expect(wrapText('A Very Long Band Name · 2016', 22).lines).toEqual([
       'A Very Long Band Name',
-      '· 2016',
+      '2016',
+    ]);
+    expect(wrapText('山田花子とミッドナイト・オーケストラ · 2013', 36, 4).lines).toEqual([
+      '山田花子とミッドナイト・オーケストラ',
+      '2013',
     ]);
   });
 

@@ -326,6 +326,13 @@ const RECORDED: Record<string, Showcase> = Object.fromEntries(
 
 const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
 
+/**
+ * The cards main's first view showed whole at rest on the rich map in the Player's panel (at
+ * 1280x800, 1440x900 and 1920x1080), counted before #240: the first view shows at least as
+ * many.
+ */
+const MAIN_WHOLE_RICH: Partial<Record<number, number>> = { 1280: 2, 1440: 2, 1920: 5 };
+
 /** The band the Player's panel heading lays over the top of the map. */
 const headingBand = (page: Page) =>
   page
@@ -394,6 +401,13 @@ for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entr
       await mapAtRest(graph);
       expect(await cardsCutAtRest(graph, headingBand(page)), "cards cut at rest").toEqual([]);
       expect(await wholeCardsAtRest(graph, headingBand(page))).toBeGreaterThan(0);
+      const before = showcase === "rich" ? MAIN_WHOLE_RICH[width] : undefined;
+      if (before !== undefined) {
+        expect(
+          await wholeCardsAtRest(graph, headingBand(page)),
+          "cards whole at rest, against main's first view",
+        ).toBeGreaterThanOrEqual(before);
+      }
       expect(await analysedAtRest(graph, headingBand(page)), "the analysed track at rest").toBe(
         "in",
       );

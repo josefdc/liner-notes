@@ -154,7 +154,7 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph on a resize', () => {
-  it('at rest, shows the first view for the new room: from the earliest year, no card cut', async () => {
+  it('at rest, shows the first view for the new room: the analysed card whole, no card cut', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
     if (!svg) throw new Error('no svg');
@@ -169,16 +169,33 @@ describe('GenealogyGraph on a resize', () => {
         return [x + left * k, x + (left + width) * k] as const;
       });
     };
-    // Wider than the panel: the first view starts at the earliest year, and no card straddles
-    // the panel's right edge, at 800 px and after a resize to 700 px.
-    expect(zoomOf(svg)).toMatchObject({ x: 0, k: 1 });
-    for (const [left, right] of across()) expect(left >= 800 || right <= 800).toBe(true);
+    /** The analysed track's card, on screen. */
+    const analysed = () =>
+      across()[
+        drawnTracks(container).findIndex(
+          (track) => track.getAttribute('data-node-id') === 'musicbrainz:recording/current',
+        )
+      ];
+    // Wider than the panel: no card straddles the panel's edges, and the analysed track's card
+    // is wholly in view, at 800 px and after a resize to 700 px.
+    expect(zoomOf(svg).k).toBe(1);
+    for (const [left, right] of across()) {
+      expect(right <= 0 || left >= 0).toBe(true);
+      expect(left >= 800 || right <= 800).toBe(true);
+    }
+    expect(analysed()[0]).toBeGreaterThanOrEqual(0);
+    expect(analysed()[1]).toBeLessThanOrEqual(800);
     await act(async () => report?.(700, 500));
     expect(svg.getAttribute('width')).toBe('700');
-    expect(zoomOf(svg)).toMatchObject({ x: 0, k: 1 });
+    expect(zoomOf(svg).k).toBe(1);
     const now = across();
-    for (const [left, right] of now) expect(left >= 700 || right <= 700).toBe(true);
-    expect(now.filter(([, right]) => right <= 700).length).toBeGreaterThan(1);
+    for (const [left, right] of now) {
+      expect(right <= 0 || left >= 0).toBe(true);
+      expect(left >= 700 || right <= 700).toBe(true);
+    }
+    expect(analysed()[0]).toBeGreaterThanOrEqual(0);
+    expect(analysed()[1]).toBeLessThanOrEqual(700);
+    expect(now.filter(([left, right]) => left >= 0 && right <= 700).length).toBeGreaterThan(1);
   });
 
   it('once the reader has moved the view, keeps the drawing, its cards and its zoom on a resize, and shifts the view by half the change', async () => {
@@ -191,11 +208,11 @@ describe('GenealogyGraph on a resize', () => {
     // Drawn at its size: the text at 12 px on screen, never zoomed out.
     expect(zoomOf(svg).k).toBe(1);
     const card = relatedTrack(container).querySelector('rect.card')?.getAttribute('width');
-    // The keyboard brings the last card, past the first view, into view: the reader's view.
-    const later = tracks.find((track) => track.getAttribute('data-node-id') === 'later');
-    await act(async () => (later as SVGGElement | undefined)?.focus());
+    // The keyboard brings the first card, before the first view, into view: the reader's view.
+    const rest = zoomOf(svg);
+    await act(async () => (relatedTrack(container) as SVGGElement).focus());
     const before = zoomOf(svg);
-    expect(before.x).toBeLessThan(0);
+    expect(before.x).toBeGreaterThan(rest.x);
 
     await act(async () => report?.(700, 500));
 
@@ -219,9 +236,11 @@ describe('GenealogyGraph on a resize', () => {
       if (!svg) throw new Error('no svg');
       const zoomed = svg.querySelector(':scope > g');
       expect(svg.getAttribute('data-view')).toBe('first');
-      // The related track's card is in the first view: none of these moves the view.
+      // The remix's card is in the first view: none of these moves the view.
       const before = zoomOf(svg);
-      const track = relatedTrack(container) as SVGGElement;
+      const track = drawnTracks(container).find(
+        (g) => g.getAttribute('data-node-id') === 'later',
+      ) as SVGGElement;
       if (act_ === 'select') await act(async () => fireEvent.click(track));
       if (act_ === 'focus') await act(async () => track.focus());
       if (act_ === 'hover') await act(async () => fireEvent.mouseEnter(track));

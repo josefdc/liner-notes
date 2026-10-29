@@ -3,10 +3,11 @@ import type { CardBox, Orientation, ViewBreaks, YearSlot } from './lineageLayout
 /**
  * The song-relations map's first view, at its size (zoom 1: its text at 12 px, never smaller):
  * - a map that fits the room is shown whole, centred along its axis;
- * - a larger one shows the analysed track's card whole. Across the page the view starts at the
- *   earliest dated year from which that card fits (never at the "Undated" column, unless every
- *   card is undated); down a phone's column it is centred on that card, as far as the map
- *   allows, starting at a year's label;
+ * - a larger one shows the analysed track's card whole. Across the page the view starts at a
+ *   dated year from which that card fits (never at the "Undated" column, unless every card is
+ *   undated): the one that shows the most cards whole, then the one with that card nearest the
+ *   view's middle, then the earliest; down a phone's column it is centred on that card, as far
+ *   as the map allows, starting at a year's label;
  * - where cards lie past the view, a strip at its bottom holds the edge cues ("4 more →"), and
  *   the layout is given the view's far edges (`breaks`), so no card straddles them nor lies
  *   under the strip: at rest each card is wholly in view or wholly out of it.
@@ -67,29 +68,53 @@ const within = (from: number, to: number, start: number, size: number) =>
   start >= from - 0.5 && start + size <= to + 0.5;
 
 /** Across the page: the years from left to right, the lanes from top to bottom. */
-function across({ map, slots, cards, anchor, room, pad, cue, band }: FirstViewInput): FirstView {
-  const below = roomBelow(room);
-  let from = 0;
-  let x = 0;
-  if (map.width <= room.width) {
-    x = (room.width - map.width) / 2;
-  } else {
-    // The earliest dated year from which the analysed card fits whole (any year when none is
-    // dated); the first year's view starts at the map's own edge.
-    const startOf = (slot: YearSlot) => (slot === slots[0] ? 0 : Math.max(0, slot.start - pad));
-    const fits = (slot: YearSlot) =>
-      anchor === null || within(startOf(slot), startOf(slot) + room.width, anchor.x, anchor.width);
-    const dated = slots.filter((slot) => slot.year !== null);
+function across(input: FirstViewInput): FirstView {
+  const { map, slots, anchor, room, pad } = input;
+  const plan = (from: number, x: number) => acrossFrom(input, from, x);
+  if (map.width <= room.width) return plan(0, (room.width - map.width) / 2).view;
+  // The dated years from which the analysed card is wholly in view (any year when none is
+  // dated); the first year's view starts at the map's own edge.
+  const startOf = (slot: YearSlot) => (slot === slots[0] ? 0 : Math.max(0, slot.start - pad));
+  const fits = (from: number) =>
+    anchor === null || within(from, from + room.width, anchor.x, anchor.width);
+  const dated = slots.filter((slot) => slot.year !== null);
+  const starts = [...new Set((dated.length > 0 ? dated : slots).map(startOf))].filter(fits);
+  if (starts.length === 0) {
+    // None: from the analysed card's own year (else the first).
     const own =
       anchor === null
         ? undefined
         : [...slots].reverse().find((slot) => slot.start <= anchor.x + anchor.width / 2);
-    const start = (dated.length > 0 ? dated : slots).find(fits) ?? own ?? slots[0];
-    from = start ? startOf(start) : 0;
-    x = -from;
+    const start = own ?? slots[0];
+    const from = start ? startOf(start) : 0;
+    return plan(from, -from).view;
   }
+  // Of those, the one that shows the most cards whole; then the one with the analysed card
+  // nearest the view's middle; then the earliest (the starts are in order: a tie keeps the
+  // one before).
+  const off = (from: number) =>
+    anchor === null ? 0 : Math.abs(anchor.x + anchor.width / 2 - (from + room.width / 2));
+  const best = starts
+    .map((from) => ({ from, ...plan(from, -from) }))
+    .reduce((a, b) =>
+      b.whole > a.whole || (b.whole === a.whole && off(b.from) < off(a.from) - 0.5) ? b : a,
+    );
+  return best.view;
+}
+
+/**
+ * Across the page, the view whose room for cards starts at `from` (map px; the pan along the
+ * axis `x`), and how many cards it shows whole.
+ */
+function acrossFrom(
+  { cards, anchor, room, cue, band }: FirstViewInput,
+  from: number,
+  x: number,
+): { view: FirstView; whole: number } {
+  const below = roomBelow(room);
   const to = from + room.width;
   const limit = Math.max(0, below - cue);
+  const shown = cards.filter((card) => within(from, to, card.x, card.width));
   // Across the lanes: from the map's top, unless the analysed card would then lie past the
   // room for cards. Then the view's top line (under the year labels, pinned over the top of the
   // view) goes where the room shows that card and the most other cards whole, nearest to the
@@ -97,6 +122,7 @@ function across({ map, slots, cards, anchor, room, pad, cue, band }: FirstViewIn
   // line starts at it, and would push the analysed one down).
   let top = 0;
   let crossFrom: number | undefined;
+  let whole: number | undefined;
   if (anchor !== null && anchor.y + anchor.height > limit + 0.5) {
     const room = limit - band;
     const [low, high] = [anchor.y + anchor.height - room, anchor.y];
@@ -114,8 +140,7 @@ function across({ map, slots, cards, anchor, room, pad, cue, band }: FirstViewIn
         (at, card) => (card.y < at && card.y + card.height > at ? card.y + card.height + 1 : at),
         line,
       );
-    const shown = cards.filter((card) => within(from, to, card.x, card.width));
-    const whole = (line: number) =>
+    const wholeFrom = (line: number) =>
       shown.filter((card) => within(line, line + room, card.y, card.height)).length;
     const lines = [
       middle,
@@ -126,10 +151,11 @@ function across({ map, slots, cards, anchor, room, pad, cue, band }: FirstViewIn
       .map((line) => Math.round(clear(Math.min(high, Math.max(low, line)))))
       .filter((line) => line >= low - 0.5 && line <= high + 0.5);
     crossFrom = lines.reduce((best, line) => {
-      const [a, b] = [whole(line), whole(best)];
+      const [a, b] = [wholeFrom(line), wholeFrom(best)];
       return a > b || (a === b && Math.abs(line - middle) < Math.abs(best - middle)) ? line : best;
     }, lines[0] ?? Math.round(high));
     top = crossFrom - band;
+    whole = wholeFrom(crossFrom);
   }
   // Cards past a side of the view: the cues' strip at its bottom is kept clear of cards.
   const past =
@@ -145,7 +171,9 @@ function across({ map, slots, cards, anchor, room, pad, cue, band }: FirstViewIn
     Object.assign(breaks, { cross: top + limit, crossPast: top + below });
   }
   if (crossFrom !== undefined) Object.assign(breaks, { crossFrom });
-  return { x, y: room.inset - top, breaks: noneIfEmpty(breaks) };
+  // From the map's top, the cards whole above the strip (above the room's bottom: no strip).
+  whole ??= shown.filter((card) => card.y + card.height <= (past ? limit : below) + 0.5).length;
+  return { view: { x, y: room.inset - top, breaks: noneIfEmpty(breaks) }, whole };
 }
 
 /** Down a column: the years from top to bottom. */

@@ -46,8 +46,9 @@ describe('the first view (#240)', () => {
     expect(planFirstView(wide)).toEqual({ x: 70, y: 40, breaks: undefined });
   });
 
-  it('starts at the earliest dated year from which the analysed card fits, never at "Undated"', () => {
-    // The analysed card in 2000: from 1990 (the earliest dated year) it fits.
+  it('starts at a dated year from which the analysed card fits, never at "Undated"', () => {
+    // The analysed card in 2000: from 1990 and from 2000 it fits, with two cards whole each;
+    // from 1990 it lies nearer the view's middle.
     const at2000 = planFirstView(row(2));
     expect(at2000.x).toBe(-284);
     expect(at2000.breaks).toEqual({ main: 884, mainFrom: 284 });
@@ -62,6 +63,61 @@ describe('the first view (#240)', () => {
     const undated = row(0);
     const all = { ...undated, slots: undated.slots.map((s) => ({ ...s, year: null })) };
     expect(planFirstView(all).x).toBe(-0);
+  });
+
+  it('starts where the most cards are whole, not at the earliest year the analysed card fits', () => {
+    // As on a track with many relations: the analysed card in 2010, three tracks in 2020, one
+    // in each earlier year. From 2000 (the earliest year it fits from) two cards are whole;
+    // from 2010, four.
+    const slots = [
+      slot(null, 16, 200),
+      slot(1990, 300, 200),
+      slot(2000, 560, 200),
+      slot(2010, 820, 200),
+      slot(2020, 1080, 200),
+    ];
+    const anchor = card(820, 30);
+    const cards = [
+      card(16, 30),
+      card(300, 30),
+      card(560, 30),
+      anchor,
+      card(1080, 30),
+      card(1080, 100),
+      card(1080, 170),
+    ];
+    const input: FirstViewInput = {
+      orientation: 'horizontal',
+      map: { width: 1300, height: 240 },
+      slots,
+      cards,
+      anchor,
+      room: { width: 600, height: 400, inset: 40 },
+      pad: 16,
+      cue: 24,
+      band: 28,
+    };
+    const view = planFirstView(input);
+    expect(view.x).toBe(-804);
+    expect(view.breaks).toBeUndefined();
+    // The analysed card wholly in view.
+    expect(anchor.x + view.x).toBeGreaterThanOrEqual(0);
+    expect(anchor.x + anchor.width + view.x).toBeLessThanOrEqual(600);
+    // With one track in 2020, both starts show two cards whole: the one with the analysed card
+    // nearer the view's middle wins (from 2000: 76 px off it; from 2010: 184 px).
+    const fewer = { ...input, cards: cards.slice(0, 5) };
+    expect(planFirstView(fewer).x).toBe(-544);
+    // A tie where the later start has the analysed card nearer the middle: from 1990 and from
+    // 2000 a 1000 px room shows four cards whole; the card lies 136 px off the middle from
+    // 1990, 124 px from 2000.
+    const later = {
+      ...input,
+      map: { width: 1600, height: 240 },
+      slots: [...slots, slot(2030, 1340, 200)],
+      cards: [...cards.slice(0, 5), card(1340, 30)],
+      room: { width: 1000, height: 400, inset: 40 },
+    };
+    expect(planFirstView(later).x).toBe(-544);
   });
 
   it('keeps the bottom strip clear for the edge cues where cards lie past the view', () => {

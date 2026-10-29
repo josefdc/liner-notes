@@ -660,9 +660,9 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
 }
 
 /**
- * Whether a place in `text` is in a link: after a "://" with no character that ends a link
- * (whitespace, a quote, "<" or ">") since. Asked for places in order, it reads each character
- * once.
+ * Whether a place in `text` is in a link: after a "://" (any scheme, or none: `a://b`, `sb://`,
+ * `file:///`) with no character that ends a link since (endsLink). Asked for places in order, it
+ * reads each character once.
  */
 function inLink(text: string): (at: number) => boolean {
   let read = 0;
@@ -671,15 +671,25 @@ function inLink(text: string): (at: number) => boolean {
   return (at) => {
     for (; read < at; read++) {
       const c = text.charCodeAt(read);
-      if (c <= 0x20 || (c >= 0x7f && c <= 0xa0) || LINK_ENDS.includes(c)) broken = read;
-      else if (c === 0x3a && text.startsWith("//", read + 1)) scheme = read;
+      if (endsLink(c)) broken = read;
+      else if (c === COLON && text.startsWith("//", read + 1)) scheme = read;
     }
     return scheme > broken;
   };
 }
 
-/** The characters that end a link: a quote, a backtick, "<" and ">". */
-const LINK_ENDS = [0x22, 0x27, 0x60, 0x3c, 0x3e];
+/**
+ * A character that ends a link: a control character (C0, DEL and C1), whitespace (\s, with the
+ * no-break and the other Unicode spaces and the line and paragraph separators), a quote ("
+ * or '), a backtick, "<" or ">".
+ */
+function endsLink(c: number): boolean {
+  if (c <= 0x20 || (c >= 0x7f && c <= 0xa0)) return true;
+  if (c === 0x22 || c === 0x27 || c === 0x60 || c === 0x3c || c === 0x3e) return true;
+  return c > 0xff && WHITESPACE.test(String.fromCharCode(c));
+}
+
+const WHITESPACE = /\s/;
 const SLASH = 0x2f;
 const EQUALS = 0x3d;
 const COLON = 0x3a;

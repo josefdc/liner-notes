@@ -1270,6 +1270,12 @@ describe("configured values in what a client is shown, in a token and in any whi
         else expect(shownText, `${surface}: ${text}`).toBe(out);
       }
     }
+    // Any whitespace, a control character, a quote, a backtick, "<" or ">" ends a link: a value
+    // after one is in a word of its own, whose token is hidden whole.
+    for (const end of [" ", "\t", "\u0085", " ", " ", " ", " ", "　", '"', "`", ">"]) {
+      const text = `see https://h.example/a${end}ab/${V}/cd next`;
+      expect(scrub(text), JSON.stringify(end)).toBe(`see https://h.example/a${end}[redacted] next`);
+    }
   });
 
   it("matches a value's whitespace with any run of whitespace in a text", () => {

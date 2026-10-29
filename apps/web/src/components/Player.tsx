@@ -239,6 +239,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )
       .map((factoid) => factoid.id),
   ).size;
+  // Claims the result left out because each states a fact a claim shown states, with its source:
+  // facts were found, and are listed.
+  const restatedFacts = (track.run?.verifier?.restated ?? 0) > 0;
   // Facts found but not shown: their claim was rejected or cannot be read.
   const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
     claims.isHidden(factoid.claimId),
@@ -534,6 +537,69 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     tabRefs.current[next]?.focus();
   };
 
+  // "Find more facts" and what it last said: shown with the cards, and without any (when every
+  // fact found is listed below with its source, more may still be asked for).
+  const moreFactsControls = (
+    <>
+      {onMoreFactoidsStream && (
+        <button
+          type="button"
+          onClick={handleDecryptMore}
+          // Once every round has been asked, another click would bring nothing new.
+          disabled={isDecrypting || more.finished}
+          aria-describedby={more.finished ? noMoreRoundsId : undefined}
+          className={`w-full flex items-center justify-center gap-2 py-3 px-4
+                         border border-dashed border-white/20 rounded-md
+                         text-xs font-mono text-text-secondary uppercase tracking-wider
+                         hover:border-white/40 hover:text-white hover:bg-white/5
+                         focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
+                         disabled:opacity-50
+                         ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
+                         transition-all duration-(--duration-fast)`}
+        >
+          {isDecrypting ? (
+            <>
+              <Lock size={12} className="animate-pulse" />
+              Finding more facts…
+            </>
+          ) : (
+            <>
+              <LockOpen size={12} />
+              Find more facts
+            </>
+          )}
+        </button>
+      )}
+      {decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
+        </p>
+      )}
+      {more.answerFailed && !decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          More facts could not be written. Try again.
+        </p>
+      )}
+      {more.failed.length > 0 && !decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          {more.failed.length === 1
+            ? '1 fact could not be written.'
+            : `${more.failed.length} facts could not be written.`}
+        </p>
+      )}
+      {more.finished && (
+        <p id={noMoreRoundsId} role="status" className="text-xs font-mono text-text-tertiary">
+          No more facts: every angle on this track has been asked.
+        </p>
+      )}
+      {noMoreRecorded && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          No more facts: this result is a recording, and every fact recorded with it is shown.
+        </p>
+      )}
+    </>
+  );
+
   return (
     <div ref={rootRef} className="h-full w-full flex flex-col bg-void relative overflow-hidden">
       {/* Background Atmosphere */}
@@ -705,11 +771,19 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <p className="text-xs text-text-tertiary font-mono mb-8">{facts(allFactoids.length)}</p>
           )}
           {allFactoids.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-12">
-              <p className="text-text-tertiary text-xs font-mono text-center">
-                {/* Facts were found but none is shown: the lines around say why */}
-                {hiddenFacts ? 'No facts to show.' : 'No facts were found for this track.'}
-              </p>
+            <div className="space-y-6">
+              <div className="flex-1 flex items-center justify-center py-12">
+                <p className="text-text-tertiary text-xs font-mono text-center">
+                  {/* Facts were found but none is shown: the lines around say why. Facts found
+                      that each restate a sourced claim are listed below, with their sources. */}
+                  {hiddenFacts
+                    ? 'No facts to show.'
+                    : restatedFacts
+                      ? 'Every fact found here is already listed with its source below.'
+                      : 'No facts were found for this track.'}
+                </p>
+              </div>
+              {moreFactsControls}
             </div>
           ) : (
             <div className="space-y-6">
@@ -751,68 +825,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 </section>
               )}
 
-              {/* The "More facts" button */}
-              {onMoreFactoidsStream && (
-                <button
-                  type="button"
-                  onClick={handleDecryptMore}
-                  // Once every round has been asked, another click would bring nothing new.
-                  disabled={isDecrypting || more.finished}
-                  aria-describedby={more.finished ? noMoreRoundsId : undefined}
-                  className={`w-full flex items-center justify-center gap-2 py-3 px-4
-                               border border-dashed border-white/20 rounded-md
-                               text-xs font-mono text-text-secondary uppercase tracking-wider
-                               hover:border-white/40 hover:text-white hover:bg-white/5
-                               focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
-                               disabled:opacity-50
-                               ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
-                               transition-all duration-(--duration-fast)`}
-                >
-                  {isDecrypting ? (
-                    <>
-                      <Lock size={12} className="animate-pulse" />
-                      Finding more facts…
-                    </>
-                  ) : (
-                    <>
-                      <LockOpen size={12} />
-                      Find more facts
-                    </>
-                  )}
-                </button>
-              )}
-              {decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
-                </p>
-              )}
-              {more.answerFailed && !decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  More facts could not be written. Try again.
-                </p>
-              )}
-              {more.failed.length > 0 && !decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  {more.failed.length === 1
-                    ? '1 fact could not be written.'
-                    : `${more.failed.length} facts could not be written.`}
-                </p>
-              )}
-              {more.finished && (
-                <p
-                  id={noMoreRoundsId}
-                  role="status"
-                  className="text-xs font-mono text-text-tertiary"
-                >
-                  No more facts: every angle on this track has been asked.
-                </p>
-              )}
-              {noMoreRecorded && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  No more facts: this result is a recording, and every fact recorded with it is
-                  shown.
-                </p>
-              )}
+              {moreFactsControls}
 
               {/* Show more / collapse toggle */}
               {hiddenCount > 0 && !showAllFactoids && (

@@ -123,6 +123,15 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   // …") only restated the Eddie Johns record: it is left out with its claim, so no card is shown.
   const cards = await shownCards(page);
   expect(cards).toEqual([]);
+  // The Facts panel says so, not that none was found, and more may still be asked for.
+  const facts = page.locator("#panel-context");
+  await expect(
+    facts.getByText("Every fact found here is already listed with its source below.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(facts.getByText("No facts were found for this track.")).toHaveCount(0);
+  await expect(facts.getByRole("button", { name: "Find more facts", exact: true })).toBeVisible();
   const everyClaim = await everyClaimListed(page);
   expect(everyClaim.length).toBeGreaterThan(rows.length);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {

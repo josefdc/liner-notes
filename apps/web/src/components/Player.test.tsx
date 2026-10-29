@@ -656,6 +656,48 @@ describe('Player', () => {
       },
     );
 
+    it('says every fact found is listed below with its source when each one restated a sourced claim, and still offers more', async () => {
+      const track = {
+        ...withFacts([], [sourcedSample('c-known')]),
+        run: { id: 'r1', mode: 'live', verifier: { restated: 1 } },
+      } as unknown as TrackData;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('f2', 'New Fact', 'c-new')],
+              claims: [aClaim({ id: 'c-new', about: 'sample' })],
+              nextRound: 1,
+            },
+          ]}
+        />,
+      );
+      expect(
+        screen.getByText('Every fact found here is already listed with its source below.'),
+      ).toBeTruthy();
+      expect(screen.queryByText('No facts were found for this track.')).toBeNull();
+      fireEvent.click(moreButton());
+      expect(await screen.findByText('New Fact')).toBeTruthy();
+    });
+
+    it.each([
+      ['none was left out', { id: 'r1', mode: 'live', verifier: { restated: 0 } }],
+      ['the result does not say', { id: 'r1', mode: 'live' }],
+      ['the result has no run', undefined],
+    ])(
+      'says no facts were found when there are none and %s, and still offers more',
+      (_label, run) => {
+        const track = { ...withFacts([], []), run } as unknown as TrackData;
+        render(<MoreFactsPlayer track={track} answers={[]} />);
+        expect(screen.getByText('No facts were found for this track.')).toBeTruthy();
+        expect(
+          screen.queryByText('Every fact found here is already listed with its source below.'),
+        ).toBeNull();
+        expect(moreButton()).toBeTruthy();
+      },
+    );
+
     it("shows each fact's claim: a sourced sample links its source, a guessed one is possible", () => {
       const track = withFacts(
         [card('f1', 'Known Sample', 'c-known'), card('f2', 'Guessed Sample', 'c-guess')],

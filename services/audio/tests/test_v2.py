@@ -2025,15 +2025,17 @@ SOFT_THIRD_WRONG = {("essentia", 159): ("F#", "minor")}
 @pytest.mark.seeded
 @pytest.mark.estimators
 @pytest.mark.parametrize("root", range(12), ids=[f"{n}3" for n in signals.PITCH_NAMES])
-def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
+def test_a_chord_with_a_softer_third_over_a_doubled_root_gets_exactly_the_pinned_answers(root):
     """
     A triad with its root doubled an octave down and its third 1.5-6 dB softer
     (signals.SOFT_THIRD_GRID at every root, both modes, pumped, faded, with tremolo or stabbed;
     soft_third_indices): the doubled root is the strongest line and the third sits on its
-    flank, but down to 4.5 dB softer its notes still spell a chord, and the single-source rule
-    withholds no key. The other rules withhold many (one harmonic series, one held pitch, fewer
-    than three pitch classes): each estimator's answer is pinned exactly, the right key where
-    it is served and the rule's code where it is not.
+    flank, but down to 4.5 dB softer its notes still spell a chord. Each estimator's answer is
+    pinned exactly: the key it serves (32 of the 96; one of Essentia's is wrong) or the code of
+    the rule that withholds it (64: one harmonic series, one held pitch, fewer than three pitch
+    classes). The single-source rule withholds none of them: it is reached only when every
+    other rule lets the key through, so on the 32 it lets them all through, and on the 64 it is
+    not asked (for 3 and 131 it would withhold the key: see the test below).
     """
     answers, expected = {}, {}
     for index in soft_third_indices(root):

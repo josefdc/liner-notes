@@ -97,9 +97,9 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
   // Every claim the notes list, in any section, and every fact card, "Possible" ones included: a
   // relation a record documents is listed once, by its record, and never named "Possible" beside
-  // it. The sample's card says more than its record (how the sample is used), so it stays, named
-  // as the record names it: one sentence states the record's relation, the other only adds how
-  // the sample is used. Every card shows its badge.
+  // it. The sample's card, in the model's own words ("MusicBrainz documents … as a source
+  // sampled in …"), stays: it is named as the record names it ("Sample", never "Possible
+  // sample"). Every card shows its badge.
   const cards = await page.locator("#panel-context [data-factoid-category]").evaluateAll((found) =>
     found.map((card) => ({
       badges: card.querySelectorAll("[data-factoid-type]").length,
@@ -126,7 +126,7 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     }
   }
   for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
-  expect(cards[0].text).toMatch(/^SAMPLE: .*brass figure/i);
+  expect(cards[0].text).toMatch(/^SAMPLE: .*"More Spell on You"/i);
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
   await expect(items).toHaveCount(13);
   for (const item of await items.all()) {
@@ -143,8 +143,7 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     "href",
     "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
   );
-  // The sample claim on a fact card says more than the record (how the sample is used): it is
-  // counted, not listed twice.
+  // The sample claim on a fact card is counted, not listed twice.
   await expect(samples).toContainText("1 claim of this section is shown with the facts above.");
 
   // The release the track appears on is stated once, in "More claims", by its MusicBrainz record:

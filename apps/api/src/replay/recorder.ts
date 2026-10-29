@@ -23,15 +23,16 @@
  *   out: a viewer of the replay did neither;
  * - the excerpt of a web search result (a `tavily` item of the web or editorial tier: text the
  *   search fetched from a third-party page, never a source's API, the model or the app) that
- *   holds, outside its links, a run the long-token rule matches or a long base64 value (one with
- *   a piece of 12 or more characters between its "+" and "/"), becomes
+ *   holds, outside its links, a token-shaped run (`tokenSpans`: a run the long-token rule
+ *   matches, 32 or more hex digits, a long base64 value or a random-looking base64url run),
+ *   becomes
  *   "[excerpt withheld: it held a token-shaped run]" (WITHHELD_EXCERPT), whole, in every place
  *   the item appears; its title, url and source are kept (`withoutPageTokens`). A page's text
  *   may run words together ("StudioPiano2NotesGuitar2Tabs…") into that shape, and no word of a
  *   page that printed one is kept, so nothing glued to a run or beside it is written. Such an
  *   excerpt is refused instead, and kept as it is, when it holds a configured credential or 12
  *   characters in a row of one (as it is, URL-decoded with "+" read as a space or kept, and the
- *   credential with "+" as a space, "&#43;" or "%2B", or URL-encoded), any other secret shape in
+ *   credential with "+" as a space, "&#43;" or "%2B", or URL-encoded), a precise secret shape in
  *   any of those readings, or a link with a secret (`linkSecret`): by that rule's name. It is
  *   refused too when a claim or a map link cites the item ("a cited page excerpt holds a long
  *   token"). The recorder says which items it withheld and how many runs each held; the record
@@ -43,9 +44,15 @@
  * `done` (a stream cut short) or has no single `complete`; a paused run whose streams are not
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
- * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
- * outside the allow-listed source sites or one to them with a user name or password, or whose
- * path, query or fragment holds a secret shape or a key parameter (`linkSecret`), a preview or
+ * configured credential (also URL-encoded, or split by zero-width characters), a secret-shaped
+ * string (in any field, a credential's own format or name: PRECISE_SHAPES; in free text, also a
+ * long token, 32 or more hex digits other than the record's own commit, or a base64 value of
+ * random bytes; in an id field, a base64 value of random bytes or a token judged as a link's
+ * path segment is; in a web search page's excerpt, any token-shaped run), an e-mail address, a
+ * URL outside the allow-listed source sites or one to them with a user name or password, or
+ * whose path, query or fragment holds a secret shape, a signature, key,
+ * password or secret parameter (nested and URL-encoded too), or a token glued to its path
+ * (`linkSecret`), a preview or
  * media URL inside text (the Cover Art Archive link `archiveCoverOf` derives is allowed as the
  * result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
@@ -58,11 +65,11 @@
  * title or excerpt with a private @handle, profile boilerplate or a comment thread
  * (webTextIssue), web evidence the run routes refuse (heldTextIssue, which also reads a page
  * written without its scheme), an `error` or `interrupt` event, a commit that is not a commit
- * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The result's other producer checks
- * (`analysisIssues`) are reported as warnings: a run stored by older code may not pass them all,
- * and the record replays what was sent. The loader (records.ts) runs the same checks
- * (`recordIssues`) again on every file it reads, as far as a file can tell, so it never leaves
- * out a file the recorder wrote.
+ * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The
+ * result's other producer checks (`analysisIssues`) are reported as warnings: a run stored by
+ * older code may not pass them all, and the record replays what was sent. The loader (records.ts)
+ * runs the same checks (`recordIssues`) again on every file it reads, as far as a file can tell,
+ * so it never leaves out a file the recorder wrote.
  */
 
 import {
@@ -161,34 +168,436 @@ function isUserAction(event: { type: string; [field: string]: unknown }): boolea
 // =============================================================================
 // Checks
 // =============================================================================
+//
+// Two kinds of rule. The precise ones (PRECISE_SHAPES, the signed, key and secret parameters)
+// name a credential's own format or name, so they are refused wherever they appear, in any
+// field. The heuristic ones (a 32-hex run, a base64 value with short pieces, a random-looking
+// base64url run) read a value's randomness, and are applied only where a secret is plausible and
+// a false refusal is cheap: a web search page's excerpt (withheld, `pageExcerptVerdict`), a
+// link's query and fragment (refused, `linkSecret`), and a link's path and an id
+// (`tokenSegment`), where a run of up to 32 hex digits alone is a page's name. Free text (claims,
+// titles, a source's own text) is held to the precise rules, the long-token rule, the hex rule
+// and a strict base64 rule (`FREE_TEXT_SHAPES`); an id to the precise rules and the strict base64
+// rule (`ID_SHAPES`). A secret's name refuses a value that looks like a credential
+// (`credentialValue`), and any value under a password's or a token's own name when it is written
+// as a key: quoted, as a `name=` parameter, as XML, or at the start of a line.
 
-/** Text shaped like a credential, whatever its value (allow-listed page URLs left out). */
-const SECRET_SHAPES: Array<[string, RegExp]> = [
-  ["a bearer or basic credential", /\b(?:Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/],
+/** A rule a text is checked against: a pattern, or a test a pattern cannot express. */
+type Shape = { test(text: string): boolean };
+
+/** How often a letter and a digit meet in `text` ("a1", "1a"): random text has many. */
+const alternations = (text: string) => text.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g)?.length ?? 0;
+
+/**
+ * Zero-width characters and soft hyphens: they split a value without showing, so every text is
+ * read without them.
+ */
+const INVISIBLE = /[­᠎​-‏⁠-⁤﻿]/g;
+const visible = (text: string) => text.replace(INVISIBLE, "");
+
+/**
+ * True when a value given under a secret's name looks like a credential rather than words: no
+ * space, and 6 or more characters with a digit or a sign other than "-", "_" and "." ("hunter2",
+ * "Tr0ub4dor&3"), or 12 or more that are not words joined by "-", "_" or "." ("weekend-camping").
+ * A date or a time ("1994-10-18", "3:41") is not one, nor a title ("Hidden", "Bedtime Story").
+ */
+function credentialValue(value: string): boolean {
+  if (value === "" || /\s/.test(value)) return false;
+  if (/^\d{1,4}(?:[-/.:]\d{1,4}){1,2}$/.test(value)) return false;
+  if (value.length >= 6 && /[^A-Za-z_.-]/.test(value)) return true;
+  return (
+    value.length >= 12 && !/^(?:[A-Z]?[a-z]+|[A-Z]+)(?:[-_.](?:[A-Z]?[a-z]+|[A-Z]+))*$/.test(value)
+  );
+}
+
+/** A password's or secret's own word, as lower-case, Title-Case or upper-case text writes it. */
+const SECRET_WORD =
+  "(?:[Pp]ass(?:word|wd|phrase)?|PASS(?:WORD|WD|PHRASE)?|[Pp]wd|PWD|[Ss]ecret|SECRET)";
+
+/**
+ * The names a password or secret is written under: its word with any prefix (`db_password`,
+ * `DB_PASSWORD`, `client-secret`) or in camelCase (`dbPassword`, `apiSecret`), a service's access
+ * or secret key, and a Java session id. Each rule reads it after a separator, a quote, "<" or the
+ * start of a word, so never inside a word ("bypass", "compass").
+ */
+const SECRET_NAME = `(?:${[
+  `(?:[A-Za-z0-9]+[_-])*(?:${SECRET_WORD}|[a-z][a-z0-9]*(?:Pass(?:word|wd|phrase)?|Pwd|Secret))`,
+  "(?:[Aa]ccess|ACCESS|[Ss]ecret|SECRET)[_-](?:[Kk]ey|KEY)",
+  "[Jj][Ss]ession[Ii][Dd]|JSESSIONID",
+].join("|")})`;
+
+/** A quick test for a secret's name, read before the rules that name one. */
+const SECRET_WORDS = /pass|pwd|secret|key|session/i;
+
+/**
+ * A "pass" in any case and after any prefix (`weekend-pass`, `Backstage-Pass`), a bare "secret"
+ * or "top-secret", or a bare Title-Case "Password": a ticket or a song's name ("Secret",
+ * "Password") as often as a credential, so always read with `credentialValue`.
+ */
+const PLAIN_NAME =
+  /^(?:(?:[A-Za-z0-9]+[_-])*(?:[Pp]ass|PASS)|(?:(?:[Tt]op|TOP)[_-])?(?:[Ss]ecret|SECRET)|Password)$/;
+
+/** A working directory's path under `pwd` (`pwd: /home/user/music`) is not a password. */
+const DIRECTORY = (name: string, value: string) =>
+  /^(?:[Pp]wd|PWD)$/.test(name) && /^~?\//.test(value);
+
+/**
+ * True when `value`, given under the secret's name `name`, is refused: any value under a
+ * password's, a prefixed secret's or a token's own name written as a key (`keyed`), and
+ * otherwise, or under a `PLAIN_NAME`, a value that looks like a credential (`credentialValue`).
+ */
+const secretValue = (name: string, value: string, keyed: boolean) =>
+  !DIRECTORY(name, value) &&
+  (keyed && !PLAIN_NAME.test(name) ? value !== "" : credentialValue(value));
+
+/** A secret written as `name=value`, in a link's query or fragment or in text. */
+const SECRET_PARAMS = new RegExp(String.raw`(?:^|[\s?&;#])(${SECRET_NAME})=([^\s&;#]*)`, "g");
+
+/**
+ * A password or secret parameter: any value under a password's or a prefixed secret's name
+ * (`?pwd=`, `?db_password=`, `client_secret=`), and a value that looks like a credential
+ * (`credentialValue`) under a bare "pass", "secret" or "Password" (`PLAIN_NAME`:
+ * `?pass=weekend-camping` is a ticket).
+ */
+const SECRET_PARAM: Shape = {
+  test: (text) =>
+    SECRET_WORDS.test(text) &&
+    [...text.matchAll(SECRET_PARAMS)].some(([, name, value]) => secretValue(name, value, true)),
+};
+
+/** A quote as JSON, PHP, HTML or an escaped string writes one. */
+const QUOTE = String.raw`(?:\\?["'\x60]|&quot;|&#0*3[49];|&apos;|\\u0022|\\u0027)`;
+
+/** A field's value: quoted (up to its closing quote) or bare (up to a space or a delimiter). */
+const FIELD_VALUE = String.raw`(?:${QUOTE}([^"'\x60\\&<>\n]*)|([^\s"'\x60\\&<>,;}\])]*))`;
+
+/**
+ * The ways a password or secret field is written, as `[pattern, keyed]`: quoted, as JSON, PHP or
+ * an escaped string (`{"db_password": …}`, `'pass' => …`, `&quot;password&quot;: …`), and as XML
+ * (`<password>…</password>`), always keys; unquoted, as YAML, Ruby or a spaced assignment
+ * (`password: …`, `:password => …`, `PASSWORD = …`), a key only where `keyAt` finds one.
+ */
+const PASSWORD_FIELDS: Array<[RegExp, boolean]> = [
+  [new RegExp(String.raw`${QUOTE}(${SECRET_NAME})${QUOTE}\s*(?::|=>)\s*${FIELD_VALUE}`, "g"), true],
   [
-    "a key or token parameter",
-    /\b(?:api[-_]?key|access_token|client_secret|token)["']?\s*[:=]\s*\S/i,
+    new RegExp(
+      String.raw`(?<![A-Za-z0-9_-])(${SECRET_NAME})(?::\s*|\s*=>\s*|\s+=\s*|\s*=\s+)${FIELD_VALUE}`,
+      "g",
+    ),
+    false,
   ],
+  [new RegExp(String.raw`<(${SECRET_NAME})>([^<\s]*)</`, "g"), true],
+];
+
+/** A line's start, or a "{" or "," before a key. */
+const KEY_START = /[\r\n{,][ \t]*$/;
+
+/**
+ * True when an unquoted name at `at` in `text` is written as a key: at the start of a line or
+ * of the text, after "{" or "," (`{user: admin, password: …}`), or as a Ruby symbol
+ * (`:password`). Prose ("the password: swordfish", "Enter your password: Log in") is not.
+ */
+function keyAt(text: string, at: number): boolean {
+  const before = text.slice(Math.max(0, at - 40), at);
+  return before.endsWith(":") || KEY_START.test(before) || (at <= 40 && /^[ \t]*$/.test(before));
+}
+
+/**
+ * A password or secret field with a value: any value under a password's or a prefixed secret's
+ * name written as a key (`{"password": "letmein"}`, `db_password: x` on its own line,
+ * `<pwd>x</pwd>`), and one that looks like a credential in prose or under a `PLAIN_NAME`: a song
+ * called "Secret" or "Password" followed by another title or a time (`"Secret": "Bedtime Story"`,
+ * `"Password": "Hidden"`, `"Password": 3:41`), "the password: swordfish" and "a day-pass: €60"
+ * are not one.
+ */
+const PASSWORD_FIELD: Shape = {
+  test: (text) =>
+    SECRET_WORDS.test(text) &&
+    PASSWORD_FIELDS.some(([pattern, keyed]) =>
+      [...text.matchAll(pattern)].some((field) =>
+        secretValue(field[1], field[2] ?? field[3] ?? "", keyed || keyAt(text, field.index)),
+      ),
+    ),
+};
+
+/**
+ * A bearer token: "Bearer", in any case, then (after a space, a colon or a quote) 12 or more token
+ * characters, one of whose pieces between "-", ".", "_" and "~" has 8 or more characters and a
+ * digit, a "+", "/" or "=", or a capital after a small letter. "The bearer of bad news", "the
+ * standard bearer singer-songwriter" and "bearer 4u2c-the-world" are prose.
+ */
+const BEARERS = /\b(?:[Bb]earer|BEARER)(?::\s*|\s+)["']?([A-Za-z0-9._~+/=-]{12,})/g;
+
+/**
+ * A basic credential: "Basic", in any case, then (after a space, a colon or a quote) a base64
+ * value that decodes to UTF-8 text with a ":", a user name (maybe empty) and a password
+ * (`QWxhZGRpbjpvcGVuIHNlc2FtZQ==` is "Aladdin:open sesame", `Omh1bnRlcjI=` ":hunter2"). "Basic
+ * Channel", "a basic verse-chorus-verse", "a basic Am/F/C/G progression" and "a basic LinnDrum
+ * pattern" decode to bytes that are not text.
+ */
+const BASICS = /\b(?:[Bb]asic|BASIC)(?::\s*|\s+)["']?([A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9+/=])/g;
+
+/** Any value after an `Authorization: Basic` header, as text, JSON or an escaped string writes it. */
+const AUTHORIZATION_BASIC = /authorization\\?["']?\s*[:=]\s*\\?["']?basic[\s:]+\S/i;
+
+/** Strict UTF-8: a value that is not UTF-8 throws. */
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+/** True when the base64 `value` decodes to "user:password" text, the user maybe empty. */
+function basicPair(value: string): boolean {
+  let text: string;
+  try {
+    text = STRICT_UTF8.decode(Buffer.from(value, "base64"));
+  } catch {
+    return false;
+  }
+  return /^(?:[^\p{Cc}:]+:[^\p{Cc}]*|:[^\p{Cc}]+)$/u.test(text);
+}
+
+/**
+ * A Hugging Face token: "hf_" and 30 or more random letters, in which two capitals meet at least
+ * twice, as they do about 8 times in 34 random letters; a Title-Case phrase
+ * (`hf_ThisIsTheHalfwayPointOfTheRecord`) has none.
+ */
+const HUGGING_FACE_TOKENS = /hf_([A-Za-z]{30,})/g;
+const HUGGING_FACE_TOKEN: Shape = {
+  test: (text) =>
+    text.includes("hf_") &&
+    [...text.matchAll(HUGGING_FACE_TOKENS)].some(
+      ([, letters]) => (letters.match(/[A-Z](?=[A-Z])/g)?.length ?? 0) >= 2,
+    ),
+};
+
+const BEARER_OR_BASIC: Shape = {
+  test: (text) =>
+    /bearer|basic/i.test(text) &&
+    ([...text.matchAll(BEARERS)].some(([, value]) =>
+      value.split(/[-._~]/).some((piece) => piece.length >= 8 && /\d|[+/=]|[a-z][A-Z]/.test(piece)),
+    ) ||
+      AUTHORIZATION_BASIC.test(text) ||
+      [...text.matchAll(BASICS)].some(([, value]) => basicPair(value))),
+};
+
+/**
+ * An AWS access key id: "AKIA" or "ASIA" and 16 capitals and digits, a letter among them, with
+ * no capital just before it (a digit there, "1AKIA…", is read) and no capital or digit just
+ * after it: `#ASIATOUR2023SEOULKPOP` is a hashtag, `ASIA1982GEFFENGHS2008` a catalogue number and
+ * `AKIA0000000000000001` a matrix number.
+ */
+const AWS_KEY_IDS = /(?<![A-Z])(?:AKIA|ASIA)([A-Z0-9]{16})(?![A-Z0-9])/g;
+const AWS_KEY_ID: Shape = {
+  test: (text) =>
+    /AKIA|ASIA/.test(text) &&
+    [...text.matchAll(AWS_KEY_IDS)].some(([, rest]) => /[A-Z]/.test(rest)),
+};
+
+/**
+ * A camelCase token name (`accessToken`, `apiToken`, `authToken`, `sessionToken`) as a quoted
+ * key or a `name=` parameter, with any value; "the fanToken: CHZ" is prose.
+ */
+const CAMEL_TOKEN_KEY = new RegExp(
+  String.raw`${QUOTE}[a-z][a-z0-9]*Token${QUOTE}\s*(?::|=>|=)\s*[^\s,}]|(?<![A-Za-z0-9])[a-z][a-z0-9]*Token=[^\s&;#]`,
+);
+
+/** A camelCase token name in a spaced assignment: `musicToken = 5` is a count, not a token. */
+const CAMEL_TOKEN_SPACED = /(?<![A-Za-z0-9])[a-z][a-z0-9]*Token(?:\s+=\s*|\s*=\s+)([^\s&;#"',]+)/g;
+
+/**
+ * A key or a token under its name, with a value, as a parameter or a field: `api_key=`,
+ * `"access_token": …`, `auth_token=`, and camelCase token names (`CAMEL_TOKEN_KEY`, and
+ * `CAMEL_TOKEN_SPACED` with a value that looks like a credential).
+ */
+const KEY_OR_TOKEN: Shape = {
+  test: (text) =>
+    /(?<![A-Za-z0-9])(?:api[-_]?key|access_token|client_secret|token|(?:access|secret)[_-]key)["']?\s*[:=]\s*\S/i.test(
+      text,
+    ) ||
+    (text.includes("Token") &&
+      (CAMEL_TOKEN_KEY.test(text) ||
+        [...text.matchAll(CAMEL_TOKEN_SPACED)].some(([, value]) => credentialValue(value)))),
+};
+
+/**
+ * Credentials by their own format or name, refused in any field, whatever sits before or after
+ * them (a key glued to a word or behind an escaped "\n" is still one).
+ */
+const PRECISE_SHAPES: Array<[string, Shape]> = [
+  ["a bearer or basic credential", BEARER_OR_BASIC],
+  ["a key or token parameter", KEY_OR_TOKEN],
+  ["a password or secret parameter", SECRET_PARAM],
+  ["a password field", PASSWORD_FIELD],
   ["an OpenAI-style key", /\bsk-[A-Za-z0-9_-]{16,}/],
-  ["a Tavily key", /\btvly-[A-Za-z0-9_-]{8,}/],
+  ["a Tavily key", /tvly-[A-Za-z0-9_-]{8,}/],
   ["a Spotify access token", /\bBQ[A-Za-z0-9_-]{40,}/],
+  ["a Google API key", /AIza[0-9A-Za-z_-]{35}/],
+  ["a Stripe key", /(?:sk|rk)_(?:live|test)_[0-9A-Za-z]{16,}/],
+  ["a GitHub token", /gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}/],
+  ["a GitLab token", /glpat-[A-Za-z0-9_-]{20}/],
+  ["a Hugging Face token", HUGGING_FACE_TOKEN],
+  ["a Slack token", /xox[abprs]-[A-Za-z0-9-]{10,}/],
+  ["a Turnstile secret", /0x4AAAAAAA[A-Za-z0-9_-]{20,}/],
+  ["a Discord bot token", /[MNO][A-Za-z0-9_-]{23,27}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,40}/],
+  ["an AWS access key id", AWS_KEY_ID],
   ["a JSON web token", /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./],
   ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  [
-    "a long token",
-    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}\b/,
-  ],
-  ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
+  // Read from the start of a run of address characters only, so a long run costs one pass.
+  ["an e-mail address", /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
 
 /**
- * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
- * message may not: reasonIssue). A bare `key` parameter is one only with a token-shaped value:
- * 16 or more characters in which letters and digits alternate at least twice (`?key=Am`,
- * `?key=the-verve-bitter-sweet-symphony-1997` name a musical key or a page).
+ * 40 or more letters, digits, "-" and "_" with a digit and both cases, as a random key is. Read
+ * from the start of a run only (so a long run is read once).
  */
-const SIGNED_URL =
-  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=(?=(?:[A-Za-z0-9_-]*?(?:[A-Za-z]\d|\d[A-Za-z])){2})[A-Za-z0-9_-]{16})/i;
+const LONG_TOKEN =
+  /(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}/;
+const LONG_TOKENS = new RegExp(LONG_TOKEN.source, "g");
+
+/**
+ * 32 or more hex digits, in either case, with a digit and a letter (an API key: Last.fm's are
+ * 32; a digest), wherever the run starts ("0x…", "apikey…", after an escaped "\n"). MusicBrainz
+ * ids are UUIDs, whose runs of hex digits are 12 at most; the record's own commit is left out of
+ * the text first (`leaks`).
+ */
+const HEX_RUNS = /(?<![0-9a-f])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{32,}/gi;
+const HEX_RUN = new RegExp(HEX_RUNS.source, "i");
+const HEX_KEY: Shape = { test: (text) => HEX_RUN.test(text) };
+
+/**
+ * Runs of 40 or more base64 characters, read from a run's start only (so a long run is read
+ * once), with any "=" padding.
+ */
+const STRICT_BASE64_RUNS = /(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{40,}={0,2}/g;
+
+/**
+ * A base64 value as random bytes make one (`openssl rand -base64 32`), told from a breadcrumb or
+ * a genre list in prose: a run of 40 or more with a "+" or "/" or ending in "=", one of whose
+ * pieces between them has 16 or more characters with at least 2 capitals and 2 small letters, a
+ * letter and a digit meeting at least 4 times (so 2 digits or more). "Home/TheVerve/UrbanHymns/1997" and
+ * "Pop/Rock/Electronic/2001" have short pieces; "Discography/DaftPunk/Discovery2001OneMoreTime"
+ * has a long one whose words meet a year twice.
+ */
+const STRICT_BASE64: Shape = {
+  test: (text) =>
+    /[A-Za-z0-9+/]{40}/.test(text) &&
+    [...text.matchAll(STRICT_BASE64_RUNS)].some(
+      ([run]) =>
+        /[+/=]/.test(run) &&
+        run
+          .split(/[+/=]/)
+          .some(
+            (piece) =>
+              piece.length >= 16 &&
+              (piece.match(/[A-Z]/g)?.length ?? 0) >= 2 &&
+              (piece.match(/[a-z]/g)?.length ?? 0) >= 2 &&
+              alternations(piece) >= 4,
+          ),
+    ),
+};
+
+/** Free text is held to the precise rules, the long-token, hex and strict base64 rules. */
+const FREE_TEXT_SHAPES: Array<[string, Shape]> = [
+  ...PRECISE_SHAPES,
+  ["a long token", LONG_TOKEN],
+  ["a hex key", HEX_KEY],
+  ["a base64 value", STRICT_BASE64],
+];
+
+/** An id field is held to the precise rules and the strict base64 rule (its runs: `tokenInId`). */
+const ID_SHAPES: Array<[string, Shape]> = [...PRECISE_SHAPES, ["a base64 value", STRICT_BASE64]];
+
+/**
+ * The base64 values of a text: runs of 40 or more characters with a "+" or "/" in them, mixed
+ * case and a digit (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made), whose pieces
+ * between "+" and "/" may all be shorter than the long-token rule reads (`base64Value`).
+ */
+const BASE64_RUNS =
+  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g;
+const BASE64_PIECE = 12;
+const BASE64_HUMP_SPAN = 12;
+
+/**
+ * True when a run BASE64_RUNS found is a base64 value: one of its pieces has 12 or more
+ * characters (BASE64_PIECE), or, every piece being short, a lower-case letter is followed by a
+ * capital at least once per 12 characters, as random text has about once per 6. A chord line
+ * ("Am/G/Fmaj7/C/…/Bm7b5/E7"), a search ("Bitter+Sweet+Symphony+…") or a breadcrumb
+ * ("Home/Music/Daft/Punk/…") has short pieces and few or no such humps. A genre or label list
+ * may read as one ("Pop/Rock/Electronic/Instrumental/2001"), which is why the rule is read only
+ * in a page's excerpt (withheld) and a link's query or fragment.
+ */
+function base64Value(run: string): boolean {
+  if (run.split(/[+/]/).some((piece) => piece.length >= BASE64_PIECE)) return true;
+  const humps = run.match(/[a-z](?=[A-Z])/g)?.length ?? 0;
+  return humps * BASE64_HUMP_SPAN >= run.length;
+}
+
+/** The long base64 values of `text` (BASE64_RUNS that are `base64Value`s). */
+const base64Values = (text: string) =>
+  [...text.matchAll(BASE64_RUNS)].filter(([run]) => base64Value(run));
+const BASE64_VALUE: Shape = { test: (text) => base64Values(text).length > 0 };
+
+/** What a link's query is held to: the precise rules and the heuristic ones but `randomRuns`. */
+const QUERY_SHAPES: Array<[string, Shape]> = [
+  ...PRECISE_SHAPES,
+  ["a long token", LONG_TOKEN],
+  ["a hex key", HEX_KEY],
+  ["a base64 value", BASE64_VALUE],
+];
+
+/**
+ * Parameters whose value, a run of hex digits, is a share id (SoundCloud's and Spotify's `si`), a
+ * click id (`msclkid`), a search signature (Bandcamp's `search_sig`), a version or a cache-buster,
+ * not a key: left out of a query before the hex rule reads it. Any other name keeps the rule.
+ */
+const HEX_ID_PARAMS =
+  /([?&;])(?:si|msclkid|search_sig|v|cb|cachebust|_|hash|etag|rev|version)=[0-9A-Fa-f]{32,}(?=$|[&;#])/gi;
+
+/**
+ * Parameters of a URL signed with an expiring token (Akamai, AWS and Google Cloud signatures,
+ * OAuth), or carrying a token (`token`, `access_token`, `auth_token`, `refresh_token`,
+ * `id_token`, …) or an API key, on any host (as an error message may not: reasonIssue), in its
+ * query or its fragment (`#access_token=`, as an OAuth reply carries it).
+ */
+const SIGNED_PARAM =
+  /[?&;~#](?:hdnea|hdnts|x-(?:amz|goog)-[a-z-]+|sig|signature|oauth_[a-z_]+|(?:[a-z0-9]+_)*token|api[-_]?key)=/i;
+
+/** A bare `key` parameter's value, as it is written in a link. */
+const KEY_PARAM = /[?&;~#!]key=([^&#;\s<>]*)/gi;
+
+/**
+ * True when a `key` parameter's value looks random: without quotes (`signedUrl` reads the link
+ * URL-decoded too), it starts with 16 or more letters, digits and `. _ ~ + / = -` in which a
+ * letter and a digit meet at least twice, or 10 to 15 of them with both cases and a digit. Never a
+ * date or time (`2019-05-23T12:00`, `2019-05-23T123000Z`), or words and numbers each in one piece
+ * (`VUSCD82-UK1997`, `TheVerve12`, `8A-A-minor`): a catalogue number or a key's name. A musical
+ * key (`Am`, `C%23m`, `A minor`) is shorter, and a page's slug of words
+ * (`the-verve-bitter-sweet-symphony-1997`) has no letter beside a digit.
+ */
+function tokenKey(value: string): boolean {
+  const plain = value.replace(/^["']+/, "");
+  const run = plain.match(/^[A-Za-z0-9._~+/=-]*/)?.[0] ?? "";
+  if (/^\d{4}-\d{2}-\d{2}(?:T\d{2})?/.test(run)) return false;
+  if (run.split(/[-_.]/).every((piece) => /^(?:[A-Za-z]+\d*|\d+[A-Za-z]*)$/.test(piece)))
+    return false;
+  if (run.length >= 16) return alternations(run) >= 2;
+  return run.length >= 10 && /[A-Z]/.test(run) && /[a-z]/.test(run) && /\d/.test(run);
+}
+
+/**
+ * `text` as written and URL-decoded once and twice, with "+" kept: a parameter nested in another
+ * (`?next=%2Fcb%3Fpassword%3D…`, or `%253F…` encoded twice) is read too.
+ */
+function nested(text: string): string[] {
+  const once = decodedKeepingPlus(text);
+  return [...new Set([text, once, decodedKeepingPlus(once)])];
+}
+
+/** True when `text` holds a signed URL, or a token or random-looking key parameter, nested or not. */
+function signedUrl(text: string): boolean {
+  return nested(text).some(
+    (form) =>
+      SIGNED_PARAM.test(form) || [...form.matchAll(KEY_PARAM)].some(([, value]) => tokenKey(value)),
+  );
+}
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -214,7 +623,7 @@ const WIKIPEDIA = /^[a-z-]+\.(?:m\.)?wikipedia\.org$/;
 
 /** True for a page on an allow-listed site (not signed). */
 function allowedUrl(url: string): boolean {
-  if (SIGNED_URL.test(url)) return false;
+  if (signedUrl(url)) return false;
   try {
     const { protocol, hostname } = new URL(url.startsWith("//") ? `https:${url}` : url);
     if (protocol !== "https:" && protocol !== "http:") return false;
@@ -265,66 +674,190 @@ function webEvidenceTexts(value: unknown, path = "", paths = new Set<string>()):
 }
 
 /**
- * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, 32 or
- * more hex characters, or 32 or more base64 characters without word structure (no separator
- * such as "-", "_" or ".", and letters and digits alternating throughout, as in random text). A
- * slug of words, Title-Case or not ("Why-was-Ice-Ice-Baby-so-popular-in-1990",
- * "IceIceBabyVanillaIce1990SingleRelease"), is a page name, not a token.
+ * Where a piece or segment is read: a link's path or an id, where a run of up to 32 hex digits
+ * alone is a page's or a record's name (AP News and Notion end their article links in a 32-hex
+ * id, Last.fm's images and MD5 directories are hex, MusicBrainz ids are UUIDs) and a longer one
+ * (a SHA-256, a 40-hex key) is not, or a link's fragment, where none is.
  */
-function tokenSegment(segment: string): boolean {
+type Place = "path" | "fragment";
+
+const HEX_ONLY = /^[0-9A-Fa-f]+$/;
+
+/** The longest run of hex digits alone a path or an id names a page or a record by (an MD5). */
+const HEX_ID = 32;
+
+/**
+ * Apple Music's playlist ids (`pl.<32 hex digits>`), on its own hosts only and in a link's path
+ * only: a playlist's name, kept whatever the hex rule reads.
+ */
+const APPLE_HOSTS: ReadonlySet<string> = new Set([
+  "music.apple.com",
+  "embed.music.apple.com",
+  "geo.music.apple.com",
+  "itunes.apple.com",
+]);
+const APPLE_PLAYLIST = /^pl\.[0-9a-f]{32}$/i;
+
+/**
+ * The paths of the excerpts of web search pages (PAGE_SOURCES at PAGE_TIERS), as `strings`
+ * writes them.
+ */
+function pageExcerptPaths(value: unknown, path = "", paths = new Set<string>()): Set<string> {
+  const at = (name: string) => (path ? `${path}.${name}` : name);
+  if (Array.isArray(value)) {
+    for (const [i, item] of value.entries()) pageExcerptPaths(item, `${path}[${i}]`, paths);
+  } else if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    if (PAGE_SOURCES.has(item.source) && PAGE_TIERS.has(item.sourceTier)) paths.add(at("excerpt"));
+    for (const [name, inner] of Object.entries(item)) pageExcerptPaths(inner, at(name), paths);
+  }
+  return paths;
+}
+
+/**
+ * A piece of a link's path or fragment (between its separators) shaped like a credential: 32 or
+ * more base64 characters in which letters and digits alternate at least 4 times, as in random
+ * text, or more than 32 hex digits (in a fragment, 32 or more). A word, Title-Case or not
+ * ("IceIceBabyVanillaIce1990SingleRelease"), is a name, not a token.
+ */
+function tokenPiece(piece: string, place: Place): boolean {
+  if (!/^[A-Za-z0-9+=]{32,}$/.test(piece)) return false;
+  if (HEX_ONLY.test(piece)) return place === "fragment" || piece.length > HEX_ID;
+  return alternations(piece) >= 4;
+}
+
+/**
+ * A path segment, fragment or id part shaped like a credential: a JSON web token, an
+ * "sk-"/"pk-" style key, a piece between any of its separators that is one (`tokenPiece`: a token
+ * glued to a slug by ",", ".", "-", "_" or ":" is judged on its own), or a random-looking
+ * base64url run (`randomRuns`; in a fragment, `denseRun` too). A slug of words, Title-Case or not
+ * ("Why-was-Ice-Ice-Baby-so-popular-in-1990"), is a page name.
+ */
+function tokenSegment(segment: string, place: Place): boolean {
   if (/^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(segment)) return true;
   if (/^(?:sk|pk)[-_][A-Za-z0-9_-]{16,}$/.test(segment)) return true;
-  if (/^[A-Fa-f0-9]{32,}$/.test(segment)) return true;
-  if (!/^[A-Za-z0-9+/=]{32,}$/.test(segment)) return false;
-  const alternations = segment.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
-  return alternations.length >= 4;
+  return (
+    segment.split(/[^A-Za-z0-9+=]/).some((piece) => tokenPiece(piece, place)) ||
+    randomRuns(segment, place).length > 0 ||
+    (place === "fragment" && denseRun(segment))
+  );
+}
+
+/** A year or decade as a word ("1960s", "21st"): its letter beside a digit is not randomness. */
+const NUMBER_WORD = /^\d+(?:s|st|nd|rd|th)$/;
+
+/**
+ * True when `text` holds a run of 32 or more letters, digits, "-" and "_", in any case, in which a
+ * letter and a digit meet at least once per 8 characters, years and decades left out: a key a
+ * fragment carries, lower-case (`#7h5n1yd0-eyq67rlg17_ly3lrwqc_4aq06tp_-lqo6k`) or a UUID. A
+ * section anchor of words and decades (`Charts_of_the_1960s_1970s_1980s_and_1990s`,
+ * `UK_1960s_1970s_1980s_1990s_2000s_singles`) is not one.
+ */
+function denseRun(text: string): boolean {
+  for (const [run] of text.matchAll(/[A-Za-z0-9_-]{32,}/g)) {
+    let meets = 0;
+    for (const piece of run.split(/[-_]/)) {
+      if (!NUMBER_WORD.test(piece)) meets += alternations(piece);
+    }
+    if (meets * 8 >= run.length) return true;
+  }
+  return false;
+}
+
+const RANDOM_RUN = 32;
+/** A random run holds one piece this long at least: a key's pieces between "-" and "_" are long. */
+const RANDOM_PIECE = 8;
+/** A word, a number or a decade ("Verve", "UK", "1997", "1960s"): it ends a random run. */
+const WORD_PIECE = /^(?:[A-Z]?[a-z]+|[A-Z]+|\d+(?:s|st|nd|rd|th)?)$/;
+
+const DIGIT = 1;
+const LETTER = 2;
+const kind = (code: number) =>
+  code >= 48 && code <= 57
+    ? DIGIT
+    : (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+      ? LETTER
+      : 0;
+
+/**
+ * The random-looking base64url runs of `text`: stretches of 32 or more letters, digits, "-" and
+ * "_" in which a letter and a digit meet at least once per 8 characters (a key a link carries,
+ * `#Ab3dEf6hIj9lMn2pQr5t-Uv8xYz1bCd4fGh7K0mNq_RsTu`). A stretch runs across "-" and "_" but
+ * stops at a word of 3 or more characters, so a key glued to a slug is judged on its own and a
+ * slug or section anchor of words and years (`Track_listing_and_formats_1997_UK_CD_single`,
+ * `UK_1960s_1970s_1980s_1990s_2000s`), or a Spotify id glued to one, is not one. It holds a piece
+ * of 8 or more (`2Pac-K-Ci-JoJo-B2K-UB40-U2-R2D2` has none) and a digit and a letter; in a path
+ * or an id, letters of both cases too, as base64url has, so hex ids and UUIDs (`mb-<uuid>`) are
+ * names there. Linear: each stretch's best
+ * window (piece-aligned, 32 or more long) is found with two pointers over running sums.
+ */
+function randomRuns(text: string, place: Place): Array<readonly [number, number]> {
+  const found: Array<readonly [number, number]> = [];
+  for (const match of text.matchAll(/[A-Za-z0-9_-]{32,}/g)) {
+    const run = match[0];
+    const pieces = [...run.matchAll(/[A-Za-z0-9]+/g)].map((p) => [p.index, p[0]] as const);
+    let first = 0;
+    for (let i = 0; i <= pieces.length; i++) {
+      const piece = pieces[i]?.[1];
+      if (piece !== undefined && !(piece.length >= 3 && WORD_PIECE.test(piece))) continue;
+      const chain = pieces.slice(first, i);
+      first = i + 1;
+      if (chain.length === 0) continue;
+      const start = chain[0][0];
+      const end = chain[chain.length - 1][0] + chain[chain.length - 1][1].length;
+      if (end - start < RANDOM_RUN) continue;
+      if (!chain.some(([, p]) => p.length >= RANDOM_PIECE)) continue;
+      const stretch = run.slice(start, end);
+      if (!/\d/.test(stretch) || !/[A-Za-z]/.test(stretch)) continue;
+      if (place === "path" && !(/[A-Z]/.test(stretch) && /[a-z]/.test(stretch))) continue;
+      if (
+        densest(
+          stretch,
+          chain.map(([at, p]) => [at - start, at - start + p.length] as const),
+        )
+      ) {
+        found.push([match.index + start, match.index + end]);
+      }
+    }
+  }
+  return found;
 }
 
 /**
- * True when `text` holds a random-looking base64url run: 32 or more letters, digits, "-" and "_"
- * in which a letter and a digit meet at least once per 8 characters (a key a link carries in its
- * fragment, `#Ab3dEf6hIj9lMn2pQr5t-Uv8x…`). A section anchor of words and years
- * (`#Track_listing_and_formats_1997_UK_CD_single`, `#Charts_of_the_1960s_1970s_1980s_and_1990s`)
- * is not one.
+ * True when a window of `stretch` from a piece's start to a piece's end, 32 or more long, has a
+ * letter and a digit meeting at least once per 8 characters: 8 × meetings − length ≥ 0, found
+ * with running sums and the least sum before each end.
  */
-function randomRun(text: string): boolean {
-  return [...text.matchAll(/[A-Za-z0-9_-]{32,}/g)].some(([run]) => {
-    const alternations = run.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
-    return alternations.length * 8 >= run.length;
-  });
+function densest(stretch: string, pieces: ReadonlyArray<readonly [number, number]>): boolean {
+  // meets[k]: how many characters before position k meet the next one as a letter and a digit.
+  const meets = new Int32Array(stretch.length + 1);
+  for (let k = 0; k < stretch.length; k++) {
+    const a = kind(stretch.charCodeAt(k));
+    const b = k + 1 < stretch.length ? kind(stretch.charCodeAt(k + 1)) : 0;
+    meets[k + 1] = meets[k] + (a && b && a !== b ? 1 : 0);
+  }
+  // A window [s, e) holds meets[e - 1] − meets[s] meetings (pairs at s … e − 2).
+  let least = Number.POSITIVE_INFINITY;
+  let next = 0;
+  for (const [, end] of pieces) {
+    while (next < pieces.length && pieces[next][0] <= end - RANDOM_RUN) {
+      const s = pieces[next][0];
+      least = Math.min(least, 8 * meets[s] - s);
+      next++;
+    }
+    if (least !== Number.POSITIVE_INFINITY && 8 * meets[end - 1] - end >= least) return true;
+  }
+  return false;
 }
 
-/** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
-const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
-
-/** The long-token rule of SECRET_SHAPES. */
-const LONG_TOKEN = (SECRET_SHAPES.find(([what]) => what === "a long token") as [string, RegExp])[1];
-
-/** Every other rule of SECRET_SHAPES: what a page's excerpt holding one is refused for, by name. */
-const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
-
-/** The runs of a text the long-token rule matches. */
-const LONG_TOKENS = new RegExp(LONG_TOKEN.source, "g");
-
-/**
- * The base64 values of a text: runs of 40 or more characters with a "+" or "/" in them, mixed
- * case and a digit (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made), whose pieces
- * between "+" and "/" may all be shorter than the long-token rule reads. A run counts only when
- * one of its pieces has 12 or more characters (BASE64_PIECE): words joined by "/" or "+" (a chord
- * line "Am/G/Fmaj7/C/…", a search "Bitter+Sweet+Symphony+…", a breadcrumb) are text.
- */
-const BASE64_RUNS =
-  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g;
-const BASE64_PIECE = 12;
-
-/** The spans of `text` that are long token-shaped runs (LONG_TOKENS, BASE64_RUNS). */
+/** The spans of `text` that are token-shaped runs: long tokens, hex runs, base64 values, random runs. */
 function tokenSpans(text: string): Array<readonly [number, number]> {
-  const base64 = [...text.matchAll(BASE64_RUNS)].filter((m) =>
-    m[0].split(/[+/]/).some((piece) => piece.length >= BASE64_PIECE),
-  );
-  return [...text.matchAll(LONG_TOKENS), ...base64].map(
-    (m) => [m.index, m.index + m[0].length] as const,
-  );
+  return [
+    ...[...text.matchAll(LONG_TOKENS), ...text.matchAll(HEX_RUNS), ...base64Values(text)].map(
+      (m) => [m.index, m.index + m[0].length] as const,
+    ),
+    ...randomRuns(text, "path"),
+  ];
 }
 
 /**
@@ -413,21 +946,24 @@ function tokenRuns(text: string): number {
 }
 
 /**
- * What the record does with a web search page's excerpt: keep it (null: it holds no long
- * token-shaped run, and is checked as any text is), withhold it (the runs it holds), or refuse it
- * by name. An excerpt with a run is refused, and left as it is, when it holds a configured
- * credential or 12 characters in a row of one (`holdsSecretPart`), any other secret shape (in any
+ * What the record does with a web search page's excerpt: keep it (null: it holds no token-shaped
+ * run, and is checked as any text is), withhold it (the runs it holds: a long token, a hex run, a
+ * base64 value or a random base64url run, `tokenSpans`), or refuse it by name. A page may print a
+ * checksum or run words together into one of those shapes, so the shape alone only withholds the
+ * excerpt. An excerpt with a run is refused, and left as it is, when it holds a configured
+ * credential or 12 characters in a row of one (`holdsSecretPart`), a precise secret shape (in any
  * reading), or a link with a secret (`linkSecret`): what it held is named, not hidden.
  */
 function pageExcerptVerdict(
-  excerpt: string,
+  written: string,
   secrets: readonly string[],
 ): { withhold: number } | { refuse: string } | null {
+  const excerpt = visible(written);
   const runs = tokenRuns(excerpt);
   if (runs === 0) return null;
   if (holdsSecretPart(excerpt, secrets)) return { refuse: "a configured credential" };
   const forms = readings(excerpt);
-  const other = OTHER_SECRET_SHAPES.find(([, pattern]) => forms.some((form) => pattern.test(form)));
+  const other = PRECISE_SHAPES.find(([, pattern]) => forms.some((form) => pattern.test(form)));
   if (other) return { refuse: other[0] };
   for (const url of excerpt.match(URL_IN_TEXT) ?? []) {
     const secret = linkSecret(url);
@@ -475,10 +1011,19 @@ export function withoutPageTokens(
   found: PageExcerpts,
   path = "",
 ): unknown {
+  return judgingLinksOnce(() => pageTokensOut(value, secrets, found, path));
+}
+
+function pageTokensOut(
+  value: unknown,
+  secrets: readonly string[],
+  found: PageExcerpts,
+  path = "",
+): unknown {
   const at = (name: string | number) =>
     typeof name === "number" ? `${path}[${name}]` : path ? `${path}.${name}` : name;
   if (Array.isArray(value)) {
-    return value.map((item, i) => withoutPageTokens(item, secrets, found, at(i)));
+    return value.map((item, i) => pageTokensOut(item, secrets, found, at(i)));
   }
   if (value === null || typeof value !== "object") return value;
   const item = value as Record<string, unknown>;
@@ -499,7 +1044,7 @@ export function withoutPageTokens(
   return Object.fromEntries(
     Object.entries(item).map(([key, inner]) => [
       key,
-      withoutPageTokens(inner, secrets, found, at(key)),
+      pageTokensOut(inner, secrets, found, at(key)),
     ]),
   );
 }
@@ -520,14 +1065,46 @@ function citedEvidenceIds(value: unknown, ids = new Set<string>()): Set<string> 
 }
 
 /**
- * Why a link holds something shaped like a secret, or null: a signed URL or a key or token
- * parameter, a user name or password, a secret shape in its query, or in its path or fragment
- * (read with "+" kept, and where a long run is judged by `tokenSegment`, so a page's slug of
- * words or a section anchor is not one), or a random-looking base64url run in its fragment
- * (`randomRun`).
+ * What `linkSecret` found for each link already judged in the check under way (a record names a
+ * link many times), or null outside one: kept for one call of `leaks`, `withoutPageTokens` or
+ * `recordIssues` only, so no text outlives the record it came from.
+ */
+let judgedLinks: Map<string, string | null> | null = null;
+
+/** How many links the check under way has judged: 0 outside a check, as none is kept. */
+export const linksJudgedNow = () => judgedLinks?.size ?? 0;
+
+/** Runs `check` with links judged once each (`judgedLinks`), for this call only. */
+function judgingLinksOnce<T>(check: () => T): T {
+  if (judgedLinks) return check();
+  judgedLinks = new Map();
+  try {
+    return check();
+  } finally {
+    judgedLinks = null;
+  }
+}
+
+/**
+ * Why a link holds something shaped like a secret, or null: a signed URL or a token or key
+ * parameter (`signedUrl`), a user name or password, a secret shape in its query (the precise
+ * rules, among them a password or secret parameter, and the long-token, hex and base64 rules; also
+ * in a parameter nested in another and URL-encoded once or twice), or in its path or fragment
+ * (read with "+" kept:
+ * the precise rules, and `tokenSegment`, piece by piece, so a page's slug of words, a section
+ * anchor or a hex id in a path is not one, and a token glued to a slug is), or a base64 value in
+ * its fragment.
  */
 function linkSecret(url: string): string | null {
-  if (SIGNED_URL.test(url)) return "a signed URL";
+  const known = judgedLinks?.get(url);
+  if (known !== undefined) return known;
+  const secret = judgeLink(visible(url));
+  judgedLinks?.set(url, secret);
+  return secret;
+}
+
+function judgeLink(url: string): string | null {
+  if (signedUrl(url)) return "a signed URL";
   let parsed: URL;
   try {
     parsed = new URL(url.startsWith("//") ? `https:${url}` : url);
@@ -536,27 +1113,38 @@ function linkSecret(url: string): string | null {
   }
   // A user name or a password in a link is a credential, whatever it looks like.
   if (parsed.username || parsed.password) return "credentials in a link";
-  const scan = (text: string, shapes: Array<[string, RegExp]>, decode: (t: string) => string) =>
-    shapes.find(([, pattern]) => pattern.test(text) || pattern.test(decode(text)))?.[0] ?? null;
-  const inQuery = scan(parsed.search, SECRET_SHAPES, decoded);
+  const scan = (forms: string[], shapes: Array<[string, Shape]>) =>
+    shapes.find(([, pattern]) => forms.some((form) => pattern.test(form)))?.[0] ?? null;
+  const query = parsed.search;
+  const queryForms = [...new Set([decoded(query), ...nested(query)])];
+  const inQuery = scan(
+    queryForms.map((form) => form.replace(HEX_ID_PARAMS, "$1")),
+    QUERY_SHAPES,
+  );
   if (inQuery) return `${inQuery} in a link`;
   // The path and the fragment are scanned too: a page link may carry a capability token or an
   // address there. A "+" in either is a "+" ("/music/Basic+Channel/"), not a space.
-  for (const [part, where] of [
+  for (const [part, place] of [
     [parsed.pathname, "path"],
     [parsed.hash.slice(1), "fragment"],
   ] as const) {
-    const shape = scan(part, PATH_SECRET_SHAPES, decodedKeepingPlus);
+    const forms = nested(part);
+    const shape = scan(forms, PRECISE_SHAPES);
     if (shape) return `${shape} in a link`;
-    if (decodedKeepingPlus(part).split("/").some(tokenSegment))
-      return `a token in a link's ${where}`;
+    const own = (segment: string) =>
+      place === "path" && APPLE_HOSTS.has(parsed.hostname) && APPLE_PLAYLIST.test(segment);
+    const token = forms.some(
+      (form) =>
+        form.split("/").some((segment) => !own(segment) && tokenSegment(segment, place)) ||
+        (place === "fragment" && BASE64_VALUE.test(form)),
+    );
+    if (token) return `a token in a link's ${place}`;
   }
-  if (randomRun(decodedKeepingPlus(parsed.hash.slice(1)))) return "a token in a link's fragment";
   return null;
 }
 
 function plainWebPage(url: string): boolean {
-  if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
+  if (signedUrl(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -570,7 +1158,12 @@ function plainWebPage(url: string): boolean {
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
-/** Keys of id fields: a source's ids (record refs, slugs) may be long and token-like. */
+/**
+ * Keys of id fields. A source's id or record ref may be a slug of words with a year
+ * ("wikipedia:track/List_of_UK_Singles_Chart_number_ones_of_the_2000s"), which the long-token
+ * rule reads as a token: an id's long runs are judged as a link's path segments are instead
+ * (`tokenSegment`), so a random run there is still refused ("a token in an id").
+ */
 const ID_KEY = /^(?:id|recordRef)$|Ids?$/;
 
 /** Every string in `value`, with its path and whether it is an id field's value. */
@@ -592,22 +1185,54 @@ function strings(
   return out;
 }
 
-/** `text` with its URL encoding decoded (as it is, when it is not URL-encoded). */
-function decoded(text: string): string {
-  try {
-    return decodeURIComponent(text.replace(/\+/g, " "));
-  } catch {
-    return text;
-  }
+/**
+ * True when an id field's value (outside its links) holds a token: its parts between "/", ":"
+ * and spaces judged as a link's path segments are (`tokenSegment`).
+ */
+function tokenInId(text: string): boolean {
+  return [text, decodedKeepingPlus(text)].some((form) =>
+    form.split(/[\s/:]+/).some((part) => tokenSegment(part, "path")),
+  );
 }
 
-/** `text` URL-decoded with each "+" kept (as it is, when it is not URL-encoded). */
+/**
+ * The record's own commit (its `commit`, "-dirty" or not), short or as the full 40-digit hash it
+ * begins, as a whole run of hex digits, wherever the record states it: the hash of the code the
+ * run was made with, which a record names by design (a replay says which commit it was recorded
+ * from), not a hex key. Null without one.
+ */
+function ownCommit(record: unknown): RegExp | null {
+  const commit = (record as { commit?: unknown } | null)?.commit;
+  if (typeof commit !== "string" || !COMMIT_PATTERN.test(commit)) return null;
+  const hash = commit.replace(/-dirty$/, "");
+  const rest = 40 - hash.length;
+  const full = rest > 0 ? `(?:[0-9a-f]{${rest}})?` : "";
+  return new RegExp(`(?<![0-9a-f])${hash}${full}(?![0-9a-f])`, "gi");
+}
+
+/** `text` with its URL encoding decoded (as it is, when it is not URL-encoded). */
+function decoded(text: string): string {
+  return decodedKeepingPlus(text.replace(/\+/g, " "));
+}
+
+/** Reads bytes as UTF-8 without throwing: a byte that is not UTF-8 reads as U+FFFD. */
+const UTF8 = new TextDecoder("utf-8", { ignoreBOM: true });
+
+/**
+ * `text` URL-decoded with each "+" kept (as it is, when it is not URL-encoded). Each run of
+ * "%XX" escapes is decoded on its own, so a stray "%" ("100% off") does not leave the rest of
+ * the text undecoded, and an escape that is not UTF-8 ("%FF") reads as U+FFFD, its neighbours
+ * decoded; nothing throws, so a text dense in such escapes is read in linear time.
+ */
 function decodedKeepingPlus(text: string): string {
-  try {
-    return decodeURIComponent(text);
-  } catch {
-    return text;
-  }
+  if (!text.includes("%")) return text;
+  return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    const bytes = new Uint8Array(run.length / 3);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Number.parseInt(run.slice(3 * i + 1, 3 * i + 3), 16);
+    }
+    return UTF8.decode(bytes);
+  });
 }
 
 /** True when `phrase` (normalised) is a run of whole words of `text` (normalised). */
@@ -660,9 +1285,14 @@ function resultCoverPaths(record: unknown): Set<string> {
 /**
  * What a record must not hold, by path (values are never echoed: they may be credentials).
  * Ids the record's sources use (MusicBrainz MBIDs in evidence ids, record refs and page URLs,
- * claim and evidence ids) are content; only the ids of runs are refused.
+ * claim and evidence ids) are content, still checked for secret shapes (`tokenInId`); only the
+ * ids of runs are refused.
  */
-export function leaks(
+export function leaks(record: unknown, check: LeakCheck): string[] {
+  return judgingLinksOnce(() => leaksIn(record, check));
+}
+
+function leaksIn(
   record: unknown,
   {
     secrets,
@@ -687,20 +1317,33 @@ export function leaks(
   const statusLines = eventPaths(record, "status", "message");
   const ownLines = new Set(track ? [foundLine(track), selectedLine(track)] : []);
   const webTexts = webEvidenceTexts(record);
+  const pageExcerpts = pageExcerptPaths(record);
+  const commit = ownCommit(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
+    // Read without zero-width characters and soft hyphens, which may split a value.
+    const seen = visible(text);
     // The kept cover, as the whole value of the result's cover: an allowed link there only.
     const isCover = cover !== null && text === cover && coverPaths.has(path);
     const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
-    if (holdsSecret(text, secrets)) found.push(`${path}: a configured credential`);
-    // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
-    // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
-    for (const [what, pattern] of SECRET_SHAPES) {
-      if (isId && what === "a long token") continue;
-      if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
+    if (holdsSecret(text, secrets) || holdsSecret(seen, secrets)) {
+      found.push(`${path}: a configured credential`);
     }
-    if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
+    // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
+    // those are their own, and checked as links below), and around the record's own commit. An
+    // id field is held to the precise rules, and its parts are judged as a link's path is.
+    const around = seen.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
+    const scanned = commit ? around.replace(commit, " ") : around;
+    const forms = [...new Set([scanned, decoded(scanned), ...nested(scanned)])];
+    for (const [what, pattern] of isId ? ID_SHAPES : FREE_TEXT_SHAPES) {
+      if (forms.some((form) => pattern.test(form))) found.push(`${path}: ${what}`);
+    }
+    if (isId && tokenInId(scanned)) found.push(`${path}: a token in an id`);
+    // A web search page's excerpt the recorder kept holds no token-shaped run (it withholds one).
+    if (pageExcerpts.has(path) && tokenRuns(seen) > 0) {
+      found.push(`${path}: a token-shaped run in a page excerpt`);
+    }
+    if (signedUrl(seen)) found.push(`${path}: a signed URL`);
     // A source error says what failed in words, as the run routes read it (reasonIssue): markup
     // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
     // what an error message keeps. A status line is held to the same, whole: the run writes its
@@ -724,7 +1367,7 @@ export function leaks(
     // A web page's stored text never holds a private handle, boilerplate or a comment thread.
     const webIssue = webTexts.has(path) ? webTextIssue(text) : null;
     if (webIssue) found.push(`${path}: ${webIssue}`);
-    for (const url of text.match(URL_IN_TEXT) ?? []) {
+    for (const url of seen.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
       else if (isSocialPage(url)) found.push(`${path}: a social platform page`);
       else if (allowedHere(url)) {
@@ -732,7 +1375,12 @@ export function leaks(
         const secret = isCover ? null : linkSecret(url);
         if (secret) found.push(`${path}: ${secret}`);
       } else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
-      else found.push(`${path}: a URL outside the allow-listed sites`);
+      else {
+        // What a page left out of web evidence holds is said too (a token in its path).
+        const secret = linkSecret(url);
+        if (secret) found.push(`${path}: ${secret}`);
+        found.push(`${path}: a URL outside the allow-listed sites`);
+      }
     }
     if (!typedIsPublic && (containsWords(text, typed) || containsWords(plain, typed))) {
       found.push(`${path}: the query the user typed`);
@@ -765,6 +1413,10 @@ const UNRECORDED_EVENTS = new Set(["error", "interrupt"]);
  * (records.ts) leaves out a file with any, so a file the recorder writes is never left out.
  */
 export function recordIssues(record: ReplayRecord, check: LeakCheck): string[] {
+  return judgingLinksOnce(() => issuesOf(record, check));
+}
+
+function issuesOf(record: ReplayRecord, check: LeakCheck): string[] {
   const found = new Map<string, string>();
   const add = (path: string, why: string) => {
     const near = (a: string, b: string) =>

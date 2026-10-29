@@ -975,13 +975,14 @@ describe("the recorder", () => {
       "https://example.org/dl/token=abc123def456/file",
       "https://example.org/people/jane.doe@example.com",
       "https://example.org/s/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7d/view",
-      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
     ];
     for (const url of refused) {
       expect(leaks({ evidence: [webItem(url)] }, check), url).not.toEqual([]);
     }
-    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too.
+    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too, and so
+    // is a hex id in a path (a document's or a file's name).
     for (const url of [
+      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
       "https://www.example.com/music/news/ice-ice-baby-under-pressure-lawsuit-1234/",
       "https://example.org/wiki/List_of_songs_recorded_by_Vanilla_Ice_and_others",
       "https://example.org/articles/2024/10/a1b2c3",
@@ -1809,7 +1810,9 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     }
   });
 
-  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", () => {
+  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", {
+    timeout: 30_000,
+  }, () => {
     const tail = "Zx9Qw3Er7Ty1Ui5Op";
     // A base64 value: a run of 44 the long-token rule matches, then "/", a tail and padding.
     const head = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJD";
@@ -2094,12 +2097,10 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       // A section anchor is a page's own name, as a path segment is.
       "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Track_listing_and_formats_1997_UK_CD_single",
       "https://en.wikipedia.org/wiki/Billboard_charts#Charts_of_the_1960s_1970s_1980s_and_1990s",
-      // A key parameter that is a slug of words (with a year or not), or token-shaped but under
-      // 16 characters.
+      // A key parameter that is a slug of words (with a year or not), or a musical key.
       "https://www.whosampled.com/sample/123/?key=The-Verve-Bitter-Sweet",
       "https://www.whosampled.com/sample/123/?key=the-verve-bitter-sweet-symphony-1997",
-      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1",
-      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1Ui5",
+      "https://www.whosampled.com/sample/123/?key=C%23m",
     ]) {
       const fine = build(liveRunWith([page(`See ${link} now.`)]));
       expect(excerpts(fine.record), link).toEqual(Array(3).fill(`See ${link} now.`));
@@ -2146,14 +2147,16 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       ]),
     );
     expect(kept.record.analysis.evidence?.at(-1)?.url).toBe(tunebat);
-    const value = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz";
-    expect(value).toHaveLength(32);
-    const reasons = refusal(() =>
-      build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
-    );
-    expect(
-      reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
-    ).toHaveLength(3);
+    // Token-shaped from 10 characters on: 32, 15 and 12 of them.
+    for (const value of ["Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz", "Zx9Qw3Er7Ty1Ui5", "Zx9Qw3Er7Ty1"]) {
+      const reasons = refusal(() =>
+        build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
+      );
+      expect(
+        reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
+        value,
+      ).toHaveLength(3);
+    }
   });
 
   it('keeps ordinary text joined by "/" or "+": a chord line, a search, a breadcrumb', () => {

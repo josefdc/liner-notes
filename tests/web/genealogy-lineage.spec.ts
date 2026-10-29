@@ -1141,39 +1141,46 @@ test("the first pan down the wide map at 1920 px keeps the analysed card in view
 /**
  * The edge cues' buttons a detail box or the selected track's panel overlaps (the box takes no
  * pointer, so it is never what a point hits: their boxes are compared), or another element
- * covers at their centre.
+ * covers at their centre. The cues are scrolled into view first; every box is then read in one
+ * frame, after the page has come to rest, so none is read from before a scroll.
  */
-const coveredCues = async (page: Page) => {
-  await page.evaluate(
-    () =>
-      new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))),
-  );
-  return page
-    .getByTestId("map-cues")
-    .locator("[data-cue]")
-    .evaluateAll((buttons) => {
-      const overs = [
-        ...document.querySelectorAll('[data-testid="link-detail"], [data-testid="node-detail"]'),
-      ]
-        .map((over) => over.getBoundingClientRect())
-        .filter((over) => over.width > 0 && over.height > 0);
-      return buttons
-        .filter((button) => {
-          button.scrollIntoView({ block: "nearest" });
-          const box = button.getBoundingClientRect();
-          const overlapped = overs.some(
-            (over) =>
-              over.left < box.right &&
-              box.left < over.right &&
-              over.top < box.bottom &&
-              box.top < over.bottom,
-          );
-          const at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-          return overlapped || at === null || at.closest("[data-cue]") !== button;
-        })
-        .map((button) => button.getAttribute("data-cue"));
-    });
-};
+const coveredCues = (page: Page) =>
+  page.evaluate(async () => {
+    const frame = () => new Promise((done) => requestAnimationFrame(done));
+    const buttons = [
+      ...document.querySelectorAll<HTMLElement>('[data-testid="map-cues"] [data-cue]'),
+    ];
+    for (const button of buttons) button.scrollIntoView({ block: "nearest", behavior: "instant" });
+    await frame();
+    await frame();
+    const covered = await new Promise<string[]>((done) =>
+      requestAnimationFrame(() => {
+        const overs = [
+          ...document.querySelectorAll('[data-testid="link-detail"], [data-testid="node-detail"]'),
+        ]
+          .map((over) => over.getBoundingClientRect())
+          .filter((over) => over.width > 0 && over.height > 0);
+        const boxes = buttons.map((button) => button.getBoundingClientRect());
+        done(
+          buttons
+            .filter((button, i) => {
+              const box = boxes[i];
+              const overlapped = overs.some(
+                (over) =>
+                  over.left < box.right &&
+                  box.left < over.right &&
+                  over.top < box.bottom &&
+                  box.top < over.bottom,
+              );
+              const at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+              return overlapped || at === null || at.closest("[data-cue]") !== button;
+            })
+            .map((button) => button.getAttribute("data-cue") ?? ""),
+        );
+      }),
+    );
+    return covered;
+  });
 
 /** The bottom edge cues' buttons, as their left and right (px). */
 const bottomCues = (page: Page) =>

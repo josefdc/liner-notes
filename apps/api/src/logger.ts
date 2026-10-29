@@ -652,7 +652,7 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
     let end = Math.max(to, scanned);
     while (end < text.length && takes(text.charCodeAt(end))) end++;
     scanned = end;
-    end = beforeRule(text, to, end, closer(end));
+    end = beforeRule(text, to, end, closer);
     if (last && start < last[1]) last[1] = Math.max(last[1], end);
     else spans.push([start, end]);
   }
@@ -721,12 +721,20 @@ const RULE_START = new RegExp(
  * Where the token characters from `from` to `end` that a value's span takes stop: before the
  * first start of a rule (RULE_START) in them. Inside a word too: a host the logger replaces can
  * end right before it (`<host>https://…`), and the rule then reads it. Characters that end in a
- * name's ":" (`<value>.password: <secret>`; `closer`, the character after the quotes and
+ * name's ":" (`<value>.password: <secret>`; `closerAt(end)`, the character after the quotes and
  * whitespace at `end`) are not taken: the rules of sources/http.ts read a name only where it
- * starts a word.
+ * starts a word. With no token characters to take, nothing is read past `end`: a value of quotes
+ * or whitespace, found at each place of a long run of them, would read the rest of the run again.
  */
-function beforeRule(text: string, from: number, end: number, closer: number): number {
-  if (end > from && closer === COLON) return from;
+function beforeRule(
+  text: string,
+  from: number,
+  end: number,
+  closerAt: (end: number) => number,
+): number {
+  if (end <= from) return end;
+  const closer = closerAt(end);
+  if (closer === COLON) return from;
   for (let at = from; at < end; at++) {
     RULE_START.lastIndex = at;
     if (!RULE_START.test(text)) continue;

@@ -1391,6 +1391,23 @@ describe("configured values in what a client is shown, in a token and in any whi
     expect(result).not.toContain("S1x");
   });
 
+  it("reads nothing past a value with no token characters after it, in linear time", {
+    timeout: 60_000,
+  }, () => {
+    // A value of quotes alone is found at each place of a long run of quotes. Reading the rest of
+    // the run after each of them for a name's ":" takes about 1 s on 64 kB.
+    configure({ LOG_IP_SALT: "''''''''" });
+    const quotes = (size: number) => `x${"'".repeat(size)}x`;
+    const factor = 8;
+    const { ratio, result } = growth(quotes, (text) => hideKnownValues(text), {
+      size: 1 << 13,
+      factor,
+      maxMs: 3_000,
+    });
+    expect(ratio / factor).toBeLessThan(3);
+    expect(result).toBe("[redacted]");
+  });
+
   it("keeps U+E000 and U+E001 in a text, with no value configured and with one", () => {
     configureLogger({ LOG_LEVEL: "silent" });
     const marks = "icon  private  use redacted";

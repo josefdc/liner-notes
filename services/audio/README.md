@@ -343,23 +343,24 @@ times are seconds from the start of the preview. Every block is `null` when it w
   timbres in the controls; one timbre per root in the tests), seventh chords whose fifth folds
   into a doubled root and whose third is 6-12 dB down, a third 10-25 cents off over a doubled
   root, and sus2 and sus4 chords over their root lose no key to this rule, and it never gives
-  them its reason. That is not to say they keep their key: the rules before it withhold many
-  of them. Of the 288 triads with a softer third in the 2026-10-29 controls run (analyzer
-  2.3.4, commit `9682a4a`), librosa serves 97 keys, all right, and withholds 191, every one
-  of them right with the rules lifted: 148 as one harmonic series, 33 as one held pitch and 10
-  for fewer than three pitch classes. Essentia serves 97 (93 right, 4 wrong) and withholds the
-  same 191, 151 of them right with the rules lifted (114 one harmonic series, 32 one held
-  pitch, 5 fewer than three pitch classes). Over a beat the series rule does not ask whether
-  the chromagram moves, so a chord whose lines are mostly its doubled root's harmonics reads as
-  one series. Four of them are a known limit pinned in the tests: minor triads stabbed with
-  the third 6 dB down (C minor in a pad; C#, F and G minor in a saw; soft-third-3, -35, -131
-  and -179 in the controls) spell no third at all, so the single-source rule would withhold
-  their right key too. In the same run, seventh chords whose fifth folds into a doubled root
-  (144 controls) get wrong keys: Essentia serves 105, 39 of them wrong (36 of the 72 major
-  sevenths as the parallel minor, 3 of the 72 minor sevenths as the major key a whole tone
-  below), librosa 105 with 2 wrong; both withhold 39 (30 one held pitch, 9 fewer than three
-  pitch classes). It is not proven beyond those
-  levels and tunings, and two limits are known and pinned in the tests: a fourth (G2 under C3)
+  them its reason. That is not to say they keep their key: the rules before it withhold many of
+  them. Of the 288 triads with a softer third in the 2026-10-29 controls run (analyzer 2.3.4,
+  commit `9682a4a` of #244), librosa serves 97 keys, all right, and withholds 191, every one of
+  them right with the rules lifted: 148 as one harmonic series, 33 as one held pitch and 10 for
+  fewer than three pitch classes. Essentia serves 97 (93 right, 4 wrong) and withholds the same
+  191, 151 of them right with the rules lifted (114 one harmonic series, 32 one held pitch, 5
+  fewer than three pitch classes). Their lines are mostly the doubled root's harmonics, so they
+  read as one series: over a beat the series rule does not ask whether the chromagram moves
+  (103 of the 148, pumped or stabbed), and without one a held chord's chromagram stays still
+  (the other 45, faded or with tremolo). Four of them are a known limit pinned in the tests:
+  minor triads stabbed with the third 6 dB down (C minor in a pad; C#, F and G minor in a saw;
+  soft-third-3, -35, -131 and -179 in the controls) spell no third at all, so the single-source
+  rule would withhold their right key too. In the same run, seventh chords whose fifth folds
+  into a doubled root (144 controls) get wrong keys: Essentia serves 105, 39 of them wrong (36
+  of the 72 major sevenths as the parallel minor, 3 of the 72 minor sevenths as the major key a
+  whole tone below), librosa 105 with 2 wrong; both withhold 39 (30 one held pitch, 9 fewer
+  than three pitch classes). It is not proven beyond those levels and tunings, and two limits
+  are known and pinned in the tests: a fourth (G2 under C3)
   whose third is 15 dB down reads as two notes a fourth apart (librosa's right C major is
   withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
   major is withheld with both estimators). A major third sung or played 8 cents flat or more
@@ -390,21 +391,29 @@ times are seconds from the start of the preview. Every block is `null` when it w
   spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they
   also withhold many keys of electronic dance music, whose synthesizers leave few narrow lines.
   On 250 GiantSteps+ clips (one 30 s window each, seed 1; the key run of the 2026-10-29 report,
-  analyzer 2.3.4, commit `2901b7f`) each estimator serves 48 keys (19 %; the reference key for
-  32 with librosa, 36 with Essentia) and withholds 202, for the same reasons with both: no
-  sustained pitch 133 (53 %), fewer than three pitch classes 32, one pitch line without stable
-  notes (`speech_like`) 23, one harmonic series 11, one held pitch over the beat 2 and the
-  noise gate 1. The single-source rule withholds none of the 250. With the rule lifted,
-  Essentia names the reference key for 93 of the 132 clips that no sustained pitch alone
-  withholds (70.5 %, against 36 of the 48 it serves, 75.0 %) and librosa for 54 of 103 (52.4 %,
-  against 32 of 48, 66.7 %); 9 of the 11 that one harmonic series withholds have the reference
-  key with that rule lifted, with either estimator. Every loosening of the spectral-line rule
-  that report's calibration section tries fails the written procedure, so this stays a limit.
-  None of the four showcase recordings (`fixtures/replays/*.json`, recorded at analyzer 2.3.4)
-  gets a measured key: Hung Up, Juicy and Bitter Sweet Symphony withhold it as
-  `no_sustained_pitch`, One More Time as `speech_like`. The recordings keep only those codes,
-  not the measurements behind them. Without a beat, a
-  pitch track of the harmonic part also decides: no key for one held pitch (a note with vibrato,
+  analyzer 2.3.4, commit `2901b7f` of #256) each estimator serves 48 keys (19 %; the reference
+  key for 32 with librosa, 36 with Essentia) and withholds 202, for the same reasons with both:
+  no sustained pitch 133 (53 %), fewer than three pitch classes 32, one pitch line without
+  stable notes (`speech_like`) 23, one harmonic series 11, one held pitch over the beat 2 and
+  the noise gate 1. The single-source rule withholds none of the 250. The rules are a chain and
+  a clip's reason is the first that fires, so the rules behind it are not asked. Of the 132
+  clips for which no sustained pitch is the reason given (and no strength minimum withholds
+  them), Essentia names the reference key for 93 with every rule and the strength minimum
+  lifted (70.5 %, against 36 of the 48 it serves, 75.0 %), librosa for 54 of 103 (52.4 %,
+  against 32 of 48, 66.7 %). With the spectral-line rule alone lifted, re-derived from the
+  recorded evidence (`evals/audio/scripts/lifted_rules.py`), only 13 of the 132 get a key from
+  Essentia, 9 of them right, and the other 119 are withheld by the rules behind it (fewer than
+  three pitch classes 71, one harmonic series 38, `speech_like` 10); librosa gets 12 of 103, 8
+  right. Of the 11 clips for which one harmonic series is the reason given, 9 have the
+  reference key with every rule lifted, with either estimator, but with that rule alone lifted
+  1 gets a key (right) and 10 are withheld for fewer than three pitch classes. Every loosening
+  of the spectral-line rule that report's calibration section tries fails the written
+  procedure, so this stays a limit. None of the four showcase recordings
+  (`fixtures/replays/*.json`, recorded at analyzer 2.3.4) gets a measured key: Hung Up, Juicy
+  and Bitter Sweet Symphony withhold it as `no_sustained_pitch`, One More Time as
+  `speech_like`. The recordings keep only those codes and their reasons, not the measurements
+  behind them. Without a beat, a pitch track of the harmonic part also decides: no key for one
+  held pitch (a note with vibrato,
   whose sidebands hide the series, or a bend: its harmonics explain the lines and nothing else
   moves in the chromagram) or for a voice without stable notes (speech); a voice that moves
   between notes keeps the key even without lines (an a cappella line with vibrato). With a beat,

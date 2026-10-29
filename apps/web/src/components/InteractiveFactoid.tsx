@@ -215,7 +215,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
             className={`
               inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-sm
               border transition-all
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white
+              focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white
               ${ENTITY_CHROME}
             `}
           >

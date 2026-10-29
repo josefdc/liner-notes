@@ -237,7 +237,7 @@ export const Attribution: React.FC<AttributionProps> = ({ providers, className =
                 href={provider.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
+                className="text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
               >
                 <span className="whitespace-nowrap">
                   {provider.name}

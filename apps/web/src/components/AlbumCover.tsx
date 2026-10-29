@@ -98,7 +98,7 @@ export function AlbumCover({
             rel="noopener noreferrer"
             title={labels.credit.text}
             data-cover-text
-            className="line-clamp-3 break-words text-text-secondary underline underline-offset-2 decoration-border-hover hover:text-text-primary hover:decoration-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
+            className="line-clamp-3 break-words text-text-secondary underline underline-offset-2 decoration-border-hover hover:text-text-primary hover:decoration-text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
           >
             {labels.credit.text}
             <span className="sr-only"> (opens in a new tab)</span>

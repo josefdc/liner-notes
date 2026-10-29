@@ -159,7 +159,7 @@ export const DetailPanel: React.FC<{
             ? { bottom: bottomOffset, maxHeight: `calc(60% - ${shorterBy}px)` }
             : undefined
       }
-      className={`${place} flex flex-col gap-2 overflow-y-auto overscroll-contain cursor-auto rounded-sm border border-white/20 bg-void p-3 font-mono text-chrome text-text-chip wrap-anywhere focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70`}
+      className={`${place} flex flex-col gap-2 overflow-y-auto overscroll-contain cursor-auto rounded-sm border border-white/20 bg-void p-3 font-mono text-chrome text-text-chip wrap-anywhere focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -175,7 +175,7 @@ export const DetailPanel: React.FC<{
           type="button"
           aria-label="Close details"
           onClick={onClose}
-          className="flex size-6 shrink-0 items-center justify-center rounded-sm text-text-tertiary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+          className="flex size-6 shrink-0 items-center justify-center rounded-sm text-text-tertiary hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
         >
           <X size={14} aria-hidden="true" />
         </button>

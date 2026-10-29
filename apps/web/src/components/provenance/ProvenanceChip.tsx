@@ -103,7 +103,7 @@ export const ProvenanceChip: React.FC<ProvenanceChipProps> = ({
       aria-label={disclosure.label}
       title={title}
       onClick={disclosure.onToggle}
-      className={`inline-flex max-w-full rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void ${className}`}
+      className={`inline-flex max-w-full rounded-sm cursor-pointer hover:brightness-125 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void ${className}`}
     >
       {chip}
     </button>

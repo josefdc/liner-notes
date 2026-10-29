@@ -1084,7 +1084,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('stroke-width', 12)
       .attr('vector-effect', 'non-scaling-stroke')
       .style('pointer-events', 'stroke')
-      .style('outline', 'none')
+      .attr('class', 'focus-visible:outline-hidden')
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
@@ -1116,7 +1116,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('tabindex', -1)
       .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
       .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
-      .style('outline', 'none');
+      .attr('class', 'focus-visible:outline-hidden');
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
     // with their glow; the others outlined in white (3:1 or more on the page).
@@ -2411,7 +2411,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                             focusMapRef.current?.();
                           });
                         }}
-                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
+                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
                       >
                         {CUE_TEXT[side](cues[side])}
                       </button>

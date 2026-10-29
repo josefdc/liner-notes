@@ -89,7 +89,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
             ? 'Collapse activity log'
             : `Expand activity log, ${isComplete ? 'done' : 'running'}${lastEvent}`
         }
-        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden"
       >
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">

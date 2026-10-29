@@ -55,7 +55,7 @@ const LOADING_VIEW_PROPS = {
 const DashboardSkeleton = (
   <div
     {...LOADING_VIEW_PROPS}
-    className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in focus:outline-none"
+    className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in focus-visible:outline-hidden"
   >
     {/* Top row: the "New search" button (a small Button: its padding, line and border) */}
     <div className="flex md:justify-end">
@@ -91,7 +91,7 @@ const DashboardSkeleton = (
 const PlayerSkeleton = (
   <div
     {...LOADING_VIEW_PROPS}
-    className="h-full w-full flex flex-col bg-void animate-fade-in focus:outline-none"
+    className="h-full w-full flex flex-col bg-void animate-fade-in focus-visible:outline-hidden"
   >
     <div className="px-6 py-4 border-b border-white/5">
       <div className={`h-4 w-32 ${shimmerClass} rounded-sm`} />
@@ -110,7 +110,7 @@ const PlayerSkeleton = (
 const MapSkeleton = (
   <div
     {...LOADING_VIEW_PROPS}
-    className="h-full w-full flex flex-col bg-void animate-fade-in focus:outline-none"
+    className="h-full w-full flex flex-col bg-void animate-fade-in focus-visible:outline-hidden"
   >
     <div className="px-6 py-3 border-b border-white/5 flex flex-col gap-2">
       <div className={`h-4 w-40 ${shimmerClass} rounded-sm`} />

@@ -44,7 +44,7 @@ export const SourceLink: React.FC<SourceLinkProps> = ({ evidence, showTier = tru
       target="_blank"
       rel="noopener noreferrer"
       data-source={evidence.source}
-      className="text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
+      className="text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
     >
       {/* The icon stays with the label's last word, so a label that wraps in a narrow column
           keeps it at its end instead of at the column's edge */}

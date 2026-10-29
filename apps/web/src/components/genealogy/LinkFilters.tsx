@@ -55,7 +55,7 @@ export const LinkFilters: React.FC<{
           aria-expanded={open}
           aria-controls={groupId}
           onClick={() => setOpen(!open)}
-          className="inline-flex min-h-6 items-center gap-1 text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+          className="inline-flex min-h-6 items-center gap-1 text-text-secondary hover:text-white rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
         >
           Filter links
           <ChevronDown size={12} aria-hidden="true" className={open ? 'rotate-180' : undefined} />
@@ -72,7 +72,7 @@ export const LinkFilters: React.FC<{
           <button
             type="button"
             onClick={() => change(NO_FILTER)}
-            className="min-h-6 text-text-secondary underline underline-offset-2 hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+            className="min-h-6 text-text-secondary underline underline-offset-2 hover:text-white rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
           >
             Clear filters
           </button>
@@ -96,7 +96,7 @@ export const LinkFilters: React.FC<{
                   type="checkbox"
                   checked={on}
                   onChange={() => toggle(kind)}
-                  className="accent-cyber focus-visible:outline-none"
+                  className="accent-cyber focus-visible:outline-hidden"
                 />
                 {FILTER_LABEL[kind]} ({shownOf(kind)}/{all})
               </label>
@@ -110,7 +110,7 @@ export const LinkFilters: React.FC<{
               type="checkbox"
               checked={filter.sourcedOnly}
               onChange={() => change({ ...filter, sourcedOnly: !filter.sourcedOnly })}
-              className="accent-analog focus-visible:outline-none"
+              className="accent-analog focus-visible:outline-hidden"
             />
             Sourced only
           </label>

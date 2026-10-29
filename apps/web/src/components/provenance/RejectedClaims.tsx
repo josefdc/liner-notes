@@ -55,7 +55,7 @@ export const RejectedClaims: React.FC<RejectedClaimsProps> = ({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
-        className="w-full flex items-center justify-between gap-2 py-2 text-xs font-mono uppercase tracking-widest text-text-secondary hover:text-white px-2 focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none rounded-sm"
+        className="w-full flex items-center justify-between gap-2 py-2 text-xs font-mono uppercase tracking-widest text-text-secondary hover:text-white px-2 focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden rounded-sm"
       >
         {/* Rejected claims carry the warning colour and triangle, as "Not supported" and
             "Conflict" do beside a claim */}

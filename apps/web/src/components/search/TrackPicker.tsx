@@ -164,7 +164,7 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
               tabIndex={index === current ? 0 : -1}
               onFocus={() => setHighlighted(index)}
               onClick={() => onPick(candidate)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left cursor-pointer transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left cursor-pointer transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden ${
                 index === current
                   ? 'bg-white/10 border border-white/30'
                   : 'bg-white/5 border border-transparent hover:bg-white/10'
@@ -203,7 +203,7 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
             <button
               type="button"
               onClick={onSearchAgain}
-              className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white/60"
             >
               Search again
             </button>

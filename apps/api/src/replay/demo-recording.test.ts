@@ -285,4 +285,23 @@ describe.each(SLUGS)("the showcase recording %s", (slug) => {
     for (const node of dated)
       expect(node.mbid, `${node.id} has a year without an mbid`).toBeTruthy();
   });
+
+  it("dates each track by its own MusicBrainz record in the recording: the year it gives, and none without one", () => {
+    // The track's own record is its `track/` item; a related track's, its relations map
+    // record of that recording. A node's year is the year that record's excerpt gives.
+    const evidence = new Map((analysis.evidence ?? []).map((item) => [item.id, item]));
+    const yearIn = (id: string) => {
+      const match = /\bfirst released (\d{4})\b/.exec(evidence.get(id)?.excerpt ?? "");
+      return match ? Number(match[1]) : undefined;
+    };
+    for (const node of nodes) {
+      const id = !node.mbid
+        ? null
+        : node === current
+          ? `musicbrainz:track/recording/${node.mbid}`
+          : `musicbrainz:recording/${node.mbid}`;
+      const recorded = id === null ? undefined : yearIn(id);
+      expect(node.year ?? undefined, `${node.id}: its year, and ${id}'s`).toBe(recorded);
+    }
+  });
 });

@@ -425,22 +425,29 @@ times are seconds from the start of the preview. Every block is `null` when it w
   its whole multiples, and averages over the hits, weighted by energy. It withholds 38 and 33 drum
   keys: every training tom and kit tom, and held out 7 of 8 and 4 of 4 toms and 15 of 15 and 16 of
   17 kit toms, with no right key taken in either half. That holds for the controls' voicings, not
-  for chords in general: three of the ratios lie 7-14 cents from a minor sixth, a minor ninth and
-  an eleventh, the intervals of an inverted triad. A minor struck as E4-A4-C5 in a triangle
-  timbre, whose right key both estimators serve, reads 0.434, more than ten times the threshold
-  (`evals/audio/tests/test_drum_rules.py` pins it), so the rule would take its key. And its signal
-  is how the controls are built: the kit toms are drawn from those membrane modes
-  (`MEMBRANE_MODES` in `tests/signals.py`) and the toms with a 15 % pitch drop after each hit, the
-  same circularity as the falling partials above. The only real recordings are the 48 GiantSteps+
-  clips (electronic dance music): it withholds none of their keys, so they show that it costs
-  nothing there, not that it catches a real tuned drum. It catches no tabla either. For the tabla,
-  a pitch track spreading 125.2 cents or more over a sound whose tonal ratio is at least 0.9073
-  (both chosen on the training half) withholds 21 of the 23 Essentia tabla keys and 16 of the 18
-  librosa ones, but held out it takes a right key with each estimator (pumped-pad-s802, a held
-  chord pumped by a sidechain). The membrane-mode rule and this pair were proposed after the
-  held-out numbers of the first three rules had been seen, so their held-out numbers are not an
-  untouched test. None is shipped: the membrane-mode rule would take right keys from inverted
-  triads, and no real drum recording shows that it, or any other, helps.
+  for chords in general: the ratio 1.594 lies 7 cents from a minor sixth, so a chord with a minor
+  sixth over a strong partial reads as membrane modes too, as a major triad in first inversion or
+  a minor triad in second inversion does. A minor struck as E4-A4-C5 in a triangle timbre, whose
+  right key both estimators serve, reads 0.434, more than ten times the threshold
+  (`evals/audio/tests/test_drum_rules.py` pins it), so the rule would take its key. The controls'
+  C major stabs voiced G3-C4-E4-G4 (second inversion, a fourth and a major sixth over the bass; 18
+  of them, whose right key Essentia serves) read -0.51 to -0.74. The ratios 2.136 and 2.653 lie 14
+  and 11 cents from a minor ninth and an eleventh, intervals no triad holds. And its signal is how
+  the controls are built: the kit toms are drawn from those membrane modes (`MEMBRANE_MODES` in
+  `tests/signals.py`) and the toms with a 15 % pitch drop after each hit, the same circularity as
+  the falling partials above. The only real recordings are the 48 GiantSteps+ clips (electronic
+  dance music): it withholds none of their keys, so they show that it costs nothing there, not
+  that it catches a real tuned drum. It catches no tabla either. For the tabla, a pitch track
+  spreading 125.2 cents or more over a sound whose tonal ratio is at least 0.9073 (both chosen on
+  the training half) withholds 21 of the 23 Essentia tabla keys and 16 of the 18 librosa ones, but
+  held out it takes a right key with each estimator (pumped-pad-s802, a held chord pumped by a
+  sidechain). All five rules were first measured on all the data, held-out seeds included. The
+  split came later, in the same change that revised the frames of the falling partials and the hit
+  spans of the decay, and the membrane-mode rule and this pair were proposed after held-out
+  numbers had been seen, so no held-out number here is an untouched test; for the first three that
+  can only flatter rules that fail anyway. None is shipped: the membrane-mode rule would take the
+  right keys of chords with a minor sixth over a strong partial, and no real drum recording shows
+  that it, or any other, helps.
   Neither strength separates atonal material from tonal music: random chromatic notes or a
   twelve-tone row can still get a key, and so can a bell or a few tuned drums whose partials
   spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they

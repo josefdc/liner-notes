@@ -131,14 +131,16 @@ analyses each again and stops before reporting if any differs from the report (`
 scripts/drum_rules.py ../reports/audio-2026-10-29.json`, 5-11 min at `--jobs 4` on a shared
 machine; in a fresh environment, run it once with `--jobs 1` first, as librosa's numba cache
 written by several workers at once can crash them). Each rule's thresholds are chosen on a
-training half and judged on the rest, with one threshold for both estimators: seeded controls
-go by seed (500-529 and 700-729 train, 600-629 and 800-829 are held out), the unseeded controls
-and the clips alternately, sorted by name, so near-copies of one chord in the grids fall on both
-sides. Two of the rules (membrane modes or a falling partial, and the tabla pair) were proposed
-after held-out numbers had been seen, so theirs are not an untouched test. The membrane-mode
-rule takes no right key among the controls and clips, but an inverted triad reads as membrane
-modes too (`tests/test_drum_rules.py` pins one whose right key it would take). None is shipped;
-services/audio/README.md gives the numbers and the reasons.
+training half and judged on the rest, with one threshold for both estimators: seeded controls go
+by seed (500-529 and 700-729 train, 600-629 and 800-829 are held out), the unseeded controls and
+the clips alternately, sorted by name, so near-copies of one chord in the grids fall on both
+sides. All five rules were first measured on all the data; the split came later, with two of the
+first three measures revised, and two rules (membrane modes or a falling partial, and the tabla
+pair) were proposed after held-out numbers had been seen, so no held-out number is an untouched
+test. The membrane-mode rule takes no right key among the controls and clips, but a chord with a
+minor sixth over a strong partial (a major triad in first inversion, a minor triad in second)
+reads as membrane modes too (`tests/test_drum_rules.py` pins one whose right key it would take).
+None is shipped; services/audio/README.md gives the numbers and the reasons.
 A report whose runs were made with different analyzer versions says so at the top. The
 2026-10-29 report holds the controls, the Ballroom tempo and calibration runs, and the
 GiantSteps+ key and calibration runs, all at analyzer 2.3.4 (the controls and Ballroom runs at

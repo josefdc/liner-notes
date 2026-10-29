@@ -122,7 +122,7 @@ def harmonics_share(name: str) -> float:
     return folded / level
 
 
-def _init() -> None:
+def _cap_threads() -> None:
     for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ.setdefault(var, "1")
 
@@ -164,8 +164,9 @@ def main() -> None:
         }
         rows.append((family, seed, c["name"], source, keys))
     chords = [r[2] for r in rows if r[1] is not None and r[3].get("chord")]
-    _init()
-    with ProcessPoolExecutor(args.jobs, mp_context=get_context("spawn"), initializer=_init) as pool:
+    # The workers inherit the thread caps: set here, they hold before a worker imports numpy.
+    _cap_threads()
+    with ProcessPoolExecutor(args.jobs, mp_context=get_context("spawn")) as pool:
         share = dict(zip(chords, pool.map(harmonics_share, chords, chunksize=2), strict=True))
 
     def spread(values: list[float]) -> str:

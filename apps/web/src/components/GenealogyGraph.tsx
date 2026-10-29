@@ -2411,7 +2411,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                             focusMapRef.current?.();
                           });
                         }}
-                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
+                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
                       >
                         {CUE_TEXT[side](cues[side])}
                       </button>

@@ -22,7 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false, footer 
       {/* P0:8 Skip-to-content link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-cyber focus:text-void focus:font-mono focus:text-sm focus:tracking-widest focus:rounded"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-cyber focus:text-void focus:font-mono focus:text-sm focus:tracking-widest focus:rounded forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2"
       >
         Skip to content
       </a>
@@ -38,7 +38,7 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false, footer 
             href={SOURCE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center min-h-6 px-(--space-xs) text-chrome font-mono text-text-tertiary hover:text-text-secondary hover:underline underline-offset-4 rounded-sm transition-colors focus-visible:text-text-secondary focus-visible:underline focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:outline-hidden"
+            className="inline-flex items-center min-h-6 px-(--space-xs) text-chrome font-mono text-text-tertiary hover:text-text-secondary hover:underline underline-offset-4 rounded-sm transition-colors focus-visible:text-text-secondary focus-visible:underline focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
           >
             Source<span className="sr-only"> (opens in a new tab)</span>
           </a>

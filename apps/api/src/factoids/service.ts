@@ -611,17 +611,23 @@ export async function writeFactoids(
       context.evidence,
       { track },
     );
-    const kept = new Set(keptClaims.map((claim) => claim.id));
+    // A kept fact that states a relation the run's records document carries the mark the step
+    // gave it (`documentedBy`); a mark it came with is never taken as it is.
+    const keptById = new Map(keptClaims.map((claim) => [claim.id, claim]));
 
     const answered = answers.find((answer) => answer.ok);
     const model = answered?.ok ? answered.model : null;
     for (const [index, draft] of drafts) {
-      if (!kept.has(draft.claim.id)) {
+      const keptClaim = keptById.get(draft.claim.id);
+      if (keptClaim === undefined) {
         log.info(`Factoid ${index + 1}: restates a claim the run already has; dropped`);
         outcomes.push({ index, status: "none", reason: "repeat" });
         continue;
       }
-      const claim = claimsById.get(draft.claim.id) ?? draft.claim;
+      const { documentedBy: _came, ...unmarked } = claimsById.get(draft.claim.id) ?? draft.claim;
+      const claim = keptClaim.documentedBy
+        ? { ...unmarked, documentedBy: keptClaim.documentedBy }
+        : unmarked;
       outcomes.push({ index, status: "written", ...masked(draft.factoid, claim) });
     }
     outcomes.sort((a, b) => a.index - b.index);

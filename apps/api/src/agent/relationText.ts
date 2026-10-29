@@ -14,6 +14,10 @@
  *   source is the cited record's own (MusicBrainz, Discogs, Genius, SecondHandSongs), or "the
  *   record" or "a record" for any; the preposition alone gives the direction ("a sample of",
  *   which reads either way, is not one).
+ * - `<one> contains|features|uses|is built on|is based on a sample of|samples of|a cover of|a
+ *   remix of <other>`: the first draws on the second ("was built on", "was based on" too).
+ *
+ * Any of them may end "according to <source>", the source the cited records' own as above.
  *
  * One side is the analysed track (its title, its artist, "this recording", "the song"); the other
  * names one or more of the records the claim cites, each by its title, with or without its
@@ -27,8 +31,9 @@
  * Scrubs"). An unknown claim is read as stating nothing: doubt keeps it as it is.
  *
  * To mark a claim (and only to mark it), `readMarkedRelations` also reads it a sentence at a
- * time: one sentence states its records' relations, and the others only add detail (no "?", no
- * relation word, hedge, doubting word or unknown capitalised name). A sentence that disputes the
+ * time: one sentence states its records' relations, whole or before a comma, and the others and
+ * what follows that comma only add detail (no "?", no relation word, hedge, doubting word or
+ * unknown capitalised name). A sentence that disputes the
  * relation in words none of those lists holds can still let a partly supported claim be marked;
  * the mark then names only the relation its record documents, and the claim's own verdict shows
  * beside it.
@@ -341,9 +346,11 @@ function resolveGroup(
     return records.length > 0 && keys.size === 1 ? { records } : null;
   };
   if (title && (title.titleOf.size > 0 || title.trackTitle)) {
-    // A title the analysed track shares (a cover's), named alone, is the analysed track's.
+    // A title the analysed track shares (a cover's), named alone, is the analysed track's; a
+    // title of under three letters ("Up") names a record only with its artist.
+    const short = title.words.replace(/ /gu, "").length < 3;
     const others =
-      title.trackTitle && artists.length === 0
+      (title.trackTitle || short) && artists.length === 0
         ? []
         : [...title.titleOf].filter((id) => artists.every((artist) => artist.artistOf.has(id)));
     const track = title.trackTitle && artists.every((artist) => artist.trackArtist);
@@ -413,8 +420,11 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
  * or the other direction for a record it names. A cover is stated only with its title named.
  */
 export function readRelations(text: string, context: ReadingContext): Set<string> | null {
-  const items = itemsOf(nameWords(text), namesOf(context));
-  if (hedgedItems(items)) return null;
+  const all = itemsOf(nameWords(text), namesOf(context));
+  if (hedgedItems(all)) return null;
+  // "…, according to MusicBrainz": the source it names must be each record's own.
+  const according = accordingTo(all);
+  const items = according ? according.items : all;
 
   // The one relation word outside the names, and the verb it makes.
   const verbs = items.flatMap((item, i) => (RELATION_WORDS.has(wordOf(item) ?? "") ? [i] : []));
@@ -427,7 +437,7 @@ export function readRelations(text: string, context: ReadingContext): Set<string
   let first: readonly Item[];
   let second: readonly Item[];
   let firstDraws: boolean;
-  const documented = documentedForm(items, at, word, type);
+  const documented = documentedForm(items, at, word, type) ?? containsForm(items, at, word, type);
   if (documented) {
     ({ first, second, firstDraws } = documented);
   } else {
@@ -467,6 +477,7 @@ export function readRelations(text: string, context: ReadingContext): Set<string
     if (LINK_TYPE[record.kind] !== type || otherDrawsOn(record.kind) === trackDraws) return null;
     // A source the statement names must be the record's own.
     if (documented?.source != null && documented.source !== record.source) return null;
+    if (according?.source != null && according.source !== record.source) return null;
     if (type === "cover" && !items.some((item) => spanOf(item)?.titleOf.has(id))) return null;
     stated.add(id);
   }
@@ -547,6 +558,72 @@ function documentedForm(
   };
 }
 
+/** The verbs of a "<one> contains a sample of <other>" statement. */
+const CONTAINS: readonly (readonly string[])[] = [
+  "contains",
+  "features",
+  "uses",
+  "is built on",
+  "is based on",
+  "was built on",
+  "was based on",
+].map((phrase) => phrase.split(" "));
+
+/**
+ * The two sides of `<one> contains|features|uses|is built on|is based on a sample of|samples
+ * of|a cover of|a remix of <other>`, its relation word at `at`: the first draws on the second
+ * (the track that contains a sample of another samples it). Null for another form.
+ */
+function containsForm(
+  items: readonly Item[],
+  at: number,
+  word: string,
+  type: LinkType,
+): {
+  first: readonly Item[];
+  second: readonly Item[];
+  firstDraws: boolean;
+  source: string | null;
+} | null {
+  if (wordOf(items[at + 1]) !== "of") return null;
+  let start: number;
+  if (type === "sample" && word === "samples") start = at;
+  else if (
+    (word === "sample" && type === "sample") ||
+    ((type === "cover" || type === "remix") && word === VERBS[type].noun)
+  ) {
+    if (wordOf(items[at - 1]) !== "a") return null;
+    start = at - 1;
+  } else return null;
+  const verb = CONTAINS.find(
+    (words) =>
+      start >= words.length &&
+      words.every((each, i) => wordOf(items[start - words.length + i]) === each),
+  );
+  if (!verb) return null;
+  return {
+    first: items.slice(0, start - verb.length),
+    second: items.slice(at + 2),
+    firstDraws: true,
+    source: null,
+  };
+}
+
+/**
+ * A statement that ends "according to <source>": its words before that, and the source it names
+ * (null for "the record"). Null for a statement that does not end so.
+ */
+function accordingTo(items: readonly Item[]): { items: Item[]; source: string | null } | null {
+  for (const { words, source } of SOURCES) {
+    const at = items.length - words.length - 2;
+    if (at < 1) continue;
+    if (wordOf(items[at]) !== "according" || wordOf(items[at + 1]) !== "to") continue;
+    if (!words.every((each, i) => wordOf(items[at + 2 + i]) === each)) continue;
+    return { items: items.slice(0, at), source };
+  }
+  return null;
+}
+
 /** Words after which a full stop ends no sentence ("feat.", "Mr."), as a single initial does. */
 const ABBREVIATIONS: ReadonlySet<string> = new Set(
   "feat ft mr dr no vol jr sr st mt vs e.g i.e etc".split(" "),
@@ -555,7 +632,8 @@ const ABBREVIATIONS: ReadonlySet<string> = new Set(
 /**
  * A statement's sentences: split after ".", ";" or "!" followed by a space, but not after an
  * abbreviation (`ABBREVIATIONS`) or a single capital letter ("Ben E. King", "B.I.G."), and not
- * inside a quoted title ("…" or “…”).
+ * inside a quoted title ("…" or “…”). Its cost grows with the square of a run of stops that end no
+ * sentence; it reads only claims the judge checked, which are at most 1,000 characters long.
  */
 export function sentencesOf(text: string): string[] {
   const sentences: string[] = [];
@@ -592,11 +670,13 @@ export function sentencesOf(text: string): string[] {
 /**
  * Stems of words that hedge, dispute or deny what a statement says ("a myth", "denies it",
  * "may be"): a word that starts with one, outside the names, makes a sentence more than detail.
+ * "According" too: whom a statement holds to say it is no detail the reader can check.
  */
 const DOUBTS: readonly string[] = (
   "myth untrue wrong false mistak disput deni deny doubt unconfirm unverif rumor rumour alleg " +
   "reported supposed claim contest withdraw retract opposite revers may might perhaps possibl " +
-  "probabl unclear uncertain"
+  "probabl unclear uncertain incorrect inaccura otherwise instead could likely unlikely unsure " +
+  "questionab contradict according"
 ).split(" ");
 /** Phrases that do the same. */
 const DOUBTING_PHRASES: readonly string[][] = [
@@ -605,6 +685,9 @@ const DOUBTING_PHRASES: readonly string[][] = [
   "or so",
   "fans say",
 ].map((phrase) => phrase.split(" "));
+
+/** Words that start a tail which goes on with the relation's names rather than adding detail. */
+const TAIL_CONTINUES: ReadonlySet<string> = new Set(["by", "of", "from", "and", "with", "plus"]);
 
 /** A statement's words as `nameWords` splits them, with their case kept. */
 const casedWords = (text: string) =>
@@ -623,12 +706,21 @@ const casedWords = (text: string) =>
  * no relation word, no hedge or negation (`HEDGES`), no word starting with a doubting stem
  * (`DOUBTS`) or doubting phrase, and no capitalised word outside the names it knows (`names`:
  * the analysed track's, the cited records' and the result's other records') but its first word
- * and a source's name ("MusicBrainz"), so no name of a record the result does not hold
- * ("Between the Sheets by The Isley Brothers") or of a person ("Dr. Dre disputes this").
+ * and the name of the cited records' source ("MusicBrainz"), so no name of a record the result does not hold
+ * ("Between the Sheets by The Isley Brothers") or of a person ("Dr. Dre disputes this"). A
+ * `tail` (what follows the comma after a stated relation) gets no exception for its first word,
+ * and may not start with a word that goes on naming records ("by", "and", "with" …).
  */
-function onlyDetail(sentence: string, names: readonly Name[]): boolean {
+function onlyDetail(
+  sentence: string,
+  names: readonly Name[],
+  sources: ReadonlySet<string>,
+  tail = false,
+): boolean {
   if (sentence.includes("?")) return false;
   const words = nameWords(sentence);
+  // A tail that goes on with the relation's names ("…, by Mtume's rival") is not detail.
+  if (tail && TAIL_CONTINUES.has(words[0] ?? "")) return false;
   const cased = casedWords(sentence);
   if (cased.length !== words.length) return false;
   const items = itemsOf(words, names);
@@ -657,17 +749,51 @@ function onlyDetail(sentence: string, names: readonly Name[]): boolean {
       continue;
     }
     const word = cased[at];
-    if (at > 0 && /^\p{Lu}/u.test(word) && !SOURCE_NAMES.has(word.toLowerCase())) return false;
+    const first = at === 0 && !tail;
+    if (!first && /^\p{Lu}/u.test(word) && !sources.has(word.toLowerCase())) return false;
     at++;
   }
   return true;
 }
 
 /**
+ * How a sentence states each cited record's relation: whole (`readRelations`), or as a template
+ * followed by a comma and a tail ("…, bringing the earlier song into Madonna's dance track"),
+ * the tail to be read as detail. Each comma outside a quoted title is tried in turn, so a comma
+ * inside a name ("Tyler, The Creator") only ever ends a part that does not read. Null when no
+ * part of it states them.
+ */
+function statingPart(
+  sentence: string,
+  context: ReadingContext,
+): { stated: Set<string>; tail: string | null } | null {
+  const reads = (part: string) => {
+    const read = readRelations(part, context);
+    return read !== null && read.size === context.cited.size ? read : null;
+  };
+  const whole = reads(sentence);
+  if (whole !== null) return { stated: whole, tail: null };
+  let curly = 0;
+  let straight = false;
+  for (let i = 0; i < sentence.length; i++) {
+    const char = sentence[i];
+    if (char === "\u201c") curly++;
+    else if (char === "\u201d") curly = Math.max(0, curly - 1);
+    else if (char === '"') straight = !straight;
+    else if (char === "," && curly === 0 && !straight) {
+      const read = reads(sentence.slice(0, i));
+      if (read !== null) return { stated: read, tail: sentence.slice(i + 1).trim() };
+    }
+  }
+  return null;
+}
+
+/**
  * The cited records whose relation a statement states, for marking it: the whole statement as
  * `readRelations` reads it, or exactly one of its sentences reading each cited record's relation
- * while every other sentence only adds detail (`onlyDetail`). Null otherwise. Leaving a claim out,
- * or letting it stand for another, still needs the whole statement to be read.
+ * (whole, or before a comma and a tail: `statingPart`) while every other sentence, and the tail,
+ * only adds detail (`onlyDetail`). Null otherwise. Leaving a claim out, or letting it stand for
+ * another, still needs the whole statement to be read.
  *
  * What is left: a sentence that disputes the relation in words none of these lists holds ("the
  * band replayed the riff") still lets a claim be marked. The mark names only the relation its
@@ -683,11 +809,13 @@ export function readMarkedRelations(
   if (whole !== null) return whole;
   let stated: Set<string> | null = null;
   const rest: string[] = [];
+  const tails: string[] = [];
   for (const sentence of sentencesOf(text)) {
-    const read = readRelations(sentence, context);
-    if (read !== null && read.size === context.cited.size) {
+    const read = statingPart(sentence, context);
+    if (read !== null) {
       if (stated !== null) return null;
-      stated = read;
+      stated = read.stated;
+      if (read.tail !== null) tails.push(read.tail);
     } else {
       rest.push(sentence);
     }
@@ -697,5 +825,13 @@ export function readMarkedRelations(
     ...namesOf(context),
     ...others.map((words) => ({ words: [...words], role: "other" as const })),
   ];
-  return rest.every((sentence) => onlyDetail(sentence, names)) ? stated : null;
+  // The source the cited records come from may be named; another is no record's word for it.
+  const sourceOf = [...context.cited.values()].map((record) => record.source);
+  const sources = new Set(
+    [...SOURCE_NAMES].filter((name) => sourceOf.every((source) => source === name)),
+  );
+  const detail =
+    rest.every((sentence) => onlyDetail(sentence, names, sources)) &&
+    tails.every((tail) => onlyDetail(tail, names, sources, true));
+  return detail ? stated : null;
 }

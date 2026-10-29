@@ -363,8 +363,12 @@ describe("a model claim on a record-built relation that says something else", ()
     const kept = withoutRestatements(claims, [card("m-more")], [], evidence, { track: hungUp });
     expect(ids(kept.claims)).toEqual(ids(claims));
     expect(kept.factoids).toEqual([card("m-more")]);
-    // Each is as it was: none states its record's relation and nothing else, so none is marked.
-    for (const [i, claim] of kept.claims.entries()) expect(claim).toBe(claims[i]);
+    // None states its record's relation and nothing else, so none goes. The first states it
+    // before a comma, and what follows only adds detail (the track's artist is no new name): it
+    // is marked, its kind and verdict as they were. The others are as they were.
+    const [more, ...rest] = kept.claims;
+    expect(more).toEqual({ ...claims[0], documentedBy: ["code-abba"] });
+    for (const [i, claim] of rest.entries()) expect(claim).toBe(claims[i + 1]);
     expect(kept.restated).toBe(0);
   });
 });
@@ -744,6 +748,108 @@ describe("a model claim on a relation, read word by word", () => {
     }
   });
 
+  it("reads a claim that a track contains a sample, cover or remix of another, and its source", () => {
+    for (const verdict of both) {
+      for (const [text, cited] of [
+        ["Juicy contains a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy features a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy uses a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy is built on a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy is based on a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["The track was built on samples of Mtume’s Juicy Fruit.", "ev-fruit"],
+        ["Big Poppa Remix by Someone Else contains a sample of Juicy.", "ev-sby"],
+        ["Hung Up is based on a cover of Cover Me by Bruce Springsteen.", "ev-coverme"],
+        ["Hung Up (SDP extended vocal) is built on a remix of Hung Up.", "ev-remix"],
+        // A source it names, the record's own or any record.
+        ["The track samples Mtume’s Juicy Fruit, according to MusicBrainz.", "ev-fruit"],
+        ["Juicy contains a sample of Juicy Fruit by Mtume, according to the record.", "ev-fruit"],
+      ]) {
+        expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("goes");
+      }
+      for (const [text, cited] of [
+        // The other direction.
+        ["Juicy Fruit by Mtume contains a sample of Juicy.", "ev-fruit"],
+        ["Juicy contains a sample of Big Poppa Remix by Someone Else.", "ev-sby"],
+        // No article before a single sample, an article before several, no "of", another verb
+        // or noun, or an interpolation.
+        ["Juicy contains sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy contains a samples of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy contains a sample from Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy hides a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy contains a loop of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy contains a short sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy contains an interpolation of Juicy Fruit by Mtume.", "ev-fruit"],
+        ["Juicy never contains a sample of Juicy Fruit by Mtume.", "ev-fruit"],
+        // Another source than the record's, or more words around it.
+        ["The track samples Mtume’s Juicy Fruit, according to Discogs.", "ev-fruit"],
+        ["The track samples Mtume’s Juicy Fruit, according to WhoSampled.", "ev-fruit"],
+        ["The track samples Mtume’s Juicy Fruit, according to some fans.", "ev-fruit"],
+        ["According to MusicBrainz, the track samples Mtume’s Juicy Fruit.", "ev-fruit"],
+        ["The track samples Mtume’s Juicy Fruit, according to MusicBrainz users.", "ev-fruit"],
+      ]) {
+        expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("stays");
+      }
+      // Said so, then detail: it stays, marked (a timeline sample states it).
+      for (const text of [
+        "Juicy contains a sample of Juicy Fruit by Mtume. The bass line is looped.",
+        "Juicy is built on a sample of Juicy Fruit by Mtume, slowed down.",
+        "The track samples Mtume’s Juicy Fruit, according to MusicBrainz. The loop is short.",
+      ]) {
+        expect(read(text, ["ev-fruit"], verdict, { stated: true }), `${verdict}: ${text}`).toBe(
+          "stays, marked code-fruit",
+        );
+      }
+    }
+  });
+
+  it("names a record by a title of under three letters only with its artist", () => {
+    // "Up" alone could be a word of the claim's own ("Hung Up samples Up …").
+    const upRecord = record(
+      "ev-up",
+      "track/recording/h1/samples/recording/u1",
+      'MusicBrainz: "Hung Up" by Madonna samples "Up" by Shania Twain.',
+    );
+    const run = (text: string) =>
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-up"] }),
+            codeClaim("code-up", upRecord, { about: "sample" }),
+          ],
+          [],
+          [],
+          [upRecord],
+          { track: hungUp },
+        ).claims,
+      );
+    expect(run("Hung Up samples Up.")).toEqual(["m-1", "code-up"]);
+    expect(run("Hung Up samples Up by Shania Twain.")).toEqual(["code-up"]);
+    expect(run("Hung Up samples Shania Twain’s Up.")).toEqual(["code-up"]);
+  });
+
+  it("never marks a code-built claim, whatever its verdict", () => {
+    const judgedCode = { ...codeFruit, id: "code-judged", verdict: "supported" as const };
+    const kept = withoutRestatements([judgedCode, codeFruit], [], [], all, { track: juicy });
+    expect(kept.claims).toEqual([judgedCode, codeFruit]);
+  });
+
+  it("never marks a claim whose value was checked and found wrong", () => {
+    for (const numericCheck of ["contradicted", "n/a"] as const) {
+      const claim = judged("m-1", {
+        text: "Juicy samples Juicy Fruit by Mtume. The bass line is looped.",
+        about: "sample",
+        verdict: "partial",
+        evidenceIds: ["ev-fruit"],
+        numericCheck,
+      });
+      const kept = withoutRestatements([claim, codeFruit], [], [], all, { track: juicy });
+      const left = kept.claims.find((each) => each.id === "m-1");
+      expect(left?.documentedBy, numericCheck).toEqual(
+        numericCheck === "n/a" ? ["code-fruit"] : undefined,
+      );
+    }
+  });
+
   it("is marked when one sentence states its record's relation and the others only add detail", () => {
     for (const verdict of both) {
       for (const [text, cited, by] of [
@@ -781,6 +887,18 @@ describe("a model claim on a relation, read word by word", () => {
         ],
         [
           "Hung Up samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA. The riff is looped.",
+          "ev-abba",
+          "code-abba",
+        ],
+        // Stated before a comma, then only detail.
+        [
+          "Juicy samples Juicy Fruit by Mtume, slowed down. The bass line is looped.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        ["Juicy samples Juicy Fruit by Mtume, looping its bass line.", "ev-fruit", "code-fruit"],
+        [
+          "Hung Up samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA, the riff looped, sped up.",
           "ev-abba",
           "code-abba",
         ],
@@ -847,8 +965,39 @@ describe("a model claim on a relation, read word by word", () => {
         ["Juicy samples Juicy Fruit by Mtume. The loop was made at Bad Boy.", "ev-fruit"],
         // The relation stated twice, or a sentence for each of two records.
         ["Juicy samples Juicy Fruit by Mtume. Juicy samples Juicy Fruit.", "ev-fruit"],
-        ["Juicy samples Juicy Fruit by Mtume, slowed down. The bass line is looped.", "ev-fruit"],
         ["Juicy Fruit by Mtume samples Juicy. The bass line is looped.", "ev-fruit"],
+        // What follows the comma: a word that goes on naming records, a capitalised word (its
+        // first word too), a hedge, a doubt, a question, or another relation.
+        ["Juicy samples Juicy Fruit by Mtume, by way of Rappin’ Duke.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, and a later song too.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, with a drum break from elsewhere.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, of all songs.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, from its second verse.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, plus a horn stab.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, Biggie said.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, says Puff Daddy.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, reportedly.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, though some doubt it.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, or so they say.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, right?", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, and covers it later.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, which was not cleared.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, though that is likely incorrect.", "ev-fruit"],
+        // A doubting word the reader knows (questionable, could, instead …) in a sentence of
+        // its own.
+        ["Juicy samples Juicy Fruit by Mtume. The credit is questionable.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It could be a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. A replay was used instead.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Some sources contradict this.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Some say otherwise.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The credit is inaccurate.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. That is unlikely.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Fans are unsure.", "ev-fruit"],
+        // A source the record is not from (it is MusicBrainz's).
+        ["Juicy samples Juicy Fruit by Mtume. The loop is listed by Discogs.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume, according to Discogs.", "ev-fruit"],
+        // A comma inside a quoted title ends no statement.
+        ["Juicy samples “Juicy Fruit, a funk hit” by Mtume.", "ev-fruit"],
       ]) {
         expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
       }
@@ -1414,6 +1563,52 @@ describe("the model's copies of a relation no code-built claim states", () => {
     }
   });
 
+  it("keep a copy a timeline sample or a link of the model's names, and the other copy", () => {
+    // Two copies of one relation no code claim states; the second, on a card, is the better.
+    const named = judged("m-a", {
+      text: "Juicy samples Juicy Fruit by Mtume.",
+      about: "sample",
+      evidenceIds: ["ev-fruit"],
+    });
+    const carded = judged("m-b", {
+      text: "This recording samples Mtume’s “Juicy Fruit”.",
+      about: "sample",
+      evidenceIds: ["ev-fruit"],
+      factoid: { title: "Juicy Fruit", type: "sample", entities: [] },
+    });
+    const link = {
+      source: "current",
+      target: "mtume",
+      type: "sample",
+      origin: "model",
+      claimId: "m-a",
+    };
+    const map = {
+      nodes: [{ id: "current" }, { id: "mtume", label: "Juicy Fruit - Mtume" }],
+      links: [link],
+    };
+    for (const claims of [
+      [named, carded],
+      [carded, named],
+    ]) {
+      for (const [stating, genealogy] of [
+        [[{ claimId: "m-a" }], undefined],
+        [[link], map],
+      ] as const) {
+        const out = withoutRestatements(claims, [card("m-b")], stating, evidence, {
+          track: juicy,
+          genealogy,
+        });
+        // Both stay: the one named by a sample or a link never goes, and no name points at
+        // nothing.
+        expect(ids(out.claims).sort()).toEqual(["m-a", "m-b"]);
+        expect(out.factoids).toEqual([card("m-b")]);
+        expect(out.restated).toBe(0);
+        if (genealogy) expect(out.genealogy).toBe(genealogy);
+      }
+    }
+  });
+
   it("never leave a copy out for a rejected one", () => {
     const rejected = judged("m-rej", {
       text: "Hung Up samples ABBA's Gimme! Gimme! Gimme!, twice as fast.",
@@ -1547,6 +1742,70 @@ describe("the model's copies of a relation no code-built claim states", () => {
         expect(run(order), JSON.stringify(claims.map((c) => [c.text, c.verdict]))).toEqual(first);
       }
     }
+  });
+});
+
+describe("the step run on its own result", () => {
+  it("changes nothing: a node only the model's links draw names no record either time", () => {
+    // m-1 restates the record, and the model drew its own node for it; m-2 names the record by
+    // its artist alone, read only when no other record of the result credits Mtume.
+    const m1 = judged("m-1", {
+      text: "Juicy samples Juicy Fruit by Mtume.",
+      about: "sample",
+      verdict: "partial",
+      evidenceIds: ["ev-fruit"],
+    });
+    const m2 = judged("m-2", {
+      text: "Juicy samples Mtume.",
+      about: "sample",
+      verdict: "partial",
+      evidenceIds: ["ev-fruit"],
+    });
+    const links = [
+      {
+        source: "c-node",
+        target: "current",
+        type: "sample",
+        origin: "code",
+        claimId: "code-fruit",
+        evidenceIds: ["ev-fruit"],
+      },
+      { source: "m-node", target: "current", type: "sample", origin: "model", claimId: "m-1" },
+    ];
+    const map = {
+      nodes: [
+        { id: "current" },
+        { id: "c-node", label: "Juicy Fruit - Mtume" },
+        { id: "m-node", label: "Juicy Fruit (Remix) - Mtume" },
+      ],
+      links,
+    };
+    const first = withoutRestatements([m1, m2, codeFruit], [], links, evidence, {
+      track: juicy,
+      genealogy: map,
+    });
+    expect(ids(first.claims)).toEqual(["code-fruit"]);
+    expect(first.genealogy.nodes.map((node) => node.id)).toEqual(["current", "c-node"]);
+    const second = withoutRestatements(first.claims, [], first.genealogy.links, evidence, {
+      track: juicy,
+      genealogy: first.genealogy,
+    });
+    expect(second.claims).toEqual(first.claims);
+    expect(second.genealogy).toBe(first.genealogy);
+    expect(second.restated).toBe(0);
+    // A node a code link draws still names a record: Mtume alone is then two records'.
+    const coded = {
+      nodes: [...map.nodes, { id: "k-node", label: "Other Song - Mtume" }],
+      links: [
+        ...links,
+        { source: "k-node", target: "current", type: "sample", origin: "code", claimId: "code-x" },
+      ],
+    };
+    const kept = withoutRestatements([m1, m2, codeFruit], [], coded.links, evidence, {
+      track: juicy,
+      genealogy: coded,
+    });
+    expect(ids(kept.claims)).toEqual(["m-2", "code-fruit"]);
   });
 });
 

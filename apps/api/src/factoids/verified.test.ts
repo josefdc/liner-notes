@@ -336,6 +336,17 @@ describe("a new sample fact that restates a code-built sample of the run", () =>
     expect(sentClaims[0]).not.toHaveProperty("documentedBy");
   });
 
+  it("is sent marked when it states the record's relation and only adds detail", async () => {
+    const more =
+      "Daft Punk’s recording samples “More Spell on You” by Eddie Johns. The horns are chopped into the hook.";
+    expect(await sent(more)).toEqual([more]);
+    // Its own kind and verdict, and the code claim of the run that documents its relation: the
+    // page names the relation as that claim does ("Sample").
+    expect(sentClaims).toEqual([
+      expect.objectContaining({ verdict: "partial", kind: "inferred", documentedBy: ["code-s"] }),
+    ]);
+  });
+
   it("is sent unmarked when it names another record", async () => {
     const other =
       "Daft Punk’s recording samples the horns of “More Spell on You” by Ella Fitzgerald.";

@@ -325,7 +325,8 @@ function namedRecord(id: string, relation: DocumentedRelation, source?: string):
 
 /**
  * True when `text` states `relation` as its record documents it (`readRelations`), with no other
- * record of the result to tell apart from it.
+ * record of the result to tell apart from it. Internal: the tests read single statements with
+ * it; the step reads claims in `withoutRestatements`.
  */
 export function statesRelationOf(
   text: string,
@@ -517,8 +518,8 @@ export function withoutRestatements<
   });
   /**
    * The other sides of the result's records, by each artist name they credit: its relation
-   * records and the tracks its map draws (but the analysed one). An artist names a record alone
-   * only when it credits one of them.
+   * records and the tracks its map draws (but the analysed one, and one only the model's links
+   * draw). An artist names a record alone only when it credits one of them.
    */
   const artistIndex = new Map<string, Set<string>>();
   const indexArtist = (title: string, artist: string) => {
@@ -539,9 +540,23 @@ export function withoutRestatements<
       recordNames.push(...artistNames(relation.artist));
     }
   }
+  // A node only the model's links draw is left out: those links may go with their claims and
+  // take it off the map, and the step must read a map it has run on as it read it first.
+  const linksOf = new Map<string, MapLink[]>();
+  for (const link of mapLinks) {
+    for (const end of [link.source, link.target])
+      linksOf.set(end, [...(linksOf.get(end) ?? []), link]);
+  }
+  const onlyModelDraws = (id: string) => {
+    const incident = linksOf.get(id) ?? [];
+    return (
+      incident.length > 0 &&
+      incident.every((link) => link.origin !== "code" && link.claimId !== undefined)
+    );
+  };
   for (const node of genealogy?.nodes ?? []) {
     const other = nodeRecord(node);
-    if (!other) continue;
+    if (!other || onlyModelDraws(node.id)) continue;
     indexArtist(other.title, other.artist);
     recordNames.push(...titleNames(other.title), ...artistNames(other.artist));
   }
@@ -551,11 +566,6 @@ export function withoutRestatements<
    */
   const mayState = (claim: Claim) =>
     statesRelation(claim) && (claim.verdict === "supported" || claim.verdict === "partial");
-  /**
-   * The records a claim cites whose relation it states, in their direction, and nothing else
-   * (`readRelations`): none when it is not one of the templates, so a claim read in doubt
-   * states nothing, never goes, is never marked and never covers another.
-   */
   /** How a claim that may state its records' relations is read; null for one that may not. */
   const readingOf = perClaim((claim): ReadingContext | null => {
     const relations = mayState(claim) ? relationsOf(claim) : null;
@@ -578,6 +588,11 @@ export function withoutRestatements<
     };
     return reading;
   });
+  /**
+   * The records a claim cites whose relation it states, in their direction, and nothing else
+   * (`readRelations`): none when it is not one of the templates, so a claim read in doubt
+   * states nothing, never goes, is never marked and never covers another.
+   */
   const statesOf = perClaim((claim) => {
     const reading = readingOf(claim);
     return (reading && readRelations(claim.text, reading)) ?? new Set<string>();
@@ -585,11 +600,12 @@ export function withoutRestatements<
   /**
    * Whether a kept claim is marked as stating its records' relations: the whole of it does, or
    * one of its sentences does and the others only add detail (`readMarkedRelations`: no relation
-   * word, hedge or other record's name). Leaving a claim out still needs the whole of it.
+   * word, hedge or other record's name). Leaving a claim out still needs the whole of it. A
+   * rejected claim (a value checked and found wrong) is never marked.
    */
   const marks = perClaim((claim) => {
     const reading = readingOf(claim);
-    if (!reading) return false;
+    if (!reading || claimIsRejected(claim)) return false;
     const read = readMarkedRelations(claim.text, reading, recordNames);
     return [...reading.cited.keys()].every((id) => read?.has(id) ?? false);
   });

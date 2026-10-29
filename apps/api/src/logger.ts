@@ -162,9 +162,12 @@ const SCHEME_IN_REST = String.raw`${AUTH_CHAR}*?\b${SCHEMES}\s`;
  */
 const AUTH_SCHEME = new RegExp(
   String.raw`\b(Bearer\s+|Discogs\s+token=)(?!["']?${MASK}(?:(?!${AUTH_CHAR})|${SCHEME_IN_REST})|["']?${MASKED_BEFORE})` +
+    // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
     String.raw`["']?(?:${MASK}(?!${SCHEME_IN_REST})|${AUTH_CHAR})+["']?` +
     String.raw`|\b(Basic\s+)(?!["']?${MASK}(?:(?!${MASK}|[A-Za-z0-9+/=])|${SCHEME_IN_REST}))` +
+    // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
     String.raw`["']?(?=[A-Za-z0-9+/=]{8}|[A-Za-z0-9+/=]*${MASK}(?!${SCHEME_IN_REST}))` +
+    // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
     String.raw`(?:${MASK}(?!${SCHEME_IN_REST})|[A-Za-z0-9+/=])+["']?`,
   "gi",
 );
@@ -180,6 +183,7 @@ const RULE_IN_WORD = String.raw`["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_
  * secret after it would stay. A pair's value stops at `&` and the Authorization rule's does not:
  * taken by the pair, a token that holds one would show what follows it.
  */
+// biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
 const RULE_IN_NEXT_WORD = String.raw`(?:${RULE_IN_WORD}|["']?${VALUE_CHAR}*&)`;
 /**
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
@@ -208,10 +212,12 @@ const RULE_IN_NEXT_WORD = String.raw`(?:${RULE_IN_WORD}|["']?${VALUE_CHAR}*&)`;
 export const SECRET_PAIR = new RegExp(
   String.raw`\b(${PAIR_NAMES})(["']?\s*[:=]\s*(?!\s))` +
     String.raw`(?!\s*(?:(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)["']?${MASK}(?:(?!${VALUE_CHAR})|${RULE_IN_NEXT_WORD})` +
+    // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
     String.raw`|["']?${MASK}(?:(?!${VALUE_CHAR})|${RULE_IN_WORD})` +
     String.raw`|(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)?["']?${MASKED_BEFORE}))` +
     String.raw`((?:${QUOTE}${SCHEMES}[ \t]+(?:${SCHEMES}[ \t]+)*(?!${RULE_IN_NEXT_WORD})` +
     String.raw`|${SCHEMES}\s+(?:(?:${SCHEMES}\s+)+(?!${RULE_IN_NEXT_WORD}))?))?` +
+    // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
     String.raw`["']?(?:${MASK}(?!${RULE_IN_WORD})|${VALUE_CHAR})+["']?`,
   "gi",
 );

@@ -955,6 +955,7 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
     const MAIN_SECRET_PAIR = new RegExp(
       String.raw`\b(${N})(["']?\s*[:=]\s*(?!\s))(?!\s*(?:${Q}${S}[ \t]+|${S}\s+)?["']?\[redacted\])` +
         String.raw`((?:${Q}${S}[ \t]+(?:${S}[ \t]+)*(?!${NEXT})|${S}\s+(?:(?:${S}\s+)+(?!${NEXT}))?))?` +
+        // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
         String.raw`["']?${V}+["']?`,
       "gi",
     );
@@ -1377,8 +1378,9 @@ describe("configured values in what a client is shown, in a token and in any whi
     // time, one per value about 64 times.
     const salt = "S1xS2xS3xS4xS5xS6x";
     configure({ LOG_IP_SALT: salt });
+    const pair = `${salt}token=`;
     const glued = (size: number) =>
-      `${salt}token=`.repeat(Math.floor(size / 2 / (salt.length + 6))) + " ".repeat(size / 2) + "x";
+      `${pair.repeat(Math.floor(size / 2 / pair.length))}${" ".repeat(size / 2)}x`;
     const factor = 8;
     const { ratio, result } = growth(glued, (text) => hideKnownValues(text), {
       size: 1 << 15,

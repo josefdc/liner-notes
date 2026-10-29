@@ -1722,8 +1722,9 @@ describe("a credential found escaped at the start of a token (#237)", () => {
     const salt = "S1xS2xS3xS4xS5xS6x";
     configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
     onTestFinished(() => configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL }));
+    const pair = `${salt}token=`;
     const glued = (size: number) =>
-      `${salt}token=`.repeat(Math.floor(size / 2 / (salt.length + 6))) + " ".repeat(size / 2) + "x";
+      `${pair.repeat(Math.floor(size / 2 / pair.length))}${" ".repeat(size / 2)}x`;
     const factor = 8;
     for (const [name, call] of [
       ["describeError", (text: string) => describeError(new Error(text))],

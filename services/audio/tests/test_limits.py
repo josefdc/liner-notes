@@ -27,70 +27,125 @@ RESULT = {
 }
 
 
+# Upper bound on any wait in the slot tests. A test only reaches it when it is about to fail, so
+# it can be generous: a loaded machine makes these tests slower, never wrong.
+PATIENCE_S = 30.0
+
+
+class HeldAnalyses:
+    """Fake analyses that start and then hold their slot until ``release`` is set."""
+
+    def __init__(self):
+        self.release = threading.Event()
+        self.running = 0
+        self.peak = 0
+        self._lock = threading.Lock()
+
+    async def __call__(self, url):
+        with self._lock:
+            self.running += 1
+            self.peak = max(self.peak, self.running)
+        try:
+            # Wait in a worker thread: the event loop stays free to serve the other requests.
+            if not await asyncio.to_thread(self.release.wait, PATIENCE_S):
+                raise AssertionError("the analysis was never released")
+            return RESULT
+        finally:
+            with self._lock:
+                self.running -= 1
+
+
 @pytest.fixture
 def limited(monkeypatch):
-    """Returns a factory for a client whose analyses take ``delay`` seconds each."""
+    """Returns a factory for a client whose analyses hold their slot until released."""
     monkeypatch.delenv("AUDIO_SERVICE_TOKEN", raising=False)
-    stats = {"running": 0, "peak": 0}
-    lock = threading.Lock()
 
-    def make(*, slots, queued, wait_s, delay):
+    def make(*, slots, queued, wait_s):
         monkeypatch.setattr(main, "MAX_CONCURRENT_ANALYSES", slots)
         monkeypatch.setattr(main, "MAX_QUEUED_ANALYSES", queued)
         monkeypatch.setattr(main, "QUEUE_WAIT_S", wait_s)
-
-        async def fake_analysis(url):
-            with lock:
-                stats["running"] += 1
-                stats["peak"] = max(stats["peak"], stats["running"])
-            try:
-                await asyncio.sleep(delay)
-                return RESULT
-            finally:
-                with lock:
-                    stats["running"] -= 1
-
-        monkeypatch.setattr(main, "analyze_preview_url", fake_analysis)
-        return TestClient(main.create_app()), stats
+        held = HeldAnalyses()
+        monkeypatch.setattr(main, "analyze_preview_url", held)
+        return TestClient(main.create_app()), held
 
     return make
 
 
-def post_concurrently(client, n):
-    def post(_):
-        return client.post("/analyze", json={"preview_url": DEEZER_URL})
+def post(client):
+    return client.post("/analyze", json={"preview_url": DEEZER_URL})
 
-    with ThreadPoolExecutor(max_workers=n) as pool:
-        return list(pool.map(post, range(n)))
+
+def wait_until(condition, what):
+    deadline = time.monotonic() + PATIENCE_S
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out waiting until {what}")
+        time.sleep(0.005)
 
 
 def test_requests_beyond_the_slots_wait_instead_of_failing(limited):
-    client, stats = limited(slots=4, queued=16, wait_s=5.0, delay=0.3)
-    with client:
-        started = time.monotonic()
-        responses = post_concurrently(client, 5)
-        elapsed = time.monotonic() - started
+    client, held = limited(slots=4, queued=16, wait_s=PATIENCE_S)
+    with client, ThreadPoolExecutor(max_workers=5) as pool:
+        slots = client.app.state.analysis_slots
+        try:
+            requests = [pool.submit(post, client) for _ in range(5)]
+            wait_until(
+                lambda: held.running + slots.waiting + sum(r.done() for r in requests) == 5,
+                "every request has started, is waiting or has been answered",
+            )
+            assert held.running == 4
+            assert slots.waiting == 1  # the fifth waits for a slot
+            assert not any(r.done() for r in requests)  # and is not refused
+        finally:
+            held.release.set()
+        responses = [r.result(timeout=PATIENCE_S) for r in requests]
     assert [r.status_code for r in responses] == [200] * 5
-    assert stats["peak"] == 4
-    assert elapsed >= 0.6  # the fifth request waited for a slot
+    assert held.peak == 4
 
 
-def test_full_queue_answers_503_with_retry_after(limited):
-    client, _ = limited(slots=1, queued=0, wait_s=5.0, delay=0.5)
-    with client:
-        responses = post_concurrently(client, 2)
-    assert sorted(r.status_code for r in responses) == [200, 503]
-    busy = next(r for r in responses if r.status_code == 503)
+def test_full_queue_answers_503_with_retry_after(limited, caplog):
+    client, held = limited(slots=1, queued=0, wait_s=PATIENCE_S)
+    with client, ThreadPoolExecutor(max_workers=2) as pool:
+        slots = client.app.state.analysis_slots
+        try:
+            first = pool.submit(post, client)
+            wait_until(lambda: held.running == 1, "the first request holds the slot")
+            second = pool.submit(post, client)
+            wait_until(
+                lambda: second.done() or slots.waiting or held.running > 1,
+                "the second request is answered, waits or starts",
+            )
+            assert second.done()  # refused at once, without waiting for the slot
+            assert not first.done()
+        finally:
+            held.release.set()
+        assert first.result(timeout=PATIENCE_S).status_code == 200
+    busy = second.result()
+    assert busy.status_code == 503
     assert busy.headers["retry-after"] == str(main.RETRY_AFTER_S)
     assert busy.json() == {"detail": "The analysis service is busy; try again"}
+    assert "service busy: queue full" in caplog.text
 
 
-def test_wait_beyond_the_limit_answers_503(limited):
-    client, _ = limited(slots=1, queued=4, wait_s=0.1, delay=0.5)
-    with client:
-        responses = post_concurrently(client, 2)
-    assert sorted(r.status_code for r in responses) == [200, 503]
-    assert next(r for r in responses if r.status_code == 503).headers["retry-after"]
+def test_wait_beyond_the_limit_answers_503(limited, caplog):
+    wait_s = 0.1
+    client, held = limited(slots=1, queued=4, wait_s=wait_s)
+    with client, ThreadPoolExecutor(max_workers=2) as pool:
+        try:
+            first = pool.submit(post, client)
+            wait_until(lambda: held.running == 1, "the first request holds the slot")
+            asked = time.monotonic()
+            # The slot stays held, so only the wait limit can answer the second request.
+            busy = pool.submit(post, client).result(timeout=PATIENCE_S)
+            waited = time.monotonic() - asked
+            assert not first.done()
+        finally:
+            held.release.set()
+        assert first.result(timeout=PATIENCE_S).status_code == 200
+    assert busy.status_code == 503
+    assert busy.headers["retry-after"] == str(main.RETRY_AFTER_S)
+    assert "service busy: no slot within the wait limit" in caplog.text
+    assert waited >= wait_s
 
 
 def test_executor_has_one_thread_per_slot():

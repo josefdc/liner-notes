@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { captureLogsForTests, configureLogger, scrub } from "../logger.js";
+import { captureLogsForTests, configureLogger, MAX_LOGGED_TEXT, scrub } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -1676,6 +1676,115 @@ describe("what an error message keeps", () => {
     ]) {
       const line = plainMessage(text);
       if (line !== undefined) expect(reasonIssue(line), text).toBeNull();
+    }
+  });
+});
+
+describe("a credential found escaped at the start of a token (#237)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("hides the token whole, as the credential written as it came did", () => {
+    // The mask of the escaped credential splits the token run after it; the credential as it
+    // came hid the run whole (a long mixed-case token), and so does every path now.
+    vi.stubEnv("DISCOGS_TOKEN", "abc12345");
+    const run = "XyZ9".repeat(15);
+    for (const text of [
+      `id \\u0061bc12345${run} end`,
+      `id \\u0061bc12345${run}Q end`,
+      `id abc12345${run} end`,
+      `"token":"\\u0061bc12345${run}"`,
+      `{"error":"bad key \\u0061bc12345${run}"}`,
+    ]) {
+      for (const out of [
+        scrubReadPayload(text) as string,
+        redactText(text),
+        scrubText(text),
+        plainReason(text) ?? "",
+        describeError(new Error(text)),
+        new SourceError("discogs", "http", text).message,
+      ]) {
+        expect(out, `${JSON.stringify(text)} -> ${JSON.stringify(out)}`).not.toMatch(
+          /XyZ9|abc123|bc12345/,
+        );
+      }
+    }
+  });
+
+  it("never shows part of an Authorization credential a cut splits, at every offset", {
+    timeout: 120_000,
+  }, () => {
+    // A configured value written escaped before the credential is masked shorter than it is
+    // written: the cut of each path falls further on, and must still fall before the credential.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const bus = "sb://N1xN2x.servicebus.example.net/";
+    vi.stubEnv("LOG_IP_SALT", salt);
+    vi.stubEnv("BUS_ENDPOINT", bus);
+    configureLogger({ LOG_IP_SALT: salt, BUS_ENDPOINT: bus, LOG_LEVEL: process.env.LOG_LEVEL });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    });
+    const escapedAll = (value: string) =>
+      [...value]
+        .map((c) =>
+          /[A-Za-z0-9]/.test(c) ? c : `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+        )
+        .join("");
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const heads = ["", salt, escapedAll(bus), escapedAll(salt), `${salt} `];
+    const tails = [
+      "access_token : Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+      "token=Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+      "Authorization: Bearer T9zB8yC7xD6wE5vF4uG3",
+    ];
+    const paths: Array<[string, number, (text: string) => string]> = [
+      ["plainReason", 120, (text) => plainReason(text) ?? ""],
+      ["SourceError", 200, (text) => new SourceError("discogs", "http", text).message],
+      ["scrubText", 500, scrubText],
+      ["describeError", MAX_LOGGED_TEXT - 1024, (text) => describeError(new Error(text))],
+      ["scrub", MAX_LOGGED_TEXT, scrub],
+    ];
+    const shown: string[] = [];
+    for (const [name, cut, call] of paths) {
+      for (const head of heads) {
+        for (const tail of tails) {
+          for (let n = Math.max(0, cut - 160); n < cut + 10; n++) {
+            const out = call(`${words(n)}${head}${tail}`);
+            if (/QWx|T9z/.test(out)) shown.push(`${name} ${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("reads the gap after a run of glued values once on every path, in linear time", {
+    timeout: 120_000,
+  }, () => {
+    // Values glued to a pair's name in one run of token characters, then a long run of spaces:
+    // each value's span ends where the run ends. Reading the spaces after it again for each value
+    // takes about 1.7 s on 256 kB. From 32 kB to 256 kB a single pass grows about 8-14 times in
+    // CPU time, one per value about 64 times.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    });
+    const pair = `${salt}token=`;
+    const glued = (size: number) =>
+      `${pair.repeat(Math.floor(size / 2 / pair.length))}${" ".repeat(size / 2)}x`;
+    const factor = 8;
+    for (const [name, call] of [
+      ["describeError", (text: string) => describeError(new Error(text))],
+      ["SourceError", (text: string) => new SourceError("discogs", "http", text).message],
+      ["plainReason", (text: string) => plainReason(text) ?? ""],
+      ["scrubText", scrubText],
+      ["redactText", redactText],
+    ] as const) {
+      const { ratio, result } = growth(glued, call, { size: 1 << 15, factor, maxMs: MAX_MS });
+      expect.soft(ratio / factor, name).toBeLessThan(3);
+      expect(result, name).not.toContain("S1x");
     }
   });
 });

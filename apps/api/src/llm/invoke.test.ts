@@ -15,6 +15,7 @@ import {
 } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
+import { captureLogsForTests, configureLogger, logger } from "../logger.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
 import {
@@ -351,6 +352,79 @@ describe("retries", () => {
     expect(kind(Object.assign(new Error("x"), { status: 408 }))).toBe("timeout");
     expect(kind(new Error("something else"))).toBe("provider");
     expect(classifyError(new Error("x"), { ...state, aborted: true }).kind).toBe("aborted");
+  });
+
+  it("hides a configured value written escaped before it cuts the message, at every offset", () => {
+    // Cut to 500 and 300 characters, an escaped value is a part that no longer matches when the
+    // logger reads the line: it is hidden before the cut.
+    const value = 'pw"Quote\\Back-0123456789-ABCDEFGH';
+    const escaped = JSON.stringify(value).slice(1, -1);
+    vi.stubEnv("SOME_SERVICE_PASSWORD", value);
+    configureLogger({ SOME_SERVICE_PASSWORD: value, LOG_LEVEL: "info" });
+    const logs = captureLogsForTests();
+    onTestFinished(() => {
+      logs.restore();
+      configureLogger({ LOG_LEVEL: "silent" });
+      vi.unstubAllEnvs();
+    });
+    const parts = (text: string) =>
+      Array.from({ length: text.length - 7 }, (_, i) => text.slice(i, i + 8));
+    const secret = [...parts(value), ...parts(escaped), ...parts(JSON.stringify(escaped))];
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    for (let pad = 400; pad <= 520; pad++) {
+      const error = Object.assign(new Error(`${"a".repeat(pad)}${escaped} end`), { status: 400 });
+      const llm = classifyError(error, state);
+      logs.clear();
+      logger("llm").error("model call failed", { err: llm });
+      for (const out of [
+        llm.message,
+        String((llm.cause as Error).message),
+        logs.lines().join(""),
+      ]) {
+        expect(
+          secret.filter((part) => out.includes(part)),
+          `${pad}: ${out.slice(-80)}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it("never shows part of an Authorization credential its cuts split, at every offset", () => {
+    // A configured value written escaped before the credential is hidden shorter than it is
+    // written: the 500- and 300-character cuts fall further on, after the credential is hidden.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const bus = "sb://N1xN2x.servicebus.example.net/";
+    vi.stubEnv("BUS_ENDPOINT", bus);
+    configureLogger({ LOG_IP_SALT: salt, BUS_ENDPOINT: bus, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+      vi.unstubAllEnvs();
+    });
+    const escapedAll = (value: string) =>
+      [...value]
+        .map((c) =>
+          /[A-Za-z0-9]/.test(c) ? c : `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+        )
+        .join("");
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const shown: string[] = [];
+    for (const head of ["", salt, escapedAll(bus), escapedAll(salt)]) {
+      for (const tail of [
+        "access_token : Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "token=Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "Authorization: Bearer T9zB8yC7xD6wE5vF4uG3",
+      ]) {
+        for (let n = 140; n < 510; n++) {
+          const error = Object.assign(new Error(`${words(n)}${head}${tail}`), { status: 400 });
+          const llm = classifyError(error, state);
+          for (const out of [llm.message, String((llm.cause as Error).message)]) {
+            if (/QWx|T9z/.test(out)) shown.push(`${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
   });
 });
 

@@ -43,11 +43,11 @@ const short = (ids: readonly string[]) => ids.map((id) => id.slice(0, 8));
  * What the step makes of the model claims `claims` of `slug` beside its code-built claims, its
  * cards, its map and its pack: for each, "goes" or "stays" ("stays, marked <code claims>" when
  * marked), and whether its card is kept. A claim kept is as it came but for its mark: never
- * made sourced, its kind and verdict untouched.
+ * made sourced, its kind and verdict untouched. `code` stands in for the recorded code claims.
  */
-function fates(slug: string, claims: readonly Claim[]) {
+function fates(slug: string, claims: readonly Claim[], { code }: { code?: readonly Claim[] } = {}) {
   const analysis = showcase(slug);
-  const code = (analysis.claims ?? []).filter((claim) => claim.origin === "code");
+  code ??= (analysis.claims ?? []).filter((claim) => claim.origin === "code");
   const cards = claims.map((claim) => ({ id: `card-${claim.id}`, claimId: claim.id }));
   const kept = withoutRestatements(
     [...claims, ...code],
@@ -76,8 +76,15 @@ function fates(slug: string, claims: readonly Claim[]) {
 }
 
 /** What the step makes of the recorded claim `prefix` of `slug`, changed by `change`. */
-const fate = (slug: string, prefix: string, change: Partial<Claim> = {}) =>
-  fates(slug, [{ ...claimOf(slug, prefix), ...change }])[0];
+const fate = (
+  slug: string,
+  prefix: string,
+  change: Partial<Claim> = {},
+  options: { code?: readonly Claim[] } = {},
+) => fates(slug, [{ ...claimOf(slug, prefix), ...change }], options)[0];
+/** The recorded code claims of `slug`. */
+const codeOf = (slug: string) =>
+  (showcase(slug).claims ?? []).filter((claim) => claim.origin === "code");
 
 describe("a list of the records whose relations the code builds", () => {
   const LIST = "117ba937";
@@ -150,7 +157,9 @@ describe("a list of the records whose relations the code builds", () => {
       "“Juicy” is remixed in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
       // Another source than the records'.
       "Discogs records “Juicy” as sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
-      // A list that does not end: a comma with nothing after it, or two commas.
+      // A list that starts with a separator, or does not end: a comma with nothing after it, or
+      // two commas.
+      "“Juicy” is sampled in and Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
       "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,”, and Mos Def feat. Talib Kweli’s “History.”",
     ]) {
       expect(fate(JUICY, CARD, { text }), text).toBe("stays");
@@ -173,6 +182,24 @@ describe("a list of the records whose relations the code builds", () => {
     for (const about of ["history", "trivia", "production"] as const) {
       expect(fate(JUICY, LIST, { about }), about).toBe("stays");
     }
+  });
+
+  it("stays, and its card with it, when no code claim states its records", () => {
+    // Its records' relations are then stated by nothing else shown.
+    expect(fate(JUICY, LIST, {}, { code: [] })).toBe("stays");
+    expect(fate(JUICY, CARD, {}, { code: [] })).toBe("stays");
+    expect(fates(JUICY, [claimOf(JUICY, LIST), claimOf(JUICY, CARD)], { code: [] })).toEqual([
+      "stays",
+      "stays",
+    ]);
+    // Or only code claims about another subject than a relation.
+    const history = codeOf(JUICY).map((claim) => ({ ...claim, about: "history" as const }));
+    expect(fate(JUICY, LIST, {}, { code: history })).toBe("stays");
+    expect(fate(JUICY, CARD, {}, { code: history })).toBe("stays");
+    // Or code claims that state some of its records and not the others.
+    const withoutDream = codeOf(JUICY).filter((claim) => !claim.evidenceIds.includes(dream));
+    expect(withoutDream.length).toBeLessThan(codeOf(JUICY).length);
+    expect(fate(JUICY, CARD, {}, { code: withoutDream })).toBe("stays");
   });
 
   it("is never marked: a connection keeps its own words", () => {
@@ -245,6 +272,7 @@ describe("one record in a wording of the model's own", () => {
       'Discogs documents Eddie Johns\'s "More Spell on You" as a source sampled in this recording.',
       'MusicBrainz documents Eddie Johns\'s "More Spell on You" as a source heavily sampled in this recording.',
       'MusicBrainz documents Eddie Johns\'s "More Spell on You" as a disco source sampled in this recording.',
+      'MusicBrainz documents Eddie Johns\'s "More Spell on You" as uncredited source sampled in this recording.',
       'MusicBrainz documents Eddie Johns\'s "More Spell on You" as a source sampled on this recording.',
       'MusicBrainz documents Eddie Johns\'s "More Spell on You" as a source sampled in this recording of "One More Time" and "Circo Loco."',
       'This recording also also samples "More Spell on You" by Eddie Johns.',
@@ -311,6 +339,10 @@ describe("Bitter Sweet Symphony's Coldplay cover, stated three ways", () => {
       "The song’s work has reportedly been covered by Coldplay featuring Richard Ashcroft.",
       "MusicBrainz lists a version of the song by Coldplay featuring Richard Ashcroft as a cover of “Bitter Sweet Symphony.”",
       "MusicBrainz lists a version of the song by Coldplay featuring Richard Ashcroft as a live cover.",
+      // Which "by" names the version is not told.
+      "MusicBrainz lists a version of “Bitter Sweet Symphony” by The Verve by Coldplay featuring Richard Ashcroft as a cover.",
+      // Stated twice: the claim is no one statement.
+      "The song’s work has been covered by Coldplay featuring Richard Ashcroft. MusicBrainz lists a version of the song by Coldplay featuring Richard Ashcroft as a cover.",
       "Discogs lists a version of the song by Coldplay featuring Richard Ashcroft as a cover.",
     ]) {
       expect(fate(BSS, COVER, { text }), text).toBe("stays");
@@ -341,11 +373,17 @@ describe("Bitter Sweet Symphony's Coldplay cover, stated three ways", () => {
 
 describe("a detail sentence that refers back to the relation", () => {
   const SAMPLE = "71a2da2e";
+  const COVER = "f67d7102";
   const STATED = "The Verve’s recording samples “The Last Time” by The Andrew Oldham Orchestra.";
-  const code = () =>
+  const COVERED = "The song’s work has been covered by Coldplay featuring Richard Ashcroft.";
+  const codeAbout = (title: string) =>
     (showcase(BSS).claims ?? []).find(
-      (claim) => claim.origin === "code" && claim.text.includes("The Last Time"),
+      (claim) => claim.origin === "code" && claim.text.includes(title),
     )?.id ?? "";
+  const sampleMark = () => `stays, marked ${codeAbout("The Last Time").slice(0, 8)}`;
+  /** BSS's sample claim with `detail` after its statement, as recorded: partly supported. */
+  const withDetail = (detail: string, change: Partial<Claim> = {}) =>
+    fate(BSS, SAMPLE, { text: `${STATED} ${detail}`, ...change });
 
   it("is detail: Bitter Sweet Symphony's sample card is marked with its record", () => {
     expect(claimOf(BSS, SAMPLE)).toMatchObject({
@@ -354,42 +392,277 @@ describe("a detail sentence that refers back to the relation", () => {
       verdict: "partial",
       kind: "inferred",
     });
-    expect(fate(BSS, SAMPLE)).toBe(`stays, marked ${code().slice(0, 8)}`);
+    expect(fate(BSS, SAMPLE)).toBe(sampleMark());
+    for (const detail of [
+      "Strings were layered over the sample.",
+      "The vocal sits above this sample.",
+      "The arrangement was built around that sample!",
+      "The band added drums beneath the sample.",
+      "Guitar and percussion were added alongside that sample.",
+    ]) {
+      expect(withDetail(detail), detail).toBe(sampleMark());
+    }
+    // A cover's own noun, after a cover.
+    const cover = { text: `${COVERED} Strings were added over this cover.`, verdict: "partial" };
+    expect(fate(BSS, COVER, { ...cover, kind: "inferred" } as Partial<Claim>)).toBe(
+      `stays, marked ${codeAbout("Coldplay").slice(0, 8)}`,
+    );
+  });
+
+  it("is not detail when the relation's noun is the subject: it may dispute, reverse or move it", () => {
     for (const detail of [
       "The sample opens the track.",
-      "Strings were layered over the sample.",
       "This sample carries the whole arrangement.",
-      "The arrangement was built around that sample!",
+      "The sample was lifted from The Verve’s recording by The Andrew Oldham Orchestra.",
+      "The Verve’s recording is the sample’s original source.",
+      "“The Last Time” by The Andrew Oldham Orchestra is where the sample ended up.",
+      "The sample came first; “The Last Time” followed.",
+      "The sample appears in “The Last Time” too.",
+      "The sample was uncleared and cost the band all royalties.",
+      "This sample was not used.",
+      "The sample was taken out before release.",
+      "The sample is fake.",
+      "The sample was replaced by a re-recording.",
+      "Some say the sample is fake.",
+      "The sample belongs to a different song.",
+      "This sample is a misattribution.",
+      "The sample is bogus.",
+      "The sample was taken from another track entirely.",
+      "The sample is actually a replayed re-recording.",
+      "The sample is apocryphal.",
+      "The sample is invented.",
+      "The sample: fabricated.",
+      "The sample is the riff of a later song.",
+      "The sample was replaced by a re-recorded string part.",
+      "The sample was later reused in another hit.",
+      "the sample.",
+      "The sample",
+      "That sample.",
     ]) {
-      expect(fate(BSS, SAMPLE, { text: `${STATED} ${detail}` }), detail).toBe(
-        `stays, marked ${code().slice(0, 8)}`,
-      );
+      expect(withDetail(detail), detail).toBe("stays");
+    }
+    // Supported, the same.
+    const lifted =
+      "The sample was lifted from The Verve’s recording by The Andrew Oldham Orchestra.";
+    expect(withDetail(lifted, { verdict: "supported", kind: "sourced" })).toBe("stays");
+    // As the tail of the stating sentence.
+    expect(
+      fate(BSS, SAMPLE, {
+        text: `${STATED.slice(0, -1)}, the sample having first appeared on The Verve’s recording.`,
+      }),
+    ).toBe("stays");
+    // Juicy's sample, and the Coldplay cover.
+    expect(
+      fate(JUICY, "49a56b45", {
+        text: `${claimOf(JUICY, "49a56b45").text} The sample was later reused in another hit.`,
+        verdict: "partial",
+        kind: "inferred",
+      }),
+    ).toBe("stays");
+    for (const detail of [
+      "This cover predates the song.",
+      "This cover is the original recording.",
+      "The cover came out before The Verve’s recording.",
+      "The cover was recorded live.",
+    ]) {
+      const cover = { text: `${COVERED} ${detail}`, verdict: "partial", kind: "inferred" };
+      expect(fate(BSS, COVER, cover as Partial<Claim>), detail).toBe("stays");
     }
   });
 
-  it("is not detail beside a new name, a tie to something else, another relation or a doubt", () => {
+  it("is not detail with a name beside it, more than one sample, or a word that ties it elsewhere", () => {
     for (const detail of [
-      // A name the result does not hold, or another record's.
+      // A name the result does not hold, the track's, or a cited record's.
       "Noel Gallagher built the arrangement around that sample.",
-      "The arrangement was built around that sample by Richard Ashcroft.",
       "Richard Ashcroft built the arrangement around that sample.",
-      // A tie to something else.
+      "The Verve layered strings around that sample.",
+      "Coldplay layered strings around that sample.",
+      "The Andrew Oldham Orchestra built “The Last Time” around the sample.",
+      "The arrangement was built around that sample by Richard Ashcroft.",
+      // Not the sample stated, or more than one.
+      "The arrangement was built around a sample.",
+      "The arrangement was built around one sample.",
+      "The arrangement was built around those samples.",
+      "The arrangement was built around the samples.",
+      "The arrangement was built around this sampling.",
+      // A tie to something else, before a name or a lower-case word.
       "The arrangement was built around the sample of “Popcorn.”",
       "The arrangement was built around the sample from 1965.",
       "The arrangement was built around the sample in “Juicy Cuts 7.”",
+      "The arrangement was built around that sample in the chorus.",
+      "The arrangement was built on the sample by the house band.",
+      "The arrangement was built around the sample by the house band.",
+      "The band opened with the sample at the start.",
+      "The strings swell over the sample into the bridge.",
+      "The drums were built around this sample with a drum loop.",
+      "The strings were layered around the sample on their next single.",
+      // A preposition that says where it came from, or that it is something else.
+      "The strings were taken from this sample.",
+      "The arrangement is based on this sample.",
+      "The riff was first heard in the sample.",
+      "The riff was turned into the sample.",
+      "The riff was added to the sample.",
+      "The riff was played against the sample.",
       // Not the relation stated, or not a back-reference.
       "The arrangement was built around that cover.",
       "The arrangement was built around that remix.",
       "Its strings that sample the riff were added later.",
       "The arrangement was built around that sample, and a sample of a drum break.",
       "A sample of the riff opens it.",
-      // A doubt.
+      "Around that sample, strings swell.",
+      // A doubt, or a question.
       "That sample was later disputed.",
       "The arrangement was perhaps built around that sample.",
       "Was the arrangement built around that sample?",
     ]) {
-      expect(fate(BSS, SAMPLE, { text: `${STATED} ${detail}` }), detail).toBe("stays");
+      expect(withDetail(detail), detail).toBe("stays");
     }
+    for (const detail of [
+      "Strings were taken from this cover.",
+      "The arrangement is based on this cover.",
+      "Strings were added over this cover in 2005.",
+    ]) {
+      const cover = { text: `${COVERED} ${detail}`, verdict: "partial", kind: "inferred" };
+      expect(fate(BSS, COVER, cover as Partial<Claim>), detail).toBe("stays");
+    }
+  });
+});
+
+describe("the track named by a noun of the record's scope", () => {
+  const COVER = "f67d7102";
+  const SAMPLE = "71a2da2e";
+  const supported = { verdict: "supported", kind: "sourced" } as const;
+
+  it("names a work record's track as the song or its work, never as this recording or track", () => {
+    expect(
+      showcase(BSS).evidence?.find((item) => item.id === claimOf(BSS, COVER).evidenceIds[0]),
+    ).toBeDefined();
+    for (const text of [
+      "The song has been covered by Coldplay featuring Richard Ashcroft.",
+      "The work has been covered by Coldplay featuring Richard Ashcroft.",
+      "The song’s work has been covered by Coldplay featuring Richard Ashcroft.",
+    ]) {
+      expect(fate(BSS, COVER, { text }), text).toBe("goes");
+    }
+    for (const text of [
+      "This recording has been covered by Coldplay featuring Richard Ashcroft.",
+      "This track has been covered by Coldplay featuring Richard Ashcroft.",
+      "The recording has been covered by Coldplay featuring Richard Ashcroft.",
+    ]) {
+      expect(fate(BSS, COVER, { text }), text).toBe("stays");
+      const detail = { text: `${text} The cover was recorded live.`, verdict: "partial" };
+      expect(fate(BSS, COVER, { ...detail, kind: "inferred" } as Partial<Claim>), text).toBe(
+        "stays",
+      );
+      const over = { text: `${text} Strings were added over this cover.`, verdict: "partial" };
+      expect(fate(BSS, COVER, { ...over, kind: "inferred" } as Partial<Claim>), text).toBe("stays");
+    }
+  });
+
+  it("names a recording record's track as this recording, this track or the song, never as its work", () => {
+    for (const text of [
+      "This recording samples “The Last Time” by The Andrew Oldham Orchestra.",
+      "This track samples “The Last Time” by The Andrew Oldham Orchestra.",
+      "The song samples “The Last Time” by The Andrew Oldham Orchestra.",
+    ]) {
+      expect(fate(BSS, SAMPLE, { text, ...supported }), text).toBe("goes");
+    }
+    for (const text of [
+      "The song’s work samples “The Last Time” by The Andrew Oldham Orchestra.",
+      "The work samples “The Last Time” by The Andrew Oldham Orchestra.",
+    ]) {
+      expect(fate(BSS, SAMPLE, { text, ...supported }), text).toBe("stays");
+      const detail = `${text} Strings were layered over the sample.`;
+      expect(fate(BSS, SAMPLE, { text: detail }), text).toBe("stays");
+    }
+    expect(
+      fate(OMT, "78acfe08", { text: 'The work samples "More Spell on You" by Eddie Johns.' }),
+    ).toBe("stays");
+    expect(
+      fate(OMT, "78acfe08", {
+        text: 'The song’s work samples "More Spell on You" by Eddie Johns.',
+      }),
+    ).toBe("stays");
+  });
+});
+
+describe("a cover named by the guest it features", () => {
+  const COVER = "f67d7102";
+
+  it("stays: the guest alone is not the covering artist", () => {
+    for (const text of [
+      "The song has been covered by Richard Ashcroft.",
+      "The song’s work has been covered by Richard Ashcroft.",
+      "MusicBrainz lists a version of the song by Richard Ashcroft as a cover.",
+    ]) {
+      expect(fate(BSS, COVER, { text }), text).toBe("stays");
+    }
+    const detail = {
+      text: "The song has been covered by Richard Ashcroft. Strings were added over this cover.",
+      verdict: "partial",
+      kind: "inferred",
+    } as Partial<Claim>;
+    expect(fate(BSS, COVER, detail)).toBe("stays");
+  });
+
+  it("stays when the band alone may be either of its two covers, and when “with” names its guest", () => {
+    // The result holds “Coldplay feat. Richard Ashcroft” and “Coldplay with Richard Ashcroft”.
+    expect(fate(BSS, COVER, { text: "The song’s work has been covered by Coldplay." })).toBe(
+      "stays",
+    );
+    expect(
+      fate(BSS, COVER, {
+        text: "The song’s work has been covered by Coldplay with Richard Ashcroft.",
+      }),
+    ).toBe("stays");
+  });
+});
+
+describe("a list that may group its names otherwise", () => {
+  const CARD = "5ed3b846";
+  const dream = itemOf(JUICY, "beb2b87b-cf8e-4688-9407-35271cec7109");
+  const awol = itemOf(JUICY, "b3201b35-4fbe-4da5-9bac-1c9523e63df5");
+
+  it("stays when one title is given more artists than its record's", () => {
+    for (const text of [
+      "“Juicy” is sampled in “A Dream” by Jay-Z, RBX and Mos Def.",
+      "“Juicy” is sampled in “A Dream” by Jay-Z, RBX, and Mos Def.",
+    ]) {
+      expect(fate(JUICY, CARD, { text }), text).toBe("stays");
+    }
+    for (const text of ["“Juicy” is sampled in “A Dream” by Jay-Z and RBX."]) {
+      expect(fate(JUICY, CARD, { text, evidenceIds: [dream, awol] }), text).toBe("stays");
+    }
+    const apart = "“Juicy” is sampled in “A Dream” by Jay-Z and “A.W.O.L.” by RBX.";
+    expect(fate(JUICY, CARD, { text: apart, evidenceIds: [dream, awol] })).toBe("goes");
+  });
+});
+
+describe("a question", () => {
+  it("is never read as a statement", () => {
+    for (const [slug, prefix, text] of [
+      [BSS, "f67d7102", "The song’s work has been covered by Coldplay featuring Richard Ashcroft?"],
+      [
+        JUICY,
+        "5ed3b846",
+        "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History?”",
+      ],
+      [
+        JUICY,
+        "5ed3b846",
+        "Is “Juicy” sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History”?",
+      ],
+      [OMT, "78acfe08", 'This track samples Eddie Johns\'s "More Spell on You"?'],
+      [JUICY, "f3a2ae6f", "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit”? "],
+    ] as const) {
+      expect(fate(slug, prefix, { text }), text).toBe("stays");
+    }
+    // Its statement, the same words, goes.
+    expect(
+      fate(BSS, "f67d7102", {
+        text: "The song’s work has been covered by Coldplay featuring Richard Ashcroft.",
+      }),
+    ).toBe("goes");
   });
 });
 

@@ -11,8 +11,8 @@
  *    - its text is a code claim's (`statementKey`), citing only that claim's items, whatever the
  *      judge said;
  *    - or it is about a relation (a sample or a cover) or a connection (a list of the tracks that
- *      sample this one), the judge found it supported or partly
- *      supported, and it states exactly the relations its records document
+ *      sample this one), the judge found it supported or partly supported, and it states exactly
+ *      the relations its records document
  *      (`statesOnlyItsRelations`), each record cited by a code claim about the same relation, at
  *      the same scope. The same fact is the same relation between the same two records, read the
  *      same way: the record gives the pair, the relation's kind and its direction
@@ -21,16 +21,17 @@
  *      hop, is not one). The claim must be, word for word, one of the strict templates of
  *      relationText.ts (`readRelations`): "<one> samples <other>", "<one> is sampled by|in
  *      <other>" and their forms, a list of records ("is sampled in A, B and C"), one side the
- *      analysed track and the other each record it cites,
+ *      analysed track (named as its records' scope allows: "this recording" not for a record of
+ *      the song's work, "the song's work" only for one) and the other each record it cites,
  *      named by its title (or by an artist no other record of the result shares; a cover so
- *      only beside the song named by more than its artist), in the record's direction. Anything else (a relative clause, an adverb, a
- *      hedge or a negation, a word of its own, a name it does not cite) is unknown, and an
- *      unknown claim states nothing: it stays. A claim on records of the song may also say, in
- *      sentences of their own, only that the relation is the song's (`readStatedRelations`). A
- *      connection is compared with the code claims about a sample or a cover on its records. A
- *      relation record says only that one record draws
- *      on another, so a claim that says how ("the bass line") says more, whatever the judge
- *      found;
+ *      only by its lead artist, beside the song named by more than its artist), in the record's
+ *      direction. Anything else (a relative clause, an adverb, a hedge or a negation, a word of
+ *      its own, a name it does not cite, a question) is unknown, and an unknown claim states
+ *      nothing: it stays. A claim on records of the song may also say, in sentences of their
+ *      own, only that the relation is the song's (`readStatedRelations`). A connection is
+ *      compared with the code claims about a sample or a cover on its records, and stays when
+ *      none states one of them. A relation record says only that one record draws on another,
+ *      so a claim that says how ("the bass line") says more, whatever the judge found;
  *    - or, about anything else, the judge found it wholly supported by one code claim's items
  *      and it names nothing they do not (`namesOnlyWhatItCites`: every capitalised word and
  *      every number it holds is in their excerpts, a month read as its number). Here the analysed
@@ -56,13 +57,13 @@
  *    said of it, is never dropped for one it did not check), then the one on a fact card, then
  *    the one citing more records, then the smaller id.
  * 3. A model claim kept about a sample or a cover that states exactly the relations its records
- *    document is marked with
- *    the code claims that document them (`documentedBy`): the page names its relation as
- *    theirs. It states them as 1 reads them, or in exactly one of its sentences while each other
- *    sentence only adds detail: no "?", relation word (but "that sample", "the sample", "this
- *    cover", referring back to it), hedge, negation or doubting word, and no
- *    capitalised name but the track's, its records', the result's and a source's
- *    (`readMarkedRelations`). A claim the templates cannot read is never marked.
+ *    document is marked with the code claims that document them (`documentedBy`): the page
+ *    names its relation as theirs. It states them as 1 reads them, or in exactly one of its
+ *    sentences while each other sentence only adds detail: no "?", relation word (but the
+ *    relation's noun at the end of a sentence that names nothing, after a preposition of place:
+ *    "…around that sample"), hedge, negation or doubting word, and no capitalised name but the
+ *    track's, its records', the result's and a source's (`readMarkedRelations`). A claim the
+ *    templates cannot read is never marked.
  *    Its kind and verdict stay (a partly supported one still shows so); a mark it came with is
  *    read again.
  *
@@ -96,6 +97,7 @@ import {
   foldText,
   hedged,
   LINK_TYPE,
+  leadArtistNames,
   type NamedRecord,
   otherDrawsOn,
   type ReadingContext,
@@ -339,6 +341,7 @@ function namedRecord(
     key: `${normalizeTitle(foldText(relation.title))}|${relation.artist ?? ""}`,
     titles: titleNames(relation.title),
     artists: relation.artist === null ? [] : artistNames(relation.artist),
+    leads: relation.artist === null ? [] : leadArtistNames(relation.artist),
   };
 }
 

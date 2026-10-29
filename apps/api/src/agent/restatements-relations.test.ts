@@ -1885,6 +1885,136 @@ describe("the step on many claims", () => {
   });
 });
 
+describe("a list with a comma inside a quoted title", () => {
+  const juicy = { title: "Juicy", artist: "The Notorious B.I.G." };
+  const sampledIn = (id: string, title: string, artist: string) =>
+    record(
+      id,
+      `track/recording/j1/sampled-by/recording/${id}`,
+      `MusicBrainz: "Juicy" by The Notorious B.I.G. is sampled in "${title}" by ${artist}.`,
+    );
+  const pack = [
+    sampledIn("ev-hg", "Hello, Goodbye", "Earth, Wind & Fire"),
+    sampledIn("ev-hello", "Hello", "Adele"),
+    sampledIn("ev-goodbye", "Goodbye", "Tyler, The Creator"),
+    sampledIn("ev-awol", "A.W.O.L.", "RBX"),
+  ];
+  const code = pack.map((item) => codeClaim(`code-${item.id}`, item, { about: "connection" }));
+  const fate = (text: string, evidenceIds: string[]) => {
+    const kept = withoutRestatements(
+      [judged("m-1", { text, about: "connection", evidenceIds }), ...code],
+      [],
+      [],
+      pack,
+      { track: juicy },
+    );
+    return ids(kept.claims).includes("m-1") ? "stays" : "goes";
+  };
+
+  it("reads the title whole, never as the two records its parts name", () => {
+    for (const text of [
+      "“Juicy” is sampled in RBX’s “A.W.O.L.,” and “Hello, Goodbye.”",
+      "“Juicy” is sampled in RBX’s “A.W.O.L.” and Earth, Wind & Fire’s “Hello, Goodbye.”",
+      '"Juicy" is sampled in "Hello, Goodbye" and "A.W.O.L."',
+    ]) {
+      expect(fate(text, ["ev-awol", "ev-hg"]), text).toBe("goes");
+      expect(fate(text, ["ev-awol", "ev-hello", "ev-goodbye"]), text).toBe("stays");
+    }
+    const all = "“Juicy” is sampled in “Hello, Goodbye,” “Hello,” and “Goodbye.”";
+    expect(fate(all, ["ev-hg", "ev-hello", "ev-goodbye"])).toBe("goes");
+    expect(fate(all, ["ev-hello", "ev-goodbye"])).toBe("stays");
+  });
+});
+
+describe("a cover named by its artist", () => {
+  const guestCover = record(
+    "ev-guest",
+    "work/w1/covered-by/recording/r7",
+    'MusicBrainz: the work "One More Time" is covered by "One More Time" by Big Band feat. Liz Ray.',
+  );
+  const code = codeClaim("code-guest", guestCover, { about: "cover", scope: "work" });
+  const fate = (text: string) => {
+    const model = judged("m-1", { text, about: "cover", scope: "work", evidenceIds: ["ev-guest"] });
+    const kept = withoutRestatements([model, code], [], [], [guestCover], { track: omt });
+    return ids(kept.claims).includes("m-1") ? "stays" : "goes";
+  };
+
+  it("goes named by its lead or its whole credit, and stays named by its guest alone", () => {
+    for (const text of [
+      "The song’s work has been covered by Big Band.",
+      "The song’s work has been covered by Big Band feat. Liz Ray.",
+      "The song’s work has been covered by Big Band featuring Liz Ray.",
+    ]) {
+      expect(fate(text), text).toBe("goes");
+    }
+    for (const text of [
+      "The song’s work has been covered by Liz Ray.",
+      "MusicBrainz lists a version of the song by Liz Ray as a cover.",
+    ]) {
+      expect(fate(text), text).toBe("stays");
+    }
+  });
+});
+
+describe("a list followed by detail", () => {
+  it("is marked when the list before its comma states each record and the rest is detail", () => {
+    const run = (text: string) =>
+      withoutRestatements(
+        [
+          judged("m-1", {
+            text,
+            about: "sample",
+            verdict: "partial",
+            evidenceIds: ["ev-fruit", "ev-duke"],
+          }),
+          codeFruit,
+          codeDuke,
+        ],
+        [],
+        [],
+        evidence,
+        { track: juicy },
+      ).claims.find((claim) => claim.id === "m-1");
+    const listed =
+      "Juicy samples Juicy Fruit by Mtume, Rappin’ Duke by The Rappin’ Duke, its drums looped twice.";
+    expect(run(listed)?.documentedBy).toEqual(["code-fruit", "code-duke"]);
+    const other = listed.replace("its drums", "its drums by Dr. Dre");
+    expect(run(other)?.documentedBy).toBeUndefined();
+  });
+});
+
+describe("the step on claims of many commas", () => {
+  it("reads claims of hundreds of commas at the judge's 1,000-character cap in a few milliseconds each", () => {
+    // Each comma ends a part read on its own ("…, bringing the earlier song in"), a list or a
+    // statement with a tail; the sentence is split once and each part read from its words.
+    const dream = record(
+      "ev-dream",
+      "track/recording/j1/sampled-by/recording/d1",
+      'MusicBrainz: "Juicy" by The Notorious B.I.G. is sampled in "A Dream" by Jay-Z.',
+    );
+    const juicy = { title: "Juicy", artist: "The Notorious B.I.G." };
+    const claims = Array.from({ length: 40 }, (_, i) =>
+      judged(`m-${i}`, {
+        text:
+          i % 2 === 0
+            ? `${",x".repeat(480)} ${i} Juicy is sampled in A Dream`.slice(-1_000)
+            : `Juicy is sampled in A Dream x${i}${", y".repeat(400)}`.slice(0, 1_000),
+        about: "sample",
+        verdict: "partial",
+        evidenceIds: ["ev-dream"],
+      }),
+    );
+    expect(claims.every((claim) => claim.text.length >= 990)).toBe(true);
+    const { ms, result } = timed(
+      () => withoutRestatements(claims, [], [], [dream], { track: juicy }),
+      { runs: 2, stopAboveMs: 10_000, clock: threadCpuMs },
+    );
+    // About 0.4 s on a busy machine; a read of each part's words split again took ten times that.
+    expect(ms).toBeLessThan(2_000);
+    expect(result.claims).toHaveLength(40);
+  });
+});
+
 describe("a model claim on another subject", () => {
   it("restates a code-built claim whose names differ from its own only by accents", () => {
     const release: Evidence = {

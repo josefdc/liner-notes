@@ -24,21 +24,26 @@
  *
  * Any of them may end "according to <source>", the source the cited records' own as above.
  *
- * One side is the analysed track (its title, its artist, "this recording", "this track", "the
- * song", "the song's work", "this recording of <its title>"); the other names one or more of the
- * records the claim cites ("A and B", a list "A, B and C" or "A, B, and C"), each by its title,
- * with or without its artist ("Mtume's Juicy Fruit", "Juicy Fruit by Mtume"), or by its artist
- * alone when no other record of the result has that artist; a cover by its artist alone only
- * when the track is named by more than its artist ("Daft Punk is covered by …" says which artist
- * is covered, not which song). An artist is its whole credit (its featured artist joined by
- * "feat.", "ft." or "featuring"), or the main or a featured artist of one ("Drake" in "Drake
- * feat. 21 Savage"), never a part joined by "&", "and" or a comma ("Simon" in "Simon &
- * Garfunkel": `artistNames`). A list is read with its commas (`readRelations`): a name holding a
- * comma ("Earth, Wind & Fire") is then not read in a list. Anything else is unknown: a word of its own, a relative
- * clause ("the track that Juicy samples"), an adverb ("sampled heavily by"), "sampled on", "has
- * X sampled in it", a hedge or a negation, a second relation word, a name the claim does not
- * cite. A relation word or a negation inside a name is part of the name ("Cover Me", "No
- * Scrubs"). An unknown claim is read as stating nothing: doubt keeps it as it is.
+ * One side is the analysed track (its title, its artist, "the song", "this recording of <its
+ * title>"; "this recording" or "this track" only when no record it cites is the song's work's,
+ * "the work" or "the song's work" only when each is); the other names one or more of the
+ * records the claim cites ("A and B", a list "A, B and C" or "A, B, and C", never two names side
+ * by side), each by its title, with or without its artist ("Mtume's Juicy Fruit", "Juicy Fruit
+ * by Mtume"), or by its artist alone when no other record of the result has that artist; a cover
+ * by its artist alone only when the track is named by more than its artist ("Daft Punk is
+ * covered by …" says which artist is covered, not which song), and by its main artist or whole
+ * credit, never its guest alone. An artist is its whole credit (its featured artist joined by
+ * "feat.", "ft.", "featuring" or "with"), or the main or a featured artist of one ("Drake" in
+ * "Drake feat. 21 Savage"), never a part joined by "&", "and" or a comma ("Simon" in "Simon &
+ * Garfunkel": `artistNames`). A list is read with its commas outside quotes (`readRelations`):
+ * a name holding a comma ("Earth, Wind & Fire") is then not read in a list, unless it is a
+ * quoted title ("“Hello, Goodbye”"); an artist after "<title> by <artist>" is that record's
+ * credit, never another record ("“A Dream” by Jay-Z, RBX and Mos Def" names no three records).
+ * Anything else is unknown: a word of its own, a relative clause ("the track that Juicy
+ * samples"), an adverb ("sampled heavily by"), "sampled on", "has X sampled in it", a hedge or a
+ * negation, a second relation word, a name the claim does not cite, a "?" at its end. A
+ * relation word or a negation inside a name is part of the name ("Cover Me", "No Scrubs"). An
+ * unknown claim is read as stating nothing: doubt keeps it as it is.
  *
  * A claim on records of the song may add sentences that only say the relation is the song's ("This
  * relationship is attached to the song's work, not specifically to this recording":
@@ -46,12 +51,14 @@
  *
  * To mark a claim (and only to mark it), `readMarkedRelations` also reads it a sentence at a
  * time: one sentence states its records' relations, whole or before a comma, and the others and
- * what follows that comma only add detail (no "?", no relation word but one that refers back to
- * the relation stated, "around that sample", no hedge, doubting word or unknown capitalised
- * name). A sentence that disputes the
- * relation in words none of those lists holds can still let a partly supported claim be marked;
- * the mark then names only the relation its record documents, and the claim's own verdict shows
- * beside it.
+ * what follows that comma only add detail (no "?", no hedge, doubting word or unknown
+ * capitalised name, and no relation word but the relation's own noun as the last words of a
+ * sentence that names nothing, after a preposition of place: "…around that sample", "…over the
+ * cover"). As a subject ("The sample is fake"), after "from", "on" or "in" ("taken from this
+ * cover", "based on this sample"), or followed by any word, it may dispute or move the relation,
+ * and the sentence is not detail. A sentence that disputes the relation in words none of those
+ * lists holds can still let a partly supported claim be marked; the mark then names only the
+ * relation its record documents, and the claim's own verdict shows beside it.
  */
 
 import { normalizeName } from "../sources/musicbrainz.js";
@@ -181,10 +188,29 @@ export function titleNames(title: string): string[][] {
   ]);
 }
 
-/** Where a credit names the artists it features ("A feat. B", "A ft. B", "A featuring B"). */
-const FEATURING = /\s+(?:feat\.?|ft\.?|featuring)\s+/iu;
-/** The words a credit may join a featured artist with, as a statement may write it. */
+/**
+ * Where a credit names the artists it features ("A feat. B", "A ft. B", "A featuring B", "A with
+ * B").
+ */
+const FEATURING = /\s+(?:feat\.?|ft\.?|featuring|with)\s+/iu;
+/**
+ * The words a credit may join a featured artist with, as a statement may write it: "feat.",
+ * "ft." and "featuring" for one another. "With" only for itself: "Coldplay with Richard
+ * Ashcroft" and "Coldplay feat. Richard Ashcroft" may be two records' credits.
+ */
 const FEATURING_WORDS = ["feat.", "ft.", "featuring"];
+const FEATURED = /\s+(?:feat\.?|ft\.?|featuring)\s+/iu;
+
+/** A credit's whole forms (with each word for a featured artist), main artist and parts. */
+function creditForms(artist: string): { credits: string[]; main: string; parts: string[] } {
+  const [main, ...featured] = artist.split(FEATURING);
+  const parts = [main, ...featured.flatMap((list) => list.split(/\s*,\s*/u))];
+  const credits =
+    featured.length === 0 || !FEATURED.test(artist)
+      ? [artist]
+      : [artist, ...FEATURING_WORDS.map((word) => [main, ...featured].join(` ${word} `))];
+  return { credits, main, parts };
+}
 
 /**
  * The ways a statement may name an artist: the whole credit (`normalizeArtist`), written with
@@ -196,16 +222,21 @@ const FEATURING_WORDS = ["feat.", "ft.", "featuring"];
  * naming one stays. Each name that can be told apart.
  */
 export function artistNames(artist: string): string[][] {
-  const [main, ...featured] = artist.split(FEATURING);
-  const parts = [main, ...featured.flatMap((list) => list.split(/\s*,\s*/u))];
-  const credits =
-    featured.length === 0
-      ? [artist]
-      : [artist, ...FEATURING_WORDS.map((word) => [main, ...featured].join(` ${word} `))];
+  const { credits, parts } = creditForms(artist);
   return distinctNames([
     ...credits.map((credit) => normalizeArtist(foldText(credit))),
     ...parts.map((part) => normalizeArtist(foldText(part))),
   ]);
+}
+
+/**
+ * The names of a credit's lead (`artistNames` without its featured artists): the whole credit
+ * and its main artist. A cover named by its artist is named so: "covered by Richard Ashcroft"
+ * does not say "covered by Coldplay feat. Richard Ashcroft".
+ */
+export function leadArtistNames(artist: string): string[][] {
+  const { credits, main } = creditForms(artist);
+  return distinctNames([...credits, main].map((name) => normalizeArtist(foldText(name))));
 }
 
 function distinctNames(names: readonly string[]): string[][] {
@@ -227,6 +258,8 @@ export interface NamedRecord {
   key: string;
   titles: string[][];
   artists: string[][];
+  /** Its lead artists' names (`leadArtistNames`): a cover is named by its artist only so. */
+  leads: string[][];
   /** The source of the record (`Evidence.source`), when known. */
   source?: string;
   /** A record of the song (`work/…`), not of this recording alone. */
@@ -367,10 +400,18 @@ function resolveGroup(
   noun: boolean,
   context: ReadingContext,
 ): Side | null {
-  const one = (ids: Iterable<string>): Side | null => {
+  const one = (ids: Iterable<string>, by: readonly Span[]): Side | null => {
     const records = [...ids];
     const keys = new Set(records.map((id) => context.cited.get(id)?.key));
-    return records.length > 0 && keys.size === 1 ? { records } : null;
+    if (records.length === 0 || keys.size !== 1) return null;
+    // A cover's artist is its lead: never a featured artist alone.
+    const led = records.every((id) => {
+      const record = context.cited.get(id);
+      if (!record || LINK_TYPE[record.kind] !== "cover") return true;
+      const leads = new Set(record.leads.map((name) => name.join(" ")));
+      return by.every((artist) => leads.has(artist.words));
+    });
+    return led ? { records } : null;
   };
   if (title && (title.titleOf.size > 0 || title.trackTitle)) {
     // A title the analysed track shares (a cover's), named alone, is the analysed track's; a
@@ -382,7 +423,7 @@ function resolveGroup(
         : [...title.titleOf].filter((id) => artists.every((artist) => artist.artistOf.has(id)));
     const track = title.trackTitle && artists.every((artist) => artist.trackArtist);
     if (others.length > 0 && track) return null;
-    if (others.length > 0) return one(others);
+    if (others.length > 0) return one(others, artists);
     return track ? { track: true, byArtist: false } : null;
   }
   // An artist alone (the title span may be an artist's name).
@@ -394,44 +435,68 @@ function resolveGroup(
   if (artist.trackArtist || artist.artistOf.size === 0) return null;
   // Only when no other record of the result credits this artist.
   if ((context.artistIndex.get(artist.words)?.size ?? 0) > 1) return null;
-  return one(artist.artistOf);
+  return one(artist.artistOf, [artist]);
 }
 
-/** The item a comma between two names of a list reads as (`listWords`). */
+/** The item a comma between two names of a list reads as (`tokensOf`). */
 const LIST_COMMA = ",";
+
+/**
+ * Whether the nouns that name the analysed track fit the scope of the records the statement
+ * cites: "work" ("the work", "the song's work") names the song, so every record must be of the
+ * song (`ofSong`); "recording" or "track" ("this recording", "the track") names this recording,
+ * so none may be. "The song" names either.
+ */
+function nounsFit(nouns: readonly string[], context: ReadingContext): boolean {
+  const records = [...context.cited.values()];
+  if (nouns.includes("work")) return records.every((record) => record.ofSong === true);
+  if (nouns.includes("recording") || nouns.includes("track")) {
+    return records.every((record) => record.ofSong !== true);
+  }
+  return true;
+}
 
 /**
  * A side of a statement: the analysed track once, or one or more cited records ("A and B", "A,
  * B and C", "A, B, and C"). The track may be named by a noun ("this recording", "the song", "the
- * song's work"), and a noun may name its title ("this recording of One More Time"). Null when any
- * of its words is not a name, an article, a noun that names the track, the possessive "s", "of"
- * between a noun and a title, "by" between a title and its artist, or "and" or a comma between
- * two records.
+ * song's work") that fits its records' scope (`nounsFit`), and a noun may name its title ("this
+ * recording of One More Time"). Null when any of its words is not a name, an article, a noun
+ * that names the track, the possessive "s", "of" between a noun and a title, "by" between a title
+ * and its artist, or "and" or a comma between two records; and when an artist alone follows a
+ * title written with its artist after it ("“A Dream” by Jay-Z, RBX and Mos Def" may name one
+ * record by three artists).
  */
 function readSide(items: readonly Item[], context: ReadingContext): Side | null {
   const records: string[] = [];
   let track = false;
   let byArtist = true;
+  let artistAfterTitle = false;
   let at = 0;
   while (at < items.length) {
+    // Records apart, by a list comma or "and": two names side by side ("Hello, Goodbye" in
+    // quotes) may be one title.
     if (records.length > 0) {
-      if (wordOf(items[at]) === LIST_COMMA) at++;
-      if (wordOf(items[at]) === "and") at++;
+      const comma = wordOf(items[at]) === LIST_COMMA;
+      if (comma) at++;
+      const and = wordOf(items[at]) === "and";
+      if (and) at++;
+      if (!comma && !and) return null;
     }
     while (ARTICLES.has(wordOf(items[at]) ?? "")) at++;
     const artists: Span[] = [];
-    let noun = false;
+    const nouns: string[] = [];
     const possessive = spanOf(items[at]);
     if (possessive && wordOf(items[at + 1]) === "s") {
       artists.push(possessive);
       at += 2;
     }
     while (NOUNS.has(wordOf(items[at]) ?? "")) {
-      noun = true;
+      nouns.push(wordOf(items[at]) as string);
       at++;
       // "the song's work".
       if (wordOf(items[at]) === "s" && NOUNS.has(wordOf(items[at + 1]) ?? "")) at++;
     }
+    const noun = nouns.length > 0;
     const named = spanOf(items[at + 1]);
     if (
       noun &&
@@ -442,18 +507,25 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
       at++;
     }
     const title = spanOf(items[at]);
+    const titled = title !== undefined && (title.titleOf.size > 0 || title.trackTitle);
+    let after = false;
     if (title) {
       at++;
-      const after = wordOf(items[at]) === "by" ? spanOf(items[at + 1]) : spanOf(items[at]);
-      if (after && (after.artistOf.size > 0 || after.trackArtist)) {
-        artists.push(after);
+      const next = wordOf(items[at]) === "by" ? spanOf(items[at + 1]) : spanOf(items[at]);
+      if (next && (next.artistOf.size > 0 || next.trackArtist)) {
+        artists.push(next);
+        after = true;
         at += wordOf(items[at]) === "by" ? 2 : 1;
       }
     }
     if (!title && artists.length === 0 && !noun) return null;
+    // An artist alone after "<title> by <artist>": one record's credit or another record.
+    if (artistAfterTitle && !titled && !noun) return null;
+    artistAfterTitle = titled && after;
     const side = resolveGroup(artists, title, noun, context);
     if (side === null) return null;
     if ("track" in side) {
+      if (!nounsFit(nouns, context)) return null;
       track = true;
       byArtist &&= side.byArtist;
     } else records.push(...side.records);
@@ -471,27 +543,113 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
  * with the analysed track named by more than its artist ("the song's work").
  *
  * A statement is read as `nameWords` splits it, and when that reads nothing, again with its
- * commas kept (`listWords`): a list ("sampled in A, B and C") names its records one by one, each
- * name between two commas whole.
+ * list commas kept (`tokensOf`): a list ("sampled in A, B and C") names its records one by one,
+ * each name between two commas whole. A statement that ends in "?" asks: it states nothing.
  */
 export function readRelations(text: string, context: ReadingContext): Set<string> | null {
-  const read = readRelationItems(nameWords(text), context);
-  if (read !== null || !text.includes(",")) return read;
-  return readRelationItems(listWords(text), context);
+  if (QUESTION.test(text)) return null;
+  const { words, names, plainItems, listItems } = parsed(text, context);
+  return readTokens(words, names, context, listItems, plainItems);
 }
 
 /**
- * A statement's words as `nameWords` splits them, with a comma item (`LIST_COMMA`) where the
- * statement has a comma: a name never runs across one.
+ * Each text already split for a context: a claim is read whole, then sentence by sentence, then
+ * each sentence for its stating part, and each of those reads splits the same words.
  */
-const listWords = (text: string) =>
-  text
-    .split(",")
-    .flatMap((part, i) => (i === 0 ? nameWords(part) : [LIST_COMMA, ...nameWords(part)]));
+const parsedTexts = new WeakMap<ReadingContext, Map<string, ReturnType<typeof parse>>>();
 
-/** `readRelations` on a statement's words. */
-function readRelationItems(words: readonly string[], context: ReadingContext): Set<string> | null {
-  const all = itemsOf(words, namesOf(context));
+/** A text split once (`tokensOf`), with its items with and without its list commas. */
+function parsed(text: string, context: ReadingContext) {
+  let texts = parsedTexts.get(context);
+  if (texts === undefined) {
+    texts = new Map();
+    parsedTexts.set(context, texts);
+  }
+  let value = texts.get(text);
+  if (value === undefined) {
+    value = parse(text, context);
+    texts.set(text, value);
+  }
+  return value;
+}
+
+function parse(text: string, context: ReadingContext) {
+  const names = namesOf(context);
+  const { words, commas } = tokensOf(text);
+  const plain = words.filter((word) => word !== LIST_COMMA);
+  return {
+    words,
+    commas,
+    names,
+    plainItems: itemsOf(plain, names),
+    listItems: commas.length === 0 ? undefined : itemsOf(words, names),
+  };
+}
+
+/**
+ * A statement that ends in a question mark, before or after a closing quote: "…in “History?”"
+ * may ask, or end on a title that does; it is kept either way.
+ */
+const QUESTION = /\?["”’']?\s*$/u;
+
+/**
+ * `readRelations` on a statement's words with its list commas (`tokensOf`): read without the
+ * commas first, then with them. `listItems`: the items of `words` with the commas, when known.
+ */
+function readTokens(
+  words: readonly string[],
+  names: readonly Name[],
+  context: ReadingContext,
+  listItems?: readonly Item[],
+  plainItems?: readonly Item[],
+): Set<string> | null {
+  const plain = plainItems ? null : words.filter((word) => word !== LIST_COMMA);
+  const read = readRelationItems(plainItems ?? itemsOf(plain as string[], names), context);
+  if (read !== null || !words.includes(LIST_COMMA)) return read;
+  return readRelationItems(listItems ?? itemsOf(words, names), context);
+}
+
+/**
+ * A statement split once: its words as `nameWords` splits them, with a comma item (`LIST_COMMA`)
+ * at each comma between names, and where each such comma is in the text (`outside` a quoted title
+ * or not). A comma inside a quoted title ("Hello, Goodbye") is part of the title; one that ends a
+ * quoted title (“A Dream,”) is between names. A name never runs across a comma item.
+ */
+function tokensOf(text: string): { words: string[]; commas: { at: number; outside: boolean }[] } {
+  let marked = "";
+  const commas: { at: number; outside: boolean }[] = [];
+  let start = 0;
+  let curly = 0;
+  let straight = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === "\u201c") curly++;
+    else if (char === "\u201d") curly = Math.max(0, curly - 1);
+    else if (char === '"') straight = !straight;
+    else if (char === ",") {
+      const next = text[i + 1];
+      const inside = curly > 0 || straight;
+      const ends = (curly > 0 && next === "\u201d") || (straight && next === '"');
+      if (inside && !ends) continue;
+      marked += `${text.slice(start, i)} ${COMMA_MARK} `;
+      commas.push({ at: i, outside: !inside });
+      start = i + 1;
+    }
+  }
+  marked += text.slice(start);
+  // One pass over the whole text: each comma marked by a word no statement writes.
+  const words =
+    commas.length === 0
+      ? nameWords(text)
+      : nameWords(marked).map((word) => (word === COMMA_MARK ? LIST_COMMA : word));
+  return { words, commas };
+}
+
+/** The word `tokensOf` marks a list comma with before splitting a text into words. */
+const COMMA_MARK = "0listcomma0";
+
+/** `readRelations` on a statement's items. */
+function readRelationItems(all: readonly Item[], context: ReadingContext): Set<string> | null {
   if (hedgedItems(all)) return null;
   // "…, according to MusicBrainz": the source it names must be each record's own.
   const according = accordingTo(all);
@@ -859,39 +1017,44 @@ const casedWords = (text: string) =>
 
 /** The words that refer back to the relation a claim states ("that sample", "this cover"). */
 const BACK_REFERENCES: ReadonlySet<string> = new Set(["the", "this", "that"]);
-/** Words after a back-reference that would tie it to something else ("the sample of …"). */
-const TIES: ReadonlySet<string> = new Set(["of", "from", "by", "in", "on", "into", "at", "with"]);
+/**
+ * The prepositions a back-reference may follow, at the end of a sentence: where something sits
+ * in relation to the sample ("strings layered over that sample"). Not those that may turn the
+ * relation round or move it ("taken from this cover", "based on this cover", "first heard in the
+ * sample", "sold to …", "before …").
+ */
+const BACK_REFERENCE_PLACES: ReadonlySet<string> = new Set(
+  "around over under beneath underneath beside alongside atop above below with".split(" "),
+);
 
 /**
  * True when the relation word at `at` refers back to a relation the claim states (of `types`):
- * its noun ("sample", "cover", "remix", "interpolation") after "the" or "this", or after "that"
- * at the end of the sentence ("around that sample"; "chords that sample …" relates), and not
- * followed by a name or a word that ties it to something else ("the sample of …", "the sample
- * from …").
+ * its noun ("sample", "cover", "remix", "interpolation"), singular, after "the", "this" or "that"
+ * and one of `BACK_REFERENCE_PLACES`, as the last word of the sentence ("…around that sample").
+ * Never as a subject ("the sample is fake", "this cover predates the song") or with anything
+ * after it.
  */
 function refersBack(items: readonly Item[], at: number, types: ReadonlySet<LinkType>): boolean {
   const word = wordOf(items[at]) ?? "";
   const type = RELATION_WORDS.get(word);
   if (type === undefined || !types.has(type)) return false;
   if (word !== (VERBS[type].noun ?? VERBS[type].base)) return false;
-  const opening = wordOf(items[at - 1]) ?? "";
-  if (!BACK_REFERENCES.has(opening)) return false;
-  const after = items[at + 1];
-  if (after === undefined) return true;
-  if (opening === "that" || spanOf(after)) return false;
-  return !TIES.has(wordOf(after) ?? "");
+  if (at !== items.length - 1) return false;
+  if (!BACK_REFERENCES.has(wordOf(items[at - 1]) ?? "")) return false;
+  return BACK_REFERENCE_PLACES.has(wordOf(items[at - 2]) ?? "");
 }
 
 /**
  * True when a sentence beside the one that states a claim's relation adds only detail: no "?",
  * no relation word but one that refers back to the relation it states (`refersBack`: "around
- * that sample"), no hedge or negation (`HEDGES`), no word starting with a doubting stem
- * (`DOUBTS`) or doubting phrase, and no capitalised word outside the names it knows (`names`:
- * the analysed track's, the cited records' and the result's other records') but its first word
- * and the name of the cited records' source ("MusicBrainz"), so no name of a record the result does not hold
- * ("Between the Sheets by The Isley Brothers") or of a person ("Dr. Dre disputes this"). A
- * `tail` (what follows the comma after a stated relation) gets no exception for its first word,
- * and may not start with a word that goes on naming records ("by", "and", "with" …).
+ * that sample", in a sentence that names no record and not the track), no hedge or negation
+ * (`HEDGES`), no word starting with a doubting stem (`DOUBTS`) or doubting phrase, and no
+ * capitalised word outside the names it knows (`names`: the analysed track's, the cited records'
+ * and the result's other records') but its first word and the name of the cited records' source
+ * ("MusicBrainz"), so no name of a record the result does not hold ("Between the Sheets by The
+ * Isley Brothers") or of a person ("Dr. Dre disputes this"). A `tail` (what follows the comma
+ * after a stated relation) gets no exception for its first word, and may not start with a word
+ * that goes on naming records ("by", "and", "with" …).
  */
 function onlyDetail(
   sentence: string,
@@ -911,10 +1074,10 @@ function onlyDetail(
   const plain = items.flatMap((item) =>
     wordOf(item) === undefined ? [] : [wordOf(item) as string],
   );
-  const relates = items.some(
-    (item, i) => RELATION_WORDS.has(wordOf(item) ?? "") && !refersBack(items, i, types),
-  );
-  if (relates) return false;
+  const relating = items.flatMap((item, i) => (RELATION_WORDS.has(wordOf(item) ?? "") ? [i] : []));
+  if (relating.some((i) => !refersBack(items, i, types))) return false;
+  // A sentence that refers back to the relation names nothing: no record, nor the track.
+  if (relating.length > 0 && items.some((item) => spanOf(item) !== undefined)) return false;
   if (plain.some((word) => DOUBTS.some((stem) => word.startsWith(stem)))) return false;
   const doubting = (phrase: readonly string[]) =>
     items.some((_, i) => phrase.every((word, j) => wordOf(items[i + j]) === word));
@@ -975,29 +1138,39 @@ export function readStatedRelations(text: string, context: ReadingContext): Set<
  * followed by a comma and a tail ("…, bringing the earlier song into Madonna's dance track"),
  * the tail to be read as detail. Each comma outside a quoted title is tried in turn, so a comma
  * inside a name ("Tyler, The Creator") only ever ends a part that does not read. Null when no
- * part of it states them.
+ * part of it states them. The sentence is split into words once (`tokensOf`) and each part read
+ * from those words, so a sentence of many commas costs as many reads of its parts, not as many
+ * splits of them too.
  */
 function statingPart(
   sentence: string,
   context: ReadingContext,
+  wholeRead = false,
 ): { stated: Set<string>; tail: string | null } | null {
-  const reads = (part: string) => {
-    const read = readRelations(part, context);
+  if (QUESTION.test(sentence)) return null;
+  const { words, commas, names, plainItems, listItems: listed } = parsed(sentence, context);
+  const listItems = listed ?? plainItems;
+  const reads = (part: readonly string[], items: readonly Item[], plain?: readonly Item[]) => {
+    const read = readTokens(part, names, context, items, plain);
     return read !== null && read.size === context.cited.size ? read : null;
   };
-  const whole = reads(sentence);
+  const whole = wholeRead ? null : reads(words, listItems, plainItems);
   if (whole !== null) return { stated: whole, tail: null };
-  let curly = 0;
-  let straight = false;
-  for (let i = 0; i < sentence.length; i++) {
-    const char = sentence[i];
-    if (char === "\u201c") curly++;
-    else if (char === "\u201d") curly = Math.max(0, curly - 1);
-    else if (char === '"') straight = !straight;
-    else if (char === "," && curly === 0 && !straight) {
-      const read = reads(sentence.slice(0, i));
-      if (read !== null) return { stated: read, tail: sentence.slice(i + 1).trim() };
+  // Each comma item ends a part: the items before it are the part's own, as no name runs across
+  // a comma.
+  let comma = 0;
+  let at = 0;
+  for (let i = 0; i < listItems.length; i++) {
+    const item = listItems[i];
+    if (wordOf(item) === LIST_COMMA) {
+      const { at: position, outside } = commas[comma++];
+      // A part that ends in a comma ("A, , …") reads as nothing.
+      if (outside && i > 0 && wordOf(listItems[i - 1]) !== LIST_COMMA) {
+        const read = reads(words.slice(0, at), listItems.slice(0, i));
+        if (read !== null) return { stated: read, tail: sentence.slice(position + 1).trim() };
+      }
     }
+    at += "span" in item ? item.span.words.split(" ").length : 1;
   }
   return null;
 }
@@ -1025,7 +1198,8 @@ export function readMarkedRelations(
   const rest: string[] = [];
   const tails: string[] = [];
   for (const sentence of sentencesOf(text)) {
-    const read = statingPart(sentence, context);
+    // The whole statement, read above, is not read again as its one sentence.
+    const read = statingPart(sentence, context, sentence === text.trim());
     if (read !== null) {
       if (stated !== null) return null;
       stated = read.stated;

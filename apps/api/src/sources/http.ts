@@ -1968,6 +1968,10 @@ export const withoutEscapedMediaUrls = (text: string) => redactWith(text, [escap
  * A string the pipeline reads, for a cassette: secrets redacted and media URLs removed, capped
  * well above what consumers read. Nothing else changes, so replay reproduces the recorded run;
  * id-shaped values are kept as they are.
+ *
+ * Not for a log line as it is: the cap is a plain cut, with no guard (safeCut) against a cut that
+ * splits a configured value or a token a rule hides only whole, or that shows a word the other
+ * rules' cut left out. A log takes it through the logger's scrub, or a text through scrubText.
  */
 export function scrubReadText(text: string): string {
   if (ID_SHAPED.test(text)) return text;

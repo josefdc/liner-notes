@@ -21,8 +21,16 @@
  * (cleanCommit). --allow-dirty records it anyway for a local experiment, stamped "-dirty", so the
  * committed recordings' own check (demo-recording.test.ts) still refuses it.
  *
- * Each long token-shaped run in a web page's excerpt is recorded as "[redacted]" (recorder.ts
- * `withoutPageTokens`); the recorder prints how many it replaced, and in which evidence items.
+ * Each long token-shaped word in a web search page's excerpt is recorded as "[redacted]"
+ * (recorder.ts `withoutPageTokens`); the recorder prints how many it replaced, and in which
+ * evidence items. The record itself does not say so (the replay format has no place for it):
+ * the commit that adds the recording does.
+ *
+ * The file is written as `JSON.stringify(record, null, 2)`. A committed recording is that file
+ * formatted with Biome afterwards (`npx biome format --write fixtures/replays/<slug>.json`, as
+ * `npm run lint` requires): only its whitespace changes, and its JSON content must be identical
+ * to what the recorder wrote. To compare a rebuilt record with a committed one, compare the
+ * parsed JSON, or format the rebuilt file the same way first.
  *
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.

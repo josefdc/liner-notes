@@ -463,6 +463,8 @@ describe("what is not cached, or cached for a later run to complete", () => {
   });
 
   it("caches research whose work could not be dated in time, and a hit reads the primary sources again", async () => {
+    // The work's recordings outlast the dating cut: longer than the 10 s request timeout.
+    vi.stubEnv("SOURCE_TIMEOUT_MS", "60000");
     vi.useFakeTimers({ toFake: [...FAKE] });
     let first: Awaited<ReturnType<typeof historian>>;
     try {
@@ -561,6 +563,8 @@ describe("a row left for a later run", () => {
   afterEach(() => setUnpacedForTests(true));
 
   it("is never served past the research's own time, however often a hit reads it again", async () => {
+    // The work's recordings outlast the dating cut: longer than the 10 s request timeout.
+    vi.stubEnv("SOURCE_TIMEOUT_MS", "60000");
     net = stubFetch(undated);
     await onFakeTimers(() => historian(AT));
     // The releases are read last, on the dating signal: cut with the dating, and the relations

@@ -1102,6 +1102,15 @@ describe("MusicBrainz client", () => {
   });
 });
 
+/**
+ * How long a linear step may take on a text built to make a slow form backtrack: well over the
+ * few milliseconds it takes, well under the seconds a slow form takes. Timed as the fastest of
+ * three runs, since a busy machine only adds time (a stall of one run can pass the bound); a
+ * run over twice the bound is a slow form, not a busy machine, and ends the timing.
+ */
+const QUICK_MS = 400;
+const FASTEST_OF_THREE = { runs: 3, stopAboveMs: 2 * QUICK_MS };
+
 describe("withoutEdition", { timeout: 30_000 }, () => {
   // The expressions before #194: polynomial time on a long bracket or " - " part.
   const old = (album: string) =>
@@ -1172,8 +1181,8 @@ describe("withoutEdition", { timeout: 30_000 }, () => {
     ["edition words before a line break", ` - ${"deluxe".repeat(100_000)}\n`],
   ])("answers quickly on %s built to make the earlier expressions backtrack", (_name, album) => {
     // Up to about 20 ms here (the 600 kB edition words); the slow forms take about 1 s or more.
-    const { ms, result } = timed(() => withoutEdition(album));
-    expect(ms).toBeLessThan(400);
+    const { ms, result } = timed(() => withoutEdition(album), FASTEST_OF_THREE);
+    expect(ms).toBeLessThan(QUICK_MS);
     expect(result).toBe(album.trim());
   });
 });
@@ -1273,8 +1282,8 @@ describe("withoutFeatured", { timeout: 30_000 }, () => {
     ["runs of opening brackets", `${"(".repeat(50_000)})`],
   ])("answers quickly on %s", (_name, title) => {
     // Up to about 30 ms here; the slow forms take 1.5 s or more.
-    const { ms, result } = timed(() => withoutFeatured(title, ["X"]));
-    expect(ms).toBeLessThan(400);
+    const { ms, result } = timed(() => withoutFeatured(title, ["X"]), FASTEST_OF_THREE);
+    expect(ms).toBeLessThan(QUICK_MS);
     expect(result.length).toBeGreaterThan(0);
   });
 });

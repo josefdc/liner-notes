@@ -41,13 +41,9 @@ describe("a result stored before one claim per fact", () => {
   });
 
   it("is served as it is when its run already left them out", () => {
-    const run = analysis.run!;
-    const done = { ...analysis, run: { ...run, verifier: { ...run.verifier!, restated: 0 } } };
-    const record = {
-      runId: "run-new",
-      status: "completed",
-      analysis: done,
-    } as unknown as RunRecord;
+    const first = { runId: "run-new", status: "completed", analysis } as unknown as RunRecord;
+    const done = resultOf(first) as TrackAnalysis;
+    const record = { ...first, analysis: done } as unknown as RunRecord;
     expect(resultOf(record)).toEqual(done);
   });
 });

@@ -168,12 +168,21 @@ export function isClaim(value: unknown): value is Claim {
 
 /**
  * The claim as the contract reads it: a scope it does not know as none (a claim about this
- * recording), and its factoid's unreadable entities dropped.
+ * recording), a `documentedBy` mark it cannot read as none, and its factoid's unreadable
+ * entities dropped.
  */
 function readClaim(value: Claim): Claim {
   let claim = value;
   if (claim.scope !== undefined && !CLAIM_SCOPES.has(claim.scope)) {
     const { scope: _unread, ...rest } = claim;
+    claim = rest;
+  }
+  const { documentedBy } = claim as { documentedBy?: unknown };
+  if (
+    documentedBy !== undefined &&
+    !(Array.isArray(documentedBy) && documentedBy.every((id) => typeof id === 'string'))
+  ) {
+    const { documentedBy: _unread, ...rest } = claim;
     claim = rest;
   }
   if (!claim.factoid) return claim;

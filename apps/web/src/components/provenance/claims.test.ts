@@ -41,6 +41,19 @@ describe('readClaims and readEvidence', () => {
     expect(readClaims([claim({ id: 'work', scope: 'work' })])[0]?.scope).toBe('work');
   });
 
+  it("read a claim's documentedBy mark only as a list of ids, else as none", () => {
+    const [kept, ...dropped] = readClaims([
+      { ...claim({ id: 'list' }), documentedBy: ['code-1', 'code-2'] },
+      { ...claim({ id: 'text' }), documentedBy: 'code-1' },
+      { ...claim({ id: 'numbers' }), documentedBy: ['code-1', 2] },
+      { ...claim({ id: 'object' }), documentedBy: { id: 'code-1' } },
+    ]);
+    expect(kept).toMatchObject({ id: 'list', documentedBy: ['code-1', 'code-2'] });
+    // The claim itself is kept, without the mark.
+    expect(dropped.map((read) => read.id)).toEqual(['text', 'numbers', 'object']);
+    for (const read of dropped) expect(read).not.toHaveProperty('documentedBy');
+  });
+
   it('read a result without claims or evidence as having none', () => {
     expect(readClaims(undefined)).toEqual([]);
     expect(readClaims({ claims: [] })).toEqual([]);

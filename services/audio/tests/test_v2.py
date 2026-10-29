@@ -1801,9 +1801,12 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # that keys one more or one fewer fails here. Still keyed: bells, alone and over drums (the
 # tierce is a minor third over the hum: two notes a third apart, as in a chord); three cowbells
 # whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
-# harmonics the notes test does not fold within its tolerance; toms (two or three drums, each with its own envelope) and tabla whose
-# strokes alternate partials, which do not move together. Seeds 600-629 are an evaluation set
-# (evals/audio controls) and are kept out of these tests.
+# harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
+# with its own envelope, alone or over a kit) and tabla, whose lines mostly move apart, and
+# where they hold still (tabla 504, 516, 520; kit toms 528) spell a chord; and a tubular bell,
+# whose modes hold still and move together but spell three or more pitch classes, as a chord's
+# notes do.
+# Seeds 600-629 are an evaluation set (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
     ("one-note-bass", "essentia"): {500, 501},
     ("bell", "essentia"): {503, 507, 509, 513, 514, 521, 527},
@@ -1816,6 +1819,16 @@ ONE_PITCH_CLASS_KEYED = {
     ("toms", "librosa"): {502, 507, 509, 517, 522, 526, 529},
     ("cowbell", "essentia"): {508, 515, 528},
     ("cowbell", "librosa"): {508, 528},
+    ("kit-toms", "essentia"): {500, 505, 507, 513, 515, 523, 529},
+    ("kit-toms", "librosa"): {500, 505, 507, 513, 515, 529},
+    ("tubular-bell", "essentia"): {
+        *{500, 502, 503, 504, 505, 506, 507, 508, 510, 511, 513, 514, 515, 516, 517, 518},
+        *{519, 520, 521, 522, 524, 526, 527, 529},
+    },
+    ("tubular-bell", "librosa"): {
+        *{500, 502, 503, 504, 506, 508, 510, 511, 512, 513, 514, 515, 516, 518, 519, 520},
+        *{521, 522, 524, 526, 527, 528, 529},
+    },
 }
 
 
@@ -1864,25 +1877,111 @@ def test_a_bell_holds_still_but_spells_a_minor_third():
     assert evidence.still and evidence.chord and not evidence.single, evidence
 
 
+def test_a_tubular_bell_holds_still_but_spells_a_chord():
+    """
+    A limit: a tubular bell's modes hold still and move together, but they spell pitch classes
+    as a chord's notes do, so the single-source rule keeps the key the other rules give it.
+    """
+    evidence = estimators.Signals(signals.seeded_tubular_bell(500), FIXTURE_SR).source_evidence
+    assert evidence.still and evidence.chord and not evidence.single, evidence
+
+
+def one_source_withheld(signals_: estimators.Signals) -> bool:
+    """The key is withheld as one pitched source, under whatever reason that code is given."""
+    withheld = signals_.key_withheld()
+    return withheld is not None and withheld.code == "one_pitched_source"
+
+
+def test_one_source_withheld_sees_the_single_source_rule():
+    """The guards below rest on this helper: it sees a cowbell's key withheld, not a chord's."""
+    assert one_source_withheld(estimators.Signals(signals.seeded_cowbell(500), FIXTURE_SR))
+    y, _ = signals.seeded_faded_pad(700)
+    assert not one_source_withheld(estimators.Signals(y, FIXTURE_SR))
+
+
+# The chord families' keys that the service withholds at seeds 700-729, by any rule, with the
+# rule's code (estimator-independent: Signals.key_withheld). None is the single-source rule's;
+# the earlier rules withhold them as one held pitch, one harmonic series or, for two one-bar
+# riffs, speech. Pinned exactly, so a rule that takes a chord's key under any code, new or old,
+# fails here.
+CHORD_WITHHELD = {
+    "faded-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "swelling-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "crescendo-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((716, 728), "one_held_pitch"),
+    },
+    "tremolo-pad": {**dict.fromkeys((716, 728), "one_held_pitch")},
+    "pumped-pad": {
+        **dict.fromkeys((704, 708, 722), "one_harmonic_series"),
+        **dict.fromkeys((709, 716, 728), "one_held_pitch"),
+    },
+    "c-major-stabs": {},
+    "one-chord-riff": {
+        **dict.fromkeys(
+            (
+                700,
+                701,
+                702,
+                703,
+                704,
+                705,
+                707,
+                708,
+                709,
+                710,
+                711,
+                712,
+                713,
+                715,
+                716,
+                717,
+                722,
+                724,
+                725,
+                727,
+                728,
+                729,
+            ),
+            "one_held_pitch",
+        )
+    },
+    "one-bar-riff": {**dict.fromkeys((726, 727), "speech_like")},
+    "soft-chord": {
+        **dict.fromkeys((704, 708, 710, 716, 718, 722, 726), "one_held_pitch"),
+        **dict.fromkeys((709,), "one_harmonic_series"),
+    },
+    "mallet-chord": {**dict.fromkeys((710, 714, 718, 722, 724), "one_held_pitch")},
+}
+
+
 @pytest.mark.seeded
 @pytest.mark.parametrize("family", signals.CHORD_KEYED_SEEDED)
 def test_chords_keep_the_key_the_other_rules_give_them(family):
     """
     Held chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs,
-    a bass and chord riff on one chord and one-bar riffs (signals.CHORD_KEYED_SEEDED, seeds
-    700-729): many hold still and move together, but their lines spell a chord, so the
-    single-source rule withholds none of their keys, and what the other rules decide is left
-    as analyzer 2.1.0 had it.
+    a bass and chord riff on one chord, one-bar riffs, triads in soft timbres (an electric
+    piano, a flute, an FM electric piano, a triangle wave) and triads struck on bars
+    (signals.CHORD_KEYED_SEEDED, seeds 700-729): many hold still and move together, but their
+    lines spell a chord, so the single-source rule withholds none of their keys. Every key
+    that is withheld is withheld as pinned in CHORD_WITHHELD, by the same rule.
     """
     make = signals.CHORD_KEYED_SEEDED[family]
-    fired, still = [], 0
+    withheld, still = {}, 0
     for seed in signals.CHORD_KEYED_SEEDS:
         y, _ = make(seed)
         signals_ = estimators.Signals(y, FIXTURE_SR)
         still += signals_.source_evidence.still
-        if str(signals_.key_withheld()) == estimators.ONE_SOURCE:
-            fired.append(seed)
-    assert fired == []
+        reason = signals_.key_withheld()
+        if reason is not None:
+            withheld[seed] = reason.code
+    assert withheld == CHORD_WITHHELD[family]
     if family != "one-bar-riff":  # its chords change within a bar: the lines move
         assert still > 0  # the notes test, not time, keeps these keys
 
@@ -1905,16 +2004,23 @@ def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         if level > -6.0:
             assert estimators.spells_chord(notes), (key, level, notes)
-        assert str(s.key_withheld()) != estimators.ONE_SOURCE, (key, level, notes)
+        assert not one_source_withheld(s), (key, level, notes)
 
 
 @pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)
 def test_a_detuned_third_over_a_doubled_root_is_still_a_third(cents):
-    """A root doubled an octave down with its third 10-25 cents off and no fifth: a chord."""
-    for root, mode in ((0, "minor"), (1, "major")):
+    """
+    A root doubled an octave down with its third 10-25 cents off and no fifth: a chord, and the
+    key decision is the one an in-tune third gets: the minor third keeps its key, and the major
+    third's lines spell fewer than three pitch classes. A rule that took off-grid notes for one
+    source would withhold the minor thirds here.
+    """
+    for root, mode, code in ((0, "minor", None), (1, "major", "few_pitch_classes")):
         s = estimators.Signals(signals.detuned_third(root, mode, cents), FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         assert estimators.spells_chord(notes), (root, mode, cents, notes)
+        withheld = s.key_withheld()
+        assert (withheld and withheld.code) == code, (root, mode, cents, withheld)
 
 
 @pytest.mark.parametrize("kind", ["sus2", "sus4"])
@@ -1928,7 +2034,7 @@ def test_sus_chords_over_their_root_are_chords(kind):
         s = estimators.Signals(signals.sus_chord(root, kind), FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         assert estimators.spells_chord(notes), (root, notes)
-        assert str(s.key_withheld()) != estimators.ONE_SOURCE
+        assert not one_source_withheld(s)
 
 
 @pytest.mark.seeded
@@ -1956,7 +2062,7 @@ def test_a_seventh_chord_with_a_quiet_third_is_a_chord():
 )
 def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
     s = estimators.Signals(signals.fourth_with_quiet_third(), FIXTURE_SR)
-    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+    assert not one_source_withheld(s), s.source_evidence
 
 
 @pytest.mark.xfail(
@@ -1967,7 +2073,7 @@ def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
 )
 def test_a_triad_under_a_bass_15_db_louder_keeps_its_key():
     s = estimators.Signals(signals.triad_under_a_loud_sine_bass(), FIXTURE_SR)
-    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+    assert not one_source_withheld(s), s.source_evidence
 
 
 def test_chord_key_names_each_family_s_key():

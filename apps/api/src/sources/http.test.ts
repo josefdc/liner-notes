@@ -37,7 +37,14 @@ import {
   withoutEmails,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
-import { allStrings, disagreements, randomStrings, timed } from "./testing/strings.js";
+import {
+  allStrings,
+  disagreements,
+  growth,
+  randomStrings,
+  threadCpuMs,
+  timed,
+} from "./testing/strings.js";
 
 // Pass-through, so one test can make a write fail half-way.
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -76,6 +83,35 @@ describe("fetchJson", () => {
 
     expect(error.kind).toBe("timeout");
     expect(error.message).toContain("no answer within 20 ms");
+  });
+
+  it("times out on the process's timers, which a test's fake clock drives", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    stubFetch((call) => never(call));
+    const t0 = performance.now();
+    let failedAt = -1;
+    const pending = rejection(fetchJson({ source: "musicbrainz", url: URL_A })).finally(() => {
+      failedAt = performance.now() - t0;
+    });
+    await vi.runAllTimersAsync();
+    const error = await pending;
+
+    expect(error.kind).toBe("timeout");
+    expect(error.message).toContain("no answer within 10000 ms");
+    expect(failedAt).toBe(10_000);
+  });
+
+  it("leaves no timer behind once the answer is in", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    stubFetch(() => json({ ok: 1 }));
+    await expect(fetchJson({ source: "deezer", url: URL_A })).resolves.toEqual({ ok: 1 });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("reports the caller's abort as aborted, not as a timeout", async () => {
@@ -1351,6 +1387,21 @@ describe("cassettes", () => {
     expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
+  /**
+   * The delays of the timers the recorder sets while `call` runs to wait for a cassette lock
+   * (acquireLock polls with one), told from other timers by where each is set.
+   */
+  async function lockPolls(call: () => Promise<unknown>): Promise<Array<number | undefined>> {
+    const realSetTimeout = globalThis.setTimeout;
+    const polls: Array<number | undefined> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+      if (new Error().stack?.includes("acquireLock")) polls.push(ms);
+      return realSetTimeout(handler, ms);
+    }) as typeof setTimeout);
+    await call();
+    return polls;
+  }
+
   it("breaks a lock left by a recorder that is no longer running", async () => {
     // The pid of a process that has exited.
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
@@ -1358,20 +1409,53 @@ describe("cassettes", () => {
     process.env.SOURCE_CASSETTE = "record";
     stubFetch(() => json({ ok: true }));
     const logs = captureLogsForTests();
-
-    const started = Date.now();
+    // Broken at once: the recorder sets no timer to wait for the lock, which a busy machine
+    // cannot change as it can the time taken. A recorder that waited would also give up after
+    // 50 ms and log an error. The next test shows lockPolls finds the timers of a wait.
+    const restoreWait = setCassetteLockWaitForTests(50);
+    let polls: Array<number | undefined> = [];
     try {
-      await fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" });
+      polls = await lockPolls(() =>
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" }),
+      );
     } finally {
+      restoreWait();
       logs.restore();
       vi.restoreAllMocks();
     }
 
+    expect(polls).toEqual([]);
     expect(logs.messages("error")).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(2000);
     const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
     expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/after-crash"]);
     expect(existsSync(join(dir, "deezer.json.lock"))).toBe(false);
+  });
+
+  it("waits for a lock a running recorder holds, then records nothing", async () => {
+    // The pid of a running process: the one that started this test's.
+    writeFileSync(join(dir, "deezer.json.lock"), String(process.ppid));
+    process.env.SOURCE_CASSETTE = "record";
+    stubFetch(() => json({ ok: true }));
+    const logs = captureLogsForTests();
+    // The wait the test above must not find: lockPolls reads its timers, so a recorder that
+    // polled for a dead recorder's lock would not pass there.
+    const restoreWait = setCassetteLockWaitForTests(50);
+    let polls: Array<number | undefined> = [];
+    try {
+      polls = await lockPolls(() =>
+        fetchJson({ source: "deezer", url: "https://api.deezer.test/while-held" }),
+      );
+    } finally {
+      restoreWait();
+      logs.restore();
+      vi.restoreAllMocks();
+    }
+
+    expect(polls.length).toBeGreaterThan(0);
+    expect(new Set(polls)).toEqual(new Set([10]));
+    expect(logs.messages("error").join("\n")).toContain("deezer.json.lock is held");
+    expect(readFileSync(join(dir, "deezer.json.lock"), "utf8")).toBe(String(process.ppid));
+    expect(existsSync(join(dir, "deezer.json"))).toBe(false);
   });
 
   it("a record run that loses answers says how many when it ends", {
@@ -1905,59 +1989,90 @@ describe("text patterns in linear time", { timeout: 30_000 }, () => {
   });
 });
 
-describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
-  // 200 kB: a scan that reads each start on to the end of its run takes seconds here, where a
-  // single pass takes milliseconds.
-  const size = 200_000;
-  const fill = (unit: string) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+/**
+ * The tables below measure each shape's cost on a 50 kB text and on one eight times longer, in the
+ * CPU time of the thread that runs it (`growth`). A single pass grows 5-14 times here, as the
+ * longer text also costs more per character to build and to collect, and as much on a machine
+ * with every CPU busy, since CPU time leaves out the waits for a turn on one. A scan that reads on
+ * to the end of its line or of the text from each match grows 35-85 times: a print_r entry or an
+ * environment value read again from each key inside it, a cookie value read to the end of its
+ * line, a closing tag sought from the first one for each opening tag, or a mask's place sought
+ * from the start of the text for each value. Such a scan takes 0.5-1.5 s on 200 kB, which a bound
+ * on the time taken cannot tell from the waits of a busy machine. A call over MAX_MS of CPU time,
+ * over ten times what a single pass takes on 400 kB, fails at once.
+ */
+const MAX_MS = 3_000;
+const GROWTH = { size: 50_000, factor: 8, maxMs: MAX_MS };
+const MAX_GROWTH = 30;
+/** How many times `part` occurs in `text`, none overlapping. */
+const count = (text: string, part: string) => text.split(part).length - 1;
+/** `unit` repeated to `size` characters. */
+const filled = (size: number) => (unit: string) =>
+  unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
 
-  it.each<[string, () => unknown, unknown]>([
+describe("the shapes without a quoted key in linear time", { timeout: 60_000 }, () => {
+  it.each<
+    [
+      string,
+      (fill: (unit: string) => string) => string,
+      (text: string) => unknown,
+      (text: string) => unknown,
+    ]
+  >([
     [
       "object keys whose value is an object",
-      () => redactText(`${fill("{token:")} x, token: k}`).endsWith("token: [redacted]}"),
-      true,
+      (fill) => `${fill("{token:")} x, token: k}`,
+      (text) => redactText(text).endsWith("token: [redacted]}"),
+      () => true,
     ],
     [
       "closing tags before opening tags",
-      () => redactText(`${fill("</token>")}<token>k</token>${fill("<token>")}`).length,
-      2 * size + 25,
+      (fill) => `${fill("</token>")}<token>k</token>${fill("<token>")}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 9,
     ],
     [
       "opening tags without a closing tag",
-      () => redactText(`<token>k</token>${fill("<token>")}`).length,
-      size + 25,
+      (fill) => `<token>k</token>${fill("<token>")}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 9,
     ],
     [
       "name= pairs inside a value",
-      () => redactText(`{ token: ${fill("key=")} }`),
-      "{ token: [redacted] }",
+      (fill) => `{ token: ${fill("key=")} }`,
+      redactText,
+      () => "{ token: [redacted] }",
     ],
     [
       "links inside a value",
-      () => redactText(`{ token: ${fill("//i.scdn.co/a")} }`),
-      "{ token: [redacted] }",
+      (fill) => `{ token: ${fill("//i.scdn.co/a")} }`,
+      redactText,
+      () => "{ token: [redacted] }",
     ],
     // Every rule masks on a text that earlier rules masked many times over.
     [
       "masks after masks",
-      () => scrubText(`{ token: k } ${fill("key=a //i.scdn.co/x x@y.co ")}`).length,
-      500,
+      (fill) => `{ token: k } ${fill("key=a //i.scdn.co/x x@y.co ")}`,
+      (text) => scrubText(text).length,
+      () => 500,
     ],
     [
       "values without quotes among masks",
-      () => redactText(fill("{ token: k } key=a ")).length,
-      size + Math.floor(size / 19) * 18,
+      (fill) => fill("{ token: k } key=a "),
+      (text) => redactText(text).length,
+      (text) => text.length + 9 * (count(text, ": k") + count(text, "=a")),
     ],
     [
       "empty quote pairs after a header",
-      () => redactText(`header ${fill('"" ')}`).length,
-      7 + size + Math.ceil(size / 3) * 10,
+      (fill) => `header ${fill('"" ')}`,
+      (text) => redactText(text).length,
+      (text) => text.length + 10 * count(text, '""'),
     ],
-  ])("answers quickly on %s", (_name, call, expected) => {
-    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
-    const { ms, result } = timed(call, { runs: 3, stopAboveMs: 2_000 });
-    expect(ms).toBeLessThan(400);
-    expect(result).toBe(expected);
+  ])("grows linearly on %s", (_name, make, call, expected) => {
+    const { ratio, result } = growth((size) => make(filled(size)), call, GROWTH);
+    expect(ratio).toBeLessThan(MAX_GROWTH);
+    // The result on the longer text, against what each mask adds to it.
+    expect(result).toEqual(expected(make(filled(GROWTH.size * GROWTH.factor))));
   });
 
   it("finds where each mask goes once, on 1 MB of masks among masks", () => {
@@ -2440,83 +2555,93 @@ describe("secret values in JSON strings, cut texts and more variants of each sha
 describe("cookies, config text, dumps, forms and escaped text in linear time", {
   timeout: 60_000,
 }, () => {
-  // 200 kB: a scan that reads on to the end of its line or of the text from each match takes
-  // seconds here, where a single pass takes milliseconds. Each text ends with a value to hide.
-  const size = 200_000;
-  const fill = (unit: string) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
-
-  it.each<[string, () => string]>([
-    ["cookie pairs", () => `Cookie: ${fill("a=b; ")}s=QzENDQ`],
-    ["Set-Cookie dates", () => `Set-Cookie: ${fill("Expires=Wed, 21 Oct ")}, s=QzENDQ`],
-    ["field lines that are prose", () => `${fill("\ntoken: a b")}\ntoken: QzENDQ`],
-    ["field names without a colon", () => `${fill(`\n${"a".repeat(70)}`)}\ntoken: QzENDQ`],
-    ["environment names", () => `${fill("A_TOKENA_TOKEN")} B_TOKEN=QzENDQ`],
-    ["environment values holding names", () => `X_TOKEN=${fill("A_TOKEN=")}QzENDQ`],
-    ["quoted keys whose value is prose", () => `${fill("'token': a b ")}{ 'token': QzENDQ }`],
-    ["print_r entries", () => `${fill("[token] => [token] => ")}\n[token] => QzENDQ`],
+  // Each text ends with a value to hide.
+  it.each<[string, (fill: (unit: string) => string) => string]>([
+    ["cookie pairs", (fill) => `Cookie: ${fill("a=b; ")}s=QzENDQ`],
+    ["Set-Cookie dates", (fill) => `Set-Cookie: ${fill("Expires=Wed, 21 Oct ")}, s=QzENDQ`],
+    ["field lines that are prose", (fill) => `${fill("\ntoken: a b")}\ntoken: QzENDQ`],
+    ["field names without a colon", (fill) => `${fill(`\n${"a".repeat(70)}`)}\ntoken: QzENDQ`],
+    ["environment names", (fill) => `${fill("A_TOKENA_TOKEN")} B_TOKEN=QzENDQ`],
+    ["environment values holding names", (fill) => `X_TOKEN=${fill("A_TOKEN=")}QzENDQ`],
+    ["quoted keys whose value is prose", (fill) => `${fill("'token': a b ")}{ 'token': QzENDQ }`],
+    ["print_r entries", (fill) => `${fill("[token] => [token] => ")}\n[token] => QzENDQ`],
     [
       "var_dump lengths that do not match",
-      () => `${fill('["token"]=> string(1) "aé ')}"\n["token"]=> string(6) "QzENDQ"`,
+      (fill) => `${fill('["token"]=> string(1) "aé ')}"\n["token"]=> string(6) "QzENDQ"`,
     ],
-    ["form tags", () => `${fill("<input <meta a=b ")}<input name=token value=QzENDQ>`],
+    ["form tags", (fill) => `${fill("<input <meta a=b ")}<input name=token value=QzENDQ>`],
     [
       "pydantic inputs on one line",
-      () => `token\n${fill("[type=a, input_value=b]")}[type=a, input_value=QzENDQ]`,
+      (fill) => `token\n${fill("[type=a, input_value=b]")}[type=a, input_value=QzENDQ]`,
     ],
-    ["entities", () => `${fill("&amp;lt;token&amp;gt;")}&lt;token&gt;QzENDQ&lt;/token&gt;`],
+    ["entities", (fill) => `${fill("&amp;lt;token&amp;gt;")}&lt;token&gt;QzENDQ&lt;/token&gt;`],
     [
       "a long input name",
-      () => `<input name="${fill("aB")}" value="x"><input name=token value=QzENDQ>`,
+      (fill) => `<input name="${fill("aB")}" value="x"><input name=token value=QzENDQ>`,
     ],
     [
       "a long input id",
-      () => `<input id="${fill("a-")}" value="x"><input name=token value=QzENDQ>`,
+      (fill) => `<input id="${fill("a-")}" value="x"><input name=token value=QzENDQ>`,
     ],
     [
       "a long meta name",
-      () => `<meta name="${fill("a_")}" content="x"><meta name=token content=QzENDQ>`,
+      (fill) => `<meta name="${fill("a_")}" content="x"><meta name=token content=QzENDQ>`,
     ],
     [
       "a long input name inside a JSON string",
-      () => `{"m":"\\u003cinput name=\\"${fill("aB")}\\"\\u003e"} X_TOKEN=QzENDQ`,
+      (fill) => `{"m":"\\u003cinput name=\\"${fill("aB")}\\"\\u003e"} X_TOKEN=QzENDQ`,
     ],
-    ["Authorization parameters", () => `Authorization: Digest a=b, ${fill("x")}\ntoken: QzENDQ`],
+    [
+      "Authorization parameters",
+      (fill) => `Authorization: Digest a=b, ${fill("x")}\ntoken: QzENDQ`,
+    ],
     [
       "Authorization parameters inside a JSON string",
-      () => `{"e":"a\\r\\nAuthorization: Digest a=b, ${fill("x")}"} X_TOKEN=QzENDQ`,
+      (fill) => `{"e":"a\\r\\nAuthorization: Digest a=b, ${fill("x")}"} X_TOKEN=QzENDQ`,
     ],
-    ["OAuth parameters", () => `Proxy-Authorization: OAuth k=v ${fill("a.")}\ntoken: QzENDQ`],
-    ["string escapes", () => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
-  ])("answers quickly on %s", (_name, make) => {
-    const text = make();
-    // The fastest of three runs: a busy machine only adds time, and a quadratic scan stops early.
-    const { ms, result } = timed(() => redactText(text), { runs: 3, stopAboveMs: 2_000 });
-    expect(ms).toBeLessThan(400);
+    ["OAuth parameters", (fill) => `Proxy-Authorization: OAuth k=v ${fill("a.")}\ntoken: QzENDQ`],
+    ["string escapes", (fill) => `${fill('\\\\\\"token\\": ')}{"e":"a\\r\\nX-Api-Key: QzENDQ"}`],
+  ])("grows linearly on %s", (_name, make) => {
+    const { ratio, result } = growth((size) => make(filled(size)), redactText, GROWTH);
+    expect(ratio).toBeLessThan(MAX_GROWTH);
     expect(result).not.toContain("QzENDQ");
   });
 
   it("describes a 1 MB error in linear time, and reads only the text near the HTTP log's cap", () => {
-    // About 0.4 s each on a busy machine, 1.2-1.7 s when each log-line check built an array per
-    // character, and a few tens of milliseconds for the rules without the shapes; a scan that
-    // reads the text again for each value takes minutes.
-    const big = "\nX-Api-Key: k\ntoken: a b".repeat((1 << 20) / 24);
-    for (const call of [
-      () => describeError(new Error(big)),
-      () => new SourceError("spotify", "http", big).message,
-    ]) {
-      const { ms, result } = timed(call, { runs: 3, stopAboveMs: 5_000 });
-      expect(ms).toBeLessThan(1500);
+    const calls = [
+      (text: string) => describeError(new Error(text)),
+      (text: string) => new SourceError("spotify", "http", text).message,
+    ];
+    // Field lines whose value is prose: the end of each line is found once. From 128 kB to 1 MB
+    // this grows 7-9 times in CPU time (about 50 ms on 1 MB), with every CPU busy as well. Finding
+    // each line's end by searching for CR and for LF apart grows over 40 times, and searching for
+    // each of the seven line breaks apart about 60 times, as a search for a break the text does not
+    // hold reads on to its end. Those take 0.7-2.5 s on 1 MB, which a bound on the time taken
+    // cannot tell from the waits of a busy machine.
+    const prose = (size: number) => "\ntoken: a b".repeat(Math.floor(size / 11));
+    for (const call of calls) {
+      const { ratio } = growth(prose, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
+      expect(ratio).toBeLessThan(20);
+    }
+    // About 0.4 s of CPU time each. The bound only catches a scan that reads the whole text again
+    // for each value, which takes minutes.
+    const big = "\nX-Api-Key: k\ntoken: a b".repeat(Math.floor((1 << 20) / 24));
+    for (const call of calls) {
+      const cpu = { runs: 3, stopAboveMs: 2 * MAX_MS, clock: threadCpuMs };
+      const { ms, result } = timed(() => call(big), cpu);
+      expect(ms).toBeLessThan(MAX_MS);
       expect(result).not.toMatch(/: k\b/);
     }
     // The HTTP error log reads only the text near its cap, however many hosts follow.
     const hosts = "contoso-prod.openai.azure.com ".repeat((1 << 20) / 30);
     for (const text of [big, hosts]) {
-      expect(timed(() => logText(text), { runs: 3, stopAboveMs: 2_000 }).ms).toBeLessThan(25);
+      const cpu = { runs: 3, stopAboveMs: 2_000, clock: threadCpuMs };
+      expect(timed(() => logText(text), cpu).ms).toBeLessThan(25);
     }
   });
 
   it("answers quickly on a long form-field name in a source's reason", () => {
-    const reason = `{"m":"\\u003cinput name=\\"${fill("aB")}\\" value=\\"x\\"\\u003e"}`;
+    const reason = `{"m":"\\u003cinput name=\\"${filled(200_000)("aB")}\\" value=\\"x\\"\\u003e"}`;
     const { ms } = timed(() => plainReason(reason), { runs: 3, stopAboveMs: 2_000 });
     expect(ms).toBeLessThan(400);
   });

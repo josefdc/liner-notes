@@ -38,9 +38,11 @@
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
  *    names, the focus and the normalised text, never a count, and it is never one the client or
  *    the run already has, nor another fact's of the batch.
- * 6. One claim per fact. Once judged, a fact that restates a code-built claim of the run (on the
- *    same record, naming nothing it does not), or repeats another fact of the batch, is dropped
- *    as a repeat, as the verifier leaves such a claim out of the analysis (restatements.ts).
+ * 6. One claim per fact. Once judged, a fact that restates a code-built claim of the run (on
+ *    records code claims cite, naming nothing they or the track do not; a sample the judge found
+ *    only partly supported in its records' own words), or repeats another fact of the batch, is
+ *    dropped as a repeat, as the verifier leaves such a claim out of the analysis
+ *    (restatements.ts).
  *
  * The facts are handed back in focus order once all of them have been checked.
  */
@@ -607,18 +609,25 @@ export async function writeFactoids(
       [],
       [],
       context.evidence,
+      { track },
     );
-    const kept = new Set(keptClaims.map((claim) => claim.id));
+    // A kept fact that states a relation the run's records document carries the mark the step
+    // gave it (`documentedBy`); a mark it came with is never taken as it is.
+    const keptById = new Map(keptClaims.map((claim) => [claim.id, claim]));
 
     const answered = answers.find((answer) => answer.ok);
     const model = answered?.ok ? answered.model : null;
     for (const [index, draft] of drafts) {
-      if (!kept.has(draft.claim.id)) {
+      const keptClaim = keptById.get(draft.claim.id);
+      if (keptClaim === undefined) {
         log.info(`Factoid ${index + 1}: restates a claim the run already has; dropped`);
         outcomes.push({ index, status: "none", reason: "repeat" });
         continue;
       }
-      const claim = claimsById.get(draft.claim.id) ?? draft.claim;
+      const { documentedBy: _came, ...unmarked } = claimsById.get(draft.claim.id) ?? draft.claim;
+      const claim = keptClaim.documentedBy
+        ? { ...unmarked, documentedBy: keptClaim.documentedBy }
+        : unmarked;
       outcomes.push({ index, status: "written", ...masked(draft.factoid, claim) });
     }
     outcomes.sort((a, b) => a.index - b.index);

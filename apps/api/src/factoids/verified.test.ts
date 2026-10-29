@@ -282,6 +282,80 @@ describe("a new fact that restates a code-built claim of the run", () => {
   });
 });
 
+describe("a new sample fact that restates a code-built sample of the run", () => {
+  const SAMPLED =
+    'MusicBrainz: "One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.';
+  const sampleRecord = {
+    ...evidenceItem("ev-s", SAMPLED),
+    recordRef: "track/recording/r1/samples/recording/r2",
+  };
+  const built: Claim = {
+    id: "code-s",
+    text: SAMPLED.replace("MusicBrainz: ", ""),
+    about: "sample",
+    kind: "sourced",
+    origin: "code",
+    evidenceIds: ["ev-s"],
+    verdict: null,
+    verdictReason: null,
+    numericCheck: "n/a",
+    scope: "recording",
+  };
+  const sampleCard = (text: string) => ({ ...card(text, ["ev-s"]), type: "sample" as const });
+
+  async function sent(text: string) {
+    const llm = fakeModel({ cards: [sampleCard(text), null, null], judge: () => "partial" });
+    const app = createTestApp(
+      createFactoidsRouter({
+        llm,
+        loadRun: (id) => (id === RUN_ID ? storedRun([sampleRecord], [], [built]) : null),
+      }),
+    );
+    const res = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], runId: RUN_ID })
+      .timeout(5000);
+    expect(res.status).toBe(200);
+    sentClaims = res.body.claims;
+    return res.body.factoids.map((factoid: { content: string }) => factoid.content);
+  }
+  let sentClaims: Claim[] = [];
+
+  it("is not sent, though the judge found it only partly supported: no card hedges it", async () => {
+    expect(await sent("Daft Punk’s recording samples “More Spell on You” by Eddie Johns.")).toEqual(
+      [],
+    );
+  });
+
+  it("is sent, judged as it was, when it adds a word of its own", async () => {
+    const more = "Daft Punk’s recording samples the horns of “More Spell on You” by Eddie Johns.";
+    expect(await sent(more)).toEqual([more]);
+    // Judged as it was, and unmarked: a fact that says more than its record is read in doubt,
+    // and the page hedges its relation ("Possible sample").
+    expect(sentClaims).toEqual([expect.objectContaining({ verdict: "partial", kind: "inferred" })]);
+    expect(sentClaims[0]).not.toHaveProperty("documentedBy");
+  });
+
+  it("is sent marked when it states the record's relation and only adds detail", async () => {
+    const more =
+      "Daft Punk’s recording samples “More Spell on You” by Eddie Johns. The horns are chopped into the hook.";
+    expect(await sent(more)).toEqual([more]);
+    // Its own kind and verdict, and the code claim of the run that documents its relation: the
+    // page names the relation as that claim does ("Sample").
+    expect(sentClaims).toEqual([
+      expect.objectContaining({ verdict: "partial", kind: "inferred", documentedBy: ["code-s"] }),
+    ]);
+  });
+
+  it("is sent unmarked when it names another record", async () => {
+    const other =
+      "Daft Punk’s recording samples the horns of “More Spell on You” by Ella Fitzgerald.";
+    expect(await sent(other)).toEqual([other]);
+    expect(sentClaims).toHaveLength(1);
+    expect(sentClaims[0]).not.toHaveProperty("documentedBy");
+  });
+});
+
 describe("a relation from more facts is stated whole, as the analysis states it", () => {
   const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
   const sampleCard = (text: string, evidenceIds: string[]) => ({

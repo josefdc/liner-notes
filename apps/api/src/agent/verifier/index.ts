@@ -680,12 +680,19 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     );
     // One claim per fact, on the claims as the result shows them (masked, as a replay or a stored
     // result reads them): a model claim that restates a code-built one, or a second copy of one
-    // statement, is left out with its card, and counted (restatements.ts).
-    const { claims, factoids, restated } = withoutRestatements(
+    // fact, is left out with its card and the model's links that state it, and counted
+    // (restatements.ts).
+    const {
+      claims,
+      factoids,
+      genealogy: shownMap,
+      restated,
+    } = withoutRestatements(
       masked.claims,
       masked.factoids,
       [...verified.genealogy.links, ...draft.samples],
       state.evidence,
+      { genealogy: verified.genealogy, track: { title: spotify.title, artist: spotify.artist } },
     );
     if (restated > 0) log.info(`Run ${runId}: left out ${restated} claim(s) that restate another`);
 
@@ -721,7 +728,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
       segmentsSource: draft.segmentsSource,
       samples: draft.samples,
       factoids,
-      genealogy: verified.genealogy,
+      genealogy: shownMap,
       claims,
       ...(draft.modelUnavailableReason !== null
         ? { modelUnavailable: true, modelUnavailableReason: draft.modelUnavailableReason }

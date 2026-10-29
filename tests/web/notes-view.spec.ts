@@ -95,12 +95,38 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
   );
   for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  // Every claim the notes list, in any section, and every fact card, "Possible" ones included: a
+  // relation a record documents is listed once, by its record, and never named "Possible" beside
+  // it. The sample's card says more than its record (how the sample is used), so it stays, named
+  // as the record names it: one sentence states the record's relation, the other only adds how
+  // the sample is used. Every card shows its badge.
+  const cards = await page.locator("#panel-context [data-factoid-category]").evaluateAll((found) =>
+    found.map((card) => ({
+      badges: card.querySelectorAll("[data-factoid-type]").length,
+      text: `${card.querySelector("[data-factoid-type]")?.textContent?.trim()}: ${card.textContent}`,
+    })),
+  );
+  expect(cards).toHaveLength(1);
+  for (const card of cards) expect(card.badges, card.text).toBe(1);
+  const everyClaim = await page
+    .locator("#panel-context li")
+    .evaluateAll((items) =>
+      items
+        .filter((item) => item.querySelector(":scope > p"))
+        .map((item) => item.querySelector(":scope > p")?.textContent?.trim() ?? ""),
+    );
+  expect(everyClaim.length).toBeGreaterThan(rows.length);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
     expect(
-      rows.filter((row) => fact.test(row)),
+      everyClaim.filter((claim) => fact.test(claim)),
       String(fact),
     ).toHaveLength(1);
+    for (const card of cards.filter((each) => fact.test(each.text))) {
+      expect(card.text, String(fact)).not.toMatch(/^possible/i);
+    }
   }
+  for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
+  expect(cards[0].text).toMatch(/^SAMPLE: .*brass figure/i);
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
   await expect(items).toHaveCount(13);
   for (const item of await items.all()) {
@@ -139,7 +165,22 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   // and its links are written out as a list.
   const genealogy = page.locator("#panel-genealogy");
   await expect(genealogy.locator('svg [tabindex="0"]')).toHaveCount(1);
-  await expect(genealogy.getByText(/Links as a list \(10\)/)).toBeVisible();
+  await expect(genealogy.getByText(/Links as a list \(9\)/)).toBeVisible();
+  // On the map too, each relation is drawn once, by its record: no second node or inferred link
+  // of the model's beside it.
+  const links = genealogy.locator('ul[aria-label="Genealogy links"] > li');
+  await expect(links).toHaveCount(9);
+  expect(
+    await links.evaluateAll((all) => all.map((link) => link.getAttribute("data-link-kind"))),
+  ).toEqual(Array(9).fill("sourced"));
+  for (const fact of [/More Spell on You/, /Circo Loco/]) {
+    await expect(links.filter({ hasText: fact }), String(fact)).toHaveCount(1);
+  }
+  const nodes = await genealogy
+    .locator("svg g.nodes > g[data-node-id]")
+    .evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id")));
+  expect(nodes).toHaveLength(10);
+  expect(new Set(nodes).size).toBe(nodes.length);
 
   // The result is labelled as the recording it is.
   await expect(page.getByText(/Recorded run/).first()).toBeVisible();

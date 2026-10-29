@@ -49,7 +49,10 @@ interface InteractiveFactoidProps {
   readings?: readonly Reading[];
   /** The result's measurement, for the measured side of a conflict. */
   audio?: MeasuredAudio | null;
-  /** The words of the shown genealogy link that states the card's claim, if one does. */
+  /**
+   * The words of the shown genealogy link that states the card's claim, if one does, else of the
+   * relation records document that it states (`withDocumentedRelations`).
+   */
   relation?: string | null;
 }
 
@@ -114,7 +117,8 @@ const CLAIM_CATEGORIES: Record<ClaimAbout, { Icon: LucideIcon; label: string }> 
 /**
  * The badge of a card: the relation its claim states, in the genealogy's words, when it states
  * one; else what its claim is about (the card's own type is the model's label), or the card's
- * type without a claim. `linked` is the words of the shown link that states the card's claim.
+ * type without a claim. `linked` is the words of the shown link that states the card's claim,
+ * else of the relation records document that it states (`withDocumentedRelations`).
  */
 export function factoidCategory(
   factoid: Factoid,

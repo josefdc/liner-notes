@@ -61,10 +61,11 @@ function servedWithCount(record: ReplayRecord): { analysis: TrackAnalysis; resta
 
 /**
  * A recording's result with each fact stated once, as the verifier now leaves it
- * (agent/restatements.ts, `oneClaimPerFact`): a recording made before that step loses the model's
- * restatements and their cards, counted in its verifier summary; one made after it (its summary
- * counts the step) is served as recorded. The replayed result and the recording's "more facts"
- * (http/routes/factoids.ts) both read it, so a card left out here is never served there.
+ * (agent/restatements.ts, `oneClaimPerFact`, run again on every recording): one made before that
+ * step, or before its rules last changed, loses the model's restatements and their cards, counted
+ * in its verifier summary; one it already ran on loses nothing more. The replayed result and the
+ * recording's "more facts" (http/routes/factoids.ts) both read it, so a card left out here is
+ * never served there.
  */
 export function servedRecording(record: ReplayRecord): TrackAnalysis {
   return servedWithCount(record).analysis;

@@ -36,12 +36,15 @@ let repo = "";
 // Git in these repositories ignores the user's and the machine's configuration, so settings
 // such as automatic packing or another object format cannot change what the tests see.
 const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+// Git and the check run as real processes, which a busy machine can make take seconds each. One
+// that hangs is stopped and fails its test, well inside the test's own timeout.
+const CHILD_TIMEOUT_MS = 15_000;
 
 const git = (...args: string[]) =>
   execFileSync(
     "git",
     ["-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.com", ...args],
-    { encoding: "utf8", env: gitEnv },
+    { encoding: "utf8", env: gitEnv, timeout: CHILD_TIMEOUT_MS },
   ).trim();
 
 const snapshotsDir = () => join(repo, "packages", "contract", "snapshots");
@@ -57,7 +60,9 @@ function check(base: string) {
   const result = spawnSync("node", [script, "--base", base, "--repo", repo], {
     encoding: "utf8",
     env: gitEnv,
+    timeout: CHILD_TIMEOUT_MS,
   });
+  if (result.error) throw result.error; // ETIMEDOUT when it hung
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
 
@@ -116,11 +121,12 @@ afterAll(() => {
 });
 
 // Every test gets a repository of its own, so no test reads what another wrote or committed.
+// Four git processes: given more than a hook's default 10 s, as they can take on a busy machine.
 beforeEach(() => {
   repo = mkdtempSync(join(tmpdir(), "contract-check-"));
   git("init", "-q");
   commit("initial");
-});
+}, 60_000);
 
 afterEach(() => {
   rmSync(repo, { recursive: true, force: true });
@@ -157,8 +163,9 @@ function acknowledgedBase(): string {
   return commit("acknowledged at the base");
 }
 
-// Each test spawns node and git several times: allow well beyond the 5 s default.
-describe("contract-check", { timeout: 30_000 }, () => {
+// Each test runs node and git as processes up to about ten times, up to about 2 s in all at
+// normal load and several times that on a busy machine: allow well beyond the 5 s default.
+describe("contract-check", { timeout: 120_000 }, () => {
   it("builds without touching packages/contract/dist, which other test files import", () => {
     expect(existsSync(join(packageDir, "dist")) ? distStamp() : "").toBe(distBefore);
   });

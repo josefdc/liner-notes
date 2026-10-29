@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inspect } from "node:util";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { randomStrings } from "./sources/testing/strings.js";
@@ -12,14 +13,18 @@ import {
   currentRunId,
   installConsoleBridge,
   ipHash,
+  logCut,
   logger,
   MAX_LOGGED_TEXT,
+  SECRET_PAIR,
   scrub,
   scrubbedSpans,
   serializeError,
   withRun,
 } from "./logger.js";
-import { timed } from "./sources/testing/strings.js";
+import { growth, timed } from "./sources/testing/strings.js";
+import { logText } from "./http/middleware/errors.js";
+import { SourceError } from "./sources/http.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -224,6 +229,9 @@ describe("scrubbedSpans", () => {
       "authorization: ",
       "Bearer ",
       "Basic abcdefgh12",
+      "'Bearer abc.def1'",
+      '"Basic abcdefgh12"',
+      "proxy-authorization: ",
       "contoso-prod.openai.azure.com",
       "https://u:p@h.example/x?token=t1&a=b",
       "p.scdn.co/clip",
@@ -257,6 +265,391 @@ describe("scrubbedSpans", () => {
     const text = "the token count is 5; see https://example.org/a?page=2";
     expect(scrub(text)).toBe(text);
     expect(scrubbedSpans(text)).toEqual([]);
+  });
+});
+
+describe("Authorization values in quotes and at the cap", () => {
+  const TOKEN = "eyJhbGciOi.secretpart";
+  const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+  // What util.inspect writes for a headers object, which reaches a line as text.
+  const headers = inspect({
+    accept: "application/json",
+    authorization: `Bearer ${TOKEN}`,
+    "proxy-authorization": `Basic ${CRED}`,
+  });
+  /** Whether `out` shows any 4 characters of the token or the credential. */
+  const shows = (out: string) =>
+    [TOKEN, CRED].some((secret) =>
+      Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
+        out.includes(part),
+      ),
+    );
+
+  it.each([
+    ["in single quotes", `{ authorization: 'Bearer ${TOKEN}' }`, "{ authorization: [redacted] }"],
+    ["in double quotes", `{ authorization: "Bearer ${TOKEN}" }`, "{ authorization: [redacted] }"],
+    [
+      "under proxy-authorization",
+      `{ 'proxy-authorization': 'Bearer ${TOKEN}' }`,
+      "{ 'proxy-authorization': [redacted] }",
+    ],
+    ["in JSON", `{"Authorization":"Bearer ${TOKEN}"}`, '{"Authorization":[redacted]}'],
+    ["a Basic one", `{ Authorization: 'Basic ${CRED}' }`, "{ Authorization: [redacted] }"],
+    ["after a tab", `{ authorization: 'Bearer\t${TOKEN}' }`, "{ authorization: [redacted] }"],
+    ["after two spaces", `{ authorization: "Basic  ${CRED}" }`, "{ authorization: [redacted] }"],
+    ["in backticks", `{ authorization: \`Bearer ${TOKEN}\` }`, "{ authorization: [redacted] }"],
+    [
+      "in a headers object util.inspect wrote",
+      headers,
+      "{\n  accept: 'application/json',\n  authorization: [redacted],\n  'proxy-authorization': [redacted]\n}",
+    ],
+  ])("leaves no part of a quoted token: %s", (_label, text, expected) => {
+    expect(scrub(text)).toBe(expected);
+    expect(shows(scrub(logText(text)))).toBe(false);
+    logger("Probe").warn(`sent ${logText(text)} with ${text}`);
+    expect(shows(logs.lines().join("\n"))).toBe(false);
+  });
+
+  it("leaves no part of a quoted token in a console line of an inspected headers object", () => {
+    const target = { log: () => {}, warn: () => {} } as unknown as Console;
+    const restore = installConsoleBridge(target);
+    try {
+      target.log(headers);
+      target.warn("[Fetch] headers %s", inspect({ Authorization: `Bearer ${TOKEN}` }));
+    } finally {
+      restore();
+    }
+    expect(logs.messages()).toEqual([
+      "{\n  accept: 'application/json',\n  authorization: [redacted],\n  'proxy-authorization': [redacted]\n}",
+      "headers { Authorization: [redacted] }",
+    ]);
+  });
+
+  it("leaves no part of a token after a scheme written twice, on every path to a line", () => {
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const texts: string[] = [];
+    for (const quote of ["'", '"'])
+      for (const first of ["Bearer", "Basic", "bearer", "BASIC"])
+        for (const between of [" ", "\t", "\n", "  "])
+          for (const second of ["Bearer", "Basic", "BEARER", "basic"])
+            texts.push(`authorization: ${quote}${first}${between}${second} ${token}${quote}`);
+    const shown = (out: string) => out.includes(token.slice(0, 4)) || out.includes(token.slice(-4));
+    const dir = mkdtempSync(join(tmpdir(), "log-twice-"));
+    const target = { log: () => {} } as unknown as Console;
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      const restore = installConsoleBridge(target);
+      let inspected = 0;
+      try {
+        for (const text of texts) {
+          expect(shown(scrub(text)), text).toBe(false);
+          expect(shown(scrub(logText(text))), text).toBe(false);
+          expect(shown(JSON.stringify(serializeError(new Error(text)))), text).toBe(false);
+          expect(shown(scrub(new SourceError("spotify", "http", text).message)), text).toBe(false);
+          const log = logger("Probe");
+          log.warn(text);
+          log.warn("failed", { err: new Error(text), note: text });
+          // util.inspect writes a tab or a line break escaped (`\t`), which is #237's.
+          if (/[\t\n]/.test(text)) continue;
+          const value = text.slice("authorization: '".length, -1);
+          target.log("[Fetch] sent", { note: inspect({ Authorization: value }) });
+          target.log(`[Fetch] sent ${inspect({ authorization: value })}`);
+          inspected++;
+        }
+      } finally {
+        restore();
+      }
+      const lines = readFileSync(file, "utf8").trim().split("\n");
+      expect(lines).toHaveLength(texts.length * 2 + inspected * 2);
+      expect(inspected).toBe(64);
+      expect(lines.filter(shown)).toEqual([]);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "a pair name after a quoted scheme",
+      "{ authorization: 'Bearer token: V7qW6rE5tY4uI3oP2aS1' }",
+    ],
+    [
+      "a quoted scheme after a quoted scheme",
+      "authorization: 'Bearer \"Bearer V7qW6rE5tY4uI3oP2aS1\"'",
+    ],
+    [
+      "a scheme in brackets after a quoted scheme",
+      "authorization: 'Bearer (Bearer V7qW6rE5tY4uI3oP2aS1)'",
+    ],
+    ["a Discogs token after a tab", 'Authorization: "Discogs token=\tV7qW6rE5tY4uI3oP2aS1"'],
+    ["a pair in backticks", "Authorization = `Basic \taccess_token='V7qW6rE5tY4uI3oP2aS1=='"],
+    ["a scheme after a slash", "authorization: 'Bearer x/Bearer V7qW6rE5tY4uI3oP2aS1'"],
+    ["three schemes", "authorization: Bearer Bearer Bearer V7qW6rE5tY4uI3oP2aS1"],
+    ["two schemes, then Basic", "Authorization: Bearer Bearer Basic V7qW6rE5tY4uI3oP2aS1=="],
+    [
+      "three schemes across a line break",
+      "authorization: Bearer\nBearer Bearer V7qW6rE5tY4uI3oP2aS1",
+    ],
+    ["three schemes, any case", "password=bearer BEARER bearer V7qW6rE5tY4uI3oP2aS1"],
+    ["three schemes in quotes", "authorization: 'Bearer Bearer Bearer V7qW6rE5tY4uI3oP2aS1'"],
+    // A pair's value stops at "&", the Authorization rule's does not.
+    [
+      "two schemes before a token with &, in a headers object",
+      "{ headers: { Authorization: 'Bearer Bearer a&V7qW6rE5tY4uI3oP2aS1' } }",
+    ],
+    [
+      "two schemes before a token with &, in JSON",
+      '{"authorization":"Bearer Bearer x&V7qW6rE5tY4uI3oP2aS1"}',
+    ],
+    ["two schemes before a password with &", 'password: "Bearer Bearer p&V7qW6rE5tY4uI3oP2aS1"'],
+    [
+      "four schemes in quotes before a token with &",
+      "authorization: 'Bearer Bearer Bearer Bearer abc&V7qW6rE5tY4uI3oP2aS1'",
+    ],
+    [
+      "three schemes before a token with &",
+      "authorization: Bearer Bearer Bearer abc&V7qW6rE5tY4uI3oP2aS1",
+    ],
+    [
+      "Basic twice, then Bearer, before a token with &",
+      "Authorization: Basic Basic Bearer p&V7qW6rE5tY4uI3oP2aS1 next",
+    ],
+    [
+      "three schemes before a quoted token with &",
+      'authorization: Bearer Bearer Bearer "abc&V7qW6rE5tY4uI3oP2aS1"',
+    ],
+    [
+      "two schemes in quotes before a quoted token with &",
+      "authorization: 'Bearer Bearer \"abc&V7qW6rE5tY4uI3oP2aS1\"'",
+    ],
+  ])("leaves no part of a token after schemes and rules in a row: %s", (_label, text) => {
+    const dir = mkdtempSync(join(tmpdir(), "log-rows-"));
+    const shown = (out: string) => out.includes("V7qW6r") || out.includes("oP2aS1");
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      expect(scrub(text)).not.toSatisfy(shown);
+      expect(scrub(logText(text))).not.toSatisfy(shown);
+      expect(JSON.stringify(serializeError(new Error(text)))).not.toSatisfy(shown);
+      logger("Probe").warn(text);
+      expect(readFileSync(file, "utf8")).not.toSatisfy(shown);
+      expect(readFileSync(file, "utf8")).toContain("[redacted]");
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps hidden what main's pair and Authorization rules hid (generated texts)", () => {
+    // main's expressions (662d2ce), frozen: what they hid in a text, scrub hides too.
+    const MAIN_SECRET_PAIR =
+      /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+    const MAIN_AUTH_SCHEME =
+      /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+    const main = (text: string) =>
+      text
+        .replace(MAIN_SECRET_PAIR, "$1$2[redacted]")
+        .replace(
+          MAIN_AUTH_SCHEME,
+          (_m, scheme?: string, basic?: string) => `${scheme ?? basic}[redacted]`,
+        );
+    const SECRET = "M0001xAbCdEf";
+    const shown = (out: string) => out.includes("M0001x") || out.includes("AbCdEf");
+    const texts: string[] = [];
+    for (const name of ["authorization", "Proxy-Authorization", "token", "password"])
+      for (const sep of [": ", "=", '": "', " = "])
+        for (const quote of ["", "'", '"', "`"])
+          for (const scheme of ["Bearer", "basic", "Discogs"])
+            for (const blank of [" ", "\t", "\n", "  "])
+              for (const between of [
+                "",
+                "Bearer ",
+                "Bearer Bearer ",
+                "Basic ",
+                "bearer\n",
+                "token: ",
+                "x/",
+                "(",
+                '"',
+                "'",
+                "-",
+                "access_token='",
+                "Discogs token=",
+                "Discogs token=\t",
+                "x/Bearer ",
+                '"Bearer ',
+                "(Bearer ",
+                "password=",
+                'token": ',
+                "Bearer Bearer Bearer ",
+                "p&",
+                "Bearer Bearer p&",
+                'Bearer Bearer "p&',
+              ])
+                texts.push(`${name}${sep}${quote}${scheme}${blank}${between}${SECRET}${quote} }`);
+    const parts = [
+      "authorization: ",
+      "token=",
+      "'",
+      '"',
+      "`",
+      "Bearer ",
+      "Basic ",
+      "bearer\t",
+      "Discogs token=",
+      "\n",
+      "  ",
+      "x/",
+      "(",
+      ":",
+      "&",
+      SECRET,
+    ];
+    texts.push(...randomStrings(parts, 20_000, 9, 235));
+    const missed = texts.filter((text) => shown(scrub(text)) && !shown(main(text)));
+    expect(missed.slice(0, 5)).toEqual([]);
+    // The texts hold what main hid often enough for the comparison to mean something.
+    expect(
+      texts.filter((text) => text.includes(SECRET) && !shown(main(text))).length,
+    ).toBeGreaterThan(5_000);
+  });
+
+  it("finds the token of a quoted Authorization value, without its scheme and quotes", () => {
+    const text = `{ authorization: 'Bearer ${TOKEN}', 'proxy-authorization': "Basic ${CRED}" }`;
+    expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
+      TOKEN,
+      CRED,
+    ]);
+  });
+
+  it("keeps readable text readable", () => {
+    for (const text of [
+      "Authorization header missing",
+      "authorization missing for the request",
+      "the scheme is Bearer",
+      "scheme 'Basic', then 'Bearer'",
+      "{ authorization: '' }",
+      "{ accept: 'application/json', 'content-type': 'text/plain' }",
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("keeps the words after a quoted scheme word that holds no token", () => {
+    for (const [text, expected] of [
+      [
+        "authorization: 'Bearer' or 'Basic' expected",
+        "authorization: [redacted] or 'Basic' expected",
+      ],
+      // A line break after a quoted scheme ends the value: the next line stays.
+      [
+        "authorization: 'Bearer\n    at Object.<anonymous> (app.js:1:1)'",
+        "authorization: [redacted]\n    at Object.<anonymous> (app.js:1:1)'",
+      ],
+      [
+        "password: 'Basic\n\nThe server then retried'",
+        "password: [redacted]\n\nThe server then retried'",
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("does not replace a quoted value it replaced before", () => {
+    for (const text of [
+      "authorization: 'Bearer [redacted]'",
+      'authorization: "Basic [redacted]"',
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("leaves no part of a credential the cap cuts, a short Basic one included", () => {
+    const dir = mkdtempSync(join(tmpdir(), "log-cap-"));
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      for (const [scheme, quote] of [
+        ["Basic ", ""],
+        ["Basic ", '"'],
+        ["Authorization: Basic ", ""],
+        ["Bearer ", ""],
+      ]) {
+        const value = `${scheme}${quote}${CRED}${quote}`;
+        for (let k = 1; k < CRED.length; k++) {
+          const at = MAX_LOGGED_TEXT - scheme.length - quote.length - k;
+          const text = `${"w".repeat(at - 1)} ${value} tail`;
+          const out = scrub(text);
+          expect(out.length, value).toBeLessThan(MAX_LOGGED_TEXT + 20);
+          expect(out.slice(-40), `${value} cut after ${k}`).not.toContain(
+            CRED.slice(0, Math.min(k, 3)),
+          );
+          if (k === 5) logger("Probe").warn(text);
+        }
+      }
+      const lines = readFileSync(file, "utf8").trim().split("\n");
+      expect(lines).toHaveLength(4);
+      for (const line of lines) expect(line).not.toContain(CRED.slice(0, 3));
+      expect(JSON.parse(lines[0] as string).msg).toMatch(/w …\[truncated\]$/);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("cuts before an Authorization value as the text came, whose scheme a pair took alone", () => {
+    // The cap reads Authorization values in the text before secret pairs replace anything: here
+    // the pair rule takes the quoted scheme word alone (a line break follows it), so after it no
+    // rule would find the credential; the cut still falls before it.
+    for (const k of [26, 30, 40]) {
+      const text = `${"w".repeat(MAX_LOGGED_TEXT - k - 1)} { authorization: 'Basic\n    ${CRED}' }`;
+      expect(scrub(text).slice(-30), String(k)).toBe("w { authorization: [redacted]]");
+    }
+  });
+
+  it("moves a cut that moved to a credential it splits after the word Basic", () => {
+    // Moved to a configured value glued to the credential, then to the start of the credential,
+    // which only the text as it came holds whole; a cut through a Basic credential that nothing
+    // else moved falls before the word (readPairs).
+    configureLogger({ GLUED_SECRET: "S1xS2xS3xS4xS5xS6x" });
+    const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x yy ${"z ".repeat(20)}`;
+    expect(logCut(glued, glued.indexOf("S3x"))).toBe(glued.indexOf("M0003x"));
+  });
+
+  it("moves a cut through a Basic credential before a host written right before it", () => {
+    // The credential's span, with its word, touches the host's: the cut falls before both, as
+    // it always has, and never shows the host where it hid it before.
+    configureLogger({ AZURE_OPENAI_ENDPOINT: "https://contoso-prod.openai.azure.com" });
+    const text = `xx contoso-prod.openai.azure.comBasic C1xC2xC3xC4x yy ${"z ".repeat(20)}`;
+    expect(logCut(text, text.indexOf("C3x"))).toBe(text.indexOf("contoso"));
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  it.each([
+    ["spaces after a quoted scheme", filled(" ", "authorization: 'Bearer ", "]")],
+    ["quoted schemes", filled("authorization: 'Bearer ")],
+    ["quoted schemes after Basic", filled("authorization:\"Basic\t'Bearer ")],
+    ["quoted tokens", filled('"authorization": "Bearer abc.def", ')],
+    // The word after a scheme is read for the start of another rule and for an "&": a long one,
+    // runs of schemes, and words that hold a rule's start near their end.
+    ["a long word after a quoted scheme", filled("x", "authorization: 'Bearer ")],
+    ["a run of schemes", filled("Bearer ", "authorization: ", "x")],
+    ["a quoted run of schemes", filled("Bearer ", "authorization: '")],
+    ["a pair's name after a slash", filled("authorization: 'Bearer x/token")],
+    ["an & after a run of schemes", filled("authorization: 'Bearer Bearer x&")],
+  ])("reads quoted Authorization values in linear time, up to 1 MB: %s", (_name, make) => {
+    // The CPU time of the three readers from 128 kB to 1 MB: a text read once grows about 8 times,
+    // and one read again from each value to its end about 64 times, or takes seconds on 1 MB.
+    const call = (text: string) =>
+      text.replace(SECRET_PAIR, "$1$2[R]").length + scrubbedSpans(text).length + scrub(text).length;
+    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+    expect(ratio).toBeLessThan(20);
   });
 });
 

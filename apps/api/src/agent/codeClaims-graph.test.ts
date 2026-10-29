@@ -260,13 +260,14 @@ describe("code-built claims and links in the analysis graph", () => {
     expect(result.genealogy.links.filter((l) => l.origin === "model")).toEqual([]);
     expect(samples.filter((l) => l.source === `mb-${UNDER_PRESSURE}`)).toHaveLength(1);
     expect(judged.map((statement) => statement.text)).toEqual([MODEL_CLAIM, MORE_CLAIM]);
-    // A claim judged wholly supported by the code claim's record alone, naming nothing the record
-    // does not, restates the code claim: it is left out, and counted (restatements.ts). The one
-    // that names a year the record does not state stays, with its verdict.
+    // Both say more than the record, which states only that one recording samples the other: the
+    // part sampled (the bass line), and the year of the record sampled. Each stays, with its
+    // verdict, and nothing is counted as restated (restatements.ts).
     expect(result.claims?.filter((claim) => claim.origin === "model")).toEqual([
+      expect.objectContaining({ text: MODEL_CLAIM, verdict: "supported", kind: "sourced" }),
       expect.objectContaining({ text: MORE_CLAIM, verdict: "supported", kind: "sourced" }),
     ]);
-    expect(result.run?.verifier).toEqual({ judged: 2, unjudged: 0, restated: 1 });
+    expect(result.run?.verifier).toEqual({ judged: 2, unjudged: 0, restated: 0 });
 
     // Every code link reads sourced, by the contract's rule.
     const code = result.genealogy.links.filter((l) => l.origin === "code");

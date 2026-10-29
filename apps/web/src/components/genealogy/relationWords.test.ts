@@ -385,11 +385,14 @@ describe('a model claim on a relation a record documents', () => {
   });
 
   it('keeps "Possible" when the claims it is marked with are not shown sourced on its relation', () => {
-    // Marked with a claim of another subject, an inferred one, one not in the result, or a mark
-    // the page cannot read.
+    // Marked with a claim of another subject, an inferred one, the model's, a rejected one, one
+    // not in the result, or a mark the page cannot read; or rejected itself (a value found wrong).
     for (const [model, code] of [
       [{ about: 'cover' }, {}],
       [{ about: 'sample' }, { kind: 'inferred' }],
+      [{ about: 'sample' }, { origin: 'model', verdict: 'supported' }],
+      [{ about: 'sample' }, { verdict: 'contradicted' }],
+      [{ about: 'sample', numericCheck: 'contradicted' }, {}],
       [{ about: 'sample', documentedBy: ['code-9'] }, {}],
       [{ about: 'sample', documentedBy: ['code-1', 'code-9'] }, {}],
       [{ about: 'sample', documentedBy: 'code-1' }, {}],

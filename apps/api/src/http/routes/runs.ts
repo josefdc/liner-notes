@@ -27,8 +27,9 @@ export const BY_TRACK_CANDIDATES = 5;
 /**
  * A run's stored result with each fact stated once (restatements.ts, run again on every read):
  * one stored before that step, or before its rules last changed, loses the model's restatements
- * and their cards, counted in its verifier summary and in the log. A result that is not an object with a list of claims, or that the step cannot read, is
- * returned as it is, for the contract check; the step's failure is logged.
+ * and their cards, counted in its verifier summary and in the log. A result that is not an object
+ * with a list of claims, or that the step cannot read, is returned as it is, for the contract
+ * check; the step's failure is logged.
  */
 function withOneClaimPerFact(runId: string, stored: unknown): unknown {
   if (typeof stored !== "object" || stored === null) return stored;

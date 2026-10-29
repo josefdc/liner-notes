@@ -285,9 +285,11 @@ export const VerifierSummary = z.object({
     .optional()
     .describe(
       "Claims left out of the result because they restate another: a model claim stating what " +
-        "a code-built claim states on the same record, or a second copy of one statement. " +
-        "judged and unjudged count claims before these are left out. 0 when none were; absent " +
-        "on results from before they were counted",
+        "code-built claims state on the records it cites, a model claim stating a relation " +
+        "another model claim states too, in the same or other words, or a second copy of one " +
+        "statement. judged and unjudged count claims before these are left out. A stored " +
+        "result is read again by the current rules, so the count can grow on read. 0 when none " +
+        "were; absent on results from before they were counted",
     ),
 });
 

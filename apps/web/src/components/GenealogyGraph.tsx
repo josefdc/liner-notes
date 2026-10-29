@@ -2120,7 +2120,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // leave its card room above it (a landscape phone): then it follows the map, in the flow.
   const inlinePanel = sparse || (panel !== null && panel.height < SHORT_MAP_PX);
   // A box at the map's top goes below "↑ N more" while that cue shows, never over it.
-  const detailBelowCue = detailTop && cues.up > 0 ? mapInset - topInset + 2 + CUE_PX : 0;
+  const belowCue = mapInset - topInset + 2 + CUE_PX;
+  const detailBelowCue = detailTop && cues.up > 0 ? belowCue : 0;
   // And one at its bottom goes above the bottom cues ("← N more", "N more ↓/→") while they show.
   const bottomRoom = cues.left + cues.right + cues.down > 0 ? CUE_PX + 4 : 8;
   const detailBottom = detailTop ? 8 : bottomRoom;
@@ -2185,13 +2186,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   useLayoutEffect(() => {
     // The panel's height (on the canvas), else the hover box's.
     const box = (inlinePanel ? null : panelRef.current) ?? detailRef.current;
-    const inset = box ? box.offsetHeight + (detailTop ? 8 + detailBelowCue : detailBottom) : 0;
+    // The room it takes, the cues' strip beside it always counted, as if they showed: a pan that
+    // shows or hides a cue moves the box, never this room, so the selected card or the focused
+    // item is not placed again for it (and that pan again: it could go back and forth for good).
+    const inset = box ? box.offsetHeight + (detailTop ? 8 + belowCue : CUE_PX + 4) : 0;
     detailAcrossRef.current = box ? [box.offsetLeft, box.offsetLeft + box.offsetWidth] : [0, 0];
     // What the box shows, and how tall it is: either changing places things again.
     const shown = `${
       selectedNode ? `selected:${selectedNode.id}` : active === null ? '' : JSON.stringify(active)
     }|${detailTop ? 'top' : 'bottom'}`;
-    lowInsetRef.current = box ? box.offsetHeight + bottomRoom : 0;
+    lowInsetRef.current = box ? box.offsetHeight + CUE_PX + 4 : 0;
     if (inset === detailInsetRef.current && shown === detailShownRef.current) return;
     detailInsetRef.current = inset;
     detailShownRef.current = shown;

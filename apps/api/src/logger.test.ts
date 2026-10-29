@@ -1309,6 +1309,13 @@ describe("configured values in what a client is shown, in a token and in any whi
     }
   });
 
+  it("reads a pair's value and a token on through a value between characters that end a token", () => {
+    const V = "dgTok9876543210abcdQ";
+    configure({ DISCOGS_TOKEN: V });
+    expect(scrub(`token=abc!${V}!TAILsecretXYZ123 next`)).toBe("token=[redacted] next");
+    expect(scrub(`sent Bearer abc!${V}!TAILsecretXYZ123 next`)).toBe("sent Bearer [redacted] next");
+  });
+
   it("finds a value again where it overlaps itself after a character that ends a token", () => {
     configure({ SELF_SECRET: "k3y:k3y:k3y" });
     expect(scrub("x k3y:k3y:k3y:k3y y")).toBe("x [redacted] y");

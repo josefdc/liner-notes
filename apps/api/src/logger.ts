@@ -240,11 +240,16 @@ interface ValueSet {
    * for one that crosses it.
    */
   reach: number;
+  /**
+   * The spans of the texts read last (spansOf) while a redaction runs (readingOnce), newest
+   * last: a redaction reads a text often.
+   */
+  recent: Map<string, ReadonlyArray<readonly [number, number]>>;
 }
 
 /** The configured values, longest first: as they were replaced before (cappedValues). */
 let secretStrings: string[] = [];
-let configured: ValueSet = { patterns: [], reach: 0 };
+let configured: ValueSet = { patterns: [], reach: 0, recent: new Map() };
 /** configured.reach, which logCut and cappedValues read. */
 let valueReach = 0;
 let secretHosts: string[] = [];
@@ -357,7 +362,7 @@ function valueSet(values: readonly string[]): ValueSet {
     for (const unit of pattern.units) if (unit === FOLDED_RUN) runs++;
     reach = Math.max(reach, ESCAPED_CHAR * (pattern.units.length + runs * (FOLD_REACH - 1)));
   }
-  return { patterns, reach };
+  return { patterns, reach, recent: new Map() };
 }
 
 /**
@@ -527,6 +532,43 @@ const FOLDED_RUNS = /[\0-\x20\x7f-\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205
 /** configuredSpans for the values of `set`. */
 function spansOf(text: string, set: ValueSet): Array<[number, number]> {
   if (set.patterns.length === 0 || text.length === 0) return [];
+  if (reading === 0) return readSpans(text, set);
+  keeping.add(set);
+  const known = set.recent.get(text);
+  if (known) return known.map(([start, end]) => [start, end]);
+  const spans = readSpans(text, set);
+  set.recent.set(text, spans);
+  if (set.recent.size > RECENT_TEXTS) set.recent.delete(set.recent.keys().next().value as string);
+  return spans.map(([start, end]) => [start, end]);
+}
+
+/** How many redactions run now (readingOnce), one inside another. */
+let reading = 0;
+/** The value sets that keep spans for the redaction running now. */
+const keeping = new Set<ValueSet>();
+
+/**
+ * `run`, a redaction (sources/http.ts), with the spans of the texts it reads kept until it ends
+ * (ValueSet.recent).
+ */
+export function readingOnce<T>(run: () => T): T {
+  reading++;
+  try {
+    return run();
+  } finally {
+    reading--;
+    if (reading === 0) {
+      for (const set of keeping) set.recent.clear();
+      keeping.clear();
+    }
+  }
+}
+
+/** How many texts' spans a value set keeps (ValueSet.recent). */
+const RECENT_TEXTS = 8;
+
+/** spansOf, read. */
+function readSpans(text: string, set: ValueSet): Array<[number, number]> {
   // Without a backslash the text is read only as it came: when no value is in it with every run
   // of folded characters one FOLDED_RUN, none is in its folded reading either.
   if (!text.includes("\\")) {

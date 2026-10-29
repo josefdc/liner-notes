@@ -29,6 +29,7 @@ import {
   configuredValues,
   knownValueSpans,
   logCut,
+  readingOnce,
   logger,
   MAX_LOGGED_TEXT,
   scrubbedSpans,
@@ -92,14 +93,14 @@ function readCredentials(): Credentials {
 const credentials = (): Credentials => scoped ?? readCredentials();
 
 /**
- * `run` with the credentials read once for it: a redaction reads them many times, and reading the
- * environment is most of what a short message costs.
+ * `run` with the credentials read once for it, and each text's values (readingOnce): a redaction
+ * reads them many times, and reading the environment is most of what a short message costs.
  */
 function withCredentials<T>(run: () => T): T {
   if (scoped) return run();
   scoped = readCredentials();
   try {
-    return run();
+    return readingOnce(run);
   } finally {
     scoped = undefined;
   }

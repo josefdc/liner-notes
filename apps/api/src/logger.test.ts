@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomStrings } from "./sources/testing/strings.js";
 import {
   type CapturedLogs,
@@ -24,7 +24,7 @@ import {
 } from "./logger.js";
 import { growth, timed } from "./sources/testing/strings.js";
 import { logText } from "./http/middleware/errors.js";
-import { plainReason, SourceError } from "./sources/http.js";
+import { plainReason, redactText, SourceError, scrubText } from "./sources/http.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -1025,6 +1025,87 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
     const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
     expect(ratio).toBeLessThan(20);
   });
+
+  it("replaces many values in a text under the cap in linear time", () => {
+    // Under MAX_LOGGED_TEXT nothing is cut, and each value in the text is replaced: from 2 kB to
+    // 16 kB of values, a replacement that copies the text for each grows about 64 times.
+    const make = (size: number) =>
+      `${SALT} ${json(QUOTED)} `.repeat(Math.ceil(size / 40)).slice(0, size);
+    const call = (text: string) => scrub(text).length;
+    const { ratio } = growth(make, call, { size: 1 << 11, factor: 8, maxMs: 3_000 });
+    expect(ratio).toBeLessThan(20);
+  });
+
+  it("hides the credentials sources/http.ts knows wherever the logger finds them (generated)", () => {
+    // sources/http.ts reads the credentials from the environment (knownSecrets), the salt aside.
+    const { LOG_IP_SALT: _salt, ...credentials } = VALUES;
+    for (const [name, value] of Object.entries(credentials)) vi.stubEnv(name, value);
+    try {
+      const forms = (value: string) => [
+        value,
+        json(value),
+        json(json(value)),
+        unicode(value),
+        value.replace(/\s+/g, " "),
+        // util.inspect writes a long value with line breaks as several strings joined with "+",
+        // which no rule reads as one.
+        ...(value.includes("\n") ? [] : [inspect(value).slice(1, -1)]),
+      ];
+      const values = Object.values(credentials).flatMap(forms);
+      const pieces = [
+        ...values,
+        "token=",
+        "password: ",
+        '"secret":"',
+        "authorization: Bearer ",
+        "Basic ",
+        " ",
+        "\n",
+        "\\",
+        '"',
+        "'",
+        "x",
+        "failed: ",
+        "[redacted]",
+      ];
+      let seed = 237;
+      const next = () => {
+        seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+        return seed >>> 8;
+      };
+      const markers = (out: string) => shows(out).filter((marker) => !marker.startsWith("T"));
+      for (let i = 0; i < 3_000; i++) {
+        let text = "";
+        for (let j = 2 + (next() % 6); j > 0; j--) text += pieces[next() % pieces.length];
+        const reason = plainReason(text) ?? "";
+        for (const out of [reason, scrub(reason), scrubText(text), redactText(text)]) {
+          expect(markers(out), `${JSON.stringify(text)} -> ${JSON.stringify(out)}`).toEqual([]);
+        }
+      }
+      // A token after a credential masked escaped or folded stays hidden where it was before: in
+      // the log line of a source error, the pair's rule took the token whole.
+      const TOKEN = "T9zB8yC7xD6wE5vF4uG3";
+      for (const text of [
+        `secret = ${unicode(MULTI)}${TOKEN}}Bearer Bearer ${OVER_C}`,
+        `access_token:\t"${json(json(CRLF))}${TOKEN}==,token:\t'x'`,
+        `authorization: "${json(MULTI)}${TOKEN}==Bearer `,
+        `token = \`${json(CRLF)}${TOKEN}${OVER_C},x`,
+        // A link glued to a PEM key's first line, which the line's link rule takes.
+        `x&https://u:p@h.example/x?token=t${PEM} end`,
+        // A quoted value's rule masks the start of a credential written as util.inspect writes it.
+        `"secret":"${MULTI.replace("\n", " ")}${inspect(QUOTED).slice(1, -1)}`,
+      ]) {
+        const reason = plainReason(text) ?? "";
+        const logged = scrub(new SourceError("spotify", "http", text).message);
+        for (const out of [reason, scrub(reason), logged, scrubText(text), redactText(text)]) {
+          expect(markers(out), `${JSON.stringify(text)} -> ${JSON.stringify(out)}`).toEqual([]);
+          expect(out, JSON.stringify(text)).not.toContain(TOKEN.slice(0, 6));
+        }
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 60_000);
 });
 
 describe("a configured secret that cannot be replaced safely", () => {

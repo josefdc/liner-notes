@@ -223,19 +223,28 @@ const NUMERIC = /^[\d.]+$/;
 /** A configured value as configuredSpans matches it: its folded units (fold), and their KMP table. */
 interface ValuePattern {
   units: Uint16Array;
+  /** `units` as a string, looked for first in a folded text (includes) before it is matched. */
+  text: string;
   /** For each prefix of `units`, the length of its longest proper prefix that is also a suffix. */
   next: Int32Array;
 }
 
+/** Values as configuredSpans and knownValueSpans match them. */
+interface ValueSet {
+  patterns: ValuePattern[];
+  /** The longest run of folded characters (isFolded) in one of the values, at least 1. */
+  foldedRun: number;
+  /**
+   * How long one of the values can be in a text, written escaped ESCAPE_DEPTH times with each of
+   * its folded runs as long as foldedRun: logCut looks that far past a cut for one that crosses it.
+   */
+  reach: number;
+}
+
 /** The configured values, longest first: as they were replaced before (cappedValues). */
 let secretStrings: string[] = [];
-let secretValues: ValuePattern[] = [];
-/** The longest run of folded characters (isFolded) in a configured value, at least 1. */
-let foldedRun = 1;
-/**
- * How long a configured value can be in a text, written escaped ESCAPE_DEPTH times with each of
- * its folded runs as long as foldedRun: logCut looks that far past a cut for one that crosses it.
- */
+let configured: ValueSet = { patterns: [], foldedRun: 1, reach: 0 };
+/** configured.reach, which logCut and cappedValues read. */
 let valueReach = 0;
 let secretHosts: string[] = [];
 
@@ -261,18 +270,9 @@ function collectSecrets(env: NodeJS.ProcessEnv): void {
       }
     }
   }
-  foldedRun = 1;
-  let longest = 0;
-  for (const value of values) {
-    longest = Math.max(longest, value.length);
-    for (let i = 0, run = 0; i < value.length; i++) {
-      run = isFolded(value.charCodeAt(i)) ? run + 1 : 0;
-      foldedRun = Math.max(foldedRun, run);
-    }
-  }
   secretStrings = [...values].sort((a, b) => b.length - a.length);
-  secretValues = secretStrings.map(valuePattern);
-  valueReach = ESCAPED_CHAR * foldedRun * longest;
+  configured = valueSet(secretStrings);
+  valueReach = configured.reach;
   secretHosts = [...hosts].sort((a, b) => b.length - a.length);
 }
 
@@ -334,9 +334,27 @@ function isFolded(c: number): boolean {
   );
 }
 
+/** `values` (none empty) as configuredSpans matches them: folded, with their KMP tables. */
+function valueSet(values: readonly string[]): ValueSet {
+  let foldedRun = 1;
+  let longest = 0;
+  for (const value of values) {
+    longest = Math.max(longest, value.length);
+    for (let i = 0, run = 0; i < value.length; i++) {
+      run = isFolded(value.charCodeAt(i)) ? run + 1 : 0;
+      foldedRun = Math.max(foldedRun, run);
+    }
+  }
+  return {
+    patterns: values.map((value) => valuePattern(value, foldedRun)),
+    foldedRun,
+    reach: ESCAPED_CHAR * foldedRun * longest,
+  };
+}
+
 /** `text` as units of a folded text (fold), with the KMP table configuredSpans matches it by. */
-function valuePattern(text: string): ValuePattern {
-  const { units, length } = fold(unitsOf(text));
+function valuePattern(text: string, foldedRun: number): ValuePattern {
+  const { units, length } = fold(unitsOf(text), foldedRun);
   const pattern = units.slice(0, length);
   const next = new Int32Array(length);
   for (let i = 1, k = 0; i < length; i++) {
@@ -344,7 +362,16 @@ function valuePattern(text: string): ValuePattern {
     if (pattern[i] === pattern[k]) k++;
     next[i] = k;
   }
-  return { units: pattern, next };
+  return { units: pattern, text: unitsText(pattern, length), next };
+}
+
+/** The first `length` of `units` as a string. */
+function unitsText(units: Uint16Array, length: number): string {
+  const parts: string[] = [];
+  for (let at = 0; at < length; at += 8192) {
+    parts.push(String.fromCharCode(...units.subarray(at, Math.min(length, at + 8192))));
+  }
+  return parts.join("");
 }
 
 function unitsOf(text: string): Units {
@@ -358,7 +385,7 @@ function unitsOf(text: string): Units {
  * foldedRun of them, LONG_RUN for a longer one. A configured value's run matches a short run of
  * any folded characters: logText writes a space for each, plainReason one space for a run.
  */
-function fold(text: Units): Units {
+function fold(text: Units, foldedRun: number): Units {
   const { units, length } = text;
   const out = new Uint16Array(length);
   const from = new Int32Array(length);
@@ -434,13 +461,47 @@ function unescaped(text: Units): Units | undefined {
  * redaction of source errors (sources/http.ts) reads them too: a value a log line hides in a form
  * its own rules do not know is still masked in the text it shows.
  */
-export function configuredSpans(text: string): Array<[number, number]> {
-  if (secretValues.length === 0 || text.length === 0) return [];
+export const configuredSpans = (text: string) => spansOf(text, configured);
+
+/** The values of the last list knownValueSpans was given, as matched. */
+let known: { key: string; set: ValueSet } | undefined;
+
+/**
+ * Where `values` lie in `text`, found as configuredSpans finds the configured values: as they came,
+ * escaped, folded; overlapping ones as one span. The redaction of source errors (sources/http.ts)
+ * finds the credentials it knows by it.
+ */
+export function knownValueSpans(text: string, values: readonly string[]): Array<[number, number]> {
+  const list = values.filter((value) => value.length > 0);
+  const key = list.join("\0");
+  if (known?.key !== key) known = { key, set: valueSet(list) };
+  return spansOf(text, known.set);
+}
+
+/**
+ * Runs of the characters isFolded folds, for a quick look (spansOf): each one SHORT_RUN, so a value
+ * is never missed there, only found where the run is too long for it.
+ */
+const FOLDED_RUNS = /[\0-\x20\x7f-\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/g;
+
+/** configuredSpans for the values of `set`. */
+function spansOf(text: string, set: ValueSet): Array<[number, number]> {
+  if (set.patterns.length === 0 || text.length === 0) return [];
+  // Without a backslash the text is read only as it came: when no value is in it with every run
+  // of folded characters one SHORT_RUN, none is in its folded reading either.
+  if (!text.includes("\\")) {
+    const quick = text.replace(FOLDED_RUNS, "\0");
+    if (!set.patterns.some((value) => quick.includes(value.text))) return [];
+  }
   const found: Array<[number, number]> = [];
   let reading: Units | undefined = unitsOf(text);
   for (let depth = 0; reading && depth <= ESCAPE_DEPTH; depth++) {
-    const folded = fold(reading);
-    for (const value of secretValues) occurrencesIn(folded, value, found);
+    const folded = fold(reading, set.foldedRun);
+    // Most texts hold none of the values: a value is matched only where includes finds it.
+    const seen = unitsText(folded.units, folded.length);
+    for (const value of set.patterns) {
+      if (seen.includes(value.text)) occurrencesIn(folded, value, found);
+    }
     reading = depth < ESCAPE_DEPTH ? unescaped(reading) : undefined;
   }
   found.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
@@ -502,18 +563,41 @@ const asRead = (text: string) => text.replace(PRIVATE_MARKS, "\uFFFD");
  * replaced, longest first: the earlier of the two, moved by logCut in each until neither moves
  * it. A value found here and not before can make the text shorter, and its cut fall later; text
  * cut off before is never let in.
+ *
+ * A long text is read only as far as the cut needs (cappedPrefix): a prefix, doubled until each
+ * reading of it holds MAX_LOGGED_TEXT characters and logCut's window past them, before the part
+ * of the prefix its end can change. logCut reads the readings without their configured values
+ * (replaced already): the cut is moved out of a value by its span (settle).
  */
 function cappedValues(text: string): string {
+  const margin = LOG_CUT_WINDOW + valueReach;
+  for (let size = MAX_LOGGED_TEXT + LOG_CUT_WINDOW + margin; size < text.length; size *= 2) {
+    const capped = cappedPrefix(text, size, margin);
+    if (capped !== undefined) return capped;
+  }
+  return cappedPrefix(text, text.length, margin) as string;
+}
+
+/**
+ * cappedValues on the first `size` characters of `text`; undefined when they are too few to place
+ * the cut as on the whole text. Past `size - margin` (`margin`: logCut's window and a value's
+ * reach), the spans found in a prefix can differ from those of the whole text (a value or a match
+ * the prefix cuts off), and so can a span that crosses that point.
+ */
+function cappedPrefix(whole: string, size: number, margin: number): string | undefined {
+  const text = size < whole.length ? whole.slice(0, size) : whole;
   const spans = valueSpans(text);
   const read = asRead(text);
-  const length = spans.reduce((sum, [start, end]) => sum + REDACTED.length - (end - start), 0);
-  // Each value before took at least MIN_SECRET_LENGTH characters, and REDACTED's in their place.
-  const before =
-    text.length * REDACTED.length > MAX_LOGGED_TEXT * MIN_SECRET_LENGTH
-      ? replaceAll(text, secretStrings, REDACTED).length
-      : 0;
-  if (text.length + length <= MAX_LOGGED_TEXT && before <= MAX_LOGGED_TEXT) {
-    return spans.length > 0 ? hideSpans(read, spans, read.length, HIDDEN_VALUE) : read;
+  if (text === whole) {
+    const length = spans.reduce((sum, [start, end]) => sum + REDACTED.length - (end - start), 0);
+    // Each value before took at least MIN_SECRET_LENGTH characters, and REDACTED's in their place.
+    const before =
+      text.length * REDACTED.length > MAX_LOGGED_TEXT * MIN_SECRET_LENGTH
+        ? replaceAll(text, secretStrings, REDACTED).length
+        : 0;
+    if (text.length + length <= MAX_LOGGED_TEXT && before <= MAX_LOGGED_TEXT) {
+      return spans.length > 0 ? hideSpans(read, spans, read.length, HIDDEN_VALUE) : read;
+    }
   }
   const hidden: Array<[number, number]> = [];
   const readings = [
@@ -523,12 +607,23 @@ function cappedValues(text: string): string {
       { text } as Rewritten,
     ),
   ];
+  if (text !== whole) {
+    // Where the part of the prefix its end can change starts, and whether each reading holds
+    // what the cut reads before it.
+    const boundary = size - margin;
+    let settled = boundary;
+    for (const [start, end] of [...spans, ...hidden]) {
+      if (end > boundary) settled = Math.min(settled, start);
+    }
+    const needed = MAX_LOGGED_TEXT + LOG_CUT_WINDOW;
+    if (readings.some((reading) => renderedAt(reading, settled) < needed)) return undefined;
+  }
   const sourceAt = (reading: Rewritten, at: number) =>
     at >= reading.text.length ? text.length : reading.from ? (reading.from[at] as number) : at;
   let at = text.length;
   for (const reading of readings) {
     if (reading.text.length > MAX_LOGGED_TEXT) {
-      const cut = logCut(reading.text, MAX_LOGGED_TEXT, [], { pairs: false });
+      const cut = logCut(reading.text, MAX_LOGGED_TEXT, [], { pairs: false, values: false });
       at = Math.min(at, sourceAt(reading, cut));
     }
   }
@@ -537,14 +632,14 @@ function cappedValues(text: string): string {
     at = settle([...spans, ...hidden], at);
     for (const reading of readings) {
       const there = renderedAt(reading, at);
-      const cut = logCut(reading.text, there, [], { pairs: false });
+      const cut = logCut(reading.text, there, [], { pairs: false, values: false });
       if (cut < there) {
         at = sourceAt(reading, cut);
         moved = true;
       }
     }
   }
-  return at < text.length
+  return at < whole.length
     ? `${hideSpans(read, spans, at, HIDDEN_VALUE)}${TRUNCATED}`
     : hideSpans(read, spans, read.length, HIDDEN_VALUE);
 }
@@ -736,7 +831,8 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
 export function scrubbedSpans(text: string, rules: SpanRules = {}): Array<[number, number]> {
   const hidden: Array<[number, number]> = [];
   const read = { text: asRead(text) };
-  return spansAfterValues(rewrite(read, asRewrites(valueSpans(text)), hidden), hidden, rules);
+  const values = rules.values === false ? [] : valueSpans(text);
+  return spansAfterValues(rewrite(read, asRewrites(values), hidden), hidden, rules);
 }
 
 /** Configured values' spans as Rewrites, each by HIDDEN_VALUE as scrub writes it for its rules. */
@@ -881,6 +977,8 @@ interface SpanRules {
   pairs?: boolean;
   auth?: boolean;
   cut?: boolean;
+  /** False for a text whose configured values are replaced already (cappedValues' readings). */
+  values?: boolean;
 }
 
 /** scrubbedSpans' last two rules, secret pairs and Authorization values, on `current`. */
@@ -953,7 +1051,8 @@ export function logCut(
   const window = text.slice(0, at + LOG_CUT_WINDOW);
   const spans = [...scrubbedSpans(window, { ...rules, cut: true }), ...extra];
   // A configured value longer than the window, escaped or folded, is read up to its own reach.
-  if (valueReach > LOG_CUT_WINDOW) spans.push(...configuredSpans(text.slice(0, at + valueReach)));
+  if (rules.values !== false && valueReach > LOG_CUT_WINDOW)
+    spans.push(...configuredSpans(text.slice(0, at + valueReach)));
   const end = settle(spans, at);
   if (end === at) return at;
   const credentials: Array<[number, number]> = [];

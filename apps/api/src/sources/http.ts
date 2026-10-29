@@ -24,7 +24,14 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { configuredSpans, logCut, logger, MAX_LOGGED_TEXT, scrubbedSpans } from "../logger.js";
+import {
+  configuredSpans,
+  knownValueSpans,
+  logCut,
+  logger,
+  MAX_LOGGED_TEXT,
+  scrubbedSpans,
+} from "../logger.js";
 import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
@@ -218,13 +225,58 @@ function spanHides(spans: readonly Span[]): Hide[] {
   return out;
 }
 
-/** Each place `secret` appears, left to right, as split() finds it. */
-function secretHides(text: string, secret: string): Hide[] {
+/**
+ * Each place a configured credential (knownSecrets) appears, as the logger finds a configured
+ * value (knownValueSpans): as it came, escaped once or twice as JSON writes a string, or with its
+ * line breaks and other runs of whitespace folded (plainLine folds a run into one space).
+ * Overlapping values are one span; values that only touch stay one mask each, as before.
+ */
+const knownSecretSpans = (text: string): Span[] => knownValueSpans(text, knownSecrets());
+
+/** knownSecretSpans as hides behind "[redacted]". */
+const secretHides: HideStep = (text) =>
+  knownSecretSpans(text).map(([start, end]): Hide => [start, end, "[redacted]"]);
+
+/** Each place `secret` appears as it came, left to right, as split() finds it. */
+function rawSecretHides(text: string, secret: string): Hide[] {
   const out: Hide[] = [];
   for (let at = text.indexOf(secret); at !== -1; at = text.indexOf(secret, at + secret.length)) {
     out.push([at, at + secret.length, "[redacted]"]);
   }
   return out;
+}
+
+/** The credentials' steps as they were: each credential as it came, one after the other. */
+const rawSecretSteps = (): HideStep[] =>
+  knownSecrets().map(
+    (secret): HideStep =>
+      (text) =>
+        rawSecretHides(text, secret),
+  );
+
+/**
+ * The pieces of `text` once secretSteps and then `steps` have run (runSteps, from `start`). Where
+ * a credential is in the text, they also run with the credentials found as they came, as they
+ * were, and what that hid stays hidden, as does each credential found, whole: one found escaped
+ * or folded can start a token or a value that a later rule (a `name: value` pair's) then leaves,
+ * where it took them whole before; and a rule that runs before the credentials' step (a quoted
+ * value's) can mask a credential's start and leave the rest unknown to that step.
+ */
+function secretPieces(
+  text: string,
+  steps: readonly HideStep[],
+  start: Piece[] = wholeText(text),
+  asBefore = false,
+): Piece[] {
+  if (asBefore) return runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start);
+  const pieces = runSteps(text, [...secretSteps([secretHides]), ...steps], start);
+  const known = knownSecretSpans(text);
+  if (known.length === 0) return pieces;
+  const before: Span[] = [];
+  for (const piece of runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start)) {
+    if (piece.mask !== undefined && piece.to > piece.from) before.push([piece.from, piece.to]);
+  }
+  return maskSource(pieces, mergeSpans(known, before));
 }
 
 // Case-sensitive and token-shaped, so prose such as "the basic track" is left alone.
@@ -261,13 +313,9 @@ export const redactTokenRuns = (text: string) => redactWith(text, [tokenRunHides
  * The rules that remove credentials from text, in order: quoted `name=` values, the values of
  * configured credentials, bearer tokens, `key=…` pairs, token shapes.
  */
-const secretSteps = (): HideStep[] => [
+const secretSteps = (values: readonly HideStep[]): HideStep[] => [
   (text) => spanHides(quotedParamSpans(text)),
-  ...knownSecrets().map(
-    (secret): HideStep =>
-      (text) =>
-        secretHides(text, secret),
-  ),
+  ...values,
   (text) =>
     hidesOf(text, BEARER, (m) => [m.index + (m[1] ?? "").length + 1, m.index + m[0].length]),
   (text) =>
@@ -278,7 +326,7 @@ const secretSteps = (): HideStep[] => [
 ];
 
 /** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
-const redactSecrets = (text: string) => redactWith(text, secretSteps());
+const redactSecrets = (text: string) => render(text, secretPieces(text, []));
 
 /** A key as it is compared: lower case, without "_" or "-" (`accessToken` is `access_token`). */
 const keyForm = (key: string) => key.toLowerCase().replace(/[-_]/g, "");
@@ -1543,15 +1591,27 @@ function keyValuePieces(
   more: readonly Span[] = moreSecretSpans(text),
   before: readonly Span[] = extra,
 ): Piece[] {
-  // The other rules alone: nothing to keep hidden beyond what they hide.
-  if (more.length === 0 && sameSpans(extra, before)) return maskedPieces(text, steps, extra, more);
+  // The other rules alone: nothing to keep hidden beyond what they hide; unless a credential is
+  // in the text, whose mask can leave a token the log line hid whole before (below).
+  const known = knownSecretSpans(text).length > 0;
+  if (more.length === 0 && sameSpans(extra, before) && !known) {
+    return maskedPieces(text, steps, extra, more);
+  }
   const other = maskedPieces(text, steps, before, []);
   // A redacted text is often redacted again (a SourceError's message, then describeError): what
   // the other rules hide in the text they leave, once and twice more, stays hidden too.
   const again = redactedAgain(text, other);
   let added = again.length > 0 ? maskableUnion(extra, again) : extra;
   let pieces = maskedPieces(text, steps, added, more);
-  const logged = loggedSpans(text, other);
+  // With a credential in the text, also what a log line hid when only the credentials as they came
+  // were masked (maskedPieces asBefore): one masked escaped or folded can start a token or a value
+  // that the logger's rules then leave (a value that starts with a mask), where they took it whole.
+  const logged = known
+    ? maskableUnion(
+        loggedSpans(text, other),
+        loggedSpans(text, maskedPieces(text, steps, before, [], true)),
+      )
+    : loggedSpans(text, other);
   for (let round = 0; logged.length > 0 && round < MAX_LOG_ROUNDS; round++) {
     const lost = lostToLog(text, pieces, logged);
     if (lost.length === 0) break;
@@ -1626,17 +1686,14 @@ function maskedPieces(
   steps: readonly HideStep[],
   extra: readonly Span[],
   more: readonly Span[],
+  asBefore = false,
 ): Piece[] {
   const quoted = quotedSecretSpans(text);
   const header = /header/i.test(text);
   const first = header
     ? mergeSpans(quoted, mergeSpans(doubleQuotedSpans(text), doubleQuotedSpans(text, quoted)))
     : quoted;
-  const pieces = runSteps(
-    text,
-    [...secretSteps(), ...steps],
-    hide(wholeText(text), spanHides(first)),
-  );
+  const pieces = secretPieces(text, steps, hide(wholeText(text), spanHides(first)), asBefore);
   const unquoted = unquotedKeySpans(text);
   if (unquoted.length === 0 && more.length === 0 && extra.length === 0) return pieces;
   let values = header
@@ -2461,7 +2518,11 @@ function plainLine(text: string, cut: boolean): string | undefined {
   };
   const lineValues = headerLineSpans(text);
   const more = moreSecretSpans(text);
-  const headerValues = inLine(more.length > 0 ? maskableUnion(lineValues, more) : lineValues);
+  // A credential (knownSecretSpans) too, where it lies in the text as it came: the line's link
+  // rule can take its start (a link written right before a PEM key's first line).
+  const known = knownSecretSpans(text);
+  const values = known.length > 0 ? maskableUnion(lineValues, known) : lineValues;
+  const headerValues = inLine(more.length > 0 ? maskableUnion(values, more) : values);
   const lineOnly = inLine(lineValues);
   // keyValuePieces also keeps hidden what the other rules hide when an error message made from
   // the line is redacted again (redactedAgain).
@@ -2507,12 +2568,7 @@ function plainLine(text: string, cut: boolean): string | undefined {
  * cut.
  */
 function lineCut(line: string, at: number): number {
-  const values = knownSecrets().flatMap((secret) =>
-    secretHides(line.slice(0, at + secret.length), secret).map(
-      ([start, end]): Span => [start, end],
-    ),
-  );
-  return logCut(line, at, values, { pairs: false });
+  return logCut(line, at, knownSecretSpans(line), { pairs: false });
 }
 
 /**

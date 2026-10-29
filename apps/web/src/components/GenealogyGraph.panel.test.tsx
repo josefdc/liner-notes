@@ -187,17 +187,39 @@ async function select(container: HTMLElement, id: string) {
   return moves;
 }
 
+/**
+ * The media queries by the window's width and the root font size (`rootPx`, the browser's
+ * default font size): "(min-width: 48rem)" as the stylesheet reads it; every other query false.
+ */
+let rootPx = 16;
+const mediaListeners = new Set<() => void>();
+function matchesNow(query: string) {
+  const min = /\(min-width:\s*([\d.]+)(rem|px)\)/.exec(query);
+  return min !== null && window.innerWidth >= Number(min[1]) * (min[2] === 'rem' ? rootPx : 1);
+}
+/** The root font size set to `px`: the queries that change say so, as the browser does. */
+async function setRootFont(px: number) {
+  rootPx = px;
+  await act(async () => {
+    for (const listener of [...mediaListeners]) listener();
+  });
+}
+
 let errors: string[] = [];
 beforeEach(() => {
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('ResizeObserver', SizedObserver);
+  rootPx = 16;
+  mediaListeners.clear();
   vi.spyOn(window, 'matchMedia').mockImplementation(
     (query: string) =>
       ({
-        matches: false,
+        get matches() {
+          return matchesNow(query);
+        },
         media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
+        addEventListener: (_: string, listener: () => void) => mediaListeners.add(listener),
+        removeEventListener: (_: string, listener: () => void) => mediaListeners.delete(listener),
       }) as unknown as MediaQueryList,
   );
   errors = [];
@@ -218,15 +240,20 @@ const panelOf = (container: HTMLElement) =>
 
 describe('the selected card beside its panel on a short map', () => {
   it('is placed once: a pan that shows or hides an edge cue does not place it again', async () => {
-    // A phone's column 234 px tall, its panel 140 px: the pan to the card hid "N more ↓",
-    // which moved the panel, and the card was placed again, back and forth for good.
-    panelWords = 140;
-    const { container } = await drawn(SAME_YEAR_TAIL, 400, 234);
-    const moves = await select(container, 'n9');
-    expect(moves).toBeLessThanOrEqual(2);
+    // A phone's column 200 px tall, its panel 100 px. The room the panel takes once counted the
+    // bottom cues' strip only while a cue showed there: the pan to the first card hid
+    // "N more ↓" and changed that room, and the card was placed a second time. With an
+    // over-tall card turning between its top and its bottom besides, the pan to n10 went back
+    // and forth until the map gave way to its error message.
+    panelWords = 100;
+    const { container } = await drawn(SAME_YEAR_TAIL, 340, 200);
+    expect(await select(container, 'n0')).toBe(1);
+    expect(panelOf(container)?.getAttribute('data-at')).toBe('top');
+    await select(container, 'n0');
+    expect(await select(container, 'n10')).toBe(1);
+    expect(panelOf(container)?.getAttribute('data-at')).toBe('overlay');
     expect(container.textContent).not.toContain(FALLBACK);
     expect(errors).toEqual([]);
-    expect(panelOf(container)?.getAttribute('data-at')).toBe('overlay');
   });
 
   it('on phones 340 and 400 px wide, 200 to 300 px tall, each selection moves the view at most twice', async () => {
@@ -314,6 +341,31 @@ describe('the detail box and the panel at the bottom of the map', () => {
     await select(container, 'n0');
     expect(cuesShown(container)).toContain('right');
     expect(panelOf(container)?.style.bottom).toBe('28px');
+    expect(errors).toEqual([]);
+  });
+
+  it('switch with the stylesheet at 48rem: with a 20 px root font, an 800 px window has the panel across the map, above "← N more"', async () => {
+    // md is then 960 px: the panel takes the map's width, over "← N more" unless it rises.
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(800);
+    rootPx = 20;
+    panelWidth = 784 - 16;
+    const { container } = await drawn(SPREAD, 784, 600);
+    await select(container, 'n12');
+    expect(cuesShown(container)).toEqual(['left']);
+    const panel = panelOf(container) as HTMLElement;
+    expect(panel.getAttribute('data-at')).toBe('overlay');
+    expect(panel.style.bottom).toBe('28px');
+    // "← N more"'s strip at the map's bottom ends below the panel.
+    const strip = container.querySelector<HTMLElement>('[data-cue="left"]')
+      ?.parentElement as HTMLElement;
+    expect(Number.parseFloat(panel.style.bottom)).toBeGreaterThan(
+      Number.parseFloat(strip.style.bottom) + Number.parseFloat(strip.style.height),
+    );
+    // The default 16 px: md is 768 px, the panel at the map's right, clear of "← N more".
+    panelWidth = 400;
+    await setRootFont(16);
+    expect(cuesShown(container)).toEqual(['left']);
+    expect(panelOf(container)?.style.bottom).toBe('8px');
     expect(errors).toEqual([]);
   });
 

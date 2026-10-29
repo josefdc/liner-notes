@@ -34,6 +34,16 @@ export function usePlayerLayout(): PlayerLayout {
   return useSyncExternalStore(subscribe, playerLayout, () => 'tabs');
 }
 
+/** True from md up (48rem), where the classes' `md:` variants apply (false where unread). */
+export function mdUp(): boolean {
+  return list(MD)?.matches ?? false;
+}
+
+/** `mdUp`, following the window's width and the root font size while the page is open. */
+export function useMdUp(): boolean {
+  return useSyncExternalStore(subscribe, mdUp, () => false);
+}
+
 const NO_HOVER = '(hover: none)';
 
 /** True when the main pointer cannot hover: a touch screen. */

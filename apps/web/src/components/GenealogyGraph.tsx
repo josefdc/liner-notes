@@ -35,7 +35,6 @@ import {
   isSparse,
   laneOf,
   layoutLineage,
-  MD_PX,
   type Orientation,
   orientationFor,
   placeChips,
@@ -83,7 +82,7 @@ import { listeningPlan, useABListening } from './genealogy/useABListening';
 import { Button } from './ui/Button';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
-import { useNoHover } from '../utils/layout';
+import { useMdUp, useNoHover } from '../utils/layout';
 import type { GenealogyNode, TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -1970,6 +1969,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const related = nodeList.filter((node) => node.group !== 1);
   // The gestures, in words, as the graph takes them here (see the zoom's filter).
   const touch = useNoHover();
+  // From md up, by the query the panel's `md:` classes use (48rem, which follows the root font
+  // size): the selected track's panel then lies at the map's right.
+  const mdUpLayout = useMdUp();
   const hints =
     wheelZoom === 'modifier'
       ? touch
@@ -2127,11 +2129,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // From md up the selected track's panel lies at the map's right, clear of "← N more".
   const bottomRoom = cues.left + cues.right + cues.down > 0 ? CUE_PX + 4 : 8;
   const panelRoom =
-    panel !== null && panel.viewport >= MD_PX
-      ? cues.right + cues.down > 0
-        ? CUE_PX + 4
-        : 8
-      : bottomRoom;
+    panel !== null && mdUpLayout ? (cues.right + cues.down > 0 ? CUE_PX + 4 : 8) : bottomRoom;
   const detailBottom = detailTop ? 8 : bottomRoom;
   const detailPanel = selectedNode && (
     <DetailPanel

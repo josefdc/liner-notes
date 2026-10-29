@@ -16,7 +16,6 @@ import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
-  demoRecord,
   evidenceItem,
   fakeModel,
   focusOf,
@@ -30,7 +29,7 @@ import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
 import { captureLogsForTests } from "../../logger.js";
 import { replayedAnalysis } from "../../replay/player.js";
-import { PINNED_DIR } from "../../replay/testing/recordings.js";
+import { PINNED_DIR, readRecording } from "../../replay/testing/recordings.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -691,11 +690,15 @@ describe("each fact's claim", () => {
 
   it("of a recorded fact is its recorded claim, served with no model call", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
+    // The showcase's own cards all restate its records, so its replay serves none: the pinned
+    // recording serves one (the brass figure, which says more than its record).
+    vi.stubEnv("REPLAY_DIR", PINNED_DIR);
     onTestFinished(() => {
       vi.unstubAllEnvs();
     });
     // The recording as a replay serves it: each fact stated once.
-    const served = replayedAnalysis(demoRecord(), "run-served");
+    const served = replayedAnalysis(restatingRecord(), "run-served");
+    expect(served.factoids).toHaveLength(1);
     const recordedClaim = (claimId: string) => served.claims?.find((claim) => claim.id === claimId);
 
     const stream = await openStream(streamQuery({ runId: RUN_ID }));
@@ -719,6 +722,45 @@ describe("each fact's claim", () => {
       res.body.factoids.map((factoid: { claimId: string }) => recordedClaim(factoid.claimId)),
     );
     expect(res.body.claims.length).toBeGreaterThan(0);
+    expect(model.invoke).not.toHaveBeenCalled();
+  });
+
+  it("of a showcase recording is its recorded claim, and a showcase whose cards all restate serves none", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    // Bitter Sweet Symphony's sample card says more than its record: it is served.
+    const bss = readRecording("bitter-sweet-symphony-the-verve");
+    const served = replayedAnalysis(bss, "run-served");
+    expect(served.factoids).toHaveLength(1);
+    const track = {
+      trackId: bss.analysis.id,
+      trackTitle: bss.analysis.title,
+      trackArtist: bss.analysis.artist,
+    };
+    const res = await request(app())
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...track, existingFactoidIds: [] })
+      .timeout(2000);
+    expect(res.status).toBe(200);
+    expect(res.body.factoids.map((factoid: { id: string }) => factoid.id)).toEqual(
+      served.factoids.map((factoid) => factoid.id),
+    );
+    expect(res.body.claims).toEqual(
+      served.factoids.map((factoid) =>
+        served.claims?.find((claim) => claim.id === factoid.claimId),
+      ),
+    );
+    // One More Time's own card only restates its record: none is served, and nothing is asked.
+    expect(replayedAnalysis(readRecording(), "run-served").factoids).toEqual([]);
+    const demo = await request(app())
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: [] })
+      .timeout(2000);
+    expect(demo.status).toBe(200);
+    expect(demo.body.factoids).toEqual([]);
+    expect(demo.body.claims).toEqual([]);
     expect(model.invoke).not.toHaveBeenCalled();
   });
 
@@ -784,7 +826,8 @@ describe("each fact's claim", () => {
   });
 
   it("sends a recorded fact without a claim link when the recording has not its claim", () => {
-    const record = demoRecord();
+    // Its first card (the brass figure) is served; the showcase's own card restates its record.
+    const record = restatingRecord();
     const [kept, ...dropped] = record.analysis.factoids;
     const withoutClaim = {
       ...record,

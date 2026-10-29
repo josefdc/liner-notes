@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { sentencesOf } from "./relationText.js";
+import { artistNames, leadArtistNames, sentencesOf } from "./relationText.js";
 
 describe("sentencesOf", () => {
   it("splits after a full stop, a semicolon or an exclamation mark and a space", () => {
@@ -62,5 +62,21 @@ describe("sentencesOf, after more abbreviations", () => {
     ]) {
       expect(sentencesOf(text), text).toEqual([text]);
     }
+  });
+});
+
+describe("artistNames", () => {
+  it("reads a name that holds “with” as one name, and splits a featured artist off", () => {
+    expect(artistNames("Dance With the Dead")).toEqual([["dance", "with", "the", "dead"]]);
+    expect(leadArtistNames("Dance With the Dead")).toEqual([["dance", "with", "the", "dead"]]);
+    expect(artistNames("Coldplay with Richard Ashcroft")).toEqual([
+      ["coldplay", "with", "richard", "ashcroft"],
+    ]);
+    const featured = artistNames("Coldplay feat. Richard Ashcroft").map((name) => name.join(" "));
+    expect(featured).toContain("coldplay");
+    expect(featured).toContain("richard ashcroft");
+    const leads = leadArtistNames("Coldplay feat. Richard Ashcroft").map((name) => name.join(" "));
+    expect(leads).toContain("coldplay");
+    expect(leads).not.toContain("richard ashcroft");
   });
 });

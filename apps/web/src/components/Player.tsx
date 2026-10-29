@@ -239,6 +239,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       )
       .map((factoid) => factoid.id),
   ).size;
+  // Claims the result left out because each states a fact a claim shown states, with its source:
+  // facts were found, and are listed.
+  const restatedFacts = (track.run?.verifier?.restated ?? 0) > 0;
+  // Claims the notes list: facts were found, whether or not the result says how many cards it
+  // left out (a stored result does not).
+  const listedFacts = claims.all.length > 0;
   // Facts found but not shown: their claim was rejected or cannot be read.
   const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
     claims.isHidden(factoid.claimId),
@@ -534,6 +540,69 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     tabRefs.current[next]?.focus();
   };
 
+  // "Find more facts" and what it last said: shown with the cards, and without any (when every
+  // fact found is listed below with its source, more may still be asked for).
+  const moreFactsControls = (
+    <>
+      {onMoreFactoidsStream && (
+        <button
+          type="button"
+          onClick={handleDecryptMore}
+          // Once every round has been asked, another click would bring nothing new.
+          disabled={isDecrypting || more.finished}
+          aria-describedby={more.finished ? noMoreRoundsId : undefined}
+          className={`w-full flex items-center justify-center gap-2 py-3 px-4
+                         border border-dashed border-white/20 rounded-md
+                         text-xs font-mono text-text-secondary uppercase tracking-wider
+                         hover:border-white/40 hover:text-white hover:bg-white/5
+                         focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
+                         disabled:opacity-50
+                         ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
+                         transition-all duration-(--duration-fast)`}
+        >
+          {isDecrypting ? (
+            <>
+              <Lock size={12} className="animate-pulse" />
+              Finding more facts…
+            </>
+          ) : (
+            <>
+              <LockOpen size={12} />
+              Find more facts
+            </>
+          )}
+        </button>
+      )}
+      {decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
+        </p>
+      )}
+      {more.answerFailed && !decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          More facts could not be written. Try again.
+        </p>
+      )}
+      {more.failed.length > 0 && !decryptUnavailable && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          {more.failed.length === 1
+            ? '1 fact could not be written.'
+            : `${more.failed.length} facts could not be written.`}
+        </p>
+      )}
+      {more.finished && (
+        <p id={noMoreRoundsId} role="status" className="text-xs font-mono text-text-tertiary">
+          No more facts: every angle on this track has been asked.
+        </p>
+      )}
+      {noMoreRecorded && (
+        <p role="status" className="text-xs font-mono text-text-tertiary">
+          No more facts: this result is a recording, and every fact recorded with it is shown.
+        </p>
+      )}
+    </>
+  );
+
   return (
     <div ref={rootRef} className="h-full w-full flex flex-col bg-void relative overflow-hidden">
       {/* Background Atmosphere */}
@@ -704,143 +773,95 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">{facts(allFactoids.length)}</p>
           )}
-          {allFactoids.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-12">
-              <p className="text-text-tertiary text-xs font-mono text-center">
-                {/* Facts were found but none is shown: the lines around say why */}
-                {hiddenFacts ? 'No facts to show.' : 'No facts were found for this track.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {visibleResultFactoids.map((fact, idx) => (
-                <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
-                  <InteractiveFactoid
-                    factoid={fact}
-                    claim={claimOf(fact)}
-                    origin={claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined}
-                    fromSourceData={fromSourceData}
-                    readings={readings}
-                    audio={measurement}
-                    relation={relationOf(fact)}
-                  />
-                </div>
-              ))}
-
-              {/* Factoids added by "More facts" are written by the model, whatever the result:
-                  each shows its claim, and the section is labelled only when none has one */}
-              {visibleDecryptedFactoids.length > 0 && (
-                <section aria-label="More facts" className="space-y-6">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-                      More facts
-                    </h3>
-                    {!claimedAdditional && <InferenceLabel />}
-                  </div>
-                  {visibleDecryptedFactoids.map((fact) => (
+          {/* One list, the controls at one place in it with cards or without: the first card
+              "Find more facts" brings keeps the button, and its focus. */}
+          <div className="space-y-6">
+            {allFactoids.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <p className="text-text-tertiary text-xs font-mono text-center">
+                  {/* Facts were found but none is shown: the lines around say why. Facts found
+                      that each restate a sourced claim are listed below, with their sources. */}
+                  {hiddenFacts
+                    ? 'No facts to show.'
+                    : restatedFacts
+                      ? 'Every fact found here is already listed with its source below.'
+                      : listedFacts
+                        ? 'No fact cards: the notes below list what was found.'
+                        : 'No facts were found for this track.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {visibleResultFactoids.map((fact, idx) => (
+                  <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
                     <InteractiveFactoid
-                      key={fact.id}
                       factoid={fact}
                       claim={claimOf(fact)}
-                      origin={claimedAdditional ? 'inferred' : undefined}
+                      origin={
+                        claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined
+                      }
+                      fromSourceData={fromSourceData}
                       readings={readings}
                       audio={measurement}
                       relation={relationOf(fact)}
                     />
-                  ))}
-                </section>
-              )}
+                  </div>
+                ))}
 
-              {/* The "More facts" button */}
-              {onMoreFactoidsStream && (
+                {/* Factoids added by "More facts" are written by the model, whatever the result:
+                  each shows its claim, and the section is labelled only when none has one */}
+                {visibleDecryptedFactoids.length > 0 && (
+                  <section aria-label="More facts" className="space-y-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                        More facts
+                      </h3>
+                      {!claimedAdditional && <InferenceLabel />}
+                    </div>
+                    {visibleDecryptedFactoids.map((fact) => (
+                      <InteractiveFactoid
+                        key={fact.id}
+                        factoid={fact}
+                        claim={claimOf(fact)}
+                        origin={claimedAdditional ? 'inferred' : undefined}
+                        readings={readings}
+                        audio={measurement}
+                        relation={relationOf(fact)}
+                      />
+                    ))}
+                  </section>
+                )}
+              </>
+            )}
+
+            {moreFactsControls}
+
+            {/* Show more / collapse toggle */}
+            {hiddenCount > 0 && !showAllFactoids && (
+              <div className="relative">
+                {/* Gradient fade on boundary */}
+                <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
                 <button
                   type="button"
-                  onClick={handleDecryptMore}
-                  // Once every round has been asked, another click would bring nothing new.
-                  disabled={isDecrypting || more.finished}
-                  aria-describedby={more.finished ? noMoreRoundsId : undefined}
-                  className={`w-full flex items-center justify-center gap-2 py-3 px-4
-                               border border-dashed border-white/20 rounded-md
-                               text-xs font-mono text-text-secondary uppercase tracking-wider
-                               hover:border-white/40 hover:text-white hover:bg-white/5
-                               focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
-                               disabled:opacity-50
-                               ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
-                               transition-all duration-(--duration-fast)`}
+                  onClick={() => setShowAllFactoids(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
                 >
-                  {isDecrypting ? (
-                    <>
-                      <Lock size={12} className="animate-pulse" />
-                      Finding more facts…
-                    </>
-                  ) : (
-                    <>
-                      <LockOpen size={12} />
-                      Find more facts
-                    </>
-                  )}
+                  <ChevronDown size={14} />
+                  Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
                 </button>
-              )}
-              {decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
-                </p>
-              )}
-              {more.answerFailed && !decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  More facts could not be written. Try again.
-                </p>
-              )}
-              {more.failed.length > 0 && !decryptUnavailable && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  {more.failed.length === 1
-                    ? '1 fact could not be written.'
-                    : `${more.failed.length} facts could not be written.`}
-                </p>
-              )}
-              {more.finished && (
-                <p
-                  id={noMoreRoundsId}
-                  role="status"
-                  className="text-xs font-mono text-text-tertiary"
-                >
-                  No more facts: every angle on this track has been asked.
-                </p>
-              )}
-              {noMoreRecorded && (
-                <p role="status" className="text-xs font-mono text-text-tertiary">
-                  No more facts: this result is a recording, and every fact recorded with it is
-                  shown.
-                </p>
-              )}
-
-              {/* Show more / collapse toggle */}
-              {hiddenCount > 0 && !showAllFactoids && (
-                <div className="relative">
-                  {/* Gradient fade on boundary */}
-                  <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
-                  <button
-                    type="button"
-                    onClick={() => setShowAllFactoids(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
-                  >
-                    <ChevronDown size={14} />
-                    Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
-                  </button>
-                </div>
-              )}
-              {showAllFactoids && allFactoids.length > INITIAL_VISIBLE_FACTOIDS && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllFactoids(false)}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
-                >
-                  <ChevronDown size={14} className="rotate-180" />
-                  Show less
-                </button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+            {showAllFactoids && allFactoids.length > INITIAL_VISIBLE_FACTOIDS && (
+              <button
+                type="button"
+                onClick={() => setShowAllFactoids(false)}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
+              >
+                <ChevronDown size={14} className="rotate-180" />
+                Show less
+              </button>
+            )}
+          </div>
 
           {/* The liner notes, below the cards: credits, samples and covers, history, then every
               other claim no card shows; the claims the verifier rejected; and where the data

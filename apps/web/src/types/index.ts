@@ -161,6 +161,11 @@ export interface ResultRun {
   replayed?: string;
   /** The audio analyzer of the run's measurement; null when nothing was measured. */
   analyzerVersion?: string | null;
+  /**
+   * What the verifier did: `restated` counts the claims left out because each states a fact a
+   * claim shown states. Older results do not say.
+   */
+  verifier?: { restated?: number } | null;
 }
 
 export type ModelUnavailableReason =

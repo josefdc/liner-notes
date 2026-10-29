@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cueName,
   edgeCounts,
   effectiveBreaks,
   type FirstViewInput,
   planFirstView,
   sameBreaks,
 } from './firstView';
-import { type CardBox, layoutLineage, type YearSlot } from './lineageLayout';
+import { type CardBox, layoutLineage, type ViewBreaks, type YearSlot } from './lineageLayout';
 
 const slot = (year: number | null, start: number, size: number): YearSlot => ({
   year,
@@ -170,7 +171,7 @@ describe('the first view (#240)', () => {
     expect(sameBreaks({ main: 10 }, undefined)).toBe(false);
   });
 
-  it('keeps only the breaks that move a card', () => {
+  it('keeps only the breaks that change the layout', () => {
     const cards = [1990, 2000, 2010].map((year, i) => ({
       id: `c${i}`,
       year,
@@ -180,16 +181,40 @@ describe('the first view (#240)', () => {
     }));
     const options = { orientation: 'horizontal' as const, slotGap: 44 };
     const free = layoutLineage(cards, options);
-    const moves = (only: object) => {
-      const laid = layoutLineage(cards, { ...options, breakAt: only });
-      return cards.some((c) => laid.cards.get(c.id)?.x !== free.cards.get(c.id)?.x);
+    const placesOf = (breaks: ViewBreaks | undefined) => {
+      const laid = breaks ? layoutLineage(cards, { ...options, breakAt: breaks }) : free;
+      return cards.map((c) => `${laid.cards.get(c.id)?.x},${laid.cards.get(c.id)?.y}`).join(' ');
     };
     // A line through the second card moves it; one between the cards moves none.
     const through = (free.cards.get('c1') as CardBox).x + 100;
-    expect(effectiveBreaks({ main: through, cross: 1000 }, moves)).toEqual({ main: through });
+    expect(effectiveBreaks({ main: through, cross: 1000 }, placesOf)).toEqual({ main: through });
     const between = (free.cards.get('c1') as CardBox).x - 10;
-    expect(effectiveBreaks({ main: between }, moves)).toBeUndefined();
-    expect(effectiveBreaks(undefined, moves)).toBeUndefined();
+    expect(effectiveBreaks({ main: between }, placesOf)).toBeUndefined();
+    expect(effectiveBreaks(undefined, placesOf)).toBeUndefined();
+  });
+
+  it('keeps a break that moves a card only with another (the view’s top line pushes it down)', () => {
+    // One year, two lanes: the view's top line (crossFrom) drops the first card onto it, and
+    // the second after it, across the bottom line (cross), which alone moves nothing.
+    const cards = [
+      { id: 'a', year: 2000, lane: 'sample' as const, width: 200, height: 60 },
+      { id: 'b', year: 2000, lane: 'cover' as const, width: 200, height: 60 },
+    ];
+    const options = { orientation: 'horizontal' as const, slotGap: 44 };
+    const free = layoutLineage(cards, options);
+    const placesOf = (breaks: ViewBreaks | undefined) => {
+      const laid = breaks ? layoutLineage(cards, { ...options, breakAt: breaks }) : free;
+      return cards.map((c) => `${laid.cards.get(c.id)?.x},${laid.cards.get(c.id)?.y}`).join(' ');
+    };
+    const [a, b] = [free.cards.get('a'), free.cards.get('b')] as CardBox[];
+    const crossFrom = a.y + 30;
+    // Free, b ends above the bottom line; pushed down by a, it would run over it.
+    const cross = b.y + b.height + 10;
+    const breaks = { crossFrom, cross, crossPast: cross + 24 };
+    const kept = effectiveBreaks(breaks, placesOf);
+    expect(kept).toEqual(breaks);
+    // Alone, the bottom line moves nothing.
+    expect(effectiveBreaks({ cross, crossPast: cross + 24 }, placesOf)).toBeUndefined();
   });
 
   it('counts the cards past each edge, each once', () => {
@@ -207,5 +232,16 @@ describe('the first view (#240)', () => {
         view,
       ),
     ).toEqual({ left: 1, right: 2, up: 1, down: 1 });
+  });
+});
+
+describe('an edge cue’s name', () => {
+  it('says how many tracks lie past its edge and where, "it" for one and "them" for more', () => {
+    expect(cueName('down', 1, 'horizontal')).toBe('1 more track below: pan down to it');
+    expect(cueName('right', 4, 'horizontal')).toBe(
+      '4 more tracks in later years: pan right to them',
+    );
+    expect(cueName('up', 1, 'vertical')).toBe('1 more track in earlier years: pan up to it');
+    expect(cueName('left', 2, 'vertical')).toBe('2 more tracks to the left: pan left to them');
   });
 });

@@ -329,6 +329,11 @@ export interface ViewBreaks {
 
 /** How far past a break a moved card starts (px): a hair, so it is wholly out of the view. */
 export const BREAK_CLEAR = 2;
+/**
+ * Room kept before a year's cards where a view starts at that year (map px): the year that
+ * starts this near the view's start (`mainFrom`) is its first, never moved past the break.
+ */
+export const VIEW_START_PAD = 16;
 
 export interface LineageLayout {
   orientation: Orientation;
@@ -467,7 +472,11 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
     const rows = slotRows[index];
     // A slot whose heading and first row would run over the break starts past it, but for the
     // first slot in the view.
-    if (Number.isNaN(firstInView) && at >= viewFrom) firstInView = at;
+    // (Only the year that starts at the view's start, or within its pad: a view that starts
+    // inside a year has no first year of its own.)
+    if (Number.isNaN(firstInView) && at >= viewFrom) {
+      firstInView = at <= viewFrom + VIEW_START_PAD + 0.5 ? at : Number.NEGATIVE_INFINITY;
+    }
     if (
       rows.length > 0 &&
       overBreak(at, at + heading + rows[0].main, Math.max(mainStart, firstInView))

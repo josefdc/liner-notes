@@ -40,10 +40,15 @@ import {
   placeChips,
   routeLinks,
   type ViewBreaks,
+  VIEW_START_PAD,
   wrapText,
 } from './genealogy/lineageLayout';
 import { fitCardText, SHORTENED_TEXT } from './genealogy/cardText';
 import {
+  bottomCues,
+  CUE_TEXT,
+  cueName,
+  cueWidth,
   type EdgeCounts,
   edgeCounts,
   effectiveBreaks,
@@ -52,6 +57,7 @@ import {
   sameCounts,
 } from './genealogy/firstView';
 import { cardName, cardWords } from './genealogy/cardWords';
+import { cuePan } from './genealogy/cuePan';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
 import { LineageRow } from './genealogy/LineageRow';
@@ -131,37 +137,63 @@ const chipWidth = (text: string) => labelWidth(text, LINE_LABEL_PX) + 10;
 /** Room kept round a card or a link the keyboard brings into view (screen px). */
 const VIEW_PAD = 12;
 /**
- * The strip at the bottom of the map's view that the edge cues take ("4 more →"): at rest no
- * card lies under it (px).
+ * An edge cue's height ("4 more →"), and the strip kept for the cues where a cue's button would
+ * lie over a card: at rest no card lies under a cue (px).
  */
 const CUE_PX = 24;
 /** The line over the axis that says the years are in order, not to scale (across the page, px). */
 const AXIS_NOTE_PX = 18;
 /** A map shorter than this (px) gives the line no room: it goes under the map, with the legend. */
 const AXIS_NOTE_MIN_PX = 280;
-/** Room kept before a year's cards where the first view starts at that year (map px). */
-const VIEW_START_PAD = 16;
+/** The line's words, and the room they take (12 px, IBM Plex Mono). */
+const AXIS_NOTE = 'Years in order, not to scale.';
+const AXIS_NOTE_WIDTH = labelWidth(AXIS_NOTE, 12);
+/** The heading's last row over the map: as tall as its chip, above its bottom padding (px). */
+const HEADING_ROW_PX = 28;
+/**
+ * True when the right of the last row of the heading laid over the map's top (`topInset` px
+ * tall, its padding the page's 16 px at the sides and 8 px at the bottom) holds nothing: the
+ * line "Years in order, not to scale." goes there. Read from what is drawn: any text, link,
+ * button or icon there, outside the map, takes the room.
+ */
+function headingRowFree(wrapper: HTMLElement, topInset: number): boolean {
+  const box = wrapper.getBoundingClientRect();
+  const room = {
+    left: box.right - 16 - AXIS_NOTE_WIDTH - 16,
+    right: box.right,
+    top: box.top + topInset - 8 - HEADING_ROW_PX,
+    bottom: box.top + topInset - 8,
+  };
+  const meets = (rect: DOMRect) =>
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.left < room.right &&
+    rect.right > room.left &&
+    rect.top < room.bottom &&
+    rect.bottom > room.top;
+  let child: Element = wrapper;
+  for (let parent = wrapper.parentElement, depth = 0; parent && depth < 4; depth += 1) {
+    for (const sibling of parent.children) {
+      if (sibling === child) continue;
+      // Its words, and what is drawn rather than written (an icon, a button, a link).
+      const walker = document.createTreeWalker(sibling, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        if (meets(range.getBoundingClientRect())) return false;
+      }
+      for (const element of sibling.querySelectorAll('svg, img, button, a, input, select')) {
+        if (meets(element.getBoundingClientRect())) return false;
+      }
+    }
+    child = parent;
+    parent = parent.parentElement;
+  }
+  return true;
+}
 /** No card past any edge of the view. */
 const NO_CUES: EdgeCounts = { left: 0, right: 0, up: 0, down: 0 };
-/** What an edge cue shows: how many cards lie past its edge, and which way. */
-const CUE_TEXT: Record<keyof EdgeCounts, (count: number) => string> = {
-  left: (count) => `← ${count} more`,
-  right: (count) => `${count} more →`,
-  up: (count) => `↑ ${count} more`,
-  down: (count) => `${count} more ↓`,
-};
-/** An edge cue's name: the cards past its edge, where they are, and what it does. */
-function cueLabel(side: keyof EdgeCounts, count: number, orientation: Orientation): string {
-  const tracks = `${count} more ${count === 1 ? 'track' : 'tracks'}`;
-  const along = orientation === 'horizontal' ? ['left', 'right'] : ['up', 'down'];
-  const where = along.includes(side)
-    ? side === along[0]
-      ? 'in earlier years'
-      : 'in later years'
-    : { left: 'to the left', right: 'to the right', up: 'above', down: 'below' }[side];
-  const pan = { left: 'left', right: 'right', up: 'up', down: 'down' }[side];
-  return `${tracks} ${where}: pan ${pan} to them`;
-}
 /**
  * How far from its link's middle a chip may go (map px): no chip far from what it names. One
  * that is not by its link is joined to it by a leader, drawn under the cards.
@@ -445,8 +477,24 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const orientation = panel ? orientationFor(panel.viewport, panel.width) : null;
   // Across the page the line "Years in order, not to scale." sits over the axis, under the
   // heading, where the map has the room: the map starts below both.
+  // In the heading's last row, at its right, where that room is free (it takes none of the
+  // map's): measured once the heading is laid out.
+  const [noteInHeading, setNoteInHeading] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the panel's width moves the heading's free room
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    const fits =
+      orientation === 'horizontal' &&
+      wrapper !== null &&
+      topInset >= HEADING_ROW_PX + 8 &&
+      headingRowFree(wrapper, topInset);
+    setNoteInHeading(fits);
+  }, [orientation, topInset, panel?.width]);
   const noteOverAxis =
-    orientation === 'horizontal' && panel !== null && panel.height >= AXIS_NOTE_MIN_PX;
+    !noteInHeading &&
+    orientation === 'horizontal' &&
+    panel !== null &&
+    panel.height >= AXIS_NOTE_MIN_PX;
   const mapInset = topInset + (noteOverAxis ? AXIS_NOTE_PX : 0);
   useEffect(() => {
     const by = mapInset - insetRef.current;
@@ -512,7 +560,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `restLayout` lays the map out again at rest
   useEffect(() => {
     const size = sizeRef.current;
-    if (sparse || !svgRef.current || !size || orientation === null || textWidth === null) return;
+    if (sparse || !svgRef.current || !size || orientation === null || textWidth === null) {
+      // No drawing: the focus the last one had is not given back later, to whatever then has it.
+      refocusRef.current = null;
+      return;
+    }
 
     // 1. Setup & Cleanup
     const svg = select(svgRef.current);
@@ -636,7 +688,17 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const freeSize = sizeOf(free);
     const freeCards = [...free.cards.values()];
     const anchorId = currentId ?? nodes[0]?.id ?? '';
-    /** The first view for a room (see `planFirstView`). */
+    /** The cards' places in the map laid out with these breaks, as a key. */
+    const placesOf = (breaks: ViewBreaks | undefined) => {
+      const laid = breaks ? layoutLineage(nodes, { ...layoutOptions, breakAt: breaks }) : free;
+      return nodes
+        .map((d) => {
+          const box = laid.cards.get(d.id);
+          return `${box?.x},${box?.y}`;
+        })
+        .join(' ');
+    };
+    /** The first view for a room (see `planFirstView`), judged on the map laid out for it. */
     const planFor = (size: { width: number; height: number }) =>
       planFirstView({
         orientation,
@@ -649,21 +711,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         cue: CUE_PX,
         // The pinned year labels' band (`pinnedBand`, at zoom 1).
         band: layoutOptions.axisSize + 6,
+        layout: (breaks) => {
+          const laid = breaks ? layoutLineage(nodes, { ...layoutOptions, breakAt: breaks }) : free;
+          return { cards: [...laid.cards.values()], anchor: laid.cards.get(anchorId) ?? null };
+        },
+        cueWidth,
       });
-    /** True when a layout with these breaks moves a card from where the free one has it. */
-    const moves = (only: ViewBreaks) => {
-      const laid = layoutLineage(nodes, { ...layoutOptions, breakAt: only });
-      return nodes.some((d) => {
-        const [a, b] = [laid.cards.get(d.id), free.cards.get(d.id)];
-        return a?.x !== b?.x || a?.y !== b?.y;
-      });
-    };
     /**
      * Where the first view's room for cards ends, for the room the map has now: only the breaks
-     * that move a card (so the map is laid out again only when one moves).
+     * that change the layout (so the map is laid out again only when a card moves).
      */
     const breaksFor = (size: { width: number; height: number }) =>
-      effectiveBreaks(planFor(size).breaks, moves);
+      effectiveBreaks(planFor(size).breaks, placesOf);
     // The view the map was left at: kept (with the layout it was drawn for) once the reader has
     // moved it; at rest (no pan, zoom or move to a focused card yet) it is the first view again,
     // laid out for the room the map has now.
@@ -674,10 +733,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
      * The reader is at work in the map (a focus, a hover, a press, a selection, a pan): the view
      * and the layout are theirs, kept as they are through a resize.
      */
-    const leaveRest = () => {
+    /**
+     * True while the view left rest only for a pointer passing over the map, or a finger on it
+     * (no press of a mouse, focus, selection, pan or zoom since): it is held only while that
+     * lasts, and then the view is at rest again (`backToRest`).
+     */
+    let held = false;
+    /** True once the drawing has gone (a timer of its own may still fire). */
+    let gone = false;
+    const leaveRest = (hold = false) => {
+      if (rest) held = hold;
+      else if (!hold) held = false;
       rest = false;
       if (viewRef.current?.data === shownNodes) viewRef.current = { ...viewRef.current, rest };
       svg.attr('data-view', 'reader');
+    };
+    /** The pointer gone (or the finger lifted) with nothing done: the first view again. */
+    const backToRest = () => {
+      if (!held || rest || gone) return;
+      held = false;
+      rest = true;
+      if (viewRef.current?.data === shownNodes) viewRef.current = { ...viewRef.current, rest };
+      svg.attr('data-view', 'first');
+      refit();
     };
     // Whose the view is, for tests and tools: the first view, or the reader's.
     svg.attr('data-view', rest ? 'first' : 'reader');
@@ -865,16 +943,33 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const slotCards = layout.slots.map((slot) =>
       nodes.filter((d) => slotOf(d.id) === slot).map((d) => boxOf(d.id)),
     );
-    /** The part of the map in view (map px): below the band over its top. */
+    /**
+     * The part of the map in view (map px): below the band over its top, and across the page
+     * below the year labels' band where it is pinned there (opaque: a card under it is hidden).
+     */
     const inView = () => {
       const k = transform.k || 1;
+      const top = (insetRef.current - transform.y) / k;
       return {
         left: -transform.x / k,
         right: (width - transform.x) / k,
-        top: (insetRef.current - transform.y) / k,
+        top: top + headOf(top),
         bottom: (height - transform.y) / k,
       };
     };
+    /**
+     * The band over the top of a view whose top is at `top` (map px), opaque, that hides the
+     * cards under it: the pinned year labels across the page; down a column, the band "↑ N more"
+     * takes while a card starts above the view.
+     */
+    const headOf = (top: number) =>
+      pinnedAt(top)
+        ? layout.axisSize + 6
+        : orientation === 'vertical' && cardBoxes.some((box) => box.y < top - 0.5)
+          ? CUE_PX / (transform.k || 1)
+          : 0;
+    /** True when the year labels are pinned over a view whose top is at `top` (map px). */
+    const pinnedAt = (top: number) => orientation === 'horizontal' && top - (margin.top - 6) > 0;
     /**
      * Across the page, a year's label is shown only while one of its cards is in view, at least
      * in part: a label over an empty column would say that nothing is known for that year.
@@ -1291,8 +1386,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       drawActive();
     };
     const pointAt = (item: Item | null) => {
-      // The pointer on a card or a link: the reader is at work in the map.
-      if (item !== null) leaveRest();
+      // The pointer on a card or a link: the layout is held while it is on the map.
+      if (item !== null) leaveRest(true);
       pointerOn = item;
       drawActive();
       setHovered(item);
@@ -1426,12 +1521,22 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // card that moved between the press and the release would not get the click, or the tap,
     // that selects it). The selected card is brought clear of its panel once it opens.
     let pressing = false;
+    // True while a cue gives the focus to a card it brought into view: the view stays put
+    // (`placed`, that card, until the focus moves on).
+    let placing = false;
+    let placed: Item | null = null;
     const svgElement = svg.node() as SVGSVGElement;
     listen(svgElement, 'pointerdown', (event) => {
-      // A press on the map (a card, a link, a drag): the reader is at work in it.
-      leaveRest();
-      pressing = true;
       touching = (event as PointerEvent).pointerType === 'touch';
+      // A press on the map (a card, a link, a drag): the reader is at work in it. A finger is
+      // held only while it is on the map: a page scroll that starts on it leaves the view at
+      // rest, a tap that focuses or selects a card does not.
+      leaveRest(touching);
+      pressing = true;
+    });
+    // The pointer off the map, having only passed over it: the view is at rest again.
+    listen(svgElement, 'pointerleave', (event) => {
+      if ((event as PointerEvent).pointerType !== 'touch') backToRest();
     });
     listen(svgElement, 'pointermove', (event) => {
       if ((event as PointerEvent).pointerType !== 'touch') touching = false;
@@ -1448,6 +1553,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       }
       setTimeout(() => {
         pressing = false;
+        // A finger lifted with nothing done (a page scroll, a touch d3 left alone).
+        if ((event as PointerEvent).pointerType === 'touch') backToRest();
       }, 500);
     };
     for (const type of ['pointerup', 'pointercancel']) {
@@ -1475,7 +1582,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         leaveRest();
         setRoving(i);
         focusOn = item;
-        if (!pressing) bringIntoView(item);
+        placed = placing ? item : null;
+        if (!pressing && !placing) bringIntoView(item);
         drawActive();
         setFocused(item);
       });
@@ -1487,13 +1595,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
     });
     /** True when the item the pointer is on sits in the bottom band the detail box takes. */
-    const pointedLow = () => {
-      if (!pointerOn) return false;
+    const pointedLow = () => pointerOn !== null && lowIn(pointerOn);
+    /** True when an item sits in the bottom band the detail box takes. */
+    const lowIn = (item: Item) => {
       const box =
-        pointerOn.kind === 'node'
-          ? boxOf(pointerOn.id)
+        item.kind === 'node'
+          ? boxOf(item.id)
           : (() => {
-              const { mid } = drawnLinks[pointerOn.index].route;
+              const { mid } = drawnLinks[item.index].route;
               return { x: mid.x, y: mid.y, width: 0, height: 0 };
             })();
       const k = transform.k || 1;
@@ -1505,13 +1614,23 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     afterDetailRef.current = () => {
       // The selected card's panel goes on the side away from the analysed track's card; the
       // hover box goes to the top while the item pointed at is low.
-      const top = selectedRef.current !== null ? panelAtTop() : pointedLow();
+      // So does the box of a card an edge cue gave the focus to, low in the view: the view stays
+      // where the cue left it.
+      const top =
+        selectedRef.current !== null
+          ? panelAtTop()
+          : pointerOn !== null
+            ? pointedLow()
+            : placed !== null && sameItem(focusOn, placed) && lowIn(placed);
       if (top !== detailTopRef.current) {
         detailTopRef.current = top;
         setDetailTop(top);
       }
       if (selectedRef.current !== null) bringSelectedClear();
-      else if (focusOn && !pointerOn) bringIntoView(focusOn);
+      // (A card a cue gave the focus to is in view already, the box on its far side.)
+      else if (focusOn && !pointerOn && !(placed !== null && sameItem(focusOn, placed))) {
+        bringIntoView(focusOn);
+      }
       drawChips();
     };
     // A track selected: the reader is at work in the map (the view and the layout are kept).
@@ -1629,22 +1748,72 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       items.find(({ item }) => sameItem(item, refocus))?.element.focus({ preventScroll: true });
     }
 
-    // An edge cue pans the view most of its room that way (the reader's view from then on).
+    // An edge cue pans the view that way, no further than it takes to bring the next cards
+    // past that edge wholly into view, to a stop where no card is cut (a card's or a year's
+    // edge), the analysed track's card kept in view where a stop allows it. When no card is
+    // left past that edge, the focus goes to the first card that came into view (the cue goes).
     cuePanRef.current = (side) => {
       leaveRest();
       const k = transform.k || 1;
-      const across = 0.8 * width;
-      const along = 0.8 * Math.max(0, height - insetRef.current - CUE_PX);
-      const [dx, dy] =
-        side === 'left'
-          ? [across, 0]
-          : side === 'right'
-            ? [-across, 0]
-            : side === 'up'
-              ? [0, along]
-              : [0, -along];
-      svg.call(zoomBehavior.translateBy, dx / k, dy / k);
-      holdView();
+      const sign = side === 'right' || side === 'down' ? 1 : -1;
+      const lo = (box: CardBox) => (side === 'left' || side === 'right' ? box.x : box.y);
+      const view = {
+        left: -transform.x / k,
+        right: (width - transform.x) / k,
+        top: (insetRef.current - transform.y) / k,
+        bottom: (height - transform.y) / k,
+      };
+      const now = inView();
+      const pastNow = edgeCounts(cardBoxes, now);
+      const move = cuePan({
+        side,
+        cards: cardBoxes,
+        anchor: anchorId ? boxOf(anchorId) : null,
+        view,
+        headOf,
+        map: { width: mapWidth, height: mapHeight },
+        buttonsOf: (counts, room) =>
+          bottomCues(counts, width, cueWidth).map(
+            ({ left, right }): CardBox => ({
+              x: room.left + left / k,
+              y: room.bottom - CUE_PX / k,
+              width: (right - left) / k,
+              height: CUE_PX / k,
+            }),
+          ),
+        pad: VIEW_START_PAD,
+      });
+      if (move === null) return;
+      if (move.dx !== 0 || move.dy !== 0) svg.call(zoomBehavior.translateBy, -move.dx, -move.dy);
+      countCues();
+      drawChips();
+      // Nothing left past that edge: the focus on the first card that came into view.
+      const after = inView();
+      const whole = (area: typeof after, box: CardBox) =>
+        box.x >= area.left - 0.5 &&
+        box.x + box.width <= area.right + 0.5 &&
+        box.y >= area.top - 0.5 &&
+        box.y + box.height <= area.bottom + 0.5;
+      if (edgeCounts(cardBoxes, after)[side] === 0 && pastNow[side] > 0) {
+        const arrived = nodes
+          .map((d, i) => ({ d, box: cardBoxes[i] }))
+          .filter(({ box }) => whole(after, box) && !whole(now, box))
+          .sort((a, b) => sign * (lo(a.box) - lo(b.box)) || a.box.y - b.box.y || a.box.x - b.box.x);
+        // (None came wholly in, the cards there only nearer: the one in view nearest that edge.)
+        const nearest = nodes
+          .map((d, i) => ({ d, box: cardBoxes[i] }))
+          .filter(({ box }) => whole(after, box))
+          .sort((a, b) => sign * (lo(b.box) - lo(a.box)) || a.box.y - b.box.y || a.box.x - b.box.x);
+        const first = arrived[0] ?? nearest[0];
+        if (first) {
+          const element = items.find(
+            ({ item }) => item.kind === 'node' && item.id === first.d.id,
+          )?.element;
+          placing = true;
+          element?.focus({ preventScroll: true });
+          placing = false;
+        }
+      }
     };
 
     /**
@@ -1691,6 +1860,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // Everything the drawing started stops with it: transitions (the hint's fade, a double
     // click's zoom) and their timers, and every listener on the svg and its elements.
     return () => {
+      gone = true;
       // The item with the focus gets it back in the next drawing (`refocus`).
       const active = document.activeElement;
       refocusRef.current =
@@ -2097,49 +2267,62 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           ></svg>
 
           {/* Across the page, over the axis: the years keep their order, not their distance */}
-          {noteOverAxis && (
+          {(noteOverAxis || noteInHeading) && (
             <p
-              className="absolute inset-x-0 z-10 pointer-events-none bg-void px-3 text-right text-chrome font-mono text-text-chip"
-              style={{ top: topInset, height: AXIS_NOTE_PX, lineHeight: `${AXIS_NOTE_PX}px` }}
+              className={`absolute z-10 pointer-events-none text-right text-chrome font-mono text-text-chip ${noteInHeading ? 'right-4' : 'inset-x-0 bg-void px-3'}`}
+              style={{
+                top: noteInHeading ? topInset - 8 - (HEADING_ROW_PX + AXIS_NOTE_PX) / 2 : topInset,
+                height: AXIS_NOTE_PX,
+                lineHeight: `${AXIS_NOTE_PX}px`,
+              }}
               data-testid="axis-note"
+              data-at={noteInHeading ? 'heading' : 'axis'}
             >
-              Years in order, not to scale.
+              {AXIS_NOTE}
             </p>
           )}
 
-          {/* The edge cues: how many cards lie past each edge of the view, in a strip at its
-              bottom that no card takes at rest; each pans the view that way */}
+          {/* The edge cues: how many cards lie past each edge of the view, each a button that
+              pans the view that way: "↑" at the top-left (across the page, on the pinned year
+              labels' band), the others at the bottom; at rest none lies over a card */}
           {orientation !== null && cues.left + cues.right + cues.up + cues.down > 0 && (
-            <div
-              ref={cuesRef}
-              data-testid="map-cues"
-              className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-2 px-2 pointer-events-none"
-              style={{ height: CUE_PX }}
-            >
+            <div ref={cuesRef} data-testid="map-cues" className="contents">
               {(
                 [
-                  ['left', 'up'],
-                  ['down', 'right'],
-                ] as const
-              ).map((group) => (
-                <div key={group[0]} className="flex items-center gap-2">
-                  {group
-                    .filter((side) => cues[side] > 0)
-                    .map((side) => (
+                  // Across the page on the pinned labels' band; down a column on a band of
+                  // its own, opaque (the view's room for cards starts under it).
+                  orientation === 'horizontal'
+                    ? [['up'], 'left-2', { top: mapInset + 2 }]
+                    : [['up'], 'inset-x-0 bg-void px-2', { top: mapInset }],
+                  [['left'], 'left-2 bottom-0', { bottom: 0 }],
+                  [['down', 'right'], 'right-2 bottom-0', { bottom: 0 }],
+                ] satisfies Array<[Array<keyof EdgeCounts>, string, React.CSSProperties]>
+              ).map(([group, place, style]) => {
+                const sides = group.filter((side) => cues[side] > 0);
+                if (sides.length === 0) return null;
+                return (
+                  <div
+                    key={group[0]}
+                    data-cue-band={group[0] === 'up' && orientation === 'vertical' ? '' : undefined}
+                    className={`absolute ${place} z-10 flex items-center gap-2 pointer-events-none`}
+                    style={{ height: CUE_PX, ...style }}
+                  >
+                    {sides.map((side) => (
                       <button
                         key={side}
                         type="button"
                         data-cue={side}
-                        aria-label={cueLabel(side, cues[side], orientation)}
+                        aria-label={cueName(side, cues[side], orientation)}
                         onClick={() => {
                           cuePanRef.current?.(side);
-                          // A cue with nothing left past its edge goes: the focus moves to
-                          // another cue.
+                          // A cue with nothing left past its edge goes, the focus on the first
+                          // card it brought into view; failing one, on the map.
                           requestAnimationFrame(() => {
-                            const strip = cuesRef.current;
-                            if (strip && !strip.contains(document.activeElement)) {
-                              strip.querySelector('button')?.focus();
-                            }
+                            if (document.activeElement && document.activeElement !== document.body)
+                              return;
+                            svgRef.current
+                              ?.querySelector<SVGElement>('[tabindex="0"]')
+                              ?.focus({ preventScroll: true });
                           });
                         }}
                         className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
@@ -2147,8 +2330,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                         {CUE_TEXT[side](cues[side])}
                       </button>
                     ))}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -2237,7 +2421,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           {/* The axis keeps the years' order, not their distance: a gap of forty years is not
               forty times one of a year. Not on a short screen, where every pixel goes to the
               map. */}
-          {!sparse && !noteOverAxis && (
+          {!sparse && !noteOverAxis && !noteInHeading && (
             <p
               className="text-chrome font-mono text-text-chip [@media(max-height:36rem)]:hidden"
               data-testid="axis-note"

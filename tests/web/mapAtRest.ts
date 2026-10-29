@@ -11,14 +11,17 @@ interface CardAtRest {
   state: "in" | "out" | "cut";
   box: string;
   area: string;
+  /** The card's box and the visible map area on screen (px): left, top, right, bottom. */
+  edges: { card: readonly number[]; area: readonly number[] };
 }
 
 /**
  * Every card of the map drawn in `graph`, and whether it lies wholly in the visible map area,
  * wholly out of it, or across its edge. The visible map area is the map's box (the svg's parent,
  * which hides what runs past it) inside the window, below the bands laid over its top (`heading`:
- * the Player's panel heading; the map's own line over the axis, and the year labels' band while
- * they are pinned over the cards) and above the edge cues' strip. Fails when the map has no card.
+ * the Player's panel heading; the map's own line over the axis, the year labels' band while
+ * they are pinned over the cards, and down a column the band of "↑ N more"). A card under an edge cue's button ("4 more →") is cut too: the
+ * button hides part of it. Fails when the map has no card.
  * Read once the page has settled (two frames).
  */
 async function cardsAtRest(graph: Locator, heading?: Locator): Promise<CardAtRest[]> {
@@ -30,7 +33,12 @@ async function cardsAtRest(graph: Locator, heading?: Locator): Promise<CardAtRes
     const note = svg.parentElement?.querySelector('[data-testid="axis-note"]');
     const backdrop = svg.querySelector("g.lineage-axis > rect");
     const pinned = backdrop !== null && Number(backdrop.getAttribute("fill-opacity")) > 0;
-    const cues = svg.parentElement?.querySelector('[data-testid="map-cues"]');
+    // Down a column, the band "↑ N more" takes over the view's top (opaque).
+    const band = svg.parentElement?.querySelector("[data-cue-band]");
+    // The edge cues' buttons, over the map.
+    const cues = [...(svg.parentElement?.querySelectorAll("[data-cue]") ?? [])].map((cue) =>
+      cue.getBoundingClientRect(),
+    );
     const area = {
       left: Math.max(wrapper.left, 0),
       top: Math.max(
@@ -39,13 +47,10 @@ async function cardsAtRest(graph: Locator, heading?: Locator): Promise<CardAtRes
         0,
         note ? note.getBoundingClientRect().bottom : 0,
         pinned ? (backdrop as Element).getBoundingClientRect().bottom : 0,
+        band ? band.getBoundingClientRect().bottom : 0,
       ),
       right: Math.min(wrapper.right, window.innerWidth),
-      bottom: Math.min(
-        wrapper.bottom,
-        window.innerHeight,
-        cues ? cues.getBoundingClientRect().top : Number.POSITIVE_INFINITY,
-      ),
+      bottom: Math.min(wrapper.bottom, window.innerHeight),
     };
     const round = (box: { left: number; top: number; right: number; bottom: number }) =>
       [box.left, box.top, box.right, box.bottom].map(Math.round).join(",");
@@ -61,12 +66,23 @@ async function cardsAtRest(graph: Locator, heading?: Locator): Promise<CardAtRes
         box.left >= area.right - 0.5 ||
         box.bottom <= area.top + 0.5 ||
         box.top >= area.bottom - 0.5;
+      const underCue = cues.some(
+        (cue) =>
+          box.left < cue.right - 0.5 &&
+          cue.left < box.right - 0.5 &&
+          box.top < cue.bottom - 0.5 &&
+          cue.top < box.bottom - 0.5,
+      );
       return {
         id: card.getAttribute("data-node-id") ?? "",
         analysed: card.querySelector("text.sub-label")?.textContent === "This track",
-        state: inside ? "in" : outside ? "out" : "cut",
+        state: outside ? "out" : inside && !underCue ? "in" : "cut",
         box: round(box),
         area: round(area),
+        edges: {
+          card: [box.left, box.top, box.right, box.bottom],
+          area: [area.left, area.top, area.right, area.bottom],
+        },
       } as const;
     });
   }, below);
@@ -127,6 +143,40 @@ export async function labelsOverEmptyColumns(graph: Locator, heading?: Locator) 
       })
       .map((tick) => tick.textContent ?? "");
   }, states);
+}
+
+/**
+ * The cards past each edge of the visible map area at rest (see `cardsAtRest`), each counted
+ * once: past the right or the left first, else past the bottom or the top (a card partly past
+ * an edge, or hidden under a band over the top, counts for it); and the edge cues shown, each
+ * with the count its name gives and its box on screen.
+ */
+export async function edgeCuesAtRest(graph: Locator, heading?: Locator) {
+  const cards = await cardsAtRest(graph, heading);
+  const counted = { left: 0, right: 0, up: 0, down: 0 };
+  for (const { edges } of cards) {
+    const [left, top, right, bottom] = edges.card;
+    const area = edges.area;
+    if (right > area[2] + 0.5) counted.right += 1;
+    else if (left < area[0] - 0.5) counted.left += 1;
+    else if (bottom > area[3] + 0.5) counted.down += 1;
+    else if (top < area[1] - 0.5) counted.up += 1;
+  }
+  const shown = await graph.evaluate((svg) =>
+    [...(svg.parentElement?.querySelectorAll<HTMLElement>("[data-cue]") ?? [])].map((cue) => {
+      const box = cue.getBoundingClientRect();
+      return {
+        side: cue.getAttribute("data-cue") ?? "",
+        count: Number(/\d+/.exec(cue.getAttribute("aria-label") ?? "")?.[0]),
+        box: [box.left, box.top, box.right, box.bottom],
+        map: (() => {
+          const at = (svg.parentElement as Element).getBoundingClientRect();
+          return [at.left, at.top, at.right, at.bottom];
+        })(),
+      };
+    }),
+  );
+  return { counted, shown, area: cards[0].edges.area };
 }
 
 /** How many cards the visible map area shows whole at rest (see `cardsAtRest`). */

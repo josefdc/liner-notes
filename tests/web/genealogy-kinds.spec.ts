@@ -253,6 +253,18 @@ test.describe("the genealogy graph", () => {
   const graphBoxes = (page: Page) =>
     graphOf(page).evaluate((svg) => {
       const panel = svg.getBoundingClientRect();
+      // The map in view starts under the panel's heading and the band "↑ N more" takes, both
+      // opaque (and both let the pointer through to the map, the cue's button aside).
+      const covers = [
+        ...[...document.querySelectorAll("#panel-genealogy > div")].filter((div) =>
+          [...div.querySelectorAll("h2")].some((h) => h.textContent === "Connections"),
+        ),
+        ...(svg.parentElement?.querySelectorAll("[data-cue-band]") ?? []),
+      ];
+      const top = Math.max(
+        panel.top,
+        ...covers.map((cover) => cover.getBoundingClientRect().bottom),
+      );
       const boxOf = (element: Element) => {
         const box = element.getBoundingClientRect();
         return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
@@ -264,7 +276,7 @@ test.describe("the genealogy graph", () => {
           const box = line.getBoundingClientRect();
           return [0.1, 0.5, 0.9].flatMap((at) => {
             const [x, y] = [box.x + box.width * at, box.y + box.height / 2];
-            if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) return [];
+            if (x < panel.left || x > panel.right || y < top || y > panel.bottom) return [];
             const hit = document.elementFromPoint(x, y);
             return hit && !card.contains(hit) ? [hit.tagName] : [];
           });
@@ -529,7 +541,7 @@ test.describe("the genealogy graph", () => {
     for (let i = 0; i < (await cues.count()); i += 1) {
       await expect(cues.nth(i)).toBeFocused();
       await expect(cues.nth(i)).toHaveAccessibleName(
-        /^\d+ more tracks? .*: pan (left|right|up|down) to them$/,
+        /^(1 more track .*: pan (left|right|up|down) to it|\d+ more tracks .*: pan (left|right|up|down) to them)$/,
       );
       await page.keyboard.press("Tab");
     }

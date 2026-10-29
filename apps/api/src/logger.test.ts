@@ -11,6 +11,7 @@ import {
   captureLogsForTests,
   configureLogger,
   currentRunId,
+  hideKnownValues,
   installConsoleBridge,
   ipHash,
   logCut,
@@ -1347,6 +1348,25 @@ describe("configured values in what a client is shown, in a token and in any whi
       expect(scrubbedSpans(text)).toEqual([]);
     }
     expect(scrub("Bohemian \n Rhapsodies!")).toBe("[redacted]!");
+  });
+
+  it("reads the gap after a run of glued values once, in linear time", { timeout: 60_000 }, () => {
+    // Values glued to a pair's name in one run of token characters, then a long run of spaces.
+    // Each value's span ends where the run ends; reading the spaces after it again for each value
+    // takes seconds on 1 MB. From 32 kB to 256 kB a single pass grows about 8-14 times in CPU
+    // time, one per value about 64 times.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configure({ LOG_IP_SALT: salt });
+    const glued = (size: number) =>
+      `${salt}token=`.repeat(Math.floor(size / 2 / (salt.length + 6))) + " ".repeat(size / 2) + "x";
+    const factor = 8;
+    const { ratio, result } = growth(glued, (text) => hideKnownValues(text), {
+      size: 1 << 15,
+      factor,
+      maxMs: 3_000,
+    });
+    expect(ratio / factor).toBeLessThan(3);
+    expect(result).not.toContain("S1x");
   });
 
   it("keeps U+E000 and U+E001 in a text, with no value configured and with one", () => {

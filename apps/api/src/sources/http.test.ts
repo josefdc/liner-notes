@@ -1711,6 +1711,32 @@ describe("a credential found escaped at the start of a token (#237)", () => {
       }
     }
   });
+
+  it("reads the gap after a run of glued values once on every path, in linear time", {
+    timeout: 120_000,
+  }, () => {
+    // Values glued to a pair's name in one run of token characters, then a long run of spaces:
+    // each value's span ends where the run ends. Reading the spaces after it again for each value
+    // takes about 1.7 s on 256 kB. From 32 kB to 256 kB a single pass grows about 8-14 times in
+    // CPU time, one per value about 64 times.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: process.env.LOG_LEVEL });
+    onTestFinished(() => configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL }));
+    const glued = (size: number) =>
+      `${salt}token=`.repeat(Math.floor(size / 2 / (salt.length + 6))) + " ".repeat(size / 2) + "x";
+    const factor = 8;
+    for (const [name, call] of [
+      ["describeError", (text: string) => describeError(new Error(text))],
+      ["SourceError", (text: string) => new SourceError("discogs", "http", text).message],
+      ["plainReason", (text: string) => plainReason(text) ?? ""],
+      ["scrubText", scrubText],
+      ["redactText", redactText],
+    ] as const) {
+      const { ratio, result } = growth(glued, call, { size: 1 << 15, factor, maxMs: MAX_MS });
+      expect.soft(ratio / factor, name).toBeLessThan(3);
+      expect(result, name).not.toContain("S1x");
+    }
+  });
 });
 
 describe("text patterns in linear time", { timeout: 30_000 }, () => {

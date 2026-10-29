@@ -616,12 +616,13 @@ const isTokenStart = (c: number) => c !== 0x3d && isTokenChar(c);
  * `found` (sorted by start) as spans that each take the token characters (isTokenChar) written
  * right before (up to an "=", and never a link's "//") and after them (up to the start of a rule,
  * beforeRule) as well: a value glued to more of a token (`<key>.<signature>`, a composite token)
- * hides the whole token. Before a span, a character that ends an escape
- * (`\n`, `\u00e9`) is not taken: the escape stays whole. Spans that overlap after that as one.
- * Each character is read at most twice: linear time.
+ * hides the whole token. Before a span, a character that ends an escape (`\n`, `\u00e9`) is not
+ * taken: the escape stays whole. Spans that overlap after that as one. Each character is read at
+ * most twice, and the gap after a run of token characters once (closerAfter): linear time.
  */
 function withTokens(text: string, found: ReadonlyArray<readonly [number, number]>) {
   const spans: Array<[number, number]> = [];
+  const closer = closerAfter(text);
   let scanned = 0;
   for (const [from, to] of found) {
     const last = spans.at(-1);
@@ -639,38 +640,66 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
     let end = Math.max(to, scanned);
     while (end < text.length && isTokenChar(text.charCodeAt(end))) end++;
     scanned = end;
-    end = beforeRule(text, to, end);
+    end = beforeRule(text, to, end, closer(end));
     if (last && start < last[1]) last[1] = Math.max(last[1], end);
     else spans.push([start, end]);
   }
   return spans;
 }
 
+const EQUALS = 0x3d;
+const COLON = 0x3a;
+
+/**
+ * The character after the quotes and whitespace that follow a place in `text` (GAP), read once
+ * for each place asked: every span in one run of token characters ends at the same place.
+ */
+function closerAfter(text: string): (end: number) => number {
+  let at = -1;
+  let closer = Number.NaN;
+  return (end) => {
+    if (end !== at) {
+      at = end;
+      GAP.lastIndex = end;
+      GAP.test(text);
+      closer = text.charCodeAt(GAP.lastIndex);
+    }
+    return closer;
+  };
+}
+
+/** Quotes and whitespace, between a name and its ":" or "=". */
+const GAP = /["'\s]*/y;
+
 /**
  * The start of a rule's match glued after a value: a scheme word and the space after it, a link's
  * scheme, a pair's name and its ":" or "=". Taken with the value, it would no longer be read, and
- * the secret after it would stay.
+ * the secret after it would stay. A name's ":" or "=" can follow quotes and whitespace only where
+ * the run of token characters ends (a name is token characters, and those are not): there,
+ * RULE_START matches the name alone and beforeRule reads what follows once (closerAfter).
  */
 const RULE_START = new RegExp(
-  String.raw`${SCHEMES}\s|https?:\/\/|(?:${PAIR_NAMES})["'\s]*[:=]`,
+  String.raw`${SCHEMES}\s|https?:\/\/|(?:${PAIR_NAMES})(?:=|(?=["'\s:]|$))`,
   "iy",
 );
-
-/** A ":" after a name, which the token characters before it are: `<value>.password: <secret>`. */
-const NAME_END = /["'\s]*:/y;
 
 /**
  * Where the token characters from `from` to `end` that a value's span takes stop: before the
  * first start of a rule (RULE_START) in them. Inside a word too: a host the logger replaces can
  * end right before it (`<host>https://…`), and the rule then reads it. Characters that end in a
- * name's ":" are not taken: the rules of sources/http.ts read a name only where it starts a word.
+ * name's ":" (`<value>.password: <secret>`; `closer`, the character after the quotes and
+ * whitespace at `end`) are not taken: the rules of sources/http.ts read a name only where it
+ * starts a word.
  */
-function beforeRule(text: string, from: number, end: number): number {
-  NAME_END.lastIndex = end;
-  if (end > from && NAME_END.test(text)) return from;
+function beforeRule(text: string, from: number, end: number, closer: number): number {
+  if (end > from && closer === COLON) return from;
   for (let at = from; at < end; at++) {
     RULE_START.lastIndex = at;
-    if (RULE_START.test(text)) return at;
+    if (!RULE_START.test(text)) continue;
+    // A name that ends the run is a pair's only before its "=" (its ":" returned above).
+    if (RULE_START.lastIndex !== end || text.charCodeAt(end - 1) === EQUALS || closer === EQUALS) {
+      return at;
+    }
   }
   return end;
 }

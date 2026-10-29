@@ -29,7 +29,7 @@ import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
 import { captureLogsForTests } from "../../logger.js";
 import { replayedAnalysis } from "../../replay/player.js";
-import { PINNED_DIR } from "../../replay/testing/recordings.js";
+import { PINNED_DIR, readRecording } from "../../replay/testing/recordings.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -722,6 +722,45 @@ describe("each fact's claim", () => {
       res.body.factoids.map((factoid: { claimId: string }) => recordedClaim(factoid.claimId)),
     );
     expect(res.body.claims.length).toBeGreaterThan(0);
+    expect(model.invoke).not.toHaveBeenCalled();
+  });
+
+  it("of a showcase recording is its recorded claim, and a showcase whose cards all restate serves none", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    // Bitter Sweet Symphony's sample card says more than its record: it is served.
+    const bss = readRecording("bitter-sweet-symphony-the-verve");
+    const served = replayedAnalysis(bss, "run-served");
+    expect(served.factoids).toHaveLength(1);
+    const track = {
+      trackId: bss.analysis.id,
+      trackTitle: bss.analysis.title,
+      trackArtist: bss.analysis.artist,
+    };
+    const res = await request(app())
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...track, existingFactoidIds: [] })
+      .timeout(2000);
+    expect(res.status).toBe(200);
+    expect(res.body.factoids.map((factoid: { id: string }) => factoid.id)).toEqual(
+      served.factoids.map((factoid) => factoid.id),
+    );
+    expect(res.body.claims).toEqual(
+      served.factoids.map((factoid) =>
+        served.claims?.find((claim) => claim.id === factoid.claimId),
+      ),
+    );
+    // One More Time's own card only restates its record: none is served, and nothing is asked.
+    expect(replayedAnalysis(readRecording(), "run-served").factoids).toEqual([]);
+    const demo = await request(app())
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: [] })
+      .timeout(2000);
+    expect(demo.status).toBe(200);
+    expect(demo.body.factoids).toEqual([]);
+    expect(demo.body.claims).toEqual([]);
     expect(model.invoke).not.toHaveBeenCalled();
   });
 

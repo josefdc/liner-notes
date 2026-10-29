@@ -425,6 +425,23 @@ try {
   });
   console.log(`factoids: ${more.status} ${more.body.factoids?.length} recorded facts`);
   check(more.status === 200 && more.body.factoids?.length > 0, "factoids come from the recording");
+  const demoMore = await json("/api/factoids/more", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trackId: TRACK_ID,
+      trackTitle: "One More Time",
+      trackArtist: "Daft Punk",
+      existingFactoidIds: [],
+    }),
+  });
+  console.log(`demo factoids: ${demoMore.status} ${demoMore.body.factoids?.length} recorded facts`);
+  check(
+    demoMore.status === 200 &&
+      Array.isArray(demoMore.body.factoids) &&
+      demoMore.body.factoids.length === 0,
+    "the demo's recorded cards all restate its records: none is served, and nothing is asked",
+  );
   const other = await json("/api/factoids/more", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

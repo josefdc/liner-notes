@@ -9,6 +9,7 @@ import {
   fullResultData,
   releaseStream,
   replayedRecording,
+  showcaseRecordings,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
@@ -16,7 +17,9 @@ import { offline } from "./offline";
 // The song-relations map on a page of its own (#217): `/t/<id>/map` opens a stored result's map
 // full size, from a link, a reload, Back or Forward; the Player links to it. A track analysed
 // from a map's detail panel shows the tracks explored before it as a breadcrumb, kept in the
-// history entries (Back and Forward bring it back) and cleared by a new search.
+// history entries (Back and Forward bring it back) and cleared by a new search. Every recorded
+// showcase's full map is laid out at 390, 1280, 1440 and 1920 px: as wide as the window, its
+// cards apart and nothing scrolling sideways.
 
 test.use({ reducedMotion: "reduce" });
 
@@ -621,3 +624,74 @@ test.describe("at 844 x 390 (a phone held sideways)", () => {
     await shot(page, testInfo, "long-trail-map-844x390");
   });
 });
+
+/** A stored replayed run of each committed showcase recording, as GET /api/runs serves it. */
+for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecordings()) {
+  for (const [width, height] of [
+    [390, 844],
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    test(`at ${width} px the recorded ${slug} map opens full size, its cards apart, nothing sideways`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(90_000);
+      const problems = collectProblems(page);
+      await page.setViewportSize({ width, height });
+      const result = replayedRecording(slug).events.find((event) => event.type === "complete")
+        ?.data as Record<string, unknown>;
+      await useMockApi(page, {
+        suggestions: [],
+        eventGapMs: 0,
+        streams: {},
+        runs: { [trackId]: storedRun(result, "replay") },
+      });
+      await page.goto(`/t/${trackId}/map`);
+      await expect(mapHeading(page)).toHaveText(`Song relations of ${title} · ${artist}`);
+      await expect(mapView(page).getByText(/^Recorded run · /)).toBeVisible();
+      if (links <= 2) {
+        // Two relations or fewer: the compact row.
+        await expect(mapView(page).getByTestId("lineage-row")).toBeVisible();
+      } else {
+        const graph = graphOf(page);
+        await expect(graph).toBeVisible();
+        const box = await graph.boundingBox();
+        if (!box) throw new Error("no map");
+        expect(box.width).toBeGreaterThanOrEqual(width - 2);
+        expect(box.height).toBeGreaterThanOrEqual(height * 0.5);
+        await animationsSettled(page);
+        const cards = await graph.locator("g.nodes > g rect.card").evaluateAll((all) =>
+          all.map((card) => {
+            const b = card.getBoundingClientRect();
+            return { id: card.parentElement?.getAttribute("data-node-id"), b };
+          }),
+        );
+        // Every recorded track is on the map, an undated one too: none is dropped or doubled.
+        expect(
+          await graph
+            .locator("g.nodes > g")
+            .evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id"))),
+        ).toEqual(expect.arrayContaining(nodeIds));
+        await expect(graph.locator("g.nodes > g")).toHaveCount(nodeIds.length);
+        expect(cards).toHaveLength(nodeIds.length);
+        for (const [i, { id, b }] of cards.entries()) {
+          for (const other of cards.slice(i + 1)) {
+            const o = other.b;
+            const apart =
+              b.right <= o.left + 0.5 ||
+              o.right <= b.left + 0.5 ||
+              b.bottom <= o.top + 0.5 ||
+              o.bottom <= b.top + 0.5;
+            expect(apart, `${id} and ${other.id}`).toBe(true);
+          }
+        }
+      }
+      await expect(page.locator("footer")).toHaveCount(0);
+      await noSidewaysScroll(page);
+      await shot(page, testInfo, `recorded-${slug}-${width}`);
+      expect(await analyses(page)).toEqual([]);
+      expect(problems).toEqual([]);
+    });
+  }
+}

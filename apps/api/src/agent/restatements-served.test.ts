@@ -1,23 +1,20 @@
 /**
  * A result stored before the verifier kept one claim per fact is served with each fact once: from
  * the long-term store (servedResult) and as a run's own stored result (GET /api/runs, resultOf).
- * The One More Time recording's result stands in for such a result.
+ * The One More Time recording's result as made before one claim per fact (the pinned copy,
+ * replay/testing/recordings.ts) stands in for such a result.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
+import type { TrackAnalysis } from "@liner-notes/contract";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { resultOf } from "../http/routes/runs.js";
 import { captureLogsForTests } from "../logger.js";
-import { DEFAULT_REPLAY_DIR } from "../replay/records.js";
+import { pinnedRecord } from "../replay/testing/recordings.js";
 import type { RunRecord } from "../store/runs.js";
 import type { TrackData } from "./schema.js";
 import { servedResult } from "./storedResults.js";
 
-const { analysis } = ReplayRecord.parse(
-  JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "one-more-time-daft-punk.json"), "utf8")),
-);
+const { analysis } = pinnedRecord();
 const recorded = analysis.claims ?? [];
 
 describe("a result stored before one claim per fact", () => {

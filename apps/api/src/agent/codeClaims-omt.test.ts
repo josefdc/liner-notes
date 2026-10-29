@@ -1,14 +1,15 @@
 /**
- * Code-built claims and links on the evidence of the recorded One More Time run
- * (fixtures/replays/one-more-time-daft-punk.json): what the curation keeps, and that the nodes
+ * Code-built claims and links on the evidence of the recorded One More Time run (the copy pinned
+ * at 98e88946b9b5 in fixtures/pinned, replay/testing/recordings.ts, so a re-record of the
+ * showcase leaves this evidence as it is): what the curation keeps, and that the nodes
  * made from its records never take this track's own numbers away from the numeric check.
  */
 
-import { readFileSync } from "node:fs";
 import type { Claim, Evidence } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { buildCodeClaims, withCodeClaims } from "./codeClaims.js";
 import { type PrimaryRelation, relationsIssue } from "./research/relations.js";
+import { pinnedRecord } from "../replay/testing/recordings.js";
 import { audioV2 } from "./testing/measuredAudio.js";
 import { checkClaims } from "./verifier/index.js";
 import { draftOf, modelClaim } from "./verifier/testing.js";
@@ -30,13 +31,7 @@ const REF =
  * against it as a cache hit checks it).
  */
 function oneMoreTime(): { evidence: Evidence[]; relations: PrimaryRelation[] } {
-  const fixture = JSON.parse(
-    readFileSync(
-      new URL("../../../../fixtures/replays/one-more-time-daft-punk.json", import.meta.url),
-      "utf8",
-    ),
-  );
-  const evidence: Evidence[] = fixture.analysis.evidence;
+  const evidence: Evidence[] = pinnedRecord().analysis.evidence ?? [];
   const relations: PrimaryRelation[] = [];
   for (const item of evidence) {
     const match = item.source === "musicbrainz" ? REF.exec(item.recordRef ?? "") : null;

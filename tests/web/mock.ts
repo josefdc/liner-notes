@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -156,23 +156,97 @@ export function fullResultData() {
   return events.find((event) => event.type === "complete")?.data;
 }
 
+/** The committed showcase recordings (fixtures/replays at the repository root). */
+const replayDir = join(mockDir, "..", "..", "fixtures", "replays");
+
+/** The first showcase, which the README, the demo and most specs open. */
+export const DEMO_SLUG = "one-more-time-daft-punk";
+
+/** A committed showcase recording, `fixtures/replays/<slug>.json`, checked by the contract. */
+export function recordingOf(slug: string = DEMO_SLUG) {
+  return ReplayRecord.parse(JSON.parse(readFileSync(join(replayDir, `${slug}.json`), "utf8")));
+}
+
+/** The day a source was read, as the app gives it ("28 Oct 2026", in UTC); null when unreadable. */
+export function retrievedDay(retrievedAt: string): string | null {
+  const date = new Date(retrievedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /**
- * The recorded demo run (fixtures/replays/one-more-time-daft-punk.json) as the API replays it
- * (apps/api/src/replay/player.ts): its events without their run id and `seq` and without the
- * recorded `done`, each with its time since the run started (its own `elapsedMs`, else its
- * `atMs`), the replay notice right after `connected`, and the result the API's own
- * `replayedAnalysis` serves: a replay of run `runId`, with the recording's date and commit, each
- * fact stated once. Returns the analysis stream's events, ending with `complete` and `done`.
+ * Every committed showcase recording, in order, as a spec opens it: its slug, the query that
+ * finds it, its track, its song-relations map's size (tracks and links as recorded) and its tracks, a track on
+ * it with a sourced link to this one and the day that link's record was read, and a track with a
+ * model link to this one and the verifier's verdict on it (null when the run made none).
  */
-export function replayedRecording(runId = "replay-run") {
-  const record = ReplayRecord.parse(
-    JSON.parse(
-      readFileSync(
-        join(mockDir, "..", "..", "fixtures", "replays", "one-more-time-daft-punk.json"),
-        "utf8",
-      ),
-    ),
-  );
+export function showcaseRecordings() {
+  return readdirSync(replayDir)
+    .filter((file) => file.endsWith(".json"))
+    .sort()
+    .map((file) => {
+      const record = recordingOf(file.slice(0, -".json".length));
+      const { id, title, artist, genealogy, evidence, claims } = record.analysis;
+      const current = genealogy.nodes.find((node) => node.group === 1)?.id;
+      const touches = (link: { source: string; target: string }) =>
+        link.source === current || link.target === current;
+      const other = (link: { source: string; target: string }) =>
+        link.source === current ? link.target : link.source;
+      // The first track joined to this one by a link built from a record (a MusicBrainz relation).
+      const sourced = genealogy.links.find(
+        (link) => link.origin === "code" && link.kind === "sourced" && touches(link),
+      );
+      const read = sourced?.evidenceIds
+        ?.map((evidenceId) => evidence?.find((item) => item.id === evidenceId)?.retrievedAt)
+        .find((retrievedAt) => retrievedAt !== undefined);
+      // The first track joined to this one by a link the model proposed, with the claim behind it.
+      const proposed = genealogy.links.find(
+        (link) => link.origin === "model" && link.claimId && touches(link),
+      );
+      const claim = proposed ? claims?.find((item) => item.id === proposed.claimId) : undefined;
+      return {
+        slug: record.slug,
+        query: record.request.query,
+        trackId: id,
+        title,
+        artist,
+        nodes: genealogy.nodes.length,
+        nodeIds: genealogy.nodes.map((node) => node.id),
+        links: genealogy.links.length,
+        sourcedNode: sourced
+          ? sourced.source === current
+            ? sourced.target
+            : sourced.source
+          : null,
+        sourcedRetrieved: read ? retrievedDay(read) : null,
+        modelLink:
+          proposed && claim
+            ? {
+                node: other(proposed),
+                verdict: claim.verdict ?? null,
+                verdictReason: claim.verdictReason ?? null,
+              }
+            : null,
+      };
+    });
+}
+
+/**
+ * A recorded showcase run (by default the demo, fixtures/replays/one-more-time-daft-punk.json)
+ * as the API replays it (apps/api/src/replay/player.ts): its events without their run id and
+ * `seq` and without the recorded `done`, each with its time since the run started (its own
+ * `elapsedMs`, else its `atMs`), the replay notice right after `connected`, and the result the
+ * API's own `replayedAnalysis` serves: a replay of run `runId`, with the recording's date and
+ * commit, each fact stated once. Returns the analysis stream's events, ending with `complete`
+ * and `done`.
+ */
+export function replayedRecording(slug: string = DEMO_SLUG, runId = "replay-run") {
+  const record = recordingOf(slug);
   const result = replayedAnalysis(record, runId);
   // The API's own notice, without its send time.
   const { timestamp: _sent, ...notice } = replayNotice(record) as Record<string, unknown>;

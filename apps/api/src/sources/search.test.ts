@@ -253,6 +253,53 @@ describe("web research searches", () => {
     expect(isSocialPage("https://www.ycombinator.com/companies")).toBe(false);
   });
 
+  it("leaves out a Spotify listener's page: a user's profile or playlist, never a catalogue page", async () => {
+    const pages = [
+      "https://open.spotify.com/user/1195741771/playlist/4dO9EE9qATbTOWnAH3IcbQ",
+      "https://open.spotify.com/user/1195741771",
+      "https://open.spotify.com/playlist/4dO9EE9qATbTOWnAH3IcbQ",
+      "https://open.spotify.com/intl-de/playlist/4dO9EE9qATbTOWnAH3IcbQ",
+      "https://open.spotify.com/show/2mTUnDkuKUkhiueKcVWoP0",
+      "https://play.spotify.com/user/1195741771",
+      "https://open-spotify-com.translate.goog/user/1195741771",
+      "https://web.archive.org/web/2020/https://open.spotify.com/user/1195741771",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(
+            answer([
+              ...pages.map((url) => ({
+                ...WHOSAMPLED,
+                url,
+                title: "What's The Sample? - playlist by Somebody",
+              })),
+              WHOSAMPLED,
+            ]),
+          )
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Bitter Sweet Symphony",
+      artistName: "The Verve",
+    });
+
+    expect(net.calls).toHaveLength(1);
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    // The catalogue: a track, an album or an artist, also under a language prefix.
+    for (const url of [
+      "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw",
+      "https://open.spotify.com/album/4hsxw8OBR2o5eOxbsXfk1D",
+      "https://open.spotify.com/artist/2cGwlqi3k18jFpUyTrsR84?si=abc",
+      "https://open.spotify.com/intl-pt-BR/track/57iDDD9N9tTWe75x6qhStw",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+    // Spotify's other sites are not its listeners' pages.
+    expect(isSocialPage("https://newsroom.spotify.com/2024-01-01/a-story/")).toBe(false);
+  });
+
   it("excludes Quora and Gearspace, and leaves out Discogs' forum and group pages only", async () => {
     const pages = [
       "https://www.quora.com/What-does-One-More-Time-by-Daft-Punk-sample",

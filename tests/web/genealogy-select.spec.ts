@@ -6,8 +6,10 @@ import {
   apiRequests,
   collectProblems,
   loadFixture,
+  DEMO_SLUG,
   openPlayer,
   replayedRecording,
+  showcaseRecordings,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
@@ -98,25 +100,101 @@ const SHOWCASES = {
     },
     replay: false,
   },
-  "one-more-time": {
-    open: async (page: Page) => {
-      const { events } = replayedRecording();
-      await useMockApi(page, { suggestions: [], eventGapMs: 0, streams: { [ANALYZE]: events } });
-      await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
-      await openPlayer(page);
-    },
-    code: { id: "mb-cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb", retrieved: "27 Oct 2026" },
-    model: null,
-    replay: true,
-  },
 } as const;
 
-for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES)) {
-  for (const [width, height] of [
+type Showcase = {
+  open: (page: Page) => Promise<void>;
+  /** A card with a code-built link, and the day its record was read ("20 Oct 2026"). */
+  code: { id: string; retrieved: string | RegExp };
+  /** A card with a model link, and the verifier's verdict its panel shows; or none. */
+  model: { id: string; verdict: string } | null;
+  replay: boolean;
+  /** The widths of the selection's checks (the panel clear of the cards). */
+  widths?: ReadonlyArray<readonly [number, number]>;
+};
+
+/**
+ * What the panel says the verifier found of a model link, from the recorded claim's own verdict
+ * and reason (DetailPanel's verifierText, written out here so the spec does not take it on trust).
+ */
+function recordedVerdict(verdict: string | null, reason: string | null): string {
+  const why = reason?.trim();
+  if (verdict === "partial") {
+    return `Verifier: partly supported: ${why || "the verifier did not say which part is unsupported"}`;
+  }
+  if (verdict === "unsupported") {
+    return `Verifier: not supported by its sources: ${why || "the verifier gave no reason"}`;
+  }
+  if (verdict === "supported") return `Verifier: supported by its sources${why ? ` · ${why}` : ""}`;
+  if (verdict === null) return "Verifier: not checked by the verifier";
+  throw new Error(`no wording checked here for a "${verdict}" verdict`);
+}
+
+const recordings = showcaseRecordings();
+
+test("every showcase recording is checked here: each map is a canvas with a sourced link, read on a day the panel can give", () => {
+  for (const { slug, links, sourcedNode, sourcedRetrieved } of recordings) {
+    expect(links, `${slug}: links on its map`).toBeGreaterThan(2);
+    expect(sourcedNode, `${slug}: a track with a sourced link`).not.toBeNull();
+    expect(sourcedRetrieved, `${slug}: the day that link's record was read`).not.toBeNull();
+  }
+});
+
+/**
+ * Each committed showcase recording, replayed as the API serves it, at a phone's width and
+ * desktop sizes from 1280 px; One More Time also at 1024 px. Its sourced card is the first track
+ * joined to it by a MusicBrainz relation, with the day that record was read as recorded; its
+ * model card, when the run proposed a link, the first such track, with the recorded verdict.
+ */
+const RECORDED: Record<string, Showcase> = Object.fromEntries(
+  recordings.map(({ slug, query, sourcedNode, sourcedRetrieved, modelLink }) => [
+    slug,
+    {
+      open: async (page: Page) => {
+        const { events } = replayedRecording(slug);
+        await useMockApi(page, {
+          suggestions: [],
+          eventGapMs: 0,
+          streams: { [ANALYZE]: events },
+        });
+        await analyzeAndOpenDashboard(page, query);
+        await openPlayer(page);
+      },
+      code: { id: sourcedNode ?? "(none)", retrieved: sourcedRetrieved ?? "(unreadable)" },
+      model: modelLink
+        ? {
+            id: modelLink.node,
+            verdict: recordedVerdict(modelLink.verdict, modelLink.verdictReason),
+          }
+        : null,
+      replay: true,
+      widths:
+        slug === DEMO_SLUG
+          ? [
+              [390, 844],
+              [1024, 768],
+              [1280, 800],
+              [1440, 900],
+              [1920, 1080],
+            ]
+          : [
+              [390, 844],
+              [1280, 800],
+              [1440, 900],
+              [1920, 1080],
+            ],
+    },
+  ]),
+);
+
+const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
+
+for (const [showcase, { open, code, model, replay, widths }] of Object.entries(SHOWN)) {
+  for (const [width, height] of widths ?? [
     [390, 844],
     [1024, 768],
     [1440, 900],
-  ] as const) {
+  ]) {
     test(`at ${width} px on ${showcase} a click or Enter selects, the panel shows the evidence and stays clear, Analyze analyses`, async ({
       page,
     }, testInfo) => {
@@ -145,7 +223,11 @@ for (const [showcase, { open, code, model, replay }] of Object.entries(SHOWCASES
       // The code link: "Sourced from" the record, its source a link, and the day it was read.
       const sourced = panel.locator("[data-sourced-from]").first();
       await expect(sourced).toContainText("Sourced from");
-      await expect(sourced).toContainText(`retrieved ${code.retrieved}`);
+      await expect(sourced).toContainText(
+        typeof code.retrieved === "string"
+          ? `retrieved ${code.retrieved}`
+          : new RegExp(`retrieved ${code.retrieved.source}`),
+      );
       await expect(sourced.locator("a[href^='https://']").first()).toBeVisible();
       // In a replay the pair cannot play, and the panel says where it does.
       if (replay) {

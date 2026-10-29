@@ -21,6 +21,21 @@
  * (cleanCommit). --allow-dirty records it anyway for a local experiment, stamped "-dirty", so the
  * committed recordings' own check (demo-recording.test.ts) still refuses it.
  *
+ * A web search page's excerpt that holds a long token-shaped run is recorded, whole, as
+ * "[excerpt withheld: it held a token-shaped run]" (recorder.ts `withoutPageTokens`), in every
+ * place its item appears, with the item's title, url and source kept; one that also holds a
+ * configured credential or a part of one, another secret shape, or a link with a secret, or that
+ * a claim or a map link cites, is refused instead. The recorder prints which items it withheld
+ * and how many runs each held. The record itself says so only in that note (the replay format
+ * has no other place for it): the commit that adds the recording names the items. Only web
+ * search excerpts are withheld.
+ *
+ * The file is written as `JSON.stringify(record, null, 2)`. A committed recording is that file
+ * formatted with Biome afterwards (`npx biome format --write fixtures/replays/<slug>.json`, as
+ * `npm run lint` requires): only its whitespace changes, and its JSON content must be identical
+ * to what the recorder wrote. To compare a rebuilt record with a committed one, compare the
+ * parsed JSON, or format the rebuilt file the same way first.
+ *
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -36,7 +51,13 @@ import { knownSecrets } from "../llm/cassette.js";
 import { isMainModule } from "../scripts/isMain.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
-import { buildRecord, COMMIT_PATTERN, RecordRefused } from "./recorder.js";
+import {
+  buildRecord,
+  COMMIT_PATTERN,
+  RecordRefused,
+  WITHHELD_EXCERPT,
+  type WithheldExcerpt,
+} from "./recorder.js";
 import { replayDir } from "./records.js";
 
 /** The settings file's values, for the credential check only; empty when there is none. */
@@ -154,6 +175,22 @@ export function cleanCommit({
   return { commit: commit.endsWith(DIRTY) ? commit : `${commit}${DIRTY}` };
 }
 
+/**
+ * The page excerpts the record withheld (recorder.ts `withoutPageTokens`), for the person
+ * recording: which evidence items, and how many long token-shaped runs each held; null for none.
+ */
+export function withheldExcerptsLine(withheld: readonly WithheldExcerpt[]): string | null {
+  if (withheld.length === 0) return null;
+  const total = withheld.reduce((sum, item) => sum + item.runs, 0);
+  const items = withheld.map(({ evidenceId, runs }) => `${evidenceId} (${runs})`).join(", ");
+  const pages =
+    withheld.length === 1 ? "the excerpt of 1 page" : `the excerpts of ${withheld.length} pages`;
+  return (
+    `Withheld ${pages}, which held ${total} long token-shaped ${total === 1 ? "run" : "runs"}, ` +
+    `as "${WITHHELD_EXCERPT}": ${items}`
+  );
+}
+
 export interface RecordDependencies {
   /** The settings file's values for the credential check (default: apps/api/.env). */
   settingsFileValues?: () => NodeJS.ProcessEnv;
@@ -245,6 +282,8 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     record = built.record;
     for (const warning of built.warnings) console.warn(`Warning: the result breaks ${warning}`);
     if (built.noCover) console.warn(`Warning: no cover kept: ${built.noCover}`);
+    const withheld = withheldExcerptsLine(built.withheldExcerpts);
+    if (withheld) console.log(withheld);
   } catch (err) {
     if (err instanceof RecordRefused) {
       console.error(err.message);

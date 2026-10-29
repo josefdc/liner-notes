@@ -4,7 +4,8 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MIGRATIONS, runMigrations } from "../store/migrations.js";
-import { cleanCommit, DIRTY_REFUSAL, main, recordCommit } from "./record.js";
+import { cleanCommit, DIRTY_REFUSAL, main, recordCommit, withheldExcerptsLine } from "./record.js";
+import { WITHHELD_EXCERPT } from "./recorder.js";
 
 describe("the commit a record names", () => {
   it("is the one the run ran at", () => {
@@ -140,6 +141,29 @@ describe("replay:record on a database migrated before commits were kept", () => 
     expect(code).toBe(1);
     expect(errors.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
       /has no stored commit.*pass --commit/,
+    );
+  });
+});
+
+describe("the page excerpts the record withheld", () => {
+  it("are printed with their runs and the evidence items, and nothing when there is none", () => {
+    expect(withheldExcerptsLine([])).toBeNull();
+    expect(
+      withheldExcerptsLine([{ evidenceId: "tavily:https://songs.example.com/a", runs: 1 }]),
+    ).toBe(
+      'Withheld the excerpt of 1 page, which held 1 long token-shaped run, as "' +
+        WITHHELD_EXCERPT +
+        '": tavily:https://songs.example.com/a (1)',
+    );
+    expect(
+      withheldExcerptsLine([
+        { evidenceId: "tavily:https://a.example/", runs: 2 },
+        { evidenceId: "tavily:https://b.example/", runs: 1 },
+      ]),
+    ).toBe(
+      'Withheld the excerpts of 2 pages, which held 3 long token-shaped runs, as "' +
+        WITHHELD_EXCERPT +
+        '": tavily:https://a.example/ (2), tavily:https://b.example/ (1)',
     );
   });
 });

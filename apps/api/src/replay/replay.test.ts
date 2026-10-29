@@ -87,6 +87,7 @@ import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
 import { playRecord, replayedAnalysis, setReplayPacingForTests } from "./player.js";
+import { DEMO_SLUG } from "./testing/recordings.js";
 import {
   archiveCoverOf,
   buildRecord,
@@ -94,6 +95,7 @@ import {
   publicTextsOf,
   RecordRefused,
   recordedRunId,
+  WITHHELD_EXCERPT,
   withoutMediaFields,
 } from "./recorder.js";
 import {
@@ -107,6 +109,13 @@ const TRACK_ID = "0ReplayTestTrack000001";
 const CHOICE_A = "0ReplayTestTrackA00001";
 const CHOICE_B = "0ReplayTestTrackB00001";
 const SECRET = "configured-secret-value-123456";
+
+/** The committed demo recording (One More Time), as the replay directory loads it. */
+function demoReplay() {
+  const found = loadReplays(DEFAULT_REPLAY_DIR).records.find((r) => r.slug === DEMO_SLUG);
+  if (!found) throw new Error(`no ${DEMO_SLUG} recording in ${DEFAULT_REPLAY_DIR}`);
+  return found;
+}
 
 const live = vi.hoisted(() => ({ scout: 0, search: 0, model: 0 }));
 /** How long the stub scout takes after its status line. */
@@ -591,7 +600,7 @@ describe("the recorder", () => {
   });
 
   it("keeps the time since the run started that each event was sent with, and records events without one", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const { run, events } = fixtureAsLiveRun(fixture, "One More Time Daft Punk");
     // Every event but the first two was sent with its time since the run started (the
     // recording's own times are taken off the first two).
@@ -674,7 +683,7 @@ describe("the recorder", () => {
   });
 
   it("records the dev fixture's content unchanged whatever public text was typed", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     for (const typed of ["One More Time", "daft punk"]) {
       const { run, events } = fixtureAsLiveRun(fixture, typed);
       const { record: built } = buildRecord(run, events, {
@@ -692,7 +701,7 @@ describe("the recorder", () => {
   });
 
   it("does not record how the recorded run's search text matched the track", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const matched = {
       ...fixture,
       analysis: { ...fixture.analysis, queryMatch: "partial" as const },
@@ -708,7 +717,7 @@ describe("the recorder", () => {
   });
 
   it("records a measured result's audio block and analyzer version unchanged, and replays them", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // The fixture's result as the API finalises it today: with the measurement it came from.
     const measured = {
       ...fixture,
@@ -736,7 +745,7 @@ describe("the recorder", () => {
   });
 
   it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const mbid = "4f5e6d7c-1111-4222-8333-944455566677";
     const foreignRun = "9a8b7c6d-2222-4333-8444-a55566677788";
     // As sources/identity.ts builds a MusicBrainz recording item, plus long Discogs and
@@ -1050,6 +1059,29 @@ describe("the recorder", () => {
     ).toEqual([]);
   });
 
+  it("refuses a Spotify listener's page, though the track's own Spotify page is allowed", () => {
+    const user = "https://open.spotify.com/user/1195741771/playlist/4dO9EE9qATbTOWnAH3IcbQ";
+    const track = "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw";
+    const item = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "What's The Sample? - playlist by Somebody",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "A playlist of songs and the songs they sample.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    expect(leaks({ analysis: { evidence: [item(user)] } }, check)).toEqual(
+      expect.arrayContaining([
+        "analysis.evidence[0].id: a social platform page",
+        "analysis.evidence[0].url: a social platform page",
+      ]),
+    );
+    expect(leaks({ analysis: { spotifyUrl: track, evidence: [] } }, check)).toEqual([]);
+  });
+
   it("checks only web evidence for handles: model prose and primary records may name them", () => {
     const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
     const primary = {
@@ -1247,7 +1279,7 @@ describe("the recorder", () => {
       ["<", ">", "Discovery", page, "markup"],
       ["One More Time", "Daft Punk", page, page, "markup"],
     ];
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     const at = (prefix: string) =>
       fixture.events.findIndex(
         ({ event }) => event.type === "status" && event.message.startsWith(prefix),
@@ -1316,7 +1348,7 @@ describe("the recorder", () => {
   });
 
   it("records and loads a track whose title or artist holds < or >, and still refuses markup in a status line", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // The line that names the track: the first status line (a run picked at the track picker
     // has no "Found the track" line; this one stands in for it).
     const found = fixture.events.findIndex(({ event }) => event.type === "status");
@@ -1466,7 +1498,7 @@ describe("the recorded cover from the Cover Art Archive", () => {
 
   /** The dev fixture as a live run that showed Spotify's cover and cited `evidence`. */
   function liveRunWith(evidence: unknown[], extraText = "") {
-    const fixture = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    const fixture = structuredClone(demoReplay());
     const analysis = TrackAnalysis.parse({ ...fixture.analysis, evidence });
     analysis.coverUrl = SPOTIFY_COVER;
     analysis.genealogy.nodes[0].img = SPOTIFY_COVER;
@@ -1651,9 +1683,546 @@ describe("the recorded cover from the Cover Art Archive", () => {
   });
 });
 
+describe("a long token-shaped run in a web page's excerpt", () => {
+  // A song-search page's menu, run together by the search source (as in a recorded run): no
+  // credential, but it has the long-token shape a record must not hold.
+  const MENU_RUN = "StudioPiano2NotesGuitar2TabsSing2NotesDrum2NotesMelody";
+  const PAGE_TEXT = (run: string) =>
+    `### Products Klangio Transcription ${run} Scanner Bulk Transcriptions ### Details | Genre | POP, ROCK, INDIE | Tempo | 85 BPM |`;
+  const PAGE_ID = "tavily:https://songs.example.com/en/s/Daft%20Punk/One%20More%20Time";
+  const page = (excerpt: string, edit: Record<string, unknown> = {}) => ({
+    id: PAGE_ID,
+    source: "tavily" as const,
+    sourceTier: "web" as const,
+    url: "https://songs.example.com/en/s/Daft%20Punk/One%20More%20Time",
+    title: "Daft Punk - One More Time | Song Search",
+    retrievedAt: "2026-10-29T07:02:00.000Z",
+    excerpt,
+    recordRef: null,
+    ...edit,
+  });
+  // A random run of 44, and a configured credential of 75 (no "+" or "/"), and one made as
+  // `openssl rand -base64 48` makes RUN_TOKEN_SECRET (a "+" and a "/", every piece short).
+  const TOKEN = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
+  const CONFIGURED = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJDx7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
+  const CONFIGURED_PLUS = "Ab3dEf6hIj9lMn2pQr5t+Uv8xYz1bCd4fGh7K0mNqRs/Tu9Vw2Xy5Za8Bc1De3Fg4Hi5J";
+  const FRAGMENT_KEY = "Ab3dEf6hIj9lMn2pQr5t-Uv8xYz1bCd4fGh7K0mNq_RsTu";
+
+  /**
+   * The demo recording as the live run it came from, citing `items` besides its own evidence:
+   * in its result and, as the run streamed them, in evidence events before its result.
+   */
+  function liveRunWith(items: unknown[], edit: (analysis: TrackAnalysis) => void = () => {}) {
+    const fixture = structuredClone(demoReplay());
+    const analysis = TrackAnalysis.parse({
+      ...fixture.analysis,
+      evidence: [...(fixture.analysis.evidence ?? []), ...items],
+    });
+    edit(analysis);
+    const at = fixture.events.findIndex((e) => e.event.type === "complete");
+    const before = fixture.events[at - 1];
+    const streamed = items.map((evidence) => ({
+      atMs: before.atMs,
+      event: { type: "evidence", runId: before.event.runId, evidence } as never,
+    }));
+    const events = [...fixture.events.slice(0, at), ...streamed, ...fixture.events.slice(at)];
+    return fixtureAsLiveRun({ ...fixture, analysis, events }, "One More Time Daft Punk");
+  }
+  const build = ({ run, events }: ReturnType<typeof liveRunWith>, secrets: string[] = []) =>
+    buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets });
+  const excerpts = (built: ReturnType<typeof build>["record"], id = PAGE_ID) => {
+    const streamed = built.events.flatMap(({ event }) =>
+      event.type === "evidence" && event.evidence.id === id ? [event.evidence.excerpt] : [],
+    );
+    const complete = built.events.find((e) => e.event.type === "complete")?.event as
+      | { data: TrackAnalysis }
+      | undefined;
+    const inResult = (analysis: TrackAnalysis | undefined) =>
+      (analysis?.evidence ?? []).filter((e) => e.id === id).map((e) => e.excerpt);
+    return [...streamed, ...inResult(complete?.data), ...inResult(built.analysis)];
+  };
+  /** The reasons a record of the run is refused for, on the page items' excerpts. */
+  const onExcerpts = (reasons: string[]) =>
+    reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+  /** Asserts that no 8 characters in a row of any of `secrets` are in `text`. */
+  const holdsNoPiece = (text: string, secrets: string[], what: string) => {
+    for (const secret of secrets) {
+      for (let at = 0; at + 8 <= secret.length; at++) {
+        expect(text, what).not.toContain(secret.slice(at, at + 8));
+      }
+    }
+  };
+
+  it("withholds the whole excerpt: a fixed note in every place the item appears, and the recorder says where", () => {
+    const built = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
+    // In the evidence event, in the complete event's result and in the record's result.
+    expect(excerpts(built.record)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+    expect(WITHHELD_EXCERPT).toBe("[excerpt withheld: it held a token-shaped run]");
+    const text = JSON.stringify(built.record);
+    expect(text).not.toContain(MENU_RUN);
+    // Nothing of the page's text is kept, not even its ordinary words.
+    expect(text).not.toContain("Klangio Transcription");
+    // The item's title, url and source are kept.
+    expect(built.record.analysis.evidence?.at(-1)).toEqual(page(WITHHELD_EXCERPT));
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: PAGE_ID, runs: 1 }]);
+    // The rest of the record is as before.
+    const plain = build(liveRunWith([]));
+    expect(plain.withheldExcerpts).toEqual([]);
+    expect(built.record.analysis.evidence?.slice(0, -1)).toEqual(plain.record.analysis.evidence);
+    expect(built.record.analysis.claims).toEqual(plain.record.analysis.claims);
+  });
+
+  it("is still refused anywhere but a page's excerpt: a model's text, the page's title, a record's excerpt", () => {
+    const where: Array<[string, ReturnType<typeof liveRunWith>, RegExp]> = [
+      [
+        "a claim the model wrote",
+        liveRunWith([], (analysis) => {
+          analysis.claims![0].text = `${analysis.claims![0].text} ${MENU_RUN}`;
+        }),
+        /^analysis\.claims\[0\]\.text: a long token$/,
+      ],
+      [
+        "the page's title",
+        liveRunWith([page("A plain excerpt.", { title: `Song Search ${MENU_RUN}` })]),
+        /^analysis\.evidence\[\d+\]\.title: a long token$/,
+      ],
+      [
+        "a primary record's excerpt, read from an API",
+        liveRunWith([
+          page(PAGE_TEXT(MENU_RUN), {
+            id: "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/x",
+            source: "musicbrainz",
+            sourceTier: "primary-record",
+            url: "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+            recordRef: "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+          }),
+        ]),
+        /^analysis\.evidence\[\d+\]\.excerpt: a long token$/,
+      ],
+    ];
+    for (const [what, live, reason] of where) {
+      const reasons = refusal(() => build(live));
+      expect(
+        reasons.filter((r) => reason.test(r)),
+        what,
+      ).toHaveLength(1);
+    }
+  });
+
+  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", () => {
+    const tail = "Zx9Qw3Er7Ty1Ui5Op";
+    // A base64 value: a run of 44 the long-token rule matches, then "/", a tail and padding.
+    const head = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJD";
+    const b64tail = "x7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
+    const cases: Array<[string, string, string[]]> = [
+      [
+        "a random run, a value and a dotted run",
+        `A run ${TOKEN}, a value ${head}/${b64tail}== and ${MENU_RUN}.Zx9Qw3Er7Ty1Ui5Op2As8Df4G on the page.`,
+        [TOKEN, `${head}/${b64tail}==`, "Zx9Qw3Er7Ty1Ui5Op2As8Df4G"],
+      ],
+      // As `openssl rand -base64 48` makes RUN_TOKEN_SECRET: one with a piece of 40 or more
+      // between its "+" and "/", one with none.
+      [
+        "a base64 value with a long piece",
+        "The secret 24MhF2bmL3sFImOnB4IRd56UZ9WiIv2OQ22Hgi2Ok/cKhEZZ7scoKd9v12XgSAXC was printed.",
+        ["24MhF2bmL3sFImOnB4IRd56UZ9WiIv2OQ22Hgi2Ok/cKhEZZ7scoKd9v12XgSAXC"],
+      ],
+      [
+        "a base64 value of short pieces",
+        "The secret W+cJlEwVD9gj6McMkeGh0lxSJs9D5gkkp8wavmeP/QEW+avRYnM3Onad354MN4nD was printed.",
+        ["W+cJlEwVD9gj6McMkeGh0lxSJs9D5gkkp8wavmeP/QEW+avRYnM3Onad354MN4nD"],
+      ],
+      // A JSON object: a long client id beside a client secret under the long-token length.
+      [
+        "a JSON id and secret, both unquoted names",
+        `{client_id:${TOKEN},secret_part:${tail}2As8Df4Gh6Jk0L}`,
+        [TOKEN, `${tail}2As8Df4Gh6Jk0L`],
+      ],
+      // Wrapped over two lines.
+      ["a run wrapped over two lines", `page ${TOKEN}\n${tail} end`, [TOKEN, tail]],
+    ];
+    // A run, then any character, then a tail: a quote, a bracket, a space of any kind, a
+    // newline, punctuation, a soft hyphen or a zero-width character.
+    for (const glue of [
+      '"',
+      "'",
+      "(",
+      "<",
+      " ",
+      " ",
+      "\n",
+      "　",
+      ":",
+      ",",
+      "#",
+      "­",
+      "​",
+      "‌",
+      "‍",
+      "⁠",
+      "﻿",
+    ]) {
+      const what = `U+${glue.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`;
+      cases.push([`a run, ${what} and a tail`, `creds ${TOKEN}${glue}${tail} end`, [TOKEN, tail]]);
+    }
+    for (const [what, excerpt, secrets] of cases) {
+      const built = build(liveRunWith([page(excerpt)]));
+      expect(excerpts(built.record), what).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+      holdsNoPiece(JSON.stringify(built.record), secrets, what);
+    }
+    // An excerpt with no long run is kept as it is, glued or not.
+    const plain = build(liveRunWith([page("Genre:POP,ROCK#indie and Tempo:85 BPM")]));
+    expect(excerpts(plain.record)).toEqual(Array(3).fill("Genre:POP,ROCK#indie and Tempo:85 BPM"));
+    expect(plain.withheldExcerpts).toEqual([]);
+  });
+
+  it("refuses an excerpt that holds a configured credential, whole or in part, by name, and writes nothing", () => {
+    // evidencePack.ts cuts each excerpt at 499 characters and adds "…": here inside the
+    // credential, so only its first 49 characters are on the page.
+    const pageText = `${"page text ".repeat(45)}${CONFIGURED}`;
+    const cut = `${pageText.slice(0, 499)}…`;
+    expect(cut).toContain(CONFIGURED.slice(0, 49));
+    expect(cut).not.toContain(CONFIGURED);
+    const cases: Array<[string, string, string]> = [
+      ["cut at 499 characters", cut, CONFIGURED],
+      [
+        "wrapped over two lines",
+        `page ${CONFIGURED.slice(0, 44)}\n${CONFIGURED.slice(44)} end`,
+        CONFIGURED,
+      ],
+      ["its last 12 characters", `page ${MENU_RUN} and ${CONFIGURED.slice(-12)} end`, CONFIGURED],
+      ['with "+" shown as a space', `x ${CONFIGURED_PLUS.replace("+", " ")} y`, CONFIGURED_PLUS],
+      ['with "+" as &#43;', `x ${CONFIGURED_PLUS.replace("+", "&#43;")} y`, CONFIGURED_PLUS],
+      ['with "+" as %2B', `x ${CONFIGURED_PLUS.replace("+", "%2B")} y`, CONFIGURED_PLUS],
+      ['with "/" as %2F', `x ${CONFIGURED_PLUS.replace("/", "%2F")} y`, CONFIGURED_PLUS],
+      ["whole", `Oops ${CONFIGURED_PLUS} leaked`, CONFIGURED_PLUS],
+    ];
+    for (const [what, excerpt, secret] of cases) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), [secret])));
+      expect(onPage, what).toHaveLength(3);
+      for (const reason of onPage) expect(reason, what).toMatch(/: a configured credential$/);
+    }
+    // A credential whose pieces between its "+" are all under 12 characters: found as the page
+    // shows its "+", as a space or "&#43;".
+    const pieces = "Ab3dEf6hIj+Uv8xYz1bCd+Tu9Vw2Xy5Z+a8Bc1De3Fg+Hi5JkLm";
+    for (const plus of [" ", "&#43;"]) {
+      const excerpt = `x ${pieces.replaceAll("+", plus)} y ${MENU_RUN}`;
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), [pieces])));
+      expect(onPage, plus).toHaveLength(3);
+      for (const reason of onPage) expect(reason, plus).toMatch(/: a configured credential$/);
+    }
+    // 11 characters of it are not a part a page could only have from the credential.
+    const short = build(liveRunWith([page(`page ${MENU_RUN} and ${CONFIGURED.slice(-11)} end`)]), [
+      CONFIGURED,
+    ]);
+    expect(excerpts(short.record)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+  });
+
+  it('refuses a configured credential with a "+" by name in the model\'s text too, with "/" as %2F', () => {
+    for (const shown of [CONFIGURED_PLUS, CONFIGURED_PLUS.replace("/", "%2F")]) {
+      const inClaim = liveRunWith([], (analysis) => {
+        analysis.claims![0].text = `${analysis.claims![0].text} ${shown}`;
+      });
+      expect(
+        refusal(() => build(inClaim, [CONFIGURED_PLUS])),
+        shown,
+      ).toContain("analysis.claims[0].text: a configured credential");
+    }
+    // A credential with a "%" in it is found as it is written, not only decoded.
+    const percent = "Zx9Qw3%41Er7Ty1Ui5Op";
+    const withPercent = liveRunWith([], (analysis) => {
+      analysis.claims![0].text = `${analysis.claims![0].text} ${percent}`;
+    });
+    expect(refusal(() => build(withPercent, [percent]))).toContain(
+      "analysis.claims[0].text: a configured credential",
+    );
+  });
+
+  it("refuses an excerpt with a run when a claim or a map link cites the item", () => {
+    const cases: Array<[string, (analysis: TrackAnalysis) => void]> = [
+      ["a claim", (analysis) => analysis.claims![0].evidenceIds.push(PAGE_ID)],
+      [
+        "a map link",
+        (analysis) => {
+          const link = analysis.genealogy!.links[0];
+          link.evidenceIds = [...(link.evidenceIds ?? []), PAGE_ID];
+        },
+      ],
+    ];
+    for (const [what, edit] of cases) {
+      const reasons = refusal(() => build(liveRunWith([page(PAGE_TEXT(MENU_RUN))], edit)));
+      const onPage = onExcerpts(reasons);
+      expect(onPage, what).toHaveLength(3);
+      for (const reason of onPage) {
+        expect(reason, what).toMatch(/: a cited page excerpt holds a long token$/);
+      }
+    }
+    // Cited, with no run in it: kept as it is.
+    const cited = build(
+      liveRunWith([page("A plain page.")], (analysis) =>
+        analysis.claims![0].evidenceIds.push(PAGE_ID),
+      ),
+    );
+    expect(excerpts(cited.record)).toEqual(Array(3).fill("A plain page."));
+  });
+
+  it("leaves an excerpt with another secret shape as it is, and refuses it by that rule's name", () => {
+    const sk = "sk-proj-Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNq";
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const cases: Array<[string, string, string[], string]> = [
+      ["a configured credential", `Oops ${sk} leaked`, [sk], "a configured credential"],
+      [
+        "a configured credential glued to text",
+        `Oops leakedKey${sk}Here end`,
+        [sk],
+        "a configured credential",
+      ],
+      ["an sk- key", `A key ${sk} on the page.`, [], "an OpenAI-style key"],
+      ["a JSON web token", `token ${jwt} end`, [], "a JSON web token"],
+      ["a bare JSON web token", `session ${jwt} end`, [], "a JSON web token"],
+      ["a bearer token", `Authorization: Bearer ${TOKEN} end`, [], "a bearer or basic credential"],
+      [
+        "a JSON client secret beside a long client id",
+        `{"client_id":"${TOKEN}","client_secret":"Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0L"}`,
+        [],
+        "a key or token parameter",
+      ],
+      [
+        "a quoted api key",
+        `{'api_key': 'Zx9Qw3Er7Ty1Ui5Op'} ${MENU_RUN}`,
+        [],
+        "a key or token parameter",
+      ],
+      [
+        "an e-mail address beside a run",
+        `${MENU_RUN} write to someone@example.com`,
+        [],
+        "an e-mail address",
+      ],
+      [
+        "a signed link beside a run",
+        `${MENU_RUN} see https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5O now`,
+        [],
+        "a signed URL",
+      ],
+    ];
+    for (const [what, excerpt, secrets, reason] of cases) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), secrets)));
+      expect(onPage, what).toHaveLength(3);
+      for (const found of onPage) expect(found, what).toMatch(new RegExp(`: ${reason}$`));
+    }
+  });
+
+  it('refuses a key or token parameter with a quoted name in any text: `"client_secret":"…"`', () => {
+    const inClaim = liveRunWith([], (analysis) => {
+      analysis.claims![0].text = `${analysis.claims![0].text} {"client_secret":"Zx9Qw3Er7Ty1"}`;
+    });
+    expect(refusal(() => build(inClaim))).toContain(
+      "analysis.claims[0].text: a key or token parameter",
+    );
+  });
+
+  it("is withheld only in a web search page's excerpt: another source's item with a page tier is refused", () => {
+    for (const [source, sourceTier] of [
+      ["discogs", "editorial"],
+      ["musicbrainz", "web"],
+      ["genius", "editorial"],
+    ] as const) {
+      const reasons = refusal(() =>
+        build(
+          liveRunWith([
+            page(`API body ${MENU_RUN}`, {
+              source,
+              sourceTier,
+              id: `${source}:x`,
+              url: "https://www.discogs.com/release/1",
+            }),
+          ]),
+        ),
+      );
+      expect(
+        reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a long token$/.test(r)),
+        `${source}/${sourceTier}`,
+      ).toHaveLength(3);
+    }
+  });
+
+  it("refuses a secret in a link to an allow-listed site, in its path, query or fragment", () => {
+    const cases: Array<[string, string]> = [
+      [`https://genius.com/${TOKEN}`, "a token in a link's path"],
+      ["https://www.discogs.com/search?api_key=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      ["https://www.discogs.com/search?apikey=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      ["https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5O", "a signed URL"],
+      ["https://genius.com/search?access_token=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      [`https://genius.com/search?q=${TOKEN}`, "a long token in a link"],
+      ["https://genius.com/search?q=someone%40example.com", "an e-mail address in a link"],
+      [
+        `https://genius.com/Daft-punk-one-more-time-lyrics#${TOKEN}`,
+        "a token in a link's fragment",
+      ],
+      [
+        "https://genius.com/Daft-punk-one-more-time-lyrics#someone@example.com",
+        "an e-mail address in a link",
+      ],
+      // A base64url key with "-" and "_" (as a file host's link carries its decryption key).
+      [
+        `https://genius.com/Daft-punk-one-more-time-lyrics#${FRAGMENT_KEY}`,
+        "a token in a link's fragment",
+      ],
+    ];
+    for (const [link, reason] of cases) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(`See ${link} now.`)]))));
+      expect(onPage, link).toHaveLength(3);
+      for (const found of onPage) expect(found, link).toMatch(new RegExp(`: ${reason}$`));
+    }
+  });
+
+  it("refuses a web page whose own url carries a token in its fragment", () => {
+    const url = `https://songs.example.com/file/AbCdEfGh#${FRAGMENT_KEY}`;
+    const reasons = refusal(() =>
+      build(liveRunWith([page("A shared file.", { id: `tavily:${url}`, url })])),
+    );
+    expect(reasons.filter((r) => /evidence(\[\d+\])?\.url: /.test(r))).toHaveLength(3);
+  });
+
+  it("keeps a page link whose path, fragment or key parameter only looks like one", () => {
+    for (const link of [
+      "https://genius.com/Daft-punk-one-more-time-lyrics",
+      // A "+" in a path is a "+", not a space: no "Basic " credential here.
+      "https://www.last.fm/music/Basic+Channel/_/Phylyps+Trak",
+      // A section anchor is a page's own name, as a path segment is.
+      "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Track_listing_and_formats_1997_UK_CD_single",
+      "https://en.wikipedia.org/wiki/Billboard_charts#Charts_of_the_1960s_1970s_1980s_and_1990s",
+      // A key parameter that is a slug of words (with a year or not), or token-shaped but under
+      // 16 characters.
+      "https://www.whosampled.com/sample/123/?key=The-Verve-Bitter-Sweet",
+      "https://www.whosampled.com/sample/123/?key=the-verve-bitter-sweet-symphony-1997",
+      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1",
+      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1Ui5",
+    ]) {
+      const fine = build(liveRunWith([page(`See ${link} now.`)]));
+      expect(excerpts(fine.record), link).toEqual(Array(3).fill(`See ${link} now.`));
+    }
+    // The same Last.fm page as a web search result of its own.
+    const lastfm = "https://www.last.fm/music/Basic+Channel/_/Phylyps+Trak";
+    const item = build(
+      liveRunWith([page("A plain page.", { id: `tavily:${lastfm}`, url: lastfm })]),
+    );
+    expect(item.record.analysis.evidence?.at(-1)?.url).toBe(lastfm);
+  });
+
+  it("refuses a link with a user name or password, in a page's excerpt and as a record's url", () => {
+    for (const link of [
+      "https://Ab3dEf6hIj9l:Zx9Qw3Er7Ty1Ui5Op@www.discogs.com/release/1",
+      "https://someone@www.discogs.com/release/1",
+    ]) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(`See ${link} now.`)]))));
+      expect(onPage, link).toHaveLength(3);
+      for (const reason of onPage) expect(reason, link).toMatch(/: credentials in a link$/);
+    }
+    const record = page("A plain record.", {
+      id: "discogs:release/1",
+      source: "discogs",
+      sourceTier: "primary-record",
+      url: "https://admin:Zx9Qw3Er7Ty1Ui5Op@www.discogs.com/release/1",
+      recordRef: "release/1",
+    });
+    expect(
+      refusal(() => build(liveRunWith([record]))).filter((r) =>
+        /evidence(\[\d+\])?\.url: credentials in a link$/.test(r),
+      ),
+    ).toHaveLength(3);
+  });
+
+  it("refuses a key parameter only with a token-shaped value: a musical key is text", () => {
+    const tunebat = "https://tunebat.com/Info/Bitter-Sweet-Symphony?key=Am";
+    const kept = build(
+      liveRunWith([
+        page("Transpose with ?key=G to play it in G. Settings: capo=2&Key=A minor", {
+          id: `tavily:${tunebat}`,
+          url: tunebat,
+        }),
+      ]),
+    );
+    expect(kept.record.analysis.evidence?.at(-1)?.url).toBe(tunebat);
+    const value = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz";
+    expect(value).toHaveLength(32);
+    const reasons = refusal(() =>
+      build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
+    );
+    expect(
+      reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
+    ).toHaveLength(3);
+  });
+
+  it('keeps ordinary text joined by "/" or "+": a chord line, a search, a breadcrumb', () => {
+    for (const excerpt of [
+      "Intro: Am/G/Fmaj7/C/Am/G/Fmaj7/C/Dm7/G7/Em7/Am7/Dm7/G7, then the verse.",
+      "Search: Bitter+Sweet+Symphony+Remastered+2016+The+Verve lyrics and chords",
+      "Home/Music/Daft/Punk/Discovery/2001/One/More/Time/Lyrics and chords",
+    ]) {
+      const kept = build(liveRunWith([page(excerpt)]));
+      expect(excerpts(kept.record), excerpt).toEqual(Array(3).fill(excerpt));
+      expect(kept.withheldExcerpts, excerpt).toEqual([]);
+      // Cited, it is kept too: the recording is not refused.
+      const cited = build(
+        liveRunWith([page(excerpt)], (analysis) => analysis.claims![0].evidenceIds.push(PAGE_ID)),
+      );
+      expect(excerpts(cited.record), excerpt).toEqual(Array(3).fill(excerpt));
+    }
+  });
+
+  it("withholds an editorial-tier page's excerpt as a web-tier one, and refuses it when cited", () => {
+    // An editorial page is on an allow-listed site (a web-tier page may be on any).
+    const url = "https://en.wikipedia.org/wiki/Discovery_(Daft_Punk_album)";
+    const id = `tavily:${url}`;
+    const editorial = page(PAGE_TEXT(MENU_RUN), { id, url, sourceTier: "editorial" });
+    const built = build(liveRunWith([editorial]));
+    expect(excerpts(built.record, id)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: id, runs: 1 }]);
+    const onPage = onExcerpts(
+      refusal(() =>
+        build(liveRunWith([editorial], (analysis) => analysis.claims![0].evidenceIds.push(id))),
+      ),
+    );
+    expect(onPage).toHaveLength(3);
+    for (const reason of onPage) {
+      expect(reason).toMatch(/: a cited page excerpt holds a long token$/);
+    }
+  });
+
+  it("counts every run in the excerpts it withheld, in items that share an id", () => {
+    const built = build(
+      liveRunWith([page(`one ${MENU_RUN}`), page(`two ${MENU_RUN} and ${MENU_RUN}x`)]),
+    );
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: PAGE_ID, runs: 3 }]);
+  });
+
+  it("checks the record again as it is written: the loader takes it", () => {
+    // The loader runs the same checks on every file it reads: the note passes them.
+    const scratch = mkdtempSync(join(tmpdir(), "replay-page-tokens-"));
+    try {
+      const { record: built } = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
+      writeFileSync(join(scratch, `${built.slug}.json`), JSON.stringify(built));
+      const set = loadReplays(scratch);
+      expect(set.problems).toEqual([]);
+      expect(set.records.map((r) => r.slug)).toEqual([built.slug]);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+    // A key too short for the long-token shape, beside a run: refused for the key, by name.
+    const onPage = onExcerpts(
+      refusal(() => build(liveRunWith([page(`${PAGE_TEXT(MENU_RUN)} sk-abcdefghij0123456789`)]))),
+    );
+    expect(onPage).toHaveLength(3);
+    for (const reason of onPage) expect(reason).toMatch(/: an OpenAI-style key$/);
+  });
+});
+
 describe("the player", () => {
   it("serves no search match from a record: it belonged to the recorded run", () => {
-    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const fixture = demoReplay();
     // A record written before the recorder left the match out.
     const older = { ...fixture, analysis: { ...fixture.analysis, queryMatch: "none" as const } };
     const served = replayedAnalysis(older, "0f0e0d0c-aaaa-4bbb-8ccc-000000000002");
@@ -1980,7 +2549,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("caps the wait between recorded events", async () => {
-    const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const dev = demoReplay();
     const recordedMs = dev.events.at(-1)?.atMs ?? 0;
     expect(recordedMs).toBeGreaterThan(5_000);
     const sent: string[] = [];
@@ -2021,7 +2590,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("reports no result when the stream did not send the recorded one", async () => {
-    const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const dev = demoReplay();
     const result = await playRecord(
       dev,
       "some-run",
@@ -2117,7 +2686,7 @@ describe("REPLAY_MODE", () => {
   });
 
   it("sends a recorded event's own time since the run started over its atMs", async () => {
-    const dev = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    const dev = structuredClone(demoReplay());
     // Times that differ from the stream's: the event's own is what the run measured.
     for (const item of dev.events) {
       (item.event as Record<string, unknown>).elapsedMs = item.atMs + 5_000;

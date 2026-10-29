@@ -224,8 +224,23 @@ export function isLyricPage(url: string): boolean {
 }
 
 /**
- * True for a page on a social platform or a forum (SOCIAL_SITES, and FORUM_PATHS by path; also
- * through a translate proxy, in a Wayback Machine copy, and with or without a scheme).
+ * The catalogue pages of a streaming site whose other pages belong to its listeners: on Spotify's
+ * web player (open.spotify.com, play.spotify.com) only a track, album or artist page is kept,
+ * also under a language prefix such as /intl-de/. A user's profile or playlist, a show or anything
+ * else may name a private person or their choices.
+ */
+const SPOTIFY_CATALOGUE =
+  /^\/+(?:intl-[a-z]{2}(?:[-_][a-z]{2})?\/+)?(?:track|album|artist)\/[A-Za-z0-9]+\/?$/i;
+const CATALOGUE_ONLY: ReadonlyArray<readonly [site: string, page: RegExp]> = [
+  ["open.spotify.com", SPOTIFY_CATALOGUE],
+  ["play.spotify.com", SPOTIFY_CATALOGUE],
+];
+
+/**
+ * True for a page on a social platform or a forum (SOCIAL_SITES, and FORUM_PATHS by path), or a
+ * listener's page on a streaming site (any page CATALOGUE_ONLY does not list: a Spotify user's
+ * profile or playlist); also through a translate proxy, in a Wayback Machine copy, and with or
+ * without a scheme.
  */
 export function isSocialPage(url: string): boolean {
   const parsed = looseUrl(url);
@@ -234,6 +249,9 @@ export function isSocialPage(url: string): boolean {
   const named = host.endsWith(".translate.goog") ? unproxyHost(host) : host;
   if (SOCIAL_SITES.some((site) => onSite(named, site))) return true;
   if (FORUM_PATHS.some(([site, path]) => onSite(named, site) && path.test(parsed.pathname))) {
+    return true;
+  }
+  if (CATALOGUE_ONLY.some(([site, page]) => onSite(named, site) && !page.test(parsed.pathname))) {
     return true;
   }
   const inner = translatedPage(parsed, host) ?? archivedPage(parsed, host);

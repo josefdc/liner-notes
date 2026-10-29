@@ -1,22 +1,19 @@
 /**
- * The One More Time recording (fixtures/replays/one-more-time-daft-punk.json), replayed: each of
+ * The One More Time recording as made before one claim per fact (fixtures/pinned, a copy of the
+ * showcase recorded at 98e88946b9b5: replay/testing/recordings.ts), replayed: each of
  * the four facts the model restated beside a code-built claim (the Eddie Johns sample, the Circo
  * Loco sample, the London Elektricity cover, the Discovery release) is stated once, by the
  * code-built claim, and the claims left out are counted. The one model claim on those records
  * that adds information (the brass figure, partly supported) stays, on its card.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { type Claim, ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { oneClaimPerFact } from "../agent/restatements.js";
 import { playRecord, replayedAnalysis, replayNotice } from "./player.js";
-import { DEFAULT_REPLAY_DIR } from "./records.js";
+import { pinnedRecord } from "./testing/recordings.js";
 
-const record = ReplayRecord.parse(
-  JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "one-more-time-daft-punk.json"), "utf8")),
-);
+const record = pinnedRecord();
 
 const RECORDING = "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7";
 /** The record of each fact, by name. */

@@ -2094,12 +2094,10 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       // A section anchor is a page's own name, as a path segment is.
       "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Track_listing_and_formats_1997_UK_CD_single",
       "https://en.wikipedia.org/wiki/Billboard_charts#Charts_of_the_1960s_1970s_1980s_and_1990s",
-      // A key parameter that is a slug of words (with a year or not), or token-shaped but under
-      // 16 characters.
+      // A key parameter that is a slug of words (with a year or not), or a musical key.
       "https://www.whosampled.com/sample/123/?key=The-Verve-Bitter-Sweet",
       "https://www.whosampled.com/sample/123/?key=the-verve-bitter-sweet-symphony-1997",
-      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1",
-      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1Ui5",
+      "https://www.whosampled.com/sample/123/?key=C%23m",
     ]) {
       const fine = build(liveRunWith([page(`See ${link} now.`)]));
       expect(excerpts(fine.record), link).toEqual(Array(3).fill(`See ${link} now.`));
@@ -2146,14 +2144,16 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       ]),
     );
     expect(kept.record.analysis.evidence?.at(-1)?.url).toBe(tunebat);
-    const value = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz";
-    expect(value).toHaveLength(32);
-    const reasons = refusal(() =>
-      build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
-    );
-    expect(
-      reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
-    ).toHaveLength(3);
+    // Token-shaped from 10 characters on: 32, 15 and 12 of them.
+    for (const value of ["Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz", "Zx9Qw3Er7Ty1Ui5", "Zx9Qw3Er7Ty1"]) {
+      const reasons = refusal(() =>
+        build(liveRunWith([page(`See https://www.discogs.com/search?q=a&key=${value} now.`)])),
+      );
+      expect(
+        reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
+        value,
+      ).toHaveLength(3);
+    }
   });
 
   it('keeps ordinary text joined by "/" or "+": a chord line, a search, a breadcrumb', () => {

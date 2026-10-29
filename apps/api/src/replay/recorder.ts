@@ -24,7 +24,8 @@
  * - the excerpt of a web search result (a `tavily` item of the web or editorial tier: text the
  *   search fetched from a third-party page, never a source's API, the model or the app) that
  *   holds, outside its links, a run the long-token rule matches or a long base64 value (one with
- *   a piece of 12 or more characters between its "+" and "/"), becomes
+ *   a piece of 12 or more characters between its "+" and "/", or short pieces with random text's
+ *   mix of cases: `base64Value`), becomes
  *   "[excerpt withheld: it held a token-shaped run]" (WITHHELD_EXCERPT), whole, in every place
  *   the item appears; its title, url and source are kept (`withoutPageTokens`). A page's text
  *   may run words together ("StudioPiano2NotesGuitar2Tabs…") into that shape, and no word of a
@@ -43,9 +44,12 @@
  * `done` (a stream cut short) or has no single `complete`; a paused run whose streams are not
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
- * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
- * outside the allow-listed source sites or one to them with a user name or password, or whose
- * path, query or fragment holds a secret shape or a key parameter (`linkSecret`), a preview or
+ * configured credential (also URL-encoded), a secret-shaped string (SECRET_SHAPES: among them a
+ * long token, a base64 value, 32 or more hex digits other than the record's own commit, an AWS
+ * access key id and a JSON "password" field; in an id field, a token judged as a link's path
+ * segment is), an e-mail address, a URL outside the allow-listed source sites or one to them with
+ * a user name or password, or whose path, query or fragment holds a secret shape, a signature,
+ * key, password or secret parameter, or a token glued to its path (`linkSecret`), a preview or
  * media URL inside text (the Cover Art Archive link `archiveCoverOf` derives is allowed as the
  * result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
@@ -58,11 +62,11 @@
  * title or excerpt with a private @handle, profile boilerplate or a comment thread
  * (webTextIssue), web evidence the run routes refuse (heldTextIssue, which also reads a page
  * written without its scheme), an `error` or `interrupt` event, a commit that is not a commit
- * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The result's other producer checks
- * (`analysisIssues`) are reported as warnings: a run stored by older code may not pass them all,
- * and the record replays what was sent. The loader (records.ts) runs the same checks
- * (`recordIssues`) again on every file it reads, as far as a file can tell, so it never leaves
- * out a file the recorder wrote.
+ * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The
+ * result's other producer checks (`analysisIssues`) are reported as warnings: a run stored by
+ * older code may not pass them all, and the record replays what was sent. The loader (records.ts)
+ * runs the same checks (`recordIssues`) again on every file it reads, as far as a file can tell,
+ * so it never leaves out a file the recorder wrote.
  */
 
 import {
@@ -162,33 +166,106 @@ function isUserAction(event: { type: string; [field: string]: unknown }): boolea
 // Checks
 // =============================================================================
 
-/** Text shaped like a credential, whatever its value (allow-listed page URLs left out). */
-const SECRET_SHAPES: Array<[string, RegExp]> = [
+/** A rule a text is checked against: a pattern, or a test a pattern cannot express. */
+type Shape = { test(text: string): boolean };
+
+/** How often a letter and a digit meet in `text` ("a1", "1a"): random text has many. */
+const alternations = (text: string) => text.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g)?.length ?? 0;
+
+/** 40 or more letters, digits, "-" and "_" with a digit and both cases, as a random key is. */
+const LONG_TOKEN =
+  /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}\b/;
+
+/**
+ * The base64 values of a text: runs of 40 or more characters with a "+" or "/" in them, mixed
+ * case and a digit (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made), whose pieces
+ * between "+" and "/" may all be shorter than the long-token rule reads (`base64Value`).
+ */
+const BASE64_RUNS =
+  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g;
+const BASE64_PIECE = 12;
+const BASE64_HUMP_SPAN = 12;
+
+/**
+ * True when a run BASE64_RUNS found is a base64 value, not words joined by "/" or "+": one of its
+ * pieces has 12 or more characters (BASE64_PIECE), or, every piece being short, a lower-case
+ * letter is followed by a capital at least once per 12 characters, as random text has about once
+ * per 6. A chord line ("Am/G/Fmaj7/C/…/Bm7b5/E7"), a search ("Bitter+Sweet+Symphony+…") or a
+ * breadcrumb ("Home/Music/Daft/Punk/…", "Home/DaftPunk/OneMoreTime/…") has short pieces and few
+ * or no such humps.
+ */
+function base64Value(run: string): boolean {
+  if (run.split(/[+/]/).some((piece) => piece.length >= BASE64_PIECE)) return true;
+  const humps = run.match(/[a-z](?=[A-Z])/g)?.length ?? 0;
+  return humps * BASE64_HUMP_SPAN >= run.length;
+}
+
+/** The long base64 values of `text` (BASE64_RUNS that are `base64Value`s). */
+const base64Values = (text: string) =>
+  [...text.matchAll(BASE64_RUNS)].filter(([run]) => base64Value(run));
+
+/**
+ * Text shaped like a credential, whatever its value (allow-listed page URLs left out). An id
+ * field's value is checked against all of them but the long-token rule (ID_KEY): the ids sources
+ * write (MusicBrainz UUIDs, Discogs, Genius and SecondHandSongs numbers, Spotify's 22-character
+ * ids, `tavily:` and a page's link, which is checked as a link) match none of them.
+ */
+const SECRET_SHAPES: Array<[string, Shape]> = [
   ["a bearer or basic credential", /\b(?:Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/],
   [
     "a key or token parameter",
     /\b(?:api[-_]?key|access_token|client_secret|token)["']?\s*[:=]\s*\S/i,
   ],
+  // A quoted name, as JSON writes one; "password: " in a page's prose is a word.
+  ["a password field", /["']pass(?:word|wd)["']\s*:\s*\S/i],
   ["an OpenAI-style key", /\bsk-[A-Za-z0-9_-]{16,}/],
   ["a Tavily key", /\btvly-[A-Za-z0-9_-]{8,}/],
   ["a Spotify access token", /\bBQ[A-Za-z0-9_-]{40,}/],
   ["a JSON web token", /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./],
   ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  [
-    "a long token",
-    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}\b/,
-  ],
+  ["an AWS access key id", /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/],
+  ["a long token", LONG_TOKEN],
+  ["a base64 value", { test: (text) => base64Values(text).length > 0 }],
+  // 32 or more hex digits with a digit and a letter, in either case (an API key, a digest).
+  // MusicBrainz ids are UUIDs, whose runs of hex digits are 12 at most; the record's own commit
+  // is left out of the text first (`leaks`).
+  ["a hex key", /(?<![A-Za-z0-9])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{32,}(?![A-Za-z0-9])/i],
   ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
 
 /**
- * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
- * message may not: reasonIssue). A bare `key` parameter is one only with a token-shaped value:
- * 16 or more characters in which letters and digits alternate at least twice (`?key=Am`,
- * `?key=the-verve-bitter-sweet-symphony-1997` name a musical key or a page).
+ * Parameters of a URL signed with an expiring token (Akamai, AWS and Google Cloud signatures,
+ * OAuth 1), or carrying a token or key, on any host (as an error message may not: reasonIssue),
+ * in its query or its fragment (`#access_token=`, as an OAuth reply carries it).
  */
-const SIGNED_URL =
-  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=(?=(?:[A-Za-z0-9_-]*?(?:[A-Za-z]\d|\d[A-Za-z])){2})[A-Za-z0-9_-]{16})/i;
+const SIGNED_PARAM =
+  /[?&;~#](?:hdnea|hdnts|x-(?:amz|goog)-[a-z-]+|sig|signature|oauth_(?:token|signature)|token|access_token|api[-_]?key)=/i;
+
+/** A bare `key` parameter's value, as it is written in a link. */
+const KEY_PARAM = /[?&;~#]key=([^&#;\s"'<>]*)/gi;
+const KEY_LENGTH = 10;
+
+/**
+ * True when a `key` parameter's value is token-shaped: URL-decoded (with "+" kept), it starts with
+ * 10 or more letters, digits and `. _ ~ + / = -` in which a letter and a digit meet at least
+ * twice (`Zx9Qw3Er7Ty1`, `Zx9.Qw3E…`, `Zx9%2BQw3E…`). A musical key (`Am`, `C%23m`, `8A`,
+ * `A minor`) is shorter, and a page's slug of words (`the-verve-bitter-sweet-symphony-1997`) has
+ * no letter beside a digit.
+ */
+function tokenKey(value: string): boolean {
+  const run = decodedKeepingPlus(value).match(/^[A-Za-z0-9._~+/=-]*/)?.[0] ?? "";
+  return run.length >= KEY_LENGTH && alternations(run) >= 2;
+}
+
+/** True when `text` holds a signed URL, or a token or token-shaped key parameter (SIGNED_PARAM). */
+function signedUrl(text: string): boolean {
+  return (
+    SIGNED_PARAM.test(text) || [...text.matchAll(KEY_PARAM)].some(([, value]) => tokenKey(value))
+  );
+}
+
+/** A password or a client secret as a link's parameter, in its query or its fragment. */
+const SECRET_PARAM = /[?&;#](?:passw(?:or)?d|(?:client_)?secret)=/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -214,7 +291,7 @@ const WIKIPEDIA = /^[a-z-]+\.(?:m\.)?wikipedia\.org$/;
 
 /** True for a page on an allow-listed site (not signed). */
 function allowedUrl(url: string): boolean {
-  if (SIGNED_URL.test(url)) return false;
+  if (signedUrl(url)) return false;
   try {
     const { protocol, hostname } = new URL(url.startsWith("//") ? `https:${url}` : url);
     if (protocol !== "https:" && protocol !== "http:") return false;
@@ -265,64 +342,95 @@ function webEvidenceTexts(value: unknown, path = "", paths = new Set<string>()):
 }
 
 /**
- * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, 32 or
- * more hex characters, or 32 or more base64 characters without word structure (no separator
- * such as "-", "_" or ".", and letters and digits alternating throughout, as in random text). A
- * slug of words, Title-Case or not ("Why-was-Ice-Ice-Baby-so-popular-in-1990",
- * "IceIceBabyVanillaIce1990SingleRelease"), is a page name, not a token.
+ * A piece of a link's path or fragment (between its separators) shaped like a credential: 32 or
+ * more hex digits, or 32 or more base64 characters in which letters and digits alternate
+ * throughout (at least 4 times), as in random text. A word, Title-Case or not
+ * ("IceIceBabyVanillaIce1990SingleRelease"), is a name, not a token.
+ */
+function tokenPiece(piece: string): boolean {
+  if (/^[A-Fa-f0-9]{32,}$/.test(piece)) return true;
+  return /^[A-Za-z0-9+=]{32,}$/.test(piece) && alternations(piece) >= 4;
+}
+
+/**
+ * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, a piece
+ * between any of its separators that is one (`tokenPiece`: a token glued to a slug by ",", ".",
+ * "-", "_" or ":" is judged on its own), or a random-looking base64url run (`randomRun`). A slug
+ * of words, Title-Case or not ("Why-was-Ice-Ice-Baby-so-popular-in-1990"), is a page name.
  */
 function tokenSegment(segment: string): boolean {
   if (/^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(segment)) return true;
   if (/^(?:sk|pk)[-_][A-Za-z0-9_-]{16,}$/.test(segment)) return true;
-  if (/^[A-Fa-f0-9]{32,}$/.test(segment)) return true;
-  if (!/^[A-Za-z0-9+/=]{32,}$/.test(segment)) return false;
-  const alternations = segment.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
-  return alternations.length >= 4;
+  return segment.split(/[^A-Za-z0-9+=]/).some(tokenPiece) || randomRun(segment);
+}
+
+const RANDOM_RUN = 32;
+/** The longest stretch judged (a key is shorter; a longer one is judged by its stretches). */
+const RANDOM_RUN_MAX = 512;
+
+/**
+ * True when `text` holds a random-looking base64url run: 32 or more letters, digits, "-" and "_",
+ * with a digit and both cases, in which a letter and a digit meet at least once per 8 characters
+ * (a key a link carries, `#Ab3dEf6hIj9lMn2pQr5t-Uv8xYz1bCd4fGh7K0mNq_RsTu`). Each stretch of a
+ * run's pieces between its "-" and "_" is judged, so a key glued to a slug by one is found. A
+ * section anchor or slug of words and years (`Track_listing_and_formats_1997_UK_CD_single`,
+ * `1960s_1970s_1980s_1990s_2000s_and_2010s`) and a MusicBrainz UUID (lower-case hex) are not one.
+ */
+function randomRun(text: string): boolean {
+  for (const [run] of text.matchAll(/[A-Za-z0-9_-]{32,}/g)) {
+    // Counts before each position: where a letter and a digit meet (the character there and
+    // the next), capitals, small letters and digits.
+    const sums = [[0, 0, 0, 0]];
+    for (let i = 0; i < run.length; i++) {
+      const [meet, upper, lower, digit] = sums[i];
+      sums.push([
+        meet + alternations(run.slice(i, i + 2)),
+        upper + (/[A-Z]/.test(run[i]) ? 1 : 0),
+        lower + (/[a-z]/.test(run[i]) ? 1 : 0),
+        digit + (/\d/.test(run[i]) ? 1 : 0),
+      ]);
+    }
+    const seps = [...run.matchAll(/[-_]/g)].map((m) => m.index);
+    const starts = [0, ...seps.map((at) => at + 1)];
+    const ends = [...seps, run.length];
+    for (const start of starts) {
+      for (const end of ends) {
+        if (end - start > RANDOM_RUN_MAX) break;
+        if (end - start < RANDOM_RUN) continue;
+        // Meetings inside the stretch: of the characters at start … end - 2 with the next.
+        const meet = sums[end - 1][0] - sums[start][0];
+        const [upper, lower, digit] = [1, 2, 3].map((k) => sums[end][k] - sums[start][k]);
+        if (upper > 0 && lower > 0 && digit > 0 && meet * 8 >= end - start) return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
- * True when `text` holds a random-looking base64url run: 32 or more letters, digits, "-" and "_"
- * in which a letter and a digit meet at least once per 8 characters (a key a link carries in its
- * fragment, `#Ab3dEf6hIj9lMn2pQr5t-Uv8x…`). A section anchor of words and years
- * (`#Track_listing_and_formats_1997_UK_CD_single`, `#Charts_of_the_1960s_1970s_1980s_and_1990s`)
- * is not one.
+ * Apple Music's editorial playlist ids ("pl." and 32 hex digits): the public page's own name, as
+ * `https://music.apple.com/us/playlist/<name>/pl.<id>` (no account opens it), not a key.
  */
-function randomRun(text: string): boolean {
-  return [...text.matchAll(/[A-Za-z0-9_-]{32,}/g)].some(([run]) => {
-    const alternations = run.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
-    return alternations.length * 8 >= run.length;
-  });
-}
+const APPLE_MUSIC_PLAYLIST = /^pl\.[0-9a-f]{32}$/;
+
+/** Rules judged by `tokenSegment` in a link's path and fragment, not as text. */
+const SEGMENT_SHAPES = new Set(["a long token", "a base64 value", "a hex key"]);
 
 /** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
-const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
+const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => !SEGMENT_SHAPES.has(what));
 
-/** The long-token rule of SECRET_SHAPES. */
-const LONG_TOKEN = (SECRET_SHAPES.find(([what]) => what === "a long token") as [string, RegExp])[1];
+/** The rules a web search page's excerpt is withheld for: its long token-shaped runs. */
+const RUN_SHAPES = new Set(["a long token", "a base64 value"]);
 
 /** Every other rule of SECRET_SHAPES: what a page's excerpt holding one is refused for, by name. */
-const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
+const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => !RUN_SHAPES.has(what));
 
 /** The runs of a text the long-token rule matches. */
 const LONG_TOKENS = new RegExp(LONG_TOKEN.source, "g");
 
-/**
- * The base64 values of a text: runs of 40 or more characters with a "+" or "/" in them, mixed
- * case and a digit (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made), whose pieces
- * between "+" and "/" may all be shorter than the long-token rule reads. A run counts only when
- * one of its pieces has 12 or more characters (BASE64_PIECE): words joined by "/" or "+" (a chord
- * line "Am/G/Fmaj7/C/…", a search "Bitter+Sweet+Symphony+…", a breadcrumb) are text.
- */
-const BASE64_RUNS =
-  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g;
-const BASE64_PIECE = 12;
-
-/** The spans of `text` that are long token-shaped runs (LONG_TOKENS, BASE64_RUNS). */
+/** The spans of `text` that are long token-shaped runs (LONG_TOKENS, base64 values). */
 function tokenSpans(text: string): Array<readonly [number, number]> {
-  const base64 = [...text.matchAll(BASE64_RUNS)].filter((m) =>
-    m[0].split(/[+/]/).some((piece) => piece.length >= BASE64_PIECE),
-  );
-  return [...text.matchAll(LONG_TOKENS), ...base64].map(
+  return [...text.matchAll(LONG_TOKENS), ...base64Values(text)].map(
     (m) => [m.index, m.index + m[0].length] as const,
   );
 }
@@ -521,13 +629,14 @@ function citedEvidenceIds(value: unknown, ids = new Set<string>()): Set<string> 
 
 /**
  * Why a link holds something shaped like a secret, or null: a signed URL or a key or token
- * parameter, a user name or password, a secret shape in its query, or in its path or fragment
- * (read with "+" kept, and where a long run is judged by `tokenSegment`, so a page's slug of
- * words or a section anchor is not one), or a random-looking base64url run in its fragment
- * (`randomRun`).
+ * parameter (`signedUrl`), a password or a secret parameter, a user name or password, a secret
+ * shape in its query, or in its path or fragment (read with "+" kept, and where a long run is
+ * judged by `tokenSegment`, piece by piece, so a page's slug of words or a section anchor is not
+ * one, and a token glued to one is). Apple Music's playlist ids are its pages' own names.
  */
 function linkSecret(url: string): string | null {
-  if (SIGNED_URL.test(url)) return "a signed URL";
+  if (signedUrl(url)) return "a signed URL";
+  if (SECRET_PARAM.test(url)) return "a password or secret parameter in a link";
   let parsed: URL;
   try {
     parsed = new URL(url.startsWith("//") ? `https:${url}` : url);
@@ -536,7 +645,7 @@ function linkSecret(url: string): string | null {
   }
   // A user name or a password in a link is a credential, whatever it looks like.
   if (parsed.username || parsed.password) return "credentials in a link";
-  const scan = (text: string, shapes: Array<[string, RegExp]>, decode: (t: string) => string) =>
+  const scan = (text: string, shapes: Array<[string, Shape]>, decode: (t: string) => string) =>
     shapes.find(([, pattern]) => pattern.test(text) || pattern.test(decode(text)))?.[0] ?? null;
   const inQuery = scan(parsed.search, SECRET_SHAPES, decoded);
   if (inQuery) return `${inQuery} in a link`;
@@ -548,15 +657,18 @@ function linkSecret(url: string): string | null {
   ] as const) {
     const shape = scan(part, PATH_SECRET_SHAPES, decodedKeepingPlus);
     if (shape) return `${shape} in a link`;
-    if (decodedKeepingPlus(part).split("/").some(tokenSegment))
-      return `a token in a link's ${where}`;
+    const segments = decodedKeepingPlus(part)
+      .split("/")
+      .filter(
+        (segment) => !(parsed.hostname === "music.apple.com" && APPLE_MUSIC_PLAYLIST.test(segment)),
+      );
+    if (segments.some(tokenSegment)) return `a token in a link's ${where}`;
   }
-  if (randomRun(decodedKeepingPlus(parsed.hash.slice(1)))) return "a token in a link's fragment";
   return null;
 }
 
 function plainWebPage(url: string): boolean {
-  if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
+  if (signedUrl(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -570,7 +682,12 @@ function plainWebPage(url: string): boolean {
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
-/** Keys of id fields: a source's ids (record refs, slugs) may be long and token-like. */
+/**
+ * Keys of id fields. A source's id or record ref may be a slug of words with a year
+ * ("wikipedia:track/List_of_UK_Singles_Chart_number_ones_of_the_2000s"), which the long-token
+ * rule reads as a token: an id's long runs are judged as a link's path segments are instead
+ * (`tokenSegment`), so a random run there is still refused ("a token in an id").
+ */
 const ID_KEY = /^(?:id|recordRef)$|Ids?$/;
 
 /** Every string in `value`, with its path and whether it is an id field's value. */
@@ -590,6 +707,23 @@ function strings(
     }
   }
   return out;
+}
+
+/** True when an id field's value (outside its links) holds a token: `tokenSegment` on its parts. */
+function tokenInId(text: string): boolean {
+  return [text, decodedKeepingPlus(text)].some((form) => form.split(/[\s/:]+/).some(tokenSegment));
+}
+
+/**
+ * The record's own commit (its `commit`, "-dirty" or not) as a whole word, wherever the record
+ * states it: the hash of the code the run was made with, which a record names by design (a
+ * replay says which commit it was recorded from), not a hex key. Null without one.
+ */
+function ownCommit(record: unknown): RegExp | null {
+  const commit = (record as { commit?: unknown } | null)?.commit;
+  if (typeof commit !== "string" || !COMMIT_PATTERN.test(commit)) return null;
+  const hash = commit.replace(/-dirty$/, "");
+  return new RegExp(`(?<![\\w+/=-])${hash}(?:-dirty)?(?![\\w+/=-])`, "gi");
 }
 
 /** `text` with its URL encoding decoded (as it is, when it is not URL-encoded). */
@@ -660,7 +794,8 @@ function resultCoverPaths(record: unknown): Set<string> {
 /**
  * What a record must not hold, by path (values are never echoed: they may be credentials).
  * Ids the record's sources use (MusicBrainz MBIDs in evidence ids, record refs and page URLs,
- * claim and evidence ids) are content; only the ids of runs are refused.
+ * claim and evidence ids) are content, still checked for secret shapes (`tokenInId`); only the
+ * ids of runs are refused.
  */
 export function leaks(
   record: unknown,
@@ -687,6 +822,7 @@ export function leaks(
   const statusLines = eventPaths(record, "status", "message");
   const ownLines = new Set(track ? [foundLine(track), selectedLine(track)] : []);
   const webTexts = webEvidenceTexts(record);
+  const commit = ownCommit(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
     // The kept cover, as the whole value of the result's cover: an allowed link there only.
@@ -694,13 +830,15 @@ export function leaks(
     const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
     if (holdsSecret(text, secrets)) found.push(`${path}: a configured credential`);
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
-    // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
+    // those are their own, and checked as links below), and around the record's own commit.
+    const around = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
+    const scanned = commit ? around.replace(commit, " ") : around;
     for (const [what, pattern] of SECRET_SHAPES) {
       if (isId && what === "a long token") continue;
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
-    if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
+    if (isId && tokenInId(scanned)) found.push(`${path}: a token in an id`);
+    if (signedUrl(text)) found.push(`${path}: a signed URL`);
     // A source error says what failed in words, as the run routes read it (reasonIssue): markup
     // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
     // what an error message keeps. A status line is held to the same, whole: the run writes its
@@ -732,7 +870,12 @@ export function leaks(
         const secret = isCover ? null : linkSecret(url);
         if (secret) found.push(`${path}: ${secret}`);
       } else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
-      else found.push(`${path}: a URL outside the allow-listed sites`);
+      else {
+        // What a page left out of web evidence holds is said too (a token in its path).
+        const secret = linkSecret(url);
+        if (secret) found.push(`${path}: ${secret}`);
+        found.push(`${path}: a URL outside the allow-listed sites`);
+      }
     }
     if (!typedIsPublic && (containsWords(text, typed) || containsWords(plain, typed))) {
       found.push(`${path}: the query the user typed`);

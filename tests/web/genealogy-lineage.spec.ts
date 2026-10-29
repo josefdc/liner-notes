@@ -1141,8 +1141,9 @@ test("the first pan down the wide map at 1920 px keeps the analysed card in view
 /**
  * The edge cues' buttons a detail box or the selected track's panel overlaps (the box takes no
  * pointer, so it is never what a point hits: their boxes are compared), or another element
- * covers at their centre. The cues are scrolled into view first; every box is then read in one
- * frame, after the page has come to rest, so none is read from before a scroll.
+ * covers at their centre; a cue whose centre is out of the window is listed as
+ * "<cue>:offscreen". The cues are scrolled into view first; every box is then read in one frame,
+ * after the page has come to rest, so none is read from before a scroll.
  */
 const coveredCues = (page: Page) =>
   page.evaluate(async () => {
@@ -1160,23 +1161,27 @@ const coveredCues = (page: Page) =>
         ]
           .map((over) => over.getBoundingClientRect())
           .filter((over) => over.width > 0 && over.height > 0);
-        const boxes = buttons.map((button) => button.getBoundingClientRect());
-        done(
-          buttons
-            .filter((button, i) => {
-              const box = boxes[i];
-              const overlapped = overs.some(
-                (over) =>
-                  over.left < box.right &&
-                  box.left < over.right &&
-                  over.top < box.bottom &&
-                  box.top < over.bottom,
-              );
-              const at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-              return overlapped || at === null || at.closest("[data-cue]") !== button;
-            })
-            .map((button) => button.getAttribute("data-cue") ?? ""),
-        );
+        const covers: string[] = [];
+        for (const button of buttons) {
+          const name = button.getAttribute("data-cue") ?? "";
+          const box = button.getBoundingClientRect();
+          const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+          // Its centre out of the window (a map taller than it): not seen, rather than covered.
+          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) {
+            covers.push(`${name}:offscreen`);
+            continue;
+          }
+          const overlapped = overs.some(
+            (over) =>
+              over.left < box.right &&
+              box.left < over.right &&
+              over.top < box.bottom &&
+              box.top < over.bottom,
+          );
+          const at = document.elementFromPoint(x, y);
+          if (overlapped || at === null || at.closest("[data-cue]") !== button) covers.push(name);
+        }
+        done(covers);
       }),
     );
     return covered;
@@ -1276,6 +1281,64 @@ for (const [showcase, width, height, panelOverCues] of [
     expect(problems).toEqual([]);
   });
 }
+
+// With a 20 px default font, md (48rem) is 960 px: an 800 px window lays the page out below md,
+// and the map with it. The map runs down a column, and the selected track's panel takes the
+// map's width, above every bottom cue.
+test("with a 20 px default font, an 800 px window has the map down a column, and no panel covers an edge cue", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "the default font size is set through Chromium's CDP");
+  const problems = collectProblems(page);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Page.setFontSizes", { fontSizes: { standard: 20 } });
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({ width: 800, height: 900 });
+  await SHOWN.wide.open(page);
+  expect(await page.evaluate(() => matchMedia("(min-width: 48rem)").matches)).toBe(false);
+  await page.getByRole("tab", { name: "Connections" }).click();
+  await page.mouse.move(0, 0);
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWN.wide.cards);
+  await graph.scrollIntoViewIfNeeded();
+  await mapAtRest(graph);
+  expect(await coveredCues(page), "at rest").toEqual([]);
+
+  // Each related track selected in turn (the focus brings its card into view first): its panel
+  // covers no cue.
+  let overCues = false;
+  const ids = await graph
+    .locator('g.nodes > g[role="button"]')
+    .evaluateAll((cards) => cards.map((card) => card.getAttribute("data-node-id") ?? ""));
+  expect(ids.length).toBeGreaterThan(0);
+  for (const id of ids) {
+    const card = graph.locator(`g.nodes > g[data-node-id="${id}"]`);
+    await card.focus();
+    await mapAtRest(graph);
+    await card.blur();
+    await card.click();
+    const panel = page.getByTestId("node-detail");
+    await expect(panel).toBeVisible();
+    await mapAtRest(graph);
+    expect(await coveredCues(page), `${id} selected`).toEqual([]);
+    const across = await panel.boundingBox();
+    overCues ||=
+      across !== null &&
+      (await panel.getAttribute("data-at")) === "overlay" &&
+      (await bottomCues(page)).some(
+        ([left, right]) => left < across.x + across.width && across.x < right,
+      );
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+  }
+  expect(overCues, "a panel over the bottom cues' strip").toBe(true);
+
+  // The axis down the page, as below md.
+  const [first, second] = (await measure(page)).ticks;
+  expect(second.box.y).toBeGreaterThan(first.box.y);
+  expect(problems).toEqual([]);
+});
 
 // A long title in the analysed track's own year makes that year wider than the analysed card:
 // the first view is judged on the map laid out for it (the year moves at the view's edge as a

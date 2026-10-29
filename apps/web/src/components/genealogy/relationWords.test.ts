@@ -314,10 +314,12 @@ describe('a partly supported claim that cites a relation record', () => {
   });
 });
 
-// A model claim about a relation a record documents (a code-built claim on the same record) is
-// named as the record's relation, never "Possible …", whatever its verdict; its own kind stays.
+// A model claim the API marks as stating a relation a record documents (`documentedBy`: the
+// code-built claims on its records) is named as the record's relation, never "Possible …", when
+// the judge found it supported or partly supported; its own kind stays. The page never works the
+// relation out from the claim's records itself.
 describe('a model claim on a relation a record documents', () => {
-  /** The result: a code-built claim on `ev-mb-1`, and the model's claim, as the verifier left it. */
+  /** The result: a code-built claim on `ev-mb-1`, and the model's claim, as the API served it. */
   function named(model: Record<string, unknown>, code: Record<string, unknown> = {}) {
     const track = {
       evidence: PACK,
@@ -329,7 +331,7 @@ describe('a model claim on a relation a record documents', () => {
           evidenceIds: ['ev-mb-1'],
           ...code,
         }),
-        claim('m-1', { evidenceIds: ['ev-mb-1'], ...model }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'], documentedBy: ['code-1'], ...model }),
       ],
       factoids: [],
       genealogy: { nodes: [], links: [] },
@@ -346,12 +348,15 @@ describe('a model claim on a relation a record documents', () => {
     };
   }
 
-  it.each(STATES)('is named as the record names it, its own kind kept ($name)', ({ verdict }) => {
-    const read = named({ about: 'sample', kind: 'inferred', verdict });
-    expect(read.fact).toBe('SAMPLE');
-    expect(read.listed).toBe('Sample');
-    expect(read.kind).toBe('inferred');
-  });
+  it.each(STATES.filter(({ verdict }) => verdict === 'supported' || verdict === 'partial'))(
+    'is named as the record names it, its own kind kept ($name)',
+    ({ verdict }) => {
+      const read = named({ about: 'sample', kind: 'inferred', verdict });
+      expect(read.fact).toBe('SAMPLE');
+      expect(read.listed).toBe('Sample');
+      expect(read.kind).toBe('inferred');
+    },
+  );
 
   it('a cover of the song, named as its record names it', () => {
     const read = named(
@@ -361,14 +366,33 @@ describe('a model claim on a relation a record documents', () => {
     expect(read.fact).toBe('COVER');
   });
 
-  it('keeps "Possible" when no record documents its relation', () => {
-    // Another subject, another scope, another record, or a record no code claim is on.
+  it('keeps "Possible" when the judge found it unsupported or did not judge it', () => {
+    for (const verdict of ['unsupported', null]) {
+      const read = named({ about: 'sample', kind: 'inferred', verdict });
+      expect(read.listed, String(verdict)).toBe(relationName('sample', false));
+      expect(read.fact, String(verdict)).not.toBe('SAMPLE');
+    }
+  });
+
+  it('keeps "Possible" when the API did not mark it, whatever its records', () => {
+    // On the code claim's record, at its scope, about its relation: unmarked, it keeps its words
+    // (it may name another record, or read the relation the other way).
+    const read = named({ about: 'sample', verdict: 'partial', documentedBy: undefined });
+    expect(read.listed).toBe(relationName('sample', false));
+    expect(named({ about: 'sample', verdict: 'partial', documentedBy: [] }).listed).toBe(
+      relationName('sample', false),
+    );
+  });
+
+  it('keeps "Possible" when the claims it is marked with are not shown sourced on its relation', () => {
+    // Marked with a claim of another subject, an inferred one, one not in the result, or a mark
+    // the page cannot read.
     for (const [model, code] of [
       [{ about: 'cover' }, {}],
-      [{ about: 'sample', scope: 'work' }, {}],
-      [{ about: 'sample', evidenceIds: ['ev-mb-1', 'ev-shs-1'] }, {}],
-      [{ about: 'sample', evidenceIds: ['ev-shs-1'] }, {}],
       [{ about: 'sample' }, { kind: 'inferred' }],
+      [{ about: 'sample', documentedBy: ['code-9'] }, {}],
+      [{ about: 'sample', documentedBy: ['code-1', 'code-9'] }, {}],
+      [{ about: 'sample', documentedBy: 'code-1' }, {}],
     ] as const) {
       const words = relationName(model.about, false);
       expect(named({ verdict: 'partial', ...model }, code).listed, JSON.stringify(model)).toBe(
@@ -382,7 +406,7 @@ describe('a model claim on a relation a record documents', () => {
       evidence: PACK,
       claims: [
         claim('code-1', { kind: 'sourced', origin: 'code', evidenceIds: ['ev-mb-1'] }),
-        claim('m-1', { evidenceIds: ['ev-mb-1'] }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'], documentedBy: ['code-1'], verdict: 'partial' }),
       ],
     } as unknown as TrackData);
     const linked = new Map([['code-1', 'Possible sample']]);
@@ -395,7 +419,7 @@ describe('a model claim on a relation a record documents', () => {
       evidence: PACK,
       claims: [
         claim('code-1', { kind: 'sourced', origin: 'code', evidenceIds: ['ev-mb-1'] }),
-        claim('m-1', { evidenceIds: ['ev-mb-1'] }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'], documentedBy: ['code-1'], verdict: 'partial' }),
       ],
     } as unknown as TrackData);
     expect(withDocumentedRelations(linked, shown.all).get('m-1')).toBe('Possible remix');

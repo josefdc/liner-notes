@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Claim, ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { oneClaimPerFact } from "../agent/restatements.js";
 import { playRecord, replayedAnalysis, replayNotice } from "./player.js";
 import { DEFAULT_REPLAY_DIR } from "./records.js";
 
@@ -78,9 +79,15 @@ describe("the One More Time recording, replayed", () => {
       expect(claims).toHaveLength(recorded.length - 7);
       const keys = claims.map((claim) => wordsOf(claim.text));
       expect(new Set(keys).size).toBe(keys.length);
-      // The kept claims are as recorded: verdicts, kinds and evidence untouched.
-      for (const claim of claims) {
+      // The kept claims are as recorded: verdicts, kinds and evidence untouched. The one model
+      // claim on a relation a code-built claim documents is marked with that claim.
+      for (const { documentedBy, ...claim } of claims) {
         expect(recorded.find((other) => other.id === claim.id)).toEqual(claim);
+        if (documentedBy === undefined) continue;
+        expect(claim.id.startsWith(BRASS_FIGURE)).toBe(true);
+        expect(documentedBy.map((id) => claims.find((other) => other.id === id)?.origin)).toEqual([
+          "code",
+        ]);
       }
     }
   });
@@ -120,8 +127,8 @@ describe("a recording replayed", () => {
           links: [
             ...record.analysis.genealogy.links,
             {
-              source: "current",
-              target: record.analysis.genealogy.nodes[1].id,
+              source: record.analysis.genealogy.nodes[1].id,
+              target: "current",
               value: 1,
               type: "sample",
               kind: "inferred",
@@ -142,16 +149,27 @@ describe("a recording replayed", () => {
     expect(served.run?.verifier).toMatchObject({ restated: 6 });
   });
 
-  it("is left as recorded when its run already left out what restates another", () => {
+  it("runs again on a recording whose run already left some out, adding to its count", () => {
     const run = record.analysis.run!;
     const already = ReplayRecord.parse({
       ...record,
-      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 3 } } },
     });
     const served = replayedAnalysis(already, "run-omt");
-    expect(served.claims).toEqual(already.analysis.claims);
-    expect(served.factoids).toEqual(already.analysis.factoids);
-    expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 0 });
+    const fresh = replayedAnalysis(record, "run-omt");
+    expect(served.claims).toEqual(fresh.claims);
+    expect(served.factoids).toEqual(fresh.factoids);
+    expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 3 + 7 });
+  });
+
+  it("leaves nothing more out when run on what it served", () => {
+    const fresh = replayedAnalysis(record, "run-omt");
+    const again = oneClaimPerFact(fresh);
+    expect(again.restated).toBe(0);
+    expect(again.result.claims).toEqual(fresh.claims);
+    expect(again.result.factoids).toEqual(fresh.factoids);
+    expect(again.result.genealogy).toEqual(fresh.genealogy);
+    expect(again.result.run?.verifier).toEqual(fresh.run?.verifier);
   });
 });
 
@@ -164,10 +182,15 @@ describe("the replay notice", () => {
   });
 
   it("says nothing of them when none were left out", () => {
-    const run = record.analysis.run!;
+    const claims = record.analysis.claims ?? [];
+    // Only the code-built claims: nothing restates another.
     const already = ReplayRecord.parse({
       ...record,
-      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+      analysis: {
+        ...record.analysis,
+        claims: claims.filter((claim) => claim.origin === "code"),
+        factoids: [],
+      },
     });
     expect(replayNotice(already).message).toBe(
       `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +

@@ -227,6 +227,17 @@ export const Claim = z.object({
         "absent on older claims",
     ),
   factoid: FactoidPresentation.optional(),
+  // Tolerant: a mark this reader cannot read reads as none (the relation is then named as the
+  // claim's own verdict allows), so a newer producer's value never makes the claim unreadable.
+  documentedBy: z
+    .array(z.string())
+    .optional()
+    .catch(undefined)
+    .describe(
+      "On a model claim about a sample or a cover: the code-built claims, each on a record it " +
+        "cites, whose relation it states, in the record's direction. Readers name its relation " +
+        "as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+    ),
 });
 export type Claim = z.infer<typeof Claim>;
 

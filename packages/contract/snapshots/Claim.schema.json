@@ -92,6 +92,11 @@
           }
         },
         "required": ["title", "type", "entities"]
+      },
+      "documentedBy": {
+        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+        "type": "array",
+        "items": { "type": "string" }
       }
     },
     "required": [
@@ -202,6 +207,11 @@
         },
         "required": ["title", "type", "entities"],
         "additionalProperties": false
+      },
+      "documentedBy": {
+        "description": "On a model claim about a sample or a cover: the code-built claims, each on a record it cites, whose relation it states, in the record's direction. Readers name its relation as theirs; its own kind and verdict are unchanged. Absent: no record documents it",
+        "type": "array",
+        "items": { "type": "string" }
       }
     },
     "required": [
@@ -224,5 +234,9 @@
     "$.factoid.entities[]": "strip"
   },
   "refinements": [],
-  "tolerant": ["$.factoid.entities: drops unreadable items", "$.scope: absent when unreadable"]
+  "tolerant": [
+    "$.documentedBy: absent when unreadable",
+    "$.factoid.entities: drops unreadable items",
+    "$.scope: absent when unreadable"
+  ]
 }

@@ -200,9 +200,9 @@ export function shownQueryMatch(state: {
 
 /**
  * A stored result as this run serves it: with how this run's search text matched the track, and
- * each fact stated once (restatements.ts: a result stored before that step loses the model's
- * restatements and their cards). The store keeps no run information, so the claims left out are
- * counted in the log.
+ * each fact stated once (restatements.ts, run again on every read: a result stored before that
+ * step, or before its rules last changed, loses the model's restatements and their cards). The
+ * store keeps no run information, so the claims left out are counted in the log.
  */
 export function servedResult(stored: TrackData, queryMatch: QueryMatch | null): TrackData {
   const { queryMatch: _stored, ...rest } = stored;

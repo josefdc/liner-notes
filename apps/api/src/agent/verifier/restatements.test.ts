@@ -114,6 +114,14 @@ async function verified(
   return out.trackData;
 }
 const idsOf = (data: TrackData) => (data.claims ?? []).map((claim) => claim.id);
+/** What a link joins, how, and whose it is: the verifier sets its weight and kind. */
+const ends = ({ source, target, type, origin, claimId }: GenealogyLink) => ({
+  source,
+  target,
+  type,
+  origin,
+  claimId,
+});
 
 describe("a model claim that restates a code-built claim", () => {
   beforeEach(() => {
@@ -319,7 +327,18 @@ describe("a claim that a link or a timeline sample states", () => {
       claimId: "m-link",
       evidenceIds: ["ev-sample"],
     };
-    const draft = draftOf([linked, timed, codeSample], [link], {
+    // The code-built link the map draws for the record.
+    const coded: GenealogyLink = {
+      source: "mb-r2",
+      target: "current",
+      value: 1,
+      type: "sample",
+      kind: "sourced",
+      origin: "code",
+      claimId: "code-sample",
+      evidenceIds: ["ev-sample"],
+    };
+    const draft = draftOf([linked, timed, codeSample], [link, coded], {
       // A timeline sample that names its claim, as the contract's Sample can.
       samples: [
         { time: 12, description: "The bass line", claimId: "m-timed" },
@@ -332,8 +351,55 @@ describe("a claim that a link or a timeline sample states", () => {
     expect(idsOf(out.trackData!)).toEqual(["m-timed", "code-sample"]);
     expect(out.trackData?.run?.verifier).toMatchObject({ judged: 2, restated: 1 });
     // The model's link, and the node only it drew, go with its claim.
-    expect(out.trackData?.genealogy.links).toEqual([]);
-    expect(out.trackData?.genealogy.nodes.map((node) => node.id)).toEqual(["current"]);
+    expect(out.trackData?.genealogy.links.map(ends)).toEqual([ends(coded)]);
+    expect(out.trackData?.genealogy.nodes.map((node) => node.id)).toEqual(["current", "mb-r2"]);
+  });
+
+  it("stays with a model link when no code-built link draws its relation, or the link reads another way", async () => {
+    const linked = modelClaim("m-link", {
+      text: "Ice Ice Baby samples Under Pressure.",
+      about: "sample",
+      evidenceIds: ["ev-sample"],
+    });
+    const link: GenealogyLink = {
+      source: "up",
+      target: "current",
+      value: 1,
+      type: "sample",
+      kind: "inferred",
+      origin: "model",
+      claimId: "m-link",
+      evidenceIds: ["ev-sample"],
+    };
+    const coded: GenealogyLink = {
+      ...link,
+      source: "mb-r2",
+      kind: "sourced",
+      origin: "code",
+      claimId: "code-sample",
+    };
+    const llm = judging((sent) =>
+      sent.map(({ claimId }) => ({ claimId, verdict: "supported", reason: "It says so." })),
+    );
+    const run = async (links: GenealogyLink[]) => {
+      const draft = draftOf([linked, codeSample], links);
+      const out = await createVerifierNode(testRuntime(llm))(stateFor(draft, evidence), config);
+      return out.trackData!;
+    };
+    // No code link: the model's link is the map's only line for the sample, and it stays.
+    const alone = await run([link]);
+    expect(idsOf(alone)).toEqual(["m-link", "code-sample"]);
+    expect(alone.genealogy.links.map(ends)).toEqual([ends(link)]);
+    // A link that reads the other way (this track sampled by Under Pressure), or as a cover,
+    // states another relation than the record's.
+    for (const other of [
+      { ...link, source: "current", target: "up" },
+      { ...link, type: "cover" as const },
+    ]) {
+      const out = await run([other, coded]);
+      expect(idsOf(out)).toEqual(["m-link", "code-sample"]);
+      expect(out.genealogy.links.map(ends)).toEqual([other, coded].map(ends));
+    }
   });
 });
 

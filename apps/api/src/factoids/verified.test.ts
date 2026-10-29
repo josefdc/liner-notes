@@ -316,8 +316,10 @@ describe("a new sample fact that restates a code-built sample of the run", () =>
       .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], runId: RUN_ID })
       .timeout(5000);
     expect(res.status).toBe(200);
+    sentClaims = res.body.claims;
     return res.body.factoids.map((factoid: { content: string }) => factoid.content);
   }
+  let sentClaims: Claim[] = [];
 
   it("is not sent, though the judge found it only partly supported: no card hedges it", async () => {
     expect(await sent("Daft Punk’s recording samples “More Spell on You” by Eddie Johns.")).toEqual(
@@ -328,6 +330,19 @@ describe("a new sample fact that restates a code-built sample of the run", () =>
   it("is sent, judged as it was, when it adds a word of its own", async () => {
     const more = "Daft Punk’s recording samples the horns of “More Spell on You” by Eddie Johns.";
     expect(await sent(more)).toEqual([more]);
+    // Marked with the code-built claim whose relation it states: the page names that relation as
+    // the record does. Its own kind and verdict stay.
+    expect(sentClaims).toEqual([
+      expect.objectContaining({ verdict: "partial", kind: "inferred", documentedBy: ["code-s"] }),
+    ]);
+  });
+
+  it("is sent unmarked when it names another record", async () => {
+    const other =
+      "Daft Punk’s recording samples the horns of “More Spell on You” by Ella Fitzgerald.";
+    expect(await sent(other)).toEqual([other]);
+    expect(sentClaims).toHaveLength(1);
+    expect(sentClaims[0]).not.toHaveProperty("documentedBy");
   });
 });
 

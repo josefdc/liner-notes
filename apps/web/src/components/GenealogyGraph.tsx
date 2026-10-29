@@ -1084,7 +1084,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('stroke-width', 12)
       .attr('vector-effect', 'non-scaling-stroke')
       .style('pointer-events', 'stroke')
-      .attr('class', 'focus-visible:outline-hidden')
+      // No outline: SVG is not recoloured in forced-colors mode, where an outline would be
+      // transparent. A focused link shows its band (its stroke), there too.
+      .style('outline', 'none')
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
@@ -1116,7 +1118,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('tabindex', -1)
       .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
       .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
-      .attr('class', 'focus-visible:outline-hidden');
+      // No outline: the card's focus ring (.focus-ring, below) shows the focus, in
+      // forced-colors mode too, where an outline on SVG would be transparent.
+      .style('outline', 'none');
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
     // with their glow; the others outlined in white (3:1 or more on the page).

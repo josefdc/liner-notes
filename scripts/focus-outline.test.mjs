@@ -49,7 +49,14 @@ const APPLY = /@apply\s+([^;}]+)/g;
  * Places the guard lets through, each with its reason; each must still be there as many times,
  * so an entry cannot outlive the code it is for.
  */
-const ALLOWED = [];
+const ALLOWED = [
+  {
+    site: "components/GenealogyGraph.tsx",
+    found: "outline', 'none",
+    count: 2,
+    why: "the map's SVG cards and links show their focus with a ring and a band of their own; forced-colors mode does not recolour SVG, so an outline there would be transparent",
+  },
+];
 
 const scriptKind = (path) =>
   /\.tsx$/.test(path)

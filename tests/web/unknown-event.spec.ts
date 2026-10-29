@@ -41,9 +41,12 @@ async function search(page: Page, query: string, { hold = false } = {}) {
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
-/** Lets the page's time run again (held for the progress screen), and opens the Dashboard. */
-async function openDashboard(page: Page) {
-  await page.clock.resume();
+/**
+ * Opens the Dashboard. With `held`, the page's time (held for the progress screen) first runs
+ * again; without, the clock is left alone (a resume would install one).
+ */
+async function openDashboard(page: Page, { held }: { held: boolean }) {
+  if (held) await page.clock.resume();
   await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
 }
@@ -90,7 +93,7 @@ test("an unknown event type is ignored, logged once, and the run goes on to its 
     expect.stringMatching(/^warning: .*\(status\): does not fit the contract/),
   ]);
 
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
 });
 
@@ -118,7 +121,7 @@ test("a duplicate complete for the same run is ignored", async ({ page }) => {
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} complete`))
     .toHaveLength(3);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Duplicate Result")).toHaveCount(0);
   expect(problems).toEqual([]);
@@ -151,7 +154,7 @@ test("a complete of another run that arrives before the run's own is ignored", a
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} done`))
     .toHaveLength(1);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);
   expect(problems).toEqual([]);
@@ -182,7 +185,7 @@ test("a result from a newer API that this page reads leniently is shown", async 
   expect(problems).toEqual([
     expect.stringMatching(/^warning: .*\(complete\): does not fit the contract; read leniently/),
   ]);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
 });
 
@@ -251,7 +254,7 @@ test("a repeated event and an event of another run are ignored on the resume str
   await runUntilResultsButton(page);
   await expect(page.getByText("Analyzing audio")).toHaveCount(1);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);
   expect(problems).toEqual([]);

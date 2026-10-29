@@ -130,7 +130,6 @@ test("Analyze on a link without words asks for the track by its id", async ({ pa
   expect(streams(await apiRequests(page))).toEqual([
     `stream ${ANALYZE}?query=${MISSING_ID}&trackId=${MISSING_ID}&pickedBy=click`,
   ]);
-  await page.clock.resume();
 });
 
 test("a link whose id is not a Spotify track id says so and leads to the search", async ({
@@ -211,7 +210,6 @@ test("Analyze on a link whose words are cut at the API's limit never splits a ch
   expect(streams(await apiRequests(page))).toEqual([
     `stream ${ANALYZE}?query=${"a".repeat(199)}&trackId=${MISSING_ID}&pickedBy=click`,
   ]);
-  await page.clock.resume();
 });
 
 test("Back past another track's result to a link's result shows that link's track", async ({

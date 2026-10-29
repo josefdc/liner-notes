@@ -320,6 +320,8 @@ export function dashboardHeading(page: Page) {
  * little at a time, until the results are shown, by the click or by themselves: it returns once
  * `opened` is visible, however long the first paint of the results takes. A test of the button
  * itself clicks it directly, with the page's clock held so that nothing else opens them.
+ * It returns at once if `opened` is already visible: a test that leaves one Dashboard for a new
+ * run first waits until that Dashboard is gone.
  */
 export async function openResults(page: Page, opened: Locator = dashboardHeading(page)) {
   const button = page.getByRole("button", { name: "Open the results" });
@@ -327,7 +329,7 @@ export async function openResults(page: Page, opened: Locator = dashboardHeading
     if (await opened.isVisible()) return;
     if (await button.isVisible()) await button.click({ timeout: 2_000 });
     await expect(opened).toBeVisible({ timeout: 2_000 });
-  }).toPass();
+  }).toPass({ timeout: 20_000 });
 }
 
 /**
@@ -337,28 +339,49 @@ export async function openResults(page: Page, opened: Locator = dashboardHeading
  * `page.clock.resume()` lets its time run again.
  */
 export async function holdClock(page: Page) {
-  // A moment ahead of the page's time, which runs on meanwhile: if it has passed before the
-  // pause lands (a busy machine), tried again further ahead, never near the 3.5 s.
-  let ahead = 50;
+  // A moment just ahead of the page's time, which runs on meanwhile. If that moment has passed
+  // when the pause lands (a busy machine), the page is paused all the same and the call refuses
+  // to go back: the second try, from the held time, lands.
   await expect(async () => {
-    const at = await page.evaluate((ms) => Date.now() + ms, ahead);
-    ahead = Math.min(ahead * 2, 800);
-    await page.clock.pauseAt(at);
-  }).toPass();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
+  }).toPass({ timeout: 5_000 });
 }
 
 /**
  * With the page's time held (`holdClock`), runs it on 50 ms at a time (the mocked stream's
- * pace) until "Open the results" shows, 0.4 s after the result: well short of the 3.5 s after
- * which the results open by themselves, so the progress screen is still there to be read.
+ * pace) until the run has ended, then checks that "Open the results" shows: it does 0.4 s after
+ * the result, well short of the 3.5 s after which the results open by themselves, so the progress
+ * screen is still there to be read. A run that ends otherwise fails at once, naming the screen
+ * shown instead ("The analysis did not finish", or results opened without the button).
+ * At most `maxMs` of the page's time is run (by default 2.5 s: a few dozen events at the mocked
+ * pace, then the 0.4 s), so a run that stalls on a timer fails here as it would on a real clock;
+ * a test whose stream is longer passes its own budget.
  */
-export async function runUntilResultsButton(page: Page) {
+export async function runUntilResultsButton(
+  page: Page,
+  { maxMs = 2_500 }: { maxMs?: number } = {},
+) {
   const button = page.getByRole("button", { name: "Open the results" });
-  for (let step = 0; !(await button.isVisible()); step += 1) {
-    expect(step, '"Open the results" shows').toBeLessThan(200);
+  const failed = page.getByRole("heading", { name: "The analysis did not finish" });
+  const results = dashboardHeading(page);
+  let ran = 0;
+  while (!(await button.or(failed).or(results).first().isVisible())) {
+    expect(
+      ran,
+      `"Open the results", an error or the results show within ${maxMs} ms of the page's time (${ran} ms run)`,
+    ).toBeLessThan(maxMs);
     await page.clock.runFor(50);
+    ran += 50;
   }
-  await expect(button).toBeVisible();
+  expect(
+    await failed.isVisible(),
+    `the run ended in an error after ${ran} ms of the page's time: "The analysis did not finish"`,
+  ).toBe(false);
+  expect(
+    await results.isVisible(),
+    `the results opened without "Open the results", after ${ran} ms of the page's time`,
+  ).toBe(false);
+  await expect(button).toBeVisible({ timeout: 1_000 });
 }
 
 /**

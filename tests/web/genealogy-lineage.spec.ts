@@ -870,9 +870,9 @@ for (const [what, from, to] of [
 test("a hover holds the layout only while the pointer is on the map; a press holds it for good", async ({
   page,
 }) => {
-  // Five resizes, each waited on until the map is at rest: on a busy machine more than the
+  // Several resizes, each waited on until the map is at rest: on a busy machine more than the
   // default 30 s.
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
   await page.mouse.move(0, 0);
   await page.setViewportSize({ width: 1440, height: 900 });
   await SHOWCASES.wide.open(page);
@@ -1216,9 +1216,9 @@ for (const [showcase, width, height, panelOverCues] of [
   test(`at ${width} px on the ${showcase} map no box or panel covers an edge cue`, async ({
     page,
   }) => {
-    // Up to three cue presses and six tracks selected, each waited on until the map is at
-    // rest: on a busy machine more than the default 30 s.
-    test.setTimeout(90_000);
+    // Cue presses and tracks selected, each waited on until the map is at rest: on a busy
+    // machine more than the default 30 s.
+    test.setTimeout(60_000);
     const problems = collectProblems(page);
     await page.mouse.move(0, 0);
     await page.setViewportSize({ width, height });
@@ -1298,9 +1298,9 @@ test("with a 20 px default font, an 800 px window has the map down a column, and
   browserName,
 }) => {
   test.skip(browserName !== "chromium", "the default font size is set through Chromium's CDP");
-  // Every related track of the wide map selected in turn (a dozen), each waited on until the
-  // map is at rest twice: on a busy machine more than the default 30 s.
-  test.setTimeout(90_000);
+  // Every related track of the wide map selected in turn, each waited on until the map is at
+  // rest twice: on a busy machine more than the default 30 s.
+  test.setTimeout(60_000);
   const problems = collectProblems(page);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Page.setFontSizes", { fontSizes: { standard: 20 } });

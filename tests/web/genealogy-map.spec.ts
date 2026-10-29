@@ -490,6 +490,8 @@ test.describe("at 1440 px", () => {
     await analyseSourceFromMap(page);
     // A track analysed from a Dashboard card starts no chain; back to it, it still has none.
     await page.getByRole("button").filter({ hasText: "Relation:" }).click();
+    // The source's Dashboard gives way to the new run's progress before its results open.
+    await expect(dashboardHeading(page)).toHaveCount(0);
     await openResults(page);
     await expect(dashboardHeading(page)).toHaveText("Third Track");
     await expect(trailNav(page)).toHaveCount(0);

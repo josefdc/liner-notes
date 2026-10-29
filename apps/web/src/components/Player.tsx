@@ -242,6 +242,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // Claims the result left out because each states a fact a claim shown states, with its source:
   // facts were found, and are listed.
   const restatedFacts = (track.run?.verifier?.restated ?? 0) > 0;
+  // Claims the notes list: facts were found, whether or not the result says how many cards it
+  // left out (a stored result does not).
+  const listedFacts = claims.all.length > 0;
   // Facts found but not shown: their claim was rejected or cannot be read.
   const hiddenFacts = [...track.factoids, ...addedFactoids].some((factoid) =>
     claims.isHidden(factoid.claimId),
@@ -770,8 +773,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">{facts(allFactoids.length)}</p>
           )}
-          {allFactoids.length === 0 ? (
-            <div className="space-y-6">
+          {/* One list, the controls at one place in it with cards or without: the first card
+              "Find more facts" brings keeps the button, and its focus. */}
+          <div className="space-y-6">
+            {allFactoids.length === 0 ? (
               <div className="flex-1 flex items-center justify-center py-12">
                 <p className="text-text-tertiary text-xs font-mono text-center">
                   {/* Facts were found but none is shown: the lines around say why. Facts found
@@ -780,80 +785,83 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     ? 'No facts to show.'
                     : restatedFacts
                       ? 'Every fact found here is already listed with its source below.'
-                      : 'No facts were found for this track.'}
+                      : listedFacts
+                        ? 'No fact cards: the notes below list what was found.'
+                        : 'No facts were found for this track.'}
                 </p>
               </div>
-              {moreFactsControls}
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {visibleResultFactoids.map((fact, idx) => (
-                <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
-                  <InteractiveFactoid
-                    factoid={fact}
-                    claim={claimOf(fact)}
-                    origin={claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined}
-                    fromSourceData={fromSourceData}
-                    readings={readings}
-                    audio={measurement}
-                    relation={relationOf(fact)}
-                  />
-                </div>
-              ))}
-
-              {/* Factoids added by "More facts" are written by the model, whatever the result:
-                  each shows its claim, and the section is labelled only when none has one */}
-              {visibleDecryptedFactoids.length > 0 && (
-                <section aria-label="More facts" className="space-y-6">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
-                      More facts
-                    </h3>
-                    {!claimedAdditional && <InferenceLabel />}
-                  </div>
-                  {visibleDecryptedFactoids.map((fact) => (
+            ) : (
+              <>
+                {visibleResultFactoids.map((fact, idx) => (
+                  <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
                     <InteractiveFactoid
-                      key={fact.id}
                       factoid={fact}
                       claim={claimOf(fact)}
-                      origin={claimedAdditional ? 'inferred' : undefined}
+                      origin={
+                        claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined
+                      }
+                      fromSourceData={fromSourceData}
                       readings={readings}
                       audio={measurement}
                       relation={relationOf(fact)}
                     />
-                  ))}
-                </section>
-              )}
+                  </div>
+                ))}
 
-              {moreFactsControls}
+                {/* Factoids added by "More facts" are written by the model, whatever the result:
+                  each shows its claim, and the section is labelled only when none has one */}
+                {visibleDecryptedFactoids.length > 0 && (
+                  <section aria-label="More facts" className="space-y-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                        More facts
+                      </h3>
+                      {!claimedAdditional && <InferenceLabel />}
+                    </div>
+                    {visibleDecryptedFactoids.map((fact) => (
+                      <InteractiveFactoid
+                        key={fact.id}
+                        factoid={fact}
+                        claim={claimOf(fact)}
+                        origin={claimedAdditional ? 'inferred' : undefined}
+                        readings={readings}
+                        audio={measurement}
+                        relation={relationOf(fact)}
+                      />
+                    ))}
+                  </section>
+                )}
+              </>
+            )}
 
-              {/* Show more / collapse toggle */}
-              {hiddenCount > 0 && !showAllFactoids && (
-                <div className="relative">
-                  {/* Gradient fade on boundary */}
-                  <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
-                  <button
-                    type="button"
-                    onClick={() => setShowAllFactoids(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
-                  >
-                    <ChevronDown size={14} />
-                    Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
-                  </button>
-                </div>
-              )}
-              {showAllFactoids && allFactoids.length > INITIAL_VISIBLE_FACTOIDS && (
+            {moreFactsControls}
+
+            {/* Show more / collapse toggle */}
+            {hiddenCount > 0 && !showAllFactoids && (
+              <div className="relative">
+                {/* Gradient fade on boundary */}
+                <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
                 <button
                   type="button"
-                  onClick={() => setShowAllFactoids(false)}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
+                  onClick={() => setShowAllFactoids(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
                 >
-                  <ChevronDown size={14} className="rotate-180" />
-                  Show less
+                  <ChevronDown size={14} />
+                  Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
                 </button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+            {showAllFactoids && allFactoids.length > INITIAL_VISIBLE_FACTOIDS && (
+              <button
+                type="button"
+                onClick={() => setShowAllFactoids(false)}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
+              >
+                <ChevronDown size={14} className="rotate-180" />
+                Show less
+              </button>
+            )}
+          </div>
 
           {/* The liner notes, below the cards: credits, samples and covers, history, then every
               other claim no card shows; the claims the verifier rejected; and where the data

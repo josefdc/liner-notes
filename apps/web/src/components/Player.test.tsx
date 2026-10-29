@@ -698,6 +698,54 @@ describe('Player', () => {
       },
     );
 
+    it('says the notes list what was found when a result without a run (a stored one) has claims and no card', () => {
+      // A stored result keeps no run, so how many cards were left out is not known.
+      const track = withFacts([], [sourcedSample('c-known')]);
+      expect((track as { run?: unknown }).run).toBeUndefined();
+      render(<Player trackData={track} onBack={() => {}} />);
+      expect(screen.getByText('No fact cards: the notes below list what was found.')).toBeTruthy();
+      expect(screen.queryByText('No facts were found for this track.')).toBeNull();
+    });
+
+    it('says there are no facts to show when every card is hidden, whatever was left out', () => {
+      const hidden = { ...sourcedSample('c-x'), verdict: 'contradicted' } as Claim;
+      const track = {
+        ...withFacts([card('f1', 'A Fact', 'c-x')], [hidden]),
+        run: { id: 'r1', mode: 'live', verifier: { restated: 2 } },
+      } as unknown as TrackData;
+      render(<Player trackData={track} onBack={() => {}} />);
+      expect(screen.getByText('No facts to show.')).toBeTruthy();
+      expect(
+        screen.queryByText('Every fact found here is already listed with its source below.'),
+      ).toBeNull();
+    });
+
+    it('keeps "Find more facts", and its focus, when the first card arrives', async () => {
+      const track = {
+        ...withFacts([], [sourcedSample('c-known')]),
+        run: { id: 'r1', mode: 'live', verifier: { restated: 1 } },
+      } as unknown as TrackData;
+      render(
+        <MoreFactsPlayer
+          track={track}
+          answers={[
+            {
+              factoids: [card('f2', 'New Fact', 'c-new')],
+              claims: [aClaim({ id: 'c-new', about: 'sample' })],
+              nextRound: 1,
+            },
+          ]}
+        />,
+      );
+      const button = moreButton();
+      button.focus();
+      fireEvent.click(button);
+      expect(await screen.findByText('New Fact')).toBeTruthy();
+      await waitFor(() => expect(moreButton().hasAttribute('disabled')).toBe(false));
+      expect(moreButton()).toBe(button);
+      expect(document.activeElement).toBe(button);
+    });
+
     it("shows each fact's claim: a sourced sample links its source, a guessed one is possible", () => {
       const track = withFacts(
         [card('f1', 'Known Sample', 'c-known'), card('f2', 'Guessed Sample', 'c-guess')],

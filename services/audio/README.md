@@ -396,41 +396,51 @@ times are seconds from the start of the preview. Every block is `null` when it w
   served key (`evals/audio/scripts/drum_rules.py`, on that report's controls run and GiantSteps+
   key and calibration runs). 48 of the 250 clips have a served key, 36 of them right with Essentia
   and 32 with librosa: what a rule costs in real music rests on those. Each threshold is chosen on
-  a training half (the drums at seeds 500-529, the chord families at 700-729, and every other
-  control and clip in turn) and judged on the rest, held-out seeds 600-629 and 800-829 among them,
-  with one threshold for both estimators. Drum keys are counted over both halves: 62 with
-  Essentia, 52 with librosa. The net share of the harmonic part's peak energy that falls more than
-  15 cents from the second frame after each onset to the fourth (46 ms later; a struck membrane
-  drops in pitch, a vibrato goes both ways) takes no right key of the training half from 0.3774.
-  There it withholds every tom's key, about half the kit toms' and no tabla's (28 and 23 drum
-  keys), but on the held-out half it takes 3 right keys with Essentia and 4 with librosa:
+  a training half and judged on the rest, with one threshold for both estimators. Seeded controls
+  go by seed (500-529 and 700-729 train; 600-629 and 800-829 are held out); the unseeded controls
+  and the clips go alternately, sorted by name, so near-copies of one chord in the grids (softer,
+  detuned or seventh-chord thirds) fall on both sides. Drum keys are counted over both halves: 62
+  with Essentia, 52 with librosa. The net share of the harmonic part's peak energy that falls more
+  than 15 cents from the second frame after each onset to the fourth (46 ms later; a struck
+  membrane drops in pitch, a vibrato goes both ways) takes no right key of the training half from
+  0.3774. There it withholds every tom's key, about half the kit toms' and no tabla's (28 and 23
+  drum keys), but on the held-out half it takes 3 right keys with Essentia and 4 with librosa:
   GiantSteps+ clip 265 (and 315 with librosa), a struck-bar triad (mallet-chord-s818) and a
   trumpet melody. Withholding more than half of the training drum keys (from 0.2587) takes 2 and 4
   right keys in the training half and 6 with each held out. The share of each hit's harmonic-part
   energy that comes 70 ms or more after its loudest frame (low when every line dies away at once)
   withholds no training drum key without a right one; for more than half (0.2375 or under) it
-  takes 133 right keys with each estimator in the training half and 133 and 142 held out, 9 and 10
-  GiantSteps+ clips among them. The pitch track's spread around its smoothed line (wide when the
-  tracker hops from drum to drum) takes no right key of the training half from 441.8 cents, where
-  it withholds 20 and 15 drum keys; held out it takes one right Essentia key (a one-bar riff). For
-  more than half (from 261.8 cents) it takes 15 and 14 right keys in the training half and 12 and
-  10 held out, 8 and 7, then 6 and 5, of them GiantSteps+ clips. One rule does withhold most tom
-  and kit-tom keys at no measured cost, held-out seeds included: one pitched source when at least
-  0.0206 more of a hit's peak energy lies within 30 cents of an ideal membrane's overtone ratios
-  (1.594, 2.136, 2.296 and 2.653 times one of the three strongest peaks) than of its whole
-  multiples, or when the strongest peak falls 35.1 cents or more between those two frames (the
-  median over the hits). It withholds 38 and 33 drum keys: every training tom and kit tom, and
-  held out 7 of 8 and 4 of 4 toms and 15 of 15 and 16 of 17 kit toms, with no right key taken in
-  either half. But its signal is how the controls are built: the kit toms are drawn from those
-  membrane modes (`MEMBRANE_MODES` in `tests/signals.py`) and the toms with a 15 % pitch drop
-  after each hit, the same circularity as the falling partials above. The only real recordings are
-  the 48 GiantSteps+ clips (electronic dance music): it withholds none of their keys, so they show
-  that it costs nothing there, not that it catches a real tuned drum. It catches no tabla either.
-  For the tabla, a pitch track spreading 125.2 cents or more over a sound whose tonal ratio is at
-  least 0.9073 (both chosen on the training half) withholds 21 of the 23 Essentia tabla keys and 16
-  of the 18 librosa ones, but held out it takes a right key with each estimator (pumped-pad-s802,
-  a held chord pumped by a sidechain). None is shipped without real drum recordings to show that
-  it helps.
+  takes 133 right keys with each estimator in the training half (9 of them GiantSteps+ clips) and
+  133 and 142 held out (10 GiantSteps+ clips with each). The pitch track's spread around its
+  smoothed line (wide when the tracker hops from drum to drum) takes no right key of the training
+  half from 441.8 cents, where it withholds 20 and 15 drum keys; held out it takes one right
+  Essentia key (a one-bar riff). For more than half (from 261.8 cents) it takes 15 and 14 right
+  keys in the training half and 12 and 10 held out, 8 and 7, then 6 and 5, of them GiantSteps+
+  clips. One rule withholds most tom and kit-tom keys without taking a right key from any control
+  or clip measured, held-out seeds included: one pitched source when its membrane-mode measure is
+  0.0206 or more, or when the strongest peak falls 35.1 cents or more between those two frames
+  (the median over the hits). The membrane-mode measure takes each of a hit's three strongest
+  peaks as a reference, the largest share of the other peaks' energy within 30 cents of an ideal
+  membrane's overtone ratios to it (1.594, 2.136, 2.296 and 2.653) minus the largest share near
+  its whole multiples, and averages over the hits, weighted by energy. It withholds 38 and 33 drum
+  keys: every training tom and kit tom, and held out 7 of 8 and 4 of 4 toms and 15 of 15 and 16 of
+  17 kit toms, with no right key taken in either half. That holds for the controls' voicings, not
+  for chords in general: three of the ratios lie 7-14 cents from a minor sixth, a minor ninth and
+  an eleventh, the intervals of an inverted triad. A minor struck as E4-A4-C5 in a triangle
+  timbre, whose right key both estimators serve, reads 0.434, more than ten times the threshold
+  (`evals/audio/tests/test_drum_rules.py` pins it), so the rule would take its key. And its signal
+  is how the controls are built: the kit toms are drawn from those membrane modes
+  (`MEMBRANE_MODES` in `tests/signals.py`) and the toms with a 15 % pitch drop after each hit, the
+  same circularity as the falling partials above. The only real recordings are the 48 GiantSteps+
+  clips (electronic dance music): it withholds none of their keys, so they show that it costs
+  nothing there, not that it catches a real tuned drum. It catches no tabla either. For the tabla,
+  a pitch track spreading 125.2 cents or more over a sound whose tonal ratio is at least 0.9073
+  (both chosen on the training half) withholds 21 of the 23 Essentia tabla keys and 16 of the 18
+  librosa ones, but held out it takes a right key with each estimator (pumped-pad-s802, a held
+  chord pumped by a sidechain). The membrane-mode rule and this pair were proposed after the
+  held-out numbers of the first three rules had been seen, so their held-out numbers are not an
+  untouched test. None is shipped: the membrane-mode rule would take right keys from inverted
+  triads, and no real drum recording shows that it, or any other, helps.
   Neither strength separates atonal material from tonal music: random chromatic notes or a
   twelve-tone row can still get a key, and so can a bell or a few tuned drums whose partials
   spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they

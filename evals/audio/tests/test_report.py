@@ -413,12 +413,20 @@ def test_the_calibration_section_says_only_what_its_runs_calibrate():
     assert "a tolerance of 0.04 that librosa's clips reject" in tempo
     # The controls run itself is still shown: its key column is a measurement, not a rule.
     assert "`librosa` key" in tempo
+    # The 2026-10-29 runs were made with the single-source rule, a key rule: it is described
+    # with the key calibration run, and not without it.
     newest = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json").read_text())
-    if not any(r["suite"] == "calibration" and r["kind"] == "key" for r in newest["runs"]):
-        text = "\n".join(calibration_report.section(newest))
-        assert not [words for words in KEY_RULE_WORDS if words in text]
-        # Its runs were made with the single-source rule, a key rule: not described either.
-        assert "single-source rule" not in text and "Added to the controls" not in text
+    without_key = dict(
+        newest,
+        runs=[
+            r for r in newest["runs"] if not (r["suite"] == "calibration" and r["kind"] == "key")
+        ],
+    )
+    text = "\n".join(calibration_report.section(without_key))
+    assert not [words for words in KEY_RULE_WORDS if words in text]
+    assert "single-source rule" not in text and "Added to the controls" not in text
+    with_key = "\n".join(calibration_report.section(newest))
+    assert "single-source rule" in with_key and "Added to the controls" in with_key
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

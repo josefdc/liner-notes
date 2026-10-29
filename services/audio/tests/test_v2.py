@@ -1986,25 +1986,106 @@ def test_chords_keep_the_key_the_other_rules_give_them(family):
         assert still > 0  # the notes test, not time, keeps these keys
 
 
+def soft_third_indices(root: int) -> list[int]:
+    """
+    The signals.SOFT_THIRD_GRID chords the tests analyse at `root`: both modes and every level,
+    in one timbre per root (pad, organ and saw in turn, each at four roots), 96 of the 288. The
+    evals/audio controls run all 288.
+    """
+    timbre = ("pad", "organ", "saw")[root % 3]
+    return [
+        index
+        for index, (grid_root, _, grid_timbre, _) in enumerate(signals.SOFT_THIRD_GRID)
+        if grid_root == root and grid_timbre == timbre
+    ]
+
+
+# The keys the rules withhold among those 96 chords (Signals.key_withheld, the same for both
+# estimators), with the rule's code: 64 of 96. None is the single-source rule's. Every one of them
+# has a right key with the rules lifted, as the 2026-10-29 controls run records for all 288.
+SOFT_THIRD_WITHHELD = {
+    **dict.fromkeys(
+        (3, 13, 14, 29, 30, 31, 40, 42, 43, 57, 58, 59, 70, 71, 73, 74, 75, 86, 87, 102, 103),
+        "one_harmonic_series",
+    ),
+    **dict.fromkeys(
+        (112, 113, 115, 131, 142, 147, 158, 172, 173, 174, 185, 186, 187, 201, 202, 203, 214),
+        "one_harmonic_series",
+    ),
+    **dict.fromkeys(
+        (215, 217, 218, 219, 230, 231, 246, 247, 256, 257, 259, 275, 286), "one_harmonic_series"
+    ),
+    **dict.fromkeys((141, 157, 184, 212, 213, 228, 229, 258, 284, 285), "one_held_pitch"),
+    **dict.fromkeys((15, 28, 41), "few_pitch_classes"),
+}
+# The keys served that are wrong: Essentia names the parallel minor of an F# major triad.
+SOFT_THIRD_WRONG = {("essentia", 159): ("F#", "minor")}
+
+
 @pytest.mark.seeded
-@pytest.mark.parametrize("root", range(4), ids=["C3", "C#3", "D3", "D#3"])
+@pytest.mark.estimators
+@pytest.mark.parametrize("root", range(12), ids=[f"{n}3" for n in signals.PITCH_NAMES])
 def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
     """
-    A triad at C3-D#3 with its root doubled an octave down and its third 1.5-6 dB softer
-    (signals.SOFT_THIRD_GRID, both modes, three timbres, pumped, faded, with tremolo or
-    stabbed): the doubled root is the strongest line and the third sits on its flank, but down
-    to 4.5 dB softer its notes still spell a chord, and at 6 dB the single-source rule still
-    withholds no key (the other rules decide those).
+    A triad with its root doubled an octave down and its third 1.5-6 dB softer
+    (signals.SOFT_THIRD_GRID at every root, both modes, pumped, faded, with tremolo or stabbed;
+    soft_third_indices): the doubled root is the strongest line and the third sits on its
+    flank, but down to 4.5 dB softer its notes still spell a chord, and the single-source rule
+    withholds no key. The other rules withhold many (one harmonic series, one held pitch, fewer
+    than three pitch classes): each estimator's answer is pinned exactly, the right key where
+    it is served and the rule's code where it is not.
     """
-    for index, (grid_root, _, _, level) in enumerate(signals.SOFT_THIRD_GRID):
-        if grid_root != root:
-            continue
+    answers, expected = {}, {}
+    for index in soft_third_indices(root):
+        level = signals.SOFT_THIRD_GRID[index][3]
         y, key = signals.soft_third_chord(index)
         s = estimators.Signals(y, FIXTURE_SR)
         notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
         if level > -6.0:
-            assert estimators.spells_chord(notes), (key, level, notes)
-        assert not one_source_withheld(s), (key, level, notes)
+            assert estimators.spells_chord(notes), (index, key, notes)
+        withheld = s.key_withheld()
+        assert (withheld and withheld.code) == SOFT_THIRD_WITHHELD.get(index), (index, withheld)
+        for name in KEY_ESTIMATORS:
+            found = estimators.select_estimator(name).measure_key(s)
+            answers[(name, index)] = (
+                (found.tonic, found.mode)
+                if isinstance(found, estimators.KeyEstimate)
+                else found.code
+            )
+            expected[(name, index)] = SOFT_THIRD_WITHHELD.get(index) or SOFT_THIRD_WRONG.get(
+                (name, index), key
+            )
+    assert answers == expected
+
+
+@pytest.mark.seeded
+@pytest.mark.estimators
+@pytest.mark.parametrize("index", (3, 35, 131, 179))
+def test_a_minor_triad_whose_notes_spell_no_chord_loses_its_right_key(index, monkeypatch):
+    """
+    A known limit, pinned as it is: four minor triads stabbed with their third 6 dB down
+    (C minor in a pad, C#, F and G minor in a saw; soft-third-3, -35, -131 and -179 in the
+    evals/audio controls). Their lines are the doubled root's harmonics and the fifth: they form
+    one harmonic series, so the key is withheld as one_harmonic_series with both estimators,
+    though each estimator's key is right with the rules lifted. The notes test finds no third
+    in them either (one source), so the single-source rule would withhold the key if the series
+    rule did not.
+    """
+    root, mode, _, level = signals.SOFT_THIRD_GRID[index]
+    assert (mode, level, signals.soft_third_shape(index)) == ("minor", -6.0, "stabs")
+    y, key = signals.soft_third_chord(index)
+    s = estimators.Signals(y, FIXTURE_SR)
+    assert s.key_withheld().code == "one_harmonic_series"
+    assert s.source_evidence.single, s.source_evidence
+    for name in KEY_ESTIMATORS:
+        assert estimators.select_estimator(name).measure_key(s).code == "one_harmonic_series"
+    # With the evidence rules and the strength minimum lifted, every estimator names the key.
+    monkeypatch.setattr(s, "key_withheld", lambda: None)
+    for name in KEY_ESTIMATORS:
+        est = estimators.select_estimator(name)
+        monkeypatch.setattr(est, "min_key_strength", 0.0)
+        found = est.key(s)
+        assert (found.tonic, found.mode) == key, (name, found)
 
 
 @pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)

@@ -15,6 +15,7 @@ import {
 } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
+import { captureLogsForTests, configureLogger, logger } from "../logger.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
 import {
@@ -351,6 +352,41 @@ describe("retries", () => {
     expect(kind(Object.assign(new Error("x"), { status: 408 }))).toBe("timeout");
     expect(kind(new Error("something else"))).toBe("provider");
     expect(classifyError(new Error("x"), { ...state, aborted: true }).kind).toBe("aborted");
+  });
+
+  it("hides a configured value written escaped before it cuts the message, at every offset", () => {
+    // Cut to 500 and 300 characters, an escaped value is a part that no longer matches when the
+    // logger reads the line: it is hidden before the cut.
+    const value = 'pw"Quote\\Back-0123456789-ABCDEFGH';
+    const escaped = JSON.stringify(value).slice(1, -1);
+    vi.stubEnv("SOME_SERVICE_PASSWORD", value);
+    configureLogger({ SOME_SERVICE_PASSWORD: value, LOG_LEVEL: "info" });
+    const logs = captureLogsForTests();
+    onTestFinished(() => {
+      logs.restore();
+      configureLogger({ LOG_LEVEL: "silent" });
+      vi.unstubAllEnvs();
+    });
+    const parts = (text: string) =>
+      Array.from({ length: text.length - 7 }, (_, i) => text.slice(i, i + 8));
+    const secret = [...parts(value), ...parts(escaped), ...parts(JSON.stringify(escaped))];
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    for (let pad = 400; pad <= 520; pad++) {
+      const error = Object.assign(new Error(`${"a".repeat(pad)}${escaped} end`), { status: 400 });
+      const llm = classifyError(error, state);
+      logs.clear();
+      logger("llm").error("model call failed", { err: llm });
+      for (const out of [
+        llm.message,
+        String((llm.cause as Error).message),
+        logs.lines().join(""),
+      ]) {
+        expect(
+          secret.filter((part) => out.includes(part)),
+          `${pad}: ${out.slice(-80)}`,
+        ).toEqual([]);
+      }
+    }
   });
 });
 

@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import {
   configuredSpans,
+  configuredValues,
   knownValueSpans,
   logCut,
   logger,
@@ -69,6 +70,39 @@ function knownSecrets(): string[] {
       // Longest first, so a key that contains a shorter one is removed whole.
       .sort((a, b) => b.length - a.length)
   );
+}
+
+/** The credentials a redaction reads: those of the environment as they come, and with the logger's. */
+interface Credentials {
+  /** knownSecrets, longest first. */
+  raw: string[];
+  /** knownSecrets and the logger's configured values (configuredValues). */
+  all: string[];
+}
+
+/** The credentials of the redaction running now (withCredentials). */
+let scoped: Credentials | undefined;
+
+function readCredentials(): Credentials {
+  const raw = knownSecrets();
+  return { raw, all: [...new Set([...raw, ...configuredValues()])] };
+}
+
+/** The credentials of the redaction running now, or read now. */
+const credentials = (): Credentials => scoped ?? readCredentials();
+
+/**
+ * `run` with the credentials read once for it: a redaction reads them many times, and reading the
+ * environment is most of what a short message costs.
+ */
+function withCredentials<T>(run: () => T): T {
+  if (scoped) return run();
+  scoped = readCredentials();
+  try {
+    return run();
+  } finally {
+    scoped = undefined;
+  }
 }
 
 /** Names of a `name=value` pair whose value is a secret (a query parameter, an attribute). */
@@ -226,12 +260,13 @@ function spanHides(spans: readonly Span[]): Hide[] {
 }
 
 /**
- * Each place a configured credential (knownSecrets) appears, as the logger finds a configured
- * value (knownValueSpans): as it came, escaped once or twice as JSON writes a string, or with its
- * line breaks and other runs of whitespace folded (plainLine folds a run into one space).
- * Overlapping values are one span; values that only touch stay one mask each, as before.
+ * Each place a configured credential (knownSecrets) or a value the logger hides (configuredValues:
+ * a salt, an endpoint that is not a link, a key with a space at its end) appears, as the logger
+ * finds a configured value (knownValueSpans): as it came, escaped once or twice as JSON writes a
+ * string, or with its line breaks and other runs of whitespace folded (plainLine folds a run into
+ * one space), with the token characters glued to it. Values that overlap or touch are one span.
  */
-const knownSecretSpans = (text: string): Span[] => knownValueSpans(text, knownSecrets());
+const knownSecretSpans = (text: string): Span[] => knownValueSpans(text, credentials().all);
 
 /** knownSecretSpans as hides behind "[redacted]". */
 const secretHides: HideStep = (text) =>
@@ -248,7 +283,7 @@ function rawSecretHides(text: string, secret: string): Hide[] {
 
 /** The credentials' steps as they were: each credential as it came, one after the other. */
 const rawSecretSteps = (): HideStep[] =>
-  knownSecrets().map(
+  credentials().raw.map(
     (secret): HideStep =>
       (text) =>
         rawSecretHides(text, secret),
@@ -1708,7 +1743,7 @@ function maskedPieces(
 }
 
 /** Removes credentials from an error message or log line (redactKeyValues). */
-export const redactText = (text: string) => redactKeyValues(text, []);
+export const redactText = (text: string) => withCredentials(() => redactKeyValues(text, []));
 
 /** What the HTTP error log keeps of an error's message (logText in http/middleware/errors.ts). */
 const MAX_LOGGED_MESSAGE = 200;
@@ -1728,13 +1763,15 @@ const LOG_PREFIX_ROOM = 1024;
  * they would be cut, with "…", and the log never shows what that cut left out.
  */
 function redactForLog(text: string, max: number, keep: number): string {
-  const more = moreSecretSpans(text);
-  const pieces = keyValuePieces(text, [], [], more);
-  if (more.length === 0) return render(text, pieces);
-  const shown = safeCut(text, pieces, keyValuePieces(text, [], [], []), max, keep);
-  return shown < text.length
-    ? `${render(text, piecesBefore(pieces, shown))}…`
-    : render(text, pieces);
+  return withCredentials(() => {
+    const more = moreSecretSpans(text);
+    const pieces = keyValuePieces(text, [], [], more);
+    if (more.length === 0) return render(text, pieces);
+    const shown = safeCut(text, pieces, keyValuePieces(text, [], [], []), max, keep);
+    return shown < text.length
+      ? `${render(text, piecesBefore(pieces, shown))}…`
+      : render(text, pieces);
+  });
 }
 
 /**
@@ -1933,7 +1970,7 @@ export const withoutEscapedMediaUrls = (text: string) => redactWith(text, [escap
  */
 export function scrubReadText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  const out = withoutMediaUrls(redactSecrets(text));
+  const out = withoutMediaUrls(withCredentials(() => redactSecrets(text)));
   return out.length > MAX_TEXT ? out.slice(0, MAX_TEXT) : out;
 }
 
@@ -1944,6 +1981,11 @@ export function scrubReadText(text: string): string {
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
+  return withCredentials(() => scrubbedText(text));
+}
+
+/** scrubText, past its check for an id. */
+function scrubbedText(text: string): string {
   const steps = [mediaUrlHides, escapedMediaUrlHides, emailHides, phoneHides];
   const more = moreSecretSpans(text);
   const pieces = keyValuePieces(text, steps, [], more);
@@ -2503,6 +2545,11 @@ const LINE_STEPS: HideStep[] = [
  * knows, the line stops at its start; what the line hid before it stays hidden.
  */
 function plainLine(text: string, cut: boolean): string | undefined {
+  return withCredentials(() => plainLineOf(text, cut));
+}
+
+/** plainLine, with the credentials read once for it. */
+function plainLineOf(text: string, cut: boolean): string | undefined {
   const pieces = runSteps(text, LINE_STEPS);
   const line = render(text, pieces);
   if (!line || reasonIssue(line) !== null) return undefined;
@@ -2519,8 +2566,9 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const lineValues = headerLineSpans(text);
   const more = moreSecretSpans(text);
   // A credential (knownSecretSpans) too, where it lies in the text as it came: the line's link
-  // rule can take its start (a link written right before a PEM key's first line).
-  const known = knownSecretSpans(text);
+  // rule can take its start (a link written right before a PEM key's first line). One inside a
+  // link the line writes as "[link]" is hidden with it, and the line says it was a link.
+  const known = outsideMasks(pieces, knownSecretSpans(text));
   const values = known.length > 0 ? maskableUnion(lineValues, known) : lineValues;
   const headerValues = inLine(more.length > 0 ? maskableUnion(values, more) : values);
   const lineOnly = inLine(lineValues);
@@ -2558,6 +2606,19 @@ function plainLine(text: string, cut: boolean): string | undefined {
   const shorter = render(short, piecesBefore(masked, end));
   const cutAgain = `${shorter.length > MAX_DETAIL - 1 ? shorter.slice(0, MAX_DETAIL - 1) : shorter}…`;
   return reasonIssue(cutAgain) === null ? cutAgain : undefined;
+}
+
+/** `spans` (sorted by start) but those inside one mask of `pieces`, which hides them whole. */
+function outsideMasks(pieces: readonly Piece[], spans: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  let index = 0;
+  for (const [start, end] of spans) {
+    while (index < pieces.length && (pieces[index] as Piece).to <= start) index++;
+    const piece = pieces[index];
+    const inside = piece?.mask !== undefined && piece.from <= start && end <= piece.to;
+    if (!inside) out.push([start, end]);
+  }
+  return out;
 }
 
 /**

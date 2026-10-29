@@ -24,7 +24,7 @@ import {
 } from "./logger.js";
 import { growth, timed } from "./sources/testing/strings.js";
 import { logText } from "./http/middleware/errors.js";
-import { plainReason, redactText, SourceError, scrubText } from "./sources/http.js";
+import { describeError, plainReason, redactText, SourceError, scrubText } from "./sources/http.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -644,11 +644,16 @@ describe("Authorization values in quotes and at the cap", () => {
   it("moves a cut that moved to a credential it splits after the word Basic", () => {
     // Moved to a configured value glued to the credential, then to the start of the credential,
     // which only the text as it came holds whole: the rules leave the credential to the scheme
-    // after it. A cut through a Basic credential that the rules read whole, as they read one that
-    // holds a configured value, falls before the word (readPairs).
+    // after it (here after a ":", which ends the value's token). A cut through a Basic credential
+    // that the rules read whole, as they read one that holds a configured value, falls before the
+    // word (readPairs).
     configureLogger({ GLUED_SECRET: "S1xS2xS3xS4xS5xS6x" });
-    const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x/Bearer yy ${"z ".repeat(20)}`;
+    const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x:Bearer yy ${"z ".repeat(20)}`;
     expect(logCut(glued, glued.indexOf("S3x"))).toBe(glued.indexOf("M0003x"));
+    // With the scheme glued to the value's token, the value takes it, and the rules read the
+    // credential whole.
+    const token = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x/Bearer yy ${"z ".repeat(20)}`;
+    expect(logCut(token, token.indexOf("S3x"))).toBe(token.indexOf("Basic"));
     const whole = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x yy ${"z ".repeat(20)}`;
     expect(logCut(whole, whole.indexOf("S3x"))).toBe(whole.indexOf("Basic"));
   });
@@ -778,12 +783,12 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
     [
       "a Bearer token that starts with a configured value",
       `authorization: Bearer ${SALT}T1xT2xT3x`,
-      "authorization: [redacted]",
+      "authorization: Bearer [redacted]",
     ],
     [
       "a quoted token that starts with a configured value",
       `{ authorization: 'Bearer ${SALT}T1xT2xT3x' }`,
-      "{ authorization: [redacted] }",
+      "{ authorization: 'Bearer [redacted]' }",
     ],
     [
       "a pair's value that starts with a configured value",
@@ -830,7 +835,7 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
         `{"error":"invalid_client","detail":${JSON.stringify(QUOTED)},"hint":"check the key"}`,
         '{"error":"invalid_client","detail":"[redacted]","hint":"check the key"}',
       ],
-      [`token=${SALT}Bearer T1xT2x`, "token=[redacted]Bearer [redacted]"],
+      [`token=${SALT}Bearer T1xT2x`, "token=[redacted] [redacted]"],
       [`token=${SALT}x token: T1xT2x`, "token=[redacted] token: [redacted]"],
       [`"Basic ${SALT}"`, '"Basic [redacted]"'],
       ['C:\\Users\\x\\n and "quoted \\"text\\"" and \\u0041', null],
@@ -843,7 +848,7 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
 
   it("reads a token on through a configured value, never through a [redacted] the text held", () => {
     expect(scrub(`token=${SALT}T1xT2x`)).toBe("token=[redacted]");
-    expect(scrub(`authorization: Bearer ${SALT}T1xT2x`)).toBe("authorization: [redacted]");
+    expect(scrub(`authorization: Bearer ${SALT}T1xT2x`)).toBe("authorization: Bearer [redacted]");
     // A text redacted before is read as it always was: a value that starts with its mask is left,
     // and the redaction of source errors (sources/http.ts), which masks what a log line of its
     // text would not hide, masks the rest of the token itself.
@@ -871,10 +876,11 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
       expect(shows(reason), reason).toEqual([]);
       expect(shows(scrub(text))).toEqual([]);
     }
-    // The characters scrub writes a configured value with, for its rules, are U+FFFD in a text.
+    // The characters scrub writes a configured value with, for its rules, are read as others in a
+    // text that holds them, and written back.
     expect(scrub("token=abc\uE001T1xT2x")).toBe("token=[redacted]");
     expect(scrub("token: \uE000redacted\uE001T1x")).toBe("token: [redacted]");
-    expect(scrub("a \uE000redacted\uE001 b")).toBe("a \uFFFDredacted\uFFFD b");
+    expect(scrub("a \uE000redacted\uE001 b")).toBe("a \uE000redacted\uE001 b");
     expect(scrubbedSpans("a \uE000redacted\uE001 b")).toEqual([]);
   });
 
@@ -1025,6 +1031,8 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
     ["masks after Basic", filled("[redacted]Q", "Basic "), undefined],
     ["masks before a scheme", filled("[redacted]Bearer ", "token="), undefined],
     ["masks and &", filled("[redacted]x&", "authorization: Bearer "), undefined],
+    ["values after a pair's name, each ending a token", filled("V1xV2x-V3x!", "token="), undefined],
+    ["values after a scheme, each ending a token", filled("V1xV2x-V3x!", "Bearer "), undefined],
   ])("reads configured values and masks in linear time, up to 1 MB: %s", (_name, make, env) => {
     const many = Object.fromEntries(
       Array.from({ length: 40 }, (_, i) => [`MANY_${i}_KEY`, `V${i}xV${i + 1}x-V${i + 2}x`]),
@@ -1118,6 +1126,272 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
       vi.unstubAllEnvs();
     }
   }, 60_000);
+});
+
+describe("configured values in what a client is shown, in a token and in any whitespace (#237)", () => {
+  /** A text with JSON's escapes, `\x` ones included, read; whitespace runs as one space. */
+  const plain = (text: string) =>
+    text
+      .replace(/\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})/g, (_m, u?: string, x?: string) =>
+        String.fromCharCode(Number.parseInt(u ?? x ?? "0", 16)),
+      )
+      .replace(/\\n|\\r|\\t/g, " ")
+      .replace(/\\(.)/g, "$1")
+      .replace(/[\s\p{Cc} ]+/gu, " ");
+  /** The first 8-character part of `value` (whitespace as one space) that `out` shows. */
+  const shown = (out: string, value: string) => {
+    const folded = plain(value).trim();
+    const read = [out, plain(out), plain(plain(out))];
+    for (let at = 0; at + 8 <= folded.length; at++) {
+      const part = folded.slice(at, at + 8);
+      if (read.some((text) => text.includes(part))) return part;
+    }
+    return undefined;
+  };
+  /** What a client and a log line are shown of `text` as a source's error. */
+  const surfaces = (text: string) => {
+    const described = describeError(new Error(text));
+    return {
+      plainReason: plainReason(text) ?? "",
+      describeError: described,
+      sourceError: new SourceError("discogs", "http", text).message,
+      redactText: redactText(text),
+      scrubText: scrubText(text),
+      scrub: scrub(text),
+      logLine: scrub(`source failed: ${described}`),
+    };
+  };
+  const configure = (values: Record<string, string>, env = values) => {
+    configureLogger({ ...values, LOG_LEVEL: "silent" });
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+  };
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("hides a value only the logger knows in what a client is shown", () => {
+    const PEM =
+      "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\n";
+    const values = {
+      LOG_IP_SALT: "saltValue12345678ZZ",
+      PEM_PRIVATE_KEY: PEM,
+      OPENAI_API_KEY: "sk-live-AbCdEf0123456789XyZ ",
+      SEARCH_ENDPOINT: "internal-search-key-998877",
+    };
+    // sources/http.ts reads its credentials from the environment: none of these is one of them
+    // as it is written in a text (a salt, an endpoint, a key with a line break or a space at its
+    // end); the logger knows each.
+    configure(values, {});
+    for (const text of [
+      "bad saltValue12345678ZZ here",
+      `{"message":${JSON.stringify(`bad key ${PEM}`)}}`,
+      `bad key ${PEM}`,
+      "invalid key sk-live-AbCdEf0123456789XyZ.",
+      "failed calling internal-search-key-998877 now",
+    ]) {
+      for (const [surface, out] of Object.entries(surfaces(text))) {
+        for (const value of Object.values(values)) {
+          expect(shown(out, value), `${surface}: ${JSON.stringify(out)}`).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it("hides the rest of a token glued to a value, after it or before it", () => {
+    const V = "dgTok9876543210abcdQ";
+    configure({ DISCOGS_TOKEN: V });
+    for (const text of [
+      `Bearer ${V}TAILsecretXYZ123 next`,
+      `Basic ${V}TAILsecretXYZ123 next`,
+      `password: ${V}TAILsecretXYZ123 next`,
+      `X-Api-Key: ${V}TAILsecretXYZ123 next`,
+      `see https://u:${V}TAILsecretXYZ123@host.example/x next`,
+      `see /search?q=${V}TAILsecretXYZ123&a=1 next`,
+      `see /search?a=1&q=${V}TAILsecretXYZ123 next`,
+      `authorization: 'Bearer ${V}TAILsecretXYZ123'`,
+      `{"token":"${V}TAILsecretXYZ123","next":1}`,
+      `Bearer HEADsecretXYZ123${V} next`,
+      `password: HEADsecretXYZ123${V}.TAILsecretXYZ123 next`,
+    ]) {
+      for (const [surface, out] of Object.entries(surfaces(text))) {
+        const label = `${surface}: ${JSON.stringify(text)} -> ${JSON.stringify(out)}`;
+        expect(shown(out, V), label).toBeUndefined();
+        expect(out, label).not.toMatch(/TAIL|HEAD|secretXYZ/);
+      }
+    }
+    // An escape before a value stays whole: the character after its backslash is not a token's.
+    configure({ DISCOGS_TOKEN: V });
+    expect(scrub(`a\\n${V}b`)).toBe("a\\n[redacted]");
+    expect(scrub(`a\\u00e9${V}b`)).toBe("a\\u00e9[redacted]");
+    expect(scrub(`a\\\\n${V}b`)).toBe("a\\\\[redacted]");
+    // A name before "=" is not a token's start.
+    expect(scrub(`x=${V}tail`)).toBe("x=[redacted]");
+  });
+
+  it("matches a value's whitespace with any run of whitespace in a text", () => {
+    const PEM =
+      "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----";
+    const PHRASE = "open sesame 0123 xyzzy";
+    configure({ PEM_PRIVATE_KEY: PEM, PHRASE_PASSWORD: PHRASE });
+    const echoes = (value: string) => [
+      value.replace(/\n/g, "\r\n"),
+      value.replace(/[\n ]/g, "\t "),
+      value.replace(/[\n ]/g, "   "),
+      value.replace(/[\n ]/g, "\u0085"),
+      value.replace(/[\n ]/g, " \n "),
+    ];
+    for (const value of [PEM, PHRASE]) {
+      for (const echo of echoes(value)) {
+        for (const text of [
+          `error: bad credential ${echo} end`,
+          JSON.stringify({ detail: echo }),
+        ]) {
+          for (const [surface, out] of Object.entries(surfaces(text))) {
+            const label = `${surface}: ${JSON.stringify(text)} -> ${JSON.stringify(out)}`;
+            expect(shown(out, value), label).toBeUndefined();
+          }
+        }
+        const file = captureLogsForTests();
+        try {
+          configureLogger({ PEM_PRIVATE_KEY: PEM, PHRASE_PASSWORD: PHRASE, LOG_LEVEL: "info" });
+          logger("Probe").error(`error: bad credential ${echo} end`);
+          logger("Probe").error("failed", { err: new Error(echo) });
+          expect(shown(file.lines().join("\n"), value)).toBeUndefined();
+        } finally {
+          file.restore();
+        }
+      }
+    }
+  });
+
+  it("keeps hidden what a log line of the text as it came hid, past a character that ends a token", () => {
+    // Masked escaped, a credential is a value that starts with a mask, which the logger's rules
+    // leave; written as it came, the pair's or the scheme's rule took it whole with what follows.
+    const V = "dgTok9876543210abcdQ";
+    configure({ DISCOGS_TOKEN: V });
+    const escaped = [...V]
+      .map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`)
+      .join("");
+    for (const sep of ["!", ":", "@", "|", "*"]) {
+      for (const text of [
+        `password: ${escaped}${sep}TAILsecretXYZ123 next`,
+        `authorization: Bearer ${escaped}${sep}TAILsecretXYZ123 next`,
+        `token=${escaped}${sep}TAILsecretXYZ123 next`,
+      ]) {
+        const out = surfaces(text);
+        for (const surface of ["describeError", "sourceError", "logLine"] as const) {
+          const label = `${surface}: ${JSON.stringify(text)} -> ${JSON.stringify(out[surface])}`;
+          expect(out[surface], label).not.toMatch(/TAIL|secretXYZ/);
+        }
+      }
+    }
+  });
+
+  it("finds a value again where it overlaps itself after a character that ends a token", () => {
+    configure({ SELF_SECRET: "k3y:k3y:k3y" });
+    expect(scrub("x k3y:k3y:k3y:k3y y")).toBe("x [redacted] y");
+  });
+
+  it("hides no whitespace and no words but a value's own", () => {
+    // A value that is only whitespace is left out; one with a space matches a run of any length
+    // only between its own words.
+    configure(
+      { WEIRD_PASSWORD: " ".repeat(12), BAND_TOKEN: "Bohemian Rhapsodies" },
+      {
+        WEIRD_PASSWORD: " ".repeat(12),
+        BLANK_PASSWORD: "        ",
+        BAND_TOKEN: "Bohemian Rhapsodies",
+      },
+    );
+    for (const text of [
+      `Bohemian${" ".repeat(12)}Rhapsody`,
+      "Bohemian\n\n\n\nRhapsody",
+      "the quick brown fox jumps",
+      "BohemianRhapsodies",
+    ]) {
+      const out = surfaces(text);
+      expect(out.scrub).toBe(text);
+      expect(out.describeError).toBe(text);
+      expect(out.redactText).toBe(text);
+      expect(out.sourceError).toBe(`discogs: ${text}`);
+      expect(out.plainReason).toBe(text.replace(/\s+/g, " "));
+      expect(scrubbedSpans(text)).toEqual([]);
+    }
+    expect(scrub("Bohemian \n Rhapsodies!")).toBe("[redacted]!");
+  });
+
+  it("keeps U+E000 and U+E001 in a text, with no value configured and with one", () => {
+    configureLogger({ LOG_LEVEL: "silent" });
+    const marks = "icon  private  use redacted";
+    expect(scrub(marks)).toBe(marks);
+    expect(scrubbedSpans(marks)).toEqual([]);
+    configureLogger({ SOME_SERVICE_TOKEN: "T0kenValue-1234", LOG_LEVEL: "silent" });
+    expect(scrub(`${marks} T0kenValue-1234 `)).toBe(`${marks} [redacted] `);
+    // Read as any other character of a value: a pair's value runs on through one.
+    expect(scrub("token=abcdef x")).toBe("token=[redacted] x");
+  });
+
+  it("keeps a link's [link] in a reason when a credential is in the link", () => {
+    const env = {
+      LASTFM_API_KEY: "0123abcd4567ef890123abcd4567ef00",
+      DISCOGS_TOKEN: "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789AbCd",
+    };
+    configure(env);
+    expect(
+      plainReason(
+        `Invalid API key - You must be granted a valid key by last.fm (https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${env.LASTFM_API_KEY}&format=json)`,
+      ),
+    ).toBe("Invalid API key - You must be granted a valid key by last.fm ([link])");
+    expect(
+      plainReason(
+        `see https://api.discogs.com/database/search?q=Hurt&token=${env.DISCOGS_TOKEN} for details`,
+      ),
+    ).toBe("see [link] for details");
+  });
+
+  it("stops a reason before a credential its cut splits", () => {
+    // A credential sources/http.ts reads from the environment, which the logger does not know.
+    const CRED = "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789AbCd";
+    configure({}, { DISCOGS_TOKEN: CRED });
+    const escaped = `${CRED.slice(0, 20)}\\u00${CRED.charCodeAt(20).toString(16)}${CRED.slice(21)}`;
+    for (const form of [CRED, escaped, JSON.stringify(CRED)]) {
+      for (let k = 30; k < 60; k++) {
+        const text = `${"w ".repeat(k)}${form} tail`;
+        const reason = plainReason(text) ?? "";
+        // Where the cut at MAX_DETAIL falls inside the credential, the reason stops at its start.
+        const quoted = form.startsWith('"') ? 1 : 0;
+        if (2 * k + quoted < 119 && 2 * k + form.length - quoted > 119) {
+          expect(reason, String(k)).toMatch(/^(?:w ?)+"?…$/);
+        }
+        expect(shown(reason, CRED), String(k)).toBeUndefined();
+      }
+    }
+  });
+
+  it("finds a value written with \\x escapes, with \\/ escapes, and over 4 kB escaped across a cut", () => {
+    const SLASHED = "ab/cd/ef/gh12+ij==";
+    configure({ SLASHED_SECRET: SLASHED });
+    const hex = [...SLASHED].map((c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+    expect(scrub(`failed: ${hex.join("")} end`)).toBe("failed: [redacted] end");
+    expect(scrub(`failed: "${SLASHED.replaceAll("/", "\\/")}" end`)).toBe(
+      'failed: "[redacted]" end',
+    );
+    // A value longer than logCut's window, written with \u escapes (six times as long): found
+    // across scrub's cap and across a short cut.
+    const LONG = Array.from({ length: 900 }, (_, i) => `L${i.toString(36)}x`).join("");
+    configure({ LONG_SECRET: LONG.slice(0, 4_500) });
+    const escaped = (text: string) =>
+      [...text].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+    const long = LONG.slice(0, 4_500);
+    for (const pad of [0, 4_000, 12_000, 16_000]) {
+      const text = `${"w ".repeat(pad / 2)}${escaped(long)} end`;
+      expect(shown(scrub(text), long), String(pad)).toBeUndefined();
+    }
+    const mid = LONG.slice(0, 1_000);
+    configure({ LONG_SECRET: mid });
+    const text = `${"x".repeat(150)} ${escaped(mid)} end`;
+    expect(logCut(text, 200)).toBe(151);
+  });
 });
 
 describe("a configured secret that cannot be replaced safely", () => {

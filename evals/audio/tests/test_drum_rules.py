@@ -170,17 +170,35 @@ def test_reproduce_refuses_any_difference_from_the_report(served, name):
     row, got = recorded_row(rows, name)
     assert row["kind"] == ("clip" if name == "16" else "control")
     assert script.reproduce([row], {name: got}) == 1
+    tonic, mode, strength = got["keys"]["essentia"]
+    other = "C" if tonic != "C" else "D"
+    bins, movement, shared, depth = got["source"]
+
+    def source(i, value):
+        changed = list(got["source"])
+        changed[i] = value
+        return {**got, "source": changed}
+
     changes = {
         "withheld": {**got, "withheld": "one_held_pitch"},
-        "source": {
+        "bins": source(0, bins + 1),
+        "movement": source(1, movement + 0.01),
+        "shared": source(2, shared * (1 + 1e-4)),
+        "depth": source(3, depth * (1 - 1e-4)),
+        "tonic, same strength": {
             **got,
-            "source": [got["source"][0], got["source"][1] + 0.01, *got["source"][2:]],
+            "keys": {**got["keys"], "essentia": (other, mode, strength)},
         },
-        "bins": {**got, "source": [got["source"][0] + 1, *got["source"][1:]]},
-        "tonic": {**got, "keys": {**got["keys"], "librosa": ("C#", "minor", 0.5)}},
-        "strength": {
+        "mode": {
             **got,
-            "keys": {**got["keys"], "essentia": (*got["keys"]["essentia"][:2], 0.01)},
+            "keys": {
+                **got["keys"],
+                "essentia": (tonic, "minor" if mode == "major" else "major", strength),
+            },
+        },
+        "strength 1e-4": {
+            **got,
+            "keys": {**got["keys"], "essentia": (tonic, mode, strength * (1 + 1e-4))},
         },
         "withheld key": {**got, "keys": {**got["keys"], "librosa": None}},
     }
@@ -188,6 +206,17 @@ def test_reproduce_refuses_any_difference_from_the_report(served, name):
         with pytest.raises(SystemExit, match=name):
             script.reproduce([row], {name: changed})
         assert what
+    # The recorded estimate disagrees with the key served: refused too.
+    wrong = {**row, "estimates": {**row["estimates"], "essentia": (other, mode, strength)}}
+    with pytest.raises(SystemExit, match=name):
+        script.reproduce([wrong], {name: got})
+    # Within the tolerances (a float32 round trip), the same evidence and key.
+    close = {
+        **got,
+        "source": [bins, movement * (1 + 1e-8), shared, depth],
+        "keys": {**got["keys"], "essentia": (tonic, mode, strength * (1 + 1e-7))},
+    }
+    assert script.reproduce([row], {name: close}) == 1
 
 
 def test_membrane_modes_tell_a_drum_head_from_a_string():
@@ -198,6 +227,16 @@ def test_membrane_modes_tell_a_drum_head_from_a_string():
     assert measured_on(script.membrane_modes, string) < -0.5
 
 
+def test_membrane_modes_weigh_each_hit_by_its_energy():
+    """A loud drum-head hit and two quiet string hits: the loud one carries the mean."""
+    script = load_script()
+    _, E = service.load()
+    head = [(steady(180.0 * r), 1.0) for r in (1.0, *script.MEMBRANE_RATIOS)]
+    string = [(steady(180.0 * k), 0.25) for k in (1, 2, 3, 4, 5)]
+    y = cycled_hits([head, string, string])
+    assert script.membrane_modes(E.Signals(y, SR)) > 0.5
+
+
 def test_a_falling_strongest_partial_reads_a_drum_falling_in_pitch():
     script = load_script()
     falling = measured_on(
@@ -205,6 +244,75 @@ def test_a_falling_strongest_partial_reads_a_drum_falling_in_pitch():
     )
     assert falling < -35
     assert abs(measured_on(script.falling_partial, [steady(180.0)])) < 5
+
+
+def cycled_hits(kinds, seconds: float = 8.0, period: float = 0.25, decay: float = 0.1):
+    """
+    A hit every `period` s, cut at the next, cycling through `kinds`: each a list of (pitch
+    function, amplitude) sines, dying away with the time constant `decay`.
+    """
+    t = np.arange(int(period * SR)) / SR
+    envelope = np.exp(-t / decay) * np.minimum(1, t / 0.002)
+    tones = [
+        sum(a * np.sin(2 * np.pi * np.cumsum(pitch_of(t)) / SR) for pitch_of, a in kind)
+        for kind in kinds
+    ]
+    y = np.zeros(int(seconds * SR))
+    for i, start in enumerate(range(0, y.size - t.size, t.size)):
+        y[start : start + t.size] += tones[i % len(tones)] * envelope
+    return (0.5 * y / np.abs(y).max()).astype(np.float32)
+
+
+def test_a_falling_strongest_partial_follows_the_strongest_over_uneven_hits():
+    """
+    The strongest of three partials falls 15 % in two hits of three and rises as much in the
+    third; two weaker ones hold still. The median over hits follows the falls.
+    """
+    script = load_script()
+    _, E = service.load()
+    held = [(steady(470.0), 0.3), (steady(730.0), 0.2)]
+    fall = [(lambda t: 180.0 * (1 + 0.15 * np.exp(-t / 0.05)), 1.0), *held]
+    rise = [(lambda t: 180.0 * (1 - 0.15 * np.exp(-t / 0.05)), 1.0), *held]
+    shown = script.falling_partial(E.Signals(cycled_hits([fall, fall, rise]), SR))
+    assert -150 < shown < -35
+
+
+def stabs(notes, partials, bpm: float = 120.0, decay: float = 0.3, seconds: float = 30.0):
+    """A chord struck on every beat, each note with `partials` (amplitudes of harmonics 1, 2...)."""
+    period = 60.0 / bpm
+    t = np.arange(int(period * SR)) / SR
+    tone = sum(
+        a * np.sin(2 * np.pi * f * (k + 1) * t) for f in notes for k, a in enumerate(partials)
+    )
+    hit = tone * np.exp(-t / decay) * np.minimum(1, t / 0.004) * np.minimum(1, (period - t) / 0.01)
+    y = np.zeros(int(seconds * SR))
+    for start in range(0, y.size - hit.size, hit.size):
+        y[start : start + hit.size] += hit
+    return (0.5 * y / np.abs(y).max()).astype(np.float32)
+
+
+TRIANGLE = (1, 0, 1 / 9, 0, 1 / 25)
+# The membrane-mode threshold the 2026-10-29 run chose on the training half.
+MEMBRANE_THRESHOLD = 0.0206
+
+
+def test_an_inverted_triad_reads_as_membrane_modes_and_would_lose_its_right_key():
+    """
+    A known cost of the membrane-mode rule: three of MEMBRANE_RATIOS lie 7-14 cents from a
+    minor sixth, a minor ninth and an eleventh, the intervals of an inverted triad. A minor
+    struck as E4-A4-C5 in a triangle timbre gets its right key from both estimators, and reads
+    far above the threshold; the same timbre in root position (C4-E4-G4) reads below it.
+    """
+    script = load_script()
+    _, E = service.load()
+    inverted = E.Signals(stabs((329.63, 440.0, 523.25), TRIANGLE), SR)
+    assert inverted.key_withheld() is None
+    for est in ("essentia", "librosa"):
+        key = E.select_estimator(est).key(inverted)
+        assert (key.tonic, key.mode) == ("A", "minor"), est
+    assert script.membrane_modes(inverted) > 10 * MEMBRANE_THRESHOLD
+    root = E.Signals(stabs((261.63, 329.63, 392.0), TRIANGLE), SR)
+    assert script.membrane_modes(root) < MEMBRANE_THRESHOLD
 
 
 def test_without_a_hit_there_is_nothing_to_measure():
@@ -248,7 +356,7 @@ def table():
     return rows, {name: {"r": r, "q": q} for name, (r, q) in values.items()}
 
 
-def test_halves_split_seeded_rows_by_seed_and_the_rest_in_turn():
+def test_halves_split_seeded_rows_by_seed_and_the_rest_alternately():
     script = load_script()
     rows, _ = table()
     assert script.halves(rows) == {
@@ -322,3 +430,72 @@ def test_a_pair_of_measurements_is_placed_in_both_gaps(monkeypatch):
     # Aimed at the tabla, which has no training key, it finds nothing.
     monkeypatch.setattr(script, "CANDIDATES", {"two": ("all", ("r", "q"), ("tabla",))})
     assert script.candidates(rows, measured)["two"]["free"] is None
+
+
+def search_table():
+    """
+    Six training toms (0.9 down to 0.4): Essentia served the first four, librosa all six. One
+    unseeded control (training: it is the only one) with a right key from Essentia only.
+    """
+    rows, measured = [], {}
+    for i, value in enumerate((0.9, 0.8, 0.7, 0.6, 0.5, 0.4)):
+        name = f"toms-s50{i}"
+        rows.append(
+            {
+                "name": name,
+                "kind": "control",
+                "drum": ("toms", "pinned"),
+                "group": "toms",
+                "keys": {"essentia": (i < 4, False), "librosa": (True, False)},
+            }
+        )
+        measured[name] = {"r": value, "q": 0.8}
+    rows.append(
+        {
+            "name": "melody",
+            "kind": "control",
+            "drum": None,
+            "group": "music",
+            "keys": {"essentia": (True, True), "librosa": (True, False)},
+        }
+    )
+    measured["melody"] = {"r": 0.55, "q": 0.9}
+    return rows, measured
+
+
+def test_more_than_half_is_the_strictest_threshold_for_both_estimators(monkeypatch):
+    """
+    From the top: at 0.8 Essentia has 2 of 4 (half, not more); at 0.7 it has 3 of 4 but
+    librosa 3 of 6; at 0.6, 4 of 6. Not the weakest threshold either (0.4 takes all).
+    """
+    script = load_script()
+    rows, measured = search_table()
+    monkeypatch.setattr(script, "CANDIDATES", {"one": ("any", ("r",), None)})
+    got = script.candidates(rows, measured)["one"]
+    assert got["most"] == 0.6
+    assert got["mostDrums"]["essentia"][("toms", "pinned")] == (4, 4)
+    assert got["mostDrums"]["librosa"][("toms", "pinned")] == (4, 6)
+
+
+def test_a_key_right_with_one_estimator_counts_as_right(monkeypatch):
+    """The melody's key is right with Essentia only; the free threshold must stay above it."""
+    script = load_script()
+    rows, measured = search_table()
+    monkeypatch.setattr(script, "CANDIDATES", {"one": ("any", ("r",), None)})
+    got = script.candidates(rows, measured)["one"]
+    ((threshold, top),) = got["free"].values()
+    assert top == 0.55 and threshold == pytest.approx(0.575)
+    assert got["freeCosts"]["training"] == {"essentia": {}, "librosa": {}}
+
+
+def test_a_pair_keeps_the_first_threshold_that_withholds_most_drums(monkeypatch):
+    """
+    With r from 0.6 down to the melody's 0.55, q has no right key to clear: four toms go. From
+    0.7 or 0.8 fewer go; from 0.5 the melody's q (0.9) is above every tom's.
+    """
+    script = load_script()
+    rows, measured = search_table()
+    monkeypatch.setattr(script, "CANDIDATES", {"two": ("all", ("r", "q"), None)})
+    got = script.candidates(rows, measured)["two"]
+    assert got["free"]["r"] == (pytest.approx(0.575), None)
+    assert got["freeDrums"]["librosa"][("toms", "pinned")] == (4, 6)

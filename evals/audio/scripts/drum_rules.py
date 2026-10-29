@@ -9,7 +9,7 @@ controls and clips are analysed: every control to which the controls run served 
 either estimator (the drums at 500-529 and 600-629 among them), and every clip to which the
 GiantSteps+ key run served one. Each is made again (a control from its seed, a clip from the
 local GiantSteps+ audio, cut at the run's clip seed), then decoded and analysed by the service.
-Before anything is measured, reproduce() checks each one against the report: no evidence rule
+Before anything is reported, reproduce() checks each one against the report: no evidence rule
 withholds its key, the single-source evidence is the one recorded (the controls run's, or the
 GiantSteps+ calibration run's for a clip), and each estimator serves the key it served, at the
 recorded strength, or none where it served none.
@@ -27,26 +27,32 @@ The measurements, each per hit at the onsets librosa finds (hop 512, 23 ms; fram
 - **A pitch line that jumps between hits**: the pitch track's spread around its smoothed line
   (Voice.vibrato_cents, 90th percentile): one drum after another sets the tracker hopping
   between their pitches.
-- **Membrane modes**: in the frame GLIDE_FRAMES[0] after the onset, the share of the peaks'
-  energy near an ideal membrane's overtone ratios (MEMBRANE_RATIOS) to one of the three
-  strongest peaks, minus the share near a whole multiple of it, the reference peak left out
-  (each share the largest over the three references); averaged over hits by their energy.
+- **Membrane modes**: per hit, in the frame GLIDE_FRAMES[0] after the onset, each of the three
+  strongest peaks is taken as a reference. Of the other peaks' energy, the largest share (over
+  the references) within MODE_CENTS of an ideal membrane's overtone ratios (MEMBRANE_RATIOS)
+  to its reference, minus the largest share within MODE_CENTS of a whole multiple (2x and up);
+  then the mean over hits, weighted by their peaks' energy. The ratios lie 7-14 cents from a
+  minor sixth (1.594), a minor ninth (2.136) and an eleventh (2.653), so an inverted triad's
+  notes read as membrane modes too (tests/test_drum_rules.py pins one).
 - **A falling strongest partial**: the strongest of those peaks followed to the nearest peak
   GLIDE_FRAMES[1] after the onset, in cents; the median over hits.
 - **Tonal ratio**: Tonality.tonal_ratio, the share of the 60 Hz-5 kHz energy in spectral lines.
 
 The candidates (CANDIDATES) are the first three measurements each on its own; membrane modes or
 a falling strongest partial; and, aimed at the tabla, a pitch line that jumps between hits on a
-tonal sound. Their thresholds are chosen on the training half and judged on the held-out one:
-training is the drums at 500-529 and the other seeded families at 700-729 with every other
-served control and clip in turn (sorted by name), held out the seeds 600-629 and 800-829 and
-the rest. One threshold serves both estimators. A rule withholds no right key of the training
-half at the middle of the gap between the most drum-like right key there and the next drum
-(for an "or", each measurement has its own; for an "and", the first is tried at each drum
-value and the second placed at its gap among the rows the first takes, keeping the pair that
-withholds most of the training drums it aims at). For each single measurement it also gives
-the least strict threshold that withholds more than half of the training drum keys with each
-estimator, with the right keys it takes in both halves.
+tonal sound. The last two were proposed after the held-out numbers of the first three had been
+seen, so their held-out numbers are not an untouched test. Thresholds are chosen on the training
+half and judged on the held-out one. A seeded control goes by its seed: 500-529 (the drums and
+the other one-pitch-class families) and 700-729 (the chord families) train, 600-629 and 800-829
+are held out. The unseeded controls and the clips, sorted by name, go alternately to each half,
+so near-copies of one chord in the grids (soft-third, seventh, detuned-third) fall on both
+sides. One threshold serves both estimators. A rule withholds no right key of the training half
+at the middle of the gap between the most drum-like right key there and the next drum (for an
+"or", each measurement has its own; for an "and", the first is tried at each drum value and the
+second placed at its gap among the rows the first takes, keeping the pair that withholds most of
+the training drums it aims at). For each single measurement it also gives the strictest
+threshold (the highest drum value, searched from the top) that withholds more than half of the
+training drum keys with each estimator, with the right keys it takes in both halves.
 
     cd evals/audio && uv run python scripts/drum_rules.py ../reports/audio-2026-10-29.json [--jobs J]
 
@@ -349,8 +355,9 @@ def hit_peaks(signals):
 
 def membrane_modes(signals) -> float | None:
     """
-    The share of each hit's peak energy near MEMBRANE_RATIOS to a reference peak minus the share
-    near its whole multiples, the reference left out; averaged over hits by their energy.
+    Per hit, with each of the MODE_REFERENCES strongest peaks as a reference (itself left out):
+    the largest share of the other peaks' energy near MEMBRANE_RATIOS times the reference, minus
+    the largest share near its whole multiples from 2x; the mean over hits, weighted by energy.
     """
     shares, weights = [], []
     for hz, energy, _ in hit_peaks(signals):
@@ -450,14 +457,14 @@ def analyse(item: tuple[str, str, int, str]) -> dict:
 
 def reproduce(rows: list[dict], measured: dict) -> int:
     """
-    Check every row against the report before anything is measured: no evidence rule withholds
+    Check every row against the report before anything is reported: no evidence rule withholds
     its key; the single-source evidence is the one recorded; each estimator serves the key it
     served, at the strength recorded with the rules lifted, and none where it served none.
     Exits on the first row that differs. Returns how many rows were checked.
     """
 
     def refuse(row: dict, what: str) -> None:
-        raise SystemExit(f"{row['name']}: {what} differs from the report; nothing is measured")
+        raise SystemExit(f"{row['name']}: {what} differs from the report; nothing is reported")
 
     for row in rows:
         got = measured[row["name"]]
@@ -498,8 +505,8 @@ def _group(control: dict) -> str:
 
 def halves(rows: list[dict]) -> dict[str, str]:
     """
-    {name: "training" or "held out"}: a seeded control by its seed (TRAINING_SEEDS), every
-    other control and clip in turn, sorted by name.
+    {name: "training" or "held out"}: a seeded control by its seed (TRAINING_SEEDS); the
+    unseeded controls and the clips, sorted by name, alternately.
     """
     unseeded = sorted(r["name"] for r in rows if not FAMILY.match(r["name"]))
     out = {name: ("training", "held out")[i % 2] for i, name in enumerate(unseeded)}
@@ -615,9 +622,9 @@ def candidates(rows: list[dict], measured: dict) -> dict:
     """
     Per candidate, thresholds chosen on the training half (halves): "free", those that withhold
     no right key there ({measurement: (signed threshold, most drum-like right value)}), and for
-    a single measurement "most", the least strict one that withholds more than half of the
-    training drum keys with each estimator. For each, the drum counts ("...Drums") and per half
-    the costs ("...Costs").
+    a single measurement "most", the strictest one (from the highest drum value down) that
+    withholds more than half of the training drum keys with each estimator. For each, the drum
+    counts ("...Drums") and per half the costs ("...Costs").
     """
     half = halves(rows)
     parts = {h: [r for r in rows if half[r["name"]] == h] for h in ("training", "held out")}

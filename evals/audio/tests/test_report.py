@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from evals_audio import calibration, golden, service
+from evals_audio import calibration, calibration_report, golden, service
 from evals_audio.controls import GROUPS, added_families, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
@@ -373,6 +373,104 @@ def test_the_guide_explains_only_the_tables_a_report_holds():
     assert {"MIREX", "Paired MIREX difference"} <= terms(key)
     assert not terms(key) & {"Acc1", "Lifted rules"}
     assert "Acc1" not in " ".join(intro(key)) and "a MIREX score of 1" in " ".join(intro(key))
+
+
+# Words of the calibration section that are only true of a calibration of the key rules.
+KEY_RULE_WORDS = (
+    "exact for key",
+    "MIREX 0",
+    "strength minimum",
+    "key evidence rule",
+    "key: unrelated",
+    "39 of 50 GiantSteps+ keys",
+    "gave keys to material with no key",
+    "pitch-class level of 0.1",
+    "key exact",
+    "pitchless drum track",
+    "the drum track above",
+    "the key strength, the share of energy in spectral lines",
+    "truth: key",
+    "`librosa` key",
+    "*a key* means",
+)
+# And those only true of a calibration of the tempo rules.
+TEMPO_RULE_WORDS = (
+    "Acc1",
+    "Acc2",
+    "steadiness",
+    "forgiving octave and meter",
+    "0.04",
+    "periodicity",
+    "confidence",
+    "beat drift",
+    "beat-this is shown",
+    "truth: tempo",
+    "`librosa` tempo",
+)
+
+
+def calibration_runs(doc: dict, *kinds: str) -> dict:
+    """The document with only the calibration runs of `kinds` (and the other suites' runs)."""
+    return dict(
+        doc,
+        runs=[r for r in doc["runs"] if r["suite"] != "calibration" or r["kind"] in kinds],
+    )
+
+
+def test_the_calibration_section_says_only_what_its_runs_calibrate():
+    """
+    Without a calibration run of the key rules, the section says nothing about them: no key
+    scores, minimums, measurements, history or control columns; without one of the tempo rules,
+    nothing about those. With both (the 2026-10-25 report) it says both.
+    """
+    full = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-25.json").read_text())
+    both = "\n".join(calibration_report.section(full))
+    tempo = "\n".join(calibration_report.section(calibration_runs(full, "tempo")))
+    key = "\n".join(calibration_report.section(calibration_runs(full, "key")))
+    for words in KEY_RULE_WORDS:
+        assert words in both, words
+        assert words not in tempo, words
+    for words in TEMPO_RULE_WORDS:
+        assert words in both, words
+        assert words not in key, words
+    assert "(Acc1 for tempo)" in tempo and "The service withholds a tempo when" in tempo
+    assert "(the confidence minimum)" in tempo
+    assert "choosing the tightening that fixes most controls and requiring" in tempo
+    assert "a tolerance of 0.04 that librosa's clips reject" in tempo
+    assert "### Octave and meter errors and the confidence" in tempo
+    assert "| generated controls | tempo, gate |" in tempo
+    assert "None of those that pass gets a tempo." in tempo
+    # The derivation check counts the tempo decisions only, and names no key mismatch.
+    tempo_doc = calibration_runs(full, "tempo")
+    runs = [r for r in tempo_doc["runs"] if r["suite"] == "calibration"]
+    controls = next(r for r in tempo_doc["runs"] if r["suite"] == "controls")
+    pairs = sum(
+        calibration.usable(c, name, "tempo")
+        for run in [*runs, controls]
+        for c in run.get("clips") or run["controls"]
+        for name in run["estimators"]
+    )
+    assert f"on 0 of {pairs} clip and estimator pairs" in tempo
+    broken = json.loads(json.dumps(full))
+    control = next(r for r in broken["runs"] if r["suite"] == "controls")["controls"][0]
+    control["estimators"]["essentia"]["key"]["served"] = ["C#", "minor"]
+    assert "controls key `essentia`" in "\n".join(calibration_report.section(broken))
+    tempo_broken = "\n".join(calibration_report.section(calibration_runs(broken, "tempo")))
+    assert "controls key" not in tempo_broken and f"on 0 of {pairs} clip" in tempo_broken
+    assert "| generated controls | key, gate | `librosa`, `essentia` |" in key
+    assert "(exact for key)" in key and "The service withholds a key when" in key
+    assert "(the strength minimum)" in key and "unrelated to the reference key at most" in key
+    assert "### Octave and meter errors" not in key
+    assert "| generated controls | key, gate |" in key
+    assert "None of those that pass gets a key." in key
+    # The 2026-10-29 runs were made with the single-source rule, a key rule: it is described
+    # with the key calibration run, and not without it.
+    newest = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json").read_text())
+    text = "\n".join(calibration_report.section(calibration_runs(newest, "tempo")))
+    assert not [words for words in KEY_RULE_WORDS if words in text]
+    assert "single-source rule" not in text and "Added to the controls" not in text
+    with_key = "\n".join(calibration_report.section(newest))
+    assert "single-source rule" in with_key and "Added to the controls" in with_key
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

@@ -682,9 +682,12 @@ def test_the_gate_section_names_noise_controls_that_get_a_value():
     runs, ctl = key_runs()
     for c in ctl["controls"]:
         c["truth"]["gate"] = "noise"
-    text = "\n".join(calibration_report.gate_section(runs, ctl, cal.BASELINE))
+    text = "\n".join(calibration_report.gate_section(runs, ctl, cal.BASELINE, {"tempo", "key"}))
     # Under the baseline neither control gets a key.
     assert "None of those that pass gets a tempo or a key." in text
     lower = cal.BASELINE.set("class_level", 0.1)
-    text = "\n".join(calibration_report.gate_section(runs, ctl, lower))
+    text = "\n".join(calibration_report.gate_section(runs, ctl, lower, {"tempo", "key"}))
     assert "these get a value: band-bass+10 (`essentia` key)" in text
+    # A report that calibrates only the tempo rules names no key a noise control gets.
+    text = "\n".join(calibration_report.gate_section(runs, ctl, lower, {"tempo"}))
+    assert "(`essentia` key)" not in text and "None of those that pass gets a tempo." in text

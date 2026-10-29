@@ -3,7 +3,8 @@ name: audio models
 # The audio service as it runs in production: with essentia-tensorflow (the "models" extra)
 # and the Essentia models, so the Essentia estimators and the model tests run too. Of the
 # seeded control families, only those that run the key estimators (marker "estimators": the
-# one-pitch-class pins and the pitchless families) run here, for their Essentia half; the
+# one-pitch-class pins, the pitchless families, the triads with a softer third over a doubled
+# root and the four of them pinned as a known limit) run here, for their Essentia half; the
 # others give the same result without Essentia and run in the ci workflow. The ci workflow's
 # python job ("not seeded"), python-seeded and python-seeded-chords jobs ("seeded") cover the
 # service without the models.

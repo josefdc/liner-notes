@@ -126,11 +126,17 @@ values the run was made with (`Rules.one_source`), and derives each run at its o
 does not vary them. The `held-out-seeded` group (the same families at seeds 600-629 and
 800-829) is evaluation only: the choice does not see it and no test pins it. A report whose
 runs were made with different analyzer versions says so at the top. The 2026-10-29 report holds
-the controls and the Ballroom tempo and calibration runs, at analyzer 2.3.4; key accuracy
-(GiantSteps+), GiantSteps Tempo, the GiantSteps calibrations, the golden set and the costs were
-not run for it, and were last measured for the 2026-10-25 report, at analyzer 2.1.0. The
-single-source rule came in 2.2.0, so no committed report measures what it costs on annotated
-keys.
+the controls, the Ballroom tempo and calibration runs, and the GiantSteps+ key and calibration
+runs, all at analyzer 2.3.4 (the controls and Ballroom runs at commit `9682a4a` of #244, the
+GiantSteps+ runs at `2901b7f` of #256: the same analyzer code, a harness changed only in how
+it writes the report); GiantSteps Tempo, its calibration, the golden set and the costs were
+not run for it, and were last measured for the 2026-10-25 report, at analyzer 2.1.0. Runs made
+on the same day (UTC) go into one dated report. The results file keeps each run's commit and
+analyzer version. The Markdown gives the commit of a tempo or key run in that run's section;
+the calibration section lists the commits of the calibration and controls runs together,
+without saying which run was made at which. The single-source rule came in 2.2.0; on the
+GiantSteps+ keys at 2.3.4 it withholds none of the 250 clips, and every clip's key, strength,
+score and reason for withholding is the same as at 2.1.0 (two reasons are worded differently).
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

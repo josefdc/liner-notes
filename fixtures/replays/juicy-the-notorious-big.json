@@ -5,8 +5,8 @@
     "query": "Juicy - 2005 Remaster The Notorious B.I.G.",
     "selectedTrackId": null
   },
-  "recordedAt": "2026-10-28T18:37:13.253Z",
-  "commit": "2b66a5082fc7",
+  "recordedAt": "2026-10-29T07:01:59.843Z",
+  "commit": "0fdfdccc509c",
   "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
   "events": [
     {
@@ -15,1086 +15,1086 @@
         "type": "connected",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 0,
-        "elapsedMs": 2,
+        "elapsedMs": 0,
         "threadId": "recorded-juicy-the-notorious-big",
-        "timestamp": "2026-10-28T18:36:37.788Z"
+        "timestamp": "2026-10-29T07:01:27.111Z"
       }
     },
     {
-      "atMs": 131,
+      "atMs": 5,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 1,
-        "elapsedMs": 138,
+        "elapsedMs": 4,
         "message": "Reading the track from Spotify",
         "code": "NET-100",
         "node": "scout",
-        "timestamp": "2026-10-28T18:36:37.882Z"
+        "timestamp": "2026-10-29T07:01:27.114Z"
       }
     },
     {
-      "atMs": 390,
+      "atMs": 129,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 2,
-        "elapsedMs": 397,
+        "elapsedMs": 128,
         "message": "Found the track on Spotify: Juicy - 2005 Remaster by The Notorious B.I.G.",
         "code": "SPOTIFY-FOUND",
         "node": "scout",
-        "timestamp": "2026-10-28T18:36:38.182Z"
+        "timestamp": "2026-10-29T07:01:27.239Z"
       }
     },
     {
-      "atMs": 405,
+      "atMs": 138,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 3,
-        "elapsedMs": 413,
+        "elapsedMs": 138,
         "message": "Starting the research: Last.fm, MusicBrainz, SecondHandSongs, Genius and a web search",
         "code": "RESEARCH-START",
         "node": "historian",
-        "timestamp": "2026-10-28T18:36:38.195Z"
+        "timestamp": "2026-10-29T07:01:27.246Z"
       }
     },
     {
-      "atMs": 838,
+      "atMs": 378,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 4,
-        "elapsedMs": 845,
+        "elapsedMs": 378,
         "message": "Measuring tempo and key from the preview clip",
         "code": "AUDIO-INIT",
         "node": "engineer",
-        "timestamp": "2026-10-28T18:36:38.629Z"
+        "timestamp": "2026-10-29T07:01:27.488Z"
       }
     },
     {
-      "atMs": 2128,
+      "atMs": 1884,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 5,
-        "elapsedMs": 2135,
-        "message": "Starting the research steps",
-        "node": "research_manager",
-        "timestamp": "2026-10-28T18:36:39.921Z"
+        "elapsedMs": 1883,
+        "message": "Measured 96 BPM; key not given: too little sustained pitch",
+        "code": "AUDIO-COMPLETE",
+        "node": "engineer",
+        "timestamp": "2026-10-29T07:01:28.994Z"
       }
     },
     {
-      "atMs": 2138,
+      "atMs": 2802,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 6,
-        "elapsedMs": 2146,
-        "message": "Searching: sample history on the web",
-        "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:39.928Z"
+        "elapsedMs": 2801,
+        "message": "Starting the research steps",
+        "node": "research_manager",
+        "timestamp": "2026-10-29T07:01:29.913Z"
       }
     },
     {
-      "atMs": 2139,
+      "atMs": 2807,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 7,
-        "elapsedMs": 2146,
-        "message": "Searching: production history on the web",
+        "elapsedMs": 2807,
+        "message": "Searching: sample history on the web",
         "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:39.928Z"
+        "timestamp": "2026-10-29T07:01:29.915Z"
       }
     },
     {
-      "atMs": 2139,
+      "atMs": 2808,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 8,
-        "elapsedMs": 2146,
-        "message": "Searching: ListenBrainz similar artists",
+        "elapsedMs": 2807,
+        "message": "Searching: production history on the web",
         "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:39.928Z"
+        "timestamp": "2026-10-29T07:01:29.915Z"
       }
     },
     {
-      "atMs": 2139,
+      "atMs": 2808,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 9,
-        "elapsedMs": 2147,
-        "message": "Searching: MusicBrainz collaborators of the artist",
+        "elapsedMs": 2807,
+        "message": "Searching: ListenBrainz similar artists",
         "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:39.928Z"
+        "timestamp": "2026-10-29T07:01:29.915Z"
       }
     },
     {
-      "atMs": 3721,
+      "atMs": 2808,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 10,
-        "elapsedMs": 3729,
-        "message": "Measured 96 BPM; key not given: too little sustained pitch",
-        "code": "AUDIO-COMPLETE",
-        "node": "engineer",
-        "timestamp": "2026-10-28T18:36:41.515Z"
+        "elapsedMs": 2807,
+        "message": "Searching: MusicBrainz collaborators of the artist",
+        "node": "research_tool",
+        "timestamp": "2026-10-29T07:01:29.915Z"
       }
     },
     {
-      "atMs": 10856,
+      "atMs": 12919,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 11,
-        "elapsedMs": 10863,
+        "elapsedMs": 12918,
         "message": "Choosing follow-up step 1 of at most 2",
         "node": "research_manager",
-        "timestamp": "2026-10-28T18:36:48.647Z"
+        "timestamp": "2026-10-29T07:01:40.029Z"
       }
     },
     {
-      "atMs": 12579,
+      "atMs": 14572,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 12,
-        "elapsedMs": 12587,
+        "elapsedMs": 14571,
         "message": "Searching: Last.fm similar artists",
         "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:50.372Z"
+        "timestamp": "2026-10-29T07:01:41.680Z"
       }
     },
     {
-      "atMs": 12697,
+      "atMs": 14825,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 13,
-        "elapsedMs": 12705,
+        "elapsedMs": 14824,
         "message": "Choosing follow-up step 2 of at most 2",
         "node": "research_manager",
-        "timestamp": "2026-10-28T18:36:50.491Z"
+        "timestamp": "2026-10-29T07:01:41.935Z"
       }
     },
     {
-      "atMs": 14551,
+      "atMs": 16970,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 14,
-        "elapsedMs": 14558,
-        "message": "Searching: the planner's lead on the web",
+        "elapsedMs": 16969,
+        "message": "Searching: Last.fm artist info",
         "node": "research_tool",
-        "timestamp": "2026-10-28T18:36:52.344Z"
+        "timestamp": "2026-10-29T07:01:44.080Z"
       }
     },
     {
-      "atMs": 16073,
+      "atMs": 17034,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 15,
-        "elapsedMs": 16080,
+        "elapsedMs": 17033,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G. (5:02), ISRC USBB40580814, first released 1994-09-13.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
         }
       }
     },
     {
-      "atMs": 16073,
+      "atMs": 17035,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 16,
-        "elapsedMs": 16081,
+        "elapsedMs": 17034,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is remixed in \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
         }
       }
     },
     {
-      "atMs": 16074,
+      "atMs": 17035,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 17,
-        "elapsedMs": 16081,
+        "elapsedMs": 17034,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G..",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109"
         }
       }
     },
     {
-      "atMs": 16076,
+      "atMs": 17036,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 18,
-        "elapsedMs": 16084,
+        "elapsedMs": 17035,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A.W.O.L.\" by RBX.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
         }
       }
     },
     {
-      "atMs": 16082,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 19,
-        "elapsedMs": 16090,
+        "elapsedMs": 17038,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"History\" by Mos Def feat. Talib Kweli.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
         }
       }
     },
     {
-      "atMs": 16082,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 20,
-        "elapsedMs": 16090,
+        "elapsedMs": 17038,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"It's Only Hip Hop\" by Apathy feat. Brevi.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 21,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 22,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Rappin' Duke (vocal)\" by The Rappin' Duke.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 23,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 24,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"The One\" by Tamar Braxton.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17039,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 25,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
           "title": "Juicy — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Villuminati\" by J. Cole.",
           "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 26,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4",
           "title": "Ready to Die: The Remaster — MusicBrainz release",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. appears on the official album \"Ready to Die: The Remaster\" (2016-04-08).",
           "recordRef": "release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 27,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
           "title": "Juicy — MusicBrainz work",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
           "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 28,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
           "title": "Juicy — MusicBrainz work",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
           "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 29,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
           "title": "Juicy — MusicBrainz work",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
           "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 30,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
           "title": "Juicy — MusicBrainz work",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
           "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 31,
-        "elapsedMs": 16090,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
           "title": "Juicy — MusicBrainz work",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (The Notorious B.I.G. cover)\" by John That.",
           "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 32,
-        "elapsedMs": 16091,
+        "elapsedMs": 17039,
         "evidence": {
           "id": "tavily:https://www.hotnewhiphop.com/89010-top-15-greatest-hip-hop-samples-news",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.hotnewhiphop.com/89010-top-15-greatest-hip-hop-samples-news",
           "title": "Top 15 Greatest Hip-Hop Samples",
-          "retrievedAt": "2026-10-28T18:36:41.594Z",
-          "excerpt": "Drake wasn't the first artist who sampled ... Where Have I Heard That Song Before: “Juicy” by Notorious B.I.G. Juicy - 2005 Remaster cover",
+          "retrievedAt": "2026-10-29T07:01:31.079Z",
+          "excerpt": "But instead of drifting into a sea polluted with countless other forgotten 1980’s singles, it found new life when Notorious B.I.G. sampled the song for his debut single “Juicy.” Although the sample officially rips from the “Fruity Instrumental” mix, and the girl group Tidal replace the lead singer’s vocals, “Juicy,” retains the original song’s silky groove. Solidifying his status as rap’s newest force, Biggie raps about how he’s blowing up like we thought he would. His lyrics present him as a […",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17040,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 33,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
-          "id": "tavily:https://www.youtube.com/watch?v=1eNA0RBueoY",
+          "id": "tavily:https://www.youtube.com/watch?v=78SV9tguyVM",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://www.youtube.com/watch?v=1eNA0RBueoY",
-          "title": "The Notorious B.I.G. - Unbelievable (Official Audio)",
-          "retrievedAt": "2026-10-28T18:36:41.594Z",
+          "url": "https://www.youtube.com/watch?v=78SV9tguyVM",
+          "title": "The Notorious B.I.G. - Kick in the Door (Official Audio)",
+          "retrievedAt": "2026-10-29T07:01:31.079Z",
           "excerpt": "Christopher Wallace, known professionally as The Notorious B.I.G., Biggie, or Biggie Smalls, was an American rapper and songwriter. He was born in Brooklyn, New York, on May 21, 1972. His debut album Ready to Die, released in September 1994, included singles such as “Juicy,” “Big Poppa,” “One More Chance,” “Warning,” and “Everyday Struggle.” Wallace’s second album, Life After Death, released posthumously in 1997, included tracks such as “Hypnotize,” “Mo Money Mo Problems,” “Sky’s the Limit,” [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 34,
-        "elapsedMs": 16091,
-        "evidence": {
-          "id": "tavily:https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-          "title": "The Notorious B.I.G.'s 'Big Poppa' sample of The Isley ...",
-          "retrievedAt": "2026-10-28T18:36:41.594Z",
-          "excerpt": "\"Big Poppa\" by The Notorious B.I.G. sampled The Isley Brothers's \"Between the Sheets\". Listen to both songs on WhoSampled.",
-          "recordRef": null
-        }
-      }
-    },
-    {
-      "atMs": 16083,
-      "event": {
-        "type": "evidence",
-        "runId": "recorded-juicy-the-notorious-big",
-        "seq": 35,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "tavily:https://www.youtube.com/shorts/J7syCPQuA18",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.youtube.com/shorts/J7syCPQuA18",
           "title": "Sample vs. Original | Mtume “Juicy Fruit” & The Notorious ...",
-          "retrievedAt": "2026-10-28T18:36:41.594Z",
-          "excerpt": "Sample vs. Original | Mtume “Juicy Fruit” vs. The Notorious B.I.G. “Juicy” One of the biggest samples in hip-hop history—The Notorious B.I.G.",
+          "retrievedAt": "2026-10-29T07:01:31.079Z",
+          "excerpt": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17041,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-juicy-the-notorious-big",
+        "seq": 35,
+        "elapsedMs": 17040,
+        "evidence": {
+          "id": "tavily:https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+          "source": "tavily",
+          "sourceTier": "web",
+          "url": "https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+          "title": "‎Barry White: Sampled - Playlist - Apple Music",
+          "retrievedAt": "2026-10-29T07:01:31.079Z",
+          "excerpt": "Barry White: Sampled # Barry White: Sampled Apple Music Hip-Hop Their original tunes have been the source material for some of modern music’s biggest hits. 58 songs, 3 hours 43 minutes ## ### JAŸ-Z ### Madvillain ### Nas ### Trippie Redd ### Eric B. & Rakim ### 50 Cent ### The Notorious B.I.G. ### Birdman ### Lil Wayne ### Action Bronson ### Rick Ross",
+          "recordRef": null
+        }
+      }
+    },
+    {
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 36,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "tavily:https://en.wikipedia.org/wiki/Big_Poppa",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://en.wikipedia.org/wiki/Big_Poppa",
           "title": "Big Poppa - Wikipedia",
-          "retrievedAt": "2026-10-28T18:36:41.594Z",
+          "retrievedAt": "2026-10-29T07:01:31.079Z",
           "excerpt": "\"Big Poppa\" is a song by American rapper the Notorious B.I.G., released by Bad Boy Records on December 24, 1994 as the second single from his debut studio album, Ready to Die (1994). Produced by Chucky Thompson and Nashiem Myrick, it samples \"Sampling (music)\") the song \"Between the Sheets \"Between the Sheets (song)\")\" (1983) by The Isley Brothers. \"Big Poppa\" is a rap song with elements of R&B and East Coast hip hop. It is named after one of the Notorious B.I.G.'s nicknames. [...] | v t e The …",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16083,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 37,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "tavily:https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
           "title": "Juicy (The Notorious B.I.G. song) - Wikipedia",
-          "retrievedAt": "2026-10-28T18:36:41.278Z",
+          "retrievedAt": "2026-10-29T07:01:31.557Z",
           "excerpt": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 38,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
+        "evidence": {
+          "id": "tavily:https://en.wikipedia.org/wiki/Ready_to_Die",
+          "source": "tavily",
+          "sourceTier": "web",
+          "url": "https://en.wikipedia.org/wiki/Ready_to_Die",
+          "title": "Ready to Die - Wikipedia",
+          "retrievedAt": "2026-10-29T07:01:31.557Z",
+          "excerpt": "Ready to Die is the debut studio album by the American rapper The Notorious B.I.G., released on September 13, 1994, by Bad Boy Records and distributed by Arista Records. The album features productions by Bad Boy founder Sean Combs, Easy Mo Bee, Chucky Thompson, DJ Premier and Lord Finesse, among others. It was recorded from 1993 to 1994 at The Hit Factory and D&D Studios in New York City. The partly autobiographical album tells the story of the rapper's experiences as a young criminal, and was …",
+          "recordRef": null
+        }
+      }
+    },
+    {
+      "atMs": 17041,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-juicy-the-notorious-big",
+        "seq": 39,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "tavily:https://www.musicmusingsandsuch.com/musicmusingsandsuch/2022/2/22/feature-the-king-of-new-york-remembering-the-notorious-big",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2022/2/22/feature-the-king-of-new-york-remembering-the-notorious-big",
           "title": "FEATURE: The King of New York: Remembering The Notorious B.I.G. — Music Musings & Such",
-          "retrievedAt": "2026-10-28T18:36:41.278Z",
+          "retrievedAt": "2026-10-29T07:01:31.557Z",
           "excerpt": "“Double albums tend to be overblown, self-indulgent cash grabs, but Life After Death warranted the approach. Beginning with the 1994 Quad Studios shooting of Tupac Shakur in New York City, the Notorious B.I.G—along with Combs, Shakur, and Suge Knight—was at the center of a multifaceted rivalry. It was a struggle between N.Y.'s Bad Boy and L.A.'s Death Row records that surpassed label affiliation to become about coastal loyalty, arguments about commercialism vs. art that spread from the music [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
-        "seq": 39,
-        "elapsedMs": 16091,
+        "seq": 40,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "tavily:https://www.npr.org/2023/08/01/1191059697/hip-hop-50-houston",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.npr.org/2023/08/01/1191059697/hip-hop-50-houston",
           "title": "50 years of hip-hop history: Houston : NPR",
-          "retrievedAt": "2026-10-28T18:36:41.278Z",
+          "retrievedAt": "2026-10-29T07:01:31.557Z",
           "excerpt": "applying it to his much-heralded works with Nas, The Notorious B.I.G. and his own Gang Starr. Closer to home, New Orleans' Master P, one of the most prolific label heads in hip-hop history, sketched out his record company dreams via the blueprint provided by J. Prince and Rap-A-Lot. [...] Geto Boys, \"Mind Playing Tricks on Me\" (1991) DJ Screw and Lil' Keke, \"Pimp tha Pen\" (1996) Lil' Troy, \"Wanna Be a Baller\" [feat. Fat Pat, Yungstar, Lil' Will, Big T and H.A.W.K] (1998) Fat Pat, \"Tops Drop\" (1…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 16084,
-      "event": {
-        "type": "evidence",
-        "runId": "recorded-juicy-the-notorious-big",
-        "seq": 40,
-        "elapsedMs": 16091,
-        "evidence": {
-          "id": "tavily:https://thenotoriousbig.fandom.com/wiki/Juicy",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://thenotoriousbig.fandom.com/wiki/Juicy",
-          "title": "Juicy | The Notorious B.I.G. Wiki",
-          "retrievedAt": "2026-10-28T18:36:53.850Z",
-          "excerpt": "It contains a sample of the 1983 song \"Juicy Fruit\" by Mtume, though is directly sampled from the song's \"Fruity Instrumental\" mix. ... History",
-          "recordRef": null
-        }
-      }
-    },
-    {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 41,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "musicbrainz:recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "title": "Juicy Fruit — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Loving You\" by Jennifer Lopez.",
           "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 42,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "musicbrainz:recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "title": "Juicy Fruit — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Ma läksin kiima\" by Cool D.",
           "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 43,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "musicbrainz:recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "title": "Juicy Fruit — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"No Question\" by Allure featuring LL Cool J.",
           "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 44,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "musicbrainz:recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "title": "Juicy Fruit — MusicBrainz relationships",
-          "retrievedAt": "2026-10-28T18:36:41.784Z",
+          "retrievedAt": "2026-10-29T07:01:37.328Z",
           "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"The One\" by Tamar Braxton.",
           "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 45,
-        "elapsedMs": 16091,
+        "elapsedMs": 17040,
         "evidence": {
           "id": "musicbrainz:recording/304f3ef2-e277-4b78-8d44-ddba5a70f852",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852",
           "title": "Juicy / New York, New York — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra, first released 2006-07-14.",
           "recordRef": "recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 46,
-        "elapsedMs": 16091,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/beb2b87b-cf8e-4688-9407-35271cec7109",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
           "title": "A Dream — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G., first released 2002-11-12.",
           "recordRef": "recording/beb2b87b-cf8e-4688-9407-35271cec7109"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 47,
-        "elapsedMs": 16091,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
           "title": "A.W.O.L. — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"A.W.O.L.\" by RBX, first released 1995-09-26.",
           "recordRef": "recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 48,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/362b4346-fee5-4447-8329-f85d25498335",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/362b4346-fee5-4447-8329-f85d25498335",
           "title": "History — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"History\" by Mos Def feat. Talib Kweli, first released 2009-06-09.",
           "recordRef": "recording/362b4346-fee5-4447-8329-f85d25498335"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 49,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9",
           "title": "It's Only Hip Hop — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"It's Only Hip Hop\" by Apathy feat. Brevi, first released 2011-08-23.",
           "recordRef": "recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17041,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 50,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "title": "Juicy Fruit — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:15.794Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"Juicy Fruit\" by Mtume, first released 1983-04-22.",
           "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 51,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/7cf3a922-c586-4134-9d4a-53189021e0e3",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/7cf3a922-c586-4134-9d4a-53189021e0e3",
           "title": "Rappin' Duke (vocal) — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:17.067Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"Rappin' Duke (vocal)\" by The Rappin' Duke, first released 1984.",
           "recordRef": "recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 52,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948",
           "title": "Power Trip — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo, first released 2012-09-04.",
           "recordRef": "recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
         }
       }
     },
     {
-      "atMs": 16084,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 53,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
           "title": "The One — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"The One\" by Tamar Braxton, first released 2013-05-07.",
           "recordRef": "recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
         }
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 54,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/580bf335-54ee-4d32-902f-866d89e3d08a",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/580bf335-54ee-4d32-902f-866d89e3d08a",
           "title": "Villuminati — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:30.873Z",
           "excerpt": "MusicBrainz recording \"Villuminati\" by J. Cole, first released 2013-06-14.",
           "recordRef": "recording/580bf335-54ee-4d32-902f-866d89e3d08a"
         }
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 55,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/444dbdc1-dc60-4188-91d0-ef2230bfb732",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732",
           "title": "Loving You — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:37.327Z",
           "excerpt": "MusicBrainz recording \"Loving You\" by Jennifer Lopez, first released 2001-01-01.",
           "recordRef": "recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
         }
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 56,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19",
           "title": "Ma läksin kiima — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:37.327Z",
           "excerpt": "MusicBrainz recording \"Ma läksin kiima\" by Cool D, first released 2009-11-16.",
           "recordRef": "recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
         }
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "evidence",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 57,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "evidence": {
           "id": "musicbrainz:recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791",
           "title": "No Question — MusicBrainz recording",
-          "retrievedAt": "2026-10-28T15:15:18.379Z",
+          "retrievedAt": "2026-10-29T07:01:37.327Z",
           "excerpt": "MusicBrainz recording \"No Question\" by Allure featuring LL Cool J, first released 1997-05-06.",
           "recordRef": "recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
         }
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 58,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "message": "Read 34 records from the primary sources (MusicBrainz 34)",
         "code": "RESEARCH-FOUND",
         "node": "historian",
-        "timestamp": "2026-10-28T18:36:53.864Z"
+        "timestamp": "2026-10-29T07:01:44.143Z"
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 59,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "message": "Discogs not asked: no key is configured for it",
         "code": "SYS-WARN",
         "node": "historian",
-        "timestamp": "2026-10-28T18:36:53.864Z"
+        "timestamp": "2026-10-29T07:01:44.143Z"
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 60,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "message": "Research finished",
         "code": "RESEARCH-FOUND",
         "node": "historian",
-        "timestamp": "2026-10-28T18:36:53.866Z"
+        "timestamp": "2026-10-29T07:01:44.144Z"
       }
     },
     {
-      "atMs": 16085,
+      "atMs": 17042,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 61,
-        "elapsedMs": 16092,
+        "elapsedMs": 17041,
         "message": "Writing the liner notes",
         "code": "LLM-CONNECT",
         "node": "composer",
-        "timestamp": "2026-10-28T18:36:53.874Z"
+        "timestamp": "2026-10-29T07:01:44.149Z"
       }
     },
     {
-      "atMs": 30416,
+      "atMs": 29188,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 62,
-        "elapsedMs": 30424,
+        "elapsedMs": 29187,
         "message": "Checking the written notes against their sources",
         "code": "LLM-CONNECT",
         "node": "verifier",
-        "timestamp": "2026-10-28T18:37:08.203Z"
+        "timestamp": "2026-10-29T07:01:56.287Z"
       }
     },
     {
-      "atMs": 30417,
+      "atMs": 29188,
       "event": {
         "type": "status",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 63,
-        "elapsedMs": 30424,
+        "elapsedMs": 29188,
         "message": "Looking up cover art on Spotify for the genealogy",
         "code": "GRAPH-ENRICH",
         "node": "verifier",
-        "timestamp": "2026-10-28T18:37:08.203Z"
+        "timestamp": "2026-10-29T07:01:56.287Z"
       }
     },
     {
-      "atMs": 35459,
+      "atMs": 32732,
       "event": {
         "type": "complete",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 64,
-        "elapsedMs": 35464,
+        "elapsedMs": 32731,
         "data": {
           "id": "5ByAIlEEnxYdvpnezg7HTX",
           "title": "Juicy - 2005 Remaster",
@@ -1254,76 +1254,85 @@
           "samples": [],
           "factoids": [
             {
-              "id": "757d5947-cf68-4f99-8f96-2fb41f1e23fd",
-              "title": "A familiar groove reworked",
-              "content": "This recording samples Mtume’s “Juicy Fruit,” linking Biggie’s track to the earlier song. MusicBrainz also lists a sample from The Rappin’ Duke’s “Rappin’ Duke (vocal).”",
+              "id": "7e85a56e-1470-40c4-8771-b9b7dcf3cccd",
+              "title": "A groove borrowed from Mtume",
+              "content": "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit.”",
               "type": "sample",
               "entities": [
                 {
-                  "id": "75e74c5d-c17e-4606-8490-ea584125dc92",
+                  "id": "6f528788-b044-4ee1-a20f-68abf32176fc",
                   "text": "Mtume",
                   "type": "artist",
                   "searchQuery": "Mtume"
                 },
                 {
-                  "id": "88243f2f-e76a-4d75-aca6-220f4978f532",
+                  "id": "747bf6a5-8ccc-4dd8-8c5a-aad162882005",
                   "text": "Juicy Fruit",
-                  "type": "album",
+                  "type": "sample",
                   "searchQuery": "Juicy Fruit"
-                },
+                }
+              ],
+              "claimId": "f3a2ae6f-f983-472c-8d94-701f11a866f7"
+            },
+            {
+              "id": "1fe0ae0e-f848-45d2-811f-5b25ab2a483c",
+              "title": "Another sampled voice",
+              "content": "The recording also samples “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+              "type": "sample",
+              "entities": [
                 {
-                  "id": "41912d20-ce38-4452-8774-93959fcaf673",
+                  "id": "57f8becc-8e9b-4116-a71b-7b453183b990",
                   "text": "The Rappin’ Duke",
                   "type": "artist",
                   "searchQuery": "The Rappin’ Duke"
                 },
                 {
-                  "id": "a61854c5-970a-4053-a216-e17ecf3307f6",
+                  "id": "1dd0a178-95d1-41f4-9adb-be71502f1a0c",
                   "text": "Rappin’ Duke (vocal)",
                   "type": "sample",
                   "searchQuery": "Rappin’ Duke (vocal)"
                 }
               ],
-              "claimId": "3c65f053-09c0-4f1a-855e-d01149f533aa"
+              "claimId": "49a56b45-f85e-44fc-9fe1-c98f440598a7"
             },
             {
-              "id": "c9a3c8a9-26e7-41d8-9e37-0d35b6ac0998",
-              "title": "A sample with a long afterlife",
-              "content": "MusicBrainz lists several later recordings as sampling this “Juicy”: “A Dream” by Jay‐Z feat. Faith Evans & Notorious B.I.G., “History” by Mos Def feat. Talib Kweli, and “Villuminati” by J. Cole.",
+              "id": "e7185dba-f3da-4074-b948-710458727d11",
+              "title": "A later sample trail",
+              "content": "MusicBrainz records “Juicy” as sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
               "type": "connection",
               "entities": [
                 {
-                  "id": "fbb34e63-d65c-4a57-bf1b-50f518f82066",
-                  "text": "Jay‐Z",
+                  "id": "27fb6465-a341-4f22-9ce4-b613cfa5a490",
+                  "text": "Jay-Z",
                   "type": "artist",
-                  "searchQuery": "Jay‐Z"
+                  "searchQuery": "Jay-Z"
                 },
                 {
-                  "id": "5a9937c1-d988-4d13-890e-e7477431b3bf",
-                  "text": "Faith Evans",
-                  "type": "artist",
-                  "searchQuery": "Faith Evans"
+                  "id": "3f28d26a-8d74-467e-9fa8-018911fb02d2",
+                  "text": "A Dream",
+                  "type": "sample",
+                  "searchQuery": "A Dream"
                 },
                 {
-                  "id": "1bdbf6d2-9189-4163-a9b9-eb7ba0d530dc",
+                  "id": "7a7e5585-0ae5-4882-bc17-fbc7b998584a",
+                  "text": "RBX",
+                  "type": "artist",
+                  "searchQuery": "RBX"
+                },
+                {
+                  "id": "fb8646a6-1785-4f2c-b9f7-25eb6f49d289",
                   "text": "Mos Def",
                   "type": "artist",
                   "searchQuery": "Mos Def"
                 },
                 {
-                  "id": "11838564-ff82-4373-90ef-6f2e17e69e2f",
+                  "id": "97e9d1a6-932b-4f50-93ca-3b615335f2a2",
                   "text": "Talib Kweli",
                   "type": "artist",
                   "searchQuery": "Talib Kweli"
-                },
-                {
-                  "id": "50bfc12e-0ee4-4579-91c4-40ca8e06d735",
-                  "text": "J. Cole",
-                  "type": "artist",
-                  "searchQuery": "J. Cole"
                 }
               ],
-              "claimId": "21a4e58c-2dfc-454a-8612-5615345477ff"
+              "claimId": "5ed3b846-7fe9-467e-8553-d249f152b778"
             }
           ],
           "genealogy": {
@@ -1338,16 +1347,6 @@
                 "trackArtist": "The Notorious B.I.G.",
                 "year": 1994,
                 "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
-              },
-              {
-                "id": "villuminati",
-                "group": 4,
-                "label": "Villuminati - J. Cole",
-                "img": "",
-                "size": 22,
-                "spotifyId": "5o9GCBBMWxSu7y4naOdFPy",
-                "trackTitle": "Villuminati",
-                "trackArtist": "J. Cole"
               },
               {
                 "id": "mb-1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
@@ -1464,25 +1463,13 @@
             ],
             "links": [
               {
-                "source": "current",
-                "target": "villuminati",
-                "value": 1,
-                "type": "sample",
-                "kind": "inferred",
-                "origin": "model",
-                "claimId": "957aca1d-6590-49d4-87ed-061a01718a08",
-                "evidenceIds": [
-                  "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
-                ]
-              },
-              {
                 "source": "mb-1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
                 "target": "current",
                 "value": 3,
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "bb87febd-7ff6-4521-ade6-4528989fa0af",
+                "claimId": "91c82e85-15bd-405e-9c33-95f63b652ea8",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
                 ]
@@ -1494,7 +1481,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "86c4f3d6-1568-4921-95cd-2de3c3ec112c",
+                "claimId": "2b0a8a0d-a151-4753-8c0d-cd2391f57f8c",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
                 ]
@@ -1506,7 +1493,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "bb846543-d659-43a8-8130-ed7dd740621b",
+                "claimId": "7c135214-2a8a-4599-b680-18a73ca7283a",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
                 ]
@@ -1518,7 +1505,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "49a6f106-8438-49d0-b5f2-7d6141641824",
+                "claimId": "5bcdf59d-3be3-46ec-9ca5-c619b8d4af4c",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109"
                 ]
@@ -1530,7 +1517,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "c27b07a2-aa7f-4c55-aac5-1ecd5cc4ddcc",
+                "claimId": "9f6f8de0-0a3a-4f7a-aa99-28cff83b7edf",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
                 ]
@@ -1542,7 +1529,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "4191b1e5-79da-4fdc-94e1-3d5d371aa904",
+                "claimId": "dfc78b7b-3a4d-4858-a279-1256384b61e5",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
                 ]
@@ -1554,7 +1541,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "9d115a33-aa9f-41fd-b084-5cdad5b3e698",
+                "claimId": "3b5e29a9-864e-4e47-979e-e352dbfa008f",
                 "evidenceIds": [
                   "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
                 ]
@@ -2126,7 +2113,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G. (5:02), ISRC USBB40580814, first released 1994-09-13.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
             },
@@ -2136,7 +2123,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is remixed in \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
             },
@@ -2146,7 +2133,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G..",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109"
             },
@@ -2156,7 +2143,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A.W.O.L.\" by RBX.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
             },
@@ -2166,7 +2153,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"History\" by Mos Def feat. Talib Kweli.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
             },
@@ -2176,7 +2163,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"It's Only Hip Hop\" by Apathy feat. Brevi.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
             },
@@ -2186,7 +2173,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
             },
@@ -2196,7 +2183,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Rappin' Duke (vocal)\" by The Rappin' Duke.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
             },
@@ -2206,7 +2193,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
             },
@@ -2216,7 +2203,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"The One\" by Tamar Braxton.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
             },
@@ -2226,7 +2213,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
               "title": "Juicy — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Villuminati\" by J. Cole.",
               "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
             },
@@ -2236,7 +2223,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4",
               "title": "Ready to Die: The Remaster — MusicBrainz release",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. appears on the official album \"Ready to Die: The Remaster\" (2016-04-08).",
               "recordRef": "release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4"
             },
@@ -2246,7 +2233,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
               "title": "Juicy — MusicBrainz work",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
               "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
             },
@@ -2256,7 +2243,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
               "title": "Juicy — MusicBrainz work",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
               "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
             },
@@ -2266,7 +2253,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
               "title": "Juicy — MusicBrainz work",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
               "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
             },
@@ -2276,7 +2263,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
               "title": "Juicy — MusicBrainz work",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
               "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
             },
@@ -2286,7 +2273,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
               "title": "Juicy — MusicBrainz work",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (The Notorious B.I.G. cover)\" by John That.",
               "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
             },
@@ -2296,28 +2283,18 @@
               "sourceTier": "web",
               "url": "https://www.hotnewhiphop.com/89010-top-15-greatest-hip-hop-samples-news",
               "title": "Top 15 Greatest Hip-Hop Samples",
-              "retrievedAt": "2026-10-28T18:36:41.594Z",
-              "excerpt": "Drake wasn't the first artist who sampled ... Where Have I Heard That Song Before: “Juicy” by Notorious B.I.G. Juicy - 2005 Remaster cover",
+              "retrievedAt": "2026-10-29T07:01:31.079Z",
+              "excerpt": "But instead of drifting into a sea polluted with countless other forgotten 1980’s singles, it found new life when Notorious B.I.G. sampled the song for his debut single “Juicy.” Although the sample officially rips from the “Fruity Instrumental” mix, and the girl group Tidal replace the lead singer’s vocals, “Juicy,” retains the original song’s silky groove. Solidifying his status as rap’s newest force, Biggie raps about how he’s blowing up like we thought he would. His lyrics present him as a […",
               "recordRef": null
             },
             {
-              "id": "tavily:https://www.youtube.com/watch?v=1eNA0RBueoY",
+              "id": "tavily:https://www.youtube.com/watch?v=78SV9tguyVM",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://www.youtube.com/watch?v=1eNA0RBueoY",
-              "title": "The Notorious B.I.G. - Unbelievable (Official Audio)",
-              "retrievedAt": "2026-10-28T18:36:41.594Z",
+              "url": "https://www.youtube.com/watch?v=78SV9tguyVM",
+              "title": "The Notorious B.I.G. - Kick in the Door (Official Audio)",
+              "retrievedAt": "2026-10-29T07:01:31.079Z",
               "excerpt": "Christopher Wallace, known professionally as The Notorious B.I.G., Biggie, or Biggie Smalls, was an American rapper and songwriter. He was born in Brooklyn, New York, on May 21, 1972. His debut album Ready to Die, released in September 1994, included singles such as “Juicy,” “Big Poppa,” “One More Chance,” “Warning,” and “Everyday Struggle.” Wallace’s second album, Life After Death, released posthumously in 1997, included tracks such as “Hypnotize,” “Mo Money Mo Problems,” “Sky’s the Limit,” [.…",
-              "recordRef": null
-            },
-            {
-              "id": "tavily:https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-              "title": "The Notorious B.I.G.'s 'Big Poppa' sample of The Isley ...",
-              "retrievedAt": "2026-10-28T18:36:41.594Z",
-              "excerpt": "\"Big Poppa\" by The Notorious B.I.G. sampled The Isley Brothers's \"Between the Sheets\". Listen to both songs on WhoSampled.",
               "recordRef": null
             },
             {
@@ -2326,8 +2303,18 @@
               "sourceTier": "web",
               "url": "https://www.youtube.com/shorts/J7syCPQuA18",
               "title": "Sample vs. Original | Mtume “Juicy Fruit” & The Notorious ...",
-              "retrievedAt": "2026-10-28T18:36:41.594Z",
-              "excerpt": "Sample vs. Original | Mtume “Juicy Fruit” vs. The Notorious B.I.G. “Juicy” One of the biggest samples in hip-hop history—The Notorious B.I.G.",
+              "retrievedAt": "2026-10-29T07:01:31.079Z",
+              "excerpt": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”",
+              "recordRef": null
+            },
+            {
+              "id": "tavily:https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+              "title": "‎Barry White: Sampled - Playlist - Apple Music",
+              "retrievedAt": "2026-10-29T07:01:31.079Z",
+              "excerpt": "Barry White: Sampled # Barry White: Sampled Apple Music Hip-Hop Their original tunes have been the source material for some of modern music’s biggest hits. 58 songs, 3 hours 43 minutes ## ### JAŸ-Z ### Madvillain ### Nas ### Trippie Redd ### Eric B. & Rakim ### 50 Cent ### The Notorious B.I.G. ### Birdman ### Lil Wayne ### Action Bronson ### Rick Ross",
               "recordRef": null
             },
             {
@@ -2336,7 +2323,7 @@
               "sourceTier": "web",
               "url": "https://en.wikipedia.org/wiki/Big_Poppa",
               "title": "Big Poppa - Wikipedia",
-              "retrievedAt": "2026-10-28T18:36:41.594Z",
+              "retrievedAt": "2026-10-29T07:01:31.079Z",
               "excerpt": "\"Big Poppa\" is a song by American rapper the Notorious B.I.G., released by Bad Boy Records on December 24, 1994 as the second single from his debut studio album, Ready to Die (1994). Produced by Chucky Thompson and Nashiem Myrick, it samples \"Sampling (music)\") the song \"Between the Sheets \"Between the Sheets (song)\")\" (1983) by The Isley Brothers. \"Big Poppa\" is a rap song with elements of R&B and East Coast hip hop. It is named after one of the Notorious B.I.G.'s nicknames. [...] | v t e The …",
               "recordRef": null
             },
@@ -2346,8 +2333,18 @@
               "sourceTier": "web",
               "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
               "title": "Juicy (The Notorious B.I.G. song) - Wikipedia",
-              "retrievedAt": "2026-10-28T18:36:41.278Z",
+              "retrievedAt": "2026-10-29T07:01:31.557Z",
               "excerpt": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is…",
+              "recordRef": null
+            },
+            {
+              "id": "tavily:https://en.wikipedia.org/wiki/Ready_to_Die",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://en.wikipedia.org/wiki/Ready_to_Die",
+              "title": "Ready to Die - Wikipedia",
+              "retrievedAt": "2026-10-29T07:01:31.557Z",
+              "excerpt": "Ready to Die is the debut studio album by the American rapper The Notorious B.I.G., released on September 13, 1994, by Bad Boy Records and distributed by Arista Records. The album features productions by Bad Boy founder Sean Combs, Easy Mo Bee, Chucky Thompson, DJ Premier and Lord Finesse, among others. It was recorded from 1993 to 1994 at The Hit Factory and D&D Studios in New York City. The partly autobiographical album tells the story of the rapper's experiences as a young criminal, and was …",
               "recordRef": null
             },
             {
@@ -2356,7 +2353,7 @@
               "sourceTier": "web",
               "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2022/2/22/feature-the-king-of-new-york-remembering-the-notorious-big",
               "title": "FEATURE: The King of New York: Remembering The Notorious B.I.G. — Music Musings & Such",
-              "retrievedAt": "2026-10-28T18:36:41.278Z",
+              "retrievedAt": "2026-10-29T07:01:31.557Z",
               "excerpt": "“Double albums tend to be overblown, self-indulgent cash grabs, but Life After Death warranted the approach. Beginning with the 1994 Quad Studios shooting of Tupac Shakur in New York City, the Notorious B.I.G—along with Combs, Shakur, and Suge Knight—was at the center of a multifaceted rivalry. It was a struggle between N.Y.'s Bad Boy and L.A.'s Death Row records that surpassed label affiliation to become about coastal loyalty, arguments about commercialism vs. art that spread from the music [.…",
               "recordRef": null
             },
@@ -2366,18 +2363,8 @@
               "sourceTier": "web",
               "url": "https://www.npr.org/2023/08/01/1191059697/hip-hop-50-houston",
               "title": "50 years of hip-hop history: Houston : NPR",
-              "retrievedAt": "2026-10-28T18:36:41.278Z",
+              "retrievedAt": "2026-10-29T07:01:31.557Z",
               "excerpt": "applying it to his much-heralded works with Nas, The Notorious B.I.G. and his own Gang Starr. Closer to home, New Orleans' Master P, one of the most prolific label heads in hip-hop history, sketched out his record company dreams via the blueprint provided by J. Prince and Rap-A-Lot. [...] Geto Boys, \"Mind Playing Tricks on Me\" (1991) DJ Screw and Lil' Keke, \"Pimp tha Pen\" (1996) Lil' Troy, \"Wanna Be a Baller\" [feat. Fat Pat, Yungstar, Lil' Will, Big T and H.A.W.K] (1998) Fat Pat, \"Tops Drop\" (1…",
-              "recordRef": null
-            },
-            {
-              "id": "tavily:https://thenotoriousbig.fandom.com/wiki/Juicy",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://thenotoriousbig.fandom.com/wiki/Juicy",
-              "title": "Juicy | The Notorious B.I.G. Wiki",
-              "retrievedAt": "2026-10-28T18:36:53.850Z",
-              "excerpt": "It contains a sample of the 1983 song \"Juicy Fruit\" by Mtume, though is directly sampled from the song's \"Fruity Instrumental\" mix. ... History",
               "recordRef": null
             },
             {
@@ -2386,7 +2373,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
               "title": "Juicy Fruit — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Loving You\" by Jennifer Lopez.",
               "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
             },
@@ -2396,7 +2383,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
               "title": "Juicy Fruit — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Ma läksin kiima\" by Cool D.",
               "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
             },
@@ -2406,7 +2393,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
               "title": "Juicy Fruit — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"No Question\" by Allure featuring LL Cool J.",
               "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
             },
@@ -2416,7 +2403,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
               "title": "Juicy Fruit — MusicBrainz relationships",
-              "retrievedAt": "2026-10-28T18:36:41.784Z",
+              "retrievedAt": "2026-10-29T07:01:37.328Z",
               "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"The One\" by Tamar Braxton.",
               "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
             },
@@ -2426,7 +2413,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852",
               "title": "Juicy / New York, New York — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra, first released 2006-07-14.",
               "recordRef": "recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
             },
@@ -2436,7 +2423,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
               "title": "A Dream — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G., first released 2002-11-12.",
               "recordRef": "recording/beb2b87b-cf8e-4688-9407-35271cec7109"
             },
@@ -2446,7 +2433,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
               "title": "A.W.O.L. — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"A.W.O.L.\" by RBX, first released 1995-09-26.",
               "recordRef": "recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
             },
@@ -2456,7 +2443,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/362b4346-fee5-4447-8329-f85d25498335",
               "title": "History — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"History\" by Mos Def feat. Talib Kweli, first released 2009-06-09.",
               "recordRef": "recording/362b4346-fee5-4447-8329-f85d25498335"
             },
@@ -2466,7 +2453,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9",
               "title": "It's Only Hip Hop — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"It's Only Hip Hop\" by Apathy feat. Brevi, first released 2011-08-23.",
               "recordRef": "recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
             },
@@ -2476,7 +2463,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
               "title": "Juicy Fruit — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:15.794Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"Juicy Fruit\" by Mtume, first released 1983-04-22.",
               "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
             },
@@ -2486,7 +2473,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/7cf3a922-c586-4134-9d4a-53189021e0e3",
               "title": "Rappin' Duke (vocal) — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:17.067Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"Rappin' Duke (vocal)\" by The Rappin' Duke, first released 1984.",
               "recordRef": "recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
             },
@@ -2496,7 +2483,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948",
               "title": "Power Trip — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo, first released 2012-09-04.",
               "recordRef": "recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
             },
@@ -2506,7 +2493,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
               "title": "The One — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"The One\" by Tamar Braxton, first released 2013-05-07.",
               "recordRef": "recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
             },
@@ -2516,7 +2503,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/580bf335-54ee-4d32-902f-866d89e3d08a",
               "title": "Villuminati — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:30.873Z",
               "excerpt": "MusicBrainz recording \"Villuminati\" by J. Cole, first released 2013-06-14.",
               "recordRef": "recording/580bf335-54ee-4d32-902f-866d89e3d08a"
             },
@@ -2526,7 +2513,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732",
               "title": "Loving You — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:37.327Z",
               "excerpt": "MusicBrainz recording \"Loving You\" by Jennifer Lopez, first released 2001-01-01.",
               "recordRef": "recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
             },
@@ -2536,7 +2523,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19",
               "title": "Ma läksin kiima — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:37.327Z",
               "excerpt": "MusicBrainz recording \"Ma läksin kiima\" by Cool D, first released 2009-11-16.",
               "recordRef": "recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
             },
@@ -2546,61 +2533,62 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791",
               "title": "No Question — MusicBrainz recording",
-              "retrievedAt": "2026-10-28T15:15:18.379Z",
+              "retrievedAt": "2026-10-29T07:01:37.327Z",
               "excerpt": "MusicBrainz recording \"No Question\" by Allure featuring LL Cool J, first released 1997-05-06.",
               "recordRef": "recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
             }
           ],
           "claims": [
             {
-              "id": "760e366c-4764-4bf9-9101-e41b904e353d",
+              "id": "1901e816-4eb1-41b8-b343-561713b46879",
               "text": "“Juicy” by The Notorious B.I.G. was first released on September 13, 1994.",
               "about": "track",
               "kind": "sourced",
               "origin": "model",
               "evidenceIds": ["musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b"],
               "verdict": "supported",
-              "verdictReason": "The Juicy recording excerpt gives September 13, 1994, as its first release date.",
+              "verdictReason": "The MusicBrainz recording excerpt gives September 13, 1994, as its first release date.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording"
             },
             {
-              "id": "6e877d38-f9de-43f4-a19d-0f5381ae0480",
-              "text": "This recording samples Mtume’s “Juicy Fruit” and “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
-              "about": "sample",
+              "id": "117ba937-2533-4219-8506-ad3949d50d03",
+              "text": "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” Mos Def feat. Talib Kweli’s “History,” and Apathy feat. Brevi’s “It’s Only Hip Hop.”",
+              "about": "connection",
               "kind": "sourced",
               "origin": "model",
               "evidenceIds": [
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335",
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
               ],
               "verdict": "supported",
-              "verdictReason": "The two samples relationship excerpts name Mtume’s “Juicy Fruit” and The Rappin’ Duke’s recording.",
+              "verdictReason": "The four cited MusicBrainz sampled-in excerpts name all four recordings.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording"
             },
             {
-              "id": "3c65f053-09c0-4f1a-855e-d01149f533aa",
-              "text": "This recording samples Mtume’s “Juicy Fruit,” linking Biggie’s track to the earlier song. MusicBrainz also lists a sample from The Rappin’ Duke’s “Rappin’ Duke (vocal).”",
+              "id": "f3a2ae6f-f983-472c-8d94-701f11a866f7",
+              "text": "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit.”",
               "about": "sample",
               "kind": "sourced",
               "origin": "model",
               "evidenceIds": [
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
               ],
               "verdict": "supported",
-              "verdictReason": "The two samples relationship excerpts list both “Juicy Fruit” and “Rappin’ Duke (vocal).”",
+              "verdictReason": "The MusicBrainz “Juicy Fruit” relationship excerpt credits the sample.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording",
               "factoid": {
-                "title": "A familiar groove reworked",
+                "title": "A groove borrowed from Mtume",
                 "type": "sample",
                 "entities": [
                   {
@@ -2609,8 +2597,30 @@
                   },
                   {
                     "text": "Juicy Fruit",
-                    "type": "album"
-                  },
+                    "type": "sample"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "49a56b45-f85e-44fc-9fe1-c98f440598a7",
+              "text": "The recording also samples “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+              "about": "sample",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": [
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+              ],
+              "verdict": "supported",
+              "verdictReason": "The MusicBrainz “Rappin’ Duke (vocal)” relationship excerpt credits the sample.",
+              "numericCheck": "n/a",
+              "numericReason": null,
+              "numericComparison": null,
+              "scope": "recording",
+              "factoid": {
+                "title": "Another sampled voice",
+                "type": "sample",
+                "entities": [
                   {
                     "text": "The Rappin’ Duke",
                     "type": "artist"
@@ -2623,32 +2633,36 @@
               }
             },
             {
-              "id": "21a4e58c-2dfc-454a-8612-5615345477ff",
-              "text": "MusicBrainz lists several later recordings as sampling this “Juicy”: “A Dream” by Jay‐Z feat. Faith Evans & Notorious B.I.G., “History” by Mos Def feat. Talib Kweli, and “Villuminati” by J. Cole.",
+              "id": "5ed3b846-7fe9-467e-8553-d249f152b778",
+              "text": "MusicBrainz records “Juicy” as sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
               "about": "connection",
-              "kind": "inferred",
+              "kind": "sourced",
               "origin": "model",
               "evidenceIds": [
                 "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335",
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
+                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
               ],
-              "verdict": "partial",
-              "verdictReason": "The three sampled-by excerpts name those recordings but do not establish that they are later.",
+              "verdict": "supported",
+              "verdictReason": "The three cited MusicBrainz sampled-in excerpts identify “A Dream,” “A.W.O.L.,” and “History.”",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording",
               "factoid": {
-                "title": "A sample with a long afterlife",
+                "title": "A later sample trail",
                 "type": "connection",
                 "entities": [
                   {
-                    "text": "Jay‐Z",
+                    "text": "Jay-Z",
                     "type": "artist"
                   },
                   {
-                    "text": "Faith Evans",
+                    "text": "A Dream",
+                    "type": "sample"
+                  },
+                  {
+                    "text": "RBX",
                     "type": "artist"
                   },
                   {
@@ -2658,30 +2672,12 @@
                   {
                     "text": "Talib Kweli",
                     "type": "artist"
-                  },
-                  {
-                    "text": "J. Cole",
-                    "type": "artist"
                   }
                 ]
               }
             },
             {
-              "id": "957aca1d-6590-49d4-87ed-061a01718a08",
-              "text": "\"Villuminati - J. Cole\" samples \"Juicy - 2005 Remaster - The Notorious B.I.G.\".",
-              "about": "sample",
-              "kind": "inferred",
-              "origin": "model",
-              "evidenceIds": [
-                "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
-              ],
-              "verdict": "partial",
-              "verdictReason": "The Villuminati relationship names “Juicy,” but not the specific 2005 remaster.",
-              "numericCheck": "n/a",
-              "scope": "recording"
-            },
-            {
-              "id": "bb87febd-7ff6-4521-ade6-4528989fa0af",
+              "id": "91c82e85-15bd-405e-9c33-95f63b652ea8",
               "text": "\"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume.",
               "about": "sample",
               "kind": "sourced",
@@ -2695,7 +2691,7 @@
               "scope": "recording"
             },
             {
-              "id": "86c4f3d6-1568-4921-95cd-2de3c3ec112c",
+              "id": "2b0a8a0d-a151-4753-8c0d-cd2391f57f8c",
               "text": "\"Juicy\" by The Notorious B.I.G. samples \"Rappin' Duke (vocal)\" by The Rappin' Duke.",
               "about": "sample",
               "kind": "sourced",
@@ -2709,7 +2705,7 @@
               "scope": "recording"
             },
             {
-              "id": "bb846543-d659-43a8-8130-ed7dd740621b",
+              "id": "7c135214-2a8a-4599-b680-18a73ca7283a",
               "text": "\"Juicy\" by The Notorious B.I.G. is remixed in \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra.",
               "about": "sample",
               "kind": "sourced",
@@ -2723,7 +2719,7 @@
               "scope": "recording"
             },
             {
-              "id": "49a6f106-8438-49d0-b5f2-7d6141641824",
+              "id": "5bcdf59d-3be3-46ec-9ca5-c619b8d4af4c",
               "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G..",
               "about": "sample",
               "kind": "sourced",
@@ -2737,7 +2733,7 @@
               "scope": "recording"
             },
             {
-              "id": "c27b07a2-aa7f-4c55-aac5-1ecd5cc4ddcc",
+              "id": "9f6f8de0-0a3a-4f7a-aa99-28cff83b7edf",
               "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"A.W.O.L.\" by RBX.",
               "about": "sample",
               "kind": "sourced",
@@ -2751,7 +2747,7 @@
               "scope": "recording"
             },
             {
-              "id": "4191b1e5-79da-4fdc-94e1-3d5d371aa904",
+              "id": "dfc78b7b-3a4d-4858-a279-1256384b61e5",
               "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"History\" by Mos Def feat. Talib Kweli.",
               "about": "sample",
               "kind": "sourced",
@@ -2765,7 +2761,7 @@
               "scope": "recording"
             },
             {
-              "id": "9d115a33-aa9f-41fd-b084-5cdad5b3e698",
+              "id": "3b5e29a9-864e-4e47-979e-e352dbfa008f",
               "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"It's Only Hip Hop\" by Apathy feat. Brevi.",
               "about": "sample",
               "kind": "sourced",
@@ -2779,7 +2775,7 @@
               "scope": "recording"
             },
             {
-              "id": "d2c0cc6e-bc60-42fd-843f-dcc146c76a79",
+              "id": "adfbc66c-bfc6-4f23-94ec-8c50cbdebe22",
               "text": "The work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
               "about": "cover",
               "kind": "sourced",
@@ -2793,7 +2789,7 @@
               "scope": "work"
             },
             {
-              "id": "f340ec9c-1908-4dc6-a21e-459f499a26d6",
+              "id": "e6ce312d-ab44-47a6-9ab7-adfa1be23512",
               "text": "The work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
               "about": "cover",
               "kind": "sourced",
@@ -2807,7 +2803,7 @@
               "scope": "work"
             },
             {
-              "id": "c9ddad5b-f73a-4d47-8ec8-096b9eb53920",
+              "id": "de531349-6203-4ec8-83db-1d90d5ea64a8",
               "text": "The work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
               "about": "cover",
               "kind": "sourced",
@@ -2821,7 +2817,7 @@
               "scope": "work"
             },
             {
-              "id": "b9e8b7c7-e0f7-41c9-be30-fc0525bfa9a6",
+              "id": "62ebe7c2-6b03-4125-b1ef-ec6ab20cfaa3",
               "text": "The work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
               "about": "cover",
               "kind": "sourced",
@@ -2835,7 +2831,7 @@
               "scope": "work"
             },
             {
-              "id": "c1e59cfb-1dc9-462a-b832-af1146349b72",
+              "id": "9b8d0507-02d1-4efb-a9f8-2443546b3f57",
               "text": "\"Juicy\" by The Notorious B.I.G. appears on the official album \"Ready to Die: The Remaster\" (2016-04-08).",
               "about": "track",
               "kind": "sourced",
@@ -2850,22 +2846,22 @@
           "run": {
             "id": "recorded-juicy-the-notorious-big",
             "mode": "replay",
-            "recordedAt": "2026-10-28T18:37:13.253Z",
-            "commit": "2b66a5082fc7",
+            "recordedAt": "2026-10-29T07:01:59.843Z",
+            "commit": "0fdfdccc509c",
             "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
             "replayed": "run",
             "fallback": false,
             "usage": {
               "llmCalls": 4,
-              "inputTokens": 15760,
-              "outputTokens": 3158,
-              "reasoningTokens": 427,
-              "usd": 0.015989
+              "inputTokens": 16449,
+              "outputTokens": 3371,
+              "reasoningTokens": 114,
+              "usd": 0.014776000000000001
             },
             "verifier": {
-              "judged": 9,
+              "judged": 11,
               "unjudged": 0,
-              "restated": 4
+              "restated": 6
             },
             "sourceErrors": [
               {
@@ -2879,13 +2875,13 @@
       }
     },
     {
-      "atMs": 35469,
+      "atMs": 32753,
       "event": {
         "type": "done",
         "runId": "recorded-juicy-the-notorious-big",
         "seq": 65,
-        "elapsedMs": 35476,
-        "timestamp": "2026-10-28T18:37:13.263Z"
+        "elapsedMs": 32752,
+        "timestamp": "2026-10-29T07:01:59.863Z"
       }
     }
   ],
@@ -3048,76 +3044,85 @@
     "samples": [],
     "factoids": [
       {
-        "id": "757d5947-cf68-4f99-8f96-2fb41f1e23fd",
-        "title": "A familiar groove reworked",
-        "content": "This recording samples Mtume’s “Juicy Fruit,” linking Biggie’s track to the earlier song. MusicBrainz also lists a sample from The Rappin’ Duke’s “Rappin’ Duke (vocal).”",
+        "id": "7e85a56e-1470-40c4-8771-b9b7dcf3cccd",
+        "title": "A groove borrowed from Mtume",
+        "content": "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit.”",
         "type": "sample",
         "entities": [
           {
-            "id": "75e74c5d-c17e-4606-8490-ea584125dc92",
+            "id": "6f528788-b044-4ee1-a20f-68abf32176fc",
             "text": "Mtume",
             "type": "artist",
             "searchQuery": "Mtume"
           },
           {
-            "id": "88243f2f-e76a-4d75-aca6-220f4978f532",
+            "id": "747bf6a5-8ccc-4dd8-8c5a-aad162882005",
             "text": "Juicy Fruit",
-            "type": "album",
+            "type": "sample",
             "searchQuery": "Juicy Fruit"
-          },
+          }
+        ],
+        "claimId": "f3a2ae6f-f983-472c-8d94-701f11a866f7"
+      },
+      {
+        "id": "1fe0ae0e-f848-45d2-811f-5b25ab2a483c",
+        "title": "Another sampled voice",
+        "content": "The recording also samples “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+        "type": "sample",
+        "entities": [
           {
-            "id": "41912d20-ce38-4452-8774-93959fcaf673",
+            "id": "57f8becc-8e9b-4116-a71b-7b453183b990",
             "text": "The Rappin’ Duke",
             "type": "artist",
             "searchQuery": "The Rappin’ Duke"
           },
           {
-            "id": "a61854c5-970a-4053-a216-e17ecf3307f6",
+            "id": "1dd0a178-95d1-41f4-9adb-be71502f1a0c",
             "text": "Rappin’ Duke (vocal)",
             "type": "sample",
             "searchQuery": "Rappin’ Duke (vocal)"
           }
         ],
-        "claimId": "3c65f053-09c0-4f1a-855e-d01149f533aa"
+        "claimId": "49a56b45-f85e-44fc-9fe1-c98f440598a7"
       },
       {
-        "id": "c9a3c8a9-26e7-41d8-9e37-0d35b6ac0998",
-        "title": "A sample with a long afterlife",
-        "content": "MusicBrainz lists several later recordings as sampling this “Juicy”: “A Dream” by Jay‐Z feat. Faith Evans & Notorious B.I.G., “History” by Mos Def feat. Talib Kweli, and “Villuminati” by J. Cole.",
+        "id": "e7185dba-f3da-4074-b948-710458727d11",
+        "title": "A later sample trail",
+        "content": "MusicBrainz records “Juicy” as sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
         "type": "connection",
         "entities": [
           {
-            "id": "fbb34e63-d65c-4a57-bf1b-50f518f82066",
-            "text": "Jay‐Z",
+            "id": "27fb6465-a341-4f22-9ce4-b613cfa5a490",
+            "text": "Jay-Z",
             "type": "artist",
-            "searchQuery": "Jay‐Z"
+            "searchQuery": "Jay-Z"
           },
           {
-            "id": "5a9937c1-d988-4d13-890e-e7477431b3bf",
-            "text": "Faith Evans",
-            "type": "artist",
-            "searchQuery": "Faith Evans"
+            "id": "3f28d26a-8d74-467e-9fa8-018911fb02d2",
+            "text": "A Dream",
+            "type": "sample",
+            "searchQuery": "A Dream"
           },
           {
-            "id": "1bdbf6d2-9189-4163-a9b9-eb7ba0d530dc",
+            "id": "7a7e5585-0ae5-4882-bc17-fbc7b998584a",
+            "text": "RBX",
+            "type": "artist",
+            "searchQuery": "RBX"
+          },
+          {
+            "id": "fb8646a6-1785-4f2c-b9f7-25eb6f49d289",
             "text": "Mos Def",
             "type": "artist",
             "searchQuery": "Mos Def"
           },
           {
-            "id": "11838564-ff82-4373-90ef-6f2e17e69e2f",
+            "id": "97e9d1a6-932b-4f50-93ca-3b615335f2a2",
             "text": "Talib Kweli",
             "type": "artist",
             "searchQuery": "Talib Kweli"
-          },
-          {
-            "id": "50bfc12e-0ee4-4579-91c4-40ca8e06d735",
-            "text": "J. Cole",
-            "type": "artist",
-            "searchQuery": "J. Cole"
           }
         ],
-        "claimId": "21a4e58c-2dfc-454a-8612-5615345477ff"
+        "claimId": "5ed3b846-7fe9-467e-8553-d249f152b778"
       }
     ],
     "genealogy": {
@@ -3132,16 +3137,6 @@
           "trackArtist": "The Notorious B.I.G.",
           "year": 1994,
           "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
-        },
-        {
-          "id": "villuminati",
-          "group": 4,
-          "label": "Villuminati - J. Cole",
-          "img": "",
-          "size": 22,
-          "spotifyId": "5o9GCBBMWxSu7y4naOdFPy",
-          "trackTitle": "Villuminati",
-          "trackArtist": "J. Cole"
         },
         {
           "id": "mb-1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
@@ -3258,25 +3253,13 @@
       ],
       "links": [
         {
-          "source": "current",
-          "target": "villuminati",
-          "value": 1,
-          "type": "sample",
-          "kind": "inferred",
-          "origin": "model",
-          "claimId": "957aca1d-6590-49d4-87ed-061a01718a08",
-          "evidenceIds": [
-            "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
-          ]
-        },
-        {
           "source": "mb-1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
           "target": "current",
           "value": 3,
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "bb87febd-7ff6-4521-ade6-4528989fa0af",
+          "claimId": "91c82e85-15bd-405e-9c33-95f63b652ea8",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
           ]
@@ -3288,7 +3271,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "86c4f3d6-1568-4921-95cd-2de3c3ec112c",
+          "claimId": "2b0a8a0d-a151-4753-8c0d-cd2391f57f8c",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
           ]
@@ -3300,7 +3283,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "bb846543-d659-43a8-8130-ed7dd740621b",
+          "claimId": "7c135214-2a8a-4599-b680-18a73ca7283a",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
           ]
@@ -3312,7 +3295,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "49a6f106-8438-49d0-b5f2-7d6141641824",
+          "claimId": "5bcdf59d-3be3-46ec-9ca5-c619b8d4af4c",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109"
           ]
@@ -3324,7 +3307,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "c27b07a2-aa7f-4c55-aac5-1ecd5cc4ddcc",
+          "claimId": "9f6f8de0-0a3a-4f7a-aa99-28cff83b7edf",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
           ]
@@ -3336,7 +3319,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "4191b1e5-79da-4fdc-94e1-3d5d371aa904",
+          "claimId": "dfc78b7b-3a4d-4858-a279-1256384b61e5",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
           ]
@@ -3348,7 +3331,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "9d115a33-aa9f-41fd-b084-5cdad5b3e698",
+          "claimId": "3b5e29a9-864e-4e47-979e-e352dbfa008f",
           "evidenceIds": [
             "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
           ]
@@ -3915,7 +3898,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G. (5:02), ISRC USBB40580814, first released 1994-09-13.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
       },
@@ -3925,7 +3908,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is remixed in \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/remixed-by/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
       },
@@ -3935,7 +3918,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G..",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109"
       },
@@ -3945,7 +3928,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"A.W.O.L.\" by RBX.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
       },
@@ -3955,7 +3938,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"History\" by Mos Def feat. Talib Kweli.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
       },
@@ -3965,7 +3948,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"It's Only Hip Hop\" by Apathy feat. Brevi.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
       },
@@ -3975,7 +3958,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
       },
@@ -3985,7 +3968,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Rappin' Duke (vocal)\" by The Rappin' Duke.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
       },
@@ -3995,7 +3978,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
       },
@@ -4005,7 +3988,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"The One\" by Tamar Braxton.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
       },
@@ -4015,7 +3998,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
         "title": "Juicy — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. is sampled in \"Villuminati\" by J. Cole.",
         "recordRef": "track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
       },
@@ -4025,7 +4008,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4",
         "title": "Ready to Die: The Remaster — MusicBrainz release",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. appears on the official album \"Ready to Die: The Remaster\" (2016-04-08).",
         "recordRef": "release/0756fea0-10c2-4d4d-afaf-c5e81ae496b4"
       },
@@ -4035,7 +4018,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
         "title": "Juicy — MusicBrainz work",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
         "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
       },
@@ -4045,7 +4028,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
         "title": "Juicy — MusicBrainz work",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
         "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
       },
@@ -4055,7 +4038,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
         "title": "Juicy — MusicBrainz work",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
         "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
       },
@@ -4065,7 +4048,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
         "title": "Juicy — MusicBrainz work",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
         "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
       },
@@ -4075,7 +4058,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
         "title": "Juicy — MusicBrainz work",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (The Notorious B.I.G. cover)\" by John That.",
         "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
       },
@@ -4085,28 +4068,18 @@
         "sourceTier": "web",
         "url": "https://www.hotnewhiphop.com/89010-top-15-greatest-hip-hop-samples-news",
         "title": "Top 15 Greatest Hip-Hop Samples",
-        "retrievedAt": "2026-10-28T18:36:41.594Z",
-        "excerpt": "Drake wasn't the first artist who sampled ... Where Have I Heard That Song Before: “Juicy” by Notorious B.I.G. Juicy - 2005 Remaster cover",
+        "retrievedAt": "2026-10-29T07:01:31.079Z",
+        "excerpt": "But instead of drifting into a sea polluted with countless other forgotten 1980’s singles, it found new life when Notorious B.I.G. sampled the song for his debut single “Juicy.” Although the sample officially rips from the “Fruity Instrumental” mix, and the girl group Tidal replace the lead singer’s vocals, “Juicy,” retains the original song’s silky groove. Solidifying his status as rap’s newest force, Biggie raps about how he’s blowing up like we thought he would. His lyrics present him as a […",
         "recordRef": null
       },
       {
-        "id": "tavily:https://www.youtube.com/watch?v=1eNA0RBueoY",
+        "id": "tavily:https://www.youtube.com/watch?v=78SV9tguyVM",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://www.youtube.com/watch?v=1eNA0RBueoY",
-        "title": "The Notorious B.I.G. - Unbelievable (Official Audio)",
-        "retrievedAt": "2026-10-28T18:36:41.594Z",
+        "url": "https://www.youtube.com/watch?v=78SV9tguyVM",
+        "title": "The Notorious B.I.G. - Kick in the Door (Official Audio)",
+        "retrievedAt": "2026-10-29T07:01:31.079Z",
         "excerpt": "Christopher Wallace, known professionally as The Notorious B.I.G., Biggie, or Biggie Smalls, was an American rapper and songwriter. He was born in Brooklyn, New York, on May 21, 1972. His debut album Ready to Die, released in September 1994, included singles such as “Juicy,” “Big Poppa,” “One More Chance,” “Warning,” and “Everyday Struggle.” Wallace’s second album, Life After Death, released posthumously in 1997, included tracks such as “Hypnotize,” “Mo Money Mo Problems,” “Sky’s the Limit,” [.…",
-        "recordRef": null
-      },
-      {
-        "id": "tavily:https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://www.whosampled.com/sample/420/The-Notorious-B.I.G.-Big-Poppa-The-Isley-Brothers-Between-the-Sheets",
-        "title": "The Notorious B.I.G.'s 'Big Poppa' sample of The Isley ...",
-        "retrievedAt": "2026-10-28T18:36:41.594Z",
-        "excerpt": "\"Big Poppa\" by The Notorious B.I.G. sampled The Isley Brothers's \"Between the Sheets\". Listen to both songs on WhoSampled.",
         "recordRef": null
       },
       {
@@ -4115,8 +4088,18 @@
         "sourceTier": "web",
         "url": "https://www.youtube.com/shorts/J7syCPQuA18",
         "title": "Sample vs. Original | Mtume “Juicy Fruit” & The Notorious ...",
-        "retrievedAt": "2026-10-28T18:36:41.594Z",
-        "excerpt": "Sample vs. Original | Mtume “Juicy Fruit” vs. The Notorious B.I.G. “Juicy” One of the biggest samples in hip-hop history—The Notorious B.I.G.",
+        "retrievedAt": "2026-10-29T07:01:31.079Z",
+        "excerpt": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”",
+        "recordRef": null
+      },
+      {
+        "id": "tavily:https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+        "source": "tavily",
+        "sourceTier": "web",
+        "url": "https://music.apple.com/us/playlist/barry-white-sampled/pl.c93e6eaec52f47c189d19c2d88efdca5",
+        "title": "‎Barry White: Sampled - Playlist - Apple Music",
+        "retrievedAt": "2026-10-29T07:01:31.079Z",
+        "excerpt": "Barry White: Sampled # Barry White: Sampled Apple Music Hip-Hop Their original tunes have been the source material for some of modern music’s biggest hits. 58 songs, 3 hours 43 minutes ## ### JAŸ-Z ### Madvillain ### Nas ### Trippie Redd ### Eric B. & Rakim ### 50 Cent ### The Notorious B.I.G. ### Birdman ### Lil Wayne ### Action Bronson ### Rick Ross",
         "recordRef": null
       },
       {
@@ -4125,7 +4108,7 @@
         "sourceTier": "web",
         "url": "https://en.wikipedia.org/wiki/Big_Poppa",
         "title": "Big Poppa - Wikipedia",
-        "retrievedAt": "2026-10-28T18:36:41.594Z",
+        "retrievedAt": "2026-10-29T07:01:31.079Z",
         "excerpt": "\"Big Poppa\" is a song by American rapper the Notorious B.I.G., released by Bad Boy Records on December 24, 1994 as the second single from his debut studio album, Ready to Die (1994). Produced by Chucky Thompson and Nashiem Myrick, it samples \"Sampling (music)\") the song \"Between the Sheets \"Between the Sheets (song)\")\" (1983) by The Isley Brothers. \"Big Poppa\" is a rap song with elements of R&B and East Coast hip hop. It is named after one of the Notorious B.I.G.'s nicknames. [...] | v t e The …",
         "recordRef": null
       },
@@ -4135,8 +4118,18 @@
         "sourceTier": "web",
         "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
         "title": "Juicy (The Notorious B.I.G. song) - Wikipedia",
-        "retrievedAt": "2026-10-28T18:36:41.278Z",
+        "retrievedAt": "2026-10-29T07:01:31.557Z",
         "excerpt": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is…",
+        "recordRef": null
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Ready_to_Die",
+        "source": "tavily",
+        "sourceTier": "web",
+        "url": "https://en.wikipedia.org/wiki/Ready_to_Die",
+        "title": "Ready to Die - Wikipedia",
+        "retrievedAt": "2026-10-29T07:01:31.557Z",
+        "excerpt": "Ready to Die is the debut studio album by the American rapper The Notorious B.I.G., released on September 13, 1994, by Bad Boy Records and distributed by Arista Records. The album features productions by Bad Boy founder Sean Combs, Easy Mo Bee, Chucky Thompson, DJ Premier and Lord Finesse, among others. It was recorded from 1993 to 1994 at The Hit Factory and D&D Studios in New York City. The partly autobiographical album tells the story of the rapper's experiences as a young criminal, and was …",
         "recordRef": null
       },
       {
@@ -4145,7 +4138,7 @@
         "sourceTier": "web",
         "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2022/2/22/feature-the-king-of-new-york-remembering-the-notorious-big",
         "title": "FEATURE: The King of New York: Remembering The Notorious B.I.G. — Music Musings & Such",
-        "retrievedAt": "2026-10-28T18:36:41.278Z",
+        "retrievedAt": "2026-10-29T07:01:31.557Z",
         "excerpt": "“Double albums tend to be overblown, self-indulgent cash grabs, but Life After Death warranted the approach. Beginning with the 1994 Quad Studios shooting of Tupac Shakur in New York City, the Notorious B.I.G—along with Combs, Shakur, and Suge Knight—was at the center of a multifaceted rivalry. It was a struggle between N.Y.'s Bad Boy and L.A.'s Death Row records that surpassed label affiliation to become about coastal loyalty, arguments about commercialism vs. art that spread from the music [.…",
         "recordRef": null
       },
@@ -4155,18 +4148,8 @@
         "sourceTier": "web",
         "url": "https://www.npr.org/2023/08/01/1191059697/hip-hop-50-houston",
         "title": "50 years of hip-hop history: Houston : NPR",
-        "retrievedAt": "2026-10-28T18:36:41.278Z",
+        "retrievedAt": "2026-10-29T07:01:31.557Z",
         "excerpt": "applying it to his much-heralded works with Nas, The Notorious B.I.G. and his own Gang Starr. Closer to home, New Orleans' Master P, one of the most prolific label heads in hip-hop history, sketched out his record company dreams via the blueprint provided by J. Prince and Rap-A-Lot. [...] Geto Boys, \"Mind Playing Tricks on Me\" (1991) DJ Screw and Lil' Keke, \"Pimp tha Pen\" (1996) Lil' Troy, \"Wanna Be a Baller\" [feat. Fat Pat, Yungstar, Lil' Will, Big T and H.A.W.K] (1998) Fat Pat, \"Tops Drop\" (1…",
-        "recordRef": null
-      },
-      {
-        "id": "tavily:https://thenotoriousbig.fandom.com/wiki/Juicy",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://thenotoriousbig.fandom.com/wiki/Juicy",
-        "title": "Juicy | The Notorious B.I.G. Wiki",
-        "retrievedAt": "2026-10-28T18:36:53.850Z",
-        "excerpt": "It contains a sample of the 1983 song \"Juicy Fruit\" by Mtume, though is directly sampled from the song's \"Fruity Instrumental\" mix. ... History",
         "recordRef": null
       },
       {
@@ -4175,7 +4158,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
         "title": "Juicy Fruit — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Loving You\" by Jennifer Lopez.",
         "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
       },
@@ -4185,7 +4168,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
         "title": "Juicy Fruit — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"Ma läksin kiima\" by Cool D.",
         "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
       },
@@ -4195,7 +4178,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
         "title": "Juicy Fruit — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"No Question\" by Allure featuring LL Cool J.",
         "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
       },
@@ -4205,7 +4188,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
         "title": "Juicy Fruit — MusicBrainz relationships",
-        "retrievedAt": "2026-10-28T18:36:41.784Z",
+        "retrievedAt": "2026-10-29T07:01:37.328Z",
         "excerpt": "MusicBrainz: \"Juicy Fruit\" by Mtume is sampled in \"The One\" by Tamar Braxton.",
         "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc/sampled-by/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
       },
@@ -4215,7 +4198,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/304f3ef2-e277-4b78-8d44-ddba5a70f852",
         "title": "Juicy / New York, New York — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra, first released 2006-07-14.",
         "recordRef": "recording/304f3ef2-e277-4b78-8d44-ddba5a70f852"
       },
@@ -4225,7 +4208,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
         "title": "A Dream — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G., first released 2002-11-12.",
         "recordRef": "recording/beb2b87b-cf8e-4688-9407-35271cec7109"
       },
@@ -4235,7 +4218,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
         "title": "A.W.O.L. — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"A.W.O.L.\" by RBX, first released 1995-09-26.",
         "recordRef": "recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5"
       },
@@ -4245,7 +4228,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/362b4346-fee5-4447-8329-f85d25498335",
         "title": "History — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"History\" by Mos Def feat. Talib Kweli, first released 2009-06-09.",
         "recordRef": "recording/362b4346-fee5-4447-8329-f85d25498335"
       },
@@ -4255,7 +4238,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9",
         "title": "It's Only Hip Hop — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"It's Only Hip Hop\" by Apathy feat. Brevi, first released 2011-08-23.",
         "recordRef": "recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
       },
@@ -4265,7 +4248,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
         "title": "Juicy Fruit — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:15.794Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"Juicy Fruit\" by Mtume, first released 1983-04-22.",
         "recordRef": "recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
       },
@@ -4275,7 +4258,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/7cf3a922-c586-4134-9d4a-53189021e0e3",
         "title": "Rappin' Duke (vocal) — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:17.067Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"Rappin' Duke (vocal)\" by The Rappin' Duke, first released 1984.",
         "recordRef": "recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
       },
@@ -4285,7 +4268,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948",
         "title": "Power Trip — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"Power Trip\" by Lecrae feat. PRo, Sho Baraka & Andy Mineo, first released 2012-09-04.",
         "recordRef": "recording/fbfd690d-7b9d-43ce-bd5d-a2cf1e5ad948"
       },
@@ -4295,7 +4278,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7",
         "title": "The One — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"The One\" by Tamar Braxton, first released 2013-05-07.",
         "recordRef": "recording/5fca01f7-1d54-49c6-be17-8e8fac6e45f7"
       },
@@ -4305,7 +4288,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/580bf335-54ee-4d32-902f-866d89e3d08a",
         "title": "Villuminati — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:30.873Z",
         "excerpt": "MusicBrainz recording \"Villuminati\" by J. Cole, first released 2013-06-14.",
         "recordRef": "recording/580bf335-54ee-4d32-902f-866d89e3d08a"
       },
@@ -4315,7 +4298,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/444dbdc1-dc60-4188-91d0-ef2230bfb732",
         "title": "Loving You — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:37.327Z",
         "excerpt": "MusicBrainz recording \"Loving You\" by Jennifer Lopez, first released 2001-01-01.",
         "recordRef": "recording/444dbdc1-dc60-4188-91d0-ef2230bfb732"
       },
@@ -4325,7 +4308,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19",
         "title": "Ma läksin kiima — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:37.327Z",
         "excerpt": "MusicBrainz recording \"Ma läksin kiima\" by Cool D, first released 2009-11-16.",
         "recordRef": "recording/4fdda4ff-1d84-46bd-aab8-45d1daa54d19"
       },
@@ -4335,61 +4318,62 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791",
         "title": "No Question — MusicBrainz recording",
-        "retrievedAt": "2026-10-28T15:15:18.379Z",
+        "retrievedAt": "2026-10-29T07:01:37.327Z",
         "excerpt": "MusicBrainz recording \"No Question\" by Allure featuring LL Cool J, first released 1997-05-06.",
         "recordRef": "recording/83d02048-fbe5-4ca8-b32a-82cc9d45d791"
       }
     ],
     "claims": [
       {
-        "id": "760e366c-4764-4bf9-9101-e41b904e353d",
+        "id": "1901e816-4eb1-41b8-b343-561713b46879",
         "text": "“Juicy” by The Notorious B.I.G. was first released on September 13, 1994.",
         "about": "track",
         "kind": "sourced",
         "origin": "model",
         "evidenceIds": ["musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b"],
         "verdict": "supported",
-        "verdictReason": "The Juicy recording excerpt gives September 13, 1994, as its first release date.",
+        "verdictReason": "The MusicBrainz recording excerpt gives September 13, 1994, as its first release date.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording"
       },
       {
-        "id": "6e877d38-f9de-43f4-a19d-0f5381ae0480",
-        "text": "This recording samples Mtume’s “Juicy Fruit” and “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
-        "about": "sample",
+        "id": "117ba937-2533-4219-8506-ad3949d50d03",
+        "text": "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” Mos Def feat. Talib Kweli’s “History,” and Apathy feat. Brevi’s “It’s Only Hip Hop.”",
+        "about": "connection",
         "kind": "sourced",
         "origin": "model",
         "evidenceIds": [
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335",
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/e1e3d537-732a-47ca-9f8e-b8ec6f4c19b9"
         ],
         "verdict": "supported",
-        "verdictReason": "The two samples relationship excerpts name Mtume’s “Juicy Fruit” and The Rappin’ Duke’s recording.",
+        "verdictReason": "The four cited MusicBrainz sampled-in excerpts name all four recordings.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording"
       },
       {
-        "id": "3c65f053-09c0-4f1a-855e-d01149f533aa",
-        "text": "This recording samples Mtume’s “Juicy Fruit,” linking Biggie’s track to the earlier song. MusicBrainz also lists a sample from The Rappin’ Duke’s “Rappin’ Duke (vocal).”",
+        "id": "f3a2ae6f-f983-472c-8d94-701f11a866f7",
+        "text": "MusicBrainz credits “Juicy” with sampling Mtume’s “Juicy Fruit.”",
         "about": "sample",
         "kind": "sourced",
         "origin": "model",
         "evidenceIds": [
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc",
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/1d890c2b-2ba3-4b34-9196-64d5cb0cc0dc"
         ],
         "verdict": "supported",
-        "verdictReason": "The two samples relationship excerpts list both “Juicy Fruit” and “Rappin’ Duke (vocal).”",
+        "verdictReason": "The MusicBrainz “Juicy Fruit” relationship excerpt credits the sample.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording",
         "factoid": {
-          "title": "A familiar groove reworked",
+          "title": "A groove borrowed from Mtume",
           "type": "sample",
           "entities": [
             {
@@ -4398,8 +4382,30 @@
             },
             {
               "text": "Juicy Fruit",
-              "type": "album"
-            },
+              "type": "sample"
+            }
+          ]
+        }
+      },
+      {
+        "id": "49a56b45-f85e-44fc-9fe1-c98f440598a7",
+        "text": "The recording also samples “Rappin’ Duke (vocal)” by The Rappin’ Duke.",
+        "about": "sample",
+        "kind": "sourced",
+        "origin": "model",
+        "evidenceIds": [
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/samples/recording/7cf3a922-c586-4134-9d4a-53189021e0e3"
+        ],
+        "verdict": "supported",
+        "verdictReason": "The MusicBrainz “Rappin’ Duke (vocal)” relationship excerpt credits the sample.",
+        "numericCheck": "n/a",
+        "numericReason": null,
+        "numericComparison": null,
+        "scope": "recording",
+        "factoid": {
+          "title": "Another sampled voice",
+          "type": "sample",
+          "entities": [
             {
               "text": "The Rappin’ Duke",
               "type": "artist"
@@ -4412,32 +4418,36 @@
         }
       },
       {
-        "id": "21a4e58c-2dfc-454a-8612-5615345477ff",
-        "text": "MusicBrainz lists several later recordings as sampling this “Juicy”: “A Dream” by Jay‐Z feat. Faith Evans & Notorious B.I.G., “History” by Mos Def feat. Talib Kweli, and “Villuminati” by J. Cole.",
+        "id": "5ed3b846-7fe9-467e-8553-d249f152b778",
+        "text": "MusicBrainz records “Juicy” as sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.,” and Mos Def feat. Talib Kweli’s “History.”",
         "about": "connection",
-        "kind": "inferred",
+        "kind": "sourced",
         "origin": "model",
         "evidenceIds": [
           "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/beb2b87b-cf8e-4688-9407-35271cec7109",
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335",
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/b3201b35-4fbe-4da5-9bac-1c9523e63df5",
+          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/362b4346-fee5-4447-8329-f85d25498335"
         ],
-        "verdict": "partial",
-        "verdictReason": "The three sampled-by excerpts name those recordings but do not establish that they are later.",
+        "verdict": "supported",
+        "verdictReason": "The three cited MusicBrainz sampled-in excerpts identify “A Dream,” “A.W.O.L.,” and “History.”",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording",
         "factoid": {
-          "title": "A sample with a long afterlife",
+          "title": "A later sample trail",
           "type": "connection",
           "entities": [
             {
-              "text": "Jay‐Z",
+              "text": "Jay-Z",
               "type": "artist"
             },
             {
-              "text": "Faith Evans",
+              "text": "A Dream",
+              "type": "sample"
+            },
+            {
+              "text": "RBX",
               "type": "artist"
             },
             {
@@ -4447,30 +4457,12 @@
             {
               "text": "Talib Kweli",
               "type": "artist"
-            },
-            {
-              "text": "J. Cole",
-              "type": "artist"
             }
           ]
         }
       },
       {
-        "id": "957aca1d-6590-49d4-87ed-061a01718a08",
-        "text": "\"Villuminati - J. Cole\" samples \"Juicy - 2005 Remaster - The Notorious B.I.G.\".",
-        "about": "sample",
-        "kind": "inferred",
-        "origin": "model",
-        "evidenceIds": [
-          "musicbrainz:track/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b/sampled-by/recording/580bf335-54ee-4d32-902f-866d89e3d08a"
-        ],
-        "verdict": "partial",
-        "verdictReason": "The Villuminati relationship names “Juicy,” but not the specific 2005 remaster.",
-        "numericCheck": "n/a",
-        "scope": "recording"
-      },
-      {
-        "id": "bb87febd-7ff6-4521-ade6-4528989fa0af",
+        "id": "91c82e85-15bd-405e-9c33-95f63b652ea8",
         "text": "\"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume.",
         "about": "sample",
         "kind": "sourced",
@@ -4484,7 +4476,7 @@
         "scope": "recording"
       },
       {
-        "id": "86c4f3d6-1568-4921-95cd-2de3c3ec112c",
+        "id": "2b0a8a0d-a151-4753-8c0d-cd2391f57f8c",
         "text": "\"Juicy\" by The Notorious B.I.G. samples \"Rappin' Duke (vocal)\" by The Rappin' Duke.",
         "about": "sample",
         "kind": "sourced",
@@ -4498,7 +4490,7 @@
         "scope": "recording"
       },
       {
-        "id": "bb846543-d659-43a8-8130-ed7dd740621b",
+        "id": "7c135214-2a8a-4599-b680-18a73ca7283a",
         "text": "\"Juicy\" by The Notorious B.I.G. is remixed in \"Juicy / New York, New York\" by The Notorious B.I.G. & Frank Sinatra.",
         "about": "sample",
         "kind": "sourced",
@@ -4512,7 +4504,7 @@
         "scope": "recording"
       },
       {
-        "id": "49a6f106-8438-49d0-b5f2-7d6141641824",
+        "id": "5bcdf59d-3be3-46ec-9ca5-c619b8d4af4c",
         "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"A Dream\" by Jay‐Z feat. Faith Evans & Notorious B.I.G..",
         "about": "sample",
         "kind": "sourced",
@@ -4526,7 +4518,7 @@
         "scope": "recording"
       },
       {
-        "id": "c27b07a2-aa7f-4c55-aac5-1ecd5cc4ddcc",
+        "id": "9f6f8de0-0a3a-4f7a-aa99-28cff83b7edf",
         "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"A.W.O.L.\" by RBX.",
         "about": "sample",
         "kind": "sourced",
@@ -4540,7 +4532,7 @@
         "scope": "recording"
       },
       {
-        "id": "4191b1e5-79da-4fdc-94e1-3d5d371aa904",
+        "id": "dfc78b7b-3a4d-4858-a279-1256384b61e5",
         "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"History\" by Mos Def feat. Talib Kweli.",
         "about": "sample",
         "kind": "sourced",
@@ -4554,7 +4546,7 @@
         "scope": "recording"
       },
       {
-        "id": "9d115a33-aa9f-41fd-b084-5cdad5b3e698",
+        "id": "3b5e29a9-864e-4e47-979e-e352dbfa008f",
         "text": "\"Juicy\" by The Notorious B.I.G. is sampled in \"It's Only Hip Hop\" by Apathy feat. Brevi.",
         "about": "sample",
         "kind": "sourced",
@@ -4568,7 +4560,7 @@
         "scope": "recording"
       },
       {
-        "id": "d2c0cc6e-bc60-42fd-843f-dcc146c76a79",
+        "id": "adfbc66c-bfc6-4f23-94ec-8c50cbdebe22",
         "text": "The work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
         "about": "cover",
         "kind": "sourced",
@@ -4582,7 +4574,7 @@
         "scope": "work"
       },
       {
-        "id": "f340ec9c-1908-4dc6-a21e-459f499a26d6",
+        "id": "e6ce312d-ab44-47a6-9ab7-adfa1be23512",
         "text": "The work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
         "about": "cover",
         "kind": "sourced",
@@ -4596,7 +4588,7 @@
         "scope": "work"
       },
       {
-        "id": "c9ddad5b-f73a-4d47-8ec8-096b9eb53920",
+        "id": "de531349-6203-4ec8-83db-1d90d5ea64a8",
         "text": "The work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
         "about": "cover",
         "kind": "sourced",
@@ -4610,7 +4602,7 @@
         "scope": "work"
       },
       {
-        "id": "b9e8b7c7-e0f7-41c9-be30-fc0525bfa9a6",
+        "id": "62ebe7c2-6b03-4125-b1ef-ec6ab20cfaa3",
         "text": "The work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
         "about": "cover",
         "kind": "sourced",
@@ -4624,7 +4616,7 @@
         "scope": "work"
       },
       {
-        "id": "c1e59cfb-1dc9-462a-b832-af1146349b72",
+        "id": "9b8d0507-02d1-4efb-a9f8-2443546b3f57",
         "text": "\"Juicy\" by The Notorious B.I.G. appears on the official album \"Ready to Die: The Remaster\" (2016-04-08).",
         "about": "track",
         "kind": "sourced",
@@ -4639,22 +4631,22 @@
     "run": {
       "id": "recorded-juicy-the-notorious-big",
       "mode": "replay",
-      "recordedAt": "2026-10-28T18:37:13.253Z",
-      "commit": "2b66a5082fc7",
+      "recordedAt": "2026-10-29T07:01:59.843Z",
+      "commit": "0fdfdccc509c",
       "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
       "replayed": "run",
       "fallback": false,
       "usage": {
         "llmCalls": 4,
-        "inputTokens": 15760,
-        "outputTokens": 3158,
-        "reasoningTokens": 427,
-        "usd": 0.015989
+        "inputTokens": 16449,
+        "outputTokens": 3371,
+        "reasoningTokens": 114,
+        "usd": 0.014776000000000001
       },
       "verifier": {
-        "judged": 9,
+        "judged": 11,
         "unjudged": 0,
-        "restated": 4
+        "restated": 6
       },
       "sourceErrors": [
         {
@@ -4667,9 +4659,9 @@
   },
   "usage": {
     "llmCalls": 4,
-    "inputTokens": 15760,
-    "outputTokens": 3158,
-    "reasoningTokens": 427,
-    "usd": 0.015989
+    "inputTokens": 16449,
+    "outputTokens": 3371,
+    "reasoningTokens": 114,
+    "usd": 0.014776000000000001
   }
 }

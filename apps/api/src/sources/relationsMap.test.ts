@@ -25,7 +25,12 @@ import { shownEvidence } from "../agent/prompts.js";
 import { captureLogsForTests } from "../logger.js";
 import { runMigrations } from "../store/migrations.js";
 import { SonicCache, TTL_MUSICBRAINZ_RECORDING } from "../store/cache.js";
-import { collectPrimarySources, MAP_INCOMPLETE, type RecordingCache } from "./identity.js";
+import {
+  collectPrimarySources,
+  MAP_INCOMPLETE,
+  type RecordingCache,
+  RELEASES_INCOMPLETE,
+} from "./identity.js";
 import {
   getRecordingDetails,
   type MbRelationship,
@@ -42,6 +47,7 @@ const MB = "https://musicbrainz.org/ws/2";
 const ICE = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
 const UNDER_PRESSURE = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
 const ICE_ICE_BACON = "6507f9c2-48c9-4648-9daa-4c9271e0f983";
+const PUSHIN_ICE = "51a54bec-25d2-49de-bb9f-bfff669367cc";
 /** Made-up recordings of the second hop. */
 const SIBLING = "11111111-1111-4111-8111-111111111111";
 const EARLIER = "22222222-2222-4222-8222-222222222222";
@@ -88,10 +94,15 @@ const underPressure = {
 const isHopRead = (call: FetchCall) => call.url.startsWith(`${MB}/recording/${UNDER_PRESSURE}?`);
 const isDateSearch = (call: FetchCall) => call.url.startsWith(`${MB}/recording?query=`);
 
+/** The recording ids a search by recording id asks for. */
+const dateIds = (call: FetchCall): string[] =>
+  (new URL(call.url).searchParams.get("query") ?? "").match(
+    /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g,
+  ) ?? [];
+
 /** The dates the search by recording id answers: every recording asked but the sibling. */
 function dateSearch(call: FetchCall) {
-  const query = new URL(call.url).searchParams.get("query") ?? "";
-  const ids = query.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g) ?? [];
+  const ids = dateIds(call);
   const dates: Record<string, string> = { [EARLIER]: "1975", [ICE_ICE_BACON]: "2004-02-10" };
   return json({
     count: ids.length,
@@ -156,9 +167,16 @@ describe("the relations map", () => {
     const sources = await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} });
     const mb = records(sources);
 
-    // The source's details once, and one search by recording id for the dates.
+    // One search by recording id for the dates of the track's own relations, right after the
+    // recording's lookup; after the chain, the source's details once, then one search for the
+    // dates of the second hop's recordings.
     expect(net.calls.filter(isHopRead)).toHaveLength(1);
-    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
+    const mapReads = net.calls.filter((c) => isHopRead(c) || isDateSearch(c));
+    expect(mapReads.map(isHopRead)).toEqual([false, true, false]);
+    expect(dateIds(mapReads[0]).sort()).toEqual([UNDER_PRESSURE, ICE_ICE_BACON, PUSHIN_ICE].sort());
+    expect(dateIds(mapReads[2]).sort()).toEqual([SIBLING, EARLIER].sort());
+    expect(net.calls.indexOf(mapReads[0])).toBe(2);
+    expect(net.calls.at(-1)).toBe(mapReads[2]);
     expect(mb.error).toBeUndefined();
 
     // The sibling and what the source samples, never this track itself.
@@ -328,11 +346,13 @@ describe("the relations map", () => {
     expect(() => cache.putMbDate(EARLIER, "1975", "not a time")).toThrow(TypeError);
   });
 
-  it("drops the second hop quietly when the chain's time is nearly out", async () => {
-    // At the real 1.1 s spacing the chain's own reads end at 5.5 s (the recording's releases).
-    // With the 20 s deadline a map read may start until 13.5 s: both are made. With an 8 s
-    // deadline it may start only until 5.2 s, already past: the map queues nothing, so the
-    // chain ends when its own reads do, as without the map.
+  it("dates the track's own relations in a short budget, and drops the second hop", async () => {
+    // At the real 1.1 s spacing the search for the dates of the track's own relations is sent
+    // at 2.2 s, right after the recording's lookup, and the chain's own reads follow. With the
+    // 20 s deadline the second hop is read after them. With an 8 s deadline a map read may
+    // start only until 5.2 s, before the chain's reads end: the second hop is not read, and the
+    // recording's releases, the chain's last read (one slot later for the search), come after
+    // the 6 s dating cut.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
     const collect = async (deadlineMs: number, relationsMap?: object) => {
       MusicBrainzRateLimiter.getInstance().resetForTests();
@@ -352,23 +372,19 @@ describe("the relations map", () => {
       return { mb, settledAt, mapReads: net.calls.filter((c) => isHopRead(c) || isDateSearch(c)) };
     };
     const inTime = await collect(20_000, {});
-    expect(inTime.mapReads).toHaveLength(2);
+    expect(inTime.mapReads).toHaveLength(3);
     expect(hops(inTime.mb.records)).toHaveLength(2);
+    expect(inTime.mb.incomplete).not.toContain(MAP_INCOMPLETE);
 
     const late = await collect(8000, {});
-    const without = await collect(8000);
-    expect(late.mapReads).toEqual([]);
-    expect(late.settledAt).toBe(without.settledAt);
+    expect(late.mapReads.map(isDateSearch)).toEqual([true]);
     expect(hops(late.mb.records)).toEqual([]);
-    // Nothing lost and no error: the track's own records are all there, undated.
     expect(late.mb.error).toBeUndefined();
-    const sample = late.mb.records.find((r) => r.recording?.mbid === UNDER_PRESSURE);
-    expect(sample?.recording).not.toHaveProperty("firstReleaseDate");
-    // Not complete: the map is read again by a later run.
-    expect(inTime.mb.incomplete).not.toContain(MAP_INCOMPLETE);
-    expect(late.mb.incomplete).toBe(
-      `${inTime.mb.incomplete}; ${MAP_INCOMPLETE}the relations map could not be read in full in this run's time; a later run reads it again`,
-    );
+    const bacon = late.mb.records.find((r) => r.recording?.mbid === ICE_ICE_BACON);
+    expect(bacon?.recording?.firstReleaseDate).toBe("2004-02-10");
+    // The second hop is read again by a later run; no release is named; the notes say so.
+    expect(late.mb.incomplete).toContain(RELEASES_INCOMPLETE);
+    expect(late.mb.incomplete).toContain(MAP_INCOMPLETE);
   });
 
   it("leaves a map it could not read in full for a later run to read again", async () => {
@@ -376,7 +392,11 @@ describe("the relations map", () => {
     const cache = recordingCache();
     const logs = captureLogsForTests({ level: "warn" });
     onTestFinished(() => logs.restore());
-    stubFetch((call) => (isDateSearch(call) ? new Response("busy", { status: 503 }) : route(call)));
+    stubFetch((call) =>
+      isDateSearch(call)
+        ? new Response("busy", { status: 503, headers: { "retry-after": "0" } })
+        : route(call),
+    );
     const sources = await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } });
     const evidence = await runEvidence(
       Promise.resolve({ status: "read", sources }),
@@ -401,20 +421,22 @@ describe("the relations map", () => {
     // The research cached from it is read again, not served as is.
     const cached = cachedEvidenceOf(evidence, ICE_TRACK.isrc, null, now().toISOString());
     expect(cachedEvidenceUse(cached, ICE_TRACK.isrc)).toBe("refresh");
-    // The second hop read then comes from the cache: only the dates are asked again.
+    // The second hop read then comes from the cache: only the dates are asked again (the
+    // track's own relations' search, then the second hop's).
     const again = stubFetch(route);
     const second = records(
       await collectPrimarySources(ICE_TRACK, { now, relationsMap: { cache } }),
     );
     expect(again.calls.filter(isHopRead)).toEqual([]);
-    expect(again.calls.filter(isDateSearch)).toHaveLength(1);
+    expect(again.calls.filter(isDateSearch)).toHaveLength(2);
     expect(second.incomplete).not.toContain(MAP_INCOMPLETE);
   });
 
-  it("makes no map request once the chain's own reads end past the map's start limit", async () => {
+  it("makes no later map request once the chain's own reads end past the map's start limit", async () => {
     // With the 20 s deadline the map's reads may start until 13.5 s; the dating cut is at 15 s.
     // Here MusicBrainz answers the recording's releases (the chain's last read) only at 13.6 s:
-    // a request sent then would still be answered before the cut, but it starts too late.
+    // a request sent then would still be answered before the cut, but it starts too late. Only
+    // the search sent ahead of the chain's reads, right after the recording's lookup, is made.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
     const t0 = performance.now();
     const net = stubFetch(async (call) => {
@@ -426,9 +448,13 @@ describe("the relations map", () => {
     const run = collectPrimarySources(ICE_TRACK, { now, relationsMap: {} });
     await vi.runAllTimersAsync();
     const mb = records(await run);
-    expect(net.calls.filter((c) => isHopRead(c) || isDateSearch(c))).toEqual([]);
+    expect(net.calls.filter((c) => isHopRead(c) || isDateSearch(c)).map(isDateSearch)).toEqual([
+      true,
+    ]);
+    expect(net.calls.findIndex(isDateSearch)).toBe(2);
     expect(hops(mb.records)).toEqual([]);
     expect(mb.error).toBeUndefined();
+    expect(mb.incomplete).toContain(MAP_INCOMPLETE);
   });
 
   it.each([
@@ -471,7 +497,7 @@ describe("the relations map", () => {
     expect(cache.getMbDate(SIBLING)).toEqual({ date: null, readAt: now().toISOString() });
   });
 
-  it("does not ask again when MusicBrainz sheds a map read", async () => {
+  it("asks a map read MusicBrainz sheds again once, and then does without it", async () => {
     unpaced();
     const net = stubFetch((call) =>
       isHopRead(call) || isDateSearch(call)
@@ -479,9 +505,10 @@ describe("the relations map", () => {
         : route(call),
     );
     const mb = records(await collectPrimarySources(ICE_TRACK, { now, relationsMap: {} }));
-    expect(net.calls.filter(isHopRead)).toHaveLength(1);
-    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
+    expect(net.calls.filter(isHopRead)).toHaveLength(2);
+    expect(net.calls.filter(isDateSearch)).toHaveLength(2);
     expect(mb.error).toBeUndefined();
+    expect(mb.incomplete).toContain(MAP_INCOMPLETE);
   });
 
   it("refuses cached relations whose dates their items do not state", async () => {
@@ -587,8 +614,8 @@ describe("the relations map's pacing", () => {
 
     expect(hops(mb.records)).toHaveLength(2);
     expect(net.calls.filter(isHopRead)).toHaveLength(1);
-    expect(net.calls.filter(isDateSearch)).toHaveLength(1);
-    expect(at.length).toBeGreaterThanOrEqual(7);
+    expect(net.calls.filter(isDateSearch)).toHaveLength(2);
+    expect(at.length).toBeGreaterThanOrEqual(8);
     const gaps = at.slice(1).map((t, i) => t - at[i]);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1100);
   });
@@ -615,6 +642,33 @@ describe("the relations map's place in the MusicBrainz queue", () => {
     const chain = withMusicBrainzPriority(() => getRecordingDetails(D));
     await settleOnFakeClock(Promise.all([first, research, map, chain]));
     expect(sent).toEqual([A, D, C, B]);
+  });
+
+  it("keeps the chain's next read ahead of a waiting research read after a slow answer", async () => {
+    // The chain's read takes 1.5 s, longer than the 1.1 s spacing; a research read has waited
+    // meanwhile. The chain's next read, queued as soon as the first is answered, goes first.
+    queueOnFakeClock(1100);
+    const sent: Array<[string, number]> = [];
+    const t0 = performance.now();
+    stubFetch(async (call) => {
+      const id = new URL(call.url).pathname.split("/").at(-1) ?? "";
+      sent.push([id, performance.now() - t0]);
+      if (id === A) await new Promise((resolve) => setTimeout(resolve, 1500));
+      return answer(call);
+    });
+    const chain = withMusicBrainzPriority(async () => {
+      await getRecordingDetails(A);
+      await getRecordingDetails(D);
+    });
+    const research = new Promise((resolve) => setTimeout(resolve, 100)).then(() =>
+      getRecordingDetails(B),
+    );
+    await settleOnFakeClock(Promise.all([chain, research]));
+    expect(sent).toEqual([
+      [A, 0],
+      [D, 1500],
+      [B, 2600],
+    ]);
   });
 
   it("refuses a map read whose turn comes after its start limit, and keeps its slot free", async () => {

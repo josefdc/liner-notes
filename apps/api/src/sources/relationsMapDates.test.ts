@@ -845,7 +845,7 @@ describe("the relations map's years on a track with many relations", () => {
 
   it("drops a search slower than the chain waits for, and asks it again after the chain", async () => {
     // The search for the relations' dates, sent at 2.2 s, would answer after 9.99 s: the chain
-    // waits for it 3 s, then reads on, and the search is asked again after the chain's reads.
+    // waits for it 2 s, then reads on, and the search is asked again after the chain's reads.
     const log = warnings();
     const net = stubFetch(slow(route, stalledAt(isDateSearch, 9_990)));
     const { mb, identity, settledAt } = await onFakeClock({ research: RESEARCH_AT });
@@ -867,8 +867,61 @@ describe("the relations map's years on a track with many relations", () => {
     expect(log()).toEqual([]);
   });
 
+  it.each([
+    // The second hop's search answers in time: the map is complete.
+    [2_500, HOP_DATED, []],
+    // The relations' re-ask answers at 12.6 s; the second hop's search would start after the
+    // map's start limit (13.5 s), so it is not sent: its recordings are drawn undated.
+    [4_000, NONE_OF_HOP_DATED, ["the dates of 3 recordings"]],
+  ])(
+    "re-asks after the chain when every search answers in %i ms, slower than the chain waits",
+    async (ms, hopDated, notRead) => {
+      // Every date search answers after `ms`, the rest at live latencies. The chain waits 2 s
+      // for the first, then reads on; the search is asked again after the chain's reads, and
+      // that answer dates the relations.
+      const sent: Array<[string, number]> = [];
+      let t0: number | null = null;
+      const answer = slow(route, (call) => (isDateSearch(call) ? ms : liveMs(call)));
+      const net = stubFetch((call) => {
+        t0 ??= performance.now();
+        sent.push([mbOrder([call])[0] ?? "", performance.now() - t0]);
+        return answer(call);
+      });
+      const log = warnings();
+      const { mb, identity, settledAt } = await onFakeClock();
+
+      expect(settledAt).toBeLessThanOrEqual(15_000);
+      // The track's own facts are all read.
+      expect(mb.incomplete ?? "").not.toContain(RELEASES_INCOMPLETE);
+      expect(mb.incomplete ?? "").not.toContain(DATES_INCOMPLETE);
+      expect(identity?.coverRelease).toBeTruthy();
+      expect(identity?.original.original).toBe(true);
+      // The chain read on 2 s after the search was sent (2.2 s), not when it was answered.
+      const at = (label: string, nth = 1) => sent.filter(([l]) => l === label)[nth - 1]?.[1];
+      expect(at("dates")).toBeCloseTo(2_200, 0);
+      expect(at("work")).toBeCloseTo(4_200, 0);
+      // The relations' search asked once more after the chain's last read; no id asked a third
+      // time.
+      const searches = searchIds(net.calls);
+      expect(searches.slice(0, 2).map((ids) => ids.sort())).toEqual([
+        [...DIRECT_IDS].sort(),
+        [...DIRECT_IDS].sort(),
+      ]);
+      expect(at("dates", 2)).toBeGreaterThan(at("release") ?? Number.POSITIVE_INFINITY);
+      const asks = new Map<string, number>();
+      for (const id of searches.flat()) asks.set(id, (asks.get(id) ?? 0) + 1);
+      expect(Math.max(...asks.values())).toBeLessThanOrEqual(2);
+      expect(directDates(mb.records)).toEqual(EXPECTED_DIRECT);
+      expect(hopDates(mb.records)).toEqual(hopDated);
+      expect(log()).toEqual(
+        notRead.map((what) => expect.stringMatching(new RegExp(`: not read ${what} \\(`))),
+      );
+      if (notRead.length > 0) expect(mb.incomplete).toContain(MAP_INCOMPLETE);
+    },
+  );
+
   it("reports a date search that never answers, and still reads the track's own facts", async () => {
-    // The chain waits 3 s for the search, then reads on; asked again after the chain, the search
+    // The chain waits 2 s for the search, then reads on; asked again after the chain, the search
     // is cut with the work's dating at 15 s, and the second hop has no time left.
     const log = warnings();
     stubFetch((call) => (isDateSearch(call) ? never(call) : route(call)));

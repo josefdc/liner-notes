@@ -839,7 +839,7 @@ export interface RelationsMapOptions {
  * The most the chain waits for the search for its relations' dates (MusicBrainz answered it in
  * 670 ms when measured): one slower is dropped, and asked again after the chain's reads.
  */
-const AHEAD_SEARCH_TIMEOUT_MS = 3000;
+const AHEAD_SEARCH_TIMEOUT_MS = 2000;
 
 /** Waits `ms` (not at all when it is not positive), or until `signal` aborts. */
 function pause(ms: number, signal?: AbortSignal): Promise<void> {

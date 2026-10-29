@@ -399,6 +399,9 @@ describe("a detail sentence that refers back to the relation", () => {
       "The arrangement was built around that sample!",
       "The band added drums beneath the sample.",
       "Guitar and percussion were added alongside that sample.",
+      // The analysed track's own, and what was written about it.
+      "The track’s strings were layered over the sample.",
+      "The source material describes strings layered over the sample.",
     ]) {
       expect(withDetail(detail), detail).toBe(sampleMark());
     }
@@ -479,6 +482,19 @@ describe("a detail sentence that refers back to the relation", () => {
       "Coldplay layered strings around that sample.",
       "The Andrew Oldham Orchestra built “The Last Time” around the sample.",
       "The arrangement was built around that sample by Richard Ashcroft.",
+      // A record in other words: the other side, or a third record.
+      "The orchestral original was itself built around that sample.",
+      "The earlier recording was built around that sample.",
+      "The earlier record was later rebuilt atop that sample.",
+      "The source recording was layered over the sample.",
+      "The earlier record was recorded with that sample.",
+      "A later hit was built around that sample.",
+      "Another band later built its own hit around that sample.",
+      "The previous single was layered over the sample.",
+      "A subsequent version was built around that sample.",
+      "The source was built around that sample.",
+      "A track was built around that sample.",
+      "The song was layered over the sample.",
       // Not the sample stated, or more than one.
       "The arrangement was built around a sample.",
       "The arrangement was built around one sample.",
@@ -521,6 +537,9 @@ describe("a detail sentence that refers back to the relation", () => {
       "Strings were taken from this cover.",
       "The arrangement is based on this cover.",
       "Strings were added over this cover in 2005.",
+      "The original song was later rebuilt around this cover.",
+      "The original was written atop this cover.",
+      "Strings were added with this cover.",
     ]) {
       const cover = { text: `${COVERED} ${detail}`, verdict: "partial", kind: "inferred" };
       expect(fate(BSS, COVER, cover as Partial<Claim>), detail).toBe("stays");
@@ -605,10 +624,11 @@ describe("a cover named by the guest it features", () => {
     expect(fate(BSS, COVER, detail)).toBe("stays");
   });
 
-  it("stays when the band alone may be either of its two covers, and when “with” names its guest", () => {
-    // The result holds “Coldplay feat. Richard Ashcroft” and “Coldplay with Richard Ashcroft”.
+  it("goes named by its lead, and stays named by the other cover's whole credit", () => {
+    // The result holds “Coldplay feat. Richard Ashcroft” and “Coldplay with Richard Ashcroft”: the
+    // second credit is one name, so Coldplay leads only the first.
     expect(fate(BSS, COVER, { text: "The song’s work has been covered by Coldplay." })).toBe(
-      "stays",
+      "goes",
     );
     expect(
       fate(BSS, COVER, {

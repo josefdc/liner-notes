@@ -33,7 +33,7 @@
  * by its artist alone only when the track is named by more than its artist ("Daft Punk is
  * covered by …" says which artist is covered, not which song), and by its main artist or whole
  * credit, never its guest alone. An artist is its whole credit (its featured artist joined by
- * "feat.", "ft.", "featuring" or "with"), or the main or a featured artist of one ("Drake" in
+ * "feat.", "ft." or "featuring"), or the main or a featured artist of one ("Drake" in
  * "Drake feat. 21 Savage"), never a part joined by "&", "and" or a comma ("Simon" in "Simon &
  * Garfunkel": `artistNames`). A list is read with its commas outside quotes (`readRelations`):
  * a name holding a comma ("Earth, Wind & Fire") is then not read in a list, unless it is a
@@ -53,8 +53,8 @@
  * time: one sentence states its records' relations, whole or before a comma, and the others and
  * what follows that comma only add detail (no "?", no hedge, doubting word or unknown
  * capitalised name, and no relation word but the relation's own noun as the last words of a
- * sentence that names nothing, after a preposition of place: "…around that sample", "…over the
- * cover"). As a subject ("The sample is fake"), after "from", "on" or "in" ("taken from this
+ * sentence that names nothing and describes no record ("the original", "a later hit"), after a
+ * preposition of place: "…around that sample", "…over the cover"). As a subject ("The sample is fake"), after "from", "on" or "in" ("taken from this
  * cover", "based on this sample"), or followed by any word, it may dispute or move the relation,
  * and the sentence is not detail. A sentence that disputes the relation in words none of those
  * lists holds can still let a partly supported claim be marked; the mark then names only the
@@ -189,24 +189,20 @@ export function titleNames(title: string): string[][] {
 }
 
 /**
- * Where a credit names the artists it features ("A feat. B", "A ft. B", "A featuring B", "A with
- * B").
+ * Where a credit names the artists it features ("A feat. B", "A ft. B", "A featuring B"). Not
+ * "with", which a name may hold ("Dance With the Dead"): "Coldplay with Richard Ashcroft" is one
+ * name.
  */
-const FEATURING = /\s+(?:feat\.?|ft\.?|featuring|with)\s+/iu;
-/**
- * The words a credit may join a featured artist with, as a statement may write it: "feat.",
- * "ft." and "featuring" for one another. "With" only for itself: "Coldplay with Richard
- * Ashcroft" and "Coldplay feat. Richard Ashcroft" may be two records' credits.
- */
+const FEATURING = /\s+(?:feat\.?|ft\.?|featuring)\s+/iu;
+/** The words for a featured artist, as a statement may write one for another. */
 const FEATURING_WORDS = ["feat.", "ft.", "featuring"];
-const FEATURED = /\s+(?:feat\.?|ft\.?|featuring)\s+/iu;
 
 /** A credit's whole forms (with each word for a featured artist), main artist and parts. */
 function creditForms(artist: string): { credits: string[]; main: string; parts: string[] } {
   const [main, ...featured] = artist.split(FEATURING);
   const parts = [main, ...featured.flatMap((list) => list.split(/\s*,\s*/u))];
   const credits =
-    featured.length === 0 || !FEATURED.test(artist)
+    featured.length === 0
       ? [artist]
       : [artist, ...FEATURING_WORDS.map((word) => [main, ...featured].join(` ${word} `))];
   return { credits, main, parts };
@@ -1024,8 +1020,35 @@ const BACK_REFERENCES: ReadonlySet<string> = new Set(["the", "this", "that"]);
  * sample", "sold to …", "before …").
  */
 const BACK_REFERENCE_PLACES: ReadonlySet<string> = new Set(
-  "around over under beneath underneath beside alongside atop above below with".split(" "),
+  "around over under beneath underneath beside alongside atop above below".split(" "),
 );
+
+/**
+ * Words that may describe a record in a sentence that refers back to the relation: the other
+ * record, or a third one ("The orchestral original was itself built around that sample", "A
+ * later hit was built around that sample"), which may turn the relation round or add one. Such a
+ * sentence is not detail; but for "source material" (what was written about the track), and the
+ * analysed track's own possessive ("the track's arrangement").
+ */
+const RECORD_WORDS: ReadonlySet<string> = new Set(
+  "original earlier older later another previous prior itself subsequent record recording song hit single track version cover remix source".split(
+    " ",
+  ),
+);
+/** The nouns "the" or "this" and a possessive make the analysed track's ("the track's …"). */
+const TRACK_NOUNS: ReadonlySet<string> = new Set(["track", "song", "recording"]);
+
+/** True when a sentence that refers back to the relation describes a record (`RECORD_WORDS`). */
+function describesRecord(items: readonly Item[], relating: readonly number[]): boolean {
+  return items.some((item, i) => {
+    const word = wordOf(item);
+    if (word === undefined || relating.includes(i) || !RECORD_WORDS.has(word)) return false;
+    const next = wordOf(items[i + 1]);
+    if (word === "source" && next === "material") return false;
+    const before = wordOf(items[i - 1]) ?? "";
+    return !(TRACK_NOUNS.has(word) && (before === "the" || before === "this") && next === "s");
+  });
+}
 
 /**
  * True when the relation word at `at` refers back to a relation the claim states (of `types`):
@@ -1078,6 +1101,8 @@ function onlyDetail(
   if (relating.some((i) => !refersBack(items, i, types))) return false;
   // A sentence that refers back to the relation names nothing: no record, nor the track.
   if (relating.length > 0 && items.some((item) => spanOf(item) !== undefined)) return false;
+  // Nor a record in other words: the original, a later hit.
+  if (relating.length > 0 && describesRecord(items, relating)) return false;
   if (plain.some((word) => DOUBTS.some((stem) => word.startsWith(stem)))) return false;
   const doubting = (phrase: readonly string[]) =>
     items.some((_, i) => phrase.every((word, j) => wordOf(items[i + j]) === word));

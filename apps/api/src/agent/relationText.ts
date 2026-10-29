@@ -9,22 +9,29 @@
  *   interpolation of");
  * - `<one> is sampled|covered|remixed|interpolated by|in <other>`: the second draws on the
  *   first, "by" or "in" coming right after the verb;
- * - `<source> documents|lists|credits|records <one> as a sample in|on|of <other>`: the second
+ * - `<source> documents|lists|credits|records <one> as a sample in|on <other>`: the second
  *   draws on the first; `… <one> as a cover|remix of <other>`: the first draws on the second. The
- *   source is MusicBrainz, Discogs, Genius, SecondHandSongs, WhoSampled, "the record" or "a
- *   record"; the preposition alone gives the direction.
+ *   source is the cited record's own (MusicBrainz, Discogs, Genius, SecondHandSongs), or "the
+ *   record" or "a record" for any; the preposition alone gives the direction ("a sample of",
+ *   which reads either way, is not one).
  *
  * One side is the analysed track (its title, its artist, "this recording", "the song"); the other
  * names one or more of the records the claim cites, each by its title, with or without its
  * artist ("Mtume's Juicy Fruit", "Juicy Fruit by Mtume"), or by its artist alone when no other
- * record of the result has that artist. Anything else is unknown: a word of its own, a relative
+ * record of the result has that artist. An artist is its whole credit, or the main or a featured
+ * artist of one ("Drake" in "Drake feat. 21 Savage"), never a part joined by "&", "and" or a
+ * comma ("Simon" in "Simon & Garfunkel": `artistNames`). Anything else is unknown: a word of its own, a relative
  * clause ("the track that Juicy samples"), an adverb ("sampled heavily by"), "sampled on", "has
  * X sampled in it", a hedge or a negation, a second relation word, a name the claim does not
  * cite. A relation word or a negation inside a name is part of the name ("Cover Me", "No
  * Scrubs"). An unknown claim is read as stating nothing: doubt keeps it as it is.
  *
  * To mark a claim (and only to mark it), `readMarkedRelations` also reads it a sentence at a
- * time: one sentence states its records' relations, and the others only add detail.
+ * time: one sentence states its records' relations, and the others only add detail (no "?", no
+ * relation word, hedge, doubting word or unknown capitalised name). A sentence that disputes the
+ * relation in words none of those lists holds can still let a partly supported claim be marked;
+ * the mark then names only the relation its record documents, and the claim's own verdict shows
+ * beside it.
  */
 
 import { normalizeName } from "../sources/musicbrainz.js";
@@ -154,17 +161,23 @@ export function titleNames(title: string): string[][] {
   ]);
 }
 
-/** The credits an artist name joins ("Drake & 21 Savage", "A feat. B", "A, B and C"). */
-const CREDIT_JOINS = /\s*(?:&|,|\bfeat\.?(?=\s)|\bft\.?(?=\s)|\bfeaturing\b|\band\b)\s*/iu;
+/** Where a credit names the artists it features ("A feat. B", "A ft. B", "A featuring B"). */
+const FEATURING = /\s+(?:feat\.?|ft\.?|featuring)\s+/iu;
 
 /**
- * The ways a statement may name an artist: the whole credit (`normalizeArtist`), and each artist
- * it credits on its own ("Drake" for "Drake & 21 Savage"); each one that can be told apart.
+ * The ways a statement may name an artist: the whole credit (`normalizeArtist`), its main artist
+ * before a featured one ("Drake" for "Drake feat. 21 Savage"), and each featured artist (a list
+ * split on commas). "&", "and" and a comma in the main credit stay: an excerpt does not tell "Simon
+ * & Garfunkel" or "Earth, Wind & Fire" (one artist) from "Drake & 21 Savage" (two), so a part of
+ * such a credit names nothing on its own and a claim naming one stays. Each name that can be told
+ * apart.
  */
 export function artistNames(artist: string): string[][] {
+  const [main, ...featured] = artist.split(FEATURING);
+  const parts = [main, ...featured.flatMap((list) => list.split(/\s*,\s*/u))];
   return distinctNames([
     normalizeArtist(foldText(artist)),
-    ...artist.split(CREDIT_JOINS).map((part) => normalizeArtist(foldText(part))),
+    ...parts.map((part) => normalizeArtist(foldText(part))),
   ]);
 }
 
@@ -187,6 +200,8 @@ export interface NamedRecord {
   key: string;
   titles: string[][];
   artists: string[][];
+  /** The source of the record (`Evidence.source`), when known. */
+  source?: string;
 }
 
 /** The analysed track's names. */
@@ -450,6 +465,8 @@ export function readRelations(text: string, context: ReadingContext): Set<string
   for (const id of other.records) {
     const record = context.cited.get(id) as NamedRecord;
     if (LINK_TYPE[record.kind] !== type || otherDrawsOn(record.kind) === trackDraws) return null;
+    // A source the statement names must be the record's own.
+    if (documented?.source != null && documented.source !== record.source) return null;
     if (type === "cover" && !items.some((item) => spanOf(item)?.titleOf.has(id))) return null;
     stated.add(id);
   }
@@ -469,26 +486,34 @@ function namesOf(context: ReadingContext): Name[] {
   return names;
 }
 
-/** The sources a "record documents" statement starts with ("MusicBrainz lists …"). */
-const SOURCES: readonly (readonly string[])[] = [
-  "musicbrainz",
-  "discogs",
-  "genius",
-  "secondhandsongs",
-  "whosampled",
-  "the record",
-  "a record",
-].map((source) => source.split(" "));
+/**
+ * The sources a "record documents" statement starts with ("MusicBrainz lists …"), each with the
+ * `Evidence.source` it must match; "the record" and "a record" match any.
+ */
+const SOURCES: readonly { words: readonly string[]; source: string | null }[] = [
+  { words: ["musicbrainz"], source: "musicbrainz" },
+  { words: ["discogs"], source: "discogs" },
+  { words: ["genius"], source: "genius" },
+  { words: ["secondhandsongs"], source: "secondhandsongs" },
+  // No record of the result comes from WhoSampled: a statement naming it reads as unknown.
+  { words: ["whosampled"], source: "whosampled" },
+  { words: ["the", "record"], source: null },
+  { words: ["a", "record"], source: null },
+];
+/** The source names a statement may write capitalised ("MusicBrainz"). */
+const SOURCE_NAMES: ReadonlySet<string> = new Set(
+  SOURCES.filter((each) => each.source !== null).map((each) => each.words.join(" ")),
+);
 /** The verbs of a "record documents" statement. */
 const DOCUMENTS: ReadonlySet<string> = new Set(["documents", "lists", "credits", "records"]);
 /**
  * The words after "as a sample|cover|remix" that join it to the second side, and whether the
- * first side draws on the second: "<one> as a sample in|on|of <two>" (two samples one), "<one>
- * as a cover|remix of <two>" (one covers or remixes two). The preposition alone gives the
- * direction.
+ * first side draws on the second: "<one> as a sample in|on <two>" (two samples one), "<one> as a
+ * cover|remix of <two>" (one covers or remixes two). The preposition alone gives the direction;
+ * "a sample of" reads either way ("material sampled in", "material taken from"), so it is not one.
  */
 const AS_A: Partial<Record<LinkType, { joins: ReadonlySet<string>; firstDraws: boolean }>> = {
-  sample: { joins: new Set(["in", "on", "of"]), firstDraws: false },
+  sample: { joins: new Set(["in", "on"]), firstDraws: false },
   cover: { joins: new Set(["of"]), firstDraws: true },
   remix: { joins: new Set(["of"]), firstDraws: true },
 };
@@ -502,22 +527,30 @@ function documentedForm(
   at: number,
   word: string,
   type: LinkType,
-): { first: readonly Item[]; second: readonly Item[]; firstDraws: boolean } | null {
+): {
+  first: readonly Item[];
+  second: readonly Item[];
+  firstDraws: boolean;
+  source: string | null;
+} | null {
   const form = AS_A[type];
   if (!form || word !== VERBS[type].base) return null;
   if (wordOf(items[at - 1]) !== "a" || wordOf(items[at - 2]) !== "as") return null;
   if (!form.joins.has(wordOf(items[at + 1]) ?? "")) return null;
-  const source = SOURCES.find((words) => words.every((each, i) => wordOf(items[i]) === each));
-  if (!source || !DOCUMENTS.has(wordOf(items[source.length]) ?? "")) return null;
+  const named = SOURCES.find(({ words }) => words.every((each, i) => wordOf(items[i]) === each));
+  if (!named || !DOCUMENTS.has(wordOf(items[named.words.length]) ?? "")) return null;
   return {
-    first: items.slice(source.length + 1, at - 2),
+    first: items.slice(named.words.length + 1, at - 2),
     second: items.slice(at + 2),
     firstDraws: form.firstDraws,
+    source: named.source,
   };
 }
 
 /** Words after which a full stop ends no sentence ("feat.", "Mr."), as a single initial does. */
-const ABBREVIATIONS: ReadonlySet<string> = new Set(["feat", "ft", "mr", "st", "vs"]);
+const ABBREVIATIONS: ReadonlySet<string> = new Set(
+  "feat ft mr dr no vol jr sr st mt vs e.g i.e etc".split(" "),
+);
 
 /**
  * A statement's sentences: split after ".", ";" or "!" followed by a space, but not after an
@@ -541,8 +574,11 @@ export function sentencesOf(text: string): string[] {
       /\s/u.test(text[i + 1] ?? "")
     ) {
       if (char === ".") {
-        const last = /(\p{L}+)$/u.exec(text.slice(start, i))?.[1] ?? "";
-        if (ABBREVIATIONS.has(last.toLowerCase()) || /^\p{Lu}$/u.test(last)) continue;
+        const before = text.slice(start, i);
+        const word = /([\p{L}.]+)$/u.exec(before)?.[1]?.toLowerCase() ?? "";
+        const last = /(\p{L}+)$/u.exec(before)?.[1] ?? "";
+        if (ABBREVIATIONS.has(word) || ABBREVIATIONS.has(last.toLowerCase())) continue;
+        if (/^\p{Lu}$/u.test(last)) continue;
       }
       sentences.push(text.slice(start, i + 1).trim());
       start = i + 1;
@@ -554,12 +590,89 @@ export function sentencesOf(text: string): string[] {
 }
 
 /**
+ * Stems of words that hedge, dispute or deny what a statement says ("a myth", "denies it",
+ * "may be"): a word that starts with one, outside the names, makes a sentence more than detail.
+ */
+const DOUBTS: readonly string[] = (
+  "myth untrue wrong false mistak disput deni deny doubt unconfirm unverif rumor rumour alleg " +
+  "reported supposed claim contest withdraw retract opposite revers may might perhaps possibl " +
+  "probabl unclear uncertain"
+).split(" ");
+/** Phrases that do the same. */
+const DOUBTING_PHRASES: readonly string[][] = [
+  "other way round",
+  "other way around",
+  "or so",
+  "fans say",
+].map((phrase) => phrase.split(" "));
+
+/** A statement's words as `nameWords` splits them, with their case kept. */
+const casedWords = (text: string) =>
+  foldText(text)
+    .normalize("NFKD")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
+    .replace(/&/g, " and ")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+/**
+ * True when a sentence beside the one that states a claim's relation adds only detail: no "?",
+ * no relation word, no hedge or negation (`HEDGES`), no word starting with a doubting stem
+ * (`DOUBTS`) or doubting phrase, and no capitalised word outside the names it knows (`names`:
+ * the analysed track's, the cited records' and the result's other records') but its first word
+ * and a source's name ("MusicBrainz"), so no name of a record the result does not hold
+ * ("Between the Sheets by The Isley Brothers") or of a person ("Dr. Dre disputes this").
+ */
+function onlyDetail(sentence: string, names: readonly Name[]): boolean {
+  if (sentence.includes("?")) return false;
+  const words = nameWords(sentence);
+  const cased = casedWords(sentence);
+  if (cased.length !== words.length) return false;
+  const items = itemsOf(words, names);
+  if (hedgedItems(items)) return false;
+  const plain = items.flatMap((item) =>
+    wordOf(item) === undefined ? [] : [wordOf(item) as string],
+  );
+  if (plain.some((word) => RELATION_WORDS.has(word))) return false;
+  if (plain.some((word) => DOUBTS.some((stem) => word.startsWith(stem)))) return false;
+  const doubting = (phrase: readonly string[]) =>
+    items.some((_, i) => phrase.every((word, j) => wordOf(items[i + j]) === word));
+  if (DOUBTING_PHRASES.some(doubting)) return false;
+  // Another record's name, and a capitalised word no name holds.
+  let at = 0;
+  for (const item of items) {
+    const span = spanOf(item);
+    if (span) {
+      const another =
+        span.other &&
+        !span.trackTitle &&
+        !span.trackArtist &&
+        span.titleOf.size === 0 &&
+        span.artistOf.size === 0;
+      if (another) return false;
+      at += span.words.split(" ").length;
+      continue;
+    }
+    const word = cased[at];
+    if (at > 0 && /^\p{Lu}/u.test(word) && !SOURCE_NAMES.has(word.toLowerCase())) return false;
+    at++;
+  }
+  return true;
+}
+
+/**
  * The cited records whose relation a statement states, for marking it: the whole statement as
  * `readRelations` reads it, or exactly one of its sentences reading each cited record's relation
- * while every other sentence only adds detail. No other sentence may hold a relation word, a
- * hedge or a negation outside the names, or a name of `others` (the result's other records) that
- * is not the analysed track's or a cited record's. Null otherwise. Leaving a claim out, or
- * letting it stand for another, still needs the whole statement to be read.
+ * while every other sentence only adds detail (`onlyDetail`). Null otherwise. Leaving a claim out,
+ * or letting it stand for another, still needs the whole statement to be read.
+ *
+ * What is left: a sentence that disputes the relation in words none of these lists holds ("the
+ * band replayed the riff") still lets a claim be marked. The mark names only the relation its
+ * record documents, which is true of the record, and the claim's own verdict ("Partly supported")
+ * and kind still show beside it.
  */
 export function readMarkedRelations(
   text: string,
@@ -584,17 +697,5 @@ export function readMarkedRelations(
     ...namesOf(context),
     ...others.map((words) => ({ words: [...words], role: "other" as const })),
   ];
-  for (const sentence of rest) {
-    const items = itemsOf(nameWords(sentence), names);
-    if (hedgedItems(items)) return null;
-    if (items.some((item) => RELATION_WORDS.has(wordOf(item) ?? ""))) return null;
-    const another = (span: Span | undefined) =>
-      span?.other === true &&
-      !span.trackTitle &&
-      !span.trackArtist &&
-      span.titleOf.size === 0 &&
-      span.artistOf.size === 0;
-    if (items.some((item) => another(spanOf(item)))) return null;
-  }
-  return stated;
+  return rest.every((sentence) => onlyDetail(sentence, names)) ? stated : null;
 }

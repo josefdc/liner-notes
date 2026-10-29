@@ -8,7 +8,7 @@
 import type { Claim, Evidence } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { threadCpuMs, timed } from "../sources/testing/strings.js";
-import { documentedRelation, withoutRestatements } from "./restatements.js";
+import { documentedRelation, statesRelationOf, withoutRestatements } from "./restatements.js";
 import { modelClaim, trackRecord } from "./verifier/testing.js";
 
 const record = (id: string, recordRef: string, excerpt: string): Evidence => ({
@@ -543,9 +543,8 @@ describe("a model claim on a relation, read word by word", () => {
         ["Hung Up is a cover of Cover Me by Bruce Springsteen.", "ev-coverme"],
         ["Hung Up samples Stand by Me by Ben E. King.", "ev-stand"],
         ["Hung Up samples Stand by Me.", "ev-stand"],
-        ["One More Time is sampled in Circo Loco by Drake.", "ev-circo"],
-        ["One More Time is sampled in Drake's Circo Loco.", "ev-circo"],
         ["One More Time is sampled in Circo Loco by Drake and 21 Savage.", "ev-circo"],
+        ["One More Time is sampled in Circo Loco by Drake & 21 Savage.", "ev-circo"],
         ["The song One More Time is covered by The London Elektricity Big Band.", "ev-cover"],
       ]) {
         expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("goes");
@@ -658,14 +657,14 @@ describe("a model claim on a relation, read word by word", () => {
     for (const verdict of both) {
       for (const [text, cited] of [
         ["MusicBrainz documents Mtume’s “Juicy Fruit” as a sample in Juicy.", "ev-fruit"],
-        ["Discogs lists Juicy Fruit by Mtume as a sample on this recording.", "ev-fruit"],
-        ["The record lists Juicy Fruit by Mtume as a sample of Juicy.", "ev-fruit"],
+        ["MusicBrainz lists Juicy Fruit by Mtume as a sample on this recording.", "ev-fruit"],
+        ["The record lists Juicy Fruit by Mtume as a sample in Juicy.", "ev-fruit"],
         // Swapped: the analysed track is the sample, the other record draws on it.
-        ["WhoSampled lists Juicy as a sample in Big Poppa Remix by Someone Else.", "ev-sby"],
-        ["Genius credits The Notorious B.I.G.’s Juicy as a sample on Big Poppa Remix.", "ev-sby"],
+        ["MusicBrainz lists Juicy as a sample in Big Poppa Remix by Someone Else.", "ev-sby"],
+        ["A record credits The Notorious B.I.G.’s Juicy as a sample on Big Poppa Remix.", "ev-sby"],
         ["MusicBrainz lists Hung Up as a cover of Cover Me by Bruce Springsteen.", "ev-coverme"],
         [
-          "SecondHandSongs records The London Elektricity Big Band’s One More Time as a cover of the song One More Time.",
+          "MusicBrainz records The London Elektricity Big Band’s One More Time as a cover of the song One More Time.",
           "ev-cover",
         ],
         ["A record lists Hung Up (SDP extended vocal) as a remix of Hung Up.", "ev-remix"],
@@ -685,10 +684,63 @@ describe("a model claim on a relation, read word by word", () => {
         ["MusicBrainz lists Hung Up as a cover in Cover Me by Bruce Springsteen.", "ev-coverme"],
         ["MusicBrainz documents Juicy Fruit by Mtume as a looped sample in Juicy.", "ev-fruit"],
         ["MusicBrainz wrongly documents Juicy Fruit by Mtume as a sample in Juicy.", "ev-fruit"],
+        // "A sample of" reads either way.
+        ["The record lists Juicy Fruit by Mtume as a sample of Juicy.", "ev-fruit"],
+        ["MusicBrainz lists Juicy as a sample of Big Poppa Remix by Someone Else.", "ev-sby"],
+        // A source the record is not from (each of these is a MusicBrainz record).
+        ["Discogs lists Juicy Fruit by Mtume as a sample on this recording.", "ev-fruit"],
+        ["WhoSampled lists Juicy as a sample in Big Poppa Remix by Someone Else.", "ev-sby"],
+        ["Genius credits The Notorious B.I.G.’s Juicy as a sample on Big Poppa Remix.", "ev-sby"],
+        [
+          "SecondHandSongs records The London Elektricity Big Band’s One More Time as a cover of the song One More Time.",
+          "ev-cover",
+        ],
       ]) {
         expect(read(text, [cited], verdict), `${verdict}: ${text}`).toBe("stays");
         expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
       }
+    }
+    // A record from the source it names: Genius, SecondHandSongs, Discogs.
+    for (const [source, excerpt, text] of [
+      [
+        "genius",
+        'Genius: the song "Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume.',
+        "Genius lists Juicy Fruit by Mtume as a sample in Juicy.",
+      ],
+      [
+        "secondhandsongs",
+        'SecondHandSongs: "Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume.',
+        "SecondHandSongs records Juicy Fruit by Mtume as a sample on this recording.",
+      ],
+      [
+        "discogs",
+        'Discogs: "Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume.',
+        "Discogs documents Juicy Fruit by Mtume as a sample in Juicy.",
+      ],
+    ] as const) {
+      const item: Evidence = { ...record("ev-src", "track/song/1/samples/2", excerpt), source };
+      const model = judged("m-1", {
+        text,
+        about: "sample",
+        verdict: "partial",
+        evidenceIds: ["ev-src"],
+      });
+      const run = (claim: Claim) =>
+        ids(
+          withoutRestatements(
+            [claim, codeClaim("code-src", item, { about: "sample" })],
+            [],
+            [],
+            [item],
+            { track: juicy },
+          ).claims,
+        );
+      expect(run(model), source).toEqual(["code-src"]);
+      // Named as MusicBrainz's, it is not this record's word: it stays.
+      expect(run({ ...model, text: text.replace(/^\w+/u, "MusicBrainz") }), source).toEqual([
+        "m-1",
+        "code-src",
+      ]);
     }
   });
 
@@ -702,6 +754,17 @@ describe("a model claim on a relation, read word by word", () => {
         ],
         [
           "MusicBrainz documents Mtume’s “Juicy Fruit” as a sample in Juicy. Other sources describe its bass line as looped into the track’s hook.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        // Names the sentence may hold: the track's, the record's, a source's, its first word.
+        [
+          "Juicy samples Juicy Fruit by Mtume. The Notorious B.I.G. raps over Mtume’s bass line.",
+          "ev-fruit",
+          "code-fruit",
+        ],
+        [
+          "Juicy samples Juicy Fruit by Mtume. The loop’s length is listed by MusicBrainz.",
           "ev-fruit",
           "code-fruit",
         ],
@@ -745,6 +808,43 @@ describe("a model claim on a relation, read word by word", () => {
         ["Juicy samples Juicy Fruit by Mtume. The loop never changes.", "ev-fruit"],
         ["Juicy samples Juicy Fruit by Mtume. And it also covers a later song.", "ev-fruit"],
         ["Juicy samples Juicy Fruit by Mtume. A remix followed.", "ev-fruit"],
+        // A question, a doubting word or phrase, or a capitalised name no record of the result has.
+        ["Juicy samples Juicy Fruit by Mtume. Or does it?", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. This is a myth.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. That is untrue.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. That may be wrong.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Or so claims a forum post.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Dr. Dre disputes this.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume... or so they say.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. In fact it is the other way round.", "ev-fruit"],
+        [
+          "Juicy samples Juicy Fruit by Mtume. It also lifts the drums from Between the Sheets by The Isley Brothers.",
+          "ev-fruit",
+        ],
+        ["Juicy samples Juicy Fruit by Mtume. Or so fans say.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. This remains unconfirmed.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Mtume’s label denies it.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. That is according to rumours.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Experts doubt it.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It is the opposite, in fact.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The credit was later withdrawn.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The credit was retracted.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The label contested it.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It was reported later.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The order is reversed.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Perhaps the loop came first.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It might be a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It is possibly a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It is probably a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The source is unclear.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The source is uncertain.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The source is unverified.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It was a mistake.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. That is false.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. It is supposed to be a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Some claim a replay.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. Biggie has denied this in interviews.", "ev-fruit"],
+        ["Juicy samples Juicy Fruit by Mtume. The loop was made at Bad Boy.", "ev-fruit"],
         // The relation stated twice, or a sentence for each of two records.
         ["Juicy samples Juicy Fruit by Mtume. Juicy samples Juicy Fruit.", "ev-fruit"],
         ["Juicy samples Juicy Fruit by Mtume, slowed down. The bass line is looped.", "ev-fruit"],
@@ -752,6 +852,15 @@ describe("a model claim on a relation, read word by word", () => {
       ]) {
         expect(read(text, [cited], verdict, { stated: true }), `${verdict}: ${text}`).toBe("stays");
       }
+      // Another record of the result, named first in a sentence.
+      const popcorn = record(
+        "ev-pop",
+        "track/recording/j1/samples/recording/p1",
+        'MusicBrainz: "Juicy" by The Notorious B.I.G. samples "Popcorn" by Hot Butter.',
+      );
+      const pack = [...all, popcorn];
+      const named = "Juicy samples Juicy Fruit by Mtume. Popcorn is looped too.";
+      expect(read(named, ["ev-fruit"], verdict, { stated: true, pack }), verdict).toBe("stays");
       const two =
         "Juicy samples Juicy Fruit by Mtume. Juicy samples Rappin’ Duke (vocal) by The Rappin’ Duke.";
       expect(read(two, ["ev-fruit", "ev-duke"], verdict, { stated: true }), verdict).toBe("stays");
@@ -925,23 +1034,94 @@ describe("a model claim on a relation, read word by word", () => {
         ).claims,
       ),
     ).toEqual(["code-fruit"]);
-    // Drake credits another record of the result: "Drake" alone names neither.
+    // A featured credit: its main artist names the record, unless another record has it too.
     const other = record(
       "ev-drake",
       "track/recording/o1/sampled-by/recording/d2",
-      'MusicBrainz: "One More Time" by Daft Punk is sampled in "Other Song" by Drake.',
+      'MusicBrainz: "One More Time" by Daft Punk is sampled in "Other Song" by Drake feat. 21 Savage.',
     );
-    expect(read("One More Time is sampled in Drake.", ["ev-circo"], "partial")).toBe("goes");
-    expect(
-      read("One More Time is sampled in Drake.", ["ev-circo"], "partial", {
-        pack: [...all, other],
-      }),
-    ).toBe("stays");
-    expect(
-      read("One More Time is sampled in Circo Loco by Drake.", ["ev-circo"], "partial", {
-        pack: [...all, other],
-      }),
-    ).toBe("goes");
+    const third = record(
+      "ev-third",
+      "track/recording/o1/sampled-by/recording/d3",
+      'MusicBrainz: "One More Time" by Daft Punk is sampled in "Third Song" by Drake.',
+    );
+    const featured = (text: string, pack: Evidence[]) =>
+      ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-drake"] }),
+            codeClaim("code-drake", other, { about: "sample" }),
+          ],
+          [],
+          [],
+          pack,
+          { track: omt },
+        ).claims,
+      );
+    for (const text of [
+      "One More Time is sampled in Other Song by Drake.",
+      "One More Time is sampled in Other Song by 21 Savage.",
+      "One More Time is sampled in Drake.",
+    ]) {
+      expect(featured(text, [other]), text).toEqual(["code-drake"]);
+    }
+    // Another record of the result credits Drake: "Drake" alone names neither.
+    expect(featured("One More Time is sampled in Drake.", [other, third])).toEqual([
+      "m-1",
+      "code-drake",
+    ]);
+    // "Drake & 21 Savage" may be one artist or two: "Drake" alone does not name Circo Loco.
+    expect(read("One More Time is sampled in Drake.", ["ev-circo"], "partial")).toBe("stays");
+    expect(read("One More Time is sampled in Circo Loco by Drake.", ["ev-circo"], "partial")).toBe(
+      "stays",
+    );
+    expect(read("One More Time is sampled in Drake's Circo Loco.", ["ev-circo"], "partial")).toBe(
+      "stays",
+    );
+  });
+
+  it("names a record by a part of its credit only around a featuring", () => {
+    const xanadu = { title: "Xanadu", artist: "Olivia" };
+    const run = (title: string, artist: string, text: string) => {
+      const item = record(
+        "ev-c",
+        "track/recording/x1/samples/recording/c1",
+        `MusicBrainz: "Xanadu" by Olivia samples "${title}" by ${artist}.`,
+      );
+      return ids(
+        withoutRestatements(
+          [
+            judged("m-1", { text, about: "sample", verdict: "partial", evidenceIds: ["ev-c"] }),
+            codeClaim("code-c", item, { about: "sample" }),
+          ],
+          [],
+          [],
+          [item],
+          { track: xanadu },
+        ).claims,
+      );
+    };
+    // "&", "and" and a comma join one credit: a part of it names nothing on its own.
+    for (const [title, artist, text] of [
+      ["Mrs. Robinson", "Simon & Garfunkel", "Xanadu samples Simon."],
+      ["Mrs. Robinson", "Simon & Garfunkel", "Xanadu samples Mrs. Robinson by Garfunkel."],
+      ["Proud Mary", "Ike & Tina Turner", "Xanadu samples Tina Turner's Proud Mary."],
+      ["Yonkers", "Tyler, The Creator", "Xanadu samples Tyler."],
+      ["Hollywood", "Marina and the Diamonds", "Xanadu samples Marina."],
+      ["September", "Earth, Wind & Fire", "Xanadu samples Earth."],
+      ["September", "Earth, Wind & Fire", "Xanadu samples Wind's September."],
+    ]) {
+      expect(run(title, artist, text), text).toEqual(["m-1", "code-c"]);
+    }
+    for (const [title, artist, text] of [
+      ["Mrs. Robinson", "Simon & Garfunkel", "Xanadu samples Mrs. Robinson by Simon & Garfunkel."],
+      ["September", "Earth, Wind & Fire", "Xanadu samples September by Earth, Wind & Fire."],
+      ["Yonkers", "Tyler, The Creator", "Xanadu samples Tyler, The Creator."],
+      ["Circo", "Drake feat. 21 Savage, Future", "Xanadu samples Circo by Future."],
+      ["Circo", "Drake ft. 21 Savage", "Xanadu samples Drake."],
+    ]) {
+      expect(run(title, artist, text), text).toEqual(["code-c"]);
+    }
   });
 
   it("reads names without accents, tonos, ß or the dotless ı, and a title without its subtitle", () => {
@@ -1440,5 +1620,45 @@ describe("the step on many claims", () => {
       // the record's words go, but for the best of them when no code-built claim states it.
       expect(result.claims.filter((claim) => claim.origin === "model")).toHaveLength(left);
     }
+  });
+});
+
+describe("a model claim on another subject", () => {
+  it("restates a code-built claim whose names differ from its own only by accents", () => {
+    const release: Evidence = {
+      ...trackRecord(
+        "ev-rel",
+        'MusicBrainz: "Crazy in Love" by Beyoncé appears on the official album "Dangerously in Love" (2003-06-20).',
+      ),
+      recordRef: "release/r1",
+    };
+    const built = codeClaim("code-rel", release, {
+      about: "track",
+      scope: "release",
+      text: release.excerpt.slice("MusicBrainz: ".length),
+    });
+    const model = judged("m-1", {
+      text: "Crazy in Love appears on Beyonce's album Dangerously in Love.",
+      about: "track",
+      scope: "release",
+      evidenceIds: ["ev-rel"],
+    });
+    const kept = withoutRestatements([model, built], [], [], [release], {
+      track: { title: "Crazy in Love", artist: "Beyoncé" },
+    });
+    expect(ids(kept.claims)).toEqual(["code-rel"]);
+  });
+});
+
+describe("a name both the analysed track's and a record's", () => {
+  it("names neither, when the record has the track's title and artist", () => {
+    const remix = { kind: "remixed-by" as const, title: "One More Time", artist: "Daft Punk" };
+    const track = { title: "One More Time", artist: "Daft Punk" };
+    expect(
+      statesRelationOf("Daft Punk's One More Time remixes this recording.", remix, track),
+    ).toBe(false);
+    expect(
+      statesRelationOf("This recording is remixed in One More Time by Daft Punk.", remix, track),
+    ).toBe(false);
   });
 });

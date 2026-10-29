@@ -53,8 +53,9 @@
  * 3. A model claim kept that states exactly the relations its records document is marked with
  *    the code claims that document them (`documentedBy`): the page names its relation as
  *    theirs. It states them as 1 reads them, or in exactly one of its sentences while each other
- *    sentence only adds detail: no relation word, no hedge or negation, no name of another record
- *    of the result (`readMarkedRelations`). A claim the templates cannot read is never marked.
+ *    sentence only adds detail: no "?", relation word, hedge, negation or doubting word, and no
+ *    capitalised name but the track's, its records', the result's and a source's
+ *    (`readMarkedRelations`). A claim the templates cannot read is never marked.
  *    Its kind and verdict stay (a partly supported one still shows so); a mark it came with is
  *    read again.
  *
@@ -310,8 +311,9 @@ function trackNamesOf(track: AnalysedTrack) {
 }
 
 /** A documented relation's other record, as `readRelations` names it. */
-function namedRecord(id: string, relation: DocumentedRelation): NamedRecord {
+function namedRecord(id: string, relation: DocumentedRelation, source?: string): NamedRecord {
   return {
+    source,
     id,
     kind: relation.kind,
     title: relation.title,
@@ -388,7 +390,8 @@ export interface WithoutRestatements<F, G> {
 }
 
 /** What the step reads of an evidence item. */
-type CitedItem = Pick<Evidence, "id" | "sourceTier" | "recordRef" | "excerpt">;
+type CitedItem = Pick<Evidence, "id" | "sourceTier" | "recordRef" | "excerpt"> &
+  Partial<Pick<Evidence, "source">>;
 
 /** What else the step reads of the result. */
 export interface RestatementContext<G> {
@@ -498,7 +501,7 @@ export function withoutRestatements<
               ...relation,
               id,
               ofSong: (item.recordRef ?? "").startsWith("work/"),
-              named: namedRecord(id, relation),
+              named: namedRecord(id, relation, item.source),
             }
           : null,
       );

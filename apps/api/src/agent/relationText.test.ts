@@ -46,3 +46,21 @@ describe("sentencesOf", () => {
     ]);
   });
 });
+
+describe("sentencesOf, after more abbreviations", () => {
+  it("never splits after Dr., No., Vol., Jr., Sr., St., Mt., e.g., i.e. or etc.", () => {
+    for (const text of [
+      "Dr. Dre samples it.",
+      "It reached No. 1 in the chart.",
+      "It is on Vol. 2 of the series.",
+      "Sammy Davis Jr. sings it.",
+      "Harry Connick Sr. plays it.",
+      "Mt. Kimbie remix it.",
+      "Some sources, e.g. MusicBrainz, list it.",
+      "One source, i.e. MusicBrainz, lists it.",
+      "Drums, bass, etc. are looped.",
+    ]) {
+      expect(sentencesOf(text), text).toEqual([text]);
+    }
+  });
+});

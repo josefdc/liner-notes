@@ -10,8 +10,9 @@ import type { CardBox, Orientation, ViewBreaks, YearSlot } from './lineageLayout
  *   cards whole, then the one with that card nearest the view's middle, then the earliest. Down
  *   a phone's column it is centred on that card, as far as the map allows, starting at a year's
  *   label or at a row of cards;
- * - where cards lie past the view, the edge cues say so ("4 more →"): "↑" at the top-left, the
- *   others at the bottom. The layout is given the view's far edges (`breaks`), so no card
+ * - where cards lie past the view, the edge cues say so ("4 more →"): "↑" at the top (across
+ *   the page at the left, on the year labels' band; down a column in the gutter right of the
+ *   cards where it fits, else on a band of its own), the others at the bottom. The layout is given the view's far edges (`breaks`), so no card
  *   straddles them, and room is kept for a cue only where its button would lie over a card: at
  *   rest each card is wholly in view or wholly out of it, and none lies under a cue.
  * No DOM: the same sizes always give the same view.
@@ -61,8 +62,8 @@ export interface FirstViewInput {
   layout?: (breaks: ViewBreaks | undefined) => LaidOut;
   /**
    * An edge cue's button width (px) for the cards past its side. Given, a strip is kept for the
-   * cues only where a button would lie over a card ("↑" at the top-left down a column, the
-   * others at the bottom); not given, a strip at the bottom of the view whenever cards lie past.
+   * cues only where a button would lie over a card ("↑" at the top down a column, where it
+   * does not fit the gutter right of the cards; the others at the bottom); not given, a strip at the bottom of the view whenever cards lie past.
    */
   cueWidth?: (side: keyof EdgeCounts, count: number) => number;
 }

@@ -751,10 +751,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const kept = last && last.data === shownNodes && last.orientation === orientation ? last : null;
     let rest = kept === null || kept.rest;
     /**
-     * The reader is at work in the map (a focus, a hover, a press, a selection, a pan): the view
-     * and the layout are theirs, kept as they are through a resize.
-     */
-    /**
      * True while the view left rest only for a pointer passing over the map, or a finger on it
      * (no press of a mouse, focus, selection, pan or zoom since): it is held only while that
      * lasts, and then the view is at rest again (`backToRest`). A drawing anew under the

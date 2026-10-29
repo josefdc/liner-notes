@@ -867,6 +867,8 @@ test("the edge cues say how many cards lie past each edge, and pan to them from 
   await right.click();
   await expect.poll(view).not.toBe(before);
   await expect(graph).toHaveAttribute("data-view", "reader");
+  // Cards now lie past the left edge too: a cue for them.
+  await expect(cues.locator('[data-cue="left"]')).toBeVisible();
   // From the map, the next Tab stop is a cue; Enter pans the view too.
   await graph.locator('g.nodes > g[tabindex="0"]').focus();
   await page.keyboard.press("Tab");
@@ -875,8 +877,7 @@ test("the edge cues say how many cards lie past each edge, and pan to them from 
   const then = await view();
   await page.keyboard.press("Enter");
   await expect.poll(view).not.toBe(then);
-  // Cards now lie past the left edge: a cue for them, and the focus still on a cue.
-  await expect(cues.locator('[data-cue="left"]')).toBeVisible();
+  // The focus still on a cue (on another one where nothing is left past the edge it named).
   await expect
     .poll(() =>
       page.evaluate(() => document.activeElement?.closest('[data-testid="map-cues"]') !== null),

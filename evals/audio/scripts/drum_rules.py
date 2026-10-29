@@ -31,28 +31,31 @@ The measurements, each per hit at the onsets librosa finds (hop 512, 23 ms; fram
   strongest peaks is taken as a reference. Of the other peaks' energy, the largest share (over
   the references) within MODE_CENTS of an ideal membrane's overtone ratios (MEMBRANE_RATIOS)
   to its reference, minus the largest share within MODE_CENTS of a whole multiple (2x and up);
-  then the mean over hits, weighted by their peaks' energy. The ratios lie 7-14 cents from a
-  minor sixth (1.594), a minor ninth (2.136) and an eleventh (2.653), so an inverted triad's
-  notes read as membrane modes too (tests/test_drum_rules.py pins one).
+  then the mean over hits, weighted by their peaks' energy. 1.594 lies 7 cents from a minor
+  sixth, so a chord with a minor sixth over a strong partial (a major triad in first
+  inversion, a minor triad in second) reads as membrane modes too (tests/test_drum_rules.py
+  pins one); 2.136 and 2.653 lie 14 and 11 cents from a minor ninth and an eleventh.
 - **A falling strongest partial**: the strongest of those peaks followed to the nearest peak
   GLIDE_FRAMES[1] after the onset, in cents; the median over hits.
 - **Tonal ratio**: Tonality.tonal_ratio, the share of the 60 Hz-5 kHz energy in spectral lines.
 
 The candidates (CANDIDATES) are the first three measurements each on its own; membrane modes or
 a falling strongest partial; and, aimed at the tabla, a pitch line that jumps between hits on a
-tonal sound. The last two were proposed after the held-out numbers of the first three had been
-seen, so their held-out numbers are not an untouched test. Thresholds are chosen on the training
-half and judged on the held-out one. A seeded control goes by its seed: 500-529 (the drums and
-the other one-pitch-class families) and 700-729 (the chord families) train, 600-629 and 800-829
-are held out. The unseeded controls and the clips, sorted by name, go alternately to each half,
-so near-copies of one chord in the grids (soft-third, seventh, detuned-third) fall on both
-sides. One threshold serves both estimators. A rule withholds no right key of the training half
-at the middle of the gap between the most drum-like right key there and the next drum (for an
-"or", each measurement has its own; for an "and", the first is tried at each drum value and the
-second placed at its gap among the rows the first takes, keeping the pair that withholds most of
-the training drums it aims at). For each single measurement it also gives the strictest
-threshold (the highest drum value, searched from the top) that withholds more than half of the
-training drum keys with each estimator, with the right keys it takes in both halves.
+tonal sound. All five were first measured on all the data; the split came later, with the glide
+frames and the hit spans revised, and the last two were proposed after held-out numbers had been
+seen, so no held-out number here is an untouched test (for the first three, that can only
+flatter rules that fail anyway). Thresholds are chosen on the training half and judged on the
+held-out one. A seeded control goes by its seed: 500-529 (the drums and the other
+one-pitch-class families) and 700-729 (the chord families) train, 600-629 and 800-829 are held
+out. The unseeded controls and the clips, sorted by name, go alternately to each half, so
+near-copies of one chord in the grids (soft-third, seventh, detuned-third) fall on both sides.
+One threshold serves both estimators. A rule withholds no right key of the training half at the
+middle of the gap between the most drum-like right key there and the next drum (for an "or",
+each measurement has its own; for an "and", the first is tried at each drum value and the second
+placed at its gap among the rows the first takes, keeping the pair that withholds most of the
+training drums it aims at). For each single measurement it also gives the strictest threshold
+(the highest drum value, searched from the top) that withholds more than half of the training
+drum keys with each estimator, with the right keys it takes in both halves.
 
     cd evals/audio && uv run python scripts/drum_rules.py ../reports/audio-2026-10-29.json [--jobs J]
 

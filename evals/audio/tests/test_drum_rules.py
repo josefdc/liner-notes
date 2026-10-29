@@ -219,22 +219,56 @@ def test_reproduce_refuses_any_difference_from_the_report(served, name):
     assert script.reproduce([row], {name: close}) == 1
 
 
+def bessel_ratios() -> list[float]:
+    """An ideal circular membrane's first overtones over its fundamental, from Bessel zeros."""
+    from scipy.special import jn_zeros
+
+    fundamental = jn_zeros(0, 1)[0]
+    zeros = [jn_zeros(1, 1)[0], jn_zeros(2, 1)[0], jn_zeros(0, 2)[1], jn_zeros(3, 1)[0]]
+    return [z / fundamental for z in zeros]
+
+
+def test_the_membrane_ratios_are_an_ideal_membranes():
+    script = load_script()
+    assert script.MEMBRANE_RATIOS == pytest.approx(bessel_ratios(), abs=1e-3)
+
+
 def test_membrane_modes_tell_a_drum_head_from_a_string():
     script = load_script()
-    head = [steady(180.0 * r) for r in (1.0, *script.MEMBRANE_RATIOS)]
+    head = [steady(180.0 * r) for r in (1.0, *bessel_ratios())]
     string = [steady(180.0 * k) for k in (1, 2, 3, 4, 5)]
-    assert measured_on(script.membrane_modes, head) > 0.5
-    assert measured_on(script.membrane_modes, string) < -0.5
+    assert measured_on(script.membrane_modes, head) > 0.95
+    assert measured_on(script.membrane_modes, string) < -0.95
+
+
+def test_membrane_modes_count_peaks_within_30_cents_and_multiples_from_2x():
+    """
+    The head's overtones 20 cents off still count; 50 cents off they do not. A lone octave over
+    the fundamental is a multiple.
+    """
+    script = load_script()
+    _, E = service.load()
+
+    def head(cents):
+        """The fundamental loudest, so that it is one of the three references."""
+        overtones = [180.0 * r * 2 ** (cents / 1200) for r in bessel_ratios()]
+        kind = [(steady(180.0), 1.0)] + [(steady(f), 0.5) for f in overtones]
+        return script.membrane_modes(E.Signals(cycled_hits([kind]), SR))
+
+    assert head(20) > 0.95
+    assert abs(head(50)) < 0.05
+    assert measured_on(script.membrane_modes, [steady(180.0), steady(360.0)]) < -0.95
 
 
 def test_membrane_modes_weigh_each_hit_by_its_energy():
     """A loud drum-head hit and two quiet string hits: the loud one carries the mean."""
     script = load_script()
     _, E = service.load()
-    head = [(steady(180.0 * r), 1.0) for r in (1.0, *script.MEMBRANE_RATIOS)]
+    head = [(steady(180.0 * r), 1.0) for r in (1.0, *bessel_ratios())]
     string = [(steady(180.0 * k), 0.25) for k in (1, 2, 3, 4, 5)]
     y = cycled_hits([head, string, string])
-    assert script.membrane_modes(E.Signals(y, SR)) > 0.5
+    # Unweighted, the mean of one head and two strings would be about -1/3.
+    assert script.membrane_modes(E.Signals(y, SR)) > 0.2
 
 
 def test_a_falling_strongest_partial_reads_a_drum_falling_in_pitch():
@@ -274,7 +308,8 @@ def test_a_falling_strongest_partial_follows_the_strongest_over_uneven_hits():
     fall = [(lambda t: 180.0 * (1 + 0.15 * np.exp(-t / 0.05)), 1.0), *held]
     rise = [(lambda t: 180.0 * (1 - 0.15 * np.exp(-t / 0.05)), 1.0), *held]
     shown = script.falling_partial(E.Signals(cycled_hits([fall, fall, rise]), SR))
-    assert -150 < shown < -35
+    # The mean of two falls and a rise would be about a third of a fall.
+    assert -150 < shown < -25
 
 
 def stabs(notes, partials, bpm: float = 120.0, decay: float = 0.3, seconds: float = 30.0):
@@ -296,21 +331,22 @@ TRIANGLE = (1, 0, 1 / 9, 0, 1 / 25)
 MEMBRANE_THRESHOLD = 0.0206
 
 
-def test_an_inverted_triad_reads_as_membrane_modes_and_would_lose_its_right_key():
+def test_a_minor_sixth_over_the_bass_reads_as_membrane_modes_and_would_lose_its_key():
     """
-    A known cost of the membrane-mode rule: three of MEMBRANE_RATIOS lie 7-14 cents from a
-    minor sixth, a minor ninth and an eleventh, the intervals of an inverted triad. A minor
-    struck as E4-A4-C5 in a triangle timbre gets its right key from both estimators, and reads
-    far above the threshold; the same timbre in root position (C4-E4-G4) reads below it.
+    A known cost of the membrane-mode rule: 1.594 lies 7 cents from a minor sixth, so a chord
+    with a minor sixth over a strong partial reads as membrane modes, as a minor triad in
+    second inversion does. A minor struck as E4-A4-C5 in a triangle timbre gets its right key
+    from both estimators, and reads far above the threshold; the same timbre in root position
+    (C4-E4-G4) reads below it.
     """
     script = load_script()
     _, E = service.load()
-    inverted = E.Signals(stabs((329.63, 440.0, 523.25), TRIANGLE), SR)
-    assert inverted.key_withheld() is None
+    sixth = E.Signals(stabs((329.63, 440.0, 523.25), TRIANGLE), SR)
+    assert sixth.key_withheld() is None
     for est in ("essentia", "librosa"):
-        key = E.select_estimator(est).key(inverted)
+        key = E.select_estimator(est).key(sixth)
         assert (key.tonic, key.mode) == ("A", "minor"), est
-    assert script.membrane_modes(inverted) > 10 * MEMBRANE_THRESHOLD
+    assert script.membrane_modes(sixth) > 10 * MEMBRANE_THRESHOLD
     root = E.Signals(stabs((261.63, 329.63, 392.0), TRIANGLE), SR)
     assert script.membrane_modes(root) < MEMBRANE_THRESHOLD
 
@@ -499,3 +535,15 @@ def test_a_pair_keeps_the_first_threshold_that_withholds_most_drums(monkeypatch)
     got = script.candidates(rows, measured)["two"]
     assert got["free"]["r"] == (pytest.approx(0.575), None)
     assert got["freeDrums"]["librosa"][("toms", "pinned")] == (4, 6)
+
+
+def test_a_major_triad_in_second_inversion_does_not_read_as_membrane_modes():
+    """
+    The controls' C major stabs voiced G3-C4-E4-G4 (a fourth and a major sixth over the bass)
+    read well below the threshold; seed 826 is one, with Essentia's right key.
+    """
+    script = load_script()
+    assert int(np.random.default_rng(826).integers(0, 3)) == 2  # the G3-C4-E4-G4 voicing
+    got = script.analyse(("control", "c-major-stabs-s826", 1, ""))
+    assert got["keys"]["essentia"][:2] == ("C", "major")
+    assert got["membrane modes"] < -0.4

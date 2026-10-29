@@ -22,7 +22,7 @@ import {
   serializeError,
   withRun,
 } from "./logger.js";
-import { timed } from "./sources/testing/strings.js";
+import { growth, timed } from "./sources/testing/strings.js";
 import { logText } from "./http/middleware/errors.js";
 import { SourceError } from "./sources/http.js";
 
@@ -394,6 +394,36 @@ describe("Authorization values in quotes and at the cap", () => {
     ],
     ["three schemes, any case", "password=bearer BEARER bearer V7qW6rE5tY4uI3oP2aS1"],
     ["three schemes in quotes", "authorization: 'Bearer Bearer Bearer V7qW6rE5tY4uI3oP2aS1'"],
+    // A pair's value stops at "&", the Authorization rule's does not.
+    [
+      "two schemes before a token with &, in a headers object",
+      "{ headers: { Authorization: 'Bearer Bearer a&V7qW6rE5tY4uI3oP2aS1' } }",
+    ],
+    [
+      "two schemes before a token with &, in JSON",
+      '{"authorization":"Bearer Bearer x&V7qW6rE5tY4uI3oP2aS1"}',
+    ],
+    ["two schemes before a password with &", 'password: "Bearer Bearer p&V7qW6rE5tY4uI3oP2aS1"'],
+    [
+      "four schemes in quotes before a token with &",
+      "authorization: 'Bearer Bearer Bearer Bearer abc&V7qW6rE5tY4uI3oP2aS1'",
+    ],
+    [
+      "three schemes before a token with &",
+      "authorization: Bearer Bearer Bearer abc&V7qW6rE5tY4uI3oP2aS1",
+    ],
+    [
+      "Basic twice, then Bearer, before a token with &",
+      "Authorization: Basic Basic Bearer p&V7qW6rE5tY4uI3oP2aS1 next",
+    ],
+    [
+      "three schemes before a quoted token with &",
+      'authorization: Bearer Bearer Bearer "abc&V7qW6rE5tY4uI3oP2aS1"',
+    ],
+    [
+      "two schemes in quotes before a quoted token with &",
+      "authorization: 'Bearer Bearer \"abc&V7qW6rE5tY4uI3oP2aS1\"'",
+    ],
   ])("leaves no part of a token after schemes and rules in a row: %s", (_label, text) => {
     const dir = mkdtempSync(join(tmpdir(), "log-rows-"));
     const shown = (out: string) => out.includes("V7qW6r") || out.includes("oP2aS1");
@@ -454,6 +484,9 @@ describe("Authorization values in quotes and at the cap", () => {
                 "password=",
                 'token": ',
                 "Bearer Bearer Bearer ",
+                "p&",
+                "Bearer Bearer p&",
+                'Bearer Bearer "p&',
               ])
                 texts.push(`${name}${sep}${quote}${scheme}${blank}${between}${SECRET}${quote} }`);
     const parts = [
@@ -471,6 +504,7 @@ describe("Authorization values in quotes and at the cap", () => {
       "x/",
       "(",
       ":",
+      "&",
       SECRET,
     ];
     texts.push(...randomStrings(parts, 20_000, 9, 235));
@@ -592,30 +626,30 @@ describe("Authorization values in quotes and at the cap", () => {
     expect(logCut(text, text.indexOf("C3x"))).toBe(text.indexOf("contoso"));
   });
 
-  it("reads 1 MB of quoted Authorization values in linear time", { timeout: 60_000 }, () => {
-    const pieces = [
-      `authorization: 'Bearer ${" ".repeat(1 << 20)}]`,
-      "authorization: 'Bearer ".repeat(1 << 15),
-      "authorization:\"Basic\t'Bearer ".repeat(1 << 15),
-      `"authorization": "Bearer abc.def", `.repeat(1 << 15),
-      // The word after a scheme is read for the start of another rule: a long one, runs of
-      // schemes, and words that hold a rule's start near their end.
-      `authorization: 'Bearer ${"x".repeat(1 << 20)}`,
-      `authorization: ${"Bearer ".repeat(1 << 17)}x`,
-      `authorization: '${"Bearer ".repeat(1 << 17)}`,
-      "authorization: 'Bearer x/token".repeat(1 << 15),
-    ];
-    const { ms } = timed(
-      () => {
-        for (const text of pieces) {
-          text.replace(SECRET_PAIR, "$1$2[R]");
-          scrubbedSpans(text);
-          scrub(text);
-        }
-      },
-      { runs: 3, stopAboveMs: 10_000 },
-    );
-    expect(ms).toBeLessThan(4_000);
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  it.each([
+    ["spaces after a quoted scheme", filled(" ", "authorization: 'Bearer ", "]")],
+    ["quoted schemes", filled("authorization: 'Bearer ")],
+    ["quoted schemes after Basic", filled("authorization:\"Basic\t'Bearer ")],
+    ["quoted tokens", filled('"authorization": "Bearer abc.def", ')],
+    // The word after a scheme is read for the start of another rule and for an "&": a long one,
+    // runs of schemes, and words that hold a rule's start near their end.
+    ["a long word after a quoted scheme", filled("x", "authorization: 'Bearer ")],
+    ["a run of schemes", filled("Bearer ", "authorization: ", "x")],
+    ["a quoted run of schemes", filled("Bearer ", "authorization: '")],
+    ["a pair's name after a slash", filled("authorization: 'Bearer x/token")],
+    ["an & after a run of schemes", filled("authorization: 'Bearer Bearer x&")],
+  ])("reads quoted Authorization values in linear time, up to 1 MB: %s", (_name, make) => {
+    // The CPU time of the three readers from 128 kB to 1 MB: a text read once grows about 8 times,
+    // and one read again from each value to its end about 64 times, or takes seconds on 1 MB.
+    const call = (text: string) =>
+      text.replace(SECRET_PAIR, "$1$2[R]").length + scrubbedSpans(text).length + scrub(text).length;
+    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+    expect(ratio).toBeLessThan(20);
   });
 });
 

@@ -131,11 +131,12 @@ const QUOTE = "[`\"']";
 const VALUE_CHAR = String.raw`[^\s"'&,;}\]]`;
 /**
  * After a scheme, whether the next word (quoted or not) holds the start of a rule that would run
- * on past it: an Authorization scheme followed by a space, or a pair's name whose value lies
- * beyond the word. A pair that took the word with the scheme would hide that start, and the
- * secret after it would stay.
+ * on past it: an Authorization scheme followed by a space, a pair's name whose value lies beyond
+ * the word, or an `&`. A pair that took the word with the scheme would hide that start, and the
+ * secret after it would stay. A pair's value stops at `&` and the Authorization rule's does not:
+ * taken by the pair, a token that holds one would show what follows it.
  */
-const RULE_IN_NEXT_WORD = String.raw`["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_NAMES})(?:["'\s]\s*[:=]|[:=](?!${VALUE_CHAR})))`;
+const RULE_IN_NEXT_WORD = String.raw`(?:["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_NAMES})(?:["'\s]\s*[:=]|[:=](?!${VALUE_CHAR})))|["']?${VALUE_CHAR}*&)`;
 /**
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
  * whitespace after ":" or "=" is taken whole (a value never starts with a space), so a long run
@@ -147,10 +148,11 @@ const RULE_IN_NEXT_WORD = String.raw`["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${
  * after it. Inside the quotes only spaces and tabs follow a scheme, so a line break after one
  * keeps the next line. Two or more schemes in a row (`Bearer Bearer <token>`) are taken together,
  * with the word after them as the value. The schemes after the first, and a quoted scheme at
- * all, are taken only when the word after them holds no start of another rule
- * (RULE_IN_NEXT_WORD: `'Bearer token: <token>'`, `'Bearer "Bearer <token>"'`); otherwise the pair
- * takes what it always did, the first scheme word (with its quote) or an unquoted scheme and one
- * word, and the rules after it find the rest.
+ * all, are taken only when the word after them holds no start of another rule and no `&`
+ * (RULE_IN_NEXT_WORD: `'Bearer token: <token>'`, `'Bearer "Bearer <token>"'`,
+ * `'Bearer Bearer abc&<token>'`); otherwise the pair takes what it always did, the first scheme
+ * word (with its quote) or an unquoted scheme and one word, and the rules after it find the rest:
+ * the Authorization rule reads a token past an `&`, where a pair's value stops.
  */
 export const SECRET_PAIR = new RegExp(
   String.raw`\b(${PAIR_NAMES})(["']?\s*[:=]\s*(?!\s))` +

@@ -100,6 +100,20 @@ ONE_SOURCE_NOTE = (
 )
 
 
+def added_note(controls: dict) -> list[str]:
+    """The control families added after the single-source rule, when the run holds any."""
+    from .controls import added_families
+
+    added = added_families([c["name"] for c in controls["controls"]])
+    if not added:
+        return []
+    listed = ", ".join(added[:-1]) + (" and " if len(added) > 1 else "") + added[-1]
+    return [
+        f"- Added to the controls after the single-source rule, with no value set on them: "
+        f"{listed}. The rule was not changed for them."
+    ]
+
+
 def count_p_values(doc: dict) -> int:
     """The p-values this section prints: one McNemar per evaluation row, one per AUC line."""
     runs, controls = runs_of(doc)
@@ -173,6 +187,7 @@ def section(doc: dict) -> list[str]:
         "there; a change that alters no evaluation clip stays.",
         *(f"- {note}" for note in PROTOCOL_NOTES),
         *([f"- {ONE_SOURCE_NOTE}"] if after.one_source else []),
+        *added_note(controls),
         "- The families are taken in turn, each with the earlier choices in place: "
         + "; ".join(f"{f['title']}" for f in choice["families"])
         + ".",
@@ -546,7 +561,7 @@ def shown(value, kind: str) -> str:
 
 
 def controls_section(controls: dict, after: cal.Rules) -> list[str]:
-    from .controls import GROUPS
+    from .controls import GROUPS, group_description
 
     names = controls["estimators"]
     # The controls run's own values: a controls run added to a report of older runs is shown
@@ -604,7 +619,10 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
                 row.append(text + mark)
         rows.append(row)
     present = {ctl["group"] for ctl in controls["controls"]}
-    groups = "; ".join(f"**{k}**: {v}" for k, v in GROUPS.items() if k in present)
+    shown_names = [ctl["name"] for ctl in controls["controls"]]
+    groups = "; ".join(
+        f"**{k}**: {group_description(k, shown_names)}" for k in GROUPS if k in present
+    )
     return [
         "### Controls",
         "",

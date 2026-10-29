@@ -3,15 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from evals_audio import golden
+from evals_audio import calibration, golden, service
+from evals_audio.controls import GROUPS, added_families, group_description
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, Key, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import (
+    INTERVALS,
     SCHEMA_VERSION,
     OlderResults,
     add_run,
     count_p_values,
+    guide,
+    intro,
     load,
+    measured,
+    not_run,
     render,
 )
 from evals_audio.runner import compare_pairs, lifted_views, withheld_cost
@@ -222,6 +228,151 @@ COMMITTED = sorted((REPO_ROOT / "evals" / "reports").glob("audio-*.json"))
 def test_there_is_a_committed_report():
     """The checks below run once per committed report; with none they would run on nothing."""
     assert COMMITTED, "no evals/reports/audio-*.json"
+
+
+def test_the_newest_controls_run_is_of_the_service_as_it_is():
+    """
+    The READMEs quote the control counts of the newest committed controls run, so that run must
+    have been made with the analyzer version and the single-source values the service holds
+    now: a change to the rule, or any change to the output that bumps the version, needs a
+    fresh run (uv run python -m evals_audio --suite controls).
+    """
+    runs = [
+        (path.name, run)
+        for path in COMMITTED
+        for run in json.loads(path.read_text())["runs"]
+        if run["suite"] == "controls"
+    ]
+    assert runs, "no committed controls run"
+    name, newest = max(runs, key=lambda item: item[1]["startedAt"])
+    _, est = service.load()
+    assert newest["analyzerVersion"] == service.base_version(), name
+    assert newest["rules"].get("one_source") == calibration.source_values(est), name
+
+
+def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
+    """An older report keeps describing the controls it ran; a newer one names the added ones."""
+    before = ["tabla-s500", "toms-s501", "cowbell-s502", "faded-pad-s700"]
+    for group in ("one-pitch-class-seeded", "chord-keyed-seeded", "no-key"):
+        assert group_description(group, before) == GROUPS[group]
+    new = group_description(
+        "one-pitch-class-seeded", [*before, "kit-toms-s505", "tubular-bell-s507"]
+    )
+    assert new.endswith(
+        "a held synth note, two rack toms and a floor tom over a kit, a tubular bell), 30 seeds each"
+    )
+    only_bells = group_description("one-pitch-class-seeded", [*before, "tubular-bell-s507"])
+    assert "a held synth note, a tubular bell)" in only_bells
+    chords = group_description("chord-keyed-seeded", [*before, "mallet-chord-s801"])
+    assert chords.endswith(
+        "their key not scored; triads struck on bars (a marimba-like bar or a glockenspiel), 30 "
+        "seeds each)"
+    )
+    both = group_description("chord-keyed-seeded", [*before, "mallet-chord-s801", "soft-chord-s7"])
+    assert both.endswith(
+        "; triads in a soft timbre (an electric piano, a flute, an FM electric piano or a "
+        "triangle wave) and triads struck on bars (a marimba-like bar or a glockenspiel), 30 "
+        "seeds each)"
+    )
+    assert group_description("no-key", ["tubular-bell-s507"]) == GROUPS["no-key"]
+    assert added_families(before) == []
+    assert added_families([*before, "soft-chord-s700", "tubular-bell-s500"]) == [
+        "a tubular bell",
+        "triads in a soft timbre (an electric piano, a flute, an FM electric piano or a "
+        "triangle wave)",
+    ]
+
+
+def test_a_group_description_takes_added_families_whatever_its_wording(monkeypatch):
+    """Reworded without a closing parenthesis, a group still names its added families."""
+    monkeypatch.setitem(GROUPS, "one-pitch-class-seeded", "no key: one pitched source")
+    assert (
+        group_description("one-pitch-class-seeded", ["tubular-bell-s500"])
+        == "no key: one pitched source, a tubular bell"
+    )
+    monkeypatch.setitem(GROUPS, "one-pitch-class-seeded", "no key (one source) at 30 seeds")
+    assert (
+        group_description("one-pitch-class-seeded", ["kit-toms-s500"])
+        == "no key (one source, two rack toms and a floor tom over a kit) at 30 seeds"
+    )
+
+
+def test_a_report_says_what_it_measures_and_what_it_does_not_hold():
+    """A report of some suites names those only, and the ones it leaves out."""
+
+    def doc(*suites):
+        return {"runs": [{"suite": suite} for suite in suites]}
+
+    partial = doc("tempo", "calibration", "controls")
+    assert measured(partial) == (
+        "Tempo accuracy of the audio service (`services/audio`) on annotated datasets, the "
+        "calibration of its withholding rules and its answers on generated controls"
+    )
+    for words in ("key accuracy", "golden", "costs"):
+        assert words not in measured(partial)
+    full = doc("tempo", "key", "golden", "cost", "calibration", "controls")
+    assert measured(full).startswith("Tempo and key accuracy") and not_run(full) == ""
+    assert measured(doc("controls")).endswith("its answers on generated controls")
+    assert measured(doc()) == "No measurement of the audio service (`services/audio`)"
+
+
+def test_a_report_lists_each_run_it_does_not_hold_and_claims_no_other_report():
+    def run(suite, dataset):
+        return {"suite": suite, "dataset": {"name": dataset}}
+
+    partial = {
+        "runs": [
+            run("tempo", "ballroom"),
+            run("calibration", "ballroom"),
+            run("controls", "controls"),
+        ]
+    }
+    text = not_run(partial)
+    assert text.startswith(" Not run for this report: tempo on GiantSteps Tempo; key on GiantSteps")
+    for words in (
+        "what the tempo rules compare on GiantSteps Tempo",
+        "what the key rules compare on GiantSteps Key",
+        "the golden set; the estimators' costs.",
+        "Any report in `evals/reports` that holds them",
+    ):
+        assert words in text
+    assert "Ballroom" not in text and "generated controls" not in text
+    assert "earlier report" not in text  # no report is said to hold them
+    assert "the generated controls" in not_run({"runs": [run("tempo", "ballroom")]})
+
+
+def test_the_guide_explains_only_the_tables_a_report_holds():
+    def terms(doc):
+        return {line[4:].split("**", 1)[0] for line in guide(doc) if line.startswith("- **")}
+
+    def committed(date):
+        return json.loads((REPO_ROOT / "evals" / "reports" / f"audio-{date}.json").read_text())
+
+    def runs(doc, *kept):
+        return dict(
+            doc, runs=[r for r in doc["runs"] if (r["suite"], r["dataset"]["name"]) in kept]
+        )
+
+    full = committed("2026-10-25")  # every suite
+    assert {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"} <= terms(full)
+    assert next(line for line in guide(full) if line.startswith("- **Intervals**")) == INTERVALS
+    tempo = runs(full, ("tempo", "ballroom"), ("calibration", "ballroom"))
+    held = terms(tempo)
+    assert {"Acc1", "Lifted rules", "Comparability", "Intervals"} <= held
+    assert not held & {"MIREX", "Paired MIREX difference", "Agreement", "hit@k", "Costs"}
+    intervals = next(line for line in guide(tempo) if line.startswith("- **Intervals**"))
+    assert "Acc1 and Acc2." in intervals and "MIREX" not in intervals and "exact" not in intervals
+    assert "MIREX" not in " ".join(intro(tempo)) and "an Acc1 hit pins" in " ".join(intro(tempo))
+    # A key calibration shows exact scores, which the MIREX bullet explains; paired MIREX
+    # differences come with the key suite only.
+    key_calibration = runs(full, ("calibration", "giantsteps-key"))
+    assert "MIREX" in terms(key_calibration) and "Paired MIREX difference" not in terms(
+        key_calibration
+    )
+    key = runs(full, ("key", "giantsteps-key"))
+    assert {"MIREX", "Paired MIREX difference"} <= terms(key)
+    assert not terms(key) & {"Acc1", "Lifted rules"}
+    assert "Acc1" not in " ".join(intro(key)) and "a MIREX score of 1" in " ".join(intro(key))
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])

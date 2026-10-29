@@ -553,12 +553,76 @@ def p_value_note(doc: dict) -> str:
 
 def guide(doc: dict) -> list[str]:
     lines = GUIDE if is_legacy(doc) else GUIDE[:-2] + GUIDE_BAKEOFF + GUIDE[-2:]
+    if not is_legacy(doc):
+        suites, kinds = {run["suite"] for run in doc["runs"]}, held(doc)
+        lines = [
+            _intervals(kinds) if _bullet(line) == "Intervals" else line
+            for line in lines
+            if GUIDE_SUITE.get(_bullet(line), "") in {"", *suites}
+            and GUIDE_KIND.get(_bullet(line), "") in {"", *kinds}
+        ]
     return [p_value_note(doc) if line is P_VALUES else line for line in lines]
+
+
+# Bullets of the guide that explain one suite's tables, left out of a report without that suite.
+GUIDE_SUITE = {
+    "Paired MIREX difference": "key",
+    "Agreement": "golden",
+    "hit@k": "golden",
+    "Costs": "cost",
+}
+# Bullets that explain tempo or key scores, which a calibration on such a dataset shows too.
+GUIDE_KIND = {"Acc1": "tempo", "Lifted rules": "tempo", "MIREX": "key"}
+
+
+def held(doc: dict) -> set[str]:
+    """The suites of a report's runs, with tempo or key for a calibration on such a dataset."""
+    from .datasets import DATASETS
+
+    kinds = {d.name: d.suite for d in DATASETS.values()}
+    return {run["suite"] for run in doc["runs"]} | {
+        kinds[run["dataset"]["name"]]
+        for run in doc["runs"]
+        if run["suite"] == "calibration" and run["dataset"]["name"] in kinds
+    }
+
+
+def _intervals(suites: set[str]) -> str:
+    """The Intervals bullet, naming only the scores of the tempo or key tables a report holds."""
+    tempo, key = "tempo" in suites, "key" in suites
+    if tempo == key:
+        return INTERVALS
+    wilson = "Acc1 and Acc2" if tempo else "exact"
+    bootstrap = (
+        ""
+        if tempo
+        else "; a BCa bootstrap (10,000 resamples, fixed seed) for MIREX, with no interval when "
+        "every score is equal"
+    )
+    return (
+        f"- **Intervals** are 95 %: Wilson score intervals for {wilson}{bootstrap}. Each interval "
+        "rests on the denominator printed next to it, which for correct / answered can be far "
+        "below n."
+    )
+
+
+def _bullet(line) -> str:
+    """The bold term a guide bullet opens with ("" for any other line)."""
+    if not isinstance(line, str) or not line.startswith("- **"):
+        return ""
+    return line[4:].split("**", 1)[0]
 
 
 def is_legacy(doc: dict) -> bool:
     return doc.get("schemaVersion", SCHEMA_VERSION) <= LEGACY_SCHEMA
 
+
+INTERVALS = (
+    "- **Intervals** are 95 %: Wilson score intervals for Acc1, Acc2 and exact; a BCa bootstrap "
+    "(10,000 resamples, fixed seed) for MIREX, with no interval when every score is equal. Each "
+    "interval rests on the denominator printed next to it, which for correct / answered can be "
+    "far below n."
+)
 
 GUIDE = [
     "## How to read it",
@@ -576,10 +640,7 @@ GUIDE = [
     "- **MIREX** key score: 1 same key, 0.5 a perfect fifth above in the same mode, 0.3 "
     "relative, 0.2 parallel, 0 otherwise; shown as the summed score over the denominator. "
     "**exact**: the same key only.",
-    "- **Intervals** are 95 %: Wilson score intervals for Acc1, Acc2 and exact; a BCa bootstrap "
-    "(10,000 resamples, fixed seed) for MIREX, with no interval when every score is equal. Each "
-    "interval rests on the denominator printed next to it, which for correct / answered can be "
-    "far below n.",
+    INTERVALS,
     "- **Paired MIREX difference**: most paired key differences are zero, and a bootstrap "
     "interval can then cover far less than 95 %. The interval here is a paired t interval whose "
     "spread includes two pseudo-differences at -1 and +1, the ends of the range, so it never "
@@ -638,12 +699,21 @@ LEGACY_SCOPE = (
 
 
 def intro(doc: dict) -> list[str]:
+    suites = {"tempo", "key"} if is_legacy(doc) else held(doc)
+    tells = "; ".join(
+        words
+        for kind, words in (
+            ("key", "a MIREX score of 1, 0.5, 0.3 or 0.2 fixes the key"),
+            ("tempo", "an Acc1 hit pins the tempo within 4 %"),
+        )
+        if kind in suites
+    )
     results = (
         f"Rendered from `audio-{doc['date']}.json`, which holds the per-clip results: track ids, "
         "estimates and scores. It stores no reference labels and no audio file names, but an "
-        "estimate with its score often gives the reference away (a MIREX score of 1, 0.5, 0.3 "
-        "or 0.2 fixes the key; an Acc1 hit pins the tempo within 4 %), so those results are "
-        "derived from the annotations: the licence and credits under each dataset apply to them."
+        f"estimate with its score often gives the reference away{f' ({tells})' if tells else ''}, "
+        "so those results are derived from the annotations: the licence and credits under each "
+        "dataset apply to them."
     )
     if is_legacy(doc):
         return [
@@ -656,16 +726,91 @@ def intro(doc: dict) -> list[str]:
             "",
         ]
     return [
-        "Tempo and key accuracy of the audio service (`services/audio`) on annotated datasets, "
-        "its agreement with sourced tempo and key values on the golden set's Deezer previews, "
-        "its style fingerprint against Discogs styles, and what each tempo estimator costs, "
-        "measured by `evals/audio` (`uv run python -m evals_audio`). The harness imports the "
-        "service and calls its own `analyze_signals`, so the numbers are what the service "
-        "returns, gate and withholding rules included. " + results,
+        measured(doc) + ", measured by `evals/audio` (`uv run python -m evals_audio`). The "
+        "harness imports the service and calls its own `analyze_signals`, so the numbers are "
+        "what the service returns, gate and withholding rules included. " + results + not_run(doc),
         "",
         scope(doc),
         "",
     ]
+
+
+FULL_REPORT = {"tempo", "key", "golden", "cost"}
+
+
+def _listed(parts: list[str]) -> str:
+    return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+
+
+def measured(doc: dict) -> str:
+    """What the report measures: every suite, or only those of the runs it holds."""
+    suites = {run["suite"] for run in doc["runs"]}
+    if FULL_REPORT <= suites:
+        return (
+            "Tempo and key accuracy of the audio service (`services/audio`) on annotated "
+            "datasets, its agreement with sourced tempo and key values on the golden set's "
+            "Deezer previews, its style fingerprint against Discogs styles, and what each tempo "
+            "estimator costs"
+        )
+    accuracy = " and ".join(kind for kind in ("tempo", "key") if kind in suites)
+    parts = [
+        words
+        for suite, words in (
+            (
+                "golden",
+                "its agreement with sourced tempo and key values on the golden set's Deezer "
+                "previews (with its style fingerprint against Discogs styles)",
+            ),
+            ("cost", "what each tempo estimator costs"),
+            ("calibration", "the calibration of its withholding rules"),
+            ("controls", "its answers on generated controls"),
+        )
+        if suite in suites
+    ]
+    if accuracy:
+        return _listed(
+            [
+                f"{accuracy.capitalize()} accuracy of the audio service (`services/audio`) on "
+                "annotated datasets",
+                *parts,
+            ]
+        )
+    if not parts:
+        return "No measurement of the audio service (`services/audio`)"
+    return "The audio service (`services/audio`): " + _listed(parts)
+
+
+def not_run(doc: dict) -> str:
+    """The suites and datasets a report without every suite leaves out, said plainly."""
+    from .datasets import DATASETS
+
+    suites = {run["suite"] for run in doc["runs"]}
+    if FULL_REPORT <= suites:
+        return ""
+    held = {(run["suite"], run["dataset"]["name"]) for run in doc["runs"]}
+    missing = [
+        *(f"{d.suite} on {d.title}" for d in DATASETS.values() if (d.suite, d.name) not in held),
+        *(
+            f"what the {d.suite} rules compare on {d.title}"
+            for d in DATASETS.values()
+            if ("calibration", d.name) not in held
+        ),
+        *(
+            words
+            for suite, words in (
+                ("golden", "the golden set"),
+                ("cost", "the estimators' costs"),
+                ("controls", "the generated controls"),
+            )
+            if suite not in suites
+        ),
+    ]
+    if not missing:
+        return ""
+    return (
+        f" Not run for this report: {'; '.join(missing)}. Any report in `evals/reports` that "
+        "holds them states the analyzer version it was made with."
+    )
 
 
 def scope(doc: dict) -> str:

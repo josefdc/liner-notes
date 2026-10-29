@@ -335,7 +335,10 @@ times are seconds from the start of the preview. Every block is `null` when it w
   pitch classes, or two a second, a third, a sixth or a seventh apart; a fifth or a third about
   as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
   and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
-  by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose
+  by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads in soft
+  timbres (an electric piano or a flute, whose overtones are 22-30 dB down; an FM electric
+  piano, whose second harmonic is 7-16 dB down at each attack and then fades; a triangle wave)
+  or struck on bars (a marimba-like bar, a glockenspiel), triads whose
   third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
   timbres), seventh chords whose fifth folds into a doubled root and whose third is 6-12 dB
   down, a third 10-25 cents off over a doubled root, and sus2 and sus4 chords over their root
@@ -345,25 +348,45 @@ times are seconds from the start of the preview. Every block is `null` when it w
   withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
   major is withheld with both estimators). A major third sung or played 8 cents flat or more
   over its root two octaves down reads as the root's fifth harmonic, so such a still chord can
-  count as one source too. A bell is not caught (its tierce is a minor third over the hum, as in
-  a chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
-  separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
-  still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
-  what keep keys off pitchless sound, and they also withhold many keys of electronic dance
-  music, whose synthesizers leave few narrow lines (the calibration section of
-  `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
-  decides: no key for one held pitch (a note with vibrato, whose sidebands hide the series, or
-  a bend: its harmonics explain the lines and nothing else moves in the chromagram) or for a
-  voice without stable notes (speech); a voice that moves between notes keeps the key even
-  without lines (an a cappella line with vibrato). With a beat, once the lines support a key,
-  the pitch track still withholds it for speech or rap over drums, and for one held pitch (a
-  drone, one bass note, a held note) whose harmonics explain the harmonic part's lines; there
-  the allowance does not widen with the tracked pitch's span, since a band's bass line can look
-  like one held pitch to the tracker while its chords are off that pitch's harmonics. A major
-  triad over its own root in the bass is acoustically one harmonic series (harmonics 4, 5 and
-  6) and gets no key, with or without a beat. A sung line far out of tune, or with very wide
-  vibrato, can read as a voice without stable notes and gets no key: the rule errs toward
-  withholding. Tonics are spelled with sharps (Essentia's Bb is reported as A#).
+  count as one source too. A church bell is not caught (its tierce is a minor third over the
+  hum, as in a chord), nor is a tubular bell: its modes hold still and move together (at 27 of
+  the tests' 30 seeds), but they spell three pitch classes or more, as a chord's notes do, and
+  none is a harmonic of another. Essentia keys 24 and librosa 23 of those 30 tubular bells, and
+  21 and 19 of the 30 held-out ones (`evals/audio`). Two rules that could tell the bell from a
+  chord were measured on the controls, and neither is shipped
+  (`evals/audio/scripts/source_rules.py` reads the off-grid share from the report's recorded
+  notes and measures the harmonics share again from each control's signal). The share of a still
+  control's note pairs more than 20 cents off the equal-tempered grid is 0.67-0.83 on the
+  tubular bells, 0.00 on the triads in soft timbres and at most 0.60 on the triads struck on
+  bars. One source when a still chord's share is at least 0.65 withholds every still tubular
+  bell's key (21 Essentia and 20 librosa, 21 and 19 held out) and no soft or bar triad's, but it
+  takes 32 right keys with each estimator from thirds 20-25 cents off over their root, which
+  must keep their key; the margin between the bars and the bells is narrow too. One source when
+  at most a tenth of the lines' level is overtones of the notes they spell (tried for analyzer
+  2.3.5) withholds the same tubular bells' keys, but also right keys, the same with either
+  estimator: of some triads whose overtones are as few, 1 of the 14 still ones in soft timbres
+  and 9 of the 23 held out, 6 of the 15 struck on bars and 9 of the 20 held out. Drums are not
+  caught either: toms, alone or over a kit, and tabla strokes have envelopes of their own, so
+  their lines seldom hold still; where they do (tabla at 3 of the 30 seeds and 3 of the 30
+  held-out, two rack toms and a floor tom over a kit at 1 and 1), their partials spell a chord.
+  Neither strength separates atonal material from tonal music: random chromatic notes or a
+  twelve-tone row can still get a key, and so can a bell or a few tuned drums whose partials
+  spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they
+  also withhold many keys of electronic dance music, whose synthesizers leave few narrow lines
+  (the calibration section of `evals/reports/audio-*.md` has the numbers). Without a beat, a
+  pitch track of the harmonic part also decides: no key for one held pitch (a note with vibrato,
+  whose sidebands hide the series, or a bend: its harmonics explain the lines and nothing else
+  moves in the chromagram) or for a voice without stable notes (speech); a voice that moves
+  between notes keeps the key even without lines (an a cappella line with vibrato). With a beat,
+  once the lines support a key, the pitch track still withholds it for speech or rap over drums,
+  and for one held pitch (a drone, one bass note, a held note) whose harmonics explain the
+  harmonic part's lines; there the allowance does not widen with the tracked pitch's span, since
+  a band's bass line can look like one held pitch to the tracker while its chords are off that
+  pitch's harmonics. A major triad over its own root in the bass is acoustically one harmonic
+  series (harmonics 4, 5 and 6) and gets no key, with or without a beat. A sung line far out of
+  tune, or with very wide vibrato, can read as a voice without stable notes and gets no key: the
+  rule errs toward withholding. Tonics are spelled with sharps (Essentia's Bb is reported as
+  A#).
 - **Fingerprint** is `null` without the models, and for input the service judges not to be
   music: no beat, and a single harmonic series, one held pitch or speech (the style and mood
   models answer for any input). A pad, a melody over a drone or a band without drums keeps

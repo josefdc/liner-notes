@@ -179,7 +179,8 @@ function isUserAction(event: { type: string; [field: string]: unknown }): boolea
 // titles, a source's own text) is held to the precise rules, the long-token rule, the hex rule
 // and a strict base64 rule (`FREE_TEXT_SHAPES`); an id to the precise rules and the strict base64
 // rule (`ID_SHAPES`). A secret's name refuses a value that looks like a credential
-// (`credentialValue`), and any value under a password's or a token's own name.
+// (`credentialValue`), and any value under a password's or a token's own name when it is written
+// as a key: quoted, as a `name=` parameter, as XML, or at the start of a line.
 
 /** A rule a text is checked against: a pattern, or a test a pattern cannot express. */
 type Shape = { test(text: string): boolean };
@@ -229,16 +230,25 @@ const SECRET_NAME = `(?:${[
 const SECRET_WORDS = /pass|pwd|secret|key|session/i;
 
 /**
- * A bare "pass" or "secret", in any case, or a bare Title-Case "Password": a festival pass or a
- * song's name ("Secret", "Password") as often as a credential, so read with `credentialValue`.
- * Any other secret's name (`password`, `pwd`, `db_password`, `apiSecret`, `PASSWORD`) refuses
- * any value.
+ * A "pass" in any case and after any prefix (`weekend-pass`, `Backstage-Pass`), a bare "secret"
+ * or "top-secret", or a bare Title-Case "Password": a ticket or a song's name ("Secret",
+ * "Password") as often as a credential, so always read with `credentialValue`.
  */
-const PLAIN_NAME = /^(?:[Pp]ass|PASS|[Ss]ecret|SECRET|Password)$/;
+const PLAIN_NAME =
+  /^(?:(?:[A-Za-z0-9]+[_-])*(?:[Pp]ass|PASS)|(?:(?:[Tt]op|TOP)[_-])?(?:[Ss]ecret|SECRET)|Password)$/;
 
-/** True when `value`, given under the secret's name `name`, is refused (`PLAIN_NAME`). */
-const secretValue = (name: string, value: string) =>
-  PLAIN_NAME.test(name) ? credentialValue(value) : value !== "";
+/** A working directory's path under `pwd` (`pwd: /home/user/music`) is not a password. */
+const DIRECTORY = (name: string, value: string) =>
+  /^(?:[Pp]wd|PWD)$/.test(name) && /^~?\//.test(value);
+
+/**
+ * True when `value`, given under the secret's name `name`, is refused: any value under a
+ * password's, a prefixed secret's or a token's own name written as a key (`keyed`), and
+ * otherwise, or under a `PLAIN_NAME`, a value that looks like a credential (`credentialValue`).
+ */
+const secretValue = (name: string, value: string, keyed: boolean) =>
+  !DIRECTORY(name, value) &&
+  (keyed && !PLAIN_NAME.test(name) ? value !== "" : credentialValue(value));
 
 /** A secret written as `name=value`, in a link's query or fragment or in text. */
 const SECRET_PARAMS = new RegExp(String.raw`(?:^|[\s?&;#])(${SECRET_NAME})=([^\s&;#]*)`, "g");
@@ -252,7 +262,7 @@ const SECRET_PARAMS = new RegExp(String.raw`(?:^|[\s?&;#])(${SECRET_NAME})=([^\s
 const SECRET_PARAM: Shape = {
   test: (text) =>
     SECRET_WORDS.test(text) &&
-    [...text.matchAll(SECRET_PARAMS)].some(([, name, value]) => secretValue(name, value)),
+    [...text.matchAll(SECRET_PARAMS)].some(([, name, value]) => secretValue(name, value, true)),
 };
 
 /** A quote as JSON, PHP, HTML or an escaped string writes one. */
@@ -262,33 +272,50 @@ const QUOTE = String.raw`(?:\\?["'\x60]|&quot;|&#0*3[49];|&apos;|\\u0022|\\u0027
 const FIELD_VALUE = String.raw`(?:${QUOTE}([^"'\x60\\&<>\n]*)|([^\s"'\x60\\&<>,;}\])]*))`;
 
 /**
- * The ways a password or secret field is written: quoted, as JSON, PHP or an escaped string
- * (`{"db_password": …}`, `'pass' => …`, `&quot;password&quot;: …`); as YAML, Ruby or a spaced
- * assignment (`password: …`, `:password => …`, `PASSWORD = …`); or as XML
- * (`<password>…</password>`).
+ * The ways a password or secret field is written, as `[pattern, keyed]`: quoted, as JSON, PHP or
+ * an escaped string (`{"db_password": …}`, `'pass' => …`, `&quot;password&quot;: …`), and as XML
+ * (`<password>…</password>`), always keys; unquoted, as YAML, Ruby or a spaced assignment
+ * (`password: …`, `:password => …`, `PASSWORD = …`), a key only where `keyAt` finds one.
  */
-const PASSWORD_FIELDS = [
-  new RegExp(String.raw`${QUOTE}(${SECRET_NAME})${QUOTE}\s*(?::|=>)\s*${FIELD_VALUE}`, "g"),
-  new RegExp(
-    String.raw`(?<![A-Za-z0-9_-])(${SECRET_NAME})(?::\s*|\s*=>\s*|\s+=\s*|\s*=\s+)${FIELD_VALUE}`,
-    "g",
-  ),
-  new RegExp(String.raw`<(${SECRET_NAME})>([^<\s]*)</`, "g"),
+const PASSWORD_FIELDS: Array<[RegExp, boolean]> = [
+  [new RegExp(String.raw`${QUOTE}(${SECRET_NAME})${QUOTE}\s*(?::|=>)\s*${FIELD_VALUE}`, "g"), true],
+  [
+    new RegExp(
+      String.raw`(?<![A-Za-z0-9_-])(${SECRET_NAME})(?::\s*|\s*=>\s*|\s+=\s*|\s*=\s+)${FIELD_VALUE}`,
+      "g",
+    ),
+    false,
+  ],
+  [new RegExp(String.raw`<(${SECRET_NAME})>([^<\s]*)</`, "g"), true],
 ];
+
+/** A line's start, or a "{" or "," before a key. */
+const KEY_START = /[\r\n{,][ \t]*$/;
+
+/**
+ * True when an unquoted name at `at` in `text` is written as a key: at the start of a line or
+ * of the text, after "{" or "," (`{user: admin, password: …}`), or as a Ruby symbol
+ * (`:password`). Prose ("the password: swordfish", "Enter your password: Log in") is not.
+ */
+function keyAt(text: string, at: number): boolean {
+  const before = text.slice(Math.max(0, at - 40), at);
+  return before.endsWith(":") || KEY_START.test(before) || (at <= 40 && /^[ \t]*$/.test(before));
+}
 
 /**
  * A password or secret field with a value: any value under a password's or a prefixed secret's
- * name (`{"password": "letmein"}`, `db_password: x`, `<pwd>x</pwd>`), and one that looks like a
- * credential under a bare "pass", "secret" or "Password" (`PLAIN_NAME`): a song called "Secret"
- * or "Password" followed by another title or a time (`"Secret": "Bedtime Story"`, `"Password":
- * "Hidden"`, `"Password": 3:41`) is not one.
+ * name written as a key (`{"password": "letmein"}`, `db_password: x` on its own line,
+ * `<pwd>x</pwd>`), and one that looks like a credential in prose or under a `PLAIN_NAME`: a song
+ * called "Secret" or "Password" followed by another title or a time (`"Secret": "Bedtime Story"`,
+ * `"Password": "Hidden"`, `"Password": 3:41`), "the password: swordfish" and "a day-pass: €60"
+ * are not one.
  */
 const PASSWORD_FIELD: Shape = {
   test: (text) =>
     SECRET_WORDS.test(text) &&
-    PASSWORD_FIELDS.some((pattern) =>
+    PASSWORD_FIELDS.some(([pattern, keyed]) =>
       [...text.matchAll(pattern)].some((field) =>
-        secretValue(field[1], field[2] ?? field[3] ?? ""),
+        secretValue(field[1], field[2] ?? field[3] ?? "", keyed || keyAt(text, field.index)),
       ),
     ),
 };
@@ -303,12 +330,29 @@ const BEARERS = /\b(?:[Bb]earer|BEARER)(?::\s*|\s+)["']?([A-Za-z0-9._~+/=-]{12,}
 
 /**
  * A basic credential: "Basic", in any case, then (after a space, a colon or a quote) a base64
- * value that decodes to printable text with a ":", a user name and a password
- * (`QWxhZGRpbjpvcGVuIHNlc2FtZQ==` is "Aladdin:open sesame"). "Basic Channel", "a basic
- * verse-chorus-verse", "a basic Am/F/C/G progression" and "a basic LinnDrum pattern" decode to
- * bytes that are not text.
+ * value that decodes to UTF-8 text with a ":", a user name (maybe empty) and a password
+ * (`QWxhZGRpbjpvcGVuIHNlc2FtZQ==` is "Aladdin:open sesame", `Omh1bnRlcjI=` ":hunter2"). "Basic
+ * Channel", "a basic verse-chorus-verse", "a basic Am/F/C/G progression" and "a basic LinnDrum
+ * pattern" decode to bytes that are not text.
  */
 const BASICS = /\b(?:[Bb]asic|BASIC)(?::\s*|\s+)["']?([A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9+/=])/g;
+
+/** Any value after an `Authorization: Basic` header, as text, JSON or an escaped string writes it. */
+const AUTHORIZATION_BASIC = /authorization\\?["']?\s*[:=]\s*\\?["']?basic[\s:]+\S/i;
+
+/** Strict UTF-8: a value that is not UTF-8 throws. */
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+/** True when the base64 `value` decodes to "user:password" text, the user maybe empty. */
+function basicPair(value: string): boolean {
+  let text: string;
+  try {
+    text = STRICT_UTF8.decode(Buffer.from(value, "base64"));
+  } catch {
+    return false;
+  }
+  return /^(?:[^\p{Cc}:]+:[^\p{Cc}]*|:[^\p{Cc}]+)$/u.test(text);
+}
 
 /**
  * A Hugging Face token: "hf_" and 30 or more random letters, in which two capitals meet at least
@@ -330,9 +374,8 @@ const BEARER_OR_BASIC: Shape = {
     ([...text.matchAll(BEARERS)].some(([, value]) =>
       value.split(/[-._~]/).some((piece) => piece.length >= 8 && /\d|[+/=]|[a-z][A-Z]/.test(piece)),
     ) ||
-      [...text.matchAll(BASICS)].some(([, value]) =>
-        /^[\x20-\x7e]+:[\x20-\x7e]*$/.test(Buffer.from(value, "base64").toString("latin1")),
-      )),
+      AUTHORIZATION_BASIC.test(text) ||
+      [...text.matchAll(BASICS)].some(([, value]) => basicPair(value))),
 };
 
 /**
@@ -349,15 +392,29 @@ const AWS_KEY_ID: Shape = {
 };
 
 /**
+ * A camelCase token name (`accessToken`, `apiToken`, `authToken`, `sessionToken`) as a quoted
+ * key or a `name=` parameter, with any value; "the fanToken: CHZ" is prose.
+ */
+const CAMEL_TOKEN_KEY = new RegExp(
+  String.raw`${QUOTE}[a-z][a-z0-9]*Token${QUOTE}\s*(?::|=>|=)\s*[^\s,}]|(?<![A-Za-z0-9])[a-z][a-z0-9]*Token=[^\s&;#]`,
+);
+
+/** A camelCase token name in a spaced assignment: `musicToken = 5` is a count, not a token. */
+const CAMEL_TOKEN_SPACED = /(?<![A-Za-z0-9])[a-z][a-z0-9]*Token(?:\s+=\s*|\s*=\s+)([^\s&;#"',]+)/g;
+
+/**
  * A key or a token under its name, with a value, as a parameter or a field: `api_key=`,
- * `"access_token": …`, `auth_token=`, and camelCase token names (`accessToken`, `apiToken`,
- * `authToken`, `sessionToken`).
+ * `"access_token": …`, `auth_token=`, and camelCase token names (`CAMEL_TOKEN_KEY`, and
+ * `CAMEL_TOKEN_SPACED` with a value that looks like a credential).
  */
 const KEY_OR_TOKEN: Shape = {
   test: (text) =>
     /(?<![A-Za-z0-9])(?:api[-_]?key|access_token|client_secret|token|(?:access|secret)[_-]key)["']?\s*[:=]\s*\S/i.test(
       text,
-    ) || /(?<![A-Za-z0-9])[a-z][a-z0-9]*Token["']?\s*[:=]\s*\S/.test(text),
+    ) ||
+    (text.includes("Token") &&
+      (CAMEL_TOKEN_KEY.test(text) ||
+        [...text.matchAll(CAMEL_TOKEN_SPACED)].some(([, value]) => credentialValue(value)))),
 };
 
 /**

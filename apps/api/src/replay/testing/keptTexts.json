@@ -577,5 +577,61 @@
   {
     "value": "Basic C/G/Am/F chords for beginners",
     "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Whisper the password: love",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "the password: swordfish, from the film",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "the passphrase: open sesame",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Tracklist: 1. PASSWORD: 3:41",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Glastonbury weekend-pass: £335",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "a day-pass: €60",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Backstage-Pass: VIP only",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "the top-secret: demo tapes",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "the fanToken: CHZ launched in 2021",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "via a socialToken: $RAC",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "musicToken = 5",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "pwd: /home/user/music",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Enter your password: Log in",
+    "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "Create a password: at least 8 characters",
+    "places": ["excerpt", "mbexcerpt", "text"]
   }
 ]

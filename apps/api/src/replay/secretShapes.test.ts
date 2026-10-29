@@ -272,18 +272,6 @@ describe("precise rules: refused in every field", () => {
       "PASSWORD = opensesame1",
       ":password => 'opensesame1'",
       "<password>opensesame1</password>",
-      // Under a password's or a prefixed secret's own name, any value is one.
-      '{"password": "letmein"}',
-      "password: letmein",
-      "<password>sunshine</password>",
-      '{"db_password": "correcthorse"}',
-      '{"api_secret": "abcdefghijklmnop"}',
-      'config: {"user": "admin", "password": "letmein"}',
-      '{"pwd": "x1"}',
-      // A token under a camelCase name.
-      '{"accessToken": "a1b2c3d4e5f6"}',
-      `apiToken=${VALUE}`,
-      `{"authToken":"${VALUE}"}`,
       '{"db_password": "opensesame1"}',
       '{"pass": "opensesame1"}',
       '{"pwd": "opensesame1"}',
@@ -295,6 +283,31 @@ describe("precise rules: refused in every field", () => {
     ]) {
       expect(inClaim(text), text).not.toEqual([]);
       expect(excerpt(`Login: ${text}`), text).not.toEqual([]);
+    }
+    // Under a password's, a prefixed secret's or a camelCase token's own name written as a key
+    // (quoted, as XML, as a parameter or at a line's start), any value is one.
+    for (const text of [
+      '{"password": "letmein"}',
+      '{"PASSWORD": "letmein"}',
+      "password: letmein",
+      "PASSWORD: letmein",
+      "<password>sunshine</password>",
+      "?password=x",
+      "DB_PASSWORD=letmein",
+      '{"db_password": "correcthorse"}',
+      '{"api_secret": "abcdefghijklmnop"}',
+      'config: {"user": "admin", "password": "letmein"}',
+      "{user: admin, password: letmein}",
+      "PASSWORD = letmein",
+      ":password => 'letmein'",
+      '{"pwd": "x1"}',
+      '{"accessToken": "a1b2c3d4e5f6"}',
+      "?accessToken=abc",
+      `apiToken=${VALUE}`,
+      `{"authToken":"${VALUE}"}`,
+    ]) {
+      expect(inClaim(text), text).not.toEqual([]);
+      expect(excerpt(`Login\n${text}`), text).not.toEqual([]);
     }
     // Songs called "Secret" or "Password", followed by another title, a year or a time.
     for (const text of [
@@ -308,6 +321,52 @@ describe("precise rules: refused in every field", () => {
       "Password: Swordfish, the 1999 B-side.",
     ]) {
       expect(inClaim(text), text).toEqual([]);
+    }
+  });
+
+  it("reads a secret's name in prose, a pass, a token's name and a path with the value only", () => {
+    // Prose, tickets, coins and a working directory: written wherever they are held.
+    for (const text of [
+      "Whisper the password: love",
+      "the password: swordfish, from the film",
+      "the passphrase: open sesame",
+      "Tracklist: 1. PASSWORD: 3:41",
+      "Glastonbury weekend-pass: £335",
+      "a day-pass: €60",
+      "Backstage-Pass: VIP only",
+      "the top-secret: demo tapes",
+      "Top-Secret: Garden",
+      "the fanToken: CHZ launched in 2021",
+      "via a socialToken: $RAC",
+      "musicToken = 5",
+      "pwd: /home/user/music",
+      "Enter your password: Log in",
+      "Create a password: at least 8 characters",
+    ]) {
+      expect(inClaim(text), text).toEqual([]);
+      expect(excerpt(text), text).toEqual([]);
+      expect(
+        judge({ evidence: [webItem("https://example.org/a", { title: text })] }),
+        text,
+      ).toEqual([]);
+      const primary = {
+        id: "musicbrainz:x",
+        source: "musicbrainz",
+        sourceTier: "primary-record",
+        url: "https://musicbrainz.org/recording/x",
+        excerpt: text,
+      };
+      expect(judge({ evidence: [primary] }), text).toEqual([]);
+    }
+    // The same names with a value that looks like a credential.
+    for (const text of [
+      "the password: hunter22",
+      "Backstage-Pass: Tr0ub4dor&3",
+      "the top-secret: Zx9Qw3Er7Ty1",
+      "musicToken = Zx9Qw3Er7Ty1",
+      "pwd: Tr0ub4dor&3",
+    ]) {
+      expect(inClaim(text), text).not.toEqual([]);
     }
   });
 
@@ -337,6 +396,15 @@ describe("precise rules: refused in every field", () => {
       "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
       "authorization: basic dXNlcjpwYXNzd29yZA==",
       'Basic "dXNlcjpwYXNz"',
+      // An empty user name, and a password in UTF-8 ("user:pässword").
+      "Authorization: Basic Omh1bnRlcjI=",
+      "Basic Omh1bnRlcjI=",
+      "Authorization: Basic dXNlcjpww6Rzc3dvcmQ=",
+      "Basic dXNlcjpww6Rzc3dvcmQ=",
+      // Any value after an Authorization header's "Basic".
+      "Authorization: Basic hunter2",
+      '{"Authorization": "Basic c2VjcmV0"}',
+      '{\\"Authorization\\": \\"Basic c2VjcmV0\\"}',
     ]) {
       expect(inClaim(text), text).toContain(
         "analysis.claims[0].text: a bearer or basic credential",

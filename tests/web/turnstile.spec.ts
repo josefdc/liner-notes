@@ -2,8 +2,11 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   apiRequests,
   collectProblems,
+  holdClock,
   loadFixture,
+  resultReached,
   runTokens,
+  runUntilResultsButton,
   sentTurnstileTokens,
   useMockApi,
 } from "./mock";
@@ -93,9 +96,13 @@ test("an analysis runs end to end with the widget's token", async ({ page }) => 
   const problems = collectProblems(page);
   const outside = await fakeTurnstile(page);
   await useMockApi(page, loadFixture("full-result"));
+  await page.clock.install();
   await page.goto("/");
+  // The run's end is read on the completion screen, with the page's time held from before it
+  // starts (see `holdClock`).
+  await holdClock(page);
   await search(page, "Bright Lines");
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
 
   expect(await widgets(page)).toEqual({
     interactive: false,
@@ -117,6 +124,7 @@ test("the check shows only while Cloudflare asks the visitor for an interaction"
   const problems = collectProblems(page);
   await fakeTurnstile(page, { interactive: true });
   await useMockApi(page, loadFixture("full-result"));
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Bright Lines");
 
@@ -125,8 +133,13 @@ test("the check shows only while Cloudflare asks the visitor for an interaction"
   // The progress line says what is under way, instead of "Connecting...".
   await expect(page.getByText("Checking that you are a person...").first()).toBeVisible();
   expect(await postsToRuns(page)).toBe(0);
-  await page.getByRole("button", { name: "I am a person" }).click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  // The run's end is read on the completion screen, with the page's time held from before it
+  // starts (see `holdClock`).
+  const person = page.getByRole("button", { name: "I am a person" });
+  await expect(person).toBeVisible();
+  await holdClock(page);
+  await person.click();
+  await runUntilResultsButton(page);
   await expect(caption).toBeHidden();
   await expect(page.getByRole("button", { name: "I am a person" })).toHaveCount(0);
   expect(await sentTurnstileTokens(page)).toEqual(["fake-turnstile-token-1"]);
@@ -155,6 +168,7 @@ test("a refused run token is checked again once, on the next click", async ({ pa
       },
     },
   });
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Bright Lines");
   const retry = page.getByRole("button", { name: "Try again", exact: true });
@@ -164,8 +178,11 @@ test("a refused run token is checked again once, on the next click", async ({ pa
   expect((await widgets(page)).renders).toHaveLength(1);
   expect(await postsToRuns(page)).toBe(1);
 
+  // The run's end is read on the completion screen, with the page's time held from before it
+  // starts (see `holdClock`).
+  await holdClock(page);
   await retry.click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   expect((await widgets(page)).renders).toHaveLength(2);
   expect(await sentTurnstileTokens(page)).toEqual([
     "fake-turnstile-token-1",
@@ -189,9 +206,13 @@ test("a widget token the API refuses is checked again once, within the same clic
     error: "This page needs to check the request again. Please try again.",
   };
   await useMockApi(page, { ...loadFixture("full-result"), runTokenRefusals: [refusal] });
+  await page.clock.install();
   await page.goto("/");
+  // The run's end is read on the completion screen, with the page's time held from before it
+  // starts (see `holdClock`).
+  await holdClock(page);
   await search(page, "Bright Lines");
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   expect((await widgets(page)).renders).toHaveLength(2);
   expect(await sentTurnstileTokens(page)).toEqual([
     "fake-turnstile-token-1",
@@ -291,7 +312,9 @@ test("a rate-limited refusal keeps the retry disabled, with the time left, until
   await expect(page.locator("#error-retry-ready")).toHaveText("You can try again now.");
   expect(await postsToRuns(page)).toBe(1);
   await retry.click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  // The run reaches its result (this test is about the wait before it, on the page's own time,
+  // so that time is not held; what follows reads only the requests made).
+  await resultReached(page);
   expect(await postsToRuns(page)).toBe(2);
   expect(unexpected(problems)).toEqual([]);
 });
@@ -326,7 +349,9 @@ test("a rate limit refused inside the stream waits for its retryAfterMs", async 
   await expect(page.getByText(/^You can try again in [12] s\.$/)).toBeVisible();
   await expect(retry).toBeEnabled({ timeout: 5_000 });
   await retry.click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  // The run reaches its result (this test is about the wait before it, on the page's own time,
+  // so that time is not held; what follows reads only the requests made).
+  await resultReached(page);
   expect(await postsToRuns(page)).toBe(2);
   expect(unexpected(problems)).toEqual([]);
 });
@@ -356,9 +381,9 @@ test("a script request that stalls is made again, and the user can get through",
 
   // The stalled request is given up: the next check asks again, and gets through.
   await retry.click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible({
-    timeout: 20_000,
-  });
+  // The run reaches its result (this test is about the script's timeouts, on the page's own
+  // time, so that time is not held; what follows reads only the requests and tokens).
+  await resultReached(page, { timeout: 20_000 });
   expect(outside.filter((url) => url.startsWith(SCRIPT))).toEqual([SCRIPT, `${SCRIPT}&retry=1`]);
   expect(await sentTurnstileTokens(page)).toEqual(["fake-turnstile-token-1"]);
   expect(unexpected(problems)).toEqual([]);

@@ -3,7 +3,9 @@ import {
   apiRequests,
   collectProblems,
   fullResultData,
+  holdClock,
   loadFixture,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -63,13 +65,17 @@ test("an interrupt-only picker with data heartbeats resumes to one result", asyn
       ],
     },
   });
+  await page.clock.install();
   await search(page, "Hurt");
   await expect(page.getByText("Is this the right track?")).toBeVisible();
   await page.keyboard.press("ArrowDown");
+  // The completion screen is read with the page's time held (see `holdClock`); the time left
+  // for a reconnect is the page's own.
+  await holdClock(page);
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
-  await page.waitForTimeout(400);
+  await runUntilResultsButton(page);
+  await page.clock.runFor(400);
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${RESUME}`))).toEqual([
     `stream ${RESUME}?threadId=${THREAD}&selectedTrackId=${candidates[1].id}&pickedBy=click`,

@@ -4,10 +4,12 @@ import {
   apiRequests,
   collectProblems,
   dashboardHeading,
+  holdClock,
   loadFixture,
   openPlayer,
   openResults,
   releaseStream,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -39,6 +41,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
 }) => {
   const problems = collectProblems(page);
   await useMockApi(page, fixture);
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Some Other Song");
 
@@ -70,14 +73,18 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   await page.keyboard.press("Shift+Tab");
   expect(await other.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
 
-  // Picking it analyses its title and artist, which the API answers with the recording.
+  // Picking it analyses its title and artist, which the API answers with the recording. Its
+  // progress is read with the page's time held (see `holdClock`).
+  await holdClock(page);
   await tracks.getByRole("button", { name: /Bright Lines/ }).click();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText(
     "Replaying an analysis recorded on 2026-10-22T14:03:00.000Z (commit abc1234)",
   );
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
+  await page.clock.resume();
   await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   await animationsSettled(page);
@@ -250,10 +257,16 @@ test("on a phone, the recording label stays visible on every Player tab", async 
 test("a track picked after the budget tripped replays its recording", async ({ page }) => {
   const problems = collectProblems(page);
   await useMockApi(page, loadFixture("budget-paused-picker"));
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Bright Lines");
-  // The studio take (2001), the one with a recording.
-  await page.getByRole("option", { name: /Test Artist • 2001/ }).click();
+  // The studio take (2001), the one with a recording. Its progress is read with the page's time
+  // held (see `holdClock`), once the picker's options are in.
+  const take = page.getByRole("option", { name: /Test Artist • 2001/ });
+  await expect(take).toBeVisible();
+  await holdClock(page);
+  await take.click();
+  await runUntilResultsButton(page);
 
   // The resume is refused (budget spent); the recording of that very track is replayed.
   await expect(page.getByRole("log")).toContainText(
@@ -263,6 +276,7 @@ test("a track picked after the budget tripped replays its recording", async ({ p
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
+  await page.clock.resume();
   await openResults(page);
   await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
     "Recorded run · 22 Oct 2026 · replayed",

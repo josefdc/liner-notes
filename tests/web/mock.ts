@@ -317,14 +317,16 @@ export function dashboardHeading(page: Page) {
  * loaded). The progress screen also opens them by itself 3.5 s after the run completes: on a
  * busy machine, a click still being retried then (the button not yet where a click lands) finds
  * the button gone, and would wait for it until the test times out. So the click is tried a
- * little at a time, until the results are open, by the click or by themselves. A test of the
- * button itself clicks it directly, with the page's clock held so that nothing else opens them.
+ * little at a time, until the results are shown, by the click or by themselves: it returns once
+ * `opened` is visible, however long the first paint of the results takes. A test of the button
+ * itself clicks it directly, with the page's clock held so that nothing else opens them.
  */
 export async function openResults(page: Page, opened: Locator = dashboardHeading(page)) {
   const button = page.getByRole("button", { name: "Open the results" });
   await expect(async () => {
     if (await opened.isVisible()) return;
-    await button.click({ timeout: 2_000 });
+    if (await button.isVisible()) await button.click({ timeout: 2_000 });
+    await expect(opened).toBeVisible({ timeout: 2_000 });
   }).toPass();
 }
 
@@ -335,9 +337,13 @@ export async function openResults(page: Page, opened: Locator = dashboardHeading
  * `page.clock.resume()` lets its time run again.
  */
 export async function holdClock(page: Page) {
-  // A moment ahead of the page's time, which runs on meanwhile: tried again if it has passed.
+  // A moment ahead of the page's time, which runs on meanwhile: if it has passed before the
+  // pause lands (a busy machine), tried again further ahead, never near the 3.5 s.
+  let ahead = 50;
   await expect(async () => {
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
+    const at = await page.evaluate((ms) => Date.now() + ms, ahead);
+    ahead = Math.min(ahead * 2, 800);
+    await page.clock.pauseAt(at);
   }).toPass();
 }
 
@@ -353,6 +359,17 @@ export async function runUntilResultsButton(page: Page) {
     await page.clock.runFor(50);
   }
   await expect(button).toBeVisible();
+}
+
+/**
+ * Waits until a run has reached its result: "Open the results" on the completion screen, or the
+ * Dashboard that screen opens by itself 3.5 s later. For a test whose subject came before the
+ * result and runs on the page's own time (a wait or a countdown), so that time is not held.
+ */
+export async function resultReached(page: Page, { timeout }: { timeout?: number } = {}) {
+  await expect(
+    page.getByRole("button", { name: "Open the results" }).or(dashboardHeading(page)).first(),
+  ).toBeVisible({ timeout });
 }
 
 /** Runs a search against the mocked stream and continues to the Dashboard. */

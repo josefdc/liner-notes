@@ -3,9 +3,12 @@ import {
   apiRequests,
   collectProblems,
   fullResultData,
+  holdClock,
   loadFixture,
   releaseStream,
+  resultReached,
   routeRunTokens,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -49,6 +52,7 @@ async function search(page: Page, query: string) {
 test("a candidate picked before the analysis stream ends opens one resume and shows the result once", async ({
   page,
 }) => {
+  await page.clock.install();
   await useMockApi(page, {
     suggestions: [],
     streams: {
@@ -76,9 +80,11 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
   // The analysis stream now sends its "done" and ends, while the resume is still running.
   await releaseStream(page, "analysis-done");
   await expect.poll(async () => finished(await streamLog(page), ANALYZE)).toBe(true);
+  // The result is read on the completion screen, the page's time held (see `holdClock`).
+  await holdClock(page);
   await releaseStream(page, "resume-result");
 
-  await expect.soft(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   const log = await apiRequests(page);
   expect.soft(resumes(log)).toHaveLength(1);
   expect.soft(posts(log)).toEqual([]);
@@ -119,8 +125,9 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   // The broken stream was closed, so it did not reconnect (a new run on the server).
   expect(await streamLog(page)).not.toContain(`${ANALYZE} reconnect`);
 
+  // The retry runs to a result (what follows reads only the requests made).
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await resultReached(page);
   const log = await apiRequests(page);
   expect(analyses(log)).toHaveLength(2);
   expect(posts(log)).toEqual([]);
@@ -164,14 +171,17 @@ test("a duplicate complete for the thread is ignored after a pick", async ({ pag
       ],
     },
   });
+  await page.clock.install();
   await search(page, "Hurt");
   await expect(page.getByText("Is this the right track?")).toBeVisible();
 
-  // The highlighted (first) candidate, picked with Enter.
+  // The highlighted (first) candidate, picked with Enter. The completion screen is read with
+  // the page's time held (see `holdClock`); the time left for a second resume is the page's own.
+  await holdClock(page);
   await page.keyboard.press("Enter");
-  await expect.soft(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect.poll(async () => finished(await streamLog(page), RESUME)).toBe(true);
-  await page.waitForTimeout(300);
+  await page.clock.runFor(300);
 
   const log = await apiRequests(page);
   expect

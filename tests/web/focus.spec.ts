@@ -3,6 +3,7 @@ import {
   analyzeAndOpenDashboard,
   collectProblems,
   dashboardHeading,
+  holdClock,
   loadFixture,
   openPlayer,
   useMockApi,
@@ -44,11 +45,15 @@ test("the results that open by themselves take the focus, even when their code i
     await new Promise((resolve) => setTimeout(resolve, 5000));
     await route.continue();
   });
+  await page.clock.install();
   await page.goto("/");
   await page.getByRole("combobox", { name: "Song title and artist" }).fill("Bright Lines");
+  // The progress is read before the run can complete, the page's time held (see `holdClock`).
+  await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await expect(progressStatus(page)).toBeFocused();
   await watchFocus(page);
+  await page.clock.resume();
 
   // Nothing clicked: the results open by themselves.
   await expect(page.getByRole("status", { name: "Loading the results" })).toBeFocused({
@@ -81,10 +86,13 @@ test("each result screen gives the focus to its h1, the track's title", async ({
 
 test("a run started from the Dashboard moves the focus to its progress", async ({ page }) => {
   await useMockApi(page, fullResult);
+  await page.clock.install();
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await expect(resultHeading(page)).toBeFocused();
   await watchFocus(page);
 
+  // The progress is read before the run can complete, the page's time held (see `holdClock`).
+  await holdClock(page);
   await page.getByRole("button", { name: /Older Record/ }).click();
   await expect(progressStatus(page)).toBeFocused();
   expect(await focusFellToPage(page)).toBe(false);
@@ -93,6 +101,7 @@ test("a run started from the Dashboard moves the focus to its progress", async (
 test("a run started from the Player moves the focus to its progress", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await useMockApi(page, fullResult);
+  await page.clock.install();
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
   // Enter on a track selects it (its details take the focus); their Analyze starts the run.
@@ -105,6 +114,8 @@ test("a run started from the Player moves the focus to its progress", async ({ p
   await analyze.focus();
   await watchFocus(page);
 
+  // The progress is read before the run can complete, the page's time held (see `holdClock`).
+  await holdClock(page);
   await page.keyboard.press("Enter");
   await expect(progressStatus(page)).toBeFocused();
   expect(await focusFellToPage(page)).toBe(false);

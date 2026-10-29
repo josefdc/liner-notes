@@ -1,5 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
-import { collectProblems, openResults, releaseStream, replayedRecording, useMockApi } from "./mock";
+import {
+  collectProblems,
+  holdClock,
+  openResults,
+  releaseStream,
+  replayedRecording,
+  runUntilResultsButton,
+  useMockApi,
+} from "./mock";
 import { offline } from "./offline";
 
 // The recorded run's cover, and any other outside address, are answered on the page: nothing
@@ -208,6 +216,7 @@ const lineInView = (log: ReturnType<Page["getByRole"]>, text?: string) =>
 test("a reader scrolled up mid-log stays on the line they read while older lines are dropped", async ({
   page,
 }) => {
+  await page.clock.install();
   const log = await logAtHalf(page, 820);
   // The browser's own scroll anchoring is off, as in a browser without it: the log alone keeps
   // the reader's place.
@@ -234,7 +243,10 @@ test("a reader scrolled up mid-log stays on the line they read while older lines
   // Back at the end, the newest lines are followed again.
   await page.mouse.wheel(0, 100_000);
   await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
+  // The run completes: its last lines are read with the page's time held (see `holdClock`).
+  await holdClock(page);
   await releaseStream(page, "finish");
+  await runUntilResultsButton(page);
   await expect(log).toContainText("Recorded analysis replayed");
   await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
 });

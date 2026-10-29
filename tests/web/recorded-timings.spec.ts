@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   collectProblems,
+  holdClock,
   loadFixture,
   releaseStream,
   replayedRecording,
+  runUntilResultsButton,
   useMockApi,
 } from "./mock";
 import { offline } from "./offline";
@@ -109,10 +111,13 @@ test("the progress log shows a replayed line's recorded time, and no time withou
     eventGapMs: 10,
     streams: { "/api/analyze/stream": events },
   });
+  // The progress log is read on the completion screen, its time held there (see `holdClock`).
+  await page.clock.install();
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("One More Time Daft Punk");
+  await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
 
   const log = page.getByRole("log");
   const timeOf = (message: string) =>

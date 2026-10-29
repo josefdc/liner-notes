@@ -97,6 +97,7 @@ test("Stop closes the run's stream, brings the search back, and a new search run
   page,
 }) => {
   const problems = collectProblems(page);
+  await page.clock.install();
   await useMockApi(page, {
     suggestions: [],
     streams: { [ANALYZE]: { opens: [stoppedRun, nextRun] } },
@@ -107,10 +108,14 @@ test("Stop closes the run's stream, brings the search back, and a new search run
 
   await stopAndCheck(page, "Hurt", "hold");
 
-  // A new search works as usual.
+  // A new search works as usual. Its progress is read with the page's time held (see
+  // `holdClock`).
+  await holdClock(page);
   await search(page, "One More Time");
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText("Found the track on Spotify");
   await expect(page.getByRole("log")).not.toContainText("A line after the stop");
+  await page.clock.resume();
   await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   expect(problems).toEqual([]);

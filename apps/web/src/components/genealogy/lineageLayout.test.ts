@@ -459,7 +459,7 @@ describe('wrapText, character by character (#240)', () => {
       'A Very Long Band Name · 2016',
     ]) {
       for (let width = 4; width <= 44; width += 1) {
-        const { lines } = wrapText(meta, width, 20);
+        const { lines } = wrapText(meta, width, 20, { separator: true });
         for (const line of lines) {
           expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
           expect(line.startsWith('·'), `${width}: ${line}`).toBe(false);
@@ -472,14 +472,44 @@ describe('wrapText, character by character (#240)', () => {
         ).toContain(joined.replaceAll(' ', ''));
       }
     }
-    expect(wrapText('Band · 2016', 20).lines).toEqual(['Band · 2016']);
-    expect(wrapText('A Very Long Band Name · 2016', 22).lines).toEqual([
+    const separated = { separator: true };
+    expect(wrapText('Band · 2016', 20, 2, separated).lines).toEqual(['Band · 2016']);
+    expect(wrapText('A Very Long Band Name · 2016', 22, 2, separated).lines).toEqual([
       'A Very Long Band Name',
       '2016',
     ]);
-    expect(wrapText('山田花子とミッドナイト・オーケストラ · 2013', 36, 4).lines).toEqual([
-      '山田花子とミッドナイト・オーケストラ',
-      '2013',
+    expect(wrapText('山田花子とミッドナイト・オーケストラ · 2013', 36, 4, separated).lines).toEqual(
+      ['山田花子とミッドナイト・オーケストラ', '2013'],
+    );
+  });
+
+  it('keeps every "·" that is the record’s own, at a line’s start too', () => {
+    // A title's, and an artist credit's (with no year, or before the card's own separator):
+    // only that separator is ever left out.
+    const title = 'Mendelssohn · Symphony No. 4 · I. Allegro vivace';
+    for (let width = 8; width <= 50; width += 1) {
+      const { lines } = wrapText(title, width, 20);
+      expect(lines.join(' ').replaceAll('- ', '').replaceAll(' ', ''), `${width}`).toBe(
+        title.replaceAll(' ', ''),
+      );
+      for (const line of lines) expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
+    }
+    expect(wrapText(title, 14, 6).lines).toEqual([
+      'Mendelssohn',
+      '· Symphony No.',
+      '4 · I. Allegro',
+      'vivace',
+    ]);
+    // An artist line with no year: no separator of the card's, nothing left out.
+    expect(wrapText('Artist A · Artist B', 10, 3, { separator: false }).lines).toEqual([
+      'Artist A',
+      '· Artist B',
+    ]);
+    // With the year: the credit's "·" kept, the card's own left out where the line breaks.
+    expect(wrapText('Artist A · Artist B · 1997', 10, 3, { separator: true }).lines).toEqual([
+      'Artist A',
+      '· Artist B',
+      '1997',
     ]);
   });
 

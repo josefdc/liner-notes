@@ -63,6 +63,26 @@ describe('a card’s words (#240)', () => {
     expect(artist.shortened).toBe('artist');
   });
 
+  it('says the year is shortened too where the cut artist line ended with it', () => {
+    const credit =
+      'Berliner Philharmoniker, Herbert von Karajan, Anne-Sophie Mutter, Yo-Yo Ma, Mark Zeltser, Wiener Singverein';
+    const column = { ...options, width: 240, widest: 240 };
+    const dated = fitCardText('Triple Concerto', `${credit} · 1980`, { ...column, metaYear: true });
+    // The line's last word, the year, is gone with the cut: the card says so.
+    expect(dated.meta.truncated).toBe(true);
+    expect(dated.meta.lines.join(' ')).not.toContain('1980');
+    expect(dated.shortened).toBe('artist and year');
+    expect(SHORTENED_TEXT[dated.shortened ?? 'artist']).toBe('Artist and year shortened');
+    // Undated: the artist alone is cut.
+    expect(fitCardText('Triple Concerto', credit, column).shortened).toBe('artist');
+    // And with the title cut too.
+    const both = fitCardText(LONG, `${credit} · 1980`, { ...column, metaYear: true });
+    expect(both.shortened).toBe('title, artist and year');
+    expect(SHORTENED_TEXT['title, artist and year']).toBe('Title, artist and year shortened');
+    // Whole: nothing said.
+    expect(fitCardText('Song', 'Band · 1980', { ...column, metaYear: true }).shortened).toBeNull();
+  });
+
   it('fits a Japanese title by the cells its characters take: whole on a wider card, else cut', () => {
     const title =
       '夜明けの街角で踊る二人の物語（シティポップ・リミックス・エクステンデッド・バージョン）〜真夜中のサウンドトラック・スペシャル・エディション〜';

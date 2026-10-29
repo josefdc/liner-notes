@@ -165,27 +165,37 @@ const cardWords = (page: Page) =>
   graphOf(page).evaluate((svg) =>
     [...svg.querySelectorAll("g.nodes > g")].map((card) => {
       const right = (card.querySelector("rect.card") as Element).getBoundingClientRect().right;
+      const year = card.getAttribute("data-year");
       const read = (name: string, whole: string | null) => {
         const lines = [...card.querySelectorAll<SVGTSpanElement>(`text.${name} tspan`)];
         // The lines joined back: a space between two lines where the words had one (none
         // between two lines of CJK text, broken between its characters), none after a hyphen
-        // the wrap put in, and the "·" separator the wrap leaves out where a line breaks at it.
+        // the wrap put in. The card's own " · " before the year (the artist line's last one)
+        // is left out where a line breaks at it, and never starts a line; any other "·" is the
+        // record's, drawn as it is.
         const record = (whole ?? "").trim().replace(/\s+/g, " ");
+        const separatorAt =
+          name === "card-meta" && year && record.endsWith(` · ${year}`)
+            ? record.length - ` · ${year}`.length
+            : -1;
         let joined = "";
+        let separatorStarts = false;
         lines.forEach((line, i) => {
           const text = line.textContent ?? "";
           const hyphen = line.hasAttribute("data-hyphen");
           joined += hyphen ? text.slice(0, -1) : text;
           const next = lines[i + 1]?.textContent?.[0] ?? "";
-          if (i < lines.length - 1 && !hyphen && next !== "·") {
-            if (record.startsWith(`${joined} · ${next}`)) joined += " · ";
-            else if (!record.startsWith(`${joined}${next}`)) joined += " ";
+          if (i < lines.length - 1 && !hyphen) {
+            if (joined.length === separatorAt) {
+              if (next === "·") separatorStarts = true;
+              joined += next === "·" ? " " : " · ";
+            } else if (!record.startsWith(`${joined}${next}`)) joined += " ";
           }
         });
         return {
           lines: lines.length,
           cut: lines.some((line) => line.textContent?.includes("…")),
-          whole: joined === (whole ?? "").trim().replace(/\s+/g, " "),
+          whole: !separatorStarts && joined === record,
           joined,
           past: Math.max(
             -Infinity,
@@ -197,6 +207,7 @@ const cardWords = (page: Page) =>
         id: card.getAttribute("data-node-id"),
         title: read("card-title", card.getAttribute("data-title")),
         meta: read("card-meta", card.getAttribute("data-meta")),
+        year,
         // What the card says is shortened, and the words it says it in.
         shortened: card.getAttribute("data-shortened"),
         said: read("card-shortened", null).joined,
@@ -208,22 +219,28 @@ const cardWords = (page: Page) =>
 const SHORTENED: Record<string, string> = {
   title: "Title shortened",
   artist: "Artist shortened",
+  "artist and year": "Artist and year shortened",
   "title and artist": "Title and artist shortened",
+  "title, artist and year": "Title, artist and year shortened",
 };
 
 /**
  * Every card's cut words said on it: a card whose title or artist and year ends in "…" says
- * which, in words; one with its words whole says nothing.
+ * which, in words (the year too where the cut line ended with it); one with its words whole
+ * says nothing.
  */
 async function checkCutsSaid(page: Page, what: string) {
   for (const card of await cardWords(page)) {
+    const artist = card.year ? "artist and year" : "artist";
     const cut =
       card.title.cut && card.meta.cut
-        ? "title and artist"
+        ? card.year
+          ? "title, artist and year"
+          : "title and artist"
         : card.title.cut
           ? "title"
           : card.meta.cut
-            ? "artist"
+            ? artist
             : null;
     expect(card.shortened, `${what}: ${card.id} says what is cut`).toBe(cut);
     expect(card.said, `${what}: ${card.id}'s words for it`).toBe(cut ? SHORTENED[cut] : "");
@@ -731,11 +748,12 @@ for (const [width, height] of [
           record: g.getAttribute("data-title") ?? "",
           title: lines("card-title"),
           meta: lines("card-meta"),
+          year: g.getAttribute("data-year"),
         };
       }),
     );
     const bare = (text: string) => text.replace(/\s+/g, "");
-    for (const { id, record, title, meta } of drawn) {
+    for (const { id, record, title, meta, year } of drawn) {
       for (const line of title) {
         if (line.hyphen) {
           expect(line.text, `${id}: a hyphen only in a word not in CJK`).not.toMatch(
@@ -750,7 +768,8 @@ for (const [width, height] of [
       else expect(joined, id).toBe(bare(record));
       for (const line of meta) {
         expect(line.text.trimEnd().endsWith("·"), `${id}: ${line.text}`).toBe(false);
-        expect(line.text.trimStart().startsWith("·"), `${id}: ${line.text}`).toBe(false);
+        // (The card's own "·" before the year: a "·" of the record may start a line.)
+        if (year) expect(line.text.trim(), `${id}: ${line.text}`).not.toBe(`· ${year}`);
       }
     }
     const h4 = drawn.find((each) => each.id === "h4");

@@ -105,38 +105,50 @@ const softBreak = (before: string, after: string) =>
 const wideBreak = (before: string, after: string) =>
   graphemeUnits(before) === 2 || graphemeUnits(after) === 2;
 
+/** How `wrapText` wraps a text. */
+export interface WrapOptions {
+  /**
+   * True when the text's last lone "·" is the card's own separator (between an artist and a
+   * year): it is left out where a line breaks at it. Any other "·" is the record's, kept.
+   */
+  separator?: boolean;
+}
+
 /**
- * A text's words, broken at spaces; a lone "·" (the card's separator) is kept with the word
- * after it, so no line ends in one (and `wrapText` drops it where that word starts a line).
+ * A text's words, broken at spaces; a lone "·" is kept with the word after it, so no line ends
+ * in one. `separatorAt`: the word the card's separator starts (with `separator`), else -1.
  */
-function wordsOf(text: string): string[] {
+function wordsOf(text: string, separator = false): { words: string[]; separatorAt: number } {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const joined: string[] = [];
+  let separatorAt = -1;
   for (let i = 0; i < words.length; i += 1) {
     if (words[i] === '·' && i + 1 < words.length) {
+      if (separator) separatorAt = joined.length;
       joined.push(`· ${words[i + 1]}`);
       i += 1;
     } else joined.push(words[i]);
   }
-  return joined;
+  return { words: joined, separatorAt };
 }
 
 /**
  * `text` in lines of at most `maxChars` monospace cells (a wide character takes two, see
  * `graphemeUnits`), broken at spaces and, in CJK text, between characters (with no hyphen, and
- * not before a closing mark nor after an opening one). The card's "·" separator neither ends
- * nor starts a line: where the line breaks at it, it is left out. A word longer than a line is broken
- * inside, between two graphemes, its piece ending in a hyphen (`hyphenated` says which lines end
- * so). At most `maxLines` lines: text that needs more is cut, its last line ending in "…", and
+ * not before a closing mark nor after an opening one). No line ends in a lone "·"; the card's
+ * own separator (`options.separator`) starts none either: where the line breaks at it, it is
+ * left out. A word longer than a line is broken inside, between two graphemes, its piece ending
+ * in a hyphen (`hyphenated` says which lines end so). At most `maxLines` lines: text that needs more is cut, its last line ending in "…", and
  * said to be `truncated`.
  */
 export function wrapText(
   text: string,
   maxChars: number,
   maxLines = 2,
+  options: WrapOptions = {},
 ): { lines: string[]; hyphenated: boolean[]; truncated: boolean } {
   const width = Math.max(2, Math.floor(maxChars));
-  const words = wordsOf(text);
+  const { words, separatorAt } = wordsOf(text, options.separator);
   const lines: string[] = [];
   const hyphenated: boolean[] = [];
   let line = '';
@@ -169,12 +181,12 @@ export function wrapText(
     line = '';
     lineUnits = 0;
   };
-  for (const word of words) {
+  for (const [index, word] of words.entries()) {
     const whole = graphemes(word);
     let rest = whole;
     while (rest.length > 0) {
-      // The separator never starts a line: the word after it starts it alone.
-      if (rest === whole && !line && lines.length > 0 && rest[0] === '·' && rest[1] === ' ') {
+      // The card's separator never starts a line: the word after it starts it alone.
+      if (rest === whole && index === separatorAt && !line && lines.length > 0) {
         rest = rest.slice(2);
       }
       const room = line ? width - lineUnits - 1 : width;
@@ -239,14 +251,14 @@ function unbroken(word: string): string[] {
  * fewer than its longest word (a word is not broken to save width; CJK text breaks between its
  * characters).
  */
-export function charsToWrap(text: string, maxLines = 2): number {
+export function charsToWrap(text: string, maxLines = 2, options: WrapOptions = {}): number {
   const length = textUnits(text.trim());
   const longest = Math.max(
     0,
-    ...wordsOf(text).flatMap((word) => unbroken(word).map((piece) => textUnits(piece))),
+    ...wordsOf(text).words.flatMap((word) => unbroken(word).map((piece) => textUnits(piece))),
   );
   for (let chars = Math.max(longest, Math.ceil(length / maxLines)); chars < length; chars += 1) {
-    if (!wrapText(text, chars, maxLines).truncated) return chars;
+    if (!wrapText(text, chars, maxLines, options).truncated) return chars;
   }
   return length;
 }

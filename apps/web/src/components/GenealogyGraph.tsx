@@ -437,8 +437,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       Math.max(
         MIN_CHARS,
         ...graphNodes(data).map((node) => {
-          const { title, meta } = cardWords(node, yearOfNode(node.id));
-          return Math.max(charsToWrap(title, 2), charsToWrap(meta, 2), 'This track'.length);
+          const { title, meta, year } = cardWords(node, yearOfNode(node.id));
+          return Math.max(
+            charsToWrap(title, 2),
+            charsToWrap(meta, 2, { separator: year !== null }),
+            'This track'.length,
+          );
         }),
       ),
     [data, yearOfNode],
@@ -651,11 +655,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         minChars: MIN_CHARS,
         titleLines: TITLE_LINES,
         metaLines: META_LINES,
+        metaYear: year !== null,
       });
       const chars = Math.max(MIN_CHARS, Math.floor(text.width / CHAR_PX));
       // Words cut on the card: the card says so, in words, under them.
       const shortenedWrap = text.shortened
-        ? wrapText(SHORTENED_TEXT[text.shortened], chars, 2)
+        ? wrapText(SHORTENED_TEXT[text.shortened], chars, 3)
         : { lines: [], hyphenated: [], truncated: false };
       const lines =
         text.title.lines.length +
@@ -1099,6 +1104,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('data-node-id', (d) => d.id)
       .attr('data-title', (d) => d.title)
       .attr('data-meta', (d) => d.meta)
+      .attr('data-year', (d) => d.year)
       .attr('data-shortened', (d) => d.shortened)
       .attr('transform', (d) => {
         const box = boxOf(d.id);

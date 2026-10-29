@@ -402,17 +402,18 @@ times are seconds from the start of the preview. Every block is `null` when it w
   lifted (70.5 %, against 36 of the 48 it serves, 75.0 %), librosa for 54 of 103 (52.4 %,
   against 32 of 48, 66.7 %). With the spectral-line rule alone lifted, re-derived from the
   recorded evidence (`evals/audio/scripts/lifted_rules.py`), only 13 of the 132 get a key from
-  Essentia, 9 of them right, and the other 119 are withheld by the rules behind it (fewer than
-  three pitch classes 71, one harmonic series 38, `speech_like` 10); librosa gets 12 of 103, 8
-  right. Of the 11 clips for which one harmonic series is the reason given, 9 have the
-  reference key with every rule lifted, with either estimator, but with that rule alone lifted
-  1 gets a key (right) and 10 are withheld for fewer than three pitch classes. Every loosening
-  of the spectral-line rule that report's calibration section tries fails the written
-  procedure, so this stays a limit. None of the four showcase recordings
-  (`fixtures/replays/*.json`, recorded at analyzer 2.3.4) gets a measured key: Hung Up, Juicy
-  and Bitter Sweet Symphony withhold it as `no_sustained_pitch`, One More Time as
-  `speech_like`. The recordings keep only those codes and their reasons, not the measurements
-  behind them. Without a beat, a pitch track of the harmonic part also decides: no key for one
+  Essentia, 9 of them right, and the other 119 are withheld by the rules behind it (the first
+  of them to fire: fewer than three pitch classes 71, one harmonic series 38, `speech_like`
+  10); librosa gets 12 of 103, 8 right. Of the 11 clips for which one harmonic series is the
+  reason given, 9 have the reference key with every rule lifted, with either estimator, but
+  with that rule alone lifted 1 gets a key (right) and the first rule behind it to fire on the
+  other 10 is fewer than three pitch classes. Every loosening of the spectral-line rule that
+  report's calibration section tries fails the written procedure, so this stays a limit. None
+  of the four showcase recordings (`fixtures/replays/*.json`, recorded at analyzer 2.3.4) gets
+  a measured key: Hung Up, Juicy and Bitter Sweet Symphony withhold it as `no_sustained_pitch`,
+  One More Time as `speech_like`. The recordings keep only those codes and their reasons, not
+  the measurements behind them. Without a beat, a pitch track of the harmonic part also
+  decides: no key for one
   held pitch (a note with vibrato,
   whose sidebands hide the series, or a bend: its harmonics explain the lines and nothing else
   moves in the chromagram) or for a voice without stable notes (speech); a voice that moves

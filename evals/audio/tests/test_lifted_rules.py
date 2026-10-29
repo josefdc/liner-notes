@@ -7,6 +7,8 @@ that moves them must update the README.
 import importlib.util
 import json
 
+import pytest
+
 from evals_audio.service import REPO_ROOT
 
 SCRIPT = REPO_ROOT / "evals" / "audio" / "scripts" / "lifted_rules.py"
@@ -57,3 +59,28 @@ def test_one_key_rule_lifted_alone_gives_few_keys_on_giantsteps():
             "stillWithheld": {"fewer than three pitch classes": 10},
         }
     assert json.loads(path.read_text())["date"] == "2026-10-29"
+
+
+def test_the_recorded_evidence_reproduces_the_key_run():
+    """
+    Each withheld clip's first reason and its estimate with the rules lifted, as the key run
+    recorded them, come out of the calibration run's evidence; a record that disagrees is caught.
+    """
+    script = load_script()
+    path = REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json"
+    _, key_run, calibration_run = script.newest(path)
+    # 202 withheld per estimator, 1 of them gated as noise with no estimate.
+    assert script.reproduce(key_run, calibration_run) == 2 * 201
+    for field, value in (("estimate", "C major"), ("rules", ["fewer than three pitch classes"])):
+        broken = json.loads(json.dumps(key_run))
+        row = next(
+            r
+            for r in broken["tracks"]["essentia"]
+            if r["withheld"]
+            and r.get("unreturned")
+            and r["unreturned"]["rules"] == ["no sustained pitch"]
+            and r["unreturned"]["estimate"] != "C major"
+        )
+        row["unreturned"][field] = value
+        with pytest.raises(AssertionError):
+            script.reproduce(broken, calibration_run)

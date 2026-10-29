@@ -290,7 +290,7 @@ def section(doc: dict) -> list[str]:
         "",
     ]
     out += clips_table(runs, controls)
-    out += mismatch_lines(runs, controls)
+    out += mismatch_lines(runs, controls, kinds)
     out += choice_section(choice, kinds)
     out += confirmation_section(confirmation, kinds)
     out += agreement_table(selected, confirmed, after, kinds)
@@ -309,6 +309,7 @@ RECORDED = {
 
 
 def clips_table(runs: list[dict], controls: dict) -> list[str]:
+    kinds = {r["kind"] for r in runs}
     rows = []
     for run in runs:
         splits = run["splits"]
@@ -325,8 +326,12 @@ def clips_table(runs: list[dict], controls: dict) -> list[str]:
     rows.append(
         [
             "generated controls",
-            ", ".join([*calibrated({r["kind"] for r in runs}), "gate"]),
-            ", ".join(f"`{n}`" for n in controls["estimators"]),
+            ", ".join([*calibrated(kinds), "gate"]),
+            ", ".join(
+                f"`{n}`"
+                for n in controls["estimators"]
+                if any(has_kind(n, k) for k in calibrated(kinds))
+            ),
             str(len(controls["controls"])),
             "–",
             f"`{controls['command']}`",
@@ -345,8 +350,11 @@ def clips_table(runs: list[dict], controls: dict) -> list[str]:
     ]
 
 
-def mismatch_lines(runs: list[dict], controls: dict) -> list[str]:
-    """The derivation check: decisions re-derived at the service's values against the served."""
+def mismatch_lines(runs: list[dict], controls: dict, kinds: set) -> list[str]:
+    """
+    The derivation check: decisions re-derived at the service's values against the served, on
+    the annotated clips and on the controls for the kinds of rules the report calibrates.
+    """
     parts, total, pairs = [], 0, 0
     for run in runs:
         rules = cal.Rules.from_dict(run["rules"])
@@ -358,7 +366,7 @@ def mismatch_lines(runs: list[dict], controls: dict) -> list[str]:
                 parts.append(f"{run['dataset']['name']} `{name}`: {', '.join(ids)}")
     rules = cal.Rules.from_dict(controls["rules"])
     items = [{**c, "trackId": c["name"]} for c in controls["controls"]]
-    for kind in ("tempo", "key"):
+    for kind in calibrated(kinds):
         for name, ids in cal.mismatches(items, controls["estimators"], kind, rules).items():
             total += len(ids)
             pairs += sum(1 for c in items if cal.usable(c, name, kind))

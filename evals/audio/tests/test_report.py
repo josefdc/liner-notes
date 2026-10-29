@@ -440,6 +440,24 @@ def test_the_calibration_section_says_only_what_its_runs_calibrate():
     assert "### Octave and meter errors and the confidence" in tempo
     assert "| generated controls | tempo, gate |" in tempo
     assert "None of those that pass gets a tempo." in tempo
+    # The derivation check counts the tempo decisions only, and names no key mismatch.
+    tempo_doc = calibration_runs(full, "tempo")
+    runs = [r for r in tempo_doc["runs"] if r["suite"] == "calibration"]
+    controls = next(r for r in tempo_doc["runs"] if r["suite"] == "controls")
+    pairs = sum(
+        calibration.usable(c, name, "tempo")
+        for run in [*runs, controls]
+        for c in run.get("clips") or run["controls"]
+        for name in run["estimators"]
+    )
+    assert f"on 0 of {pairs} clip and estimator pairs" in tempo
+    broken = json.loads(json.dumps(full))
+    control = next(r for r in broken["runs"] if r["suite"] == "controls")["controls"][0]
+    control["estimators"]["essentia"]["key"]["served"] = ["C#", "minor"]
+    assert "controls key `essentia`" in "\n".join(calibration_report.section(broken))
+    tempo_broken = "\n".join(calibration_report.section(calibration_runs(broken, "tempo")))
+    assert "controls key" not in tempo_broken and f"on 0 of {pairs} clip" in tempo_broken
+    assert "| generated controls | key, gate | `librosa`, `essentia` |" in key
     assert "(exact for key)" in key and "The service withholds a key when" in key
     assert "(the strength minimum)" in key and "unrelated to the reference key at most" in key
     assert "### Octave and meter errors" not in key

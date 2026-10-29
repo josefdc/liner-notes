@@ -21,6 +21,9 @@
  * (cleanCommit). --allow-dirty records it anyway for a local experiment, stamped "-dirty", so the
  * committed recordings' own check (demo-recording.test.ts) still refuses it.
  *
+ * Each long token-shaped run in a web page's excerpt is recorded as "[redacted]" (recorder.ts
+ * `withoutPageTokens`); the recorder prints how many it replaced, and in which evidence items.
+ *
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -36,7 +39,13 @@ import { knownSecrets } from "../llm/cassette.js";
 import { isMainModule } from "../scripts/isMain.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
-import { buildRecord, COMMIT_PATTERN, RecordRefused } from "./recorder.js";
+import {
+  buildRecord,
+  COMMIT_PATTERN,
+  REDACTED_RUN,
+  RecordRefused,
+  type RedactedRuns,
+} from "./recorder.js";
 import { replayDir } from "./records.js";
 
 /** The settings file's values, for the credential check only; empty when there is none. */
@@ -154,6 +163,20 @@ export function cleanCommit({
   return { commit: commit.endsWith(DIRTY) ? commit : `${commit}${DIRTY}` };
 }
 
+/**
+ * What the record replaced in page excerpts (recorder.ts `withoutPageTokens`), for the person
+ * recording: how many long token-shaped runs, and in which evidence items; null for none.
+ */
+export function redactedRunsLine(redacted: readonly RedactedRuns[]): string | null {
+  if (redacted.length === 0) return null;
+  const total = redacted.reduce((sum, item) => sum + item.runs, 0);
+  const items = redacted.map(({ evidenceId, runs }) => `${evidenceId} (${runs})`).join(", ");
+  return (
+    `Replaced ${total} long token-shaped ${total === 1 ? "run" : "runs"} with "${REDACTED_RUN}" ` +
+    `in the excerpts of ${redacted.length} ${redacted.length === 1 ? "page" : "pages"}: ${items}`
+  );
+}
+
 export interface RecordDependencies {
   /** The settings file's values for the credential check (default: apps/api/.env). */
   settingsFileValues?: () => NodeJS.ProcessEnv;
@@ -245,6 +268,8 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     record = built.record;
     for (const warning of built.warnings) console.warn(`Warning: the result breaks ${warning}`);
     if (built.noCover) console.warn(`Warning: no cover kept: ${built.noCover}`);
+    const redacted = redactedRunsLine(built.redactedRuns);
+    if (redacted) console.log(redacted);
   } catch (err) {
     if (err instanceof RecordRefused) {
       console.error(err.message);

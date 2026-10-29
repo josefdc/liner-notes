@@ -20,7 +20,14 @@
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
  * - status messages about the user's own actions in that run (the clarification node's
  *   "Selected: …", in older runs "User confirmed …", and "Remembered preference …") are left
- *   out: a viewer of the replay did neither.
+ *   out: a viewer of the replay did neither;
+ * - in the excerpt of a third-party page (web or editorial evidence: text the search fetched
+ *   from a page, never a source's API, the model or the app), each run the long-token rule
+ *   matches outside the page's links becomes "[redacted]" (`withoutPageTokens`). A page's
+ *   text may run words together ("StudioPiano2NotesGuitar2Tabs…") into that shape; the record
+ *   keeps neither such a run nor a real token a page printed. The recorder says how many it
+ *   replaced, in which items, and checks the record again as it is written: the same run
+ *   anywhere else (a title, a primary record, the model's text) is still a refusal.
  *
  * Refusals: a run that is not completed, has no stored result of its own, or was not live (a
  * replayed or cached result is not recorded again); a run whose last stream does not end with
@@ -258,6 +265,66 @@ function tokenSegment(segment: string): boolean {
 
 /** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
 const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
+
+/** The long-token rule of SECRET_SHAPES, for every run it matches in a text. */
+const LONG_TOKEN_RUNS = new RegExp(
+  (SECRET_SHAPES.find(([what]) => what === "a long token") as [string, RegExp])[1].source,
+  "g",
+);
+
+/** What a page's long token-shaped run is recorded as (as the logs and source errors hide one). */
+export const REDACTED_RUN = "[redacted]";
+
+/** Evidence tiers whose excerpt is a third-party page's text, as the search fetched it. */
+const PAGE_TIERS: ReadonlySet<unknown> = new Set(["web", "editorial"]);
+
+/** How many long token-shaped runs the recorder replaced in one evidence item's excerpt. */
+export interface RedactedRuns {
+  evidenceId: string;
+  runs: number;
+}
+
+/** `text` with each long-token run outside its links as REDACTED_RUN, and how many there were. */
+function redactRuns(text: string): { text: string; runs: number } {
+  let runs = 0;
+  const swap = (part: string) =>
+    part.replace(LONG_TOKEN_RUNS, () => {
+      runs++;
+      return REDACTED_RUN;
+    });
+  let out = "";
+  let at = 0;
+  // A page's links are left as they are: `leaks` judges them (an allow-listed page's slug is
+  // its own; any other link is refused).
+  for (const link of text.matchAll(URL_IN_TEXT)) {
+    out += swap(text.slice(at, link.index)) + link[0];
+    at = link.index + link[0].length;
+  }
+  out += swap(text.slice(at));
+  return { text: out, runs };
+}
+
+/**
+ * A copy of `value` in which each third-party page's excerpt (an evidence item of the web or
+ * editorial tier) has its long-token runs replaced (`redactRuns`); nothing else changes. Each
+ * item with a replacement is counted in `found` by its id (an item the record holds more than
+ * once, as an event and in the result, once).
+ */
+export function withoutPageTokens(value: unknown, found: Map<string, number>): unknown {
+  if (Array.isArray(value)) return value.map((item) => withoutPageTokens(item, found));
+  if (value === null || typeof value !== "object") return value;
+  const item = value as Record<string, unknown>;
+  if (PAGE_TIERS.has(item.sourceTier) && typeof item.excerpt === "string") {
+    const { text, runs } = redactRuns(item.excerpt);
+    if (runs === 0) return item;
+    const id = String(item.id);
+    found.set(id, Math.max(found.get(id) ?? 0, runs));
+    return { ...item, excerpt: text };
+  }
+  return Object.fromEntries(
+    Object.entries(item).map(([key, inner]) => [key, withoutPageTokens(inner, found)]),
+  );
+}
 
 function plainWebPage(url: string): boolean {
   if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
@@ -583,6 +650,8 @@ export interface BuiltRecord {
    * replayed as it was sent live); for the person recording to judge.
    */
   warnings: string[];
+  /** The page excerpts whose long token-shaped runs the record holds as "[redacted]". */
+  redactedRuns: RedactedRuns[];
   /** Why the record keeps no cover (`archiveCover`); absent when it keeps one. */
   noCover?: string;
 }
@@ -644,6 +713,8 @@ export function buildRecord(
   const { queryMatch: _match, ...recorded } = analysis;
   // Every image blanked, then the one cover a record keeps: the Cover Art Archive's.
   const { url: cover, reason: noCover } = archiveCover(analysis);
+  // Each page excerpt's long token-shaped runs replaced, in the result and in the events.
+  const redacted = new Map<string, number>();
   const blanked = withoutMediaFields({
     ...recorded,
     run: {
@@ -656,12 +727,15 @@ export function buildRecord(
       analyzerVersion,
     },
   }) as TrackAnalysis;
-  const recordedAnalysis: TrackAnalysis = { ...blanked, coverUrl: cover };
+  const recordedAnalysis: TrackAnalysis = {
+    ...(withoutPageTokens(blanked, redacted) as TrackAnalysis),
+    coverUrl: cover,
+  };
 
   const recordEvents = joined
     .filter(({ event }) => !isUserAction(event))
     .map(({ atMs, event }, seq) => {
-      const body = withoutMediaFields(event) as Event;
+      const body = withoutPageTokens(withoutMediaFields(event), redacted) as Event;
       const envelope: Record<string, unknown> = { runId: placeholder, seq };
       if ("threadId" in body) envelope.threadId = placeholder;
       if (body.type === "complete") envelope.data = recordedAnalysis;
@@ -713,5 +787,6 @@ export function buildRecord(
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),
   );
-  return { record, warnings, ...(noCover && { noCover }) };
+  const redactedRuns = [...redacted].map(([evidenceId, runs]) => ({ evidenceId, runs }));
+  return { record, warnings, redactedRuns, ...(noCover && { noCover }) };
 }

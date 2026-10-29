@@ -1682,6 +1682,147 @@ describe("the recorded cover from the Cover Art Archive", () => {
   });
 });
 
+describe("a long token-shaped run in a web page's excerpt", () => {
+  // A song-search page's menu, run together by the search source (as in a recorded run): no
+  // credential, but it has the long-token shape a record must not hold.
+  const MENU_RUN = "StudioPiano2NotesGuitar2TabsSing2NotesDrum2NotesMelody";
+  const PAGE_TEXT = (run: string) =>
+    `### Products Klangio Transcription ${run} Scanner Bulk Transcriptions ### Details | Genre | POP, ROCK, INDIE | Tempo | 85 BPM |`;
+  const PAGE_ID = "tavily:https://songs.example.com/en/s/Daft%20Punk/One%20More%20Time";
+  const page = (excerpt: string, edit: Record<string, unknown> = {}) => ({
+    id: PAGE_ID,
+    source: "tavily" as const,
+    sourceTier: "web" as const,
+    url: "https://songs.example.com/en/s/Daft%20Punk/One%20More%20Time",
+    title: "Daft Punk - One More Time | Song Search",
+    retrievedAt: "2026-10-29T07:02:00.000Z",
+    excerpt,
+    recordRef: null,
+    ...edit,
+  });
+
+  /**
+   * The demo recording as the live run it came from, citing `items` besides its own evidence:
+   * in its result and, as the run streamed them, in evidence events before its result.
+   */
+  function liveRunWith(items: unknown[], edit: (analysis: TrackAnalysis) => void = () => {}) {
+    const fixture = structuredClone(demoReplay());
+    const analysis = TrackAnalysis.parse({
+      ...fixture.analysis,
+      evidence: [...(fixture.analysis.evidence ?? []), ...items],
+    });
+    edit(analysis);
+    const at = fixture.events.findIndex((e) => e.event.type === "complete");
+    const before = fixture.events[at - 1];
+    const streamed = items.map((evidence) => ({
+      atMs: before.atMs,
+      event: { type: "evidence", runId: before.event.runId, evidence } as never,
+    }));
+    const events = [...fixture.events.slice(0, at), ...streamed, ...fixture.events.slice(at)];
+    return fixtureAsLiveRun({ ...fixture, analysis, events }, "One More Time Daft Punk");
+  }
+  const build = ({ run, events }: ReturnType<typeof liveRunWith>) =>
+    buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets: [] });
+  const excerpts = (built: ReturnType<typeof build>["record"]) => {
+    const streamed = built.events.flatMap(({ event }) =>
+      event.type === "evidence" && event.evidence.id === PAGE_ID ? [event.evidence.excerpt] : [],
+    );
+    const complete = built.events.find((e) => e.event.type === "complete")?.event as
+      | { data: TrackAnalysis }
+      | undefined;
+    const inResult = (analysis: TrackAnalysis | undefined) =>
+      (analysis?.evidence ?? []).filter((e) => e.id === PAGE_ID).map((e) => e.excerpt);
+    return [...streamed, ...inResult(complete?.data), ...inResult(built.analysis)];
+  };
+
+  it("is recorded as [redacted] in the page's excerpt, and the recorder says where", () => {
+    const built = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
+    // In the evidence event, in the complete event's result and in the record's result.
+    expect(excerpts(built.record)).toEqual(Array(3).fill(PAGE_TEXT("[redacted]")));
+    expect(JSON.stringify(built.record)).not.toContain(MENU_RUN);
+    expect(built.redactedRuns).toEqual([{ evidenceId: PAGE_ID, runs: 1 }]);
+    // The rest of the record is as before.
+    const plain = build(liveRunWith([]));
+    expect(plain.redactedRuns).toEqual([]);
+    expect(built.record.analysis.evidence?.slice(0, -1)).toEqual(plain.record.analysis.evidence);
+    expect(built.record.analysis.claims).toEqual(plain.record.analysis.claims);
+  });
+
+  it("is still refused anywhere but a page's excerpt: a model's text, the page's title, a record's excerpt", () => {
+    const where: Array<[string, ReturnType<typeof liveRunWith>, RegExp]> = [
+      [
+        "a claim the model wrote",
+        liveRunWith([], (analysis) => {
+          analysis.claims![0].text = `${analysis.claims![0].text} ${MENU_RUN}`;
+        }),
+        /^analysis\.claims\[0\]\.text: a long token$/,
+      ],
+      [
+        "the page's title",
+        liveRunWith([page("A plain excerpt.", { title: `Song Search ${MENU_RUN}` })]),
+        /^analysis\.evidence\[\d+\]\.title: a long token$/,
+      ],
+      [
+        "a primary record's excerpt, read from an API",
+        liveRunWith([
+          page(PAGE_TEXT(MENU_RUN), {
+            id: "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/x",
+            source: "musicbrainz",
+            sourceTier: "primary-record",
+            url: "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+            recordRef: "track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+          }),
+        ]),
+        /^analysis\.evidence\[\d+\]\.excerpt: a long token$/,
+      ],
+    ];
+    for (const [what, live, reason] of where) {
+      const reasons = refusal(() => build(live));
+      expect(
+        reasons.filter((r) => reason.test(r)),
+        what,
+      ).toHaveLength(1);
+    }
+  });
+
+  it("replaces a key-shaped or random run in a page's excerpt, so it is never written", () => {
+    const key = "sk-proj-Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNq";
+    const random = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz3Xc7Vb1N";
+    expect(random).toHaveLength(40);
+    const built = build(liveRunWith([page(`A key ${key} and a run ${random} on the page.`)]));
+    const text = JSON.stringify(built.record);
+    expect(text).not.toContain(key.slice(3));
+    expect(text).not.toContain(random);
+    expect(excerpts(built.record)).toEqual(
+      Array(3).fill("A key [redacted] and a run [redacted] on the page."),
+    );
+    expect(built.redactedRuns).toEqual([{ evidenceId: PAGE_ID, runs: 2 }]);
+  });
+
+  it("checks the replaced excerpt again: the record as written passes, and what the replacement does not take is still refused", () => {
+    // The record is checked as it is written: the loader, which runs the same checks on every
+    // file it reads, takes it.
+    const scratch = mkdtempSync(join(tmpdir(), "replay-page-tokens-"));
+    try {
+      const { record: built } = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
+      writeFileSync(join(scratch, `${built.slug}.json`), JSON.stringify(built));
+      const set = loadReplays(scratch);
+      expect(set.problems).toEqual([]);
+      expect(set.records.map((r) => r.slug)).toEqual([built.slug]);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+    // A key too short for the long-token shape, beside a run the replacement takes: the record
+    // is checked as it would be written, and refused for the key alone.
+    const reasons = refusal(() =>
+      build(liveRunWith([page(`${PAGE_TEXT(MENU_RUN)} sk-abcdefghij0123456789`)])),
+    );
+    const onPage = reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+    expect(onPage.length).toBeGreaterThan(0);
+    for (const reason of onPage) expect(reason).toMatch(/: an OpenAI-style key$/);
+  });
+});
+
 describe("the player", () => {
   it("serves no search match from a record: it belonged to the recorded run", () => {
     const fixture = demoReplay();

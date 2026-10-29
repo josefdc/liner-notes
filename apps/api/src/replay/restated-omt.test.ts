@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Claim, ReplayRecord, type TrackAnalysis } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { oneClaimPerFact } from "../agent/restatements.js";
 import { playRecord, replayedAnalysis, replayNotice } from "./player.js";
 import { DEFAULT_REPLAY_DIR } from "./records.js";
 
@@ -78,10 +79,20 @@ describe("the One More Time recording, replayed", () => {
       expect(claims).toHaveLength(recorded.length - 7);
       const keys = claims.map((claim) => wordsOf(claim.text));
       expect(new Set(keys).size).toBe(keys.length);
-      // The kept claims are as recorded: verdicts, kinds and evidence untouched.
-      for (const claim of claims) {
+      // The kept claims are as recorded: verdicts, kinds and evidence untouched. The brass
+      // figure's claim is marked with the Eddie Johns sample's code-built claim: its first
+      // sentence ("MusicBrainz documents … as a sample in …") states the record's relation, and
+      // its second only adds how the sample is used. No other claim is marked.
+      const eddieJohns = claims.find(
+        (claim) => claim.origin === "code" && claim.evidenceIds[0] === FACTS["Eddie Johns sample"],
+      );
+      for (const { documentedBy, ...claim } of claims) {
         expect(recorded.find((other) => other.id === claim.id)).toEqual(claim);
+        expect(documentedBy, claim.id).toEqual(
+          claim.id.startsWith(BRASS_FIGURE) ? [eddieJohns?.id] : undefined,
+        );
       }
+      expect(eddieJohns).toBeDefined();
     }
   });
 
@@ -110,7 +121,7 @@ describe("a recording replayed", () => {
   const EDDIE_JOHNS = "fdbb79f2";
   const CIRCO_LOCO = "72c47650";
 
-  it("keeps a restating claim that a link or a timeline sample names", () => {
+  it("keeps a restating claim that a timeline sample names; one a model link names goes with it", () => {
     const named = ReplayRecord.parse({
       ...record,
       analysis: {
@@ -120,8 +131,8 @@ describe("a recording replayed", () => {
           links: [
             ...record.analysis.genealogy.links,
             {
-              source: "current",
-              target: record.analysis.genealogy.nodes[1].id,
+              source: record.analysis.genealogy.nodes[1].id,
+              target: "current",
               value: 1,
               type: "sample",
               kind: "inferred",
@@ -134,23 +145,35 @@ describe("a recording replayed", () => {
         samples: [{ time: 30, description: "Circo Loco", claimId: claimId(CIRCO_LOCO) }],
       },
     });
-    const claims = replayedAnalysis(named, "run-omt").claims ?? [];
-    for (const id of [EDDIE_JOHNS, CIRCO_LOCO]) {
-      expect(claims.some((claim) => claim.id === claimId(id))).toBe(true);
-    }
-    expect(replayedAnalysis(named, "run-omt").run?.verifier).toMatchObject({ restated: 5 });
+    const served = replayedAnalysis(named, "run-omt");
+    const claims = served.claims ?? [];
+    expect(claims.some((claim) => claim.id === claimId(CIRCO_LOCO))).toBe(true);
+    expect(claims.some((claim) => claim.id === claimId(EDDIE_JOHNS))).toBe(false);
+    expect(served.genealogy).toEqual(record.analysis.genealogy);
+    expect(served.run?.verifier).toMatchObject({ restated: 6 });
   });
 
-  it("is left as recorded when its run already left out what restates another", () => {
+  it("runs again on a recording whose run already left some out, adding to its count", () => {
     const run = record.analysis.run!;
     const already = ReplayRecord.parse({
       ...record,
-      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 3 } } },
     });
     const served = replayedAnalysis(already, "run-omt");
-    expect(served.claims).toEqual(already.analysis.claims);
-    expect(served.factoids).toEqual(already.analysis.factoids);
-    expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 0 });
+    const fresh = replayedAnalysis(record, "run-omt");
+    expect(served.claims).toEqual(fresh.claims);
+    expect(served.factoids).toEqual(fresh.factoids);
+    expect(served.run?.verifier).toEqual({ judged: 9, unjudged: 0, restated: 3 + 7 });
+  });
+
+  it("leaves nothing more out when run on what it served", () => {
+    const fresh = replayedAnalysis(record, "run-omt");
+    const again = oneClaimPerFact(fresh);
+    expect(again.restated).toBe(0);
+    expect(again.result.claims).toEqual(fresh.claims);
+    expect(again.result.factoids).toEqual(fresh.factoids);
+    expect(again.result.genealogy).toEqual(fresh.genealogy);
+    expect(again.result.run?.verifier).toEqual(fresh.run?.verifier);
   });
 });
 
@@ -163,10 +186,15 @@ describe("the replay notice", () => {
   });
 
   it("says nothing of them when none were left out", () => {
-    const run = record.analysis.run!;
+    const claims = record.analysis.claims ?? [];
+    // Only the code-built claims: nothing restates another.
     const already = ReplayRecord.parse({
       ...record,
-      analysis: { ...record.analysis, run: { ...run, verifier: { ...run.verifier, restated: 0 } } },
+      analysis: {
+        ...record.analysis,
+        claims: claims.filter((claim) => claim.origin === "code"),
+        factoids: [],
+      },
     });
     expect(replayNotice(already).message).toBe(
       `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +

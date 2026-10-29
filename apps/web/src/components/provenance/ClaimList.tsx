@@ -39,7 +39,10 @@ interface ClaimListProps {
   links?: readonly RelationLinkNote[];
   readings?: readonly Reading[];
   audio?: MeasuredAudio | null;
-  /** The words of the shown genealogy link that states a claim, by claim id. */
+  /**
+   * The words of the shown genealogy link that states a claim, else of the relation records
+   * document that it states (`withDocumentedRelations`), by claim id.
+   */
   relations?: ReadonlyMap<string, string>;
   className?: string;
 }

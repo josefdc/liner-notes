@@ -22,7 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false, footer 
       {/* P0:8 Skip-to-content link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-cyber focus:text-void focus:font-mono focus:text-sm focus:tracking-widest focus:rounded forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-cyber focus:text-void focus:font-mono focus:text-sm focus:tracking-widest focus:rounded"
       >
         Skip to content
       </a>

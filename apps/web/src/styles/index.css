@@ -285,8 +285,9 @@
     border-width: 0;
   }
 
+  /* No position here: the element's own focus: classes place it (the skip link floats with
+     focus:fixed), which a position set here would override. */
   .focus\:not-sr-only:focus {
-    position: static;
     width: auto;
     height: auto;
     padding: 0.5rem 1rem;

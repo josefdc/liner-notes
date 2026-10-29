@@ -4,8 +4,11 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  holdClock,
   loadFixture,
+  openResults,
   releaseStream,
+  runUntilResultsButton,
   useMockApi,
 } from "./mock";
 
@@ -77,6 +80,7 @@ test("a reload of the Player keeps the Player", async ({ page }) => {
 test("a track without a stored run says so: nothing runs until Analyze", async ({ page }) => {
   const problems = collectProblems(page);
   await useMockApi(page, stored);
+  await page.clock.install();
   await page.goto(`/t/${MISSING_ID}?q=Midnight%20City%20M83`);
 
   const heading = page.getByRole("heading", { name: MISSING_TITLE });
@@ -91,13 +95,16 @@ test("a track without a stored run says so: nothing runs until Analyze", async (
   await page.waitForTimeout(1500);
   expect([...new Set(await apiRequests(page))]).toEqual([byTrack(MISSING_ID)]);
 
-  // Analyze runs that very track, under the link's words for it.
+  // Analyze runs that very track, under the link's words for it. Its progress is read with the
+  // page's time held (see `holdClock`).
+  await holdClock(page);
   await analyze.click();
   await expect(page.locator("[data-progress-status]")).toBeFocused();
   expect(streams(await apiRequests(page))).toEqual([
     `stream ${ANALYZE}?query=Midnight%20City%20M83&trackId=${MISSING_ID}&pickedBy=click`,
   ]);
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await page.clock.resume();
+  await openResults(page);
   await expect(resultHeading(page)).toBeFocused();
   await expect(page).toHaveURL(`/t/${MISSING_ID}?q=Bright+Lines+Test+Artist`);
 
@@ -110,11 +117,15 @@ test("a track without a stored run says so: nothing runs until Analyze", async (
 
 test("Analyze on a link without words asks for the track by its id", async ({ page }) => {
   await useMockApi(page, stored);
+  await page.clock.install();
   await page.goto(`/t/${MISSING_ID}`);
   await expect(page.getByRole("heading", { name: MISSING_TITLE })).toBeVisible();
   await expect(page.getByText("Named in the link")).toHaveCount(0);
 
+  // Its progress is read with the page's time held (see `holdClock`).
+  await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText("Searching for the track");
   expect(streams(await apiRequests(page))).toEqual([
     `stream ${ANALYZE}?query=${MISSING_ID}&trackId=${MISSING_ID}&pickedBy=click`,
@@ -189,8 +200,12 @@ test("Analyze on a link whose words are cut at the API's limit never splits a ch
   // out whole, not cut in half (which could not be sent at all).
   const words = `${"a".repeat(199)}\u{1F600}tail`;
   await useMockApi(page, stored);
+  await page.clock.install();
   await page.goto(`/t/${MISSING_ID}?q=${encodeURIComponent(words)}`);
+  // Its progress is read with the page's time held (see `holdClock`).
+  await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText("Searching for the track");
   expect(streams(await apiRequests(page))).toEqual([
     `stream ${ANALYZE}?query=${"a".repeat(199)}&trackId=${MISSING_ID}&pickedBy=click`,
@@ -225,7 +240,7 @@ test("Back past another track's result to a link's result shows that link's trac
   await page.getByRole("button", { name: "New search" }).click();
   await searchBox(page).fill("Other Song");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(page).toHaveURL(`/t/${other}?q=Other+Song+Test+Artist`);
   await expect(page.getByText("Other Song").first()).toBeVisible();
 
@@ -244,7 +259,7 @@ test("a result whose id is not a Spotify track id keeps the search's address", a
   await searchBox(page).fill("Hurt");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await page.getByRole("option", { name: /Nine Inch Nails/ }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(resultHeading(page)).toBeFocused();
   await expect(page).toHaveURL("/");
 
@@ -356,7 +371,7 @@ test("Back and Forward move between the search and a result, with no new request
   await page.goto("/");
   await searchBox(page).fill("Bright Lines");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(resultHeading(page)).toBeFocused();
   await expect(page).toHaveURL(`/t/${STORED_ID}?q=Bright+Lines+Test+Artist`);
   const requestsAtResult = await apiRequests(page);
@@ -397,7 +412,7 @@ test("a reload of a result the API holds no stored run of starts no analysis", a
   await page.goto("/");
   await searchBox(page).fill("Bright Lines");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(page).toHaveURL(`/t/${MISSING_ID}?q=Bright+Lines+Test+Artist`);
 
   await page.reload();

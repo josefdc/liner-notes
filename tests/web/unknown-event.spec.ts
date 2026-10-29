@@ -3,7 +3,10 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  holdClock,
   loadFixture,
+  openResults,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -26,14 +29,25 @@ const candidates = hitl.streams[ANALYZE].find(
   (event: { type: string }) => event.type === "interrupt",
 ).candidates as Array<{ id: string }>;
 
-async function search(page: Page, query: string) {
+/**
+ * Searches for `query`. With `hold`, the page's time is held from before the run starts, so
+ * that its progress screen stays to be read once the run completes (see `holdClock`).
+ */
+async function search(page: Page, query: string, { hold = false } = {}) {
+  if (hold) await page.clock.install();
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
+  if (hold) await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
-async function openDashboard(page: Page) {
-  await page.getByRole("button", { name: "Open the results" }).click();
+/**
+ * Opens the Dashboard. With `held`, the page's time (held for the progress screen) first runs
+ * again; without, the clock is left alone (a resume would install one).
+ */
+async function openDashboard(page: Page, { held }: { held: boolean }) {
+  if (held) await page.clock.resume();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
 }
 
@@ -62,9 +76,9 @@ test("an unknown event type is ignored, logged once, and the run goes on to its 
       ],
     },
   });
-  await search(page, "Hurt");
+  await search(page, "Hurt", { hold: true });
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
   await expect(page.getByText("Searching for the track")).toHaveCount(1);
   // A status without a message is not shown as a placeholder line.
@@ -79,7 +93,7 @@ test("an unknown event type is ignored, logged once, and the run goes on to its 
     expect.stringMatching(/^warning: .*\(status\): does not fit the contract/),
   ]);
 
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
 });
 
@@ -100,14 +114,14 @@ test("a duplicate complete for the same run is ignored", async ({ page }) => {
       ],
     },
   });
-  await search(page, "Hurt");
+  await search(page, "Hurt", { hold: true });
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} complete`))
     .toHaveLength(3);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Duplicate Result")).toHaveCount(0);
   expect(problems).toEqual([]);
@@ -133,14 +147,14 @@ test("a complete of another run that arrives before the run's own is ignored", a
       ],
     },
   });
-  await search(page, "Hurt");
+  await search(page, "Hurt", { hold: true });
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} done`))
     .toHaveLength(1);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);
   expect(problems).toEqual([]);
@@ -164,14 +178,14 @@ test("a result from a newer API that this page reads leniently is shown", async 
       ],
     },
   });
-  await search(page, "Hurt");
+  await search(page, "Hurt", { hold: true });
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
   expect(problems).toEqual([
     expect.stringMatching(/^warning: .*\(complete\): does not fit the contract; read leniently/),
   ]);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
 });
 
@@ -230,14 +244,17 @@ test("a repeated event and an event of another run are ignored on the resume str
       ],
     },
   });
+  await page.clock.install();
   await search(page, "Hurt");
   await expect(page.getByText("Is this the right track?")).toBeVisible();
+  // The page's time held from before the picked track's run (see `holdClock`).
+  await holdClock(page);
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   await expect(page.getByText("Analyzing audio")).toHaveCount(1);
   await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await openDashboard(page);
+  await openDashboard(page, { held: true });
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);
   expect(problems).toEqual([]);

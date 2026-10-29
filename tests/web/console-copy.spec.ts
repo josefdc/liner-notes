@@ -1,5 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
-import { apiRequests, collectProblems, fullResultData, releaseStream, useMockApi } from "./mock";
+import {
+  apiRequests,
+  collectProblems,
+  fullResultData,
+  holdClock,
+  releaseStream,
+  runUntilResultsButton,
+  useMockApi,
+} from "./mock";
 
 // The progress screen and its run log say what the run is doing: the picker in the server's
 // words, measuring only while a measurement runs, waiting and replaying as such, and a progress
@@ -198,6 +206,7 @@ test("after a research cache hit, the measurement shows for as long as it runs",
 });
 
 test("a replay says it replays the recorded run, not that it is running", async ({ page }) => {
+  await page.clock.install();
   await useMockApi(page, {
     suggestions: [],
     streams: {
@@ -220,8 +229,11 @@ test("a replay says it replays the recorded run, not that it is running", async 
   await expect(page.getByRole("log")).toContainText("Found the track");
   await expect(runLog(page)).toContainText("Replaying the recorded run");
   await expect(runLog(page)).not.toContainText(/Running|Run in progress/);
+  // Before the results open by themselves, a screen reader hears that they are opening: read
+  // with the page's time held short of that (see `holdClock`).
+  await holdClock(page);
   await releaseStream(page, "end");
-  // Before the results open by themselves, a screen reader hears that they are opening.
+  await runUntilResultsButton(page);
   await expect(page.getByRole("status").filter({ hasText: "Opening the results" })).toHaveText(
     "Replay complete. Opening the results",
   );
@@ -315,6 +327,7 @@ const OPENING_RESULTS = "Analysis complete. Opening the results";
 test("one live region announces each progress line, and one says the results are opening", async ({
   page,
 }) => {
+  await page.clock.install();
   const lines = [
     "Reading the track from Spotify",
     "Starting the research: Last.fm, MusicBrainz",
@@ -354,13 +367,18 @@ test("one live region announces each progress line, and one says the results are
     }
     // The status line on screen sums up the step; it is not announced a second time.
     expect(regions.filter(({ text }) => text.includes(statusText))).toHaveLength(0);
+    // The last release completes the run: from then the page's time is held, short of the
+    // 3.5 s after which the results open by themselves (see `holdClock`).
+    if (wait === "measuring") await holdClock(page);
     await releaseStream(page, wait);
   }
 
   // The run completes: the results open by themselves 3.5 s later, and that is said once,
-  // before they do.
+  // before they do (past the half second an announcement could be held back for, on the
+  // page's time).
+  await runUntilResultsButton(page);
   await expect(page.locator("[data-progress-status]")).toHaveText(OPENING_RESULTS);
-  await page.waitForTimeout(700);
+  await page.clock.runFor(700);
   const regions = await liveRegions(page);
   expect(regions.filter(({ text }) => text.includes("Opening the results"))).toEqual([
     expect.objectContaining({ text: OPENING_RESULTS }),

@@ -6,6 +6,7 @@ import {
   dashboardHeading,
   loadFixture,
   openPlayer,
+  openResults,
   useMockApi,
 } from "./mock";
 
@@ -479,7 +480,7 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Bright Lines");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page, page.locator("[data-loading-view]"));
 
   // Measured only while the module is held: a pattern that no longer matches the chunk's name
   // fails here instead of measuring whatever else is on screen.

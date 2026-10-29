@@ -4,8 +4,11 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  holdClock,
+  openResults,
   releaseStream,
   replayedRecording,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -94,6 +97,7 @@ test("Stop closes the run's stream, brings the search back, and a new search run
   page,
 }) => {
   const problems = collectProblems(page);
+  await page.clock.install();
   await useMockApi(page, {
     suggestions: [],
     streams: { [ANALYZE]: { opens: [stoppedRun, nextRun] } },
@@ -104,17 +108,23 @@ test("Stop closes the run's stream, brings the search back, and a new search run
 
   await stopAndCheck(page, "Hurt", "hold");
 
-  // A new search works as usual.
+  // A new search works as usual. Its progress is read with the page's time held (see
+  // `holdClock`).
+  await holdClock(page);
   await search(page, "One More Time");
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText("Found the track on Spotify");
   await expect(page.getByRole("log")).not.toContainText("A line after the stop");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await page.clock.resume();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   expect(problems).toEqual([]);
 });
 
 test("a replayed run can be stopped too", async ({ page }) => {
   const problems = collectProblems(page);
+  // The page's time is held for the last run (see `holdClock`).
+  await page.clock.install();
   const { events } = replayedRecording();
   // Paused once the replay notice and the first steps have arrived.
   const research = events.findIndex((event) => event.code === "RESEARCH-START");
@@ -136,12 +146,17 @@ test("a replayed run can be stopped too", async ({ page }) => {
 
   await stopAndCheck(page, "One More Time Daft Punk", "replay");
 
+  // The next search runs to its result: held there, so the button is read before the results
+  // open by themselves.
+  await holdClock(page);
   await search(page, "One More Time");
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
+  await runUntilResultsButton(page);
   expect(problems).toEqual([]);
 });
 
 test("Stop is not offered once the run has completed, nor beside the picker", async ({ page }) => {
+  // The page's time is held for the last run (see `holdClock`).
+  await page.clock.install();
   await useMockApi(page, {
     suggestions: [],
     streams: {
@@ -179,11 +194,13 @@ test("Stop is not offered once the run has completed, nor beside the picker", as
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Search again" }).click();
+  // Read on the completion screen, the page's time held there: the results open by themselves
+  // 3.5 s after the result, which would take the progress screen (and any Stop on it) away.
+  await holdClock(page);
   await search(page, "One More Time");
-  // Read once, the moment the completion screen shows: the results open by themselves a few
-  // seconds later, which would take the progress screen (and any Stop on it) away.
-  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
-  expect(await page.getByRole("button", { name: "Stop", exact: true }).count()).toBe(0);
+  await runUntilResultsButton(page);
+  await expect(page.getByRole("log")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
 });
 
 test("Stop while the picked track is being analysed closes the resume stream", async ({ page }) => {

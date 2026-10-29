@@ -4,9 +4,12 @@ import {
   apiRequests,
   collectProblems,
   dashboardHeading,
+  holdClock,
   loadFixture,
   openPlayer,
+  openResults,
   releaseStream,
+  runUntilResultsButton,
   streamLog,
   useMockApi,
 } from "./mock";
@@ -38,6 +41,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
 }) => {
   const problems = collectProblems(page);
   await useMockApi(page, fixture);
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Some Other Song");
 
@@ -69,15 +73,19 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   await page.keyboard.press("Shift+Tab");
   expect(await other.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
 
-  // Picking it analyses its title and artist, which the API answers with the recording.
+  // Picking it analyses its title and artist, which the API answers with the recording. Its
+  // progress is read with the page's time held (see `holdClock`).
+  await holdClock(page);
   await tracks.getByRole("button", { name: /Bright Lines/ }).click();
+  await runUntilResultsButton(page);
   await expect(page.getByRole("log")).toContainText(
     "Replaying an analysis recorded on 2026-10-22T14:03:00.000Z (commit abc1234)",
   );
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await page.clock.resume();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   await animationsSettled(page);
 
@@ -130,7 +138,7 @@ test("live_disabled is explained, and a live result carries no recording label",
   // Another song, on a server that analyses it live this time: no recording label.
   await page.getByRole("button", { name: "or try a different song" }).click();
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   await openPlayer(page);
@@ -143,7 +151,7 @@ test("live_disabled is explained, and a live result carries no recording label",
   expect(problems).toEqual([]);
 });
 
-test("while a recording plays, the progress screen says it is a replay, not a live analysis", async ({
+test("while a recording plays, the progress screen says it is a replay, not a live analysis, and its button opens the result", async ({
   page,
 }) => {
   const problems = collectProblems(page);
@@ -191,6 +199,18 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   expect(await ready.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   // Still on the progress screen: nothing moved on while it was read.
   await expect(page.getByRole("log")).toBeVisible();
+
+  // "Open the results" shows 0.4 s after the result, and opens it. Clicked directly, with the
+  // clock held well short of the 3.5 s after which the screen moves on by itself: only the
+  // button can have taken the progress screen away. (The Dashboard then loads on the clock.)
+  await page.clock.runFor(400);
+  await page.getByRole("button", { name: "Open the results" }).click();
+  await expect(page.getByRole("log")).toHaveCount(0);
+  await page.clock.resume();
+  await expect(dashboardHeading(page)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
+    "Recorded run · 22 Oct 2026 · replayed",
+  );
   expect(problems).toEqual([]);
 });
 
@@ -223,7 +243,7 @@ test("on a phone, the recording label stays visible on every Player tab", async 
   await page.goto("/");
   await search(page, "Some Other Song");
   await page.getByRole("button", { name: /Bright Lines/ }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await openPlayer(page);
   for (const tab of ["Analysis", "Player", "Connections"]) {
     await page.getByRole("tab", { name: tab }).click();
@@ -237,10 +257,16 @@ test("on a phone, the recording label stays visible on every Player tab", async 
 test("a track picked after the budget tripped replays its recording", async ({ page }) => {
   const problems = collectProblems(page);
   await useMockApi(page, loadFixture("budget-paused-picker"));
+  await page.clock.install();
   await page.goto("/");
   await search(page, "Bright Lines");
-  // The studio take (2001), the one with a recording.
-  await page.getByRole("option", { name: /Test Artist • 2001/ }).click();
+  // The studio take (2001), the one with a recording. Its progress is read with the page's time
+  // held (see `holdClock`), once the picker's options are in.
+  const take = page.getByRole("option", { name: /Test Artist • 2001/ });
+  await expect(take).toBeVisible();
+  await holdClock(page);
+  await take.click();
+  await runUntilResultsButton(page);
 
   // The resume is refused (budget spent); the recording of that very track is replayed.
   await expect(page.getByRole("log")).toContainText(
@@ -250,7 +276,8 @@ test("a track picked after the budget tripped replays its recording", async ({ p
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await page.clock.resume();
+  await openResults(page);
   await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
     "Recorded run · 22 Oct 2026 · replayed",
   );

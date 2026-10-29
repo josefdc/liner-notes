@@ -7,7 +7,7 @@ import {
   ReplayRecord,
   RunResponse,
 } from "@liner-notes/contract";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { replayedAnalysis, replayNotice } from "../../apps/api/src/replay/player";
 import {
   contractMisfits,
@@ -311,6 +311,90 @@ export function dashboardHeading(page: Page) {
     .getByRole("heading", { level: 1 });
 }
 
+/**
+ * Opens the results of a run that has completed, with "Open the results": `opened` is what shows
+ * once they are open (the Dashboard's heading, or the screen that says its code could not be
+ * loaded). The progress screen also opens them by itself 3.5 s after the run completes: on a
+ * busy machine, a click still being retried then (the button not yet where a click lands) finds
+ * the button gone, and would wait for it until the test times out. So the click is tried a
+ * little at a time, until the results are shown, by the click or by themselves: it returns once
+ * `opened` is visible, however long the first paint of the results takes. A test of the button
+ * itself clicks it directly, with the page's clock held so that nothing else opens them.
+ * It returns at once if `opened` is already visible: a test that leaves one Dashboard for a new
+ * run first waits until that Dashboard is gone.
+ */
+export async function openResults(page: Page, opened: Locator = dashboardHeading(page)) {
+  const button = page.getByRole("button", { name: "Open the results" });
+  await expect(async () => {
+    if (await opened.isVisible()) return;
+    if (await button.isVisible()) await button.click({ timeout: 2_000 });
+    await expect(opened).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
+/**
+ * Holds the page's time from before a run completes, so that its progress screen stays: the
+ * screen would otherwise open the results by itself 3.5 s after the result. The page's clock
+ * must have been installed (`page.clock.install()`) before the page loaded;
+ * `page.clock.resume()` lets its time run again.
+ */
+export async function holdClock(page: Page) {
+  // A moment just ahead of the page's time, which runs on meanwhile. If that moment has passed
+  // when the pause lands (a busy machine), the page is paused all the same and the call refuses
+  // to go back: the second try, from the held time, lands.
+  await expect(async () => {
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
+  }).toPass({ timeout: 5_000 });
+}
+
+/**
+ * With the page's time held (`holdClock`), runs it on 50 ms at a time (the mocked stream's
+ * pace) until the run has ended, then checks that "Open the results" shows: it does 0.4 s after
+ * the result, well short of the 3.5 s after which the results open by themselves, so the progress
+ * screen is still there to be read. A run that ends otherwise fails at once, naming the screen
+ * shown instead ("The analysis did not finish", or results opened without the button).
+ * At most `maxMs` of the page's time is run (by default 2.5 s: a few dozen events at the mocked
+ * pace, then the 0.4 s), so a run that stalls on a timer fails here as it would on a real clock;
+ * a test whose stream is longer passes its own budget.
+ */
+export async function runUntilResultsButton(
+  page: Page,
+  { maxMs = 2_500 }: { maxMs?: number } = {},
+) {
+  const button = page.getByRole("button", { name: "Open the results" });
+  const failed = page.getByRole("heading", { name: "The analysis did not finish" });
+  const results = dashboardHeading(page);
+  let ran = 0;
+  while (!(await button.or(failed).or(results).first().isVisible())) {
+    expect(
+      ran,
+      `"Open the results", an error or the results show within ${maxMs} ms of the page's time (${ran} ms run)`,
+    ).toBeLessThan(maxMs);
+    await page.clock.runFor(50);
+    ran += 50;
+  }
+  expect(
+    await failed.isVisible(),
+    `the run ended in an error after ${ran} ms of the page's time: "The analysis did not finish"`,
+  ).toBe(false);
+  expect(
+    await results.isVisible(),
+    `the results opened without "Open the results", after ${ran} ms of the page's time`,
+  ).toBe(false);
+  await expect(button).toBeVisible({ timeout: 1_000 });
+}
+
+/**
+ * Waits until a run has reached its result: "Open the results" on the completion screen, or the
+ * Dashboard that screen opens by itself 3.5 s later. For a test whose subject came before the
+ * result and runs on the page's own time (a wait or a countdown), so that time is not held.
+ */
+export async function resultReached(page: Page, { timeout }: { timeout?: number } = {}) {
+  await expect(
+    page.getByRole("button", { name: "Open the results" }).or(dashboardHeading(page)).first(),
+  ).toBeVisible({ timeout });
+}
+
 /** Runs a search against the mocked stream and continues to the Dashboard. */
 export async function analyzeAndOpenDashboard(
   page: Page,
@@ -320,7 +404,7 @@ export async function analyzeAndOpenDashboard(
   if (reload) await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   // The connected tracks follow once the link reader has loaded.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);

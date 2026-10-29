@@ -3,9 +3,11 @@ import {
   analyzeAndOpenDashboard,
   animationsSettled,
   collectProblems,
-  dashboardHeading,
+  openResults,
+  holdClock,
   loadFixture,
   openPlayer,
+  runUntilResultsButton,
   useMockApi,
 } from "./mock";
 
@@ -105,21 +107,23 @@ test("a recorded cover the archive does not hold (404) is not available, with no
 }) => {
   const requests = await archive(page, 404);
   await useMockApi(page, recorded());
+  await page.clock.install();
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Bright Lines");
-  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   // The analysis screen's cover of the track: nothing drawn for it, never a broken image. The
-  // screen moves on to the Dashboard by itself a few seconds after the result: checked before.
+  // screen moves on to the Dashboard by itself 3.5 s after the result: checked before, with the
+  // page's time held there (see `holdClock`), then the results are opened.
+  await holdClock(page);
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await runUntilResultsButton(page);
   const proceed = page.getByRole("button", { name: "Open the results" });
-  await expect(proceed).toBeVisible();
   await expect.poll(() => requests.length).toBeGreaterThan(0);
   const quick = { timeout: 1500 };
   await expect.poll(() => archiveImages(page), quick).toEqual([]);
   await expect.poll(() => brokenImages(page), quick).toEqual([]);
   await expect(proceed).toBeVisible({ timeout: 1 });
-  await expect(dashboardHeading(page)).toBeVisible({
-    timeout: 10_000,
-  });
+  await page.clock.resume();
+  await openResults(page);
   await animationsSettled(page);
 
   await expect(page.getByText("Cover not available")).toBeVisible();

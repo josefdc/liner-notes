@@ -170,7 +170,8 @@ const chainPriority = new AsyncLocalStorage<true>();
  * waits its turn ahead of any other request (the researcher's), so another run's research never
  * pushes a chain past its deadline. The order within each lane stays first come, first served.
  * The chain's relations map reads (`MapRead`) wait in a lane of their own, after every chain's
- * own reads and before the others.
+ * own reads and before the others; the one the chain waits for (`ahead`, the search for the
+ * dates of the recording's own relations) waits in the chain's lane, in turn with its reads.
  */
 export function withMusicBrainzPriority<T>(fn: () => T): T {
   return chainPriority.run(true, fn);
@@ -181,13 +182,18 @@ export function withMusicBrainzPriority<T>(fn: () => T): T {
  * chain's own reads, before the researchers'), or with `ahead` in the chain's own lane, in turn
  * with the chain's reads; it is sent only while the pacing clock is at most `notAfter` (else it
  * is refused when its turn comes, and takes no slot). When MusicBrainz sheds it, it is asked
- * again once, after the Retry-After (at most 2 s), only when that still starts by `notAfter`:
- * else the map does without it.
+ * again once, after the Retry-After (at most MB_RETRY_WAIT_MAX_MS), only when that still starts
+ * by `notAfter`: else the map does without it. With `retry` false it is not asked again here:
+ * the caller does, if it will.
  */
 export interface MapRead {
   notAfter: number;
   /** Waits in the chain's own lane rather than the map's. */
   ahead?: boolean;
+  /** False: a shed read is not asked again here (default true). */
+  retry?: boolean;
+  /** The most it waits for an answer, below the client's own request timeout. */
+  timeoutMs?: number;
 }
 
 /** Why a map read was not sent: its turn came after its `notAfter`. */
@@ -544,12 +550,13 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** The longest wait honoured from a Retry-After before the one retry. */
-const MAX_RETRY_WAIT_MS = 2000;
+export const MB_RETRY_WAIT_MAX_MS = 2000;
 
 /**
  * A rate-limited GET to the MusicBrainz API (JSON), with a timeout. When MusicBrainz sheds the
  * request (503, or 429) it is retried once, after its Retry-After (at most 2 s), through the
- * queue again; a map read (`map`, see MapRead) only when that wait still ends by its `notAfter`.
+ * queue again; a map read (`map`, see MapRead) only when that wait still ends by its `notAfter`,
+ * and never with `retry` false.
  */
 async function mbFetch<T>(
   path: string,
@@ -572,6 +579,7 @@ async function mbFetch<T>(
           rateLimitStatuses: [429, 503],
           scrub,
           signal,
+          ...(map?.timeoutMs ? { timeoutMs: map.timeoutMs } : {}),
         });
       },
       signal,
@@ -583,9 +591,9 @@ async function mbFetch<T>(
     } catch (error) {
       // Stopped by its signal: never retried.
       if (signal?.aborted || !isSourceError(error, "rate_limited")) throw error;
-      const wait = Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS);
+      const wait = Math.min(error.retryAfterMs ?? MB_RETRY_WAIT_MAX_MS, MB_RETRY_WAIT_MAX_MS);
       // A map read is asked again only when it can still start by its limit.
-      if (map && pacingClock() + wait > map.notAfter) throw error;
+      if (map && (map.retry === false || pacingClock() + wait > map.notAfter)) throw error;
       await delay(wait, signal);
       return await attempt();
     }

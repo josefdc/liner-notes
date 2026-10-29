@@ -41,14 +41,15 @@ export function laneOf(isCurrent: boolean, linkType: LinkType | null): Lane {
 
 export type Orientation = 'horizontal' | 'vertical';
 
-/** Tailwind's md breakpoint: below it the axis is vertical. */
-export const MD_PX = 768;
 /** A panel narrower than this has no room for years side by side: its axis is vertical too. */
 export const NARROW_PANEL_PX = 600;
 
-/** The axis's direction: vertical below md, or in a panel too narrow for years side by side. */
-export function orientationFor(viewportWidth: number, panelWidth: number): Orientation {
-  return viewportWidth < MD_PX || panelWidth < NARROW_PANEL_PX ? 'vertical' : 'horizontal';
+/**
+ * The axis's direction: vertical below md (`mdUp` false: the page's own breakpoint, 48rem), or
+ * in a panel too narrow for years side by side.
+ */
+export function orientationFor(mdUp: boolean, panelWidth: number): Orientation {
+  return !mdUp || panelWidth < NARROW_PANEL_PX ? 'vertical' : 'horizontal';
 }
 
 /**

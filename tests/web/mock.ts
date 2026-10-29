@@ -311,6 +311,21 @@ export function dashboardHeading(page: Page) {
     .getByRole("heading", { level: 1 });
 }
 
+/**
+ * Opens the Dashboard of a run that has completed, with "Open the results". The progress screen
+ * also opens it by itself 3.5 s after the run completes: on a busy machine, a click still being
+ * retried then (the button not yet where a click lands) finds the button gone, and would wait
+ * for it until the test times out. So the click is tried a little at a time, until the
+ * Dashboard is open, by the click or by itself.
+ */
+export async function openResults(page: Page) {
+  const button = page.getByRole("button", { name: "Open the results" });
+  await expect(async () => {
+    if (await dashboardHeading(page).isVisible()) return;
+    await button.click({ timeout: 2_000 });
+  }).toPass();
+}
+
 /** Runs a search against the mocked stream and continues to the Dashboard. */
 export async function analyzeAndOpenDashboard(
   page: Page,
@@ -320,7 +335,7 @@ export async function analyzeAndOpenDashboard(
   if (reload) await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toBeVisible();
   // The connected tracks follow once the link reader has loaded.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);

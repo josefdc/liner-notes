@@ -8,6 +8,7 @@ import {
   dashboardHeading,
   fullResultData,
   loadFixture,
+  openResults,
   releaseStream,
   replayedRecording,
   showcaseRecordings,
@@ -263,7 +264,7 @@ for (const [width, height] of [
         .getByTestId("node-detail")
         .getByRole("button", { name: "Analyze this track" })
         .click();
-      await page.getByRole("button", { name: "Open the results" }).click();
+      await openResults(page);
       await expect(dashboardHeading(page)).toBeFocused();
       expect(await analyses(page)).toHaveLength(1);
       expect((await analyses(page))[0]).toContain(`trackId=${SOURCE_ID}`);
@@ -321,7 +322,7 @@ for (const [width, height] of [
       await page.getByRole("button", { name: "New search" }).click();
       await page.getByPlaceholder(/Song title/).fill("Bright Lines");
       await page.getByRole("button", { name: "Analyze", exact: true }).click();
-      await page.getByRole("button", { name: "Open the results" }).click();
+      await openResults(page);
       await expect(dashboardHeading(page)).toBeVisible();
       await expect(trail).toHaveCount(0);
       // (The page's request log starts at the reload.)
@@ -455,7 +456,7 @@ async function analyseSourceFromMap(page: Page) {
   await card.focus();
   await page.keyboard.press("Enter");
   await page.getByTestId("node-detail").getByRole("button", { name: "Analyze this track" }).click();
-  await page.getByRole("button", { name: "Open the results" }).click();
+  await openResults(page);
   await expect(dashboardHeading(page)).toHaveText("Bright Lines");
   await expect(trailNav(page).getByRole("link")).toHaveCount(2);
 }
@@ -489,7 +490,7 @@ test.describe("at 1440 px", () => {
     await analyseSourceFromMap(page);
     // A track analysed from a Dashboard card starts no chain; back to it, it still has none.
     await page.getByRole("button").filter({ hasText: "Relation:" }).click();
-    await page.getByRole("button", { name: "Open the results" }).click();
+    await openResults(page);
     await expect(dashboardHeading(page)).toHaveText("Third Track");
     await expect(trailNav(page)).toHaveCount(0);
     await page.getByRole("button", { name: "New search" }).click();
@@ -607,7 +608,7 @@ test.describe("at 390 px", () => {
       .getByTestId("node-detail")
       .getByRole("button", { name: "Analyze this track" })
       .click();
-    await page.getByRole("button", { name: "Open the results" }).click();
+    await openResults(page);
     await page.getByRole("button", { name: "View full analysis" }).click();
     await expect(playerTab).toHaveAttribute("aria-selected", "true");
 
@@ -721,22 +722,25 @@ for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecording
         expect(box.width).toBeGreaterThanOrEqual(width - 2);
         expect(box.height).toBeGreaterThanOrEqual(height * 0.5);
         await animationsSettled(page);
+        // Every recorded track is on the map, an undated one too: none is dropped or doubled.
+        // (Polled: the map's box is shown a frame or two before the map is drawn in it, once
+        // its size is known; on a busy machine a single read can come in between.)
+        const nodes = graph.locator("g.nodes > g");
+        await expect(nodes).toHaveCount(nodeIds.length);
+        await expect
+          .poll(() =>
+            nodes.evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id"))),
+          )
+          .toEqual(expect.arrayContaining(nodeIds));
+        // At rest no card is cut by the window's map, and the analysed track's card is in it.
+        await mapAtRest(graph);
         const cards = await graph.locator("g.nodes > g rect.card").evaluateAll((all) =>
           all.map((card) => {
             const b = card.getBoundingClientRect();
             return { id: card.parentElement?.getAttribute("data-node-id"), b };
           }),
         );
-        // Every recorded track is on the map, an undated one too: none is dropped or doubled.
-        expect(
-          await graph
-            .locator("g.nodes > g")
-            .evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id"))),
-        ).toEqual(expect.arrayContaining(nodeIds));
-        await expect(graph.locator("g.nodes > g")).toHaveCount(nodeIds.length);
         expect(cards).toHaveLength(nodeIds.length);
-        // At rest no card is cut by the window's map, and the analysed track's card is in it.
-        await mapAtRest(graph);
         expect(await cardsCutAtRest(graph), `${slug}: cards cut at rest`).toEqual([]);
         expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
         expect(await analysedAtRest(graph), `${slug}: the analysed track at rest`).toBe("in");

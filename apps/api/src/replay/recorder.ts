@@ -23,7 +23,8 @@
  *   out: a viewer of the replay did neither;
  * - the excerpt of a web search result (a `tavily` item of the web or editorial tier: text the
  *   search fetched from a third-party page, never a source's API, the model or the app) that
- *   holds, outside its links, a run the long-token rule matches or a long base64 value, becomes
+ *   holds, outside its links, a run the long-token rule matches or a long base64 value (one with
+ *   a piece of 12 or more characters between its "+" and "/"), becomes
  *   "[excerpt withheld: it held a token-shaped run]" (WITHHELD_EXCERPT), whole, in every place
  *   the item appears; its title, url and source are kept (`withoutPageTokens`). A page's text
  *   may run words together ("StudioPiano2NotesGuitar2Tabs…") into that shape, and no word of a
@@ -183,11 +184,11 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
 /**
  * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
  * message may not: reasonIssue). A bare `key` parameter is one only with a token-shaped value:
- * 16 or more characters with a digit and a letter (`?key=Am`, `?key=The-Verve-Bitter-Sweet`
- * name a musical key or a page).
+ * 16 or more characters in which letters and digits alternate at least twice (`?key=Am`,
+ * `?key=the-verve-bitter-sweet-symphony-1997` name a musical key or a page).
  */
 const SIGNED_URL =
-  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{16})/i;
+  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=(?=(?:[A-Za-z0-9_-]*?(?:[A-Za-z]\d|\d[A-Za-z])){2})[A-Za-z0-9_-]{16})/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -279,6 +280,20 @@ function tokenSegment(segment: string): boolean {
   return alternations.length >= 4;
 }
 
+/**
+ * True when `text` holds a random-looking base64url run: 32 or more letters, digits, "-" and "_"
+ * in which a letter and a digit meet at least once per 8 characters (a key a link carries in its
+ * fragment, `#Ab3dEf6hIj9lMn2pQr5t-Uv8x…`). A section anchor of words and years
+ * (`#Track_listing_and_formats_1997_UK_CD_single`, `#Charts_of_the_1960s_1970s_1980s_and_1990s`)
+ * is not one.
+ */
+function randomRun(text: string): boolean {
+  return [...text.matchAll(/[A-Za-z0-9_-]{32,}/g)].some(([run]) => {
+    const alternations = run.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
+    return alternations.length * 8 >= run.length;
+  });
+}
+
 /** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
 const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
 
@@ -288,16 +303,29 @@ const LONG_TOKEN = (SECRET_SHAPES.find(([what]) => what === "a long token") as [
 /** Every other rule of SECRET_SHAPES: what a page's excerpt holding one is refused for, by name. */
 const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
 
+/** The runs of a text the long-token rule matches. */
+const LONG_TOKENS = new RegExp(LONG_TOKEN.source, "g");
+
 /**
- * The runs of a text the long-token rule matches, and the base64 values of 40 or more characters
- * with a "+" or "/" in them, mixed case and a digit (`openssl rand -base64 48`, as
- * RUN_TOKEN_SECRET is made), whose pieces between "+" and "/" may all be shorter than the
- * long-token rule reads.
+ * The base64 values of a text: runs of 40 or more characters with a "+" or "/" in them, mixed
+ * case and a digit (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made), whose pieces
+ * between "+" and "/" may all be shorter than the long-token rule reads. A run counts only when
+ * one of its pieces has 12 or more characters (BASE64_PIECE): words joined by "/" or "+" (a chord
+ * line "Am/G/Fmaj7/C/…", a search "Bitter+Sweet+Symphony+…", a breadcrumb) are text.
  */
-const TOKEN_RUNS = [
-  new RegExp(LONG_TOKEN.source, "g"),
-  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g,
-];
+const BASE64_RUNS =
+  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g;
+const BASE64_PIECE = 12;
+
+/** The spans of `text` that are long token-shaped runs (LONG_TOKENS, BASE64_RUNS). */
+function tokenSpans(text: string): Array<readonly [number, number]> {
+  const base64 = [...text.matchAll(BASE64_RUNS)].filter((m) =>
+    m[0].split(/[+/]/).some((piece) => piece.length >= BASE64_PIECE),
+  );
+  return [...text.matchAll(LONG_TOKENS), ...base64].map(
+    (m) => [m.index, m.index + m[0].length] as const,
+  );
+}
 
 /**
  * What a web search page's excerpt that held a long token-shaped run is recorded as, whole: no
@@ -372,9 +400,7 @@ function tokenRuns(text: string): number {
   return Math.max(
     ...readings(outside).map((reading) => {
       // Runs both rules match (a base64 value with a piece of 40 or more) count once.
-      const spans = TOKEN_RUNS.flatMap((pattern) =>
-        [...reading.matchAll(pattern)].map((m) => [m.index, m.index + m[0].length] as const),
-      ).sort((a, b) => a[0] - b[0]);
+      const spans = tokenSpans(reading).sort((a, b) => a[0] - b[0]);
       let runs = 0;
       let end = -1;
       for (const [start, stop] of spans) {
@@ -497,7 +523,8 @@ function citedEvidenceIds(value: unknown, ids = new Set<string>()): Set<string> 
  * Why a link holds something shaped like a secret, or null: a signed URL or a key or token
  * parameter, a user name or password, a secret shape in its query, or in its path or fragment
  * (read with "+" kept, and where a long run is judged by `tokenSegment`, so a page's slug of
- * words or a section anchor is not one).
+ * words or a section anchor is not one), or a random-looking base64url run in its fragment
+ * (`randomRun`).
  */
 function linkSecret(url: string): string | null {
   if (SIGNED_URL.test(url)) return "a signed URL";
@@ -524,6 +551,7 @@ function linkSecret(url: string): string | null {
     if (decodedKeepingPlus(part).split("/").some(tokenSegment))
       return `a token in a link's ${where}`;
   }
+  if (randomRun(decodedKeepingPlus(parsed.hash.slice(1)))) return "a token in a link's fragment";
   return null;
 }
 

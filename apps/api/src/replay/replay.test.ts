@@ -1706,6 +1706,7 @@ describe("a long token-shaped run in a web page's excerpt", () => {
   const TOKEN = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
   const CONFIGURED = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJDx7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
   const CONFIGURED_PLUS = "Ab3dEf6hIj9lMn2pQr5t+Uv8xYz1bCd4fGh7K0mNqRs/Tu9Vw2Xy5Za8Bc1De3Fg4Hi5J";
+  const FRAGMENT_KEY = "Ab3dEf6hIj9lMn2pQr5t-Uv8xYz1bCd4fGh7K0mNq_RsTu";
 
   /**
    * The demo recording as the live run it came from, citing `items` besides its own evidence:
@@ -2064,12 +2065,25 @@ describe("a long token-shaped run in a web page's excerpt", () => {
         "https://genius.com/Daft-punk-one-more-time-lyrics#someone@example.com",
         "an e-mail address in a link",
       ],
+      // A base64url key with "-" and "_" (as a file host's link carries its decryption key).
+      [
+        `https://genius.com/Daft-punk-one-more-time-lyrics#${FRAGMENT_KEY}`,
+        "a token in a link's fragment",
+      ],
     ];
     for (const [link, reason] of cases) {
       const onPage = onExcerpts(refusal(() => build(liveRunWith([page(`See ${link} now.`)]))));
       expect(onPage, link).toHaveLength(3);
       for (const found of onPage) expect(found, link).toMatch(new RegExp(`: ${reason}$`));
     }
+  });
+
+  it("refuses a web page whose own url carries a token in its fragment", () => {
+    const url = `https://songs.example.com/file/AbCdEfGh#${FRAGMENT_KEY}`;
+    const reasons = refusal(() =>
+      build(liveRunWith([page("A shared file.", { id: `tavily:${url}`, url })])),
+    );
+    expect(reasons.filter((r) => /evidence(\[\d+\])?\.url: /.test(r))).toHaveLength(3);
   });
 
   it("keeps a page link whose path, fragment or key parameter only looks like one", () => {
@@ -2079,8 +2093,11 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       "https://www.last.fm/music/Basic+Channel/_/Phylyps+Trak",
       // A section anchor is a page's own name, as a path segment is.
       "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Track_listing_and_formats_1997_UK_CD_single",
-      // A key parameter that is a slug (no digit), or token-shaped but under 16 characters.
+      "https://en.wikipedia.org/wiki/Billboard_charts#Charts_of_the_1960s_1970s_1980s_and_1990s",
+      // A key parameter that is a slug of words (with a year or not), or token-shaped but under
+      // 16 characters.
       "https://www.whosampled.com/sample/123/?key=The-Verve-Bitter-Sweet",
+      "https://www.whosampled.com/sample/123/?key=the-verve-bitter-sweet-symphony-1997",
       "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1",
       "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1Ui5",
     ]) {
@@ -2137,6 +2154,42 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     expect(
       reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: a signed URL$/.test(r)),
     ).toHaveLength(3);
+  });
+
+  it('keeps ordinary text joined by "/" or "+": a chord line, a search, a breadcrumb', () => {
+    for (const excerpt of [
+      "Intro: Am/G/Fmaj7/C/Am/G/Fmaj7/C/Dm7/G7/Em7/Am7/Dm7/G7, then the verse.",
+      "Search: Bitter+Sweet+Symphony+Remastered+2016+The+Verve lyrics and chords",
+      "Home/Music/Daft/Punk/Discovery/2001/One/More/Time/Lyrics and chords",
+    ]) {
+      const kept = build(liveRunWith([page(excerpt)]));
+      expect(excerpts(kept.record), excerpt).toEqual(Array(3).fill(excerpt));
+      expect(kept.withheldExcerpts, excerpt).toEqual([]);
+      // Cited, it is kept too: the recording is not refused.
+      const cited = build(
+        liveRunWith([page(excerpt)], (analysis) => analysis.claims![0].evidenceIds.push(PAGE_ID)),
+      );
+      expect(excerpts(cited.record), excerpt).toEqual(Array(3).fill(excerpt));
+    }
+  });
+
+  it("withholds an editorial-tier page's excerpt as a web-tier one, and refuses it when cited", () => {
+    // An editorial page is on an allow-listed site (a web-tier page may be on any).
+    const url = "https://en.wikipedia.org/wiki/Discovery_(Daft_Punk_album)";
+    const id = `tavily:${url}`;
+    const editorial = page(PAGE_TEXT(MENU_RUN), { id, url, sourceTier: "editorial" });
+    const built = build(liveRunWith([editorial]));
+    expect(excerpts(built.record, id)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: id, runs: 1 }]);
+    const onPage = onExcerpts(
+      refusal(() =>
+        build(liveRunWith([editorial], (analysis) => analysis.claims![0].evidenceIds.push(id))),
+      ),
+    );
+    expect(onPage).toHaveLength(3);
+    for (const reason of onPage) {
+      expect(reason).toMatch(/: a cited page excerpt holds a long token$/);
+    }
   });
 
   it("counts every run in the excerpts it withheld, in items that share an id", () => {

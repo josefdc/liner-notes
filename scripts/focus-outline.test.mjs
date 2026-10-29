@@ -1,10 +1,12 @@
 // Every element of the web app keeps an outline that forced-colors mode (Windows High Contrast)
 // can draw when it has the keyboard focus. That mode drops box-shadow, so the focus-visible:ring-*
-// rings disappear and the outline is the only focus indicator left. What takes it away, in any
-// spelling, fails here: an `outline-none` / `outline-0` class (with any variant, `!` or arbitrary
-// value), an outline set to none, 0, unset or initial in a style (JSX, the DOM, d3) or a
-// stylesheet (also through @apply), a class name built at run time from `outline-`, and
-// `forced-color-adjust: none`, under which the outline stays transparent.
+// rings disappear and the outline is the only focus indicator left. What takes it away fails
+// here, in the spellings CASES lists: an outline, outline-style or outline-width whose value has
+// a `none` or a zero length in any unit, or resets it (unset, initial, inherit), in a stylesheet,
+// a JSX style, the DOM or d3, through var() too; the same as a class (`outline-none`,
+// `outline-0`, `outline-[0px]`, `[outline:2px_none]`, any variant, `!`, @apply); `all: unset`
+// or `initial`; any `forced-color-adjust` but `auto`, under which the outline stays transparent;
+// and a class name built at run time from `outline-`.
 // `focus-visible:outline-hidden` keeps a transparent outline that only forced-colors mode draws,
 // and looks the same as outline-none otherwise. A bare `outline-hidden` would draw it round the
 // element all the time in forced-colors mode, focused or not, so it takes a focus variant.
@@ -17,44 +19,27 @@ import { describe, expect, it } from "vitest";
 import { classStrings } from "../apps/web/config/classes.mjs";
 import { SRC_DIR } from "../apps/web/config/theme.mjs";
 
-/** A value that removes the outline: none, a zero width, or the initial value (none). */
-const NONE = String.raw`(?:none|0(?:\.0+)?(?:px|r?em)?(?![\w.%])|unset|initial)`;
-/** A Tailwind variant chain: `md:`, `focus-visible:`, `[&:focus]:`, `group-focus:`, ... */
-const VARIANTS = String.raw`((?:(?:\[[^\]\s]*\]|[^\s:\[]+):)*)`;
-/** outline-none, outline-0 and [outline:none] / [outline-style:none] / [outline-width:0]. */
-const CLASS_NONE = new RegExp(
-  String.raw`(?:^|\s)(${VARIANTS}!?(?:outline-(?:none|0)|\[outline(?:-style|-width)?:${NONE}[^\]]*\])!?)(?=\s|$)`,
-  "g",
-);
-const CLASS_HIDDEN = new RegExp(String.raw`(?:^|\s)${VARIANTS}!?outline-hidden!?(?=\s|$)`, "g");
-const CLASS_ADJUST = new RegExp(
-  String.raw`(?:^|\s)(${VARIANTS}!?forced-color-adjust-none!?)(?=\s|$)`,
-  "g",
-);
-/**
- * An outline removed in a style, wherever it is written: `outline: none` in CSS, `outline: 0`
- * in a JSX style object, `el.style.outline = 'none'`, `.style('outline', () => 'none')`,
- * `setProperty('outline-width', '0')`, `[outline:none]`. Not a custom property (`--x-outline`).
- */
-const STYLE_NONE = new RegExp(
-  String.raw`(?<![\w-])outline(?:-?(?:style|width))?["'\x60]?\s*[:=,]\s*(?:\([^)]*\)\s*=>\s*)?["'\x60]?\s*${NONE}`,
-  "gi",
-);
-const STYLE_ADJUST = /(?<![\w-])forced-?color-?adjust["'\x60]?\s*[:=,]\s*["'\x60]?\s*none/gi;
+/** A value token that removes the outline: none, a zero length in any unit, or a reset. */
+const REMOVES = /^(?:none|unset|initial|inherit|[+-]?(?:0+(?:\.0*)?|\.0+)(?:[a-z]+|%)?)$/i;
+/** A declaration that can remove it, wherever it is written (CSS, JSX, el.style, d3). */
+const PROPERTY =
+  /(?<![\w-])(outline(?:-?(?:style|width))?|all|forced-?color-?adjust)["'\x60]?\s*[:=,]\s*/gi;
 /** A class name built at run time: `outline-${x}`, 'focus:outline-' + x. */
 const DYNAMIC = /outline-\$\{|["'\x60][^"'\x60\n]*outline-["'\x60]\s*\+/g;
 const APPLY = /@apply\s+([^;}]+)/g;
+/** Custom properties, for the var() an outline's value reads. */
+const CUSTOM = /["']?(--[\w-]+)["']?\s*:\s*["']?([^;}'",]+)/g;
 
 /**
- * Places the guard lets through, each with its reason; each must still be there as many times,
- * so an entry cannot outlive the code it is for.
+ * Places the guard lets through, each with its reason: the source line it must be, and how many
+ * times, so an entry covers that line only and cannot outlive it.
  */
 const ALLOWED = [
   {
     site: "components/GenealogyGraph.tsx",
-    found: "outline', 'none",
-    count: 2,
-    why: "the map's SVG cards and links show their focus with a ring and a band of their own; forced-colors mode does not recolour SVG, so an outline there would be transparent",
+    line: "selection.style('outline', 'none');",
+    count: 1,
+    why: "withoutOutline, for the map's SVG cards and links, which show their focus with a ring and a band of their own; forced-colors mode does not recolour SVG, so an outline there would be transparent",
   },
 ];
 
@@ -93,17 +78,101 @@ function withoutComments(text, path) {
   return out + text.slice(at);
 }
 
-/** The problems in a class string. */
-function classProblems(classes) {
-  const found = [];
-  for (const [, token] of classes.matchAll(CLASS_NONE)) found.push(`class ${token}`);
-  for (const [, token] of classes.matchAll(CLASS_ADJUST)) found.push(`class ${token}`);
-  for (const [whole, variants] of classes.matchAll(CLASS_HIDDEN)) {
-    if (!variants.includes("focus")) {
-      found.push(`class ${whole.trim()} without a focus variant`);
-    }
+/**
+ * A value's tokens: var() replaced by the custom property's value (and its fallback), other
+ * functions (colours, calc) left out, then split on whitespace, `_`, `,` and `/`.
+ */
+function tokens(value, vars) {
+  let text = value;
+  for (let i = 0; i < 5 && /var\(/.test(text); i += 1) {
+    text = text.replace(
+      /var\(\s*(--[\w-]+)\s*(?:,([^()]*))?\)/g,
+      (_, name, fallback) => ` ${vars.get(name) ?? ""} ${fallback ?? ""} `,
+    );
   }
-  return found;
+  for (let i = 0; i < 5 && /[\w-]+\([^()]*\)/.test(text); i += 1) {
+    text = text.replace(/[\w-]+\([^()]*\)/g, " ");
+  }
+  return text
+    .replace(/["'\x60]/g, " ")
+    .split(/[\s_,/]+/)
+    .map((token) => token.replace(/^!|!(?:important)?$/i, ""))
+    .filter(Boolean);
+}
+
+/** Whether `property: value` removes the outline. */
+function removes(property, value, vars) {
+  const name = property.toLowerCase().replace(/^forcedcoloradjust$/, "forced-color-adjust");
+  const words = tokens(value, vars);
+  if (name === "all") return words.some((word) => /^(?:unset|initial)$/i.test(word));
+  if (/^forced-?color-?adjust$/.test(name)) {
+    return words.some((word) => !/^(?:auto|important)$/i.test(word));
+  }
+  return words.some((word) => REMOVES.test(word));
+}
+
+/** A declaration's value, from `i`: a quoted string, or up to the end of the declaration. */
+function valueAt(body, from) {
+  let i = from;
+  const arrow = /^\([^)]*\)\s*=>\s*/.exec(body.slice(i));
+  if (arrow) i += arrow[0].length;
+  const quote = body[i];
+  if (quote === '"' || quote === "'" || quote === "`") {
+    const end = body.indexOf(quote, i + 1);
+    return body.slice(i + 1, end < 0 ? undefined : end);
+  }
+  let depth = 0;
+  let j = i;
+  for (; j < body.length; j += 1) {
+    const c = body[j];
+    if (c === "(") depth += 1;
+    else if (c === ")") {
+      if (depth === 0) break;
+      depth -= 1;
+    } else if (depth === 0 && /[;},\]]/.test(c)) break;
+  }
+  return body.slice(i, j);
+}
+
+/** A class token's variant chain and utility (the part after the last top-level colon). */
+function splitClass(token) {
+  let depth = 0;
+  let last = -1;
+  for (let i = 0; i < token.length; i += 1) {
+    const c = token[i];
+    if (c === "[" || c === "(") depth += 1;
+    else if (c === "]" || c === ")") depth -= 1;
+    else if (c === ":" && depth === 0) last = i;
+  }
+  return {
+    variants: token.slice(0, last + 1),
+    utility: token.slice(last + 1).replace(/^!|!$/g, ""),
+  };
+}
+
+/** The problems in a class string, and how many outline-hidden classes it has. */
+function classProblems(classes, vars) {
+  const found = [];
+  let hidden = 0;
+  for (const token of classes.split(/\s+/).filter(Boolean)) {
+    const { variants, utility } = splitClass(token);
+    const arbitrary = /^\[([\w-]+):(.*)\]$/.exec(utility);
+    const valued = /^outline-(?:\[(?:[\w-]+:)?(.*)\]|\((?:[\w-]+:)?(--[\w-]+)\))$/.exec(utility);
+    let bad = false;
+    if (/^outline-(?:none|0)$/.test(utility)) bad = true;
+    else if (/^forced-color-adjust-/.test(utility)) bad = utility !== "forced-color-adjust-auto";
+    else if (arbitrary)
+      bad =
+        /^(?:outline(?:-style|-width)?|all|forced-color-adjust)$/.test(arbitrary[1]) &&
+        removes(arbitrary[1], arbitrary[2], vars);
+    else if (valued) bad = removes("outline", valued[1] ?? `var(${valued[2]})`, vars);
+    else if (utility === "outline-hidden") {
+      hidden += 1;
+      if (!variants.includes("focus")) found.push(`class ${token} without a focus variant`);
+    }
+    if (bad) found.push(`class ${token}`);
+  }
+  return { found, hidden };
 }
 
 /** The web app's source files (tests apart), with their paths from apps/web/src. */
@@ -123,50 +192,69 @@ function sourceFiles() {
   return files;
 }
 
+/** The custom properties the files declare, for var(). */
+function customProperties(files) {
+  const vars = new Map();
+  for (const { path, text } of files) {
+    for (const [, name, value] of withoutComments(text, path).matchAll(CUSTOM)) {
+      vars.set(name, `${vars.get(name) ?? ""} ${value}`);
+    }
+  }
+  return vars;
+}
+
 /**
- * Where a file takes the focus outline away, as "<site>:<line>: <what>", each place once (a
+ * Where a file takes the focus outline away, as { line, what }, each place once (a
  * conditional's branches give its class string more than once). Also counts the
  * outline-hidden classes, to show that the class strings were read.
  */
-function fileProblems({ path, site, text }) {
-  const problems = [];
+function fileProblems({ path, text }, vars = customProperties([{ path, text }])) {
+  const problems = new Map();
   let hidden = 0;
   const body = withoutComments(text, path);
   const lineOf = (index) => body.slice(0, index).split("\n").length;
-  const at = (index, what) =>
-    problems.push(`${site}:${lineOf(index)}: ${what.replace(/\s+/g, " ")}`);
-  for (const pattern of [STYLE_NONE, STYLE_ADJUST]) {
-    for (const match of body.matchAll(pattern)) at(match.index, `style ${match[0]}`);
+  const add = (line, what) => problems.set(`${line}: ${what}`, { line, what });
+  for (const match of body.matchAll(PROPERTY)) {
+    const value = valueAt(body, match.index + match[0].length);
+    if (removes(match[1], value, vars)) {
+      add(lineOf(match.index), `style ${match[1]}: ${value.trim().replace(/\s+/g, " ")}`);
+    }
   }
   if (path.endsWith(".css")) {
     for (const match of body.matchAll(APPLY)) {
-      for (const what of classProblems(` ${match[1]} `)) at(match.index, `@apply ${what}`);
+      for (const what of classProblems(match[1], vars).found) {
+        add(lineOf(match.index), `@apply ${what}`);
+      }
     }
   } else {
-    for (const match of body.matchAll(DYNAMIC))
-      at(match.index, `class built at run time ${match[0]}`);
+    for (const match of body.matchAll(DYNAMIC)) {
+      add(lineOf(match.index), `class built at run time ${match[0]}`);
+    }
     for (const { text: classes, line } of classStrings(text, path)) {
-      hidden += [...classes.matchAll(CLASS_HIDDEN)].length;
-      for (const what of classProblems(classes)) problems.push(`${site}:${line}: ${what}`);
+      const found = classProblems(classes, vars);
+      hidden += found.hidden;
+      for (const what of found.found) add(line, what);
     }
   }
-  return { problems: [...new Set(problems)], hidden };
+  return { problems: [...problems.values()], hidden };
 }
 
 /** The problems in `files` that ALLOWED does not let through, and the allowances used. */
 function outlineProblems(files, allowed = ALLOWED) {
+  const vars = customProperties(files);
   const problems = [];
   const used = new Map(allowed.map((entry) => [entry, 0]));
   let hidden = 0;
   for (const file of files) {
-    const found = fileProblems(file);
+    const found = fileProblems(file, vars);
     hidden += found.hidden;
-    for (const problem of found.problems) {
+    const lines = file.text.split("\n");
+    for (const { line, what } of found.problems) {
       const entry = allowed.find(
-        (one) => problem.startsWith(`${one.site}:`) && problem.includes(one.found),
+        (one) => one.site === file.site && lines[line - 1]?.trim() === one.line,
       );
       if (entry) used.set(entry, used.get(entry) + 1);
-      else problems.push(problem);
+      else problems.push(`${file.site}:${line}: ${what}`);
     }
   }
   return { problems, hidden, used };
@@ -266,6 +354,32 @@ const CASES = [
     `export const A = () => <a className={\`p-2 \${on ? 'outline-none' : ''}\`} />;`,
     true,
   ],
+  // Values read token by token: a none or a zero length anywhere in the value, in any unit.
+  ["v1.tsx", 'export const A = () => <a className="focus-visible:outline-[0px]" />;', true],
+  ["v2.tsx", 'export const A = () => <a className="focus:outline-[0]" />;', true],
+  ["v3.tsx", 'export const A = () => <a className="focus:[outline:0_solid]" />;', true],
+  ["v4.tsx", 'export const A = () => <a className="focus:[outline:2px_none]" />;', true],
+  ["v5.css", ".x:focus { outline: 2px none; }", true],
+  ["v6.css", ".x:focus { outline: solid 0; }", true],
+  ["v7.css", ".x:focus { outline: transparent none; }", true],
+  ["v8.ts", "node.style('outline', '1px none');", true],
+  ["v9.css", ".x:focus { outline-width: 0pt; }", true],
+  ["v10.css", ".x:focus { outline: 0vw solid red; }", true],
+  ["v11.css", ".x { all: unset; }", true],
+  ["v12.tsx", 'export const A = () => <button className="[all:unset]" />;', true],
+  ["v13.css", ":root { --x: none; }\n.x:focus { outline: var(--x); }", true],
+  [
+    "v14.tsx",
+    'export const A = () => <a className="[forced-color-adjust:preserve-parent-color]" />;',
+    true,
+  ],
+  ["v15.css", ".x { forced-color-adjust: preserve-parent-color; }", true],
+  ["v16.css", ".x { all: initial; }", true],
+  ["v17.tsx", "export const A = () => <div style={{ all: 'unset' }} />;", true],
+  ["v18.css", ".x:focus { outline: 0.0em solid; }", true],
+  ["v19.css", ".x:focus { outline: var(--missing, none); }", true],
+  ["v20.tsx", 'export const A = () => <a className="focus:outline-[length:0rem]" />;', true],
+  ["v21.tsx", 'export const A = () => <a className="focus:[outline-style:none]!" />;', true],
   // Prose in a string is read like a class string: reported, the stricter side.
   ["fp3.tsx", "export const HELP = 'Do not use outline-none in this app';", true],
   // Allowed: comments, custom properties, prose, focus variant chains, a transparent colour.
@@ -302,6 +416,25 @@ const CASES = [
     'export const A = () => (\n  <>\n    {/* style={{ outline: 0 }} */}\n    <a href="https://example.com/outline-none">x</a>\n  </>\n);',
     false,
   ],
+  ["s1.css", ".x:focus { outline: 0.5px solid; outline-offset: 0px; }", false],
+  [
+    "s2.tsx",
+    'export const A = () => <a className="focus:outline-[2px] focus:[outline:2px_solid_red]" />;',
+    false,
+  ],
+  ["s3.css", ":root { --ring: 2px solid red; }\n.x:focus { outline: var(--ring); }", false],
+  ["s4.css", ".x { forced-color-adjust: auto; all: revert; }", false],
+  ["s5.ts", "export const both = Promise.all([a, b]);\nexport const opts = { all: true };", false],
+  [
+    "s6.tsx",
+    "export const A = () => <div style={{ forcedColorAdjust: 'auto', outlineOffset: 0 }} />;",
+    false,
+  ],
+  [
+    "s7.tsx",
+    'export const A = () => <a className="forced-color-adjust-auto outline-10" />;',
+    false,
+  ],
   [
     "tw11.tsx",
     'export const A = () => <a className="rounded-sm focus-visible:outline-transparent focus-visible:outline-hidden" />;',
@@ -325,7 +458,7 @@ describe("focus outlines in forced-colors mode", () => {
     expect(problems).toEqual([]);
     expect(hidden, "focus-visible:outline-hidden is found in the source").toBeGreaterThan(20);
     for (const [entry, count] of used) {
-      expect(count, `${entry.site}: "${entry.found}" is let through (${entry.why})`).toBe(
+      expect(count, `${entry.site}: "${entry.line}" is let through (${entry.why})`).toBe(
         entry.count,
       );
     }
@@ -344,13 +477,24 @@ describe("focus outlines in forced-colors mode", () => {
   });
 
   it("let through only what ALLOWED names, as many times as it says", () => {
-    const allowed = [{ site: "a.ts", found: "outline', 'none", count: 1, why: "a test" }];
+    const allowed = [
+      { site: "a.ts", line: "node.style('outline', 'none');", count: 1, why: "a test" },
+    ];
     const files = [
       { path: join(SRC_DIR, "a.ts"), site: "a.ts", text: "node.style('outline', 'none');" },
       { path: join(SRC_DIR, "b.ts"), site: "b.ts", text: "node.style('outline', 'none');" },
+      {
+        path: join(SRC_DIR, "c.ts"),
+        site: "c.ts",
+        text: "node.style('outline', 'none');\nother.style('outline', 'none');",
+      },
     ];
     const { problems, used } = outlineProblems(files, allowed);
-    expect(problems.map((problem) => problem.split(":")[0])).toEqual(["b.ts"]);
+    expect(problems.map((problem) => problem.split(":").slice(0, 2).join(":"))).toEqual([
+      "b.ts:1",
+      "c.ts:1",
+      "c.ts:2",
+    ]);
     expect([...used.values()]).toEqual([1]);
   });
 });

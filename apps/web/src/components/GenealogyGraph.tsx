@@ -110,6 +110,15 @@ function graphNodes(
   return Array.isArray(data?.nodes) ? data.nodes : [];
 }
 
+/**
+ * Takes the outline off a map card or link: each shows its focus with a ring or band of its own
+ * (recoloured for forced-colors mode in index.css). Forced-colors mode does not recolour SVG,
+ * so an outline there would stay transparent. The one place the web app removes an outline.
+ */
+function withoutOutline<T extends { style(name: string, value: string): unknown }>(selection: T) {
+  selection.style('outline', 'none');
+}
+
 // A card: a thumbnail, then the track's title (four lines at most), its artist and year (three
 // lines at most) and a tag for this track or an origin, in the graph's 12 px text.
 const PAD = 6;
@@ -1084,9 +1093,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('stroke-width', 12)
       .attr('vector-effect', 'non-scaling-stroke')
       .style('pointer-events', 'stroke')
-      // No outline: SVG is not recoloured in forced-colors mode, where an outline would be
-      // transparent. A focused link shows its band (its stroke), there too.
-      .style('outline', 'none')
+      .call(withoutOutline)
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
@@ -1118,9 +1125,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('tabindex', -1)
       .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
       .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
-      // No outline: the card's focus ring (.focus-ring, below) shows the focus, in
-      // forced-colors mode too, where an outline on SVG would be transparent.
-      .style('outline', 'none');
+      .call(withoutOutline);
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
     // with their glow; the others outlined in white (3:1 or more on the page).

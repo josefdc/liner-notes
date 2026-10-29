@@ -95,6 +95,7 @@ import {
   publicTextsOf,
   RecordRefused,
   recordedRunId,
+  WITHHELD_EXCERPT,
   withoutMediaFields,
 } from "./recorder.js";
 import {
@@ -1700,6 +1701,11 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     recordRef: null,
     ...edit,
   });
+  // A random run of 44, and a configured credential of 75 (no "+" or "/"), and one made as
+  // `openssl rand -base64 48` makes RUN_TOKEN_SECRET (a "+" and a "/", every piece short).
+  const TOKEN = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
+  const CONFIGURED = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJDx7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
+  const CONFIGURED_PLUS = "Ab3dEf6hIj9lMn2pQr5t+Uv8xYz1bCd4fGh7K0mNqRs/Tu9Vw2Xy5Za8Bc1De3Fg4Hi5J";
 
   /**
    * The demo recording as the live run it came from, citing `items` besides its own evidence:
@@ -1721,29 +1727,46 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     const events = [...fixture.events.slice(0, at), ...streamed, ...fixture.events.slice(at)];
     return fixtureAsLiveRun({ ...fixture, analysis, events }, "One More Time Daft Punk");
   }
-  const build = ({ run, events }: ReturnType<typeof liveRunWith>) =>
-    buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets: [] });
-  const excerpts = (built: ReturnType<typeof build>["record"]) => {
+  const build = ({ run, events }: ReturnType<typeof liveRunWith>, secrets: string[] = []) =>
+    buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets });
+  const excerpts = (built: ReturnType<typeof build>["record"], id = PAGE_ID) => {
     const streamed = built.events.flatMap(({ event }) =>
-      event.type === "evidence" && event.evidence.id === PAGE_ID ? [event.evidence.excerpt] : [],
+      event.type === "evidence" && event.evidence.id === id ? [event.evidence.excerpt] : [],
     );
     const complete = built.events.find((e) => e.event.type === "complete")?.event as
       | { data: TrackAnalysis }
       | undefined;
     const inResult = (analysis: TrackAnalysis | undefined) =>
-      (analysis?.evidence ?? []).filter((e) => e.id === PAGE_ID).map((e) => e.excerpt);
+      (analysis?.evidence ?? []).filter((e) => e.id === id).map((e) => e.excerpt);
     return [...streamed, ...inResult(complete?.data), ...inResult(built.analysis)];
   };
+  /** The reasons a record of the run is refused for, on the page items' excerpts. */
+  const onExcerpts = (reasons: string[]) =>
+    reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+  /** Asserts that no 8 characters in a row of any of `secrets` are in `text`. */
+  const holdsNoPiece = (text: string, secrets: string[], what: string) => {
+    for (const secret of secrets) {
+      for (let at = 0; at + 8 <= secret.length; at++) {
+        expect(text, what).not.toContain(secret.slice(at, at + 8));
+      }
+    }
+  };
 
-  it("is recorded as [redacted] in the page's excerpt, and the recorder says where", () => {
+  it("withholds the whole excerpt: a fixed note in every place the item appears, and the recorder says where", () => {
     const built = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
     // In the evidence event, in the complete event's result and in the record's result.
-    expect(excerpts(built.record)).toEqual(Array(3).fill(PAGE_TEXT("[redacted]")));
-    expect(JSON.stringify(built.record)).not.toContain(MENU_RUN);
-    expect(built.redactedRuns).toEqual([{ evidenceId: PAGE_ID, runs: 1 }]);
+    expect(excerpts(built.record)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+    expect(WITHHELD_EXCERPT).toBe("[excerpt withheld: it held a token-shaped run]");
+    const text = JSON.stringify(built.record);
+    expect(text).not.toContain(MENU_RUN);
+    // Nothing of the page's text is kept, not even its ordinary words.
+    expect(text).not.toContain("Klangio Transcription");
+    // The item's title, url and source are kept.
+    expect(built.record.analysis.evidence?.at(-1)).toEqual(page(WITHHELD_EXCERPT));
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: PAGE_ID, runs: 1 }]);
     // The rest of the record is as before.
     const plain = build(liveRunWith([]));
-    expect(plain.redactedRuns).toEqual([]);
+    expect(plain.withheldExcerpts).toEqual([]);
     expect(built.record.analysis.evidence?.slice(0, -1)).toEqual(plain.record.analysis.evidence);
     expect(built.record.analysis.claims).toEqual(plain.record.analysis.claims);
   });
@@ -1785,87 +1808,221 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     }
   });
 
-  it("replaces a random run in a page's excerpt as a whole word, so no piece of it is written", () => {
-    const random = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz3Xc7Vb1N";
-    expect(random).toHaveLength(40);
+  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", () => {
+    const tail = "Zx9Qw3Er7Ty1Ui5Op";
     // A base64 value: a run of 44 the long-token rule matches, then "/", a tail and padding.
     const head = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJD";
-    const tail = "x7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
-    // A run, ".", and a tail of 25.
-    const dotted = "Zx9Qw3Er7Ty1Ui5Op2As8Df4G";
-    const built = build(
-      liveRunWith([
-        page(`A run ${random}, a value ${head}/${tail}== and ${MENU_RUN}.${dotted} on the page.`),
-      ]),
-    );
-    expect(excerpts(built.record)).toEqual(
-      Array(3).fill("A run [redacted], a value [redacted] and [redacted] on the page."),
-    );
-    const text = JSON.stringify(built.record);
-    for (const secret of [random, `${head}/${tail}==`, `${MENU_RUN}.${dotted}`]) {
-      for (let at = 0; at + 8 <= secret.length; at++) {
-        expect(text, secret).not.toContain(secret.slice(at, at + 8));
-      }
-    }
-    expect(built.redactedRuns).toEqual([{ evidenceId: PAGE_ID, runs: 3 }]);
-  });
-
-  it("replaces a value shaped like `openssl rand -base64 48` (RUN_TOKEN_SECRET) whole, whatever its pieces", () => {
-    // One with a piece of 40 or more between its "+" and "/", one with none.
-    for (const value of [
-      "24MhF2bmL3sFImOnB4IRd56UZ9WiIv2OQ22Hgi2Ok/cKhEZZ7scoKd9v12XgSAXC",
-      "W+cJlEwVD9gj6McMkeGh0lxSJs9D5gkkp8wavmeP/QEW+avRYnM3Onad354MN4nD",
+    const b64tail = "x7Kp2Lm9Qr4Ts6Vw8Yz1Ab3Cd5Ef7Gh";
+    const cases: Array<[string, string, string[]]> = [
+      [
+        "a random run, a value and a dotted run",
+        `A run ${TOKEN}, a value ${head}/${b64tail}== and ${MENU_RUN}.Zx9Qw3Er7Ty1Ui5Op2As8Df4G on the page.`,
+        [TOKEN, `${head}/${b64tail}==`, "Zx9Qw3Er7Ty1Ui5Op2As8Df4G"],
+      ],
+      // As `openssl rand -base64 48` makes RUN_TOKEN_SECRET: one with a piece of 40 or more
+      // between its "+" and "/", one with none.
+      [
+        "a base64 value with a long piece",
+        "The secret 24MhF2bmL3sFImOnB4IRd56UZ9WiIv2OQ22Hgi2Ok/cKhEZZ7scoKd9v12XgSAXC was printed.",
+        ["24MhF2bmL3sFImOnB4IRd56UZ9WiIv2OQ22Hgi2Ok/cKhEZZ7scoKd9v12XgSAXC"],
+      ],
+      [
+        "a base64 value of short pieces",
+        "The secret W+cJlEwVD9gj6McMkeGh0lxSJs9D5gkkp8wavmeP/QEW+avRYnM3Onad354MN4nD was printed.",
+        ["W+cJlEwVD9gj6McMkeGh0lxSJs9D5gkkp8wavmeP/QEW+avRYnM3Onad354MN4nD"],
+      ],
+      // A JSON object: a long client id beside a client secret under the long-token length.
+      [
+        "a JSON id and secret, both unquoted names",
+        `{client_id:${TOKEN},secret_part:${tail}2As8Df4Gh6Jk0L}`,
+        [TOKEN, `${tail}2As8Df4Gh6Jk0L`],
+      ],
+      // Wrapped over two lines.
+      ["a run wrapped over two lines", `page ${TOKEN}\n${tail} end`, [TOKEN, tail]],
+    ];
+    // A run, then any character, then a tail: a quote, a bracket, a space of any kind, a
+    // newline, punctuation, a soft hyphen or a zero-width character.
+    for (const glue of [
+      '"',
+      "'",
+      "(",
+      "<",
+      " ",
+      " ",
+      "\n",
+      "　",
+      ":",
+      ",",
+      "#",
+      "­",
+      "​",
+      "‌",
+      "‍",
+      "⁠",
+      "﻿",
     ]) {
-      const built = build(liveRunWith([page(`The secret ${value} was printed.`)]));
-      expect(excerpts(built.record), value).toEqual(
-        Array(3).fill("The secret [redacted] was printed."),
-      );
-      const text = JSON.stringify(built.record);
-      for (let at = 0; at + 8 <= value.length; at++) {
-        expect(text, value).not.toContain(value.slice(at, at + 8));
-      }
+      const what = `U+${glue.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`;
+      cases.push([`a run, ${what} and a tail`, `creds ${TOKEN}${glue}${tail} end`, [TOKEN, tail]]);
     }
+    for (const [what, excerpt, secrets] of cases) {
+      const built = build(liveRunWith([page(excerpt)]));
+      expect(excerpts(built.record), what).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+      holdsNoPiece(JSON.stringify(built.record), secrets, what);
+    }
+    // An excerpt with no long run is kept as it is, glued or not.
+    const plain = build(liveRunWith([page("Genre:POP,ROCK#indie and Tempo:85 BPM")]));
+    expect(excerpts(plain.record)).toEqual(Array(3).fill("Genre:POP,ROCK#indie and Tempo:85 BPM"));
+    expect(plain.withheldExcerpts).toEqual([]);
   });
 
-  it("leaves a run that is also a configured credential or another secret shape, and refuses it by name", () => {
-    const configured = "sk-proj-Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNq";
+  it("refuses an excerpt that holds a configured credential, whole or in part, by name, and writes nothing", () => {
+    // evidencePack.ts cuts each excerpt at 499 characters and adds "…": here inside the
+    // credential, so only its first 49 characters are on the page.
+    const pageText = `${"page text ".repeat(45)}${CONFIGURED}`;
+    const cut = `${pageText.slice(0, 499)}…`;
+    expect(cut).toContain(CONFIGURED.slice(0, 49));
+    expect(cut).not.toContain(CONFIGURED);
+    const cases: Array<[string, string, string]> = [
+      ["cut at 499 characters", cut, CONFIGURED],
+      [
+        "wrapped over two lines",
+        `page ${CONFIGURED.slice(0, 44)}\n${CONFIGURED.slice(44)} end`,
+        CONFIGURED,
+      ],
+      ["its last 12 characters", `page ${MENU_RUN} and ${CONFIGURED.slice(-12)} end`, CONFIGURED],
+      ['with "+" shown as a space', `x ${CONFIGURED_PLUS.replace("+", " ")} y`, CONFIGURED_PLUS],
+      ['with "+" as &#43;', `x ${CONFIGURED_PLUS.replace("+", "&#43;")} y`, CONFIGURED_PLUS],
+      ['with "+" as %2B', `x ${CONFIGURED_PLUS.replace("+", "%2B")} y`, CONFIGURED_PLUS],
+      ['with "/" as %2F', `x ${CONFIGURED_PLUS.replace("/", "%2F")} y`, CONFIGURED_PLUS],
+      ["whole", `Oops ${CONFIGURED_PLUS} leaked`, CONFIGURED_PLUS],
+    ];
+    for (const [what, excerpt, secret] of cases) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), [secret])));
+      expect(onPage, what).toHaveLength(3);
+      for (const reason of onPage) expect(reason, what).toMatch(/: a configured credential$/);
+    }
+    // A credential whose pieces between its "+" are all under 12 characters: found as the page
+    // shows its "+", as a space or "&#43;".
+    const pieces = "Ab3dEf6hIj+Uv8xYz1bCd+Tu9Vw2Xy5Z+a8Bc1De3Fg+Hi5JkLm";
+    for (const plus of [" ", "&#43;"]) {
+      const excerpt = `x ${pieces.replaceAll("+", plus)} y ${MENU_RUN}`;
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), [pieces])));
+      expect(onPage, plus).toHaveLength(3);
+      for (const reason of onPage) expect(reason, plus).toMatch(/: a configured credential$/);
+    }
+    // 11 characters of it are not a part a page could only have from the credential.
+    const short = build(liveRunWith([page(`page ${MENU_RUN} and ${CONFIGURED.slice(-11)} end`)]), [
+      CONFIGURED,
+    ]);
+    expect(excerpts(short.record)).toEqual(Array(3).fill(WITHHELD_EXCERPT));
+  });
+
+  it('refuses a configured credential with a "+" by name in the model\'s text too, with "/" as %2F', () => {
+    for (const shown of [CONFIGURED_PLUS, CONFIGURED_PLUS.replace("/", "%2F")]) {
+      const inClaim = liveRunWith([], (analysis) => {
+        analysis.claims![0].text = `${analysis.claims![0].text} ${shown}`;
+      });
+      expect(
+        refusal(() => build(inClaim, [CONFIGURED_PLUS])),
+        shown,
+      ).toContain("analysis.claims[0].text: a configured credential");
+    }
+    // A credential with a "%" in it is found as it is written, not only decoded.
+    const percent = "Zx9Qw3%41Er7Ty1Ui5Op";
+    const withPercent = liveRunWith([], (analysis) => {
+      analysis.claims![0].text = `${analysis.claims![0].text} ${percent}`;
+    });
+    expect(refusal(() => build(withPercent, [percent]))).toContain(
+      "analysis.claims[0].text: a configured credential",
+    );
+  });
+
+  it("refuses an excerpt with a run when a claim or a map link cites the item", () => {
+    const cases: Array<[string, (analysis: TrackAnalysis) => void]> = [
+      ["a claim", (analysis) => analysis.claims![0].evidenceIds.push(PAGE_ID)],
+      [
+        "a map link",
+        (analysis) => {
+          const link = analysis.genealogy!.links[0];
+          link.evidenceIds = [...(link.evidenceIds ?? []), PAGE_ID];
+        },
+      ],
+    ];
+    for (const [what, edit] of cases) {
+      const reasons = refusal(() => build(liveRunWith([page(PAGE_TEXT(MENU_RUN))], edit)));
+      const onPage = onExcerpts(reasons);
+      expect(onPage, what).toHaveLength(3);
+      for (const reason of onPage) {
+        expect(reason, what).toMatch(/: a cited page excerpt holds a long token$/);
+      }
+    }
+    // Cited, with no run in it: kept as it is.
+    const cited = build(
+      liveRunWith([page("A plain page.")], (analysis) =>
+        analysis.claims![0].evidenceIds.push(PAGE_ID),
+      ),
+    );
+    expect(excerpts(cited.record)).toEqual(Array(3).fill("A plain page."));
+  });
+
+  it("leaves an excerpt with another secret shape as it is, and refuses it by that rule's name", () => {
+    const sk = "sk-proj-Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNq";
     const jwt =
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
     const cases: Array<[string, string, string[], string]> = [
-      [
-        "a configured credential",
-        `Oops ${configured} leaked`,
-        [configured],
-        "a configured credential",
-      ],
+      ["a configured credential", `Oops ${sk} leaked`, [sk], "a configured credential"],
       [
         "a configured credential glued to text",
-        `Oops leakedKey${configured}Here end`,
-        [configured],
+        `Oops leakedKey${sk}Here end`,
+        [sk],
         "a configured credential",
       ],
-      ["an sk- key", `A key ${configured} on the page.`, [], "an OpenAI-style key"],
+      ["an sk- key", `A key ${sk} on the page.`, [], "an OpenAI-style key"],
       ["a JSON web token", `token ${jwt} end`, [], "a JSON web token"],
       ["a bare JSON web token", `session ${jwt} end`, [], "a JSON web token"],
+      ["a bearer token", `Authorization: Bearer ${TOKEN} end`, [], "a bearer or basic credential"],
       [
-        "a bearer token",
-        "Authorization: Bearer Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu end",
+        "a JSON client secret beside a long client id",
+        `{"client_id":"${TOKEN}","client_secret":"Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0L"}`,
         [],
-        "a bearer or basic credential",
+        "a key or token parameter",
+      ],
+      [
+        "a quoted api key",
+        `{'api_key': 'Zx9Qw3Er7Ty1Ui5Op'} ${MENU_RUN}`,
+        [],
+        "a key or token parameter",
+      ],
+      [
+        "an e-mail address beside a run",
+        `${MENU_RUN} write to someone@example.com`,
+        [],
+        "an e-mail address",
+      ],
+      [
+        "a signed link beside a run",
+        `${MENU_RUN} see https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5O now`,
+        [],
+        "a signed URL",
       ],
     ];
     for (const [what, excerpt, secrets, reason] of cases) {
-      const { run, events } = liveRunWith([page(excerpt)]);
-      const reasons = refusal(() =>
-        buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets }),
-      );
-      const onPage = reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(excerpt)]), secrets)));
       expect(onPage, what).toHaveLength(3);
       for (const found of onPage) expect(found, what).toMatch(new RegExp(`: ${reason}$`));
     }
   });
 
-  it("is replaced only in a web search page's excerpt: another source's item with a page tier is refused", () => {
+  it('refuses a key or token parameter with a quoted name in any text: `"client_secret":"…"`', () => {
+    const inClaim = liveRunWith([], (analysis) => {
+      analysis.claims![0].text = `${analysis.claims![0].text} {"client_secret":"Zx9Qw3Er7Ty1"}`;
+    });
+    expect(refusal(() => build(inClaim))).toContain(
+      "analysis.claims[0].text: a key or token parameter",
+    );
+  });
+
+  it("is withheld only in a web search page's excerpt: another source's item with a page tier is refused", () => {
     for (const [source, sourceTier] of [
       ["discogs", "editorial"],
       ["musicbrainz", "web"],
@@ -1890,44 +2047,52 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     }
   });
 
-  it("refuses a secret in a link to an allow-listed site, in its path or its query", () => {
-    const token = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
-    for (const link of [
-      `https://genius.com/${token}`,
-      "https://www.discogs.com/search?api_key=Zx9Qw3Er7Ty1",
-      "https://www.discogs.com/search?apikey=Zx9Qw3Er7Ty1",
-      "https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5Op",
-      "https://genius.com/search?access_token=Zx9Qw3Er7Ty1",
-    ]) {
-      const reasons = refusal(() => build(liveRunWith([page(`See ${link} now.`)])));
-      expect(
-        reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r)),
-        link,
-      ).toHaveLength(3);
+  it("refuses a secret in a link to an allow-listed site, in its path, query or fragment", () => {
+    const cases: Array<[string, string]> = [
+      [`https://genius.com/${TOKEN}`, "a token in a link's path"],
+      ["https://www.discogs.com/search?api_key=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      ["https://www.discogs.com/search?apikey=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      ["https://www.discogs.com/search?q=a&key=Zx9Qw3Er7Ty1Ui5O", "a signed URL"],
+      ["https://genius.com/search?access_token=Zx9Qw3Er7Ty1", "a key or token parameter"],
+      [`https://genius.com/search?q=${TOKEN}`, "a long token in a link"],
+      ["https://genius.com/search?q=someone%40example.com", "an e-mail address in a link"],
+      [
+        `https://genius.com/Daft-punk-one-more-time-lyrics#${TOKEN}`,
+        "a token in a link's fragment",
+      ],
+      [
+        "https://genius.com/Daft-punk-one-more-time-lyrics#someone@example.com",
+        "an e-mail address in a link",
+      ],
+    ];
+    for (const [link, reason] of cases) {
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(`See ${link} now.`)]))));
+      expect(onPage, link).toHaveLength(3);
+      for (const found of onPage) expect(found, link).toMatch(new RegExp(`: ${reason}$`));
     }
-    // An allow-listed page with no secret in it is content.
-    const fine = build(
-      liveRunWith([page("See https://genius.com/Daft-punk-one-more-time-lyrics now.")]),
-    );
-    expect(excerpts(fine.record)[0]).toContain("https://genius.com/Daft-punk-one-more-time-lyrics");
   });
 
-  it("refuses a configured credential with a \"+\" in it by name, in a page's excerpt and in the model's text", () => {
-    // As `openssl rand -base64 48` makes RUN_TOKEN_SECRET: a "+" and a "/", every piece short.
-    const configured = "Ab3dEf6hIj9lMn2pQr5t+Uv8xYz1bCd4fGh7K0mNqRs/Tu9Vw2Xy5Za8Bc1De3Fg4Hi5J";
-    const options = { slug: "one-more-time-daft-punk", commit: "abc1234", secrets: [configured] };
-    const inPage = liveRunWith([page(`Leak ${configured} end`)]);
-    const onPage = refusal(() => buildRecord(inPage.run, inPage.events, options)).filter((r) =>
-      /evidence(\[\d+\])?\.excerpt: /.test(r),
+  it("keeps a page link whose path, fragment or key parameter only looks like one", () => {
+    for (const link of [
+      "https://genius.com/Daft-punk-one-more-time-lyrics",
+      // A "+" in a path is a "+", not a space: no "Basic " credential here.
+      "https://www.last.fm/music/Basic+Channel/_/Phylyps+Trak",
+      // A section anchor is a page's own name, as a path segment is.
+      "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony#Track_listing_and_formats_1997_UK_CD_single",
+      // A key parameter that is a slug (no digit), or token-shaped but under 16 characters.
+      "https://www.whosampled.com/sample/123/?key=The-Verve-Bitter-Sweet",
+      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1",
+      "https://www.whosampled.com/sample/123/?key=Zx9Qw3Er7Ty1Ui5",
+    ]) {
+      const fine = build(liveRunWith([page(`See ${link} now.`)]));
+      expect(excerpts(fine.record), link).toEqual(Array(3).fill(`See ${link} now.`));
+    }
+    // The same Last.fm page as a web search result of its own.
+    const lastfm = "https://www.last.fm/music/Basic+Channel/_/Phylyps+Trak";
+    const item = build(
+      liveRunWith([page("A plain page.", { id: `tavily:${lastfm}`, url: lastfm })]),
     );
-    expect(onPage).toHaveLength(3);
-    for (const reason of onPage) expect(reason).toMatch(/: a configured credential$/);
-    const inClaim = liveRunWith([], (analysis) => {
-      analysis.claims![0].text = `${analysis.claims![0].text} ${configured}`;
-    });
-    expect(refusal(() => buildRecord(inClaim.run, inClaim.events, options))).toContain(
-      "analysis.claims[0].text: a configured credential",
-    );
+    expect(item.record.analysis.evidence?.at(-1)?.url).toBe(lastfm);
   });
 
   it("refuses a link with a user name or password, in a page's excerpt and as a record's url", () => {
@@ -1935,8 +2100,7 @@ describe("a long token-shaped run in a web page's excerpt", () => {
       "https://Ab3dEf6hIj9l:Zx9Qw3Er7Ty1Ui5Op@www.discogs.com/release/1",
       "https://someone@www.discogs.com/release/1",
     ]) {
-      const reasons = refusal(() => build(liveRunWith([page(`See ${link} now.`)])));
-      const onPage = reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
+      const onPage = onExcerpts(refusal(() => build(liveRunWith([page(`See ${link} now.`)]))));
       expect(onPage, link).toHaveLength(3);
       for (const reason of onPage) expect(reason, link).toMatch(/: credentials in a link$/);
     }
@@ -1954,35 +2118,6 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     ).toHaveLength(3);
   });
 
-  it('replaces a run with what is glued to it across ":", ",", "#", a soft hyphen or a zero-width character', () => {
-    const token = "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7K0mNqRsTu";
-    const tail = "Zx9Qw3Er7Ty1Ui5Op";
-    for (const glue of [
-      ":",
-      ",",
-      "#",
-      "\u00AD",
-      "\u200B",
-      "\u200C",
-      "\u200D",
-      "\u2060",
-      "\uFEFF",
-    ]) {
-      const what = `U+${glue.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`;
-      const built = build(liveRunWith([page(`creds ${token}${glue}${tail} end`)]));
-      expect(excerpts(built.record), what).toEqual(Array(3).fill("creds [redacted] end"));
-      const text = JSON.stringify(built.record);
-      for (const secret of [token, tail]) {
-        for (let at = 0; at + 8 <= secret.length; at++) {
-          expect(text, what).not.toContain(secret.slice(at, at + 8));
-        }
-      }
-    }
-    // Words with no long run in them are kept as they are, glued or not.
-    const plain = build(liveRunWith([page("Genre:POP,ROCK#indie and Tempo:85 BPM")]));
-    expect(excerpts(plain.record)[0]).toBe("Genre:POP,ROCK#indie and Tempo:85 BPM");
-  });
-
   it("refuses a key parameter only with a token-shaped value: a musical key is text", () => {
     const tunebat = "https://tunebat.com/Info/Bitter-Sweet-Symphony?key=Am";
     const kept = build(
@@ -1993,7 +2128,6 @@ describe("a long token-shaped run in a web page's excerpt", () => {
         }),
       ]),
     );
-    expect(excerpts(kept.record)).toEqual([]);
     expect(kept.record.analysis.evidence?.at(-1)?.url).toBe(tunebat);
     const value = "Zx9Qw3Er7Ty1Ui5Op2As8Df4Gh6Jk0Lz";
     expect(value).toHaveLength(32);
@@ -2005,16 +2139,15 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     ).toHaveLength(3);
   });
 
-  it("counts every run it replaced, in items that share an id", () => {
+  it("counts every run in the excerpts it withheld, in items that share an id", () => {
     const built = build(
       liveRunWith([page(`one ${MENU_RUN}`), page(`two ${MENU_RUN} and ${MENU_RUN}x`)]),
     );
-    expect(built.redactedRuns).toEqual([{ evidenceId: PAGE_ID, runs: 3 }]);
+    expect(built.withheldExcerpts).toEqual([{ evidenceId: PAGE_ID, runs: 3 }]);
   });
 
-  it("checks the replaced excerpt again: the record as written passes, and what the replacement does not take is still refused", () => {
-    // The record is checked as it is written: the loader, which runs the same checks on every
-    // file it reads, takes it.
+  it("checks the record again as it is written: the loader takes it", () => {
+    // The loader runs the same checks on every file it reads: the note passes them.
     const scratch = mkdtempSync(join(tmpdir(), "replay-page-tokens-"));
     try {
       const { record: built } = build(liveRunWith([page(PAGE_TEXT(MENU_RUN))]));
@@ -2025,13 +2158,11 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
-    // A key too short for the long-token shape, beside a run the replacement takes: the record
-    // is checked as it would be written, and refused for the key alone.
-    const reasons = refusal(() =>
-      build(liveRunWith([page(`${PAGE_TEXT(MENU_RUN)} sk-abcdefghij0123456789`)])),
+    // A key too short for the long-token shape, beside a run: refused for the key, by name.
+    const onPage = onExcerpts(
+      refusal(() => build(liveRunWith([page(`${PAGE_TEXT(MENU_RUN)} sk-abcdefghij0123456789`)]))),
     );
-    const onPage = reasons.filter((r) => /evidence(\[\d+\])?\.excerpt: /.test(r));
-    expect(onPage.length).toBeGreaterThan(0);
+    expect(onPage).toHaveLength(3);
     for (const reason of onPage) expect(reason).toMatch(/: an OpenAI-style key$/);
   });
 });

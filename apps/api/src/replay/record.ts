@@ -21,11 +21,14 @@
  * (cleanCommit). --allow-dirty records it anyway for a local experiment, stamped "-dirty", so the
  * committed recordings' own check (demo-recording.test.ts) still refuses it.
  *
- * Each long token-shaped word in a web search page's excerpt is recorded as "[redacted]"
- * (recorder.ts `withoutPageTokens`); the recorder prints how many it replaced, and in which
- * evidence items. The record itself does not say so (the replay format has no place for it):
- * the commit that adds the recording does. The whole word goes, so ordinary text glued to a
- * run (a schemeless path, a slug) may go with it; only web search excerpts are touched.
+ * A web search page's excerpt that holds a long token-shaped run is recorded, whole, as
+ * "[excerpt withheld: it held a token-shaped run]" (recorder.ts `withoutPageTokens`), in every
+ * place its item appears, with the item's title, url and source kept; one that also holds a
+ * configured credential or a part of one, another secret shape, or a link with a secret, or that
+ * a claim or a map link cites, is refused instead. The recorder prints which items it withheld
+ * and how many runs each held. The record itself says so only in that note (the replay format
+ * has no other place for it): the commit that adds the recording names the items. Only web
+ * search excerpts are withheld.
  *
  * The file is written as `JSON.stringify(record, null, 2)`. A committed recording is that file
  * formatted with Biome afterwards (`npx biome format --write fixtures/replays/<slug>.json`, as
@@ -51,9 +54,9 @@ import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
 import {
   buildRecord,
   COMMIT_PATTERN,
-  REDACTED_RUN,
   RecordRefused,
-  type RedactedRuns,
+  WITHHELD_EXCERPT,
+  type WithheldExcerpt,
 } from "./recorder.js";
 import { replayDir } from "./records.js";
 
@@ -173,16 +176,18 @@ export function cleanCommit({
 }
 
 /**
- * What the record replaced in page excerpts (recorder.ts `withoutPageTokens`), for the person
- * recording: how many long token-shaped runs, and in which evidence items; null for none.
+ * The page excerpts the record withheld (recorder.ts `withoutPageTokens`), for the person
+ * recording: which evidence items, and how many long token-shaped runs each held; null for none.
  */
-export function redactedRunsLine(redacted: readonly RedactedRuns[]): string | null {
-  if (redacted.length === 0) return null;
-  const total = redacted.reduce((sum, item) => sum + item.runs, 0);
-  const items = redacted.map(({ evidenceId, runs }) => `${evidenceId} (${runs})`).join(", ");
+export function withheldExcerptsLine(withheld: readonly WithheldExcerpt[]): string | null {
+  if (withheld.length === 0) return null;
+  const total = withheld.reduce((sum, item) => sum + item.runs, 0);
+  const items = withheld.map(({ evidenceId, runs }) => `${evidenceId} (${runs})`).join(", ");
+  const pages =
+    withheld.length === 1 ? "the excerpt of 1 page" : `the excerpts of ${withheld.length} pages`;
   return (
-    `Replaced ${total} long token-shaped ${total === 1 ? "run" : "runs"} with "${REDACTED_RUN}" ` +
-    `in the excerpts of ${redacted.length} ${redacted.length === 1 ? "page" : "pages"}: ${items}`
+    `Withheld ${pages}, which held ${total} long token-shaped ${total === 1 ? "run" : "runs"}, ` +
+    `as "${WITHHELD_EXCERPT}": ${items}`
   );
 }
 
@@ -277,8 +282,8 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     record = built.record;
     for (const warning of built.warnings) console.warn(`Warning: the result breaks ${warning}`);
     if (built.noCover) console.warn(`Warning: no cover kept: ${built.noCover}`);
-    const redacted = redactedRunsLine(built.redactedRuns);
-    if (redacted) console.log(redacted);
+    const withheld = withheldExcerptsLine(built.withheldExcerpts);
+    if (withheld) console.log(withheld);
   } catch (err) {
     if (err instanceof RecordRefused) {
       console.error(err.message);

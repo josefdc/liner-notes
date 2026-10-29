@@ -21,17 +21,21 @@
  * - status messages about the user's own actions in that run (the clarification node's
  *   "Selected: …", in older runs "User confirmed …", and "Remembered preference …") are left
  *   out: a viewer of the replay did neither;
- * - in the excerpt of a web search result (a `tavily` item of the web or editorial tier: text
- *   the search fetched from a third-party page, never a source's API, the model or the app),
- *   each word outside the page's links (up to a space, a quote or a bracket) that the
- *   long-token rule matches, or that holds a long base64 value, becomes "[redacted]", whole
- *   (`withoutPageTokens`). A page's text may run
- *   words together ("StudioPiano2NotesGuitar2Tabs…") into that shape; the record keeps neither
- *   such a word nor any piece of a real token a page printed. An excerpt that holds a
- *   configured credential or any other secret shape is not touched, and is refused by that
- *   rule's name. The recorder says how many words it replaced, in which items, and checks the
- *   record again as it is written: the same run anywhere else (a title, another source's item,
- *   the model's text) is still a refusal.
+ * - the excerpt of a web search result (a `tavily` item of the web or editorial tier: text the
+ *   search fetched from a third-party page, never a source's API, the model or the app) that
+ *   holds, outside its links, a run the long-token rule matches or a long base64 value, becomes
+ *   "[excerpt withheld: it held a token-shaped run]" (WITHHELD_EXCERPT), whole, in every place
+ *   the item appears; its title, url and source are kept (`withoutPageTokens`). A page's text
+ *   may run words together ("StudioPiano2NotesGuitar2Tabs…") into that shape, and no word of a
+ *   page that printed one is kept, so nothing glued to a run or beside it is written. Such an
+ *   excerpt is refused instead, and kept as it is, when it holds a configured credential or 12
+ *   characters in a row of one (as it is, URL-decoded with "+" read as a space or kept, and the
+ *   credential with "+" as a space, "&#43;" or "%2B", or URL-encoded), any other secret shape in
+ *   any of those readings, or a link with a secret (`linkSecret`): by that rule's name. It is
+ *   refused too when a claim or a map link cites the item ("a cited page excerpt holds a long
+ *   token"). The recorder says which items it withheld and how many runs each held; the record
+ *   is then checked as it is written, so the same run anywhere else (a title, another source's
+ *   item, the model's text) is still a refusal.
  *
  * Refusals: a run that is not completed, has no stored result of its own, or was not live (a
  * replayed or cached result is not recorded again); a run whose last stream does not end with
@@ -39,9 +43,10 @@
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
  * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
- * outside the allow-listed source sites or one to them whose path or query holds a secret shape
- * or a key parameter (`linkSecret`), a preview or media URL inside text (the Cover Art
- * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
+ * outside the allow-listed source sites or one to them with a user name or password, or whose
+ * path, query or fragment holds a secret shape or a key parameter (`linkSecret`), a preview or
+ * media URL inside text (the Cover Art Archive link `archiveCoverOf` derives is allowed as the
+ * result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a link
@@ -159,7 +164,10 @@ function isUserAction(event: { type: string; [field: string]: unknown }): boolea
 /** Text shaped like a credential, whatever its value (allow-listed page URLs left out). */
 const SECRET_SHAPES: Array<[string, RegExp]> = [
   ["a bearer or basic credential", /\b(?:Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/],
-  ["a key or token parameter", /\b(?:api[-_]?key|access_token|client_secret|token)\s*[:=]\s*\S/i],
+  [
+    "a key or token parameter",
+    /\b(?:api[-_]?key|access_token|client_secret|token)["']?\s*[:=]\s*\S/i,
+  ],
   ["an OpenAI-style key", /\bsk-[A-Za-z0-9_-]{16,}/],
   ["a Tavily key", /\btvly-[A-Za-z0-9_-]{8,}/],
   ["a Spotify access token", /\bBQ[A-Za-z0-9_-]{40,}/],
@@ -174,10 +182,12 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
 
 /**
  * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
- * message may not: reasonIssue).
+ * message may not: reasonIssue). A bare `key` parameter is one only with a token-shaped value:
+ * 16 or more characters with a digit and a letter (`?key=Am`, `?key=The-Verve-Bitter-Sweet`
+ * name a musical key or a page).
  */
 const SIGNED_URL =
-  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=[A-Za-z0-9_-]{16})/i;
+  /[?&;~](?:(?:hdnea|hdnts|x-amz-signature|sig|signature|token|access_token|api[-_]?key)=|key=(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{16})/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -216,9 +226,9 @@ function allowedUrl(url: string): boolean {
 /**
  * The pages a record's web-tier evidence links to (web search results cited by the run): any
  * site, but only a plain http(s) page that is not a preview, media or signed link, has no
- * credentials and whose path and query carry nothing shaped like a secret. These URLs, and their ids
- * (`tavily:<url>`), are content of the record; any other URL still has to be on an allow-listed
- * site.
+ * credentials and whose path, query and fragment carry nothing shaped like a secret. These URLs,
+ * and their ids (`tavily:<url>`), are content of the record; any other URL still has to be on
+ * an allow-listed site.
  */
 function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
@@ -279,29 +289,21 @@ const LONG_TOKEN = (SECRET_SHAPES.find(([what]) => what === "a long token") as [
 const OTHER_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
 
 /**
- * The words of a text a token can hide in: every character up to a space, a quote or a bracket,
- * so a token's pieces glued by "-", "_", "+", "/", "=", ".", "%", "~", ":", ",", "#" or an
- * invisible character (a soft hyphen, a zero-width space or joiner, a word joiner, a
- * byte-order mark; none of them a space here) are one word.
+ * The runs of a text the long-token rule matches, and the base64 values of 40 or more characters
+ * with a "+" or "/" in them, mixed case and a digit (`openssl rand -base64 48`, as
+ * RUN_TOKEN_SECRET is made), whose pieces between "+" and "/" may all be shorter than the
+ * long-token rule reads.
  */
-const TOKEN_WORDS =
-  /[^\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"'<>()[\]{}]+/g;
-
-/** A word's leading and trailing characters that no token holds, around its core. */
-const EDGES = /^([^A-Za-z0-9_\-+/=.%~]*)(.*?)([^A-Za-z0-9_\-+/=.%~]*)$/su;
-
-/** The pieces of a word a base64 value can be (letters, digits, "+", "/" and "="). */
-const BASE64_PIECES = /[A-Za-z0-9+/=]+/g;
+const TOKEN_RUNS = [
+  new RegExp(LONG_TOKEN.source, "g"),
+  /(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]*[+/])(?=[A-Za-z0-9+/]*\d)(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}/g,
+];
 
 /**
- * A base64 value of 40 or more characters with a "+" or "/" in it, mixed case and a digit
- * (`openssl rand -base64 48`, as RUN_TOKEN_SECRET is made): its pieces between "+" and "/" may
- * all be shorter than the long-token rule reads.
+ * What a web search page's excerpt that held a long token-shaped run is recorded as, whole: no
+ * word of the page is kept, so no piece of a token, or of what a page printed beside one, is.
  */
-const BASE64_VALUE = /^(?=[^+/]*[+/])(?=.*\d)(?=.*[A-Z])(?=.*[a-z])[A-Za-z0-9+/]{40,}={0,2}$/;
-
-/** What a page's long token-shaped word is recorded as (as the logs and source errors hide one). */
-export const REDACTED_RUN = "[redacted]";
+export const WITHHELD_EXCERPT = "[excerpt withheld: it held a token-shaped run]";
 
 /**
  * The only items whose excerpt is a third-party page's text: the web search's results
@@ -310,10 +312,15 @@ export const REDACTED_RUN = "[redacted]";
 const PAGE_SOURCES: ReadonlySet<unknown> = new Set(["tavily"]);
 const PAGE_TIERS: ReadonlySet<unknown> = new Set(["web", "editorial"]);
 
-/** How many long token-shaped words the recorder replaced in one evidence item's excerpt. */
-export interface RedactedRuns {
+/** An evidence item whose excerpt the recorder withheld, and how many runs it held. */
+export interface WithheldExcerpt {
   evidenceId: string;
   runs: number;
+}
+
+/** `text` as it is, URL-decoded ("+" read as a space, as a query is) and with "+" kept. */
+function readings(text: string): string[] {
+  return [...new Set([text, decoded(text), decodedKeepingPlus(text)])];
 }
 
 /**
@@ -321,7 +328,7 @@ export interface RedactedRuns {
  * a query is, and kept as "+", as a base64 value holds one), or URL-encoded.
  */
 function holdsSecret(text: string, secrets: readonly string[]): boolean {
-  const forms = [text, decoded(text), decodedKeepingPlus(text)];
+  const forms = readings(text);
   return secrets.some(
     (secret) =>
       secret &&
@@ -329,57 +336,100 @@ function holdsSecret(text: string, secrets: readonly string[]): boolean {
   );
 }
 
+/** How many characters in a row of a configured credential a page's excerpt may share with it. */
+const SECRET_PART = 12;
+
 /**
- * `text` with each word outside its links (TOKEN_WORDS) that the long-token rule matches, or
- * that holds a long base64 value, as REDACTED_RUN, whole (no piece glued to the run is kept),
- * and how many there were. A text that holds a configured credential, or that any other rule of
- * SECRET_SHAPES matches (a JSON web token, a bearer credential, an "sk-" key, an e-mail
- * address …), is left as it is: `leaks` refuses it, by that rule's name.
+ * True when `text`, in any of its readings, holds 12 or more characters in a row of one of
+ * `secrets` (or the whole of a shorter one), as it is, with "+" as a space, "&#43;" or "%2B", or
+ * URL-encoded: a credential a page cut short, wrapped or printed in pieces.
  */
-function redactRuns(text: string, secrets: readonly string[]): { text: string; runs: number } {
-  if (holdsSecret(text, secrets)) return { text, runs: 0 };
-  const plain = decoded(text);
-  if (OTHER_SECRET_SHAPES.some(([, pattern]) => pattern.test(text) || pattern.test(plain))) {
-    return { text, runs: 0 };
-  }
-  let runs = 0;
-  const swap = (part: string) =>
-    part.replace(TOKEN_WORDS, (word) => {
-      const base64 = (word.match(BASE64_PIECES) ?? []).some((piece) => BASE64_VALUE.test(piece));
-      if (!LONG_TOKEN.test(word) && !base64) return word;
-      runs++;
-      // The punctuation a word starts or ends with ("…,", "(…") is no piece of a token: kept.
-      const [, before, , after] = word.match(EDGES) as RegExpMatchArray;
-      return `${before}${REDACTED_RUN}${after}`;
-    });
-  let out = "";
-  let at = 0;
-  // A page's links are left as they are, and `leaks` checks each one: a link to another site is
-  // refused, and one to an allow-listed site is refused when its path or query holds anything
-  // shaped like a secret or a key parameter (`linkSecret`).
-  for (const link of text.matchAll(URL_IN_TEXT)) {
-    out += swap(text.slice(at, link.index)) + link[0];
-    at = link.index + link[0].length;
-  }
-  out += swap(text.slice(at));
-  return { text: out, runs };
+function holdsSecretPart(text: string, secrets: readonly string[]): boolean {
+  const forms = readings(text);
+  return secrets.some((secret) => {
+    if (!secret) return false;
+    const shown = new Set([
+      secret,
+      secret.replace(/\+/g, " "),
+      secret.replace(/\+/g, "&#43;"),
+      secret.replace(/\+/g, "%2B"),
+      encodeURIComponent(secret),
+    ]);
+    for (const form of shown) {
+      const width = Math.min(SECRET_PART, form.length);
+      for (let at = 0; at + width <= form.length; at++) {
+        const part = form.slice(at, at + width);
+        if (forms.some((reading) => reading.includes(part))) return true;
+      }
+    }
+    return false;
+  });
+}
+
+/** How many long token-shaped runs `text` holds outside its links, in its most telling reading. */
+function tokenRuns(text: string): number {
+  const outside = text.replace(URL_IN_TEXT, " ");
+  return Math.max(
+    ...readings(outside).map((reading) => {
+      // Runs both rules match (a base64 value with a piece of 40 or more) count once.
+      const spans = TOKEN_RUNS.flatMap((pattern) =>
+        [...reading.matchAll(pattern)].map((m) => [m.index, m.index + m[0].length] as const),
+      ).sort((a, b) => a[0] - b[0]);
+      let runs = 0;
+      let end = -1;
+      for (const [start, stop] of spans) {
+        if (start >= end) runs++;
+        end = Math.max(end, stop);
+      }
+      return runs;
+    }),
+  );
 }
 
 /**
- * The words replaced in page excerpts, by evidence id and by the excerpt they were replaced in:
- * the same item held twice (as an event and in the result) counts once, and two items with one
- * id and different excerpts both count.
+ * What the record does with a web search page's excerpt: keep it (null: it holds no long
+ * token-shaped run, and is checked as any text is), withhold it (the runs it holds), or refuse it
+ * by name. An excerpt with a run is refused, and left as it is, when it holds a configured
+ * credential or 12 characters in a row of one (`holdsSecretPart`), any other secret shape (in any
+ * reading), or a link with a secret (`linkSecret`): what it held is named, not hidden.
  */
-export class PageTokenCount {
-  private readonly byItem = new Map<string, Map<string, number>>();
+function pageExcerptVerdict(
+  excerpt: string,
+  secrets: readonly string[],
+): { withhold: number } | { refuse: string } | null {
+  const runs = tokenRuns(excerpt);
+  if (runs === 0) return null;
+  if (holdsSecretPart(excerpt, secrets)) return { refuse: "a configured credential" };
+  const forms = readings(excerpt);
+  const other = OTHER_SECRET_SHAPES.find(([, pattern]) => forms.some((form) => pattern.test(form)));
+  if (other) return { refuse: other[0] };
+  for (const url of excerpt.match(URL_IN_TEXT) ?? []) {
+    const secret = linkSecret(url);
+    if (secret) return { refuse: secret };
+  }
+  return { withhold: runs };
+}
 
-  add(evidenceId: string, excerpt: string, runs: number) {
+/**
+ * The page excerpts a record withheld and refused, by evidence id and by path: the same item held
+ * twice (as an event and in the result) counts its runs once, and two items with one id and
+ * different excerpts both count.
+ */
+export class PageExcerpts {
+  private readonly byItem = new Map<string, Map<string, number>>();
+  /** The path of each excerpt withheld, with its item's id. */
+  readonly withheld: Array<{ path: string; evidenceId: string }> = [];
+  /** Each excerpt refused, by path, with the rule's name. */
+  readonly refused = new Map<string, string>();
+
+  withhold(path: string, evidenceId: string, excerpt: string, runs: number) {
     const excerpts = this.byItem.get(evidenceId) ?? new Map<string, number>();
     excerpts.set(excerpt, runs);
     this.byItem.set(evidenceId, excerpts);
+    this.withheld.push({ path, evidenceId });
   }
 
-  list(): RedactedRuns[] {
+  list(): WithheldExcerpt[] {
     return [...this.byItem].map(([evidenceId, excerpts]) => ({
       evidenceId,
       runs: [...excerpts.values()].reduce((sum, runs) => sum + runs, 0),
@@ -388,16 +438,22 @@ export class PageTokenCount {
 }
 
 /**
- * A copy of `value` in which each web search page's excerpt (an evidence item from the web
- * search, of the web or editorial tier) has its long token-shaped words replaced
- * (`redactRuns`); nothing else changes. Each replacement is counted in `found`.
+ * A copy of `value` (at `path` in the record) in which each web search page's excerpt (an
+ * evidence item from the web search, of the web or editorial tier) that holds a long
+ * token-shaped run is WITHHELD_EXCERPT (`pageExcerptVerdict`), its title, url and source kept;
+ * nothing else changes. Each one withheld, or refused and left as it is, is noted in `found`.
  */
 export function withoutPageTokens(
   value: unknown,
   secrets: readonly string[],
-  found: PageTokenCount,
+  found: PageExcerpts,
+  path = "",
 ): unknown {
-  if (Array.isArray(value)) return value.map((item) => withoutPageTokens(item, secrets, found));
+  const at = (name: string | number) =>
+    typeof name === "number" ? `${path}[${name}]` : path ? `${path}.${name}` : name;
+  if (Array.isArray(value)) {
+    return value.map((item, i) => withoutPageTokens(item, secrets, found, at(i)));
+  }
   if (value === null || typeof value !== "object") return value;
   const item = value as Record<string, unknown>;
   if (
@@ -405,20 +461,43 @@ export function withoutPageTokens(
     PAGE_TIERS.has(item.sourceTier) &&
     typeof item.excerpt === "string"
   ) {
-    const { text, runs } = redactRuns(item.excerpt, secrets);
-    if (runs === 0) return item;
-    found.add(String(item.id), item.excerpt, runs);
-    return { ...item, excerpt: text };
+    const verdict = pageExcerptVerdict(item.excerpt, secrets);
+    if (verdict === null) return item;
+    if ("refuse" in verdict) {
+      found.refused.set(at("excerpt"), verdict.refuse);
+      return item;
+    }
+    found.withhold(at("excerpt"), String(item.id), item.excerpt, verdict.withhold);
+    return { ...item, excerpt: WITHHELD_EXCERPT };
   }
   return Object.fromEntries(
-    Object.entries(item).map(([key, inner]) => [key, withoutPageTokens(inner, secrets, found)]),
+    Object.entries(item).map(([key, inner]) => [
+      key,
+      withoutPageTokens(inner, secrets, found, at(key)),
+    ]),
   );
+}
+
+/** The evidence ids that something in `value` cites (a claim's or a map link's `evidenceIds`). */
+function citedEvidenceIds(value: unknown, ids = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) citedEvidenceIds(item, ids);
+  } else if (value && typeof value === "object") {
+    for (const [key, inner] of Object.entries(value)) {
+      if (key === "evidenceIds" && Array.isArray(inner)) {
+        for (const id of inner) if (typeof id === "string") ids.add(id);
+      } else if (key === "evidenceId" && typeof inner === "string") ids.add(inner);
+      else citedEvidenceIds(inner, ids);
+    }
+  }
+  return ids;
 }
 
 /**
  * Why a link holds something shaped like a secret, or null: a signed URL or a key or token
- * parameter, a secret shape in its query or fragment, or in its path (where a long run is judged
- * by `tokenSegment`, so a page's slug of words is not one).
+ * parameter, a user name or password, a secret shape in its query, or in its path or fragment
+ * (read with "+" kept, and where a long run is judged by `tokenSegment`, so a page's slug of
+ * words or a section anchor is not one).
  */
 function linkSecret(url: string): string | null {
   if (SIGNED_URL.test(url)) return "a signed URL";
@@ -430,14 +509,21 @@ function linkSecret(url: string): string | null {
   }
   // A user name or a password in a link is a credential, whatever it looks like.
   if (parsed.username || parsed.password) return "credentials in a link";
-  const scan = (text: string, shapes: Array<[string, RegExp]>) =>
-    shapes.find(([, pattern]) => pattern.test(text) || pattern.test(decoded(text)))?.[0] ?? null;
-  const inQuery = scan(`${parsed.search}${parsed.hash}`, SECRET_SHAPES);
+  const scan = (text: string, shapes: Array<[string, RegExp]>, decode: (t: string) => string) =>
+    shapes.find(([, pattern]) => pattern.test(text) || pattern.test(decode(text)))?.[0] ?? null;
+  const inQuery = scan(parsed.search, SECRET_SHAPES, decoded);
   if (inQuery) return `${inQuery} in a link`;
-  // The path is scanned too: a page link may carry a capability token or an address there.
-  const inPath = scan(parsed.pathname, PATH_SECRET_SHAPES);
-  if (inPath) return `${inPath} in a link`;
-  if (decoded(parsed.pathname).split("/").some(tokenSegment)) return "a token in a link's path";
+  // The path and the fragment are scanned too: a page link may carry a capability token or an
+  // address there. A "+" in either is a "+" ("/music/Basic+Channel/"), not a space.
+  for (const [part, where] of [
+    [parsed.pathname, "path"],
+    [parsed.hash.slice(1), "fragment"],
+  ] as const) {
+    const shape = scan(part, PATH_SECRET_SHAPES, decodedKeepingPlus);
+    if (shape) return `${shape} in a link`;
+    if (decodedKeepingPlus(part).split("/").some(tokenSegment))
+      return `a token in a link's ${where}`;
+  }
   return null;
 }
 
@@ -766,8 +852,8 @@ export interface BuiltRecord {
    * replayed as it was sent live); for the person recording to judge.
    */
   warnings: string[];
-  /** The page excerpts whose long token-shaped runs the record holds as "[redacted]". */
-  redactedRuns: RedactedRuns[];
+  /** The page excerpts the record holds as WITHHELD_EXCERPT, with the runs each held. */
+  withheldExcerpts: WithheldExcerpt[];
   /** Why the record keeps no cover (`archiveCover`); absent when it keeps one. */
   noCover?: string;
 }
@@ -829,8 +915,8 @@ export function buildRecord(
   const { queryMatch: _match, ...recorded } = analysis;
   // Every image blanked, then the one cover a record keeps: the Cover Art Archive's.
   const { url: cover, reason: noCover } = archiveCover(analysis);
-  // Each page excerpt's long token-shaped runs replaced, in the result and in the events.
-  const redacted = new PageTokenCount();
+  // Each page excerpt that held a long token-shaped run withheld, in the result and the events.
+  const pageExcerpts = new PageExcerpts();
   const blanked = withoutMediaFields({
     ...recorded,
     run: {
@@ -844,14 +930,19 @@ export function buildRecord(
     },
   }) as TrackAnalysis;
   const recordedAnalysis: TrackAnalysis = {
-    ...(withoutPageTokens(blanked, secrets, redacted) as TrackAnalysis),
+    ...(withoutPageTokens(blanked, secrets, pageExcerpts, "analysis") as TrackAnalysis),
     coverUrl: cover,
   };
 
   const recordEvents = joined
     .filter(({ event }) => !isUserAction(event))
     .map(({ atMs, event }, seq) => {
-      const body = withoutPageTokens(withoutMediaFields(event), secrets, redacted) as Event;
+      const body = withoutPageTokens(
+        withoutMediaFields(event),
+        secrets,
+        pageExcerpts,
+        `events[${seq}].event`,
+      ) as Event;
       const envelope: Record<string, unknown> = { runId: placeholder, seq };
       if ("threadId" in body) envelope.threadId = placeholder;
       if (body.type === "complete") envelope.data = recordedAnalysis;
@@ -872,6 +963,16 @@ export function buildRecord(
     analysis: recordedAnalysis,
     usage: runInfo.usage ?? null,
   };
+
+  // A page excerpt is withheld only when nothing cites it: a verdict or a map link reached
+  // against the page's text would be replayed against a note. One refused by name stays as it
+  // is, and is reported once, by that name.
+  const cited = citedEvidenceIds(candidate);
+  for (const { path, evidenceId } of pageExcerpts.withheld) {
+    if (cited.has(evidenceId))
+      pageExcerpts.refused.set(path, "a cited page excerpt holds a long token");
+  }
+  for (const [path, why] of pageExcerpts.refused) refuse(`${path}: ${why}`);
 
   const checked = ReplayRecord.safeParse(candidate);
   if (!checked.success) {
@@ -898,11 +999,13 @@ export function buildRecord(
     otherRunIds,
     allowedCover: cover,
   };
-  for (const issue of recordIssues(record, check)) refuse(issue);
+  for (const issue of recordIssues(record, check)) {
+    if (!pageExcerpts.refused.has(issue.slice(0, issue.indexOf(": ")))) refuse(issue);
+  }
   stop();
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),
   );
-  const redactedRuns = redacted.list();
-  return { record, warnings, redactedRuns, ...(noCover && { noCover }) };
+  const withheldExcerpts = pageExcerpts.list();
+  return { record, warnings, withheldExcerpts, ...(noCover && { noCover }) };
 }

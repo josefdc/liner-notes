@@ -152,7 +152,11 @@ function pinnedBandEnd(container: HTMLElement) {
 
 const FALLBACK = 'The connections graph could not be drawn';
 /** The map in its error boundary, as the Player draws it, at `width` x `height`. */
-async function drawn(data: ReturnType<typeof mapOf>, width: number, height: number) {
+async function drawn(
+  data: React.ComponentProps<typeof GenealogyGraph>['data'],
+  width: number,
+  height: number,
+) {
   mapHeight = height;
   fakeLayout(width);
   const view = render(
@@ -330,5 +334,39 @@ describe('the detail box and the panel at the bottom of the map', () => {
       expect(panel.style.maxHeight).toBe('calc(60% - 20px)');
     }
     expect(errors).toEqual([]);
+  });
+});
+
+describe("a card's cut credit", () => {
+  it('says "Artist and year shortened" where the line cut ends in its year, and "Artist shortened" undated', async () => {
+    const LONG =
+      'The Philharmonic Orchestra Of A City With A Name Long Enough To Need Several Lines, Its Choir And Its Soloists';
+    const data = {
+      nodes: [
+        {
+          id: 'musicbrainz:recording/current',
+          group: 1,
+          label: 'Song (1990)',
+          size: 40,
+          year: 1990,
+        },
+        { ...node('dated', 4), trackTitle: 'Symphony No. 5', trackArtist: LONG, year: 1980 },
+        { ...node('undated', 4), trackTitle: 'Symphony No. 6', trackArtist: LONG },
+        { ...node('other', 4, 'Other - Someone (2000)'), year: 2000 },
+      ],
+      links: ['dated', 'undated', 'other'].map((id) =>
+        link(id, 'musicbrainz:recording/current', { type: 'influence' }),
+      ),
+    };
+    // A phone's column: no card is wider than it.
+    const { container } = await drawn(data, 340, 700);
+    const said = (id: string) =>
+      [...trackOf(container, id).querySelectorAll('text.card-shortened')]
+        .map((line) => line.textContent)
+        .join(' ');
+    expect(trackOf(container, 'dated').getAttribute('data-shortened')).toBe('artist and year');
+    expect(said('dated')).toBe('Artist and year shortened');
+    expect(trackOf(container, 'undated').getAttribute('data-shortened')).toBe('artist');
+    expect(said('undated')).toBe('Artist shortened');
   });
 });

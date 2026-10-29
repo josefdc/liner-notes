@@ -37,6 +37,7 @@ class HeldAnalyses:
 
     def __init__(self):
         self.release = threading.Event()
+        self.failures = 0  # the next this many analyses raise once released
         self.running = 0
         self.peak = 0
         self._lock = threading.Lock()
@@ -49,6 +50,10 @@ class HeldAnalyses:
             # Wait in a worker thread: the event loop stays free to serve the other requests.
             if not await asyncio.to_thread(self.release.wait, PATIENCE_S):
                 raise AssertionError("the analysis was never released")
+            with self._lock:
+                fail, self.failures = self.failures > 0, max(self.failures - 1, 0)
+            if fail:
+                raise RuntimeError("the analysis failed")
             return RESULT
         finally:
             with self._lock:
@@ -134,6 +139,35 @@ def test_full_queue_answers_503_with_retry_after(limited, caplog):
     assert "service busy: queue full" in caplog.text
 
 
+def test_the_queue_takes_exactly_its_limit(limited, caplog):
+    client, held = limited(slots=1, queued=1, wait_s=PATIENCE_S)
+    with client, ThreadPoolExecutor(max_workers=3) as pool:
+        slots = slot_guard(client, slots=1, queued=1, wait_s=PATIENCE_S)
+        try:
+            first = pool.submit(post, client)
+            wait_until(lambda: held.running == 1, "the first request holds the slot")
+            second = pool.submit(post, client)
+            wait_until(
+                lambda: second.done() or slots.waiting or held.running > 1,
+                "the second request waits, is answered or starts",
+            )
+            assert slots.waiting == 1  # the second waits in the one place in the queue
+            assert not second.done()
+            third = pool.submit(post, client)
+            wait_until(
+                lambda: third.done() or slots.waiting > 1 or held.running > 1,
+                "the third request is answered, waits or starts",
+            )
+            assert third.done()  # refused at once: the queue is full
+            assert not first.done() and not second.done()
+        finally:
+            held.release.set()
+        served = [r.result(timeout=PATIENCE_S).status_code for r in (first, second)]
+    assert served == [200, 200]
+    assert third.result().status_code == 503
+    assert "service busy: queue full" in caplog.text
+
+
 def test_wait_beyond_the_limit_answers_503(limited, caplog):
     wait_s = 0.1
     # Far above the wait plus the trip of a request on a loaded machine, far below 50 waits.
@@ -165,6 +199,18 @@ def test_wait_beyond_the_limit_answers_503(limited, caplog):
     assert busy.headers["retry-after"] == str(main.RETRY_AFTER_S)
     assert "service busy: no slot within the wait limit" in caplog.text
     assert wait_s <= waited < ceiling_s
+
+
+def test_a_failed_analysis_frees_its_slot(limited):
+    client, held = limited(slots=1, queued=0, wait_s=PATIENCE_S)
+    held.failures = 1
+    held.release.set()
+    with client:
+        slot_guard(client, slots=1, queued=0, wait_s=PATIENCE_S)
+        assert post(client).status_code == 500
+        # Had the failed analysis kept its slot, this request would find no slot and no queue.
+        assert post(client).status_code == 200
+    assert held.peak == 1
 
 
 def test_executor_has_one_thread_per_slot():

@@ -3,7 +3,7 @@ import {
   analyzeAndOpenDashboard,
   animationsSettled,
   collectProblems,
-  dashboardHeading,
+  openResults,
   holdClock,
   loadFixture,
   openPlayer,
@@ -112,7 +112,7 @@ test("a recorded cover the archive does not hold (404) is not available, with no
   await page.getByPlaceholder(/Song title/).fill("Bright Lines");
   // The analysis screen's cover of the track: nothing drawn for it, never a broken image. The
   // screen moves on to the Dashboard by itself 3.5 s after the result: checked before, with the
-  // page's time held there (see `holdClock`), then let run again.
+  // page's time held there (see `holdClock`), then the results are opened.
   await holdClock(page);
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await runUntilResultsButton(page);
@@ -123,9 +123,7 @@ test("a recorded cover the archive does not hold (404) is not available, with no
   await expect.poll(() => brokenImages(page), quick).toEqual([]);
   await expect(proceed).toBeVisible({ timeout: 1 });
   await page.clock.resume();
-  await expect(dashboardHeading(page)).toBeVisible({
-    timeout: 10_000,
-  });
+  await openResults(page);
   await animationsSettled(page);
 
   await expect(page.getByText("Cover not available")).toBeVisible();

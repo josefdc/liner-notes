@@ -46,10 +46,11 @@
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
  * configured credential (also URL-encoded, or split by zero-width characters), a secret-shaped
  * string (in any field, a credential's own format or name: PRECISE_SHAPES; in free text, also a
- * long token or 32 or more hex digits other than the record's own commit; in an id field, a
- * token judged as a link's path segment is; in a web search page's excerpt, any token-shaped
- * run), an e-mail address, a URL outside the allow-listed source sites or one to them with a user
- * name or password, or whose path, query or fragment holds a secret shape, a signature, key,
+ * long token, 32 or more hex digits other than the record's own commit, or a base64 value of
+ * random bytes; in an id field, a base64 value of random bytes or a token judged as a link's
+ * path segment is; in a web search page's excerpt, any token-shaped run), an e-mail address, a
+ * URL outside the allow-listed source sites or one to them with a user name or password, or
+ * whose path, query or fragment holds a secret shape, a signature, key,
  * password or secret parameter (nested and URL-encoded too), or a token glued to its path
  * (`linkSecret`), a preview or
  * media URL inside text (the Cover Art Archive link `archiveCoverOf` derives is allowed as the
@@ -227,23 +228,31 @@ const SECRET_NAME = `(?:${[
 /** A quick test for a secret's name, read before the rules that name one. */
 const SECRET_WORDS = /pass|pwd|secret|key|session/i;
 
-/** A bare "pass" or "secret": a festival pass or a song's name as often as a credential. */
-const PLAIN_NAME = /^(?:pass|secret)$/i;
+/**
+ * A bare "pass" or "secret", in any case, or a bare Title-Case "Password": a festival pass or a
+ * song's name ("Secret", "Password") as often as a credential, so read with `credentialValue`.
+ * Any other secret's name (`password`, `pwd`, `db_password`, `apiSecret`, `PASSWORD`) refuses
+ * any value.
+ */
+const PLAIN_NAME = /^(?:[Pp]ass|PASS|[Ss]ecret|SECRET|Password)$/;
+
+/** True when `value`, given under the secret's name `name`, is refused (`PLAIN_NAME`). */
+const secretValue = (name: string, value: string) =>
+  PLAIN_NAME.test(name) ? credentialValue(value) : value !== "";
 
 /** A secret written as `name=value`, in a link's query or fragment or in text. */
 const SECRET_PARAMS = new RegExp(String.raw`(?:^|[\s?&;#])(${SECRET_NAME})=([^\s&;#]*)`, "g");
 
 /**
- * A password or secret parameter: any value under a password's, a token's or a prefixed secret's
- * name (`?pwd=`, `?db_password=`, `client_secret=`), and a value that looks like a credential
- * (`credentialValue`) under a bare "pass" or "secret" (`?pass=weekend-camping` is a ticket).
+ * A password or secret parameter: any value under a password's or a prefixed secret's name
+ * (`?pwd=`, `?db_password=`, `client_secret=`), and a value that looks like a credential
+ * (`credentialValue`) under a bare "pass", "secret" or "Password" (`PLAIN_NAME`:
+ * `?pass=weekend-camping` is a ticket).
  */
 const SECRET_PARAM: Shape = {
   test: (text) =>
     SECRET_WORDS.test(text) &&
-    [...text.matchAll(SECRET_PARAMS)].some(([, name, value]) =>
-      PLAIN_NAME.test(name) ? credentialValue(value) : value !== "",
-    ),
+    [...text.matchAll(SECRET_PARAMS)].some(([, name, value]) => secretValue(name, value)),
 };
 
 /** A quote as JSON, PHP, HTML or an escaped string writes one. */
@@ -268,15 +277,19 @@ const PASSWORD_FIELDS = [
 ];
 
 /**
- * A password or secret field whose value looks like a credential (`credentialValue`): a song
- * called "Secret" or "Password" followed by another title or a time (`"Secret": "Bedtime
- * Story"`, `"Password": "Hidden"`, `"Password": 3:41`) is not one.
+ * A password or secret field with a value: any value under a password's or a prefixed secret's
+ * name (`{"password": "letmein"}`, `db_password: x`, `<pwd>x</pwd>`), and one that looks like a
+ * credential under a bare "pass", "secret" or "Password" (`PLAIN_NAME`): a song called "Secret"
+ * or "Password" followed by another title or a time (`"Secret": "Bedtime Story"`, `"Password":
+ * "Hidden"`, `"Password": 3:41`) is not one.
  */
 const PASSWORD_FIELD: Shape = {
   test: (text) =>
     SECRET_WORDS.test(text) &&
     PASSWORD_FIELDS.some((pattern) =>
-      [...text.matchAll(pattern)].some((field) => credentialValue(field[2] ?? field[3] ?? "")),
+      [...text.matchAll(pattern)].some((field) =>
+        secretValue(field[1], field[2] ?? field[3] ?? ""),
+      ),
     ),
 };
 
@@ -289,11 +302,13 @@ const PASSWORD_FIELD: Shape = {
 const BEARERS = /\b(?:[Bb]earer|BEARER)(?::\s*|\s+)["']?([A-Za-z0-9._~+/=-]{12,})/g;
 
 /**
- * A basic credential: "Basic", in any case, then a base64 value of 8 or more characters whose
- * length is a multiple of 4 or that ends in "=", with a digit or a capital after its first
- * character. "Basic Channel", "Basic Instructions" and "a basic verse-chorus-verse" are prose.
+ * A basic credential: "Basic", in any case, then (after a space, a colon or a quote) a base64
+ * value that decodes to printable text with a ":", a user name and a password
+ * (`QWxhZGRpbjpvcGVuIHNlc2FtZQ==` is "Aladdin:open sesame"). "Basic Channel", "a basic
+ * verse-chorus-verse", "a basic Am/F/C/G progression" and "a basic LinnDrum pattern" decode to
+ * bytes that are not text.
  */
-const BASICS = /\b(?:[Bb]asic|BASIC)(?::\s*|\s+)["']?([A-Za-z0-9+/]{6,}={0,2})(?![A-Za-z0-9+/=])/g;
+const BASICS = /\b(?:[Bb]asic|BASIC)(?::\s*|\s+)["']?([A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9+/=])/g;
 
 /**
  * A Hugging Face token: "hf_" and 30 or more random letters, in which two capitals meet at least
@@ -315,19 +330,16 @@ const BEARER_OR_BASIC: Shape = {
     ([...text.matchAll(BEARERS)].some(([, value]) =>
       value.split(/[-._~]/).some((piece) => piece.length >= 8 && /\d|[+/=]|[a-z][A-Z]/.test(piece)),
     ) ||
-      [...text.matchAll(BASICS)].some(
-        ([, value]) =>
-          value.length >= 8 &&
-          (value.length % 4 === 0 || value.endsWith("=")) &&
-          /[a-z]/.test(value) &&
-          (/\d/.test(value) || /.[A-Z]/.test(value)),
+      [...text.matchAll(BASICS)].some(([, value]) =>
+        /^[\x20-\x7e]+:[\x20-\x7e]*$/.test(Buffer.from(value, "base64").toString("latin1")),
       )),
 };
 
 /**
- * An AWS access key id: "AKIA" or "ASIA" and 16 capitals and digits, a letter among them, not
- * inside a longer run of capitals and digits (`#ASIATOUR2023SEOULKPOP` is a hashtag,
- * `ASIA1982GEFFENGHS2008` a catalogue number, `AKIA0000000000000001` a matrix number).
+ * An AWS access key id: "AKIA" or "ASIA" and 16 capitals and digits, a letter among them, with
+ * no capital just before it (a digit there, "1AKIA…", is read) and no capital or digit just
+ * after it: `#ASIATOUR2023SEOULKPOP` is a hashtag, `ASIA1982GEFFENGHS2008` a catalogue number and
+ * `AKIA0000000000000001` a matrix number.
  */
 const AWS_KEY_IDS = /(?<![A-Z])(?:AKIA|ASIA)([A-Z0-9]{16})(?![A-Z0-9])/g;
 const AWS_KEY_ID: Shape = {
@@ -337,15 +349,24 @@ const AWS_KEY_ID: Shape = {
 };
 
 /**
+ * A key or a token under its name, with a value, as a parameter or a field: `api_key=`,
+ * `"access_token": …`, `auth_token=`, and camelCase token names (`accessToken`, `apiToken`,
+ * `authToken`, `sessionToken`).
+ */
+const KEY_OR_TOKEN: Shape = {
+  test: (text) =>
+    /(?<![A-Za-z0-9])(?:api[-_]?key|access_token|client_secret|token|(?:access|secret)[_-]key)["']?\s*[:=]\s*\S/i.test(
+      text,
+    ) || /(?<![A-Za-z0-9])[a-z][a-z0-9]*Token["']?\s*[:=]\s*\S/.test(text),
+};
+
+/**
  * Credentials by their own format or name, refused in any field, whatever sits before or after
  * them (a key glued to a word or behind an escaped "\n" is still one).
  */
 const PRECISE_SHAPES: Array<[string, Shape]> = [
   ["a bearer or basic credential", BEARER_OR_BASIC],
-  [
-    "a key or token parameter",
-    /(?<![A-Za-z0-9])(?:api[-_]?key|access_token|client_secret|token|(?:access|secret)[_-]key)["']?\s*[:=]\s*\S/i,
-  ],
+  ["a key or token parameter", KEY_OR_TOKEN],
   ["a password or secret parameter", SECRET_PARAM],
   ["a password field", PASSWORD_FIELD],
   ["an OpenAI-style key", /\bsk-[A-Za-z0-9_-]{16,}/],
@@ -992,6 +1013,9 @@ function citedEvidenceIds(value: unknown, ids = new Set<string>()): Set<string> 
  * `recordIssues` only, so no text outlives the record it came from.
  */
 let judgedLinks: Map<string, string | null> | null = null;
+
+/** How many links the check under way has judged: 0 outside a check, as none is kept. */
+export const linksJudgedNow = () => judgedLinks?.size ?? 0;
 
 /** Runs `check` with links judged once each (`judgedLinks`), for this call only. */
 function judgingLinksOnce<T>(check: () => T): T {

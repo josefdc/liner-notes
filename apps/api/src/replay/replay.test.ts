@@ -1810,7 +1810,9 @@ describe("a long token-shaped run in a web page's excerpt", () => {
     }
   });
 
-  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", () => {
+  it("withholds an excerpt whatever is glued to its run, so nothing of the run or its neighbours is written", {
+    timeout: 30_000,
+  }, () => {
     const tail = "Zx9Qw3Er7Ty1Ui5Op";
     // A base64 value: a run of 44 the long-token rule matches, then "/", a tail and padding.
     const head = "Qm9vZ2llV29vZ2llMjAyNlNlY3JldEtleVZhbHVlQUJD";

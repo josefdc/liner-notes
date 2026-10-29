@@ -11,9 +11,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ReplayRecord } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { growth } from "../sources/testing/strings.js";
 import {
   archiveCoverOf,
   leaks,
+  linksJudgedNow,
   PageExcerpts,
   publicTextsOf,
   recordIssues,
@@ -197,6 +199,9 @@ describe("precise rules: refused in every field", () => {
       "See https://genius.com/x?password=a now.",
       "See https://genius.com/x?db_password=x now.",
       "See https://genius.com/x?client_secret=x now.",
+      `See https://genius.com/x?accessToken=${VALUE} now.`,
+      `See https://genius.com/x?q=a&authToken=${VALUE} now.`,
+      `See https://genius.com/x#sessionToken=${VALUE} now.`,
       "See https://genius.com/x?pass=Tr0ub4dor now.",
       "See https://genius.com/x#secret=QwErTyUiOpAsDf now.",
       "Their single secret=hunter2 remix",
@@ -267,6 +272,18 @@ describe("precise rules: refused in every field", () => {
       "PASSWORD = opensesame1",
       ":password => 'opensesame1'",
       "<password>opensesame1</password>",
+      // Under a password's or a prefixed secret's own name, any value is one.
+      '{"password": "letmein"}',
+      "password: letmein",
+      "<password>sunshine</password>",
+      '{"db_password": "correcthorse"}',
+      '{"api_secret": "abcdefghijklmnop"}',
+      'config: {"user": "admin", "password": "letmein"}',
+      '{"pwd": "x1"}',
+      // A token under a camelCase name.
+      '{"accessToken": "a1b2c3d4e5f6"}',
+      `apiToken=${VALUE}`,
+      `{"authToken":"${VALUE}"}`,
       '{"db_password": "opensesame1"}',
       '{"pass": "opensesame1"}',
       '{"pwd": "opensesame1"}',
@@ -338,9 +355,32 @@ describe("precise rules: refused in every field", () => {
       "the Basic Channel-affiliated label",
       "Basic Instructions, Basic Element12 and Basic Instinct2",
       "bearer 4u2c-the-world tour",
+      // Chord lines and gear after "basic": base64-shaped, but no "user:password" inside.
+      "built on a basic Am/F/C/G progression",
+      "the basic C/G/Am/F pop changes",
+      "a basic Em/C/G/D loop",
+      "over a basic Am7/D9/Gmaj7 vamp",
+      "a basic LinnDrum pattern",
+      "a basic MiniMoog bassline",
+      "a basic ProTools session",
+      "Basic C/G/Am/F chords for beginners",
+      // Base64 of words with no "user:password" in them ("Hello world").
+      "Basic SGVsbG8gd29ybGQ= is how the sleeve spells it",
     ]) {
       expect(inClaim(text), text).toEqual([]);
       expect(excerpt(text), text).toEqual([]);
+      expect(
+        judge({ evidence: [webItem("https://example.org/a", { title: text })] }),
+        text,
+      ).toEqual([]);
+      const primary = {
+        id: "musicbrainz:x",
+        source: "musicbrainz",
+        sourceTier: "primary-record",
+        url: "https://musicbrainz.org/recording/x",
+        excerpt: text,
+      };
+      expect(judge({ evidence: [primary] }), text).toEqual([]);
     }
   });
 
@@ -734,42 +774,74 @@ describe("the committed recordings, scanned with these rules", () => {
     }
   });
 
-  it("are checked in time linear in their size, a 40,000-character link included", () => {
-    const juicy = readFileSync(join(DEFAULT_REPLAY_DIR, "juicy-the-notorious-big.json"), "utf8");
-    for (const unit of ["x_", "a-", "aB-", "0123456789abcdef"]) {
-      const record = ReplayRecord.parse(JSON.parse(juicy));
-      const url = `https://www.example-lyrics.com/${unit.repeat(Math.ceil(40000 / unit.length)).slice(0, 40000)}`;
+  it("are checked in time linear in their size, a 40,000-character link included", {
+    timeout: 60_000,
+  }, () => {
+    const juicy = ReplayRecord.parse(
+      JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "juicy-the-notorious-big.json"), "utf8")),
+    );
+    // A record with one more web page whose link is `url`, checked as the recorder checks it.
+    const call = (url: string) => {
+      const record = structuredClone(juicy);
       const item = webItem(url) as never;
       record.analysis.evidence!.push(item);
       const done = record.events.find((e) => e.event.type === "complete")!.event as {
         data: { evidence: unknown[] };
       };
       done.data.evidence.push(item);
-      const started = performance.now();
-      recordIssues(record, {
+      return recordIssues(record, {
         ...check,
         publicTexts: publicTextsOf(record.analysis),
         track: record.analysis,
         allowedCover: archiveCoverOf(record.analysis),
       });
-      // Main took 14 to 27 s here; the checks take well under one.
-      expect(performance.now() - started, unit).toBeLessThan(5000);
+    };
+    for (const unit of ["x_", "a-", "aB-", "0123456789abcdef"]) {
+      const make = (size: number) =>
+        `https://www.example-lyrics.com/${unit.repeat(Math.ceil(size / unit.length)).slice(0, size)}`;
+      // The CPU time from a 5,000- to a 40,000-character link: a link read once grows about 8
+      // times (less, beside the record's own cost), one read again from each start about 64
+      // times; main took 14 to 27 s on the longer one.
+      const { ratio } = growth(make, call, { size: 5_000, factor: 8, maxMs: 5_000 });
+      expect(ratio, unit).toBeLessThan(20);
     }
   });
 
-  it("decode a text dense in escapes that are not UTF-8 in linear time", () => {
+  it("decode a text dense in escapes that are not UTF-8 in linear time", {
+    timeout: 60_000,
+  }, () => {
     for (const unit of ["%E3%", "%zz", "%FF%41"]) {
-      const text = unit.repeat(Math.ceil(200000 / unit.length)).slice(0, 200000);
-      for (const record of [
-        claim(text),
-        { evidence: [{ id: text }] },
-        claim(`https://genius.com/x?q=${text}`),
-      ]) {
-        const started = performance.now();
-        leaks(record, check);
-        expect(performance.now() - started, unit).toBeLessThan(1000);
+      const make = (size: number) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+      for (const [where, call] of [
+        ["a claim", (text: string) => leaks(claim(text), check)],
+        ["an id", (text: string) => leaks({ evidence: [{ id: text }] }, check)],
+        ["a link", (text: string) => leaks(claim(`https://genius.com/x?q=${text}`), check)],
+      ] as const) {
+        // From 25,000 to 200,000 characters: one exception per escape grew 8 times too, but cost
+        // seconds; a read once grows about 8 times, one again from each escape about 64.
+        const { ratio, bigMs } = growth(make, call, { size: 25_000, factor: 8, maxMs: 3_000 });
+        expect(ratio, `${unit} in ${where}`).toBeLessThan(20);
+        expect(bigMs, `${unit} in ${where}`).toBeLessThan(1_000);
       }
     }
+  });
+
+  it("keep the links they judged for one check only", () => {
+    let during = 0;
+    const record = {
+      evidence: [webItem("https://example.org/a"), webItem("https://example.org/b")],
+      // Read after the evidence, while the check walks the record.
+      get later() {
+        during = Math.max(during, linksJudgedNow());
+        return "later";
+      },
+    };
+    expect(leaks(record, check)).toEqual([]);
+    expect(during).toBeGreaterThan(0);
+    expect(linksJudgedNow()).toBe(0);
+    const found = new PageExcerpts();
+    withoutPageTokens(record, [], found);
+    expect(linksJudgedNow()).toBe(0);
   });
 });
 

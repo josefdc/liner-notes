@@ -545,5 +545,37 @@
   {
     "value": "Ashcroft wrote it as a basic singer-songwriter demo.",
     "places": ["excerpt", "mbexcerpt", "text"]
+  },
+  {
+    "value": "built on a basic Am/F/C/G progression",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "the basic C/G/Am/F pop changes",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "a basic Em/C/G/D loop",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "over a basic Am7/D9/Gmaj7 vamp",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "a basic LinnDrum pattern",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "a basic MiniMoog bassline",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "a basic ProTools session",
+    "places": ["text", "excerpt", "mbexcerpt"]
+  },
+  {
+    "value": "Basic C/G/Am/F chords for beginners",
+    "places": ["text", "excerpt", "mbexcerpt"]
   }
 ]

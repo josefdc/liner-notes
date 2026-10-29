@@ -1,11 +1,14 @@
 import {
   bottomCues,
+  cardsAbove,
+  CUE_EDGE,
   cueWidth,
   type EdgeCounts,
   edgeCounts,
   effectiveBreaks,
   type FirstViewInput,
   planFirstView,
+  upAside,
 } from './firstView';
 import {
   type CardBox,
@@ -150,15 +153,18 @@ export function firstView(
 }
 
 /** The band over the top of a view whose top is at `top` (map px), as the map draws it. */
-export function headOf(boxes: Iterable<CardBox>, options: LayoutOptions) {
+export function headOf(boxes: Iterable<CardBox>, options: LayoutOptions, width: number) {
   const band = (options.axisSize ?? 20) + 6;
   const all = [...boxes];
+  // Down a column, "↑ N more" sits in the gutter right of the cards where it fits (no band).
+  const right = Math.max(0, ...all.map((box) => box.x + box.width));
+  const aside = (top: number) => upAside(right, width, cardsAbove(all, top));
   return (top: number) =>
     options.orientation === 'horizontal'
       ? top - ((options.margin?.top ?? 0) - 6) > 0
         ? band
         : 0
-      : all.some((box) => box.y < top - 0.5)
+      : !aside(top) && all.some((box) => box.y < top - 0.5)
         ? CUE
         : 0;
 }
@@ -187,12 +193,10 @@ export function judgeView(
   options: LayoutOptions,
   room: { width: number; height: number; inset: number },
 ) {
-  const across = options.orientation === 'horizontal';
-  const band = (options.axisSize ?? 20) + 6;
   const boxes = [...cards.entries()];
   // The room for cards: under the pinned year labels (across), or under the band "↑ N more"
   // takes while a card starts above the view (down); both opaque.
-  const area = { ...view, top: view.top + headOf(cards.values(), options)(view.top) };
+  const area = { ...view, top: view.top + headOf(cards.values(), options, room.width)(view.top) };
   const counts = edgeCounts(
     boxes.map(([, box]) => box),
     area,
@@ -216,17 +220,48 @@ export function judgeView(
         box.y < b.y + b.height - 0.5 &&
         b.y < box.y + box.height - 0.5,
     );
-  // A card too large for the room is cut whatever the view: one taller than the room below the
-  // bands over its top and above the cues' strip at its bottom.
-  const fits = (box: CardBox) =>
-    box.width <= room.width && box.height <= room.height - room.inset - (across ? band : CUE) - CUE;
+  // A card too large for the room for cards in every view is cut wherever it lies in view:
+  // that card alone is not counted. The room is as drawn: under the band over the view's top
+  // (the pinned labels, "↑ N more"), down to its bottom edge; a view with no band starts no
+  // lower than the top of the map's first line of cards (across, the labels' own place).
+  const below = room.height - room.inset;
+  const head = headOf(cards.values(), options, room.width)(Number.POSITIVE_INFINITY);
+  const freeTop =
+    options.orientation === 'horizontal'
+      ? (options.margin?.top ?? 0) - 6
+      : Math.min(...boxes.map(([, box]) => box.y));
+  // Down a column the view cannot move across: a card under the place of "N more ↓" (bottom
+  // right) has the room above the cue's button only, while a card lies below it.
+  const lowest = Math.max(...boxes.map(([, box]) => box.y + box.height));
+  const strip = (box: CardBox) =>
+    options.orientation === 'vertical' &&
+    box.x + box.width > view.left + room.width - CUE_EDGE - cueWidth('down', boxes.length) + 0.5 &&
+    box.y + box.height < lowest - 0.5
+      ? CUE
+      : 0;
+  const fitsWith = (box: CardBox, strip: number) =>
+    box.width <= room.width + 0.5 &&
+    (box.height <= below - head - strip + 0.5 ||
+      (box.height <= below - strip + 0.5 && box.y + box.height <= freeTop + below - strip + 0.5));
+  // (The analysed card is judged with the cue's place kept; the others, a view anywhere.)
+  const fits = (box: CardBox) => fitsWith(box, 0);
+  const anchorFits = anchor !== null && fitsWith(anchor, strip(anchor));
   const cut = boxes
-    .filter(([, box]) => fits(box) && !outside(box) && (!within(box) || under(box)))
+    .filter(
+      ([, box]) =>
+        fits(box) &&
+        (box !== anchor || anchorFits) &&
+        !outside(box) &&
+        (!within(box) || under(box)),
+    )
     .map(([id, box]) => `${id} ${[box.x, box.y, box.width, box.height].map(Math.round)}`);
   return {
-    // (Where the analysed card is too large for the room, the view is cut wherever it goes.)
-    cut: anchor && !fits(anchor) ? [] : cut,
-    anchorIn: !anchor || !fits(anchor) || (within(anchor) && !under(anchor)),
+    cut,
+    // The analysed card wholly in view, not under a cue; where it is too large for the room,
+    // at least part of it in view.
+    anchorIn: !anchor || (anchorFits ? within(anchor) && !under(anchor) : !outside(anchor)),
+    /** True when the analysed card is too large for the room. */
+    anchorTooBig: anchor !== null && !anchorFits,
     counts,
     fits,
   };

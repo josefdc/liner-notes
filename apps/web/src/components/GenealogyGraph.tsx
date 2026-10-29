@@ -47,6 +47,7 @@ import { fitCardText, SHORTENED_TEXT } from './genealogy/cardText';
 import {
   bottomCues,
   CUE_TEXT,
+  cardsAbove,
   cueName,
   cueWidth,
   type EdgeCounts,
@@ -55,6 +56,7 @@ import {
   planFirstView,
   sameBreaks,
   sameCounts,
+  upAside,
 } from './genealogy/firstView';
 import { cardName, cardWords } from './genealogy/cardWords';
 import { cuePan } from './genealogy/cuePan';
@@ -541,6 +543,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const refocusRef = useRef<Item | null>(null);
   // How many cards lie past each edge of the view (the edge cues), and the pan a cue asks for.
   const [cues, setCues] = useState<EdgeCounts>(NO_CUES);
+  // Down a column, "↑ N more" in the gutter right of the cards (no band of its own).
+  const [upBeside, setUpBeside] = useState(false);
   const cuePanRef = useRef<((side: keyof EdgeCounts) => void) | null>(null);
   const cuesRef = useRef<HTMLDivElement>(null);
   // The detail box's height while it is shown: chips are not placed under it, and a focused item
@@ -965,9 +969,24 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const headOf = (top: number) =>
       pinnedAt(top)
         ? layout.axisSize + 6
-        : orientation === 'vertical' && cardBoxes.some((box) => box.y < top - 0.5)
+        : orientation === 'vertical' &&
+            !upIsAside(top) &&
+            cardBoxes.some((box) => box.y < top - 0.5)
           ? CUE_PX / (transform.k || 1)
           : 0;
+    /**
+     * Down a column, true when "↑ N more" sits in the gutter right of the cards (as the view is
+     * now placed and zoomed, its top at `top`, map px): no band of its own over the view's top
+     * then.
+     */
+    const upIsAside = (top: number) =>
+      orientation === 'vertical' &&
+      upAside(
+        Math.max(0, ...cardBoxes.map((box) => box.x + box.width)) * (transform.k || 1) +
+          transform.x,
+        width,
+        cardsAbove(cardBoxes, top),
+      );
     /** True when the year labels are pinned over a view whose top is at `top` (map px). */
     const pinnedAt = (top: number) => orientation === 'horizontal' && top - (margin.top - 6) > 0;
     /**
@@ -987,6 +1006,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     function countCues() {
       const counts = edgeCounts(cardBoxes, inView());
       setCues((was) => (sameCounts(was, counts) ? was : counts));
+      setUpBeside(upIsAside((insetRef.current - transform.y) / (transform.k || 1)));
     }
 
     /** The band the pinned labels take at the top of the view (screen px; none down a column). */
@@ -2283,17 +2303,22 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           )}
 
           {/* The edge cues: how many cards lie past each edge of the view, each a button that
-              pans the view that way: "↑" at the top-left (across the page, on the pinned year
-              labels' band), the others at the bottom; at rest none lies over a card */}
+              pans the view that way: "↑" at the top (across the page at the left, on the
+              pinned year labels' band; down a column at the right, in the gutter beside the
+              cards where it fits, else on a band of its own), the others at the bottom; at
+              rest none lies over a card */}
           {orientation !== null && cues.left + cues.right + cues.up + cues.down > 0 && (
             <div ref={cuesRef} data-testid="map-cues" className="contents">
               {(
                 [
                   // Across the page on the pinned labels' band; down a column on a band of
                   // its own, opaque (the view's room for cards starts under it).
+                  // Down a column, in the gutter right of the cards where it fits there.
                   orientation === 'horizontal'
                     ? [['up'], 'left-2', { top: mapInset + 2 }]
-                    : [['up'], 'inset-x-0 bg-void px-2', { top: mapInset }],
+                    : upBeside
+                      ? [['up'], 'right-2', { top: mapInset + 2 }]
+                      : [['up'], 'inset-x-0 bg-void px-2', { top: mapInset }],
                   [['left'], 'left-2 bottom-0', { bottom: 0 }],
                   [['down', 'right'], 'right-2 bottom-0', { bottom: 0 }],
                 ] satisfies Array<[Array<keyof EdgeCounts>, string, React.CSSProperties]>
@@ -2303,7 +2328,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 return (
                   <div
                     key={group[0]}
-                    data-cue-band={group[0] === 'up' && orientation === 'vertical' ? '' : undefined}
+                    data-cue-band={
+                      group[0] === 'up' && orientation === 'vertical' && !upBeside ? '' : undefined
+                    }
                     className={`absolute ${place} z-10 flex items-center gap-2 pointer-events-none`}
                     style={{ height: CUE_PX, ...style }}
                   >

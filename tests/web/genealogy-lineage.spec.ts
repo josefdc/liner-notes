@@ -337,10 +337,10 @@ const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
 
 /**
  * The cards main's first view showed whole at rest on the rich map in the Player's panel (at
- * 1280x800, 1440x900 and 1920x1080), counted before #240: the first view shows at least as
- * many.
+ * 390x844, 1280x800, 1440x900 and 1920x1080), counted before #240: the first view shows at
+ * least as many.
  */
-const MAIN_WHOLE_RICH: Partial<Record<number, number>> = { 1280: 2, 1440: 2, 1920: 5 };
+const MAIN_WHOLE_RICH: Partial<Record<number, number>> = { 390: 4, 1280: 2, 1440: 2, 1920: 5 };
 
 /** The band the Player's panel heading lays over the top of the map. */
 const headingBand = (page: Page) =>
@@ -1046,7 +1046,8 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
             const [left, top, right, bottom] = at.box;
             const map = at.map;
             if (sideShown === "up") {
-              expect(left - map[0], "↑ at the left").toBeLessThan(16);
+              // At the left, or (down a column, on a phone) at the right in the cards' gutter.
+              expect(Math.min(left - map[0], map[2] - right), "↑ at a side").toBeLessThan(16);
               expect(Math.abs(top - area[1]), "↑ at the top").toBeLessThan(40);
             } else {
               expect(
@@ -1074,6 +1075,33 @@ for (const [showcase, { open, cards: cardCount }] of Object.entries(SHOWCASES)) 
     });
   }
 }
+
+// The first "↓" on the wide map at 1920 px: a stop that brings the next cards in and keeps
+// "This track" in view wins over one that drops it, though a card far off to the right (which
+// no pan down shows) runs over that stop's bottom edge.
+test("the first pan down the wide map at 1920 px keeps the analysed card in view", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await SHOWCASES.wide.open(page);
+  await page.mouse.move(0, 0);
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  await mapAtRest(graph);
+  expect(await analysedAtRest(graph, headingBand(page))).toBe("in");
+  const before = await cardsInView(graph, headingBand(page));
+  const down = page.getByTestId("map-cues").locator('[data-cue="down"]');
+  await down.focus();
+  await page.keyboard.press("Enter");
+  await mapAtRest(graph);
+  expect(await analysedAtRest(graph, headingBand(page)), "the analysed card kept").toBe("in");
+  expect(await cardsCutAtRest(graph, headingBand(page))).toEqual([]);
+  const after = await cardsInView(graph, headingBand(page));
+  expect(after.filter((id) => !before.includes(id)).length, "cards brought in").toBeGreaterThan(0);
+  expect(problems).toEqual([]);
+});
 
 // A long title in the analysed track's own year makes that year wider than the analysed card:
 // the first view is judged on the map laid out for it (the year moves at the view's edge as a

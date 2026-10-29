@@ -69,6 +69,14 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
   const end = (room: ViewEdges, x: boolean) => (x ? room.right : room.bottom);
 
   const now = roomAt(0, 0);
+  /**
+   * True when a card can be wholly in some view: no wider than the view, no taller than its
+   * room under the band a view starting at that card has. One that cannot is cut wherever it
+   * lies in view, so no stop is judged by it.
+   */
+  const fits = (box: CardBox) =>
+    box.width <= view.right - view.left + 0.5 &&
+    box.height <= view.bottom - view.top - headOf(box.y) + 0.5;
   const beyond = cards.filter((box) => edgeCounts([box], now)[side] > 0);
   if (beyond.length === 0) return null;
   // The least move that brings the nearest of them wholly in, and that card.
@@ -76,6 +84,8 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
     sign > 0 ? hi(box, alongX) - end(now, alongX) : start(now, alongX) - lo(box, alongX);
   const need = Math.min(...beyond.map(gap));
   const next = beyond.filter((box) => gap(box) <= need + 0.5);
+  // (Up, the band over the view's top may go with the move: as little as that may do.)
+  const atLeast = side === 'up' ? Math.min(need, ...beyond.map((box) => view.top - box.y)) : need;
 
   // Every band a view's top may have under it (the pinned labels', or "↑ N more"'s), or none.
   const heads = [...new Set([0, headOf(Number.POSITIVE_INFINITY)])];
@@ -117,8 +127,9 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
 
   /**
    * The cards a view cuts: in view, at its edges or under a cue; with `everywhere`, also any
-   * card of the map that runs over its edges along the pan's axis (a pan the other way later
-   * finds none cut there either).
+   * card that runs over its edges along the pan's axis and lies across from the view (a pan
+   * back the other way finds none cut there either). A card far off to the side, which a pan
+   * along this axis never shows, does not count.
    */
   const counted = new Map<string, number>();
   const cutsAt = (main: number, cross: number, everywhere: boolean) => {
@@ -129,8 +140,15 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
     const buttons = buttonsOf(edgeCounts(cards, room), room);
     const over = (box: CardBox, edge: number) =>
       lo(box, alongX) < edge - 0.5 && hi(box, alongX) > edge + 0.5;
+    const facing = (box: CardBox) =>
+      lo(box, !alongX) < end(room, !alongX) - 0.5 && hi(box, !alongX) > start(room, !alongX) + 0.5;
     const count = cards.filter((box) => {
-      if (everywhere && (over(box, start(room, alongX)) || over(box, end(room, alongX)))) {
+      if (!fits(box)) return false;
+      if (
+        everywhere &&
+        facing(box) &&
+        (over(box, start(room, alongX)) || over(box, end(room, alongX)))
+      ) {
         return true;
       }
       if (whole(room, box)) {
@@ -149,20 +167,28 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
   };
 
   const mains = [...stopsFor(cards, alongX, alongX ? pad : 4), sign * need]
-    .filter((stop) => sign * stop >= need - 0.5 && near(stop, along))
+    .filter((stop) => sign * stop >= atLeast - 0.5 && near(stop, along))
     .sort(
       (a, b) => Number(inside(b, along)) - Number(inside(a, along)) || Math.abs(a) - Math.abs(b),
     );
   /**
-   * The moves across that clear the cards a move along the axis leaves cut across it, or that
-   * bring the next card in where it lies past the view's other edges too.
+   * The moves across for a stop along the axis: those that put the edge of a card the view
+   * then spans along the axis (one it could cut) at the view's edge, or that bring the next
+   * card in where it lies past the view's other edges too; and the map's ends.
    */
   const crossesFor = (main: number) => {
     const room = roomAt(main, 0);
-    const cut = cards.filter((box) => !whole(room, box) && !outside(room, box));
+    const spanned = cards.filter(
+      (box) =>
+        lo(box, alongX) < end(room, alongX) - 0.5 && hi(box, alongX) > start(room, alongX) + 0.5,
+    );
     return [
-      0,
-      ...stopsFor([...cut, ...next], !alongX, 4).filter((stop) => near(stop, across)),
+      ...new Set([
+        0,
+        across.least,
+        across.most,
+        ...stopsFor([...spanned, ...next], !alongX, 4).filter((stop) => near(stop, across)),
+      ]),
     ].sort(
       (a, b) => Number(inside(b, across)) - Number(inside(a, across)) || Math.abs(a) - Math.abs(b),
     );
@@ -174,8 +200,8 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
   const bringsNext = (main: number, cross: number) =>
     next.some((box) => whole(roomAt(main, cross), box));
   /**
-   * Another card wholly in view that was not, none of the cards past that edge passed over
-   * (gone past the view's other edge without being wholly in it).
+   * Another card past that edge wholly in view, none of them passed over (gone past the view's
+   * other edge without being wholly in it).
    */
   const bringsOne = (main: number, cross: number) => {
     const room = roomAt(main, cross);
@@ -183,31 +209,73 @@ export function cuePan(input: CuePanInput): { dx: number; dy: number } | null {
       sign > 0
         ? hi(box, alongX) <= start(room, alongX) + 0.5
         : lo(box, alongX) >= end(room, alongX) - 0.5;
-    return cards.some((box) => whole(room, box) && !whole(now, box)) && !beyond.some(passed);
+    return beyond.some((box) => whole(room, box)) && !beyond.some(passed);
   };
-  const pairs = mains.flatMap((main) => crossesFor(main).map((cross) => [main, cross] as const));
+  const crosses = new Map<number, number[]>();
+  const crossesAt = (main: number) => {
+    let found = crosses.get(main);
+    if (!found) {
+      found = crossesFor(main);
+      crosses.set(main, found);
+    }
+    return found;
+  };
   const move = (main: number, cross: number) =>
     alongX ? { dx: main, dy: cross } : { dx: cross, dy: main };
-  // A stop that cuts no card anywhere along the axis, else none in view; inside the map first;
-  // the next card wholly in, else another (where the next one cannot be without a cut); the
-  // analysed card kept where one allows it; the nearest.
-  for (const everywhere of [true, false]) {
-    for (const within of [true, false]) {
-      for (const brings of [bringsNext, bringsOne]) {
-        const clean = pairs.filter(
-          ([main, cross]) =>
-            (!within || (inside(main, along) && inside(cross, across))) &&
-            brings(main, cross) &&
-            cutsAt(main, cross, everywhere) === 0,
-        );
-        const best = clean.find(([main, cross]) => keeps(main, cross)) ?? clean[0];
-        if (best) return move(...best);
+  const anchorNow = anchor !== null && whole(now, anchor);
+  // While the analysed card is in view, a stop that keeps it first; then: a stop that cuts no
+  // card anywhere along the axis (that a pan along it could show), else none in view; inside
+  // the map first; the next card wholly in, else another past that edge (where the next one
+  // cannot be without a cut); the nearest along the axis, then across it.
+  for (const keeping of anchorNow ? [true, false] : [false]) {
+    for (const everywhere of [true, false]) {
+      for (const within of [true, false]) {
+        for (const brings of [bringsNext, bringsOne]) {
+          for (const main of mains) {
+            if (within && !inside(main, along)) continue;
+            for (const cross of crossesAt(main)) {
+              if (within && !inside(cross, across)) continue;
+              if (keeping && !keeps(main, cross)) continue;
+              if (!brings(main, cross) || cutsAt(main, cross, everywhere) !== 0) continue;
+              return move(main, cross);
+            }
+          }
+        }
       }
     }
   }
-  // None: the one that cuts fewest, inside the map.
-  const fewest = mains
-    .filter((stop) => inside(stop, along))
-    .sort((a, b) => cutsAt(a, 0, false) - cutsAt(b, 0, false) || Math.abs(a) - Math.abs(b))[0];
-  return move(fewest ?? Math.max(along.least, Math.min(along.most, sign * need)), 0);
+  // None: inside the map, the stop that cuts fewest of the cards that can be wholly in view
+  // (one taller or wider than the room is cut wherever the view goes), the analysed card
+  // kept where it can be, then the nearest.
+  const fitting = (main: number, cross: number) => {
+    const room = roomAt(main, cross);
+    const buttons = buttonsOf(edgeCounts(cards, room), room);
+    return cards.filter(
+      (box) =>
+        fits(box) &&
+        !outside(room, box) &&
+        (!whole(room, box) ||
+          buttons.some(
+            (b) =>
+              box.x < b.x + b.width - 0.5 &&
+              b.x < box.x + box.width - 0.5 &&
+              box.y < b.y + b.height - 0.5 &&
+              b.y < box.y + box.height - 0.5,
+          )),
+    ).length;
+  };
+  let best: { main: number; cross: number; cut: number; lost: boolean } | null = null;
+  for (const main of mains) {
+    if (!inside(main, along)) continue;
+    for (const cross of crossesAt(main)) {
+      if (!inside(cross, across)) continue;
+      const cut = fitting(main, cross);
+      const lost = anchor !== null && !whole(roomAt(main, cross), anchor);
+      if (best === null || cut < best.cut || (cut === best.cut && !lost && best.lost)) {
+        best = { main, cross, cut, lost };
+      }
+    }
+  }
+  if (best) return move(best.main, best.cross);
+  return move(Math.max(along.least, Math.min(along.most, sign * need)), 0);
 }

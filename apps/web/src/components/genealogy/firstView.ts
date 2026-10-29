@@ -112,6 +112,22 @@ export const CUE_EDGE = 8;
 export const CUE_GAP = 8;
 
 /**
+ * Down a column, true when "↑ N more" fits at the view's top right, in the gutter right of the
+ * cards (`right`, where the cards end, px from the view's left; `width`, the view's width), as
+ * "↓" does at its bottom right: it then lies over no card and needs no band of its own over the
+ * view's top. `count` is the cards above the view's top, as many as the cue may count or more.
+ */
+export const upAside = (right: number, width: number, count: number) =>
+  right <= width - CUE_EDGE - cueWidth('up', count) + 0.5;
+
+/** The cards that start above a view whose top is at `top` (map px). */
+export const cardsAbove = (cards: Iterable<CardBox>, top: number) => {
+  let count = 0;
+  for (const card of cards) if (card.y < top - 0.5) count += 1;
+  return count;
+};
+
+/**
  * Where the edge cues' buttons at the bottom of a view sit, from its left (px): "← N more" at
  * the left; "N more ↓" then "N more →" at the right.
  */
@@ -160,6 +176,8 @@ interface Judged {
   whole: number;
   /** True when the analysed card is (or there is none). */
   anchorIn: boolean;
+  /** The cards the room for cards cuts (in it only in part). */
+  cut: number;
 }
 
 const inside = (area: Area, card: CardBox) =>
@@ -177,22 +195,39 @@ const meet = (a: CardBox, b: CardBox) =>
  */
 function judge(input: FirstViewInput, view: FirstView, area: Area, clear: boolean): Judged | null {
   const laid = input.layout ? input.layout(view.breaks) : input;
-  if (clear && input.cueWidth) {
-    const counts = edgeCounts(laid.cards, { ...area, bottom: area.end });
-    const buttons = bottomCues(counts, area.right - area.left, input.cueWidth).map(
-      ({ left, right }): CardBox => ({
-        x: area.left + left,
-        y: area.end - input.cue,
-        width: right - left,
-        height: input.cue,
-      }),
-    );
-    if (laid.cards.some((card) => buttons.some((button) => meet(card, button)))) return null;
-  }
+  const counts = edgeCounts(laid.cards, { ...area, bottom: area.end });
+  const buttons = input.cueWidth
+    ? bottomCues(counts, area.right - area.left, input.cueWidth).map(
+        ({ left, right }): CardBox => ({
+          x: area.left + left,
+          y: area.end - input.cue,
+          width: right - left,
+          height: input.cue,
+        }),
+      )
+    : [];
+  if (clear && laid.cards.some((card) => buttons.some((button) => meet(card, button)))) return null;
+  const seen: Area = { ...area, bottom: area.end };
+  // The analysed card: wholly in the view, down to its bottom edge where no cue's button lies
+  // over it (a strip kept for the cues is clear only under their buttons).
+  const anchorIn =
+    laid.anchor === null ||
+    (inside(seen, laid.anchor) &&
+      (input.cueWidth
+        ? !buttons.some((button) => meet(laid.anchor as CardBox, button))
+        : inside(area, laid.anchor)));
   return {
     view,
     whole: laid.cards.filter((card) => inside(area, card)).length,
-    anchorIn: laid.anchor === null || inside(area, laid.anchor),
+    anchorIn,
+    cut: laid.cards.filter((card) =>
+      inside(seen, card)
+        ? buttons.some((button) => meet(card, button))
+        : card.x < seen.right - 0.5 &&
+          card.x + card.width > seen.left + 0.5 &&
+          card.y < seen.bottom - 0.5 &&
+          card.y + card.height > seen.top + 0.5,
+    ).length,
   };
 }
 
@@ -229,9 +264,23 @@ function across(input: FirstViewInput): FirstView {
   const starts = [...new Set((dated.length > 0 ? dated : slots).map(startOf))].filter(fits);
   // Of those, the ones where the card is wholly in view as the map is laid out for them (its
   // year moves past the view's edge when the year runs over it).
-  const views = starts
+  const views: Array<Judged & { from: number }> = starts
     .map((from) => ({ from, ...judged(from, -from) }))
     .filter((view) => view.anchorIn);
+  if (views.length === 0 && anchor !== null && input.cueWidth) {
+    // None (a cue's button over the analysed card): the views that start where the card just
+    // clears the buttons at the view's bottom left ("←") or bottom right ("→", "↓").
+    const many = input.cards.length;
+    const leftCue = CUE_EDGE + input.cueWidth('left', many) + CUE_GAP;
+    const rightCues =
+      CUE_EDGE + input.cueWidth('right', many) + CUE_GAP + input.cueWidth('down', many) + CUE_GAP;
+    const clearOf = [anchor.x - leftCue, anchor.x + anchor.width + rightCues - room.width]
+      .map((from) => Math.round(Math.max(0, Math.min(map.width - room.width, from))))
+      .filter(fits);
+    views.push(
+      ...clearOf.map((from) => ({ from, ...judged(from, -from) })).filter((view) => view.anchorIn),
+    );
+  }
   if (views.length === 0) {
     // None: from the analysed card's own year (else the first).
     const own =
@@ -319,7 +368,9 @@ function acrossFrom(
     Object.assign(breaks, { main: to, mainFrom: from });
   }
   if (past && cards.some((card) => card.y + card.height > top + limit + 0.5)) {
-    Object.assign(breaks, { cross: top + limit, crossPast: top + below });
+    // Never across the analysed card: the line goes after it (it is not moved on).
+    const cross = afterAnchor(top + limit, top + below, anchor);
+    Object.assign(breaks, { cross, crossPast: Math.max(cross, top + below) });
   }
   if (crossFrom !== undefined) Object.assign(breaks, { crossFrom });
   return {
@@ -338,6 +389,9 @@ function acrossFrom(
 function down(input: FirstViewInput): FirstView {
   const { map, slots, cards, anchor, room, cue } = input;
   const below = roomBelow(room);
+  // "↑ N more" in the gutter right of the cards, where it fits: no band over the view's top.
+  const right = Math.max(0, ...cards.map((card) => card.x + card.width));
+  const aside = (top: number) => upAside(right, room.width, cardsAbove(cards, top));
   if (map.height <= below) {
     return { x: 0, y: room.inset + (below - map.height) / 2, breaks: undefined };
   }
@@ -347,12 +401,18 @@ function down(input: FirstViewInput): FirstView {
    */
   const judged = (top: number) => {
     const raised = input.cueWidth !== undefined && cards.some((card) => card.y < top - 0.5);
-    const head = raised ? cue : 0;
+    const head = raised && !aside(top) ? cue : 0;
     return smallest(input, (strip) => {
       const limit = Math.max(0, below - head - strip);
       const breaks: ViewBreaks = {};
       if (cards.some((card) => card.y + card.height > top + limit + 0.5)) {
-        Object.assign(breaks, { main: top + limit, mainPast: top + below - head, mainFrom: top });
+        // Never across the analysed card: the line goes after it (it is not moved on).
+        const main = afterAnchor(top + limit, top + below - head, anchor);
+        Object.assign(breaks, {
+          main,
+          mainPast: Math.max(main, top + below - head),
+          mainFrom: top,
+        });
       }
       return {
         view: { x: 0, y: room.inset + head - top, breaks: noneIfEmpty(breaks) },
@@ -382,14 +442,42 @@ function down(input: FirstViewInput): FirstView {
     ...[...rows].reverse().filter((at) => at <= wanted + 0.5),
     ...rows.filter((at) => at > wanted + 0.5),
   ].filter(fits);
+  // (The first where no card is cut either, else the first.)
+  let kept: Judged | null = null;
   for (const top of new Set(tops)) {
     const view = judged(top);
-    if (view.anchorIn) return view.view;
+    if (view.anchorIn && view.cut === 0) return view.view;
+    if (view.anchorIn) kept ??= view;
   }
-  // None: the analysed card at the view's bottom, or at its top where the room is taller.
+  if (kept) return kept.view;
+  // None: the analysed card at the view's top, or at its bottom (with the strip for the cues
+  // kept, or not where no cue's button lies over it), the first where it is wholly in view;
+  // else at the view's bottom, or at its top where the room is taller.
+  if (anchor) {
+    const head = cards.some((card) => card.y < anchor.y - 4.5) && !aside(anchor.y - 4) ? cue : 0;
+    for (const top of [
+      anchor.y - 4,
+      anchor.y,
+      anchor.y + anchor.height - (below - head),
+      anchor.y + anchor.height - (below - head - cue),
+    ]) {
+      const view = judged(Math.max(0, top));
+      if (view.anchorIn) return view.view;
+    }
+  }
   return judged(anchor ? Math.max(0, Math.max(anchor.y - 4, anchor.y + anchor.height - limit)) : 0)
     .view;
 }
+
+/**
+ * A break's line (map px, across the axis of the lanes or of the years), moved to the analysed
+ * card's far edge where that card would be moved on by it although it starts in the view
+ * (before `end`, the view's edge): the card is never moved past the view, nor cut by the line.
+ */
+const afterAnchor = (line: number, end: number, anchor: CardBox | null) =>
+  anchor !== null && anchor.y < end - 0.5 && anchor.y + anchor.height > line + 0.5
+    ? Math.max(line, anchor.y + anchor.height)
+    : line;
 
 const noneIfEmpty = (breaks: ViewBreaks) =>
   breaks.main === undefined && breaks.cross === undefined && breaks.crossFrom === undefined

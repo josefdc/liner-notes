@@ -1680,6 +1680,39 @@ describe("what an error message keeps", () => {
   });
 });
 
+describe("a credential found escaped at the start of a token (#237)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("hides the token whole, as the credential written as it came did", () => {
+    // The mask of the escaped credential splits the token run after it; the credential as it
+    // came hid the run whole (a long mixed-case token), and so does every path now.
+    vi.stubEnv("DISCOGS_TOKEN", "abc12345");
+    const run = "XyZ9".repeat(15);
+    for (const text of [
+      `id \\u0061bc12345${run} end`,
+      `id \\u0061bc12345${run}Q end`,
+      `id abc12345${run} end`,
+      `"token":"\\u0061bc12345${run}"`,
+      `{"error":"bad key \\u0061bc12345${run}"}`,
+    ]) {
+      for (const out of [
+        scrubReadPayload(text) as string,
+        redactText(text),
+        scrubText(text),
+        plainReason(text) ?? "",
+        describeError(new Error(text)),
+        new SourceError("discogs", "http", text).message,
+      ]) {
+        expect(out, `${JSON.stringify(text)} -> ${JSON.stringify(out)}`).not.toMatch(
+          /XyZ9|abc123|bc12345/,
+        );
+      }
+    }
+  });
+});
+
 describe("text patterns in linear time", { timeout: 30_000 }, () => {
   // The expressions before #194, each quadratic on a long run of the characters it reads.
   const STACK_TRACE =

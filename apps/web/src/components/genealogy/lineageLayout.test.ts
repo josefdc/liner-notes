@@ -167,12 +167,14 @@ describe('layoutLineage, horizontal', () => {
 
 describe('layoutLineage, vertical (below md, or a narrow panel)', () => {
   it('turns the axis vertical below md, and in a panel too narrow for years side by side', () => {
-    expect(orientationFor(390, 390)).toBe('vertical');
-    expect(orientationFor(767, 767)).toBe('vertical');
-    expect(orientationFor(1024, 1024)).toBe('horizontal');
+    expect(orientationFor(false, 390)).toBe('vertical');
+    expect(orientationFor(false, 767)).toBe('vertical');
+    // Below md however wide the panel (a window 800 px wide with a 20 px default font).
+    expect(orientationFor(false, 784)).toBe('vertical');
+    expect(orientationFor(true, 1024)).toBe('horizontal');
     // A panel too narrow for years side by side, at any width of the window.
-    expect(orientationFor(1440, 360)).toBe('vertical');
-    expect(orientationFor(1440, 1440)).toBe('horizontal');
+    expect(orientationFor(true, 360)).toBe('vertical');
+    expect(orientationFor(true, 1440)).toBe('horizontal');
   });
 
   const layout = layoutLineage(CARDS, {

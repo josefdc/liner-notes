@@ -64,12 +64,17 @@ class SizedObserver {
   }
 }
 
-/** Whether the reader asked for reduced motion. */
+/**
+ * Whether the reader asked for reduced motion. md (48rem) as at the default 16 px font, by the
+ * window's width (1024 px here); every other query false.
+ */
 function reduceMotion(reduce: boolean) {
   vi.spyOn(window, 'matchMedia').mockImplementation(
     (query: string) =>
       ({
-        matches: reduce && query.includes('reduce'),
+        matches:
+          (reduce && query.includes('reduce')) ||
+          (query === '(min-width: 48rem)' && window.innerWidth >= 768),
         media: query,
         addEventListener: () => {},
         removeEventListener: () => {},

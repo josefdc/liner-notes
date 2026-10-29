@@ -10,10 +10,23 @@ export type PlayerLayout = 'tabs' | 'columns';
 
 const MD = '(min-width: 48rem)';
 
+// One list per query, made on first use: a render reads them several times. They are made
+// again when `window.matchMedia` itself is replaced (a test's stand-in).
+let source: Window['matchMedia'] | null = null;
+const byQuery = new Map<string, MediaQueryList>();
+
 function list(query: string): MediaQueryList | null {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(query)
-    : null;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  if (source !== window.matchMedia) {
+    source = window.matchMedia;
+    byQuery.clear();
+  }
+  let item = byQuery.get(query);
+  if (item === undefined) {
+    item = window.matchMedia(query);
+    byQuery.set(query, item);
+  }
+  return item;
 }
 
 /** The Player's layout at the window's width now ('tabs' where it cannot be read). */
@@ -32,6 +45,20 @@ function subscribe(onChange: () => void): () => void {
 /** The Player's layout, following the window's width while the page is open. */
 export function usePlayerLayout(): PlayerLayout {
   return useSyncExternalStore(subscribe, playerLayout, () => 'tabs');
+}
+
+/** True from md up (48rem), where the classes' `md:` variants apply (false where unread). */
+export function mdUp(): boolean {
+  return list(MD)?.matches ?? false;
+}
+
+/**
+ * `mdUp`, following the window's width while the page is open. A change of the browser's
+ * default font size moves the breakpoint too, but sends no change event (Chromium): the next
+ * render reads it.
+ */
+export function useMdUp(): boolean {
+  return useSyncExternalStore(subscribe, mdUp, () => false);
 }
 
 const NO_HOVER = '(hover: none)';

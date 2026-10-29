@@ -35,7 +35,6 @@ import {
   isSparse,
   laneOf,
   layoutLineage,
-  MD_PX,
   type Orientation,
   orientationFor,
   placeChips,
@@ -83,7 +82,7 @@ import { listeningPlan, useABListening } from './genealogy/useABListening';
 import { Button } from './ui/Button';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
-import { useNoHover } from '../utils/layout';
+import { useMdUp, useNoHover } from '../utils/layout';
 import type { GenealogyNode, TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -453,11 +452,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     [data, yearOfNode],
   );
 
-  // The graph's size on screen (ResizeObserver) and the window's width. The layout depends on
-  // the axis's direction and the cards' width, which the size sets: while they hold, a resize
-  // keeps the drawing and its zoom and shifts the view so the map stays where it was in the
-  // panel (`resizeRef`, set by the drawing). A hidden panel (the phone tabs) measures 0 by 0:
-  // the graph keeps its last size.
+  // The graph's size on screen (ResizeObserver), and whether the page is at md or up. The
+  // layout depends on the axis's direction and the cards' width, which they set: while they
+  // hold, a resize keeps the drawing and its zoom and shifts the view so the map stays where it
+  // was in the panel (`resizeRef`, set by the drawing). A hidden panel (the phone tabs)
+  // measures 0 by 0: the graph keeps its last size.
   // The band the panel's heading covers at the top: the view keeps the map below it. A heading
   // that grows or shrinks (it wraps or unwraps) moves the view by as much; nothing is drawn
   // again.
@@ -465,9 +464,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const insetShiftRef = useRef<((by: number) => void) | null>(null);
   const sizeRef = useRef<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<((size: { width: number; height: number }) => void) | null>(null);
-  const [panel, setPanel] = useState<{ width: number; height: number; viewport: number } | null>(
-    null,
-  );
+  const [panel, setPanel] = useState<{ width: number; height: number } | null>(null);
+  // From md up, by the query the page's `md:` classes use (48rem, which follows the browser's
+  // default font size): the axis can run across the page, and the selected track's panel lies
+  // at the map's right.
+  const mdUpLayout = useMdUp();
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -479,13 +480,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const last = sizeRef.current;
       if (last && last.width === width && last.height === height) return;
       sizeRef.current = { width, height };
-      setPanel({ width, height, viewport: window.innerWidth });
+      setPanel({ width, height });
     });
     resizeObserver.observe(wrapper);
     return () => resizeObserver.disconnect();
   }, [sparse]);
 
-  const orientation = panel ? orientationFor(panel.viewport, panel.width) : null;
+  const orientation = panel ? orientationFor(mdUpLayout, panel.width) : null;
   // Across the page the line "Years in order, not to scale." sits over the axis, under the
   // heading, where the map has the room: the map starts below both.
   // In the heading's last row, at its right, where that room is free (it takes none of the
@@ -2127,11 +2128,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // From md up the selected track's panel lies at the map's right, clear of "← N more".
   const bottomRoom = cues.left + cues.right + cues.down > 0 ? CUE_PX + 4 : 8;
   const panelRoom =
-    panel !== null && panel.viewport >= MD_PX
-      ? cues.right + cues.down > 0
-        ? CUE_PX + 4
-        : 8
-      : bottomRoom;
+    panel !== null && mdUpLayout ? (cues.right + cues.down > 0 ? CUE_PX + 4 : 8) : bottomRoom;
   const detailBottom = detailTop ? 8 : bottomRoom;
   const detailPanel = selectedNode && (
     <DetailPanel

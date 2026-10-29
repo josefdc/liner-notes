@@ -571,20 +571,24 @@ const asRead = (text: string) => text.replace(PRIVATE_MARKS, "\uFFFD");
  */
 function cappedValues(text: string): string {
   const margin = LOG_CUT_WINDOW + valueReach;
-  for (let size = MAX_LOGGED_TEXT + LOG_CUT_WINDOW + margin; size < text.length; size *= 2) {
+  for (let size = MAX_LOGGED_TEXT + LOG_CUT_WINDOW + margin; size < text.length; ) {
     const capped = cappedPrefix(text, size, margin);
-    if (capped !== undefined) return capped;
+    if (typeof capped === "string") return capped;
+    // Twice as long, or as long as the readings' share of the prefix says the cut needs.
+    const needed = MAX_LOGGED_TEXT + LOG_CUT_WINDOW;
+    size = Math.max(2 * size, Math.ceil(((size - margin) * needed * 1.25) / Math.max(capped, 1)));
   }
   return cappedPrefix(text, text.length, margin) as string;
 }
 
 /**
- * cappedValues on the first `size` characters of `text`; undefined when they are too few to place
- * the cut as on the whole text. Past `size - margin` (`margin`: logCut's window and a value's
+ * cappedValues on the first `size` characters of `text`; when they are too few to place the cut
+ * as on the whole text, how many characters the shorter reading holds before the part the end of
+ * the prefix can change. Past `size - margin` (`margin`: logCut's window and a value's
  * reach), the spans found in a prefix can differ from those of the whole text (a value or a match
  * the prefix cuts off), and so can a span that crosses that point.
  */
-function cappedPrefix(whole: string, size: number, margin: number): string | undefined {
+function cappedPrefix(whole: string, size: number, margin: number): string | number {
   const text = size < whole.length ? whole.slice(0, size) : whole;
   const spans = valueSpans(text);
   const read = asRead(text);
@@ -615,8 +619,8 @@ function cappedPrefix(whole: string, size: number, margin: number): string | und
     for (const [start, end] of [...spans, ...hidden]) {
       if (end > boundary) settled = Math.min(settled, start);
     }
-    const needed = MAX_LOGGED_TEXT + LOG_CUT_WINDOW;
-    if (readings.some((reading) => renderedAt(reading, settled) < needed)) return undefined;
+    const held = Math.min(...readings.map((reading) => renderedAt(reading, settled)));
+    if (held < MAX_LOGGED_TEXT + LOG_CUT_WINDOW) return held;
   }
   const sourceAt = (reading: Rewritten, at: number) =>
     at >= reading.text.length ? text.length : reading.from ? (reading.from[at] as number) : at;

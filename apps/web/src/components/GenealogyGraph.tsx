@@ -39,8 +39,11 @@ import {
   orientationFor,
   placeChips,
   routeLinks,
+  type ViewBreaks,
   wrapText,
 } from './genealogy/lineageLayout';
+import { fitCardText, SHORTENED_TEXT } from './genealogy/cardText';
+import { firstView, sameBreaks, viewBreaks } from './genealogy/firstView';
 import { cardName, cardWords } from './genealogy/cardWords';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
@@ -94,13 +97,21 @@ const PAD = 6;
 const THUMB = 28;
 const TEXT_GAP = 8;
 const LINE_PX = 15;
-// A limit: a title longer than four lines of the widest card (about 110 characters) is cut on
-// its card, with an ellipsis. The whole title is in the card's accessible name and its detail box.
+// Across the page a card whose title (or artist and year) needs more lines than these at the
+// width every card takes grows wider, up to MAX_LONG_TEXT_PX (about 190 characters of title).
+// Words longer still, or too long for a column's room, are cut, with an ellipsis, and the card
+// says so in words ("Title shortened"); the whole title is in its accessible name, its detail
+// box and its details panel.
 const TITLE_LINES = 4;
 const META_LINES = 3;
+/** The widest a card's text grows to show its words whole, across the page (px). */
+const MAX_LONG_TEXT_PX = 352;
 /** A character's width in the graph's monospace text. */
 const CHAR_PX = labelWidth('x', NODE_LABEL_PX);
-/** A card's text is never narrower than this many characters, nor (horizontal) wider than this. */
+/**
+ * A card's text is never narrower than this many characters, nor (horizontal) wider than this,
+ * but for a card whose words need more (up to MAX_LONG_TEXT_PX).
+ */
 const MIN_CHARS = 12;
 const MAX_TEXT_PX = 208;
 /** A map shorter than this (px) leaves no room above an overlaid panel: the panel follows it. */
@@ -346,7 +357,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
   // The characters a card's line needs for every title, artist and year in two lines, no word
   // broken. Where the room is less (a narrow panel, or past MAX_TEXT_PX), a title takes up to four
-  // lines and an artist and year three, a word too long for a line broken with a hyphen.
+  // lines and an artist and year three, a word too long for a line broken with a hyphen; across
+  // the page a card whose words need more grows wider on its own (`fitCardText`).
   const needChars = useMemo(
     () =>
       Math.max(
@@ -423,7 +435,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     data: unknown;
     orientation: Orientation;
     transform: ZoomTransform;
+    /** True while the view is the first view: the reader has not moved it. */
+    rest: boolean;
+    /** Where the first view ended when the map was laid out (see `viewBreaks`). */
+    breaks: ViewBreaks | undefined;
   } | null>(null);
+  // A resize or a new heading height while the view is at rest, where the first view now ends
+  // elsewhere: the map is laid out again for it (a count, read by the drawing's effect).
+  const [restLayout, setRestLayout] = useState(0);
   // The detail box's height while it is shown: chips are not placed under it, and a focused item
   // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
   const detailRef = useRef<HTMLDivElement>(null);
@@ -438,6 +457,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const detailTopRef = useRef(false);
   const detailShownRef = useRef('');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `restLayout` lays the map out again at rest
   useEffect(() => {
     const size = sizeRef.current;
     if (sparse || !svgRef.current || !size || orientation === null || textWidth === null) return;
@@ -489,7 +509,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       orientation === 'vertical' ? railRoomFor(links.length) : SLOT_GAP.horizontal - 12;
     const margin =
       orientation === 'vertical' ? { ...MARGIN.vertical, right: railRoom + 4 } : MARGIN.horizontal;
-    const chars = Math.max(MIN_CHARS, Math.floor(textWidth / CHAR_PX));
     // The tracks that feed this one, at any remove (a link from them into it, or into a track
     // that feeds it): an undated one goes before the first year, never after what it feeds.
     const feeds = new Set<string>();
@@ -507,11 +526,27 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const year = yearOfNode(node.id);
       const { title, meta } = cardWords(node, year);
       const tag = node.id === currentId ? 'This track' : isOrigin(node.id) ? 'Origin' : null;
-      const titleWrap = wrapText(title, chars, TITLE_LINES);
-      const metaWrap = meta
-        ? wrapText(meta, chars, META_LINES)
+      // Across the page a card grows wider for words that need it; down a column every card
+      // takes the column's room.
+      const text = fitCardText(title, meta, {
+        width: textWidth,
+        widest: orientation === 'horizontal' ? MAX_LONG_TEXT_PX : textWidth,
+        step: TEXT_STEP_PX,
+        charPx: CHAR_PX,
+        minChars: MIN_CHARS,
+        titleLines: TITLE_LINES,
+        metaLines: META_LINES,
+      });
+      const chars = Math.max(MIN_CHARS, Math.floor(text.width / CHAR_PX));
+      // Words cut on the card: the card says so, in words, under them.
+      const shortenedWrap = text.shortened
+        ? wrapText(SHORTENED_TEXT[text.shortened], chars, 2)
         : { lines: [], hyphenated: [], truncated: false };
-      const lines = titleWrap.lines.length + metaWrap.lines.length + (tag ? 1 : 0);
+      const lines =
+        text.title.lines.length +
+        text.meta.lines.length +
+        (tag ? 1 : 0) +
+        shortenedWrap.lines.length;
       return {
         node,
         i,
@@ -520,23 +555,44 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         title,
         meta,
         tag,
-        titleWrap,
-        metaWrap,
-        width: cardWidth(textWidth),
+        titleWrap: text.title,
+        metaWrap: text.meta,
+        shortened: text.shortened,
+        shortenedWrap,
+        width: cardWidth(text.width),
         height: PAD * 2 + Math.max(THUMB, lines * LINE_PX),
         lane: laneOf(node.id === currentId, relations.get(node.id)?.link?.type ?? null),
         early: year === null && feeds.has(node.id),
       };
     });
     type Card = (typeof nodes)[number];
-    const layout = layoutLineage(nodes, {
+    const layoutOptions = {
       orientation,
       gap: 10,
       slotGap: SLOT_GAP[orientation],
       axisSize: orientation === 'horizontal' ? 22 : 20,
       crossSpace: perRow * (cardWidth(textWidth) + 10) - 10,
       margin,
+    };
+    /** The map's size for a layout: the drawing is as wide as the widest rail needs. */
+    const sizeOf = (laid: ReturnType<typeof layoutLineage>) => ({
+      width: Math.max(laid.width, routeLinks(links, laid.cards, { railRoom }).right + 4),
+      height: laid.height,
     });
+    // The map as laid out for no view, and its size: what the first view fits, or not.
+    const free = layoutLineage(nodes, layoutOptions);
+    const freeSize = sizeOf(free);
+    /** Where the first view ends, for the room the map has now (see `viewBreaks`). */
+    const breaksFor = (size: { width: number; height: number }) =>
+      viewBreaks(orientation, freeSize, { ...size, inset: insetRef.current });
+    // The view the map was left at: kept (with the layout it was drawn for) once the reader has
+    // moved it; at rest (no pan, zoom or move to a focused card yet) it is the first view again,
+    // laid out for the room the map has now.
+    const last = viewRef.current;
+    const kept = last && last.data === shownNodes && last.orientation === orientation ? last : null;
+    let rest = kept === null || kept.rest;
+    const breaks = kept === null || kept.rest ? breaksFor({ width, height }) : kept.breaks;
+    const layout = breaks ? layoutLineage(nodes, { ...layoutOptions, breakAt: breaks }) : free;
     const boxOf = (id: string) => layout.cards.get(id) ?? { x: 0, y: 0, width: 0, height: 0 };
     const cardBoxes = nodes.map((d) => boxOf(d.id));
     // The links' routes, inside the drawing: the drawing is as wide as the widest rail needs.
@@ -580,8 +636,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .duration(reducedMotion ? 0 : 250)
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         transform = event.transform;
+        // The reader's own pan or zoom (a wheel, a drag, a pinch, a double click): the view is
+        // theirs from now on.
+        if (event.sourceEvent) rest = false;
         g.attr('transform', event.transform.toString());
-        viewRef.current = { data: shownNodes, orientation, transform };
+        viewRef.current = { data: shownNodes, orientation, transform, rest, breaks };
         pinAxis();
       })
       .on('end', () => drawChips());
@@ -788,6 +847,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('data-node-id', (d) => d.id)
       .attr('data-title', (d) => d.title)
       .attr('data-meta', (d) => d.meta)
+      .attr('data-shortened', (d) => d.shortened)
       .attr('transform', (d) => {
         const box = boxOf(d.id);
         return `translate(${box.x},${box.y})`;
@@ -939,6 +999,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${SUB_LABEL_PX}px`)
       .text((d) => d.tag ?? '');
+    // Words cut on the card, said in words: "Title shortened" (the ellipsis alone is easy to
+    // miss). The whole title is in the card's name, its detail box and its details.
+    lineText(
+      'card-shortened',
+      (d) => d.shortenedWrap,
+      (d) => d.titleWrap.lines.length + d.metaWrap.lines.length + (d.tag ? 1 : 0),
+      colors.gray[400],
+    );
 
     // A card's own drawing is decorative for screen readers: its name says it all.
     node.selectChildren().attr('aria-hidden', 'true');
@@ -1141,7 +1209,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           height - (detailTopRef.current ? 0 : detailInsetRef.current),
         ),
       ];
-      if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      if (dx !== 0 || dy !== 0) {
+        rest = false;
+        svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      }
     };
 
     /**
@@ -1190,7 +1261,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         const room = [heading + VIEW_PAD, beside ? height - VIEW_PAD : edge - VIEW_PAD] as const;
         dy = clearOfPanel(selected.y, room, under, [edge, height]);
       }
-      if (dx !== 0 || dy !== 0) svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      if (dx !== 0 || dy !== 0) {
+        rest = false;
+        svg.call(zoomBehavior.translateBy, dx / k, dy / k);
+      }
     };
 
     // Keyboard: one tab stop for the whole graph (roving tabindex). The arrow keys move between
@@ -1368,14 +1442,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         selectRef.current(d.id);
       });
 
-    // The first view, unless the map is laid out again for the same tracks and axis (then the
-    // reader's view is kept). The map at its size, below the panel's heading:
-    // - along the year axis, this track's card in the middle of the room, as far as the map
-    //   allows (no empty band past its edge); vertical, the view then starts at a year's label
-    //   (the slot the top of the view falls in), so the year the first cards belong to is said;
-    // - across it, the axis's labels in view (the top of the row, the left of the column) when
-    //   this track's card is then in view too.
-    const kept = viewRef.current;
+    // The first view, unless the reader has moved the view and the map is laid out again for the
+    // same tracks and axis (then the reader's view is kept). The map at its size, below the
+    // panel's heading: whole and centred along the axis where it fits, else from its earliest
+    // year, with the axis's labels in view (`firstView`); the layout ends no card across the
+    // view's far edges (`breaks`), so at rest each card is wholly in view or wholly out of it.
     /**
      * Holds the view to the map after a resize or a new layout: across each direction, a map
      * that fits the room sits where the first view puts it (centred along the axis, at the top of
@@ -1396,55 +1467,57 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         svg.call(zoomBehavior.transform, zoomIdentity.translate(x, y).scale(k));
       }
     };
-    if (kept && kept.data === shownNodes && kept.orientation === orientation) {
-      svg.call(zoomBehavior.transform, kept.transform);
-      holdView();
+    /** Puts the view at the first view, for the room the map has now. */
+    const showFirstView = () => {
+      const at = firstView(
+        orientation,
+        { width: mapWidth, height: mapHeight },
+        { width, height, inset: insetRef.current },
+      );
+      svg.call(zoomBehavior.transform, zoomIdentity.translate(at.x, at.y));
+    };
+    if (rest) {
+      showFirstView();
     } else {
-      const inset = insetRef.current;
-      const anchor = boxOf(currentId ?? nodes[0]?.id ?? '');
-      const along = (map: number, panel: number, middle: number, from = 0) =>
-        map <= panel - from
-          ? from + (panel - from - map) / 2
-          : Math.min(from, Math.max(panel - map, (from + panel) / 2 - middle));
-      const across = (map: number, panel: number, near: number, far: number, from = 0) =>
-        map <= panel - from || far + VIEW_PAD <= panel
-          ? from
-          : along(map, panel, (near + far) / 2, from);
-      let tx: number;
-      let ty: number;
-      if (orientation === 'horizontal') {
-        tx = along(mapWidth, width, anchor.x + anchor.width / 2);
-        ty = across(mapHeight, height, anchor.y, anchor.y + anchor.height + inset, inset);
-      } else {
-        tx = across(mapWidth, width, anchor.x, anchor.x + anchor.width);
-        ty = along(mapHeight, height, anchor.y + anchor.height / 2, inset);
-        // Start the view at the label of the year its top falls in, while this track's card
-        // stays in view.
-        const viewTop = inset - ty;
-        const slot = [...layout.slots].reverse().find((s) => s.start <= viewTop + 1);
-        if (slot && slot.start < viewTop - 1) {
-          const moved = inset - slot.start;
-          if (anchor.y + anchor.height + moved <= height - VIEW_PAD) ty = moved;
-        }
-      }
-      svg.call(zoomBehavior.transform, zoomIdentity.translate(tx, ty));
+      if (kept) svg.call(zoomBehavior.transform, kept.transform);
+      holdView();
     }
     // Laid out again with a track selected (a filter, a resize): the selected card back in view
     // and clear of its panel. A filter lays the map out afresh, so the pan and zoom start over
     // (accepted: the cards have new places).
     if (selectedRef.current !== null) afterDetailRef.current?.();
 
+    /**
+     * At rest, the first view again for the room the map has now: laid out again where the view
+     * now ends elsewhere across the map's cards, else the same drawing, placed anew. True when
+     * it did either (the view was at rest).
+     */
+    const refit = () => {
+      if (!rest) return false;
+      if (!sameBreaks(breaksFor({ width, height }), breaks)) {
+        setRestLayout((count) => count + 1);
+        return true;
+      }
+      showFirstView();
+      if (selectedRef.current !== null) afterDetailRef.current?.();
+      drawChips();
+      return true;
+    };
+
+    // A heading that grows or shrinks moves the view by as much (at rest, the first view anew).
     insetShiftRef.current = (by) => {
+      if (refit()) return;
       svg.call(zoomBehavior.translateBy, 0, by / (transform.k || 1));
     };
 
     // A resize that keeps the axis and the cards' width keeps the drawing and its zoom: the svg
     // takes the new size, and the view moves by half the change, so what was at the middle of
-    // the panel is at its middle again.
+    // the panel is at its middle again. At rest the view is the first view for the new size.
     resizeRef.current = (next) => {
       const [dx, dy] = [(next.width - width) / 2, (next.height - height) / 2];
       ({ width, height } = next);
       svg.attr('width', width).attr('height', height);
+      if (refit()) return;
       const k = transform.k || 1;
       svg.call(zoomBehavior.translateBy, dx / k, dy / k);
       holdView();
@@ -1487,6 +1560,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     perRow,
     clipPrefix,
     reducedMotion,
+    restLayout,
   ]);
 
   // A resize the drawing keeps (see `resizeRef`).

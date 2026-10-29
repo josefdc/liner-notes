@@ -1,0 +1,425 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "thread-genealogy-kinds",
+        "seq": 0,
+        "threadId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "heartbeat",
+        "runId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 1,
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 2,
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "runId": "thread-genealogy-kinds",
+        "seq": 3,
+        "data": {
+          "id": "t-genealogy-kinds",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-full",
+          "releaseYear": "1994",
+          "bpm": null,
+          "key": null,
+          "energy": null,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "durationSeconds": 240,
+          "genreProfile": [
+            {
+              "genre": "Synthpop",
+              "value": 80
+            },
+            {
+              "genre": "Electronic",
+              "value": 70
+            },
+            {
+              "genre": "Rock",
+              "value": 20
+            },
+            {
+              "genre": "Pop",
+              "value": 55
+            },
+            {
+              "genre": "Ambient",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist",
+                "size": 24,
+                "trackTitle": "Bright Lines",
+                "trackArtist": "Test Artist",
+                "year": 1994
+              },
+              {
+                "id": "s1",
+                "group": 2,
+                "label": "Sweet Fruit - Early Band",
+                "size": 24,
+                "trackTitle": "Sweet Fruit",
+                "trackArtist": "Early Band",
+                "year": 1983
+              },
+              {
+                "id": "s2",
+                "group": 2,
+                "label": "Duke Rap (vocal) - The Duke",
+                "size": 24,
+                "trackTitle": "Duke Rap (vocal)",
+                "trackArtist": "The Duke",
+                "year": 1984
+              },
+              {
+                "id": "d1",
+                "group": 3,
+                "label": "Bright Lines (Candyland OG Version) (Tarraxa Remixed By DJ Somebody Famous Feat Cristian Kizomba and the Very Long Collective) [Extended] - DJ Somebody Famous",
+                "size": 24,
+                "trackTitle": "Bright Lines (Candyland OG Version) (Tarraxa Remixed By DJ Somebody Famous Feat Cristian Kizomba and the Very Long Collective) [Extended]",
+                "trackArtist": "DJ Somebody Famous",
+                "year": 2006
+              },
+              {
+                "id": "d2",
+                "group": 3,
+                "label": "A Dream Later - Someone feat. Another & Test Artist",
+                "size": 24,
+                "trackTitle": "A Dream Later",
+                "trackArtist": "Someone feat. Another & Test Artist",
+                "year": 2002
+              },
+              {
+                "id": "d3",
+                "group": 3,
+                "label": "Absent Without Leave - Rapper",
+                "size": 24,
+                "trackTitle": "Absent Without Leave",
+                "trackArtist": "Rapper",
+                "year": 1995
+              },
+              {
+                "id": "d4",
+                "group": 3,
+                "label": "History Lesson - Duo feat. Guest",
+                "size": 24,
+                "trackTitle": "History Lesson",
+                "trackArtist": "Duo feat. Guest",
+                "year": 2009
+              },
+              {
+                "id": "d5",
+                "group": 3,
+                "label": "Only Hip Hop - Crew feat. Singer",
+                "size": 24,
+                "trackTitle": "Only Hip Hop",
+                "trackArtist": "Crew feat. Singer",
+                "year": 2011
+              },
+              {
+                "id": "h1",
+                "group": 4,
+                "label": "Loving You Still - Pop Singer",
+                "size": 24,
+                "trackTitle": "Loving You Still",
+                "trackArtist": "Pop Singer",
+                "year": 2001
+              },
+              {
+                "id": "h2",
+                "group": 4,
+                "label": "Ma läksin kiima - Cool Rapper",
+                "size": 24,
+                "trackTitle": "Ma läksin kiima",
+                "trackArtist": "Cool Rapper",
+                "year": 2009
+              },
+              {
+                "id": "h3",
+                "group": 4,
+                "label": "No Question - Group featuring Rapper",
+                "size": 24,
+                "trackTitle": "No Question",
+                "trackArtist": "Group featuring Rapper",
+                "year": 1997
+              },
+              {
+                "id": "h4",
+                "group": 4,
+                "label": "The One - Soul Singer",
+                "size": 24,
+                "trackTitle": "The One",
+                "trackArtist": "Soul Singer",
+                "year": 2013
+              },
+              {
+                "id": "u1",
+                "group": 3,
+                "label": "Undated Use - Later Artist",
+                "size": 24,
+                "trackTitle": "Undated Use",
+                "trackArtist": "Later Artist"
+              }
+            ],
+            "links": [
+              {
+                "source": "s1",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s2",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d1",
+                "value": 3,
+                "type": "remix",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d2",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d3",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d4",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "d5",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s1",
+                "target": "h1",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s1",
+                "target": "h2",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s1",
+                "target": "h3",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "s1",
+                "target": "h4",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "current",
+                "target": "u1",
+                "value": 2,
+                "type": "sample",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              }
+            ]
+          },
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "evidence": [
+            {
+              "id": "ev-mb-1",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000001",
+              "title": "Bright Lines (recording)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "track/recording/00000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "ev-shs-1",
+              "source": "secondhandsongs",
+              "sourceTier": "primary-record",
+              "url": "https://secondhandsongs.com/performance/1",
+              "title": "Bright Lines (performance)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "work/performance/1"
+            },
+            {
+              "id": "ev-discogs-1",
+              "source": "discogs",
+              "sourceTier": "primary-record",
+              "url": "https://www.discogs.com/release/1",
+              "title": "Test Album (release)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "release/1"
+            },
+            {
+              "id": "ev-web-1",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://example.org/article",
+              "title": "An article about Bright Lines",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": null
+            }
+          ],
+          "audioUnavailableReason": "no_preview",
+          "audio": null,
+          "claims": [
+            {
+              "id": "cl-supported",
+              "text": "Bright Lines samples Verified Model Sample.",
+              "about": "sample",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-mb-1"],
+              "verdict": "supported",
+              "verdictReason": "The record lists the sample.",
+              "numericCheck": "n/a"
+            }
+          ]
+        }
+      },
+      {
+        "type": "done",
+        "runId": "thread-genealogy-kinds",
+        "seq": 4,
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

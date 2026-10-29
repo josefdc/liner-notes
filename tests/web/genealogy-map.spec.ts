@@ -7,11 +7,13 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  loadFixture,
   releaseStream,
   replayedRecording,
   showcaseRecordings,
   useMockApi,
 } from "./mock";
+import { cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
 import { offline } from "./offline";
 
 // The song-relations map on a page of its own (#217): `/t/<id>/map` opens a stored result's map
@@ -35,6 +37,8 @@ const SPARSE = "1aBcDeFgHiJkLmNoPqRsTu";
 const BARE = "2bCdEfGhIjKlMnOpQrStUv";
 /** A well-formed track id without a stored run. */
 const MISSING = "7ouMYWpwJ422jRcDASZB7P";
+/** A stored result with a wide map (genealogy-wide: 13 tracks over thirty years). */
+const WIDE = "4dEfGhIjKlMnOpQrStUvWx";
 
 const omtResult = () =>
   replayedRecording().events.find((event) => event.type === "complete")?.data as Record<
@@ -74,6 +78,15 @@ const streamOf = (data: Record<string, unknown>) => [
   { type: "done" },
 ];
 
+/** The genealogy-wide fixture's result under the track id WIDE. */
+function wideResult() {
+  const events = loadFixture("genealogy-wide").streams[ANALYZE] as Array<{
+    type: string;
+    data?: Record<string, unknown>;
+  }>;
+  return { ...events.find((event) => event.type === "complete")?.data, id: WIDE };
+}
+
 /** Stored runs of the map's tracks, and the streams that analyse the tracks it leads to. */
 function mapApi() {
   const full = fullResultData() as { genealogy: { nodes: Array<{ group?: number }> } };
@@ -89,6 +102,7 @@ function mapApi() {
       // What the analysis of the sample source stored, for a reload of its address.
       [SOURCE_ID]: storedRun(fullAs(SOURCE_ID), "live"),
       [SPARSE]: storedRun(fullAs(SPARSE), "live"),
+      [WIDE]: storedRun(wideResult(), "live"),
       [BARE]: storedRun(
         fullAs(BARE, {
           genealogy: { nodes: full.genealogy.nodes.filter((node) => node.group === 1), links: [] },
@@ -342,6 +356,38 @@ for (const [width, height] of [
       expect(await analyses(page)).toEqual([]);
       expect(problems).toEqual([]);
     });
+  });
+}
+
+// The full-size map's first view (#240): at rest each card is wholly in the window's map or
+// wholly out of it, never cut by its edge, for the recorded One More Time run and a wide map.
+for (const [width, height] of [
+  [390, 844],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as const) {
+  test(`at ${width} px the full map's first view cuts no card at its edges`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const problems = collectProblems(page);
+    await page.setViewportSize({ width, height });
+    await useMockApi(page, mapApi());
+    for (const [id, cards] of [
+      [OMT, 10],
+      [WIDE, 13],
+    ] as const) {
+      await page.goto(`/t/${id}/map`);
+      await expect(mapHeading(page)).toBeFocused();
+      const graph = graphOf(page);
+      await expect(graph.locator("g.nodes > g")).toHaveCount(cards);
+      await mapAtRest(graph);
+      expect(await cardsCutAtRest(graph), `${id}: cards cut at rest`).toEqual([]);
+      expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
+      await shot(page, testInfo, `rest-${id}-${width}`);
+    }
+    expect(problems).toEqual([]);
   });
 }
 

@@ -12,20 +12,24 @@ import {
   showcaseRecordings,
   useMockApi,
 } from "./mock";
+import { cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
 import { offline } from "./offline";
 
 // The song-relations map as a lineage (#217): each track a card on a year axis, across the page
 // from md up (a full-width row below the columns) and down a phone's tab. On every width, for the
 // genealogy-kinds result, every recorded showcase run (fixtures/replays: One More Time on every
-// width, the others at 390, 1280, 1440 and 1920 px) and a rich map (MusicBrainz years, second
-// hops, undated tracks, a 92-character title and a 50-letter word):
+// width, the others at 390, 1280, 1440 and 1920 px), a rich map (MusicBrainz years, second
+// hops, undated tracks, a 92-character title and a 50-letter word) and a wide one (13 tracks
+// over thirty years, a 137-character title):
+// - at rest, each card is wholly in the visible map area or wholly out of it (#240);
 // - no two cards overlap;
 // - no relation is written on the map at rest; a chip names it while a card or a link is pointed
 //   at or focused: never over a card, another chip or the detail box, and near its link;
 // - every card and link the keyboard reaches is brought into view, clear of the detail box, a
 //   card with its year's label; down a phone's tab nothing runs past the panel's sides;
 // - from 1280 px no title, artist or year is cut: each wraps (four lines of title, three of
-//   artist and year at most), a long word broken with a hyphen, inside its card.
+//   artist and year at most, on a wider card where it needs one), a long word broken with a
+//   hyphen, inside its card.
 // With two relations to the analysed track or fewer the map is a compact row instead, and the
 // panel is as tall as it.
 
@@ -177,9 +181,38 @@ const cardWords = (page: Page) =>
         id: card.getAttribute("data-node-id"),
         title: read("card-title", card.getAttribute("data-title")),
         meta: read("card-meta", card.getAttribute("data-meta")),
+        // What the card says is shortened, and the words it says it in.
+        shortened: card.getAttribute("data-shortened"),
+        said: read("card-shortened", null).joined,
       };
     }),
   );
+
+/** What a card says when words are cut on it (what is cut: its words). */
+const SHORTENED: Record<string, string> = {
+  title: "Title shortened",
+  artist: "Artist shortened",
+  "title and artist": "Title and artist shortened",
+};
+
+/**
+ * Every card's cut words said on it: a card whose title or artist and year ends in "…" says
+ * which, in words; one with its words whole says nothing.
+ */
+async function checkCutsSaid(page: Page, what: string) {
+  for (const card of await cardWords(page)) {
+    const cut =
+      card.title.cut && card.meta.cut
+        ? "title and artist"
+        : card.title.cut
+          ? "title"
+          : card.meta.cut
+            ? "artist"
+            : null;
+    expect(card.shortened, `${what}: ${card.id} says what is cut`).toBe(cut);
+    expect(card.said, `${what}: ${card.id}'s words for it`).toBe(cut ? SHORTENED[cut] : "");
+  }
+}
 
 async function screenshot(page: Page, testInfo: TestInfo, name: string) {
   const dir = process.env.GENEALOGY_SHOTS_DIR ?? testInfo.project.outputDir;
@@ -231,6 +264,15 @@ const SHOWCASES = {
     cards: 16,
     widths: EVERY_WIDTH,
   },
+  wide: {
+    open: async (page: Page) => {
+      await useMockApi(page, loadFixture("genealogy-wide"));
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      await openPlayer(page);
+    },
+    cards: 13,
+    widths: EVERY_WIDTH,
+  },
 } satisfies Record<string, Showcase>;
 
 /** Each committed showcase recording, replayed as the API serves it. */
@@ -252,6 +294,12 @@ const RECORDED: Record<string, Showcase> = Object.fromEntries(
 );
 
 const SHOWN: Record<string, Showcase> = { ...SHOWCASES, ...RECORDED };
+
+/** The band the Player's panel heading lays over the top of the map. */
+const headingBand = (page: Page) =>
+  page
+    .locator("#panel-genealogy > div")
+    .filter({ has: page.getByRole("heading", { name: "Connections" }) });
 
 for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entries(SHOWN)) {
   for (const [width, height] of widths) {
@@ -310,6 +358,13 @@ for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entr
       await page.evaluate(async () => {
         await document.fonts.ready;
       });
+
+      // At rest each card is wholly in view or wholly out of it, and some are in view.
+      await mapAtRest(graph);
+      expect(await cardsCutAtRest(graph, headingBand(page)), "cards cut at rest").toEqual([]);
+      expect(await wholeCardsAtRest(graph, headingBand(page))).toBeGreaterThan(0);
+      // No word is cut unsaid.
+      await checkCutsSaid(page, `${showcase} at ${width} px`);
 
       // The axis: across the page from md up, down a phone's tab.
       const rest = await measure(page);
@@ -425,6 +480,110 @@ test("a long title and a long word are read whole, in the card's name and its de
     /^Supercalifragilisticexpialidociouslyremixedforever by Remixer \(2016\):/,
   );
   expect(await word.locator("text.card-title tspan[data-hyphen]").count()).toBeGreaterThan(0);
+});
+
+/** The wide map's remix, its title 137 characters long. */
+const LONG_TITLE =
+  "Bright Lines (Candyland OG Version) (Tarraxa Remixed By DJ Somebody Famous Feat Cristian " +
+  "Kizomba and the Very Long Collective) [Extended]";
+
+for (const [width, height] of [
+  [390, 844],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as const) {
+  test(`at ${width} px a 137-character title is ${width >= 1280 ? "whole on its card" : "cut on its card and says so"}, and whole in its name, its detail and its panel`, async ({
+    page,
+  }, testInfo) => {
+    const problems = collectProblems(page);
+    expect(LONG_TITLE.length).toBeGreaterThanOrEqual(120);
+    await page.setViewportSize({ width, height });
+    await SHOWCASES.wide.open(page);
+    if (width < 768) await page.getByRole("tab", { name: "Connections" }).click();
+    const graph = graphOf(page);
+    await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+    const card = graph.locator('g.nodes > g[data-node-id="d1"]');
+    const name = `${LONG_TITLE} by DJ Somebody Famous (2006)`;
+    expect((await card.getAttribute("aria-label"))?.startsWith(`${name}:`)).toBe(true);
+
+    // Brought into view by the keyboard (the pointer off the map): its words, and what it says
+    // is cut.
+    await page.mouse.move(0, 0);
+    await card.focus();
+    const words = (await cardWords(page)).find((each) => each.id === "d1");
+    if (!words) throw new Error("no card d1");
+    if (width >= 1280) {
+      // Whole, on a card wide enough for it in four lines, inside the card; nothing said cut.
+      expect(words.title.cut).toBe(false);
+      expect(words.title.whole, words.title.joined).toBe(true);
+      expect(words.title.lines).toBeLessThanOrEqual(4);
+      expect(words.title.past).toBeLessThanOrEqual(0);
+      expect(words.shortened).toBeNull();
+    } else {
+      // A phone's column has no room for it in four lines: cut, and the card says so, in view.
+      expect(words.title.cut).toBe(true);
+      expect(words.shortened).toBe("title");
+      expect(words.said).toBe("Title shortened");
+      const [cardBox, saidBox] = await Promise.all([
+        card.locator("rect.card").boundingBox(),
+        card.locator("text.card-shortened").boundingBox(),
+      ]);
+      if (!cardBox || !saidBox) throw new Error("no card or no words for the cut");
+      expect(saidBox.x).toBeGreaterThanOrEqual(cardBox.x);
+      expect(saidBox.x + saidBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+      expect(saidBox.y + saidBox.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+      await expect(card.locator("text.card-shortened")).toBeVisible();
+    }
+    await screenshot(page, testInfo, `long-title-${width}`);
+
+    // One step away, whole: the detail box of the focused card, and its panel once selected.
+    await expect(page.getByTestId("link-detail")).toContainText(name);
+    await page.keyboard.press("Enter");
+    const panel = page.getByTestId("node-detail");
+    await expect(panel.getByRole("heading", { name: LONG_TITLE, exact: true })).toBeVisible();
+    expect(problems).toEqual([]);
+  });
+}
+
+test("a resize at rest shows the first view for the new room, cutting no card; the reader's view is kept", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await SHOWCASES.wide.open(page);
+  const graph = graphOf(page);
+  await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
+  const view = () => graph.locator(":scope > g").evaluate((g) => g.getAttribute("transform") ?? "");
+  // Wider, narrower, then shorter: each time the first view, from the earliest year.
+  for (const [width, height] of [
+    [1440, 900],
+    [1920, 1080],
+    [1280, 800],
+    [1366, 700],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await mapAtRest(graph);
+    // (Polled: the map is laid out for the new room once the browser reports its size.)
+    await expect
+      .poll(() => cardsCutAtRest(graph, headingBand(page)), { message: `at ${width}×${height}` })
+      .toEqual([]);
+    expect(await wholeCardsAtRest(graph, headingBand(page))).toBeGreaterThan(0);
+    const first = await graph
+      .locator("text.year-tick")
+      .first()
+      .evaluate((tick) => tick.getBoundingClientRect().left);
+    expect(first, `at ${width}×${height}: the earliest year in view`).toBeGreaterThanOrEqual(0);
+  }
+  // The reader moves the view (the keyboard brings the last card in): a resize keeps it.
+  await graph.locator('g.nodes > g[data-node-id="h4"]').focus();
+  await graph.locator('g.nodes > g[data-node-id="h4"]').blur();
+  const moved = await view();
+  await graph.locator(":scope > g").evaluate((g) => g.setAttribute("data-kept", ""));
+  await page.setViewportSize({ width: 1280, height: 760 });
+  await expect.poll(view).not.toBe(moved);
+  await expect(graph.locator(":scope > g[data-kept]")).toHaveCount(1);
+  expect(problems).toEqual([]);
 });
 
 test("a narrower phone lays the map out again, keeping the reader's place, inside the panel", async ({

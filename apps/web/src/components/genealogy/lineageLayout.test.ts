@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BREAK_CLEAR,
   boxesMeet,
   type CardBox,
   type CardInput,
@@ -204,6 +205,102 @@ describe('layoutLineage, vertical (below md, or a narrow panel)', () => {
     }
     // Lanes in order inside a year: the 1984 sample above its interpolation.
     expect(placed(layout, 'sample').y).toBeLessThan(placed(layout, 'interpolation').y);
+  });
+});
+
+/** The cards that straddle a line across the map (x = at, or y = at): neither before nor past it. */
+function straddling(
+  layout: ReturnType<typeof layoutLineage>,
+  axis: 'x' | 'y',
+  at: number,
+): string[] {
+  return [...layout.cards]
+    .filter(([, box]) => {
+      const [from, to] = axis === 'x' ? [box.x, box.x + box.width] : [box.y, box.y + box.height];
+      return from < at && to > at;
+    })
+    .map(([id]) => id);
+}
+
+describe('layoutLineage, where the first view ends (#240)', () => {
+  const options = { orientation: 'horizontal' as const, margin: { top: 40, left: 16 } };
+  const free = layoutLineage(CARDS, options);
+
+  it('starts a year that would run over the view’s right edge past it, and moves no year before', () => {
+    // A line through the 1999 column, as the free layout places it.
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    const edge = slot.start + slot.size / 2;
+    expect(straddling(free, 'x', edge)).toEqual(['sibling']);
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { main: edge } });
+    expect(straddling(broken, 'x', edge)).toEqual([]);
+    expect(placed(broken, 'sibling').x).toBeGreaterThanOrEqual(edge);
+    // Each card keeps its year's column, in year order; the earlier years do not move.
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      const now = placed(broken, card.id);
+      if (was.x + was.width <= edge) expect(now, card.id).toEqual(was);
+      else expect(now.x - was.x, card.id).toBeCloseTo(edge + BREAK_CLEAR - slot.start, 6);
+    }
+    expect(broken.slots.map((s) => s.label)).toEqual(free.slots.map((s) => s.label));
+    expect(overlaps(broken)).toEqual([]);
+    expect(broken.width).toBeGreaterThan(free.width);
+  });
+
+  it('moves a card across the lanes past the view’s bottom edge, never one in the first lane', () => {
+    const current = placed(free, 'current');
+    const edge = current.y + current.height / 2;
+    expect(straddling(free, 'y', edge).length).toBeGreaterThan(0);
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { cross: edge } });
+    expect(straddling(broken, 'y', edge)).toEqual([]);
+    expect(placed(broken, 'current').y).toBe(edge + BREAK_CLEAR);
+    // Above the edge nothing moves, and no card leaves its year.
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      const now = placed(broken, card.id);
+      expect(now.x, card.id).toBe(was.x);
+      if (was.y + was.height <= edge) expect(now.y, card.id).toBe(was.y);
+    }
+    expect(overlaps(broken)).toEqual([]);
+    // A line through the first lane: those cards cannot be shown whole by moving them.
+    const first = placed(free, 'sample');
+    const through = first.y + first.height / 2;
+    const kept = layoutLineage(CARDS, { ...options, breakAt: { cross: through } });
+    expect(placed(kept, 'sample')).toEqual(first);
+  });
+
+  it('down a column, starts a year, or a row of a crowded year, past the view’s bottom edge', () => {
+    const column = {
+      orientation: 'vertical' as const,
+      crossSpace: 260,
+      margin: { top: 52, left: 14 },
+    };
+    const freeColumn = layoutLineage(CARDS, column);
+    // The 1984 slot holds rows: a line through its second row, and one through the 2011 card.
+    const second = placed(freeColumn, 'cover');
+    const rowEdge = second.y + second.height / 2;
+    const yearEdge = placed(freeColumn, 'current').y + 10;
+    for (const edge of [rowEdge, yearEdge]) {
+      expect(straddling(freeColumn, 'y', edge).length, `${edge}`).toBeGreaterThan(0);
+      const broken = layoutLineage(CARDS, { ...column, breakAt: { main: edge } });
+      expect(straddling(broken, 'y', edge), `${edge}`).toEqual([]);
+      expect(overlaps(broken)).toEqual([]);
+      // Each card still in its year's slot, its year's label above it.
+      for (const c of CARDS) {
+        const slot = broken.slots.find((s) => s.year === c.year);
+        const box = placed(broken, c.id);
+        expect(box.y).toBeGreaterThanOrEqual((slot?.start ?? 0) + broken.axisSize);
+        expect(box.y + box.height).toBeLessThanOrEqual((slot?.start ?? 0) + (slot?.size ?? 0));
+      }
+    }
+    // A year moved whole takes its label with it: the 2011 slot starts past the edge.
+    const moved = layoutLineage(CARDS, { ...column, breakAt: { main: yearEdge } });
+    expect(moved.slots.find((s) => s.year === 2011)?.start).toBe(yearEdge + BREAK_CLEAR);
+  });
+
+  it('lays the map out as before with no break, or one past the map', () => {
+    expect(layoutLineage(CARDS, { ...options, breakAt: {} })).toEqual(free);
+    expect(layoutLineage(CARDS, { ...options, breakAt: { main: free.width + 10 } })).toEqual(free);
   });
 });
 

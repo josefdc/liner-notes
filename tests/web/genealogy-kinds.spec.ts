@@ -10,6 +10,7 @@ import {
   openPlayer,
   useMockApi,
 } from "./mock";
+import { cardsCutAtRest } from "./mapAtRest";
 
 // Genealogy links by kind and relation. The fixture has, for each relation (sample,
 // interpolation, cover, remix, shared producer, influence), one sourced link built from a
@@ -332,15 +333,16 @@ test.describe("the genealogy graph", () => {
     });
   }
 
-  test("keeps the drawing and its zoom when its row widens, and lays the years down a phone's tab", async ({
+  test("lays the first view out again when its row widens at rest, keeps the reader's drawing and zoom, and lays the years down a phone's tab", async ({
     page,
   }) => {
     // At 1440 px the map is a full-width row, its years from left to right, wider than the
-    // panel; at 1920 px the same drawing is kept at the same zoom, and the row holds the whole
-    // map: it is centred across the panel, no card cut at its sides. On a phone the years run
-    // from top to bottom: drawn again.
+    // panel. At rest (the reader has not moved it) at 1920 px it is the first view for the new
+    // room: the row holds the whole map, centred across the panel, no card cut at its sides
+    // (#240). Once the reader has zoomed, a resize keeps the drawing and its zoom. On a phone
+    // the years run from top to bottom: drawn again.
     await graphFitted(page);
-    const placed = await markDrawing(page);
+    const placed = await placeInPanel(page);
     expect(placed.outside).toBeGreaterThan(0);
     const ends = () =>
       graphOf(page).evaluate((svg) => {
@@ -355,14 +357,36 @@ test.describe("the genealogy graph", () => {
       });
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
-    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
     const now = await placeInPanel(page);
     expect(now.k).toBe(placed.k);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
+    // No card cut at the panel's edges, nor under its heading.
+    const heading = page
+      .locator("#panel-genealogy > div")
+      .filter({ has: page.getByRole("heading", { name: "Connections" }) });
+    expect(await cardsCutAtRest(graphOf(page), heading)).toEqual([]);
     const after = await ends();
     expect(after.left).toBeGreaterThan(0);
     expect(after.right).toBeGreaterThan(0);
     expect(Math.abs(after.left - after.right)).toBeLessThanOrEqual(48);
+
+    // The reader zooms in (Ctrl and the wheel, where the page scrolls past the map): the view
+    // is theirs, and a resize keeps the drawing and its zoom.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await graphFitted(page);
+    const box = await graphOf(page).boundingBox();
+    if (!box) throw new Error("no map");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -200);
+    await page.keyboard.up("Control");
+    await graphFitted(page);
+    const zoomed = await markDrawing(page);
+    expect(zoomed.k).toBeGreaterThan(1);
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await graphFitted(page);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
+    expect((await placeInPanel(page)).k).toBe(zoomed.k);
     const years = () =>
       graphOf(page)
         .locator("text.year-tick")

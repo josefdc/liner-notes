@@ -180,7 +180,24 @@ export interface LayoutOptions {
   /** The year labels' room: a band above the cards (horizontal), a heading over each slot (vertical). */
   axisSize?: number;
   margin?: Partial<Margin>;
+  /**
+   * Where the first view ends (map px), along the axis (`main`) and across it (`cross`): no card
+   * straddles such a line. A year's slot (down a column, a row of its cards) that would run over
+   * it starts just past it instead, and so does a card across the row's lanes, so the first view
+   * shows each card whole or not at all. The first slot, row or lane is never moved: one too big
+   * for the view stays where it is.
+   */
+  breakAt?: ViewBreaks;
 }
+
+/** Where a first view ends, along and across the axis (map px); none where the map fits. */
+export interface ViewBreaks {
+  main?: number;
+  cross?: number;
+}
+
+/** How far past a break a moved card starts (px): a hair, so it is wholly out of the view. */
+export const BREAK_CLEAR = 2;
 
 export interface LineageLayout {
   orientation: Orientation;
@@ -211,6 +228,18 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
   // Lanes in their order, the empty ones left out; each one card's breadth apart.
   const lanes = LANES.filter((lane) => cards.some((card) => card.lane === lane));
   const pitch = Math.max(0, ...cards.map(crossOf)) + gap;
+  const breakMain = options.breakAt?.main;
+  // Across the row's lanes, measured from where the lanes start.
+  const crossStart = horizontal ? margin.top + axisSize : margin.left;
+  const breakCross =
+    horizontal && options.breakAt?.cross !== undefined
+      ? options.breakAt.cross - crossStart
+      : undefined;
+  /** A card's place across, moved past the break when it would run over it (not from 0). */
+  const pastBreak = (cross: number, size: number) =>
+    breakCross !== undefined && cross > 0 && cross < breakCross && cross + size > breakCross
+      ? breakCross + BREAK_CLEAR
+      : cross;
   // Horizontal: each lane a band. Vertical: the cards start right after the axis, in lane order
   // (a narrow panel has no room for a band per lane).
   const desiredCross = (card: CardInput) => (horizontal ? lanes.indexOf(card.lane) * pitch : 0);
@@ -259,6 +288,7 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
         row = { cards: [], main: 0 };
         cross = fit(desiredCross(card));
       }
+      cross = pastBreak(cross, size);
       row.cards.push({ card, cross });
       row.main = Math.max(row.main, mainOf(card));
     }
@@ -268,19 +298,28 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
 
   // Along the axis: each slot after the one before it, the cards after the slot's heading.
   const mainStart = horizontal ? margin.left : margin.top;
-  const crossStart = horizontal ? margin.top + axisSize : margin.left;
   const heading = horizontal ? 0 : axisSize;
   const slots: YearSlot[] = [];
   const placed = new Map<string, CardBox>();
   let at = mainStart;
   let crossEnd = 0;
+  /** True when [from, to] runs over the main break, and starts past `after` (not the first). */
+  const overBreak = (from: number, to: number, after: number) =>
+    breakMain !== undefined && from > after && from < breakMain && to > breakMain;
   keys.forEach(({ year, side }, index) => {
     if (index > 0) at += slotSpacing(keys[index - 1].year, year, slotGap);
     const rows = slotRows[index];
-    const size = heading + rows.reduce((sum, row) => sum + row.main, 0) + gap * (rows.length - 1);
-    slots.push({ year, side, label: year === null ? 'Undated' : String(year), start: at, size });
+    // A slot whose heading and first row would run over the break starts past it.
+    if (rows.length > 0 && overBreak(at, at + heading + rows[0].main, mainStart)) {
+      at = (breakMain as number) + BREAK_CLEAR;
+    }
+    const start = at;
     let rowAt = at + heading;
-    for (const row of rows) {
+    rows.forEach((row, r) => {
+      // Down a column, a later row of the slot that would run over the break starts past it.
+      if (r > 0 && overBreak(rowAt, rowAt + row.main, start)) {
+        rowAt = (breakMain as number) + BREAK_CLEAR;
+      }
       for (const { card, cross } of row.cards) {
         const main = rowAt + (row.main - mainOf(card)) / 2;
         placed.set(
@@ -291,9 +330,11 @@ export function layoutLineage(cards: readonly CardInput[], options: LayoutOption
         );
         crossEnd = Math.max(crossEnd, cross + crossOf(card));
       }
-      rowAt += row.main + gap;
-    }
-    at += size;
+      rowAt += row.main + (r < rows.length - 1 ? gap : 0);
+    });
+    const size = rows.length > 0 ? rowAt - start : heading;
+    slots.push({ year, side, label: year === null ? 'Undated' : String(year), start, size });
+    at = start + size;
   });
 
   const mainEnd = at + (horizontal ? margin.right : margin.bottom);

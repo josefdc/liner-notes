@@ -154,17 +154,48 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph on a resize', () => {
-  it('keeps the drawing, its cards and its zoom, and shifts the view by half the change', async () => {
+  it('at rest, shows the first view for the new room: from the earliest year, no card cut', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    /** Each card's left and right on screen, at the zoom drawn now. */
+    const across = () => {
+      const { x, k } = zoomOf(svg);
+      return drawnTracks(container).map((track) => {
+        const left = Number(
+          /translate\(([-\d.e]+),/.exec(track.getAttribute('transform') ?? '')?.[1],
+        );
+        const width = Number(track.querySelector('rect.card')?.getAttribute('width'));
+        return [x + left * k, x + (left + width) * k] as const;
+      });
+    };
+    // Wider than the panel: the first view starts at the earliest year, and no card straddles
+    // the panel's right edge, at 800 px and after a resize to 700 px.
+    expect(zoomOf(svg)).toMatchObject({ x: 0, k: 1 });
+    for (const [left, right] of across()) expect(left >= 800 || right <= 800).toBe(true);
+    await act(async () => report?.(700, 500));
+    expect(svg.getAttribute('width')).toBe('700');
+    expect(zoomOf(svg)).toMatchObject({ x: 0, k: 1 });
+    const now = across();
+    for (const [left, right] of now) expect(left >= 700 || right <= 700).toBe(true);
+    expect(now.filter(([, right]) => right <= 700).length).toBeGreaterThan(1);
+  });
+
+  it('once the reader has moved the view, keeps the drawing, its cards and its zoom on a resize, and shifts the view by half the change', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
     if (!svg) throw new Error('no svg');
     const zoomed = svg.querySelector(':scope > g');
     const tracks = drawnTracks(container);
     expect(tracks).toHaveLength(4);
-    const before = zoomOf(svg);
     // Drawn at its size: the text at 12 px on screen, never zoomed out.
-    expect(before.k).toBe(1);
+    expect(zoomOf(svg).k).toBe(1);
     const card = relatedTrack(container).querySelector('rect.card')?.getAttribute('width');
+    // The keyboard brings the last card, past the first view, into view: the reader's view.
+    const later = tracks.find((track) => track.getAttribute('data-node-id') === 'later');
+    await act(async () => (later as SVGGElement | undefined)?.focus());
+    const before = zoomOf(svg);
+    expect(before.x).toBeLessThan(0);
 
     await act(async () => report?.(700, 500));
 
@@ -178,7 +209,6 @@ describe('GenealogyGraph on a resize', () => {
     expect(svg.getAttribute('height')).toBe('500');
     const now = zoomOf(svg);
     expect(now.k).toBe(1);
-    // The map is no wider than the panel was: it stays centred across it.
     expect(now.x).toBeCloseTo(before.x - 50, 0);
   });
 

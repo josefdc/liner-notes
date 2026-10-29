@@ -94,12 +94,28 @@ test("the recorded run's notes: sections in order, its samples and covers with t
     'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
   );
   for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  // Every row and every fact card, "Possible" ones included: a relation a record documents is
+  // listed once, by its record, and never named "Possible" beside it. The sample's card says
+  // more than its record (how the sample is used), so it stays, named as the record names it.
+  const cards = await page
+    .locator("#panel-context [data-factoid-category]")
+    .evaluateAll((found) =>
+      found.map(
+        (card) =>
+          `${card.querySelector("[data-factoid-type]")?.textContent?.trim()}: ${card.textContent}`,
+      ),
+    );
+  expect(cards).toHaveLength(1);
   for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
     expect(
       rows.filter((row) => fact.test(row)),
       String(fact),
     ).toHaveLength(1);
+    for (const stated of [...rows, ...cards].filter((each) => fact.test(each))) {
+      expect(stated, String(fact)).not.toMatch(/^possible/i);
+    }
   }
+  expect(cards[0]).toMatch(/^SAMPLE: /);
   const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
   await expect(items).toHaveCount(13);
   for (const item of await items.all()) {

@@ -110,7 +110,7 @@ describe("a recording replayed", () => {
   const EDDIE_JOHNS = "fdbb79f2";
   const CIRCO_LOCO = "72c47650";
 
-  it("keeps a restating claim that a link or a timeline sample names", () => {
+  it("keeps a restating claim that a timeline sample names; one a model link names goes with it", () => {
     const named = ReplayRecord.parse({
       ...record,
       analysis: {
@@ -134,11 +134,12 @@ describe("a recording replayed", () => {
         samples: [{ time: 30, description: "Circo Loco", claimId: claimId(CIRCO_LOCO) }],
       },
     });
-    const claims = replayedAnalysis(named, "run-omt").claims ?? [];
-    for (const id of [EDDIE_JOHNS, CIRCO_LOCO]) {
-      expect(claims.some((claim) => claim.id === claimId(id))).toBe(true);
-    }
-    expect(replayedAnalysis(named, "run-omt").run?.verifier).toMatchObject({ restated: 5 });
+    const served = replayedAnalysis(named, "run-omt");
+    const claims = served.claims ?? [];
+    expect(claims.some((claim) => claim.id === claimId(CIRCO_LOCO))).toBe(true);
+    expect(claims.some((claim) => claim.id === claimId(EDDIE_JOHNS))).toBe(false);
+    expect(served.genealogy).toEqual(record.analysis.genealogy);
+    expect(served.run?.verifier).toMatchObject({ restated: 6 });
   });
 
   it("is left as recorded when its run already left out what restates another", () => {

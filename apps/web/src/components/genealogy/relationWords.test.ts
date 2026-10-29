@@ -14,7 +14,7 @@ import {
   relationToTrack,
 } from './links';
 import { LINK_COLOR } from './linkStyle';
-import { relationName } from './relationWords';
+import { relationName, withDocumentedRelations } from './relationWords';
 import { claim, evidenceItem, link, node, PACK } from './testing';
 
 // One set of words for a relation wherever it is shown. For each relation and each way its
@@ -311,5 +311,93 @@ describe('a partly supported claim that cites a relation record', () => {
     );
     expect(links).toEqual(['Sample']);
     expect(of('cl-1')).toEqual({ kind: 'sourced', fact: 'SAMPLE', listed: 'Sample' });
+  });
+});
+
+// A model claim about a relation a record documents (a code-built claim on the same record) is
+// named as the record's relation, never "Possible …", whatever its verdict; its own kind stays.
+describe('a model claim on a relation a record documents', () => {
+  /** The result: a code-built claim on `ev-mb-1`, and the model's claim, as the verifier left it. */
+  function named(model: Record<string, unknown>, code: Record<string, unknown> = {}) {
+    const track = {
+      evidence: PACK,
+      claims: [
+        claim('code-1', {
+          about: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+          ...code,
+        }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'], ...model }),
+      ],
+      factoids: [],
+      genealogy: { nodes: [], links: [] },
+    } as unknown as TrackData;
+    const shown = resultClaims(track);
+    const relations = withDocumentedRelations(new Map(), shown.all);
+    const stated = shown.byId.get('m-1');
+    if (!stated) throw new Error('the claim was not read');
+    const fact = { id: 'f', title: 'A fact', content: 'x', type: 'sample' } as Factoid;
+    return {
+      kind: stated.kind,
+      fact: factoidCategory(fact, stated, false, relations.get('m-1')).label,
+      listed: claimLabel(stated, relations),
+    };
+  }
+
+  it.each(STATES)('is named as the record names it, its own kind kept ($name)', ({ verdict }) => {
+    const read = named({ about: 'sample', kind: 'inferred', verdict });
+    expect(read.fact).toBe('SAMPLE');
+    expect(read.listed).toBe('Sample');
+    expect(read.kind).toBe('inferred');
+  });
+
+  it('a cover of the song, named as its record names it', () => {
+    const read = named(
+      { about: 'cover', scope: 'work', verdict: 'partial' },
+      { about: 'cover', scope: 'work' },
+    );
+    expect(read.fact).toBe('COVER');
+  });
+
+  it('keeps "Possible" when no record documents its relation', () => {
+    // Another subject, another scope, another record, or a record no code claim is on.
+    for (const [model, code] of [
+      [{ about: 'cover' }, {}],
+      [{ about: 'sample', scope: 'work' }, {}],
+      [{ about: 'sample', evidenceIds: ['ev-mb-1', 'ev-shs-1'] }, {}],
+      [{ about: 'sample', evidenceIds: ['ev-shs-1'] }, {}],
+      [{ about: 'sample' }, { kind: 'inferred' }],
+    ] as const) {
+      const words = relationName(model.about, false);
+      expect(named({ verdict: 'partial', ...model }, code).listed, JSON.stringify(model)).toBe(
+        words,
+      );
+    }
+  });
+
+  it('keeps "Possible" when its records are named so (their links disagree)', () => {
+    const shown = resultClaims({
+      evidence: PACK,
+      claims: [
+        claim('code-1', { kind: 'sourced', origin: 'code', evidenceIds: ['ev-mb-1'] }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'] }),
+      ],
+    } as unknown as TrackData);
+    const linked = new Map([['code-1', 'Possible sample']]);
+    expect(withDocumentedRelations(linked, shown.all).has('m-1')).toBe(false);
+  });
+
+  it('keeps the words of a link that states it', () => {
+    const linked = new Map([['m-1', 'Possible remix']]);
+    const shown = resultClaims({
+      evidence: PACK,
+      claims: [
+        claim('code-1', { kind: 'sourced', origin: 'code', evidenceIds: ['ev-mb-1'] }),
+        claim('m-1', { evidenceIds: ['ev-mb-1'] }),
+      ],
+    } as unknown as TrackData);
+    expect(withDocumentedRelations(linked, shown.all).get('m-1')).toBe('Possible remix');
   });
 });

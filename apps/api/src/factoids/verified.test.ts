@@ -282,6 +282,55 @@ describe("a new fact that restates a code-built claim of the run", () => {
   });
 });
 
+describe("a new sample fact that restates a code-built sample of the run", () => {
+  const SAMPLED =
+    'MusicBrainz: "One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.';
+  const sampleRecord = {
+    ...evidenceItem("ev-s", SAMPLED),
+    recordRef: "track/recording/r1/samples/recording/r2",
+  };
+  const built: Claim = {
+    id: "code-s",
+    text: SAMPLED.replace("MusicBrainz: ", ""),
+    about: "sample",
+    kind: "sourced",
+    origin: "code",
+    evidenceIds: ["ev-s"],
+    verdict: null,
+    verdictReason: null,
+    numericCheck: "n/a",
+    scope: "recording",
+  };
+  const sampleCard = (text: string) => ({ ...card(text, ["ev-s"]), type: "sample" as const });
+
+  async function sent(text: string) {
+    const llm = fakeModel({ cards: [sampleCard(text), null, null], judge: () => "partial" });
+    const app = createTestApp(
+      createFactoidsRouter({
+        llm,
+        loadRun: (id) => (id === RUN_ID ? storedRun([sampleRecord], [], [built]) : null),
+      }),
+    );
+    const res = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, existingFactoidIds: ["f1"], runId: RUN_ID })
+      .timeout(5000);
+    expect(res.status).toBe(200);
+    return res.body.factoids.map((factoid: { content: string }) => factoid.content);
+  }
+
+  it("is not sent, though the judge found it only partly supported: no card hedges it", async () => {
+    expect(await sent("Daft Punk’s recording samples “More Spell on You” by Eddie Johns.")).toEqual(
+      [],
+    );
+  });
+
+  it("is sent, judged as it was, when it adds a word of its own", async () => {
+    const more = "Daft Punk’s recording samples the horns of “More Spell on You” by Eddie Johns.";
+    expect(await sent(more)).toEqual([more]);
+  });
+});
+
 describe("a relation from more facts is stated whole, as the analysis states it", () => {
   const SAMPLE = "The hook samples a 1979 disco record from Chicago.";
   const sampleCard = (text: string, evidenceIds: string[]) => ({

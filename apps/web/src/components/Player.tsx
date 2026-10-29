@@ -48,7 +48,7 @@ import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { linerNotes, relationLinkNotes } from './provenance/notes';
 import { notPlacedNote, placeSamples } from './provenance/timelineSamples';
-import { isRelationSubject } from './genealogy/relationWords';
+import { isRelationSubject, withDocumentedRelations } from './genealogy/relationWords';
 import { RejectedClaims } from './provenance/RejectedClaims';
 import { Attribution, shownProviders } from './provenance/Attribution';
 import { closeOpen, escapeAction, tabKeyTarget } from './playerKeys';
@@ -255,8 +255,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     linkKinds,
   } = useConnections(track, claims);
   // A claim a shown link states is named as its link is, on a fact's card and in the claims
-  // list: one set of words for one relation.
-  const claimRelations = useMemo(() => relationLabelsByClaim(graphLinks), [graphLinks]);
+  // list: one set of words for one relation. A model claim about a relation records document is
+  // named as their code-built claims are, never "Possible" (its own kind and verdict still show).
+  const claimRelations = useMemo(
+    () => withDocumentedRelations(relationLabelsByClaim(graphLinks), claims.all),
+    [graphLinks, claims],
+  );
   const relationOf = (fact: Factoid) => {
     const id = claimOf(fact)?.claim.id;
     return id === undefined ? undefined : claimRelations.get(id);

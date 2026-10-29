@@ -131,7 +131,7 @@ describe("withoutRestatements", () => {
     expect(kept.restated).toBe(1);
   });
 
-  it("keeps a model claim with other evidence, another relation, another scope or a partial verdict", () => {
+  it("keeps a model claim with other evidence, another relation, another scope, a word of its own when partly supported, or no verdict", () => {
     const claims = [
       // Each names only what the sample record names: only what the test varies keeps it.
       judged("m-more", {
@@ -156,7 +156,7 @@ describe("withoutRestatements", () => {
         evidenceIds: ["ev-sample"],
       }),
       judged("m-partial", {
-        text: "Queen is sampled by Vanilla Ice.",
+        text: "Queen is sampled by Vanilla Ice in its bass line.",
         about: "sample",
         verdict: "partial",
         evidenceIds: ["ev-sample"],

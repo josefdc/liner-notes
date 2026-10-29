@@ -49,7 +49,10 @@ interface InteractiveFactoidProps {
   readings?: readonly Reading[];
   /** The result's measurement, for the measured side of a conflict. */
   audio?: MeasuredAudio | null;
-  /** The words of the shown genealogy link that states the card's claim, if one does. */
+  /**
+   * The words of the shown genealogy link that states the card's claim, if one does, else of the
+   * relation records document that it states (`withDocumentedRelations`).
+   */
   relation?: string | null;
 }
 

@@ -38,9 +38,11 @@
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
  *    names, the focus and the normalised text, never a count, and it is never one the client or
  *    the run already has, nor another fact's of the batch.
- * 6. One claim per fact. Once judged, a fact that restates a code-built claim of the run (on the
- *    same record, naming nothing it does not), or repeats another fact of the batch, is dropped
- *    as a repeat, as the verifier leaves such a claim out of the analysis (restatements.ts).
+ * 6. One claim per fact. Once judged, a fact that restates a code-built claim of the run (on
+ *    records code claims cite, naming nothing they or the track do not; a sample the judge found
+ *    only partly supported in its records' own words), or repeats another fact of the batch, is
+ *    dropped as a repeat, as the verifier leaves such a claim out of the analysis
+ *    (restatements.ts).
  *
  * The facts are handed back in focus order once all of them have been checked.
  */
@@ -607,6 +609,7 @@ export async function writeFactoids(
       [],
       [],
       context.evidence,
+      { track },
     );
     const kept = new Set(keptClaims.map((claim) => claim.id));
 

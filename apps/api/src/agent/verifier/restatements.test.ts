@@ -298,7 +298,7 @@ describe("two model claims with the same text", () => {
 });
 
 describe("a claim that a link or a timeline sample states", () => {
-  it("stays, though it restates a code-built claim", async () => {
+  it("stays when a timeline sample states it; one only a model link states goes with that link", async () => {
     const linked = modelClaim("m-link", {
       text: "Ice Ice Baby samples Under Pressure.",
       about: "sample",
@@ -329,7 +329,53 @@ describe("a claim that a link or a timeline sample states", () => {
       sent.map(({ claimId }) => ({ claimId, verdict: "supported", reason: "It says so." })),
     );
     const out = await createVerifierNode(testRuntime(llm))(stateFor(draft, evidence), config);
-    expect(idsOf(out.trackData!)).toEqual(["m-link", "m-timed", "code-sample"]);
-    expect(out.trackData?.run?.verifier).toMatchObject({ judged: 2, restated: 0 });
+    expect(idsOf(out.trackData!)).toEqual(["m-timed", "code-sample"]);
+    expect(out.trackData?.run?.verifier).toMatchObject({ judged: 2, restated: 1 });
+    // The model's link, and the node only it drew, go with its claim.
+    expect(out.trackData?.genealogy.links).toEqual([]);
+    expect(out.trackData?.genealogy.nodes.map((node) => node.id)).toEqual(["current"]);
+  });
+});
+
+describe("a partly supported model claim that restates a code-built relation", () => {
+  /** A cover of the song, documented on its MusicBrainz work page (no node of its own). */
+  const coverRecord: Evidence = {
+    ...trackRecord("ev-cover"),
+    recordRef: "work/w1/covered-by/recording/r5",
+    excerpt: 'MusicBrainz: the work "Ice Ice Baby" is covered by "Ice Ice Baby" by Ice Band.',
+  };
+  const codeCover = codeClaim("code-cover", coverRecord, "cover", "work");
+
+  it("goes with the model's link and node, naming the analysed track's artist", async () => {
+    // "Vanilla Ice" is not in the record: it is the analysed track's artist.
+    const cover = modelClaim("m-cover", {
+      text: '"Ice Ice Baby - Ice Band" is a cover of "Ice Ice Baby - Vanilla Ice".',
+      about: "cover",
+      scope: "work",
+      evidenceIds: ["ev-cover"],
+    });
+    const link: GenealogyLink = {
+      source: "current",
+      target: "ice-band",
+      value: 1,
+      type: "cover",
+      kind: "inferred",
+      origin: "model",
+      claimId: "m-cover",
+      evidenceIds: ["ev-cover"],
+    };
+    const llm = judging((sent) =>
+      sent.map(({ claimId }) => ({ claimId, verdict: "partial", reason: "In part." })),
+    );
+    const out = await createVerifierNode(testRuntime(llm))(
+      stateFor(draftOf([cover, codeCover], [link]), [...evidence, coverRecord]),
+      config,
+    );
+    const data = out.trackData!;
+    expect(idsOf(data)).toEqual(["code-cover"]);
+    expect(data.claims?.[0]).toEqual(codeCover);
+    expect(data.genealogy.links).toEqual([]);
+    expect(data.genealogy.nodes.map((node) => node.id)).toEqual(["current"]);
+    expect(data.run?.verifier).toEqual({ judged: 1, unjudged: 0, restated: 1 });
   });
 });

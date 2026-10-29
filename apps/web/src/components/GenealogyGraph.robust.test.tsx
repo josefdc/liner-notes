@@ -303,6 +303,78 @@ describe('GenealogyGraph on a resize', () => {
   });
 });
 
+describe("GenealogyGraph's edge cues", () => {
+  // Fourteen tracks, a year each: at 900x600 cards lie past the view's right edge.
+  const years = [1960, 1964, 1968, 1972, 1976, 1980, 1984, 1995, 2000, 2004, 2008, 2012, 2016];
+  const many = {
+    nodes: [
+      { id: 'musicbrainz:recording/current', group: 1, label: 'Song (1990)', size: 40, year: 1990 },
+      ...years.map((year, i) => ({ ...node(`n${i}`, 4, `Track ${i} - Someone (${year})`), year })),
+    ],
+    links: years.map((_, i) =>
+      link(`n${i}`, 'musicbrainz:recording/current', { type: 'influence' }),
+    ),
+  };
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+  it.each([
+    ['on the page', false],
+    ['in a panel that takes the focus on a press (the Player)', true],
+  ])(
+    'go on panning where a click does not focus the button (Safari, Firefox on macOS), %s',
+    async (_, panel) => {
+      const { container } = render(
+        panel ? (
+          <div tabIndex={-1} data-testid="panel">
+            <GenealogyGraph data={many} />
+          </div>
+        ) : (
+          <GenealogyGraph data={many} />
+        ),
+      );
+      const svg = container.querySelector('svg');
+      if (!svg) throw new Error('no svg');
+      await act(async () => report?.(900, 600));
+      const right = () => container.querySelector<HTMLButtonElement>('[data-cue="right"]');
+      expect(right()).not.toBeNull();
+      let presses = 0;
+      for (; presses < 6 && right(); presses += 1) {
+        const cue = right() as HTMLButtonElement;
+        const before = zoomOf(svg).x;
+        // A press there focuses the nearest focusable ancestor (the panel), else no element.
+        if (panel) screen.getByTestId('panel').focus();
+        else (document.activeElement as HTMLElement | null)?.blur?.();
+        await act(async () => fireEvent.click(cue));
+        const clicked = zoomOf(svg).x;
+        await act(async () => {
+          await frame();
+          await frame();
+        });
+        // The view went right, and stays where the cue left it.
+        expect(clicked, `press ${presses + 1}`).toBeLessThan(before);
+        expect(zoomOf(svg).x, `press ${presses + 1}`).toBe(clicked);
+        // No card cut at the view's sides.
+        for (const track of drawnTracks(container)) {
+          const left =
+            clicked +
+            Number(/translate\(([-\d.e]+),/.exec(track.getAttribute('transform') ?? '')?.[1]);
+          const width = Number(track.querySelector('rect.card')?.getAttribute('width'));
+          const cut = (edge: number) => left < edge - 0.5 && left + width > edge + 0.5;
+          expect(
+            cut(0) || cut(900),
+            `press ${presses + 1}: ${track.getAttribute('data-node-id')}`,
+          ).toBe(false);
+        }
+        // No card's box opened for a card the reader did not go to.
+        if (right()) expect(screen.queryByTestId('link-detail')).toBeNull();
+      }
+      // The cue went once nothing was left past that edge.
+      expect(right()).toBeNull();
+      expect(presses).toBeGreaterThan(1);
+    },
+  );
+});
+
 describe("GenealogyGraph's pictures", () => {
   it('clips each picture by a valid id of its own, which its url(#…) names', () => {
     const { container } = render(<GenealogyGraph data={data} />);

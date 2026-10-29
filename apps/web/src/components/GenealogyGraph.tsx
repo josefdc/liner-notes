@@ -548,6 +548,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // Down a column, "↑ N more" in the gutter right of the cards (no band of its own).
   const [upBeside, setUpBeside] = useState(false);
   const cuePanRef = useRef<((side: keyof EdgeCounts) => void) | null>(null);
+  // The focus on the map's own stop (its roving item), the view kept where it is.
+  const focusMapRef = useRef<(() => void) | null>(null);
   const cuesRef = useRef<HTMLDivElement>(null);
   // The detail box's height while it is shown: chips are not placed under it, and a focused item
   // is brought into view above it. `afterDetailRef` places them again once React has drawn it.
@@ -1840,6 +1842,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         }
       }
     };
+    focusMapRef.current = () => {
+      const element = items.find((one) => one.element.getAttribute('tabindex') === '0')?.element;
+      if (!element) return;
+      // (As a card a cue gives the focus to: the view stays where the cue left it.)
+      placing = true;
+      element.focus({ preventScroll: true });
+      placing = false;
+    };
 
     /**
      * At rest, the first view again for the room the map has now: laid out again where the view
@@ -1892,6 +1902,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         focusOn !== null && active !== null && svgElement.contains(active) ? focusOn : null;
       resizeRef.current = null;
       cuePanRef.current = null;
+      focusMapRef.current = null;
       insetShiftRef.current = null;
       afterDetailRef.current = null;
       drawSelectedRef.current = null;
@@ -2347,16 +2358,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                         type="button"
                         data-cue={side}
                         aria-label={cueName(side, cues[side], orientation)}
-                        onClick={() => {
+                        onClick={(event) => {
+                          const button = event.currentTarget;
                           cuePanRef.current?.(side);
                           // A cue with nothing left past its edge goes, the focus on the first
-                          // card it brought into view; failing one, on the map.
+                          // card it brought into view; failing one, on the map. The cue itself
+                          // says so: where a click does not focus a button (Safari, Firefox on
+                          // macOS), the focus is on no element while the cue stays.
                           requestAnimationFrame(() => {
+                            if (button.isConnected) return;
                             if (document.activeElement && document.activeElement !== document.body)
                               return;
-                            svgRef.current
-                              ?.querySelector<SVGElement>('[tabindex="0"]')
-                              ?.focus({ preventScroll: true });
+                            focusMapRef.current?.();
                           });
                         }}
                         className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"

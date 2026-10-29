@@ -303,6 +303,28 @@ describe('GenealogyGraph on a resize', () => {
   });
 });
 
+describe('GenealogyGraph drawn anew', () => {
+  it('gives the focus back to the same link, found by what it joins, once the links change order', async () => {
+    const { container, rerender } = render(<GenealogyGraph data={data} />);
+    const targets = () => [...container.querySelectorAll<SVGPathElement>('g.link-targets path')];
+    const remix = targets().find((path) => path.getAttribute('aria-label')?.includes('Later'));
+    if (!remix) throw new Error('no link to the remix');
+    const name = remix.getAttribute('aria-label');
+    const index = remix.getAttribute('data-link-index');
+    await act(async () => remix.focus());
+    expect(document.activeElement).toBe(remix);
+
+    // The same links, the remix's first now: its index names another link.
+    await act(async () =>
+      rerender(<GenealogyGraph data={{ ...data, links: [...data.links].reverse() }} />),
+    );
+
+    const focused = document.activeElement as SVGPathElement | null;
+    expect(focused?.getAttribute('data-link-index')).not.toBe(index);
+    expect(focused?.getAttribute('aria-label')).toBe(name);
+  });
+});
+
 describe("GenealogyGraph's edge cues", () => {
   // Fourteen tracks, a year each: at 900x600 cards lie past the view's right edge.
   const years = [1960, 1964, 1968, 1972, 1976, 1980, 1984, 1995, 2000, 2004, 2008, 2012, 2016];

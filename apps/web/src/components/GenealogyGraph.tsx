@@ -95,6 +95,10 @@ const sameItem = (a: Item | null, b: Item | null) =>
     ? b.kind === 'node' && a.id === b.id
     : b.kind === 'link' && a.index === b.index);
 
+/** What a link joins, and how: the same link in another list of links (null: no link). */
+const linkKey = (link: ShownLink | undefined) =>
+  link ? JSON.stringify([link.source, link.target, link.type]) : null;
+
 /** True for a link that states an influence, or no relation (an influence too). */
 const isStatedInfluence = (link: ShownLink) =>
   link.statedType === null || link.statedType === 'influence';
@@ -545,8 +549,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // drawing's effect).
   const [restLayout, setRestLayout] = useState(0);
   // The map item that had the keyboard focus when the drawing went: the next drawing gives it
-  // the focus back (a new layout keeps the reader's place).
-  const refocusRef = useRef<Item | null>(null);
+  // the focus back (a new layout keeps the reader's place). A link is found by what it joins
+  // (`linkKey`): its index may name another link once the links have changed.
+  const refocusRef = useRef<{ item: Item; link: string | null } | null>(null);
   // How many cards lie past each edge of the view (the edge cues), and the pan a cue asks for.
   const [cues, setCues] = useState<EdgeCounts>(NO_CUES);
   // Down a column, "↑ N more" in the gutter right of the cards (no band of its own).
@@ -1781,7 +1786,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const refocus = refocusRef.current;
     refocusRef.current = null;
     if (refocus) {
-      items.find(({ item }) => sameItem(item, refocus))?.element.focus({ preventScroll: true });
+      const byLink =
+        refocus.link === null
+          ? undefined
+          : items.find(
+              ({ item }) => item.kind === 'link' && linkKey(links[item.index]) === refocus.link,
+            );
+      (byLink ?? items.find(({ item }) => sameItem(item, refocus.item)))?.element.focus({
+        preventScroll: true,
+      });
     }
 
     // An edge cue pans the view that way, no further than it takes to bring the next cards
@@ -1908,7 +1921,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       // The item with the focus gets it back in the next drawing (`refocus`).
       const active = document.activeElement;
       refocusRef.current =
-        focusOn !== null && active !== null && svgElement.contains(active) ? focusOn : null;
+        focusOn !== null && active !== null && svgElement.contains(active)
+          ? {
+              item: focusOn,
+              link: focusOn.kind === 'link' ? linkKey(links[focusOn.index]) : null,
+            }
+          : null;
       resizeRef.current = null;
       cuePanRef.current = null;
       focusMapRef.current = null;

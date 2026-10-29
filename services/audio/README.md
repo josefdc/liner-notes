@@ -382,10 +382,32 @@ times are seconds from the start of the preview. Every block is `null` when it w
   at most a tenth of the lines' level is overtones of the notes they spell (tried for analyzer
   2.3.5) withholds the same tubular bells' keys, but also right keys, the same with either
   estimator: of some triads whose overtones are as few, 1 of the 14 still ones in soft timbres
-  and 9 of the 23 held out, 6 of the 15 struck on bars and 9 of the 20 held out. Drums are not
-  caught either: toms, alone or over a kit, and tabla strokes have envelopes of their own, so
-  their lines seldom hold still; where they do (tabla at 3 of the 30 seeds and 3 of the 30
-  held-out, two rack toms and a floor tom over a kit at 1 and 1), their partials spell a chord.
+  and 9 of the 23 held out, 6 of the 15 struck on bars and 9 of the 20 held out. Tuned drums
+  keep a key too, a known limit pinned in the tests. In the 2026-10-29 controls run, Essentia
+  keys 9 toms, 7 kit toms (two rack toms and a floor tom over a kit) and 11 tabla of the 30
+  pinned seeds each, and 8, 15 and 12 of the 30 held-out ones; librosa 7, 6 and 10, and 4, 17
+  and 8. Every rule before the single-source rule lets these keys through: the drums' lines
+  carry the energy, spell three pitch classes or more and form no single series, and the
+  pitch track finds no held pitch whose harmonics explain them. The single-source rule never
+  asks what their lines spell, because each drum or stroke has its own envelope: of the 67
+  drum controls with a key, 60 have lines whose envelopes share under 0.6 of their variance,
+  4 tabla have lines whose proportions move more than 0.05, and where the lines hold still (3
+  tabla) they spell a chord. Three rules aimed at pitched drums were measured on every control
+  and GiantSteps+ clip with a served key (`evals/audio/scripts/drum_rules.py`, on the controls
+  run and the GiantSteps+ key run of that report), and none is shipped. The net share of the partials' energy falling more than 15
+  cents in the 70 ms after each onset (a struck membrane drops in pitch; a vibrato goes both
+  ways) takes no right key above 0.448, a threshold chosen on all of that data, held-out seeds
+  included, and with no margin: a GiantSteps+ clip whose key is right sits at 0.448. There it
+  withholds every tom's key and about half of the kit toms' (Essentia 29 of the 62 drum keys,
+  librosa 23 of 52) but no tabla's. Withholding more than half of the drum keys (from 0.399)
+  takes right GiantSteps+ keys (2 with Essentia, 1 with librosa). The share of each hit's
+  energy left after its first 70 ms (low when every line dies away at once) takes no right key
+  only under 0.300, where it withholds 2 and 1 drum keys; for more than half it takes 54 right
+  keys with Essentia and 63 with librosa, among them 16 struck-bar triads, 12 one-chord riffs
+  and 6 and 8 GiantSteps+ clips. The pitch track's spread around its smoothed line (wide when
+  the tracker hops from drum to drum) takes no right key only above 575 cents, where it
+  withholds 6 and 4; for more than half it takes 18 and 17 right keys, 10 of them GiantSteps+
+  clips with each.
   Neither strength separates atonal material from tonal music: random chromatic notes or a
   twelve-tone row can still get a key, and so can a bell or a few tuned drums whose partials
   spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they

@@ -1803,9 +1803,10 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
 # harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
 # with its own envelope, alone or over a kit) and tabla, whose lines mostly move apart, and
-# where they hold still (tabla 504, 516, 520; kit toms 528) spell a chord; and a tubular bell,
-# whose modes hold still and move together but spell three or more pitch classes, as a chord's
-# notes do.
+# where they hold still (tabla 504, 516, 520; kit toms 528) spell a chord (a known limit: no
+# rule measured by evals/audio/scripts/drum_rules.py withholds most of their keys without
+# taking right ones); and a tubular bell, whose modes hold still and move together but spell
+# three or more pitch classes, as a chord's notes do.
 # Seeds 600-629 are an evaluation set (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
     ("one-note-bass", "essentia"): {500, 501},
@@ -1884,6 +1885,28 @@ def test_a_tubular_bell_holds_still_but_spells_a_chord():
     """
     evidence = estimators.Signals(signals.seeded_tubular_bell(500), FIXTURE_SR).source_evidence
     assert evidence.still and evidence.chord and not evidence.single, evidence
+
+
+@pytest.mark.parametrize("family, seed", [("toms", 502), ("kit-toms", 500), ("tabla", 500)])
+def test_drums_whose_lines_rise_and_fall_apart_keep_their_key(family, seed):
+    """
+    A known limit, pinned as it is: tuned drums keep the key the estimators find in their
+    partials. Every evidence rule lets it through (the lines carry the energy, spell three
+    pitch classes or more and form no single series, and the pitch track hops from drum to
+    drum, so it is no held pitch), and the single-source rule never asks what the lines spell:
+    each drum or stroke has its own envelope, so the lines' envelopes share too little variance
+    to rise and fall together. evals/audio/scripts/drum_rules.py measures three rules that
+    could withhold these keys; none withholds most of them without taking right keys
+    (services/audio/README.md).
+    """
+    signals_ = estimators.Signals(signals.ONE_PITCH_CLASS_SEEDED[family](seed), FIXTURE_SR)
+    assert signals_.has_beat and signals_.voice.moving, signals_.voice
+    assert signals_.key_withheld() is None
+    evidence = signals_.source_evidence
+    assert evidence.shared < estimators.SOURCE_MIN_SHARED, evidence
+    assert not evidence.still and evidence.notes is None, evidence
+    for name in KEY_ESTIMATORS:
+        assert estimators.select_estimator(name).key(signals_) is not None, name
 
 
 def one_source_withheld(signals_: estimators.Signals) -> bool:

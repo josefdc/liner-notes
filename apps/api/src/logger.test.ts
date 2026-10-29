@@ -644,16 +644,14 @@ describe("Authorization values in quotes and at the cap", () => {
   it("moves a cut that moved to a credential it splits after the word Basic", () => {
     // Moved to a configured value glued to the credential, then to the start of the credential,
     // which only the text as it came holds whole: the rules leave the credential to the scheme
-    // after it (here after a ":", which ends the value's token). A cut through a Basic credential
-    // that the rules read whole, as they read one that holds a configured value, falls before the
-    // word (readPairs).
+    // after it (a value's span stops before a scheme glued to it, or at a ":"). A cut through a
+    // Basic credential that the rules read whole, as they read one that holds a configured value,
+    // falls before the word (readPairs).
     configureLogger({ GLUED_SECRET: "S1xS2xS3xS4xS5xS6x" });
     const glued = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x:Bearer yy ${"z ".repeat(20)}`;
     expect(logCut(glued, glued.indexOf("S3x"))).toBe(glued.indexOf("M0003x"));
-    // With the scheme glued to the value's token, the value takes it, and the rules read the
-    // credential whole.
     const token = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x/Bearer yy ${"z ".repeat(20)}`;
-    expect(logCut(token, token.indexOf("S3x"))).toBe(token.indexOf("Basic"));
+    expect(logCut(token, token.indexOf("S3x"))).toBe(token.indexOf("M0003x"));
     const whole = `xx Basic M0003x=S1xS2xS3xS4xS5xS6x yy ${"z ".repeat(20)}`;
     expect(logCut(whole, whole.indexOf("S3x"))).toBe(whole.indexOf("Basic"));
   });
@@ -835,7 +833,7 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
         `{"error":"invalid_client","detail":${JSON.stringify(QUOTED)},"hint":"check the key"}`,
         '{"error":"invalid_client","detail":"[redacted]","hint":"check the key"}',
       ],
-      [`token=${SALT}Bearer T1xT2x`, "token=[redacted] [redacted]"],
+      [`token=${SALT}Bearer T1xT2x`, "token=[redacted]Bearer [redacted]"],
       [`token=${SALT}x token: T1xT2x`, "token=[redacted] token: [redacted]"],
       [`"Basic ${SALT}"`, '"Basic [redacted]"'],
       ['C:\\Users\\x\\n and "quoted \\"text\\"" and \\u0041', null],
@@ -1226,6 +1224,30 @@ describe("configured values in what a client is shown, in a token and in any whi
     expect(scrub(`a\\\\n${V}b`)).toBe("a\\\\[redacted]");
     // A name before "=" is not a token's start.
     expect(scrub(`x=${V}tail`)).toBe("x=[redacted]");
+    // The start of a rule glued after a value, a name before its ":", and a link's "//" before a
+    // value, are left to the rules, which then hide the secret they read, as they did.
+    configure({ DISCOGS_TOKEN: V, AZURE_OPENAI_ENDPOINT: "https://contoso-prod.openai.azure.com" });
+    for (const [text, once, twice = once] of [
+      [`xx ${V}Bearer SECRETTOKEN1234 yy`, "xx [redacted]Bearer [redacted] yy"],
+      [`xx ${V}.password: SECRETTOKEN1234 yy`, "xx [redacted].password: [redacted] yy"],
+      [
+        `xx ${V}https://u:SECRETTOKEN1234@h.example/x`,
+        "xx [redacted]https://[redacted]@h.example/x",
+      ],
+      [
+        `${V}contoso-prod.openai.azure.comhttps://u:SECRETTOKEN1234@h.example/x?token=T9zB8y`,
+        // As before: the link's rule reads it once the host is replaced, the second time.
+        "[redacted][provider endpoint]https://u:SECRETTOKEN1234@h.example/x?token=[redacted]",
+        "[redacted][provider endpoint]https://[redacted]@h.example/x?token=[redacted]",
+      ],
+      [`https://${V}.example.com/p?sig=SECRETTOKEN1234`, "https://[redacted]?sig=[redacted]"],
+    ]) {
+      expect(scrub(text)).toBe(once);
+      expect(scrub(scrub(text))).toBe(twice);
+    }
+    for (const [surface, out] of Object.entries(surfaces(`xx ${V}Bearer SECRETTOKEN1234 yy`))) {
+      expect(out, `${surface}: ${JSON.stringify(out)}`).not.toMatch(/SECRET/);
+    }
   });
 
   it("matches a value's whitespace with any run of whitespace in a text", () => {

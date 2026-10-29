@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { captureLogsForTests, configureLogger, scrub } from "../logger.js";
+import { captureLogsForTests, configureLogger, MAX_LOGGED_TEXT, scrub } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -1710,6 +1710,53 @@ describe("a credential found escaped at the start of a token (#237)", () => {
         );
       }
     }
+  });
+
+  it("never shows part of an Authorization credential a cut splits, at every offset", {
+    timeout: 120_000,
+  }, () => {
+    // A configured value written escaped before the credential is masked shorter than it is
+    // written: the cut of each path falls further on, and must still fall before the credential.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const bus = "sb://N1xN2x.servicebus.example.net/";
+    vi.stubEnv("LOG_IP_SALT", salt);
+    vi.stubEnv("BUS_ENDPOINT", bus);
+    configureLogger({ LOG_IP_SALT: salt, BUS_ENDPOINT: bus, LOG_LEVEL: process.env.LOG_LEVEL });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: process.env.LOG_LEVEL });
+    });
+    const escapedAll = (value: string) =>
+      [...value]
+        .map((c) =>
+          /[A-Za-z0-9]/.test(c) ? c : `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+        )
+        .join("");
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const heads = ["", salt, escapedAll(bus), escapedAll(salt), `${salt} `];
+    const tails = [
+      "access_token : Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+      "token=Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+      "Authorization: Bearer T9zB8yC7xD6wE5vF4uG3",
+    ];
+    const paths: Array<[string, number, (text: string) => string]> = [
+      ["plainReason", 120, (text) => plainReason(text) ?? ""],
+      ["SourceError", 200, (text) => new SourceError("discogs", "http", text).message],
+      ["scrubText", 500, scrubText],
+      ["describeError", MAX_LOGGED_TEXT - 1024, (text) => describeError(new Error(text))],
+      ["scrub", MAX_LOGGED_TEXT, scrub],
+    ];
+    const shown: string[] = [];
+    for (const [name, cut, call] of paths) {
+      for (const head of heads) {
+        for (const tail of tails) {
+          for (let n = Math.max(0, cut - 160); n < cut + 10; n++) {
+            const out = call(`${words(n)}${head}${tail}`);
+            if (/QWx|T9z/.test(out)) shown.push(`${name} ${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
   });
 
   it("reads the gap after a run of glued values once on every path, in linear time", {

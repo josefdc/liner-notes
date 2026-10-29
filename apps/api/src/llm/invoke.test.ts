@@ -388,6 +388,44 @@ describe("retries", () => {
       }
     }
   });
+
+  it("never shows part of an Authorization credential its cuts split, at every offset", () => {
+    // A configured value written escaped before the credential is hidden shorter than it is
+    // written: the 500- and 300-character cuts fall further on, after the credential is hidden.
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    const bus = "sb://N1xN2x.servicebus.example.net/";
+    vi.stubEnv("BUS_ENDPOINT", bus);
+    configureLogger({ LOG_IP_SALT: salt, BUS_ENDPOINT: bus, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+      vi.unstubAllEnvs();
+    });
+    const escapedAll = (value: string) =>
+      [...value]
+        .map((c) =>
+          /[A-Za-z0-9]/.test(c) ? c : `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+        )
+        .join("");
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const shown: string[] = [];
+    for (const head of ["", salt, escapedAll(bus), escapedAll(salt)]) {
+      for (const tail of [
+        "access_token : Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "token=Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        "Authorization: Bearer T9zB8yC7xD6wE5vF4uG3",
+      ]) {
+        for (let n = 140; n < 510; n++) {
+          const error = Object.assign(new Error(`${words(n)}${head}${tail}`), { status: 400 });
+          const llm = classifyError(error, state);
+          for (const out of [llm.message, String((llm.cause as Error).message)]) {
+            if (/QWx|T9z/.test(out)) shown.push(`${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+  });
 });
 
 describe("timeout", () => {

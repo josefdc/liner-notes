@@ -1146,12 +1146,24 @@ function valueSpans(text: string): Array<[number, number]> {
   const read = { text: asRead(text) };
   for (let round = 0; round < 2; round++) {
     const now: Array<[number, number]> = [];
-    const lost = lostSpans(old, spansAfterValues(rewrite(read, asRewrites(spans), now), now, {}));
+    const lost = lostSpans(
+      old,
+      spansAfterValues(rewrite(read, asRewrites(spans), now), now, {}),
+    ).filter(([start, end]) => !SCHEME_WORD.test(text.slice(start, end)));
     if (lost.length === 0) return spans;
     spans = unionSpans(spans, round === 0 ? lost : old);
   }
   return spans;
 }
+
+/**
+ * An Authorization scheme word alone, which a lost part can be: the Authorization rule's span of a
+ * Basic credential keeps the word (readPairs), and a pair's span of the same credential does not.
+ * It holds no secret. Replaced as a configured value, it would leave the credential after it with
+ * no scheme, which the Authorization rule then no longer reads, and a cut through the credential
+ * would no longer fall before it.
+ */
+const SCHEME_WORD = new RegExp(String.raw`^${SCHEMES}\s+$`, "i");
 
 /** The parts of `old` (sorted, not overlapping) that none of `now` (the same) covers. */
 function lostSpans(

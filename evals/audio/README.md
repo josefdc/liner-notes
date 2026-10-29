@@ -117,21 +117,25 @@ over their root, which are chord controls. The rule tried for analyzer 2.3.5 (on
 at most a tenth of the lines' level is overtones of the notes they spell) withholds the same
 tubular bells' keys, but also right keys with either estimator: 1 of the 14 still soft chords
 at seeds 700-729 and 9 of the 23 at 800-829, 6 of the 15 still chords struck on bars and 9 of
-the 20. `scripts/drum_rules.py` measures three rules for the toms, kit toms and tabla (the net
-share of partials falling in pitch just after each onset, the share of each hit's energy left
-after its first 70 ms, the pitch track's spread around its smoothed line) on every control and
-GiantSteps+ clip whose key the newest report's runs served, analysing each again (`uv run
-python scripts/drum_rules.py`, 646-682 s at `--jobs 4` on a shared machine): none withholds more
-than half of the drum keys without taking right ones, and none is shipped
-(services/audio/README.md gives the numbers). Chord controls drawn at 30 seeds each (held
-chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs, a
-bass and chord riff on one chord, one-bar riffs, triads in a soft timbre: an electric piano, a flute, an FM electric piano or a triangle
+the 20. Chord controls drawn at 30 seeds each (held chords faded, swelling, getting louder,
+with tremolo or a sidechain pump, C major stabs, a bass and chord riff on one chord, one-bar
+riffs, triads in a soft timbre: an electric piano, a flute, an FM electric piano or a triangle
 wave, and triads struck on bars: a marimba-like bar or a glockenspiel) carry their key as
 truth: that rule must not take it. The calibration records what the rule measures and the
 values the run was made with (`Rules.one_source`), and derives each run at its own values; it
 does not vary them. The `held-out-seeded` group (the same families at seeds 600-629 and
-800-829) is evaluation only: the choice does not see it and no test pins it. A report whose
-runs were made with different analyzer versions says so at the top. The 2026-10-29 report holds
+800-829) is evaluation only: the choice does not see it and no test pins it.
+`scripts/drum_rules.py` measures rules that could withhold the keys of the toms, kit toms and
+tabla, on every control and GiantSteps+ clip whose key the newest report's runs served. It
+analyses each again and stops if any differs from the report (`uv run python
+scripts/drum_rules.py ../reports/audio-2026-10-29.json`, 5-11 min at `--jobs 4` on a
+shared machine; in a fresh environment, run it once with `--jobs 1` first, as librosa's numba
+cache written by several workers at once can crash them). Each rule's thresholds are chosen on
+a training half (the drums at seeds 500-529, the chord families at 700-729, and every other
+served control and clip in turn) and judged on the rest, with one threshold for both
+estimators. None is shipped; services/audio/README.md gives the numbers and the reasons.
+A report whose runs were made with different analyzer versions says so at the top. The
+2026-10-29 report holds
 the controls, the Ballroom tempo and calibration runs, and the GiantSteps+ key and calibration
 runs, all at analyzer 2.3.4 (the controls and Ballroom runs at commit `9682a4a` of #244, the
 GiantSteps+ runs at `2901b7f` of #256: the same analyzer code, a harness changed only in how

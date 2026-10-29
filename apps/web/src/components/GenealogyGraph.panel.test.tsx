@@ -59,6 +59,12 @@ const PAIRS = mapOf([1960, 1964, 1968, 1972, 1976, 1980, 1984, 1995, 1995, 2004,
 const FEW_AFTER = mapOf([
   1960, 1964, 1968, 1972, 1976, 1980, 1984, 1985, 1986, 1987, 1995, 2000, 2000,
 ]);
+/** Fourteen tracks over fifty years: across a page, wider than a window. */
+const SPREAD = mapOf([
+  1960, 1964, 1968, 1972, 1976, 1980, 1984, 1995, 2000, 2004, 2008, 2012, 2016,
+]);
+/** Three tracks: the whole map fits a desktop's window. */
+const SMALL = mapOf([1981, 1995, 2015]);
 
 /**
  * The panel's and the box's heights, as the browser lays them out: the panel as tall as its
@@ -107,6 +113,42 @@ const trackOf = (container: HTMLElement, id: string) => {
   if (!track) throw new Error(`${id} is not drawn`);
   return track;
 };
+/** The drawing's zoom: its translation down and its scale. */
+function zoomOf(container: HTMLElement) {
+  const svg = container.querySelector('svg') as SVGSVGElement;
+  const [, y, k] = (
+    /translate\(([-\d.e]+),([-\d.e]+)\) scale\(([-\d.e]+)\)/.exec(
+      svg.querySelector(':scope > g')?.getAttribute('transform') ?? '',
+    ) ?? []
+  )
+    .slice(1)
+    .map(Number);
+  return { y, k };
+}
+/** A card's top and bottom in the map's box (px), by the drawing's zoom. */
+function cardSpan(container: HTMLElement, id: string) {
+  const { y, k } = zoomOf(container);
+  const track = trackOf(container, id);
+  const top = Number(
+    /translate\([-\d.e]+,([-\d.e]+)\)/.exec(track.getAttribute('transform') ?? '')?.[1],
+  );
+  const height = Number(track.querySelector('rect.card')?.getAttribute('height'));
+  return [y + top * k, y + (top + height) * k] as const;
+}
+
+/** Where the band of the year labels pinned over the map's top ends (px); 0 while not pinned. */
+function pinnedBandEnd(container: HTMLElement) {
+  const axis = container.querySelector('g.lineage-axis') as SVGGElement;
+  const backdrop = axis.querySelector(':scope > rect') as SVGRectElement;
+  if (Number(backdrop.getAttribute('fill-opacity')) === 0) return 0;
+  const { y, k } = zoomOf(container);
+  const below = Number(
+    /translate\(0,([-\d.e]+)\)/.exec(axis.getAttribute('transform') ?? '')?.[1] ?? 0,
+  );
+  return (
+    y + (below + Number(backdrop.getAttribute('y')) + Number(backdrop.getAttribute('height'))) * k
+  );
+}
 
 const FALLBACK = 'The connections graph could not be drawn';
 /** The map in its error boundary, as the Player draws it, at `width` x `height`. */
@@ -212,4 +254,81 @@ describe('the selected card beside its panel on a short map', () => {
     expect(looped).toEqual([]);
     expect(errors).toEqual([]);
   }, 300_000);
+});
+
+const hover = (container: HTMLElement, id: string) =>
+  act(async () => {
+    trackOf(container, id).dispatchEvent(new MouseEvent('mouseenter'));
+  });
+const unhover = (container: HTMLElement, id: string) =>
+  act(async () => {
+    trackOf(container, id).dispatchEvent(new MouseEvent('mouseleave'));
+  });
+const cuesShown = (container: HTMLElement) =>
+  [...container.querySelectorAll('[data-cue]')].map((cue) => cue.getAttribute('data-cue')).sort();
+const box = (container: HTMLElement) =>
+  container.querySelector<HTMLElement>('[data-testid="link-detail"]');
+
+describe('the detail box and the panel at the bottom of the map', () => {
+  it('sit 8 px over its bottom with no edge cue, and above the cues while one shows there', async () => {
+    // The whole map in a desktop's window: no cue.
+    const small = await drawn(SMALL, 1280, 700);
+    expect(cuesShown(small.container)).toEqual([]);
+    await hover(small.container, 'n0');
+    expect(box(small.container)?.getAttribute('data-at')).toBe('bottom');
+    expect(box(small.container)?.style.bottom).toBe('8px');
+    await unhover(small.container, 'n0');
+    await select(small.container, 'n0');
+    expect(panelOf(small.container)?.getAttribute('data-at')).toBe('overlay');
+    expect(panelOf(small.container)?.style.bottom).toBe('8px');
+    small.unmount();
+
+    // Down a phone's column, "N more ↓" at the bottom: both sit above it.
+    const column = await drawn(SPREAD, 400, 500);
+    expect(cuesShown(column.container)).toContain('down');
+    await hover(column.container, 'n0');
+    expect(box(column.container)?.getAttribute('data-at')).toBe('bottom');
+    expect(box(column.container)?.style.bottom).toBe('28px');
+    await unhover(column.container, 'n0');
+    // A track below the analysed one: its panel at the bottom.
+    await select(column.container, 'n8');
+    expect(cuesShown(column.container)).toContain('down');
+    expect(panelOf(column.container)?.getAttribute('data-at')).toBe('overlay');
+    expect(panelOf(column.container)?.style.bottom).toBe('28px');
+    expect(errors).toEqual([]);
+  });
+
+  it('from md up, raise the panel at the right for "N more →" or "N more ↓" only, not for "← N more"', async () => {
+    // happy-dom's window is 1024 px wide: the panel lies at the map's right.
+    expect(window.innerWidth).toBeGreaterThanOrEqual(768);
+    const { container } = await drawn(SPREAD, 900, 600);
+    // The latest track: the view goes to the map's right end, the earlier tracks past its left.
+    await select(container, 'n12');
+    expect(cuesShown(container)).toEqual(['left']);
+    expect(panelOf(container)?.style.bottom).toBe('8px');
+    // The earliest: the later ones past its right.
+    await select(container, 'n0');
+    expect(cuesShown(container)).toContain('right');
+    expect(panelOf(container)?.style.bottom).toBe('28px');
+    expect(errors).toEqual([]);
+  });
+
+  it('a panel at its cap is shorter by as much as it rises: a short map keeps the selected card whole between the year labels and it', async () => {
+    // A map 320 px tall, the panel's words longer than its cap (60% of the map), the panel
+    // across the map: every card is under it.
+    panelWidth = 900 - 16;
+    const { container } = await drawn(SPREAD, 900, 320);
+    for (const id of ['n1', 'n0']) {
+      await select(container, id);
+      const panel = panelOf(container) as HTMLElement;
+      const top = 320 - Number.parseFloat(panel.style.bottom) - panel.offsetHeight;
+      const [cardTop, bottom] = cardSpan(container, id);
+      expect(bottom, `${id} above its panel`).toBeLessThanOrEqual(top);
+      expect(cardTop, `${id} below the pinned year labels`).toBeGreaterThanOrEqual(
+        pinnedBandEnd(container),
+      );
+      expect(panel.style.maxHeight).toBe('calc(60% - 20px)');
+    }
+    expect(errors).toEqual([]);
+  });
 });

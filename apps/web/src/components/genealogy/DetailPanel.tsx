@@ -109,6 +109,8 @@ export const DetailPanel: React.FC<{
   topOffset?: number;
   /** How far over the canvas's bottom it sits (px), for 'overlay': above the edge cues there. */
   bottomOffset?: number;
+  /** How much less than 60% of the canvas it may take (px), on the canvas. */
+  shorterBy?: number;
   panelRef?: React.Ref<HTMLElement>;
 }> = ({
   node,
@@ -126,6 +128,7 @@ export const DetailPanel: React.FC<{
   layout,
   topOffset = 0,
   bottomOffset = 8,
+  shorterBy = 0,
   panelRef,
 }) => {
   const headingId = useId();
@@ -151,9 +154,9 @@ export const DetailPanel: React.FC<{
       data-at={layout}
       style={
         layout === 'top'
-          ? { top: topOffset }
+          ? { top: topOffset, maxHeight: `calc(60% - ${shorterBy}px)` }
           : layout === 'overlay'
-            ? { bottom: bottomOffset }
+            ? { bottom: bottomOffset, maxHeight: `calc(60% - ${shorterBy}px)` }
             : undefined
       }
       className={`${place} flex flex-col gap-2 overflow-y-auto overscroll-contain cursor-auto rounded-sm border border-white/20 bg-void p-3 font-mono text-chrome text-text-chip wrap-anywhere focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70`}

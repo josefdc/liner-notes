@@ -35,6 +35,7 @@ import {
   isSparse,
   laneOf,
   layoutLineage,
+  MD_PX,
   type Orientation,
   orientationFor,
   placeChips,
@@ -2123,14 +2124,23 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   const belowCue = mapInset - topInset + 2 + CUE_PX;
   const detailBelowCue = detailTop && cues.up > 0 ? belowCue : 0;
   // And one at its bottom goes above the bottom cues ("← N more", "N more ↓/→") while they show.
+  // From md up the selected track's panel lies at the map's right, clear of "← N more".
   const bottomRoom = cues.left + cues.right + cues.down > 0 ? CUE_PX + 4 : 8;
+  const panelRoom =
+    panel !== null && panel.viewport >= MD_PX
+      ? cues.right + cues.down > 0
+        ? CUE_PX + 4
+        : 8
+      : bottomRoom;
   const detailBottom = detailTop ? 8 : bottomRoom;
   const detailPanel = selectedNode && (
     <DetailPanel
       panelRef={panelRef}
       layout={inlinePanel ? 'inline' : detailTop ? 'top' : 'overlay'}
       topOffset={topInset + 4 + detailBelowCue}
-      bottomOffset={detailBottom}
+      bottomOffset={detailTop ? 8 : panelRoom}
+      // As much shorter as the room it can be moved by for the cues: its far edge stays put.
+      shorterBy={detailTop ? belowCue : CUE_PX + 4 - 8}
       node={selectedNode}
       year={yearOfNode(selectedNode.id)}
       links={links

@@ -38,6 +38,12 @@ import {
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
 
+// Each call reserves and settles its cost in the spend log, flushing each line to disk
+// (budget.ts): from 0.1 ms to 9 ms a flush here, but a flush waits for the disk, and other
+// processes can keep it busy for seconds. So every test of this file, whichever runs first, gets
+// more than the default 5 s; nothing in them is timed.
+vi.setConfig({ testTimeout: 30_000 });
+
 const Schema = z.object({ ok: z.boolean() });
 const OPTIONS: InvokeOptions = {
   purpose: "dev",

@@ -107,6 +107,10 @@ export const DetailPanel: React.FC<{
   layout: 'overlay' | 'top' | 'inline';
   /** Where the top of the map's free room is (px), for 'top'. */
   topOffset?: number;
+  /** How far over the canvas's bottom it sits (px), for 'overlay': above the edge cues there. */
+  bottomOffset?: number;
+  /** How much less than 60% of the canvas it may take (px), on the canvas. */
+  shorterBy?: number;
   panelRef?: React.Ref<HTMLElement>;
 }> = ({
   node,
@@ -123,6 +127,8 @@ export const DetailPanel: React.FC<{
   onClose,
   layout,
   topOffset = 0,
+  bottomOffset = 8,
+  shorterBy = 0,
   panelRef,
 }) => {
   const headingId = useId();
@@ -138,7 +144,7 @@ export const DetailPanel: React.FC<{
   const place =
     layout === 'inline'
       ? 'mx-4 mb-3'
-      : `absolute left-2 right-2 z-30 max-h-[60%] md:left-auto md:w-[28rem] md:max-w-[calc(100%-1rem)] ${layout === 'top' ? '' : 'bottom-2'}`;
+      : 'absolute left-2 right-2 z-30 max-h-[60%] md:left-auto md:w-[28rem] md:max-w-[calc(100%-1rem)]';
   return (
     <section
       ref={panelRef}
@@ -146,7 +152,13 @@ export const DetailPanel: React.FC<{
       tabIndex={-1}
       data-testid="node-detail"
       data-at={layout}
-      style={layout === 'top' ? { top: topOffset } : undefined}
+      style={
+        layout === 'top'
+          ? { top: topOffset, maxHeight: `calc(60% - ${shorterBy}px)` }
+          : layout === 'overlay'
+            ? { bottom: bottomOffset, maxHeight: `calc(60% - ${shorterBy}px)` }
+            : undefined
+      }
       className={`${place} flex flex-col gap-2 overflow-y-auto overscroll-contain cursor-auto rounded-sm border border-white/20 bg-void p-3 font-mono text-chrome text-text-chip wrap-anywhere focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70`}
     >
       <div className="flex items-start justify-between gap-2">

@@ -33,4 +33,16 @@ describe('clearOfPanel', () => {
   it('lets the selected card decide when no move clears both', () => {
     expect(clearOfPanel([30, 380], room, [420, 480], band)).toBe(0);
   });
+
+  it('puts the top of a card taller than the room at its top, and then leaves it there', () => {
+    // A card of 400 px in a room of 368: its top in the room, below it, or above it.
+    for (const at of [100, 20, -50]) {
+      for (const other of [null, [420, 480] as const]) {
+        const move = clearOfPanel([at, at + 400], room, other, band);
+        expect(at + move).toBe(room[0]);
+        // Placed again where it is (the panel moved by a cue): it stays.
+        expect(clearOfPanel([at + move, at + move + 400], room, other, band)).toBe(0);
+      }
+    }
+  });
 });

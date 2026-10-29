@@ -7,9 +7,10 @@
  * `band` is the stretch the panel covers (from its near edge to the view's end). The analysed
  * card is clear when it ends before the band or starts past its end (out of view there).
  *
- * Returns the least move that brings the selected card into the room and, where some move in
- * that range also keeps the other card clear, the one of those nearest to it. With no such move
- * (or no other card), the selected card alone decides.
+ * Returns the least move that brings the selected card into the room (one taller than the room:
+ * its top to the room's top) and, where some move in that range also keeps the other card clear,
+ * the one of those nearest to it. With no such move (or no other card), the selected card alone
+ * decides.
  */
 export function clearOfPanel(
   selected: readonly [number, number],
@@ -18,7 +19,10 @@ export function clearOfPanel(
   band: readonly [number, number],
 ): number {
   const [s0, s1] = selected;
-  const near = s0 < room[0] ? room[0] - s0 : s1 > room[1] ? room[1] - s1 : 0;
+  // A card taller than the room has its top at the room's top, wherever it is: aligning its
+  // bottom instead while its top fits would move it back on the next call.
+  const near =
+    s0 < room[0] || s1 - s0 > room[1] - room[0] ? room[0] - s0 : s1 > room[1] ? room[1] - s1 : 0;
   if (!other) return near;
   // The moves that keep the selected card in the room.
   const [low, high] = [room[0] - s0, room[1] - s1];

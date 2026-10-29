@@ -10,6 +10,7 @@ import {
   openPlayer,
   useMockApi,
 } from "./mock";
+import { cardsCutAtRest } from "./mapAtRest";
 
 // Genealogy links by kind and relation. The fixture has, for each relation (sample,
 // interpolation, cover, remix, shared producer, influence), one sourced link built from a
@@ -252,6 +253,18 @@ test.describe("the genealogy graph", () => {
   const graphBoxes = (page: Page) =>
     graphOf(page).evaluate((svg) => {
       const panel = svg.getBoundingClientRect();
+      // The map in view starts under the panel's heading and the band "↑ N more" takes, both
+      // opaque (and both let the pointer through to the map, the cue's button aside).
+      const covers = [
+        ...[...document.querySelectorAll("#panel-genealogy > div")].filter((div) =>
+          [...div.querySelectorAll("h2")].some((h) => h.textContent === "Connections"),
+        ),
+        ...(svg.parentElement?.querySelectorAll("[data-cue-band]") ?? []),
+      ];
+      const top = Math.max(
+        panel.top,
+        ...covers.map((cover) => cover.getBoundingClientRect().bottom),
+      );
       const boxOf = (element: Element) => {
         const box = element.getBoundingClientRect();
         return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
@@ -263,7 +276,7 @@ test.describe("the genealogy graph", () => {
           const box = line.getBoundingClientRect();
           return [0.1, 0.5, 0.9].flatMap((at) => {
             const [x, y] = [box.x + box.width * at, box.y + box.height / 2];
-            if (x < panel.left || x > panel.right || y < panel.top || y > panel.bottom) return [];
+            if (x < panel.left || x > panel.right || y < top || y > panel.bottom) return [];
             const hit = document.elementFromPoint(x, y);
             return hit && !card.contains(hit) ? [hit.tagName] : [];
           });
@@ -332,15 +345,16 @@ test.describe("the genealogy graph", () => {
     });
   }
 
-  test("keeps the drawing and its zoom when its row widens, and lays the years down a phone's tab", async ({
+  test("lays the first view out again when its row widens at rest, keeps the reader's drawing and zoom, and lays the years down a phone's tab", async ({
     page,
   }) => {
     // At 1440 px the map is a full-width row, its years from left to right, wider than the
-    // panel; at 1920 px the same drawing is kept at the same zoom, and the row holds the whole
-    // map: it is centred across the panel, no card cut at its sides. On a phone the years run
-    // from top to bottom: drawn again.
+    // panel. At rest (the reader has not moved it) at 1920 px it is the first view for the new
+    // room: the row holds the whole map, centred across the panel, no card cut at its sides
+    // (#240). Once the reader has zoomed, a resize keeps the drawing and its zoom. On a phone
+    // the years run from top to bottom: drawn again.
     await graphFitted(page);
-    const placed = await markDrawing(page);
+    const placed = await placeInPanel(page);
     expect(placed.outside).toBeGreaterThan(0);
     const ends = () =>
       graphOf(page).evaluate((svg) => {
@@ -355,14 +369,36 @@ test.describe("the genealogy graph", () => {
       });
     await page.setViewportSize({ width: 1920, height: 900 });
     await graphFitted(page);
-    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
     const now = await placeInPanel(page);
     expect(now.k).toBe(placed.k);
     expect(now.size[0]).toBeGreaterThan(placed.size[0]);
+    // No card cut at the panel's edges, nor under its heading.
+    const heading = page
+      .locator("#panel-genealogy > div")
+      .filter({ has: page.getByRole("heading", { name: "Connections" }) });
+    expect(await cardsCutAtRest(graphOf(page), heading)).toEqual([]);
     const after = await ends();
     expect(after.left).toBeGreaterThan(0);
     expect(after.right).toBeGreaterThan(0);
     expect(Math.abs(after.left - after.right)).toBeLessThanOrEqual(48);
+
+    // The reader zooms in (Ctrl and the wheel, where the page scrolls past the map): the view
+    // is theirs, and a resize keeps the drawing and its zoom.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await graphFitted(page);
+    const box = await graphOf(page).boundingBox();
+    if (!box) throw new Error("no map");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -200);
+    await page.keyboard.up("Control");
+    await graphFitted(page);
+    const zoomed = await markDrawing(page);
+    expect(zoomed.k).toBeGreaterThan(1);
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await graphFitted(page);
+    await expect(graphOf(page).locator(":scope > g[data-kept]")).toHaveCount(1);
+    expect((await placeInPanel(page)).k).toBe(zoomed.k);
     const years = () =>
       graphOf(page)
         .locator("text.year-tick")
@@ -498,14 +534,25 @@ test.describe("the genealogy graph", () => {
     await expect(detail).toContainText("direction unknown");
     await screenshot(page, testInfo, "focus-link", page.locator("#panel-genealogy"));
 
+    // Out of the graph: the edge cues (each says how many cards lie past its edge of the view),
+    // then the links as a list.
     await page.keyboard.press("Tab");
+    const cues = page.getByTestId("map-cues").getByRole("button");
+    for (let i = 0; i < (await cues.count()); i += 1) {
+      await expect(cues.nth(i)).toBeFocused();
+      await expect(cues.nth(i)).toHaveAccessibleName(
+        /^(1 more track .*: pan (left|right|up|down) to it|\d+ more tracks .*: pan (left|right|up|down) to them)$/,
+      );
+      await page.keyboard.press("Tab");
+    }
     await expect(page.getByText("Links as a list (17)")).toBeFocused();
     await expect(detail).toHaveCount(0);
 
     // Enter on a track selects it and opens its details, with the focus; it analyses nothing.
     const analyses = async () =>
       (await apiRequests(page)).filter((r) => r.startsWith(`stream ${ANALYZE}?`));
-    await page.keyboard.press("Shift+Tab");
+    // Back past the edge cues to the graph.
+    for (let i = await cues.count(); i >= 0; i -= 1) await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");

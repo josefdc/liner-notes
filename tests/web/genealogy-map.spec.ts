@@ -7,11 +7,13 @@ import {
   collectProblems,
   dashboardHeading,
   fullResultData,
+  loadFixture,
   releaseStream,
   replayedRecording,
   showcaseRecordings,
   useMockApi,
 } from "./mock";
+import { analysedAtRest, cardsCutAtRest, mapAtRest, wholeCardsAtRest } from "./mapAtRest";
 import { offline } from "./offline";
 
 // The song-relations map on a page of its own (#217): `/t/<id>/map` opens a stored result's map
@@ -19,7 +21,7 @@ import { offline } from "./offline";
 // from a map's detail panel shows the tracks explored before it as a breadcrumb, kept in the
 // history entries (Back and Forward bring it back) and cleared by a new search. Every recorded
 // showcase's full map is laid out at 390, 1280, 1440 and 1920 px: as wide as the window, its
-// cards apart and nothing scrolling sideways.
+// cards apart, none cut at rest, the analysed track's card in view and nothing scrolling sideways.
 
 test.use({ reducedMotion: "reduce" });
 
@@ -35,6 +37,11 @@ const SPARSE = "1aBcDeFgHiJkLmNoPqRsTu";
 const BARE = "2bCdEfGhIjKlMnOpQrStUv";
 /** A well-formed track id without a stored run. */
 const MISSING = "7ouMYWpwJ422jRcDASZB7P";
+/** A stored result with a wide map (genealogy-wide: 13 tracks over thirty years). */
+const WIDE = "4dEfGhIjKlMnOpQrStUvWx";
+/** Stored results with the genealogy-kinds and genealogy-rich maps. */
+const KINDS = "5eFgHiJkLmNoPqRsTuVwXy";
+const RICH = "6fGhIjKlMnOpQrStUvWxYz";
 
 const omtResult = () =>
   replayedRecording().events.find((event) => event.type === "complete")?.data as Record<
@@ -74,6 +81,20 @@ const streamOf = (data: Record<string, unknown>) => [
   { type: "done" },
 ];
 
+/** The genealogy-wide fixture's result under the track id WIDE. */
+function wideResult() {
+  return fixtureResult("genealogy-wide", WIDE);
+}
+
+/** A fixture's analysis result, stored under the track id `id`. */
+function fixtureResult(name: string, id: string) {
+  const events = loadFixture(name).streams[ANALYZE] as Array<{
+    type: string;
+    data?: Record<string, unknown>;
+  }>;
+  return { ...events.find((event) => event.type === "complete")?.data, id };
+}
+
 /** Stored runs of the map's tracks, and the streams that analyse the tracks it leads to. */
 function mapApi() {
   const full = fullResultData() as { genealogy: { nodes: Array<{ group?: number }> } };
@@ -89,6 +110,9 @@ function mapApi() {
       // What the analysis of the sample source stored, for a reload of its address.
       [SOURCE_ID]: storedRun(fullAs(SOURCE_ID), "live"),
       [SPARSE]: storedRun(fullAs(SPARSE), "live"),
+      [WIDE]: storedRun(wideResult(), "live"),
+      [KINDS]: storedRun(fixtureResult("genealogy-kinds", KINDS), "live"),
+      [RICH]: storedRun(fixtureResult("genealogy-rich", RICH), "live"),
       [BARE]: storedRun(
         fullAs(BARE, {
           genealogy: { nodes: full.genealogy.nodes.filter((node) => node.group === 1), links: [] },
@@ -342,6 +366,42 @@ for (const [width, height] of [
       expect(await analyses(page)).toEqual([]);
       expect(problems).toEqual([]);
     });
+  });
+}
+
+// The full-size map's first view (#240): at rest each card is wholly in the window's map or
+// wholly out of it, never cut by its edge, and the analysed track's card is in it, for the
+// recorded One More Time run, a wide map, the genealogy-kinds map and a rich one.
+for (const [width, height] of [
+  [390, 844],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as const) {
+  test(`at ${width} px the full map's first view cuts no card at its edges`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const problems = collectProblems(page);
+    await page.setViewportSize({ width, height });
+    await useMockApi(page, mapApi());
+    for (const [id, cards] of [
+      [OMT, 10],
+      [WIDE, 13],
+      [KINDS, 18],
+      [RICH, 16],
+    ] as const) {
+      await page.goto(`/t/${id}/map`);
+      await expect(mapHeading(page)).toBeFocused();
+      const graph = graphOf(page);
+      await expect(graph.locator("g.nodes > g")).toHaveCount(cards);
+      await mapAtRest(graph);
+      expect(await cardsCutAtRest(graph), `${id}: cards cut at rest`).toEqual([]);
+      expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
+      expect(await analysedAtRest(graph), `${id}: the analysed track at rest`).toBe("in");
+      await shot(page, testInfo, `rest-${id}-${width}`);
+    }
+    expect(problems).toEqual([]);
   });
 }
 
@@ -633,7 +693,7 @@ for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecording
     [1440, 900],
     [1920, 1080],
   ] as const) {
-    test(`at ${width} px the recorded ${slug} map opens full size, its cards apart, nothing sideways`, async ({
+    test(`at ${width} px the recorded ${slug} map opens full size, its cards apart and none cut at rest, nothing sideways`, async ({
       page,
     }, testInfo) => {
       test.setTimeout(90_000);
@@ -675,6 +735,11 @@ for (const { slug, trackId, title, artist, links, nodeIds } of showcaseRecording
         ).toEqual(expect.arrayContaining(nodeIds));
         await expect(graph.locator("g.nodes > g")).toHaveCount(nodeIds.length);
         expect(cards).toHaveLength(nodeIds.length);
+        // At rest no card is cut by the window's map, and the analysed track's card is in it.
+        await mapAtRest(graph);
+        expect(await cardsCutAtRest(graph), `${slug}: cards cut at rest`).toEqual([]);
+        expect(await wholeCardsAtRest(graph)).toBeGreaterThan(0);
+        expect(await analysedAtRest(graph), `${slug}: the analysed track at rest`).toBe("in");
         for (const [i, { id, b }] of cards.entries()) {
           for (const other of cards.slice(i + 1)) {
             const o = other.b;

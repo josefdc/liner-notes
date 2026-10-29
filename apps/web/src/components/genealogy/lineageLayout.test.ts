@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  BREAK_CLEAR,
   boxesMeet,
   type CardBox,
   type CardInput,
   charsToWrap,
+  graphemes,
+  graphemeUnits,
   isSparse,
   LANES,
   type Lane,
@@ -12,6 +15,7 @@ import {
   orientationFor,
   placeChips,
   routeLinks,
+  textUnits,
   wrapText,
 } from './lineageLayout';
 
@@ -207,6 +211,151 @@ describe('layoutLineage, vertical (below md, or a narrow panel)', () => {
   });
 });
 
+/** The cards that straddle a line across the map (x = at, or y = at): neither before nor past it. */
+function straddling(
+  layout: ReturnType<typeof layoutLineage>,
+  axis: 'x' | 'y',
+  at: number,
+): string[] {
+  return [...layout.cards]
+    .filter(([, box]) => {
+      const [from, to] = axis === 'x' ? [box.x, box.x + box.width] : [box.y, box.y + box.height];
+      return from < at && to > at;
+    })
+    .map(([id]) => id);
+}
+
+describe('layoutLineage, where the first view ends (#240)', () => {
+  const options = { orientation: 'horizontal' as const, margin: { top: 40, left: 16 } };
+  const free = layoutLineage(CARDS, options);
+
+  it('starts a year that would run over the view’s right edge past it, and moves no year before', () => {
+    // A line through the 1999 column, as the free layout places it.
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    const edge = slot.start + slot.size / 2;
+    expect(straddling(free, 'x', edge)).toEqual(['sibling']);
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { main: edge } });
+    expect(straddling(broken, 'x', edge)).toEqual([]);
+    expect(placed(broken, 'sibling').x).toBeGreaterThanOrEqual(edge);
+    // Each card keeps its year's column, in year order; the earlier years do not move.
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      const now = placed(broken, card.id);
+      if (was.x + was.width <= edge) expect(now, card.id).toEqual(was);
+      else expect(now.x - was.x, card.id).toBeCloseTo(edge + BREAK_CLEAR - slot.start, 6);
+    }
+    expect(broken.slots.map((s) => s.label)).toEqual(free.slots.map((s) => s.label));
+    expect(overlaps(broken)).toEqual([]);
+    expect(broken.width).toBeGreaterThan(free.width);
+  });
+
+  it('moves a card across the lanes past the view’s bottom edge, never one in the first lane', () => {
+    const current = placed(free, 'current');
+    const edge = current.y + current.height / 2;
+    expect(straddling(free, 'y', edge).length).toBeGreaterThan(0);
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { cross: edge } });
+    expect(straddling(broken, 'y', edge)).toEqual([]);
+    expect(placed(broken, 'current').y).toBe(edge + BREAK_CLEAR);
+    // Above the edge nothing moves, and no card leaves its year.
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      const now = placed(broken, card.id);
+      expect(now.x, card.id).toBe(was.x);
+      if (was.y + was.height <= edge) expect(now.y, card.id).toBe(was.y);
+    }
+    expect(overlaps(broken)).toEqual([]);
+    // A line through the first lane: those cards cannot be shown whole by moving them.
+    const first = placed(free, 'sample');
+    const through = first.y + first.height / 2;
+    const kept = layoutLineage(CARDS, { ...options, breakAt: { cross: through } });
+    expect(placed(kept, 'sample')).toEqual(first);
+  });
+
+  it('down a column, starts a year, or a row of a crowded year, past the view’s bottom edge', () => {
+    const column = {
+      orientation: 'vertical' as const,
+      crossSpace: 260,
+      margin: { top: 52, left: 14 },
+    };
+    const freeColumn = layoutLineage(CARDS, column);
+    // The 1984 slot holds rows: a line through its second row, and one through the 2011 card.
+    const second = placed(freeColumn, 'cover');
+    const rowEdge = second.y + second.height / 2;
+    const yearEdge = placed(freeColumn, 'current').y + 10;
+    for (const edge of [rowEdge, yearEdge]) {
+      expect(straddling(freeColumn, 'y', edge).length, `${edge}`).toBeGreaterThan(0);
+      const broken = layoutLineage(CARDS, { ...column, breakAt: { main: edge } });
+      expect(straddling(broken, 'y', edge), `${edge}`).toEqual([]);
+      expect(overlaps(broken)).toEqual([]);
+      // Each card still in its year's slot, its year's label above it.
+      for (const c of CARDS) {
+        const slot = broken.slots.find((s) => s.year === c.year);
+        const box = placed(broken, c.id);
+        expect(box.y).toBeGreaterThanOrEqual((slot?.start ?? 0) + broken.axisSize);
+        expect(box.y + box.height).toBeLessThanOrEqual((slot?.start ?? 0) + (slot?.size ?? 0));
+      }
+    }
+    // A year moved whole takes its label with it: the 2011 slot starts past the edge.
+    const moved = layoutLineage(CARDS, { ...column, breakAt: { main: yearEdge } });
+    expect(moved.slots.find((s) => s.year === 2011)?.start).toBe(yearEdge + BREAK_CLEAR);
+  });
+
+  it('moves a card past a break by a hair: wholly out of the view, with no more gap than that', () => {
+    expect(BREAK_CLEAR).toBe(2);
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    const edge = slot.start + slot.size / 2;
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { main: edge } });
+    expect(placed(broken, 'sibling').x).toBe(edge + BREAK_CLEAR);
+    expect(placed(broken, 'sibling').x).toBeGreaterThan(edge);
+    // With a strip between the room for cards and the view's end (the edge cues'), past the
+    // strip; a card that starts in the strip goes past it too.
+    const strip = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: edge, mainPast: edge + 30 },
+    });
+    expect(placed(strip, 'sibling').x).toBe(edge + 30 + BREAK_CLEAR);
+    const inStrip = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: slot.start - 10, mainPast: slot.start + 20 },
+    });
+    expect(placed(inStrip, 'sibling').x).toBe(slot.start + 20 + BREAK_CLEAR);
+  });
+
+  it('never moves the first year in a view that starts past the map’s start', () => {
+    const slot = free.slots.find((s) => s.year === 1999);
+    if (!slot) throw new Error('no 1999');
+    // A view from 1999 too narrow for its column: the column stays, the next years move.
+    const narrow = layoutLineage(CARDS, {
+      ...options,
+      breakAt: { main: slot.start + 20, mainFrom: slot.start - 8 },
+    });
+    expect(placed(narrow, 'sibling')).toEqual(placed(free, 'sibling'));
+    // From the map's start, the same line moves 1999.
+    const fromStart = layoutLineage(CARDS, { ...options, breakAt: { main: slot.start + 20 } });
+    expect(placed(fromStart, 'sibling').x).toBe(slot.start + 20 + BREAK_CLEAR);
+  });
+
+  it('starts a card across the view’s top line (a view below the map’s top) at the line', () => {
+    const current = placed(free, 'current');
+    const line = current.y + current.height / 2;
+    const broken = layoutLineage(CARDS, { ...options, breakAt: { crossFrom: line } });
+    expect(straddling(broken, 'y', line)).toEqual([]);
+    expect(placed(broken, 'current').y).toBe(line);
+    for (const card of CARDS) {
+      const was = placed(free, card.id);
+      if (was.y + was.height <= line) expect(placed(broken, card.id), card.id).toEqual(was);
+    }
+    expect(overlaps(broken)).toEqual([]);
+  });
+
+  it('lays the map out as before with no break, or one past the map', () => {
+    expect(layoutLineage(CARDS, { ...options, breakAt: {} })).toEqual(free);
+    expect(layoutLineage(CARDS, { ...options, breakAt: { main: free.width + 10 } })).toEqual(free);
+  });
+});
+
 describe('a card’s lane', () => {
   it('is the analysed track’s, the relation its link is drawn as, or a second hop', () => {
     expect(laneOf(true, 'sample')).toBe('current');
@@ -220,6 +369,168 @@ describe('the compact row', () => {
     expect(isSparse(0)).toBe(true);
     expect(isSparse(2)).toBe(true);
     expect(isSparse(3)).toBe(false);
+  });
+});
+
+describe('wrapText, character by character (#240)', () => {
+  it('counts a wide character (CJK, kana, Hangul, fullwidth, an emoji) as two cells', () => {
+    expect(textUnits('abc')).toBe(3);
+    expect(textUnits('夜明け')).toBe(6);
+    expect(textUnits('シティポップ')).toBe(12);
+    expect(textUnits('한국')).toBe(4);
+    expect(textUnits('ＡＢ')).toBe(4);
+    expect(textUnits('😀')).toBe(2);
+    // A letter with its accent, and an emoji with its modifier, are one grapheme each.
+    expect(graphemes('e\u0301')).toEqual(['e\u0301']);
+    expect(graphemes('👍🏽')).toHaveLength(1);
+    expect(graphemeUnits('👍🏽')).toBe(2);
+    expect(graphemeUnits('e\u0301')).toBe(1);
+  });
+
+  it('wraps wide characters by the cells they take, never past the line', () => {
+    const title = '夜明けの街角で踊る二人の物語シティポップリミックス';
+    const wrapped = wrapText(title, 20, 4);
+    for (const line of wrapped.lines) expect(textUnits(line), line).toBeLessThanOrEqual(20);
+    expect(wrapped.lines.map((line) => line.replace(/-$/, '')).join('')).toBe(title);
+  });
+
+  it('never splits an emoji or a letter from its accent when it breaks a word', () => {
+    const word = `${'a'.repeat(45)}😀${'b'.repeat(150)}`;
+    const wrapped = wrapText(word, 47, 6);
+    for (const line of wrapped.lines) {
+      expect(line, line).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/);
+      expect(line, line).not.toMatch(/(?<![\ud800-\udbff])[\udc00-\udfff]/);
+      expect(textUnits(line)).toBeLessThanOrEqual(47);
+    }
+    expect(wrapped.lines.map((line) => line.replace(/-$/, '')).join('')).toBe(word);
+    const accents = wrapText('e\u0301'.repeat(30), 10, 6);
+    for (const line of accents.lines) expect(line.startsWith('\u0301'), line).toBe(false);
+    // Cut to fit: the ellipsis never follows half an emoji.
+    const cut = wrapText('😀'.repeat(40), 9, 2);
+    expect(cut.truncated).toBe(true);
+    expect(cut.lines[1]).toMatch(/^(😀)+…$/);
+  });
+
+  it('counts a flag and a keycap as two cells', () => {
+    expect(graphemes('🇯🇵')).toHaveLength(1);
+    expect(graphemeUnits('🇯🇵')).toBe(2);
+    expect(graphemeUnits('1️⃣')).toBe(2);
+    expect(graphemeUnits('#️⃣')).toBe(2);
+    expect(textUnits(`${'🇯🇵'.repeat(20)} Tokyo`)).toBe(46);
+    const flags = wrapText(`${'🇯🇵'.repeat(20)} Tokyo`, 20, 4);
+    for (const line of flags.lines) expect(textUnits(line), line).toBeLessThanOrEqual(20);
+  });
+
+  it('breaks CJK text between characters with no hyphen, and keeps closing marks off a line’s start', () => {
+    const title =
+      '夜明けの街角で踊る二人の物語（シティポップ・リミックス・エクステンデッド・バージョン）〜真夜中のサウンドトラック・スペシャル・エディション〜';
+    for (const width of [10, 13, 20, 27, 34]) {
+      const wrapped = wrapText(title, width, 20);
+      // Every character on the card is the record's: no hyphen, nothing added, nothing lost.
+      expect(wrapped.lines.join(''), `${width}`).toBe(title);
+      expect(wrapped.hyphenated.every((h) => !h)).toBe(true);
+      for (const [i, line] of wrapped.lines.entries()) {
+        expect(textUnits(line), line).toBeLessThanOrEqual(width);
+        if (i > 0)
+          expect('、。，．」』）・ー〜！？'.includes(line[0]), `${width}: ${line}`).toBe(false);
+        if (i < wrapped.lines.length - 1) {
+          expect('「『（'.includes(line.at(-1) ?? ''), `${width}: ${line}`).toBe(false);
+        }
+      }
+    }
+    // Latin then CJK: the CJK fills the line it starts on.
+    expect(wrapText('Remix 夜明けの街角で踊る', 14, 3).lines).toEqual([
+      'Remix 夜明けの',
+      '街角で踊る',
+    ]);
+    // Where kinsoku allows no break in a line (closing marks only), the line still breaks
+    // between two characters, with no hyphen.
+    const marks = wrapText('」」」」」」」」」」', 6, 5);
+    expect(marks.lines).toEqual(['」」」', '」」」', '」」」', '」']);
+    expect(marks.hyphenated.every((h) => !h)).toBe(true);
+    // A width CJK text needs is no wider than its widest character.
+    expect(charsToWrap('夜明けの街角で踊る二人の物語', 2)).toBe(14);
+  });
+
+  it('never ends nor starts a line on the card’s "·" separator, nor adds a word', () => {
+    for (const meta of [
+      '山田花子とミッドナイト・オーケストラ · 2013',
+      'Group featuring Rapper · 1997',
+      'A Very Long Band Name · 2016',
+    ]) {
+      for (let width = 4; width <= 44; width += 1) {
+        const { lines } = wrapText(meta, width, 20, { separator: true });
+        for (const line of lines) {
+          expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
+          expect(line.startsWith('·'), `${width}: ${line}`).toBe(false);
+        }
+        // The text, its "·" kept where it sits inside a line, left out where the line breaks.
+        const [name, year] = meta.split(' · ');
+        const joined = lines.join(' ').replaceAll('- ', '');
+        expect(
+          [`${name} · ${year}`, `${name} ${year}`].map((text) => text.replaceAll(' ', '')),
+        ).toContain(joined.replaceAll(' ', ''));
+      }
+    }
+    const separated = { separator: true };
+    expect(wrapText('Band · 2016', 20, 2, separated).lines).toEqual(['Band · 2016']);
+    expect(wrapText('A Very Long Band Name · 2016', 22, 2, separated).lines).toEqual([
+      'A Very Long Band Name',
+      '2016',
+    ]);
+    expect(wrapText('山田花子とミッドナイト・オーケストラ · 2013', 36, 4, separated).lines).toEqual(
+      ['山田花子とミッドナイト・オーケストラ', '2013'],
+    );
+  });
+
+  it('keeps every "·" that is the record’s own, at a line’s start too', () => {
+    // A title's, and an artist credit's (with no year, or before the card's own separator):
+    // only that separator is ever left out.
+    const title = 'Mendelssohn · Symphony No. 4 · I. Allegro vivace';
+    for (let width = 8; width <= 50; width += 1) {
+      const { lines } = wrapText(title, width, 20);
+      expect(lines.join(' ').replaceAll('- ', '').replaceAll(' ', ''), `${width}`).toBe(
+        title.replaceAll(' ', ''),
+      );
+      for (const line of lines) expect(line.endsWith('·'), `${width}: ${line}`).toBe(false);
+    }
+    expect(wrapText(title, 14, 6).lines).toEqual([
+      'Mendelssohn',
+      '· Symphony No.',
+      '4 · I. Allegro',
+      'vivace',
+    ]);
+    // An artist line with no year: no separator of the card's, nothing left out.
+    expect(wrapText('Artist A · Artist B', 10, 3, { separator: false }).lines).toEqual([
+      'Artist A',
+      '· Artist B',
+    ]);
+    // With the year: the credit's "·" kept, the card's own left out where the line breaks.
+    expect(wrapText('Artist A · Artist B · 1997', 10, 3, { separator: true }).lines).toEqual([
+      'Artist A',
+      '· Artist B',
+      '1997',
+    ]);
+  });
+
+  it('wraps where the browser has no Intl.Segmenter: never a crash, never a split pair', async () => {
+    const segmenter = Intl.Segmenter;
+    // The browser without it, as Firefox before 125.
+    delete (Intl as { Segmenter?: unknown }).Segmenter;
+    try {
+      vi.resetModules();
+      const fresh = await import('./lineageLayout');
+      const wrapped = fresh.wrapText(`${'a'.repeat(45)}😀${'b'.repeat(30)} 夜明けの街角`, 20, 8);
+      expect(wrapped.lines.length).toBeGreaterThan(1);
+      for (const line of wrapped.lines) {
+        expect(line, line).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/);
+        expect(fresh.textUnits(line)).toBeLessThanOrEqual(20);
+      }
+      expect(fresh.graphemes('😀a')).toEqual(['😀', 'a']);
+    } finally {
+      (Intl as { Segmenter?: unknown }).Segmenter = segmenter;
+      vi.resetModules();
+    }
   });
 });
 

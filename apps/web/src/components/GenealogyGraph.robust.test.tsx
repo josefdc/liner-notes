@@ -154,17 +154,65 @@ afterEach(() => {
 });
 
 describe('GenealogyGraph on a resize', () => {
-  it('keeps the drawing, its cards and its zoom, and shifts the view by half the change', async () => {
+  it('at rest, shows the first view for the new room: the analysed card whole, no card cut', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    /** Each card's left and right on screen, at the zoom drawn now. */
+    const across = () => {
+      const { x, k } = zoomOf(svg);
+      return drawnTracks(container).map((track) => {
+        const left = Number(
+          /translate\(([-\d.e]+),/.exec(track.getAttribute('transform') ?? '')?.[1],
+        );
+        const width = Number(track.querySelector('rect.card')?.getAttribute('width'));
+        return [x + left * k, x + (left + width) * k] as const;
+      });
+    };
+    /** The analysed track's card, on screen. */
+    const analysed = () =>
+      across()[
+        drawnTracks(container).findIndex(
+          (track) => track.getAttribute('data-node-id') === 'musicbrainz:recording/current',
+        )
+      ];
+    // Wider than the panel: no card straddles the panel's edges, and the analysed track's card
+    // is wholly in view, at 800 px and after a resize to 700 px.
+    expect(zoomOf(svg).k).toBe(1);
+    for (const [left, right] of across()) {
+      expect(right <= 0 || left >= 0).toBe(true);
+      expect(left >= 800 || right <= 800).toBe(true);
+    }
+    expect(analysed()[0]).toBeGreaterThanOrEqual(0);
+    expect(analysed()[1]).toBeLessThanOrEqual(800);
+    await act(async () => report?.(700, 500));
+    expect(svg.getAttribute('width')).toBe('700');
+    expect(zoomOf(svg).k).toBe(1);
+    const now = across();
+    for (const [left, right] of now) {
+      expect(right <= 0 || left >= 0).toBe(true);
+      expect(left >= 700 || right <= 700).toBe(true);
+    }
+    expect(analysed()[0]).toBeGreaterThanOrEqual(0);
+    expect(analysed()[1]).toBeLessThanOrEqual(700);
+    expect(now.filter(([left, right]) => left >= 0 && right <= 700).length).toBeGreaterThan(1);
+  });
+
+  it('once the reader has moved the view, keeps the drawing, its cards and its zoom on a resize, and shifts the view by half the change', async () => {
     const { container } = render(<GenealogyGraph data={data} />);
     const svg = container.querySelector('svg');
     if (!svg) throw new Error('no svg');
     const zoomed = svg.querySelector(':scope > g');
     const tracks = drawnTracks(container);
     expect(tracks).toHaveLength(4);
-    const before = zoomOf(svg);
     // Drawn at its size: the text at 12 px on screen, never zoomed out.
-    expect(before.k).toBe(1);
+    expect(zoomOf(svg).k).toBe(1);
     const card = relatedTrack(container).querySelector('rect.card')?.getAttribute('width');
+    // The keyboard brings the first card, before the first view, into view: the reader's view.
+    const rest = zoomOf(svg);
+    await act(async () => (relatedTrack(container) as SVGGElement).focus());
+    const before = zoomOf(svg);
+    expect(before.x).toBeGreaterThan(rest.x);
 
     await act(async () => report?.(700, 500));
 
@@ -178,8 +226,56 @@ describe('GenealogyGraph on a resize', () => {
     expect(svg.getAttribute('height')).toBe('500');
     const now = zoomOf(svg);
     expect(now.k).toBe(1);
-    // The map is no wider than the panel was: it stays centred across it.
     expect(now.x).toBeCloseTo(before.x - 50, 0);
+  });
+
+  it('ends the first view at a selection, a focus or a hover: a resize then keeps the drawing', async () => {
+    for (const act_ of ['select', 'focus', 'hover'] as const) {
+      const { container, unmount } = render(<GenealogyGraph data={data} />);
+      const svg = container.querySelector('svg');
+      if (!svg) throw new Error('no svg');
+      const zoomed = svg.querySelector(':scope > g');
+      expect(svg.getAttribute('data-view')).toBe('first');
+      // The remix's card is in the first view: none of these moves the view.
+      const before = zoomOf(svg);
+      const track = drawnTracks(container).find(
+        (g) => g.getAttribute('data-node-id') === 'later',
+      ) as SVGGElement;
+      if (act_ === 'select') await act(async () => fireEvent.click(track));
+      if (act_ === 'focus') await act(async () => track.focus());
+      if (act_ === 'hover') await act(async () => fireEvent.mouseEnter(track));
+      expect(zoomOf(svg), act_).toEqual(before);
+      expect(svg.getAttribute('data-view'), act_).toBe('reader');
+
+      await act(async () => report?.(700, 500));
+
+      expect(svg.querySelector(':scope > g'), act_).toBe(zoomed);
+      if (act_ === 'focus') expect(document.activeElement).toBe(track);
+      unmount();
+    }
+  });
+
+  it('brings the first view back when the pointer leaves, though the map was drawn anew under it', async () => {
+    const { container } = render(<GenealogyGraph data={data} />);
+    const svg = container.querySelector('svg');
+    if (!svg) throw new Error('no svg');
+    const later = () =>
+      drawnTracks(container).find((g) => g.getAttribute('data-node-id') === 'later') as SVGGElement;
+    // A column of years (a phone's width).
+    await act(async () => report?.(360, 600));
+    // The pointer passes over a card: the view is held, not the reader's for good.
+    await act(async () => fireEvent.mouseEnter(later()));
+    expect(svg.getAttribute('data-view')).toBe('reader');
+    const zoomed = svg.querySelector(':scope > g');
+
+    // A resize that changes the cards' width: the map is drawn anew, the view kept.
+    await act(async () => report?.(380, 600));
+    expect(svg.querySelector(':scope > g')).not.toBe(zoomed);
+    expect(svg.getAttribute('data-view')).toBe('reader');
+
+    // The pointer leaves, having done nothing: the first view again.
+    await act(async () => fireEvent.pointerLeave(svg));
+    expect(svg.getAttribute('data-view')).toBe('first');
   });
 
   it('lays the map out again when the panel turns too narrow for years side by side', async () => {
@@ -205,6 +301,100 @@ describe('GenealogyGraph on a resize', () => {
     expect(x(RELATED)).toBe(x('peer'));
     expect(x('peer')).toBe(x('later'));
   });
+});
+
+describe('GenealogyGraph drawn anew', () => {
+  it('gives the focus back to the same link, found by what it joins, once the links change order', async () => {
+    const { container, rerender } = render(<GenealogyGraph data={data} />);
+    const targets = () => [...container.querySelectorAll<SVGPathElement>('g.link-targets path')];
+    const remix = targets().find((path) => path.getAttribute('aria-label')?.includes('Later'));
+    if (!remix) throw new Error('no link to the remix');
+    const name = remix.getAttribute('aria-label');
+    const index = remix.getAttribute('data-link-index');
+    await act(async () => remix.focus());
+    expect(document.activeElement).toBe(remix);
+
+    // The same links, the remix's first now: its index names another link.
+    await act(async () =>
+      rerender(<GenealogyGraph data={{ ...data, links: [...data.links].reverse() }} />),
+    );
+
+    const focused = document.activeElement as SVGPathElement | null;
+    expect(focused?.getAttribute('data-link-index')).not.toBe(index);
+    expect(focused?.getAttribute('aria-label')).toBe(name);
+  });
+});
+
+describe("GenealogyGraph's edge cues", () => {
+  // Fourteen tracks, a year each: at 900x600 cards lie past the view's right edge.
+  const years = [1960, 1964, 1968, 1972, 1976, 1980, 1984, 1995, 2000, 2004, 2008, 2012, 2016];
+  const many = {
+    nodes: [
+      { id: 'musicbrainz:recording/current', group: 1, label: 'Song (1990)', size: 40, year: 1990 },
+      ...years.map((year, i) => ({ ...node(`n${i}`, 4, `Track ${i} - Someone (${year})`), year })),
+    ],
+    links: years.map((_, i) =>
+      link(`n${i}`, 'musicbrainz:recording/current', { type: 'influence' }),
+    ),
+  };
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+  it.each([
+    ['on the page', false],
+    ['in a panel that takes the focus on a press (the Player)', true],
+  ])(
+    'go on panning where a click does not focus the button (Safari, Firefox on macOS), %s',
+    async (_, panel) => {
+      const { container } = render(
+        panel ? (
+          <div tabIndex={-1} data-testid="panel">
+            <GenealogyGraph data={many} />
+          </div>
+        ) : (
+          <GenealogyGraph data={many} />
+        ),
+      );
+      const svg = container.querySelector('svg');
+      if (!svg) throw new Error('no svg');
+      await act(async () => report?.(900, 600));
+      const right = () => container.querySelector<HTMLButtonElement>('[data-cue="right"]');
+      expect(right()).not.toBeNull();
+      let presses = 0;
+      for (; presses < 6 && right(); presses += 1) {
+        const cue = right() as HTMLButtonElement;
+        const before = zoomOf(svg).x;
+        // A press there focuses the nearest focusable ancestor (the panel), else no element.
+        if (panel) screen.getByTestId('panel').focus();
+        else (document.activeElement as HTMLElement | null)?.blur?.();
+        await act(async () => fireEvent.click(cue));
+        const clicked = zoomOf(svg).x;
+        await act(async () => {
+          await frame();
+          await frame();
+        });
+        // The view went right, and stays where the cue left it.
+        expect(clicked, `press ${presses + 1}`).toBeLessThan(before);
+        expect(zoomOf(svg).x, `press ${presses + 1}`).toBe(clicked);
+        // No card cut at the view's sides.
+        for (const track of drawnTracks(container)) {
+          const left =
+            clicked +
+            Number(/translate\(([-\d.e]+),/.exec(track.getAttribute('transform') ?? '')?.[1]);
+          const width = Number(track.querySelector('rect.card')?.getAttribute('width'));
+          const cut = (edge: number) => left < edge - 0.5 && left + width > edge + 0.5;
+          expect(
+            cut(0) || cut(900),
+            `press ${presses + 1}: ${track.getAttribute('data-node-id')}`,
+          ).toBe(false);
+        }
+        // No card's box opened for a card the reader did not go to.
+        if (right()) expect(screen.queryByTestId('link-detail')).toBeNull();
+      }
+      // The cue went once nothing was left past that edge.
+      expect(right()).toBeNull();
+      expect(presses).toBeGreaterThan(1);
+    },
+  );
 });
 
 describe("GenealogyGraph's pictures", () => {

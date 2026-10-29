@@ -379,50 +379,76 @@ def test_the_guide_explains_only_the_tables_a_report_holds():
 KEY_RULE_WORDS = (
     "exact for key",
     "MIREX 0",
-    "key strength minimum",
+    "strength minimum",
     "key evidence rule",
     "key: unrelated",
     "39 of 50 GiantSteps+ keys",
     "gave keys to material with no key",
     "pitch-class level of 0.1",
     "key exact",
+    "pitchless drum track",
+    "the drum track above",
+    "the key strength, the share of energy in spectral lines",
+    "truth: key",
+    "`librosa` key",
+    "*a key* means",
 )
+# And those only true of a calibration of the tempo rules.
+TEMPO_RULE_WORDS = (
+    "Acc1",
+    "Acc2",
+    "steadiness",
+    "forgiving octave and meter",
+    "0.04",
+    "periodicity",
+    "confidence",
+    "beat drift",
+    "beat-this is shown",
+    "truth: tempo",
+    "`librosa` tempo",
+)
+
+
+def calibration_runs(doc: dict, *kinds: str) -> dict:
+    """The document with only the calibration runs of `kinds` (and the other suites' runs)."""
+    return dict(
+        doc,
+        runs=[r for r in doc["runs"] if r["suite"] != "calibration" or r["kind"] in kinds],
+    )
 
 
 def test_the_calibration_section_says_only_what_its_runs_calibrate():
     """
     Without a calibration run of the key rules, the section says nothing about them: no key
-    scores, minimums or history; with one (the 2026-10-25 report holds both kinds) it does.
+    scores, minimums, measurements, history or control columns; without one of the tempo rules,
+    nothing about those. With both (the 2026-10-25 report) it says both.
     """
     full = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-25.json").read_text())
-    tempo_only = dict(
-        full,
-        runs=[
-            r
-            for r in full["runs"]
-            if r["suite"] == "controls" or (r["suite"] == "calibration" and r["kind"] == "tempo")
-        ],
-    )
     both = "\n".join(calibration_report.section(full))
-    tempo = "\n".join(calibration_report.section(tempo_only))
+    tempo = "\n".join(calibration_report.section(calibration_runs(full, "tempo")))
+    key = "\n".join(calibration_report.section(calibration_runs(full, "key")))
     for words in KEY_RULE_WORDS:
         assert words in both, words
         assert words not in tempo, words
+    for words in TEMPO_RULE_WORDS:
+        assert words in both, words
+        assert words not in key, words
     assert "(Acc1 for tempo)" in tempo and "The service withholds a tempo when" in tempo
+    assert "(the confidence minimum)" in tempo
     assert "choosing the tightening that fixes most controls and requiring" in tempo
     assert "a tolerance of 0.04 that librosa's clips reject" in tempo
-    # The controls run itself is still shown: its key column is a measurement, not a rule.
-    assert "`librosa` key" in tempo
+    assert "### Octave and meter errors and the confidence" in tempo
+    assert "| generated controls | tempo, gate |" in tempo
+    assert "None of those that pass gets a tempo." in tempo
+    assert "(exact for key)" in key and "The service withholds a key when" in key
+    assert "(the strength minimum)" in key and "unrelated to the reference key at most" in key
+    assert "### Octave and meter errors" not in key
+    assert "| generated controls | key, gate |" in key
+    assert "None of those that pass gets a key." in key
     # The 2026-10-29 runs were made with the single-source rule, a key rule: it is described
     # with the key calibration run, and not without it.
     newest = json.loads((REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json").read_text())
-    without_key = dict(
-        newest,
-        runs=[
-            r for r in newest["runs"] if not (r["suite"] == "calibration" and r["kind"] == "key")
-        ],
-    )
-    text = "\n".join(calibration_report.section(without_key))
+    text = "\n".join(calibration_report.section(calibration_runs(newest, "tempo")))
     assert not [words for words in KEY_RULE_WORDS if words in text]
     assert "single-source rule" not in text and "Added to the controls" not in text
     with_key = "\n".join(calibration_report.section(newest))

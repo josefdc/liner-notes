@@ -256,7 +256,8 @@ def section(doc: dict) -> list[str]:
         f"(L4). A rule the service keeps per estimator (the {minimums} "
         f"minimum{'s' if tempo and key else ''}) is decided on that estimator's clips; a shared rule "
         "on Essentia's (the default) and checked on librosa's: a change librosa's clips reject "
-        "is not made. beat-this is shown under the service's rules and decides nothing.",
+        "is not made."
+        + (" beat-this is shown under the service's rules and decides nothing." if tempo else ""),
         "- Only changes that withhold more are shipped. A loosening the procedure picks is shown "
         "but not shipped: it rests on these clips alone"
         + (
@@ -294,9 +295,9 @@ def section(doc: dict) -> list[str]:
     out += confirmation_section(confirmation, kinds)
     out += agreement_table(selected, confirmed, after, kinds)
     out += evaluation_section(runs, after, kinds)
-    out += controls_section(controls, after)
-    out += octave_section(runs, after)
-    out += gate_section(runs, controls, after)
+    out += controls_section(controls, after, kinds)
+    out += octave_section(runs, after) if tempo else []
+    out += gate_section(runs, controls, after, kinds)
     return out
 
 
@@ -324,7 +325,7 @@ def clips_table(runs: list[dict], controls: dict) -> list[str]:
     rows.append(
         [
             "generated controls",
-            "tempo, key, gate",
+            ", ".join([*calibrated({r["kind"] for r in runs}), "gate"]),
             ", ".join(f"`{n}`" for n in controls["estimators"]),
             str(len(controls["controls"])),
             "–",
@@ -652,17 +653,28 @@ def shown(value, kind: str) -> str:
     return f"{value:.1f}" if kind == "tempo" else f"{value[0]} {value[1]}"
 
 
-def controls_section(controls: dict, after: cal.Rules) -> list[str]:
+def calibrated(kinds: set) -> list[str]:
+    """The kinds of rules a report calibrates, tempo first."""
+    return [k for k in ("tempo", "key") if k in kinds]
+
+
+def controls_section(controls: dict, after: cal.Rules, kinds: set) -> list[str]:
+    """
+    The controls' answers for the kinds of rules the report calibrates: a report without a
+    key calibration run shows no key column and no key count, one without a tempo run none
+    for tempo.
+    """
     from .controls import GROUPS, group_description
 
-    names = controls["estimators"]
+    shown_kinds = calibrated(kinds)
+    names = [n for n in controls["estimators"] if any(has_kind(n, k) for k in shown_kinds)]
     # The controls run's own values: a controls run added to a report of older runs is shown
     # as the service that made it served it.
     after = cal.Rules.from_dict(controls["rules"]) if controls.get("rules") else after
     table_rows = cal.controls_table(controls["controls"], names, cal.BASELINE, after)
     counts = []
     for name in names:
-        for kind in ("tempo", "key"):
+        for kind in shown_kinds:
             cells = [
                 r["estimators"][name][kind]
                 for r in table_rows
@@ -680,23 +692,22 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
                     str(sum(bool(c["okAfter"]) for c in scored)),
                 ]
             )
-    head = ["control", "group", "truth: tempo", "truth: key", "truth: gate"]
+    head = ["control", "group", *(f"truth: {k}" for k in shown_kinds), "truth: gate"]
     for name in names:
-        head += [f"`{name}` tempo", f"`{name}` key"] if name != "beat-this" else [f"`{name}` tempo"]
+        head += [f"`{name}` {k}" for k in shown_kinds if has_kind(name, k)]
     rows = []
     for r in table_rows:
         truth = r["truth"]
         row = [
             r["name"],
             r["group"],
-            truth_label(truth["tempo"], "tempo"),
-            truth_label(truth["key"], "key"),
+            *(truth_label(truth[k], k) for k in shown_kinds),
             truth["gate"],
         ]
         for name in names:
             cells = r["estimators"].get(name, {})
-            for kind in ("tempo", "key"):
-                if name == "beat-this" and kind == "key":
+            for kind in shown_kinds:
+                if not has_kind(name, kind):
                     continue
                 c = cells.get(kind)
                 if c is None:
@@ -721,8 +732,13 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
         "Generated signals whose truth is known by construction: the issue's lists of defects "
         "found with generated probes, and the probe sets of the service's own tests "
         "(`services/audio/tests`). Groups: " + groups + ". A truth of *none* means there is "
-        "nothing to measure; *a key* means music in more than one key (any key is right, none "
-        "is wrong). The values are derived before and after from the recorded measurements, as "
+        "nothing to measure"
+        + (
+            "; *a key* means music in more than one key (any key is right, none is wrong)"
+            if "key" in kinds
+            else ""
+        )
+        + ". The values are derived before and after from the recorded measurements, as "
         "for the annotated clips.",
         "",
         *table(["estimator", "field", "scored controls", "right before", "right after"], counts),
@@ -733,6 +749,11 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
         "– is no value.",
         "",
     ]
+
+
+def has_kind(name: str, kind: str) -> bool:
+    """beat-this gives a tempo and no key."""
+    return not (name == "beat-this" and kind == "key")
 
 
 def octave_section(runs: list[dict], after: cal.Rules) -> list[str]:
@@ -768,7 +789,7 @@ def octave_section(runs: list[dict], after: cal.Rules) -> list[str]:
     ]
 
 
-def gate_section(runs: list[dict], controls: dict, after: cal.Rules) -> list[str]:
+def gate_section(runs: list[dict], controls: dict, after: cal.Rules, kinds: set) -> list[str]:
     rows = []
     for run in runs:
         gated = [
@@ -789,12 +810,12 @@ def gate_section(runs: list[dict], controls: dict, after: cal.Rules) -> list[str
             f"{c['name']} (`{name}` {kind})"
             for c in passed
             for name in controls["estimators"]
-            for kind in ("tempo", "key")
+            for kind in calibrated(kinds)
             if cal.usable(c, name, kind) and cal.derived(c, name, kind, after) is not None
         }
     )
     then = (
-        "None of those that pass gets a tempo or a key."
+        f"None of those that pass gets {' or '.join(f'a {k}' for k in calibrated(kinds))}."
         if not valued
         else f"Of those that pass, these get a value: {', '.join(valued)}."
     )

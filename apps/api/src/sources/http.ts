@@ -1969,9 +1969,10 @@ export const withoutEscapedMediaUrls = (text: string) => redactWith(text, [escap
  * well above what consumers read. Nothing else changes, so replay reproduces the recorded run;
  * id-shaped values are kept as they are.
  *
- * Not for a log line as it is: the cap is a plain cut, with no guard (safeCut) against a cut that
- * splits a configured value or a token a rule hides only whole, or that shows a word the other
- * rules' cut left out. A log takes it through the logger's scrub, or a text through scrubText.
+ * Its output goes to a cassette (forCassette); no log line is written from it. It is not for one:
+ * the cap is a plain cut, with no guard (safeCut) against a cut that splits a configured value or
+ * a token a rule hides only whole. Nor is the logger's scrub of it shown to be safe: a credential
+ * this redaction leaves can be one scrub no longer reads either.
  */
 export function scrubReadText(text: string): string {
   if (ID_SHAPED.test(text)) return text;

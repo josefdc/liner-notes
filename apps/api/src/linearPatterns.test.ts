@@ -32,11 +32,13 @@ const OLD_SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/
 const OLD_NAME_JOIN = /\s*(?:,|&|\band\b|\/)\s*/i;
 const OLD_CREDIT_JOIN = /\s*(?:,|&|\/|\s(?:and|x|with|feat\.?|ft\.?|featuring)\s)\s*/i;
 const OLD_DISAMBIGUATION_NUMBER = /\s+\(\d+\)$/;
-// The earlier form of SECRET_PAIR's whitespace after ":" or "=". Its scheme group is SECRET_PAIR's
-// (#235), so it checks the whitespace only: what the scheme group takes is pinned by literal
-// cases below.
-const OLD_SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])((?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)(?!(?:Bearer|Basic|Discogs)\s))?["']?[^\s"'&,;}\]]+["']?/gi;
+// SECRET_PAIR with the earlier form of its whitespace after ":" or "=" (before #198), for that
+// whitespace only: the rest is SECRET_PAIR's own. What its scheme group takes is pinned by the
+// literal cases below, and against main's expression by logger.test.ts.
+const OLD_SECRET_PAIR = new RegExp(
+  SECRET_PAIR.source.replace(String.raw`[:=]\s*(?!\s))`, String.raw`[:=]\s*)`),
+  "gi",
+);
 
 const credits = [
   "Queen & David Bowie",
@@ -198,13 +200,22 @@ describe("SECRET_PAIR", { timeout: 30_000 }, () => {
       ["token: 'Basic' is not supported", "token: [R] is not supported"],
       // A line break after a quoted scheme ends the value.
       ["authorization: 'Bearer\n  at Object.x'", "authorization: [R]\n  at Object.x'"],
-      // A scheme before another is the value alone: the second, with its token, is left for the
-      // Authorization rule.
-      ["authorization: 'Bearer Bearer abc.def'", "authorization: [R] Bearer abc.def'"],
-      ["authorization: Basic bearer abc.def", "authorization: [R] bearer abc.def"],
+      // Schemes in a row are taken together, with the word after them.
+      ["authorization: 'Bearer Bearer abc.def'", "authorization: [R]"],
+      ["authorization: Basic bearer abc.def", "authorization: [R]"],
+      ["authorization: Bearer Bearer Bearer abc.def", "authorization: [R]"],
+      // Unless that word starts another rule: then the first scheme alone, as before, and the
+      // rules after it find the rest.
+      ["authorization: 'Bearer token: abc.def'", "authorization: [R] token: [R]"],
+      ["authorization: 'Bearer \"Bearer abc.def\"'", 'authorization: [R] "Bearer abc.def"\''],
+      ["authorization: Bearer Bearer x/Bearer abc", "authorization: [R] x/Bearer abc"],
     ]) {
       expect(line.replace(SECRET_PAIR, "$1$2[R]"), line).toBe(expected);
     }
+  });
+
+  it("derives the earlier whitespace from SECRET_PAIR", () => {
+    expect(OLD_SECRET_PAIR.source).not.toBe(SECRET_PAIR.source);
   });
 
   it("reads a long run of whitespace after a secret's name quickly", () => {

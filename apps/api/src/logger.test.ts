@@ -370,6 +370,118 @@ describe("Authorization values in quotes and at the cap", () => {
     }
   });
 
+  it.each([
+    [
+      "a pair name after a quoted scheme",
+      "{ authorization: 'Bearer token: V7qW6rE5tY4uI3oP2aS1' }",
+    ],
+    [
+      "a quoted scheme after a quoted scheme",
+      "authorization: 'Bearer \"Bearer V7qW6rE5tY4uI3oP2aS1\"'",
+    ],
+    [
+      "a scheme in brackets after a quoted scheme",
+      "authorization: 'Bearer (Bearer V7qW6rE5tY4uI3oP2aS1)'",
+    ],
+    ["a Discogs token after a tab", 'Authorization: "Discogs token=\tV7qW6rE5tY4uI3oP2aS1"'],
+    ["a pair in backticks", "Authorization = `Basic \taccess_token='V7qW6rE5tY4uI3oP2aS1=='"],
+    ["a scheme after a slash", "authorization: 'Bearer x/Bearer V7qW6rE5tY4uI3oP2aS1'"],
+    ["three schemes", "authorization: Bearer Bearer Bearer V7qW6rE5tY4uI3oP2aS1"],
+    ["two schemes, then Basic", "Authorization: Bearer Bearer Basic V7qW6rE5tY4uI3oP2aS1=="],
+    [
+      "three schemes across a line break",
+      "authorization: Bearer\nBearer Bearer V7qW6rE5tY4uI3oP2aS1",
+    ],
+    ["three schemes, any case", "password=bearer BEARER bearer V7qW6rE5tY4uI3oP2aS1"],
+    ["three schemes in quotes", "authorization: 'Bearer Bearer Bearer V7qW6rE5tY4uI3oP2aS1'"],
+  ])("leaves no part of a token after schemes and rules in a row: %s", (_label, text) => {
+    const dir = mkdtempSync(join(tmpdir(), "log-rows-"));
+    const shown = (out: string) => out.includes("V7qW6r") || out.includes("oP2aS1");
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      expect(scrub(text)).not.toSatisfy(shown);
+      expect(scrub(logText(text))).not.toSatisfy(shown);
+      expect(JSON.stringify(serializeError(new Error(text)))).not.toSatisfy(shown);
+      logger("Probe").warn(text);
+      expect(readFileSync(file, "utf8")).not.toSatisfy(shown);
+      expect(readFileSync(file, "utf8")).toContain("[redacted]");
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps hidden what main's pair and Authorization rules hid (generated texts)", () => {
+    // main's expressions (662d2ce), frozen: what they hid in a text, scrub hides too.
+    const MAIN_SECRET_PAIR =
+      /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
+    const MAIN_AUTH_SCHEME =
+      /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+    const main = (text: string) =>
+      text
+        .replace(MAIN_SECRET_PAIR, "$1$2[redacted]")
+        .replace(
+          MAIN_AUTH_SCHEME,
+          (_m, scheme?: string, basic?: string) => `${scheme ?? basic}[redacted]`,
+        );
+    const SECRET = "M0001xAbCdEf";
+    const shown = (out: string) => out.includes("M0001x") || out.includes("AbCdEf");
+    const texts: string[] = [];
+    for (const name of ["authorization", "Proxy-Authorization", "token", "password"])
+      for (const sep of [": ", "=", '": "', " = "])
+        for (const quote of ["", "'", '"', "`"])
+          for (const scheme of ["Bearer", "basic", "Discogs"])
+            for (const blank of [" ", "\t", "\n", "  "])
+              for (const between of [
+                "",
+                "Bearer ",
+                "Bearer Bearer ",
+                "Basic ",
+                "bearer\n",
+                "token: ",
+                "x/",
+                "(",
+                '"',
+                "'",
+                "-",
+                "access_token='",
+                "Discogs token=",
+                "Discogs token=\t",
+                "x/Bearer ",
+                '"Bearer ',
+                "(Bearer ",
+                "password=",
+                'token": ',
+                "Bearer Bearer Bearer ",
+              ])
+                texts.push(`${name}${sep}${quote}${scheme}${blank}${between}${SECRET}${quote} }`);
+    const parts = [
+      "authorization: ",
+      "token=",
+      "'",
+      '"',
+      "`",
+      "Bearer ",
+      "Basic ",
+      "bearer\t",
+      "Discogs token=",
+      "\n",
+      "  ",
+      "x/",
+      "(",
+      ":",
+      SECRET,
+    ];
+    texts.push(...randomStrings(parts, 20_000, 9, 235));
+    const missed = texts.filter((text) => shown(scrub(text)) && !shown(main(text)));
+    expect(missed.slice(0, 5)).toEqual([]);
+    // The texts hold what main hid often enough for the comparison to mean something.
+    expect(
+      texts.filter((text) => text.includes(SECRET) && !shown(main(text))).length,
+    ).toBeGreaterThan(5_000);
+  });
+
   it("finds the token of a quoted Authorization value, without its scheme and quotes", () => {
     const text = `{ authorization: 'Bearer ${TOKEN}', 'proxy-authorization': "Basic ${CRED}" }`;
     expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
@@ -486,6 +598,12 @@ describe("Authorization values in quotes and at the cap", () => {
       "authorization: 'Bearer ".repeat(1 << 15),
       "authorization:\"Basic\t'Bearer ".repeat(1 << 15),
       `"authorization": "Bearer abc.def", `.repeat(1 << 15),
+      // The word after a scheme is read for the start of another rule: a long one, runs of
+      // schemes, and words that hold a rule's start near their end.
+      `authorization: 'Bearer ${"x".repeat(1 << 20)}`,
+      `authorization: ${"Bearer ".repeat(1 << 17)}x`,
+      `authorization: '${"Bearer ".repeat(1 << 17)}`,
+      "authorization: 'Bearer x/token".repeat(1 << 15),
     ];
     const { ms } = timed(
       () => {

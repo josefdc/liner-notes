@@ -120,19 +120,46 @@ const SECRET_PARAM =
 /** Authorization values: a Bearer token, Basic credentials, a Discogs token; quoted or not. */
 const AUTH_SCHEME =
   /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+/** Names whose value is secret, in `name: value` and `name=value` pairs (SECRET_PAIR). */
+const PAIR_NAMES =
+  "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
+/** The Authorization schemes. */
+const SCHEMES = "(?:Bearer|Basic|Discogs)";
+/** A quote that can open a value: util.inspect writes backticks when a string holds both others. */
+const QUOTE = "[`\"']";
+/** A character of a pair's value. */
+const VALUE_CHAR = String.raw`[^\s"'&,;}\]]`;
+/**
+ * After a scheme, whether the next word (quoted or not) holds the start of a rule that would run
+ * on past it: an Authorization scheme followed by a space, or a pair's name whose value lies
+ * beyond the word. A pair that took the word with the scheme would hide that start, and the
+ * secret after it would stay.
+ */
+const RULE_IN_NEXT_WORD = String.raw`["']?${VALUE_CHAR}*?\b(?:${SCHEMES}\s|(?:${PAIR_NAMES})(?:["'\s]\s*[:=]|[:=](?!${VALUE_CHAR})))`;
 /**
  * `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. The
  * whitespace after ":" or "=" is taken whole (a value never starts with a space), so a long run
- * of it is not read again from each of its characters. An Authorization scheme before the value
- * is taken with it (the third group), inside the quotes too (`authorization: 'Bearer …'`, as
- * util.inspect writes a headers object, with backticks when the text holds both quotes): taken
- * as the value alone, the scheme word would leave the token after it. Inside the quotes, only
- * spaces and tabs follow the scheme, so a line break after it keeps the next line. A scheme
- * followed by another (`'Bearer Bearer <token>'`) is not taken: the pair then replaces the first
- * word only, and the Authorization rule finds the second with its token.
+ * of it is not read again from each of its characters.
+ *
+ * An Authorization scheme before the value is taken with it (the third group), inside the quotes
+ * too (`authorization: 'Bearer …'`, as util.inspect writes a headers object, with backticks when
+ * the text holds both quotes): taken as the value alone, the scheme word would leave the token
+ * after it. Inside the quotes only spaces and tabs follow a scheme, so a line break after one
+ * keeps the next line. Two or more schemes in a row (`Bearer Bearer <token>`) are taken together,
+ * with the word after them as the value. The schemes after the first, and a quoted scheme at
+ * all, are taken only when the word after them holds no start of another rule
+ * (RULE_IN_NEXT_WORD: `'Bearer token: <token>'`, `'Bearer "Bearer <token>"'`); otherwise the pair
+ * takes what it always did, the first scheme word (with its quote) or an unquoted scheme and one
+ * word, and the rules after it find the rest.
  */
-export const SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*(?!\s))(?!\s*(?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])((?:[`"'](?:Bearer|Basic|Discogs)[ \t]+|(?:Bearer|Basic|Discogs)\s+)(?!(?:Bearer|Basic|Discogs)\s))?["']?[^\s"'&,;}\]]+["']?/gi;
+export const SECRET_PAIR = new RegExp(
+  String.raw`\b(${PAIR_NAMES})(["']?\s*[:=]\s*(?!\s))` +
+    String.raw`(?!\s*(?:${QUOTE}${SCHEMES}[ \t]+|${SCHEMES}\s+)?["']?\[redacted\])` +
+    String.raw`((?:${QUOTE}${SCHEMES}[ \t]+(?:${SCHEMES}[ \t]+)*(?!${RULE_IN_NEXT_WORD})` +
+    String.raw`|${SCHEMES}\s+(?:(?:${SCHEMES}\s+)+(?!${RULE_IN_NEXT_WORD}))?))?` +
+    `["']?${VALUE_CHAR}+["']?`,
+  "gi",
+);
 
 /** Environment variables whose values are never written: keys, secrets, tokens, endpoints. */
 const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;
@@ -334,10 +361,10 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * overlapping another: its rules replayed in its order, each on the text the rules before it
  * left (configured values, links, configured hosts, preview and provider hosts, secret pairs,
  * Authorization values), and what each replaces found where it stood in `text`. The quotes
- * around a value and the scheme word before one, which scrub replaces with it, are not in them:
- * they hold no secret, and the redaction that reads these spans keeps them (the word Basic
- * before a credential that scrub's Authorization rule replaces is the one exception, see
- * readPairs). The configured
+ * (`'` and `"`) around a value and the scheme words before one, which scrub replaces with it, are
+ * not in them: they hold no secret, and the redaction that reads these spans keeps them. Two
+ * exceptions only hide more: a backtick around a value stays in its span, and so does the word
+ * Basic before a credential that scrub's Authorization rule replaces (see readPairs). The configured
  * values as JSON writes them (with `"`, `\` or a control character escaped) are in them too,
  * although scrub does not replace them in a text: the last pass over a line replaces only what
  * it writes itself from a value, and one written already escaped in a text is escaped again
@@ -467,9 +494,12 @@ const LOG_CUT_WINDOW = 4096;
  * the cut is looked up around it, however long. Once the cut has moved, it also falls before an
  * Authorization credential of the text as it came that crosses it: matched there, the credential
  * ran on into what the cut now leaves out, and what is left of it may be too short for its rule.
- * That second span starts after the scheme word, which holds no secret; a cut through a Basic
- * credential that only the rules moved falls before the word Basic, which its span from
- * scrubbedSpans keeps (readPairs).
+ * That second span starts after the scheme word, which holds no secret, so a cut that moved
+ * there stops after `Basic ` (before #235 it went back before the word; in a credential glued
+ * to a link or a host, the text before the word that such a cut used to leave out is now kept,
+ * whole, with what the rules hide in it hidden). A cut through a Basic credential that only the
+ * rules moved still falls before the word Basic, which its span from scrubbedSpans keeps
+ * (readPairs).
  *
  * It places the cuts that decide how much of a text a log line shows: scrub's cap, logText's
  * (http/middleware/errors.ts), and those of the redaction of source errors (safeCut and lineCut

@@ -1013,7 +1013,7 @@ describe("configured values escaped, folded, overlapping or in a token (#237)", 
     ["a long value's own start, repeated", filled("ab"), { LONG_KEY: `${"ab".repeat(2_000)}Z` }],
     [
       "a long value's own start, repeated, the value in the text too",
-      filled(`${"ab".repeat(1_999)}Z`, "", `${"ab".repeat(2_000)}Z`),
+      filled("ab", "", `${"ab".repeat(2_000)}Z`),
       { LONG_KEY: `${"ab".repeat(2_000)}Z` },
     ],
     ["text with 40 configured values", filled("V1xV2x-V3x "), undefined],

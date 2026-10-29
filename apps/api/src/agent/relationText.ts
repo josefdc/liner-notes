@@ -541,7 +541,8 @@ function readSide(items: readonly Item[], context: ReadingContext): Side | null 
  *
  * A statement is read as `nameWords` splits it, and when that reads nothing, again with its
  * list commas kept (`tokensOf`): a list ("sampled in A, B and C") names its records one by one,
- * each name between two commas whole. A statement that ends in "?" asks: it states nothing.
+ * each name between two commas whole. A statement that asks (`asks`: a "?" outside a quoted
+ * title, or one that ends it) states nothing.
  */
 export function readRelations(text: string, context: ReadingContext): Set<string> | null {
   if (asks(text, context)) return null;
@@ -1057,6 +1058,9 @@ const RECORD_WORDS: ReadonlySet<string> = new Set([
   ...["another", "other", "many", "several", "countless", "numerous", "rival"],
   ...["record", "recording", "song", "hit", "single", "track", "version", "cover", "remix"],
   ...["tune", "album", "composition", "predecessor", "release", "side", "source"],
+  ...["successor", "followup", "sequel", "debut", "mixtape", "soundtrack", "demo", "rerecording"],
+  ...["mashup", "bootleg", "edit", "cut", "beat", "orchestra", "themselves"],
+  ...["producer", "artist", "rapper"],
 ]);
 /** The nouns "the" or "this" and a possessive make the analysed track's ("the track's …"). */
 const TRACK_NOUNS: ReadonlySet<string> = new Set(["track", "song", "recording"]);
@@ -1072,9 +1076,11 @@ function describesRecord(items: readonly Item[], relating: readonly number[]): b
   return items.some((item, i) => {
     const word = wordOf(item);
     if (word === undefined || relating.includes(i)) return false;
+    const next = wordOf(items[i + 1]);
+    // "follow-up", split in two.
+    if (word === "follow" && (next === "up" || next === "ups")) return true;
     const found = recordWord(word);
     if (found === undefined) return false;
-    const next = wordOf(items[i + 1]);
     const before = wordOf(items[i - 1]) ?? "";
     if (
       word === "source" &&

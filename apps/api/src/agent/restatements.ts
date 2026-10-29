@@ -463,8 +463,11 @@ function perClaim<T>(read: (claim: Claim) => T): (claim: Claim) => T {
  * the model's links of `context.genealogy` state, when each of those links may go with it.
  * `evidence` is the result's pack. The result does not depend on the claims' order.
  *
- * The step only ever leaves out or marks: should it fail on some text, every claim, card and
- * link is kept as it came, unmarked (a mark is never kept unread), and nothing is left out.
+ * The step only ever leaves out or marks, so a failure keeps what it touches. A claim whose
+ * text the relation templates cannot read (`readSafely`) states nothing: it is kept, unmarked,
+ * and every other claim is read as ever, so its restatements still go. Should the step fail
+ * anywhere else, every claim, card and link is kept as it came, unmarked (a mark is never kept
+ * unread), and nothing is left out.
  */
 export function withoutRestatements<
   F extends { claimId?: string },

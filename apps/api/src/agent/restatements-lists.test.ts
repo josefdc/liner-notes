@@ -482,6 +482,11 @@ describe("a detail sentence that refers back to the relation", () => {
       kind: "inferred",
     } as Partial<Claim>;
     expect(fate(JUICY, "5ed3b846", change)).toBe("stays");
+    const producers = {
+      ...change,
+      text: "“Juicy” is sampled in Jay-Z’s “A Dream,” RBX’s “A.W.O.L.” and Mos Def feat. Talib Kweli’s “History”. Hip-hop producers built beats around that sample.",
+    };
+    expect(fate(JUICY, "5ed3b846", producers)).toBe("stays");
   });
 
   it("is not detail after a comma that closes a quoted title (“…,”): that comma ends no part", () => {
@@ -546,6 +551,25 @@ describe("a detail sentence that refers back to the relation", () => {
       "Several strings were layered over the sample.",
       "Countless strings were layered over the sample.",
       "A rival arrangement was built around that sample.",
+      // Who else used it, and what else it is.
+      "Hip-hop producers built beats around that sample.",
+      "Dozens of producers have built beats around that sample.",
+      "Rappers have freestyled over that sample.",
+      "Hip-hop cuts were built around that sample.",
+      "Its successor was built around that sample.",
+      "The follow-up was built around that sample.",
+      "The sequel was built around that sample.",
+      "The mixtape was built around that sample.",
+      "The soundtrack was built around that sample.",
+      "Their debut was built around that sample.",
+      "Mashups were built around that sample.",
+      "Bootlegs were built around that sample.",
+      "Edits were built around that sample.",
+      "The rerecording was built around that sample.",
+      "The demo was built around that sample.",
+      "Other artists built tracks around that sample.",
+      "The orchestra’s arrangement was built around that sample.",
+      "The strings were themselves built around that sample.",
       // A possessive other than the track's own.
       "The original’s riff was rebuilt around that sample.",
       "The album’s strings were layered over the sample.",
@@ -593,6 +617,7 @@ describe("a detail sentence that refers back to the relation", () => {
       "Strings were added over this cover in 2005.",
       "The original song was later rebuilt around this cover.",
       "Many songs were built around this cover.",
+      "Hip-hop producers built beats around this cover.",
       "Other bands recorded songs over this cover.",
       "The original was written atop this cover.",
       "Strings were added with this cover.",

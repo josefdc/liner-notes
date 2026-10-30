@@ -139,7 +139,8 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
           {/* Log list: a scroller, so a Tab stop; in forced-colors mode its outline is drawn
               inside it, where the panel's overflow-hidden does not cut it. Its entries and their
               dots are positioned, so they paint over that outline: the layer after it draws the
-              outline again, above them and outside the scroll, while the list has the focus. */}
+              outline again, above them (z-20 over the dots' z-10) and outside the scroll, while
+              the list matches :focus-visible in forced-colors mode. */}
           <div className="relative">
             <div className="peer relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain forced-colors:focus-visible:-outline-offset-2">
               {/* Timeline line */}

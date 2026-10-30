@@ -365,19 +365,20 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Main Grid (P2:17 — stagger animations). It fills spare height but never shrinks below its
           content, and the hero above never shrinks: the page scrolls instead of clipping them. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 forced-colors:lg:grid-rows-[auto_1fr]">
         {/* Hero: Sonic Fingerprint. It takes the focus by script; in forced-colors mode it shows
-            it with an outline 4px outside it. From lg it stretches to the row, which the open
-            activity log makes taller than the screen above the footer, so no scroll showed the
-            whole outline. In that mode it stops 3rem short of the window's height (the footer,
-            and room for the outline), never under 28rem (its content needs about 26), and a
-            focus scroll leaves 8px beyond it (Chrome's scroll lands up to 1px past the margin),
-            so the outline stays in view. */}
+            it with an outline 4px outside it. From lg it stretches to its row, and the row can be
+            taller than the screen above the footer (at 1440×900 the open activity log makes it
+            901px, in an 875px view), so no scroll showed the whole outline. In that mode the
+            connected tracks beside it span a second row too (the grid's classes), so its own row
+            is as tall as its content: it still stretches to it (its chart sizes to that height),
+            and never hides any of it. A focus scroll leaves 8px beyond it (Chrome's scroll lands
+            up to 1px past the margin), so the outline stays in view wherever the content fits. */}
         <section
           ref={fingerprintRef}
           tabIndex={-1}
           aria-label="Sonic Fingerprint"
-          className="focus-visible:outline-hidden focus-visible:border-cyber/70 forced-colors:scroll-my-2 forced-colors:lg:max-h-[max(calc(100dvh-3rem),28rem)] lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="focus-visible:outline-hidden focus-visible:border-cyber/70 forced-colors:scroll-my-2 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel subtitle={fingerprintText} className="flex-1">
@@ -432,7 +433,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </section>
 
         {/* Connected tracks from the genealogy (P2:17 — stagger) */}
-        <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4">
+        <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4 forced-colors:lg:row-span-2">
           {/* The count moves below the heading when the two do not fit side by side */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>

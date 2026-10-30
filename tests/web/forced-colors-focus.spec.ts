@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   animationsSettled,
@@ -25,6 +25,10 @@ const fullResult = loadFixture("full-result");
 /** A result whose map is drawn as cards (the full result's is a single row of buttons). */
 const kindsResult = loadFixture("genealogy-kinds");
 const MAP_TRACK = "5eFgHiJkLmNoPqRsTuVwXy";
+/** A result with model style and tag scores: a taller Sonic Fingerprint panel. */
+const measuredResult = loadFixture("measured-v2");
+/** The layer that draws the open activity log's list outline above its entries. */
+const LOG_LAYER = '#activity-log-content .overflow-y-auto + [aria-hidden="true"]';
 /** The map's own elements, which show their focus with a ring drawn in the SVG. */
 const MAP_ITEMS = "g.nodes > g, g.link-targets > path";
 
@@ -424,11 +428,21 @@ async function paintedSides(page: Page) {
  * `paintedSides`, with `gaps`: per side, the pixels along its straight part (the element's box
  * less its corner radius, within the window) at which the band does not paint across its whole
  * width. Something that covers the outline there, or cuts it by even a pixel, leaves a gap.
+ *
+ * The band is the focused element's outline, or, given `drawnBy` and while it is shown, that
+ * element's: a layer that draws the focused element's outline for it. A `solid` outline's band is
+ * checked to its corner radius. Chrome rounds the corners of an `auto` ring (the browser's own)
+ * whatever the radius: measured on the log list's 1px ring, 1px past its inset at each end, so an
+ * `auto` band is checked to AUTO_RING_CORNER px further in.
  */
-async function outlinePixels(page: Page) {
+async function outlinePixels(page: Page, drawnBy?: string) {
   await animationsSettled(page);
-  const geometry = await page.evaluate(() => {
-    const element = document.activeElement as Element;
+  const geometry = await page.evaluate((layer) => {
+    const drawn = layer ? document.querySelector(layer) : null;
+    const element =
+      drawn && getComputedStyle(drawn).display !== "none"
+        ? drawn
+        : (document.activeElement as Element);
     const s = getComputedStyle(element);
     const r = element.getBoundingClientRect();
     const width = Number.parseFloat(s.outlineWidth) || 0;
@@ -441,8 +455,17 @@ async function outlinePixels(page: Page) {
         s.borderBottomLeftRadius,
       ].map((value) => Number.parseFloat(value) || 0),
     );
-    return { x: r.x, y: r.y, w: r.width, h: r.height, width, offset, radius };
-  });
+    return {
+      x: r.x,
+      y: r.y,
+      w: r.width,
+      h: r.height,
+      width,
+      offset,
+      radius,
+      auto: s.outlineStyle === "auto",
+    };
+  }, drawnBy);
   const outer = geometry.width + Math.max(geometry.offset, 0) + 2;
   const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
   const x0 = Math.max(0, Math.floor(geometry.x - outer));
@@ -460,7 +483,7 @@ async function outlinePixels(page: Page) {
   await off.evaluate((element) => (element as Element).remove());
   await caret.evaluate((element) => (element as Element).remove());
   return page.evaluate(
-    async ({ a, b, g, clip }) => {
+    async ({ a, b, g, clip, AUTO_RING_CORNER }) => {
       const load = (src: string) =>
         new Promise<HTMLImageElement>((resolve) => {
           const image = new Image();
@@ -530,7 +553,7 @@ async function outlinePixels(page: Page) {
         }
         return at;
       };
-      const corner = Math.max(g.radius, -outerEdge, 0);
+      const corner = Math.max(g.radius, -outerEdge, 0) + (g.auto ? AUTO_RING_CORNER : 0);
       const columns = span(left + corner, right - corner, ia.width);
       const rows = span(top + corner, bottom - corner, ia.height);
       const depth = (from: number, to: number) => {
@@ -561,6 +584,7 @@ async function outlinePixels(page: Page) {
       b: `data:image/png;base64,${plain.toString("base64")}`,
       g: geometry,
       clip,
+      AUTO_RING_CORNER,
     },
   );
 }
@@ -575,12 +599,15 @@ async function expectPainted(page: Page, what: string, painted: string[]) {
   expect.soft(bare, `${what}: sides of its outline that paint nothing`).toEqual([]);
 }
 
+/** How much further in `outlinePixels` checks an `auto` ring's sides, for its rounded corners. */
+const AUTO_RING_CORNER = 2;
+
 /**
- * Checks that the focused element's outline paints on all four sides, and along the whole
- * straight part of each: nothing covers or cuts any of it.
+ * Checks that the focused element's outline (or `drawnBy`'s, see `outlinePixels`) paints on all
+ * four sides, and along the whole straight part of each: nothing covers or cuts any of it.
  */
-async function expectWhole(page: Page, what: string, painted: string[]) {
-  const { sides, gaps } = await outlinePixels(page);
+async function expectWhole(page: Page, what: string, painted: string[], drawnBy?: string) {
+  const { sides, gaps } = await outlinePixels(page, drawnBy);
   painted.push(`${what}: ${JSON.stringify(sides)}, gaps ${JSON.stringify(gaps)}`);
   expect
     .soft(
@@ -598,6 +625,103 @@ async function expectWhole(page: Page, what: string, painted: string[]) {
       `${what}: lengths of its outline's sides not painted across its width (covered or cut)`,
     )
     .toEqual([]);
+}
+
+/**
+ * Waits until `locator`'s box, its scroll height and the size of each chart in it have stayed
+ * the same for ten frames: after a resize, a chart redraws to its new size a little later.
+ */
+async function layoutSettled(page: Page, locator: Locator) {
+  await animationsSettled(page);
+  await locator.evaluate(
+    (element) =>
+      new Promise<void>((resolve, reject) => {
+        const read = () => {
+          const r = element.getBoundingClientRect();
+          const charts = [...element.querySelectorAll("svg")].map((svg) => {
+            const box = svg.getBoundingClientRect();
+            return `${box.width}x${box.height}`;
+          });
+          return `${r.width}x${r.height} ${element.scrollHeight} ${charts.join(",")}`;
+        };
+        let last = read();
+        let same = 0;
+        const started = performance.now();
+        const tick = () => {
+          const now = read();
+          same = now === last ? same + 1 : 0;
+          last = now;
+          if (same >= 10) resolve();
+          else if (performance.now() - started > 10_000)
+            reject(new Error(`no settled layout: ${now}`));
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+/**
+ * What of an element's content it does not show above or below: overflow past the bottom of its
+ * padding box (which it hides, and nothing scrolls), and each piece of text drawn wholly or
+ * partly above or below that box. Text a screen reader alone reads (sr-only) is left out.
+ */
+async function hiddenContent(locator: Locator) {
+  return locator.evaluate((element) => {
+    const out: string[] = [];
+    if (element.scrollHeight > element.clientHeight) {
+      out.push(
+        `overflow: scrollHeight ${element.scrollHeight} > clientHeight ${element.clientHeight}`,
+      );
+    }
+    const top = element.getBoundingClientRect().top + element.clientTop;
+    const bottom = top + element.clientHeight;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+      const parent = node.parentElement;
+      if (!text || !parent) continue;
+      if (parent.closest(".sr-only")) continue;
+      if (getComputedStyle(parent).visibility !== "visible") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        const past = rect.top < top - 0.5 || rect.bottom > bottom + 0.5;
+        if (past) {
+          out.push(
+            `"${text.slice(0, 40)}" at ${rect.top.toFixed(0)}..${rect.bottom.toFixed(0)}, the panel shows ${top.toFixed(0)}..${bottom.toFixed(0)}`,
+          );
+          break;
+        }
+      }
+    }
+    return out;
+  });
+}
+
+/**
+ * full-result with six more status lines before its result (the API numbers the events): the
+ * log's list shows its latest six entries, whose dots can be scrolled across either edge.
+ */
+function longLog() {
+  const events = (fullResult.streams[ANALYZE] as Array<Record<string, unknown>>).map(
+    ({ runId: _runId, seq: _seq, ...event }) => event,
+  );
+  const statuses = events.filter((event) => event.type === "status");
+  const extra = [
+    "Reading the audio features",
+    "Tracing the samples",
+    "Checking the credits",
+    "Looking up the release history",
+    "Comparing the sources",
+    "Writing the notes",
+  ].map((message, index) => ({ ...statuses[index % statuses.length], message }));
+  const at = events.findIndex((event) => event.type === "complete");
+  return {
+    ...fullResult,
+    streams: { [ANALYZE]: [...events.slice(0, at), ...extra, ...events.slice(at)] },
+  };
 }
 
 /** The analysis held before its result: the progress screen stays. */
@@ -860,73 +984,147 @@ test.describe("forced-colors mode", () => {
     test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
   });
 
-  test("with the activity log open, the Sonic Fingerprint panel shows its whole outline", async ({
+  for (const [name, fixture, chart, noRoom] of [
+    // full-result's panel draws its genre profile as a radar chart; measured-v2's lists the
+    // audio models' style and tag scores instead.
+    // The outline needs the panel's content and 4px either side within the screen's view (the
+    // window less its footer). measured-v2's content (model style and tag scores) is 792px tall
+    // at 1024px wide and 583px at 1280px: more than the 743px view at 1024×768 and the 475px
+    // view at 1280×500, so no scroll can show its whole outline there. Those two only check that
+    // all of the content shows (and that the panel is that tall, which is why).
+    ["full-result", fullResult, true, []],
+    ["measured-v2", measuredResult, false, ["1024×768", "1280×500"]],
+  ] as const) {
+    test(`with the activity log open, the Sonic Fingerprint panel shows all of its content and its whole outline (${name})`, async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+      const painted: string[] = [];
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await useMockApi(page, fixture);
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      const toggle = page.getByRole("button", { name: /activity log/ });
+      await toggle.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+      const panel = page.getByRole("region", { name: "Sonic Fingerprint" });
+
+      for (const [width, height] of [
+        [1440, 900],
+        [1024, 768],
+        [1280, 500],
+      ] as const) {
+        const size = `${width}×${height}`;
+        await page.setViewportSize({ width, height });
+        await layoutSettled(page, panel);
+
+        // The panel never hides any of its content, in forced-colors mode or not: it hides its
+        // overflow, and nothing scrolls it.
+        // Only what is hidden above or below is checked: at 1024px wide the radar draws an axis
+        // label ("Electronic", full-result) past the panel's right side in either mode, as on
+        // main. That is the chart's own sizing (its radius against the narrow column), which
+        // the panel's height does not decide.
+        for (const forcedColors of ["active", "none"] as const) {
+          await page.emulateMedia({ forcedColors });
+          await layoutSettled(page, panel);
+          expect
+            .soft(
+              await hiddenContent(panel),
+              `${name} at ${size}, forced colors ${forcedColors}: content the panel hides`,
+            )
+            .toEqual([]);
+          // A chart is drawn, at least as tall as its area's 250px minimum: a panel sized by
+          // its content must still give it a height to draw in.
+          const drawn = await panel
+            .locator("svg.recharts-surface")
+            .evaluateAll((svgs) =>
+              svgs.map((svg) => Math.round(svg.getBoundingClientRect().height)),
+            );
+          expect
+            .soft(
+              drawn,
+              `${name} at ${size}, forced colors ${forcedColors}: the charts drawn, by height`,
+            )
+            .toEqual(chart ? [expect.any(Number)] : []);
+          if (chart) {
+            expect
+              .soft(
+                drawn[0],
+                `${name} at ${size}, forced colors ${forcedColors}: the chart's height`,
+              )
+              .toBeGreaterThanOrEqual(250);
+          }
+        }
+        await page.emulateMedia({ forcedColors: "active" });
+        await layoutSettled(page, panel);
+
+        // The panel takes the focus by script (after its chart's "Try again"): after the log's
+        // toggle, and with the screen scrolled to its top and to its end.
+        for (const from of ["after the log's toggle", "from the top", "from the end"] as const) {
+          const what = `${name} at ${size}, the panel focused ${from}`;
+          if (from === "after the log's toggle") await toggle.focus();
+          await panel.evaluate((element, start) => {
+            if (start === "after the log's toggle") return;
+            (document.activeElement as HTMLElement | null)?.blur();
+            const screen = element.closest(".overflow-y-auto") as HTMLElement;
+            screen.scrollTop = start === "from the top" ? 0 : screen.scrollHeight;
+          }, from);
+          await panel.focus();
+          await expect(panel).toBeFocused();
+          const fit = await panel.evaluate((element) => {
+            const s = getComputedStyle(element);
+            const grow = Math.max(
+              (Number.parseFloat(s.outlineWidth) || 0) + (Number.parseFloat(s.outlineOffset) || 0),
+              0,
+            );
+            const screen = (
+              element.closest(".overflow-y-auto") as HTMLElement
+            ).getBoundingClientRect();
+            const box = element.getBoundingClientRect();
+            return {
+              outline: [box.top - grow, box.bottom + grow],
+              view: [screen.top, screen.bottom],
+            };
+          });
+          const outlined = fit.outline[1] - fit.outline[0];
+          const room = fit.view[1] - fit.view[0];
+          if ((noRoom as readonly string[]).includes(size)) {
+            // The content alone is taller than the view: the outline cannot be shown whole, and
+            // only that is left unchecked.
+            expect
+              .soft(outlined, `${what}: the panel with its outline, in a ${room}px view`)
+              .toBeGreaterThan(room);
+            continue;
+          }
+          const stop = await focusedStop(page);
+          expectOutlines(stop ? [stop] : [], what);
+          expect
+            .soft(
+              fit.outline[0] >= fit.view[0] && fit.outline[1] <= fit.view[1],
+              `${what}: its outline (${fit.outline.join("..")}) in the screen's view (${fit.view.join("..")})`,
+            )
+            .toBe(true);
+          await expectWhole(page, what, painted);
+        }
+      }
+      test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
+    });
+  }
+
+  test("the open activity log's list shows its whole outline at rest, scrolled, and under its dots", async ({
     page,
   }) => {
     test.setTimeout(90_000);
     const painted: string[] = [];
     await page.setViewportSize({ width: 1440, height: 900 });
-    await useMockApi(page, fullResult);
-    await analyzeAndOpenDashboard(page, "Bright Lines");
-    await page.getByRole("button", { name: /activity log/ }).focus();
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
-    await animationsSettled(page);
-
-    // The panel takes the focus by script (after its chart's "Try again"): from where the
-    // log's toggle left the screen, and with the screen scrolled to its top and to its end.
-    const panel = page.getByRole("region", { name: "Sonic Fingerprint" });
-    for (const from of ["after the log's toggle", "from the top", "from the end"] as const) {
-      await panel.evaluate((element, start) => {
-        if (start === "after the log's toggle") return;
-        (document.activeElement as HTMLElement | null)?.blur();
-        const screen = element.closest(".overflow-y-auto") as HTMLElement;
-        screen.scrollTop = start === "from the top" ? 0 : screen.scrollHeight;
-      }, from);
-      await panel.focus();
-      await expect(panel).toBeFocused();
-      const stop = await focusedStop(page);
-      expectOutlines(stop ? [stop] : [], `the Sonic Fingerprint panel, focused ${from}`);
-
-      // The panel and its outline lie in the view of the screen it scrolls in (the window less
-      // the footer), which the focus scrolls to.
-      const fit = await panel.evaluate((element) => {
-        const s = getComputedStyle(element);
-        const grow = Math.max(
-          (Number.parseFloat(s.outlineWidth) || 0) + (Number.parseFloat(s.outlineOffset) || 0),
-          0,
-        );
-        const screen = (element.closest(".overflow-y-auto") as HTMLElement).getBoundingClientRect();
-        const box = element.getBoundingClientRect();
-        return {
-          outline: [box.top - grow, box.bottom + grow],
-          view: [screen.top, screen.bottom],
-        };
-      });
-      expect
-        .soft(
-          fit.outline[0] >= fit.view[0] && fit.outline[1] <= fit.view[1],
-          `focused ${from}, the panel's outline (${fit.outline.join("..")}) in the screen's view (${fit.view.join("..")})`,
-        )
-        .toBe(true);
-      await expectWhole(page, `Sonic Fingerprint panel, focused ${from}`, painted);
-    }
-    test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
-  });
-
-  test("the open activity log's list shows its whole outline at rest and scrolled", async ({
-    page,
-  }) => {
-    test.setTimeout(90_000);
-    const painted: string[] = [];
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await useMockApi(page, fullResult);
+    await useMockApi(page, longLog());
     await analyzeAndOpenDashboard(page, "Bright Lines");
     const toggle = page.getByRole("button", { name: /activity log/ });
     await toggle.focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
     await animationsSettled(page);
+    await expect(page.locator("#activity-log-content [data-log-code]")).toHaveCount(6);
 
     // Tab goes from the toggle to the list, as before.
     await page.keyboard.press("Tab");
@@ -935,18 +1133,56 @@ test.describe("forced-colors mode", () => {
     const range = await list.evaluate((element) => element.scrollHeight - element.clientHeight);
     expect(range, "the list scrolls").toBeGreaterThan(0);
 
-    for (const [where, at] of [
-      ["at rest", 0],
-      ["scrolled to the middle", Math.round(range / 2)],
-      ["scrolled to the end", range],
+    // Scroll positions that put an entry's dot (positioned, z-10) across the list's top edge
+    // and across its bottom edge, where it would cover an outline drawn below it.
+    const across = await list.evaluate((element, band) => {
+      const dots = [...element.querySelectorAll("[data-log-code] > :first-child")];
+      const box = element.getBoundingClientRect();
+      const height = element.clientHeight;
+      const max = element.scrollHeight - height;
+      // Each dot's top in the list's scrolled content.
+      const tops = dots.map((dot) => dot.getBoundingClientRect().top - box.top + element.scrollTop);
+      const pick = (want: (top: number) => number) =>
+        tops.map(want).find((at) => at >= 0 && at <= max);
+      return {
+        // The dot from 2px above the top edge, and 6px above the bottom edge: across the band.
+        top: pick((top) => Math.round(top + 2)),
+        bottom: pick((top) => Math.round(top - (height - band - 4))),
+      };
+    }, 2);
+    expect(across.top, "a scroll position puts a dot across the top edge").toBeDefined();
+    expect(across.bottom, "a scroll position puts a dot across the bottom edge").toBeDefined();
+
+    for (const [where, at, edge] of [
+      ["at rest", 0, null],
+      ["scrolled to the middle", Math.round(range / 2), null],
+      ["scrolled to the end", range, null],
+      ["with a dot across its top edge", across.top as number, "top"],
+      ["with a dot across its bottom edge", across.bottom as number, "bottom"],
     ] as const) {
       await list.evaluate((element, top) => {
         element.scrollTop = top;
       }, at);
       expect(await list.evaluate((element) => element.scrollTop)).toBe(at);
+      if (edge) {
+        // The dot is there, across the band the outline takes inside that edge.
+        const crossing = await list.evaluate((element, side) => {
+          const box = element.getBoundingClientRect();
+          const band = side === "top" ? [box.top, box.top + 2] : [box.bottom - 2, box.bottom];
+          return [...element.querySelectorAll("[data-log-code] > :first-child")].some((dot) => {
+            const r = dot.getBoundingClientRect();
+            return (
+              r.top < band[1] && r.bottom > band[0] && r.left >= box.left && r.right <= box.right
+            );
+          });
+        }, edge);
+        expect(crossing, `a dot lies across the list's ${edge} edge`).toBe(true);
+      }
       const stop = await focusedStop(page);
       expectOutlines(stop ? [stop] : [], `the activity log's list ${where}`);
-      await expectWhole(page, `activity log list ${where}`, painted);
+      // The band checked is the 2px the list's outline is drawn in, by the layer above the
+      // entries; without the layer (or while it is not shown), the list's own outline.
+      await expectWhole(page, `activity log list ${where}`, painted, LOG_LAYER);
     }
     test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
   });

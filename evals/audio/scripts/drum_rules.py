@@ -149,10 +149,10 @@ def newest(path: Path | None) -> tuple[str, dict, dict, dict]:
     raise SystemExit("no report holds a controls run and the GiantSteps+ key and calibration runs")
 
 
-def drum(name: str) -> tuple[str, str] | None:
-    """(family, seed span) of a drum control, or None."""
+def drum(name: str, families: tuple[str, ...] = DRUMS) -> tuple[str, str] | None:
+    """(family, seed span) of a control of `families` (the drums), or None."""
     m = FAMILY.match(name)
-    if not m or m["family"] not in DRUMS:
+    if not m or m["family"] not in families:
         return None
     span = next((s for s, seeds in SPANS.items() if int(m["seed"]) in seeds), None)
     return (m["family"], span) if span else None
@@ -164,10 +164,13 @@ def _estimate(block: dict | None) -> tuple[str, str, float] | None:
     return None if raw is None else (raw["tonic"], raw["mode"], raw["strength"])
 
 
-def served_rows(controls_run: dict, key_run: dict, calibration_run: dict) -> list[dict]:
+def served_rows(
+    controls_run: dict, key_run: dict, calibration_run: dict, families: tuple[str, ...] = DRUMS
+) -> list[dict]:
     """
-    One row per served control or clip: its name, kind ("control" or "clip"), drum family and
-    span (or None), group, and per estimator (served, right), the key it served (or None) and
+    One row per served control or clip: its name, kind ("control" or "clip"), family and span
+    if it is one of `families`, the families the rules are aimed at (the "drum" field; None
+    otherwise), group, and per estimator (served, right), the key it served (or None) and
     its recorded estimate; and the single-source evidence recorded for it. A control's key is
     right when it is its truth, or any key for the controls whose truth is "any key"; a clip's
     when the key run scored it exact.
@@ -190,7 +193,7 @@ def served_rows(controls_run: dict, key_run: dict, calibration_run: dict) -> lis
                 {
                     "name": c["name"],
                     "kind": "control",
-                    "drum": drum(c["name"]),
+                    "drum": drum(c["name"], families),
                     "group": _group(c),
                     "keys": keys,
                     "served": served,
@@ -396,10 +399,10 @@ def pitch_jumps(signals) -> float | None:
     return None if voice is None else float(voice.vibrato_cents)
 
 
-def measure(signals) -> dict:
+def checked(signals) -> dict:
     """
-    The evidence rules' verdict, the single-source evidence, each estimator's key ((tonic,
-    mode, strength) or None) and the measurements.
+    What reproduce() checks against the report: the evidence rules' verdict, the single-source
+    evidence and each estimator's key ((tonic, mode, strength) or None).
     """
     from evals_audio import service
 
@@ -414,6 +417,13 @@ def measure(signals) -> dict:
         "withheld": None if withheld is None else withheld.code,
         "source": [source.bins, source.movement, source.shared, source.depth],
         "keys": keys,
+    }
+
+
+def measure(signals) -> dict:
+    """checked(), and the measurements."""
+    return {
+        **checked(signals),
         "gliding partials": gliding_partials(signals),
         "decaying lines": decaying_lines(signals),
         "a pitch line that jumps between hits": pitch_jumps(signals),
@@ -434,8 +444,8 @@ def _cap_threads() -> None:
         os.environ.setdefault(var, "1")
 
 
-def analyse(item: tuple[str, str, int, str]) -> dict:
-    """One served control or clip, made again and measured (in a worker)."""
+def signals_of(item: tuple[str, str, int, str]):
+    """One served control or clip, made again and decoded as its run did (in a worker)."""
     from evals_audio import clips, datasets, service
     from evals_audio import controls as C
 
@@ -445,17 +455,20 @@ def analyse(item: tuple[str, str, int, str]) -> dict:
             _CONTROLS.update({c.name: c for c in C.controls()})
         # Written and decoded as the controls suite does (some controls are MP3s).
         with tempfile.TemporaryDirectory(prefix="drum-rules-") as tmp:
-            signals = service.decode_file(C.write(_CONTROLS[name], tmp))
-    else:
-        spec = datasets.DATASETS[DATASET]
-        home = Path(data_dir) / spec.mirdata_name
-        if not _CLIPS:
-            refs = datasets.references(spec, home)
-            _CLIPS.update({datasets.public_id(spec, r.track_id): r for r in refs})
-        ref = _CLIPS[name]
-        wav, _ = clips.read_clip(str(home / ref.audio_rel), seed, DATASET, ref.track_id)
-        signals = service.decode(wav)
-    return measure(signals)
+            return service.decode_file(C.write(_CONTROLS[name], tmp))
+    spec = datasets.DATASETS[DATASET]
+    home = Path(data_dir) / spec.mirdata_name
+    if not _CLIPS:
+        refs = datasets.references(spec, home)
+        _CLIPS.update({datasets.public_id(spec, r.track_id): r for r in refs})
+    ref = _CLIPS[name]
+    wav, _ = clips.read_clip(str(home / ref.audio_rel), seed, DATASET, ref.track_id)
+    return service.decode(wav)
+
+
+def analyse(item: tuple[str, str, int, str]) -> dict:
+    """One served control or clip, made again and measured (in a worker)."""
+    return measure(signals_of(item))
 
 
 def reproduce(rows: list[dict], measured: dict) -> int:
@@ -541,12 +554,14 @@ def _right(row: dict) -> bool:
     return row["drum"] is None and any(ok for _, ok in row["keys"].values())
 
 
-def _drum_counts(rows: list[dict], measured: dict, rule: tuple[str, dict]) -> dict:
-    """{estimator: {(family, span): (withheld, served)}}."""
+def _drum_counts(
+    rows: list[dict], measured: dict, rule: tuple[str, dict], families: tuple[str, ...] = DRUMS
+) -> dict:
+    """{estimator: {(family, span): (withheld, served)}}, for each of `families`."""
     out: dict = {}
     for est in ESTIMATORS:
         out[est] = {}
-        for family in DRUMS:
+        for family in families:
             for span in SPANS:
                 served = [r for r in rows if r["drum"] == (family, span) and r["keys"][est][0]]
                 hit = [r for r in served if withholds(measured, r["name"], rule)]
@@ -621,26 +636,32 @@ def _free(rows: list[dict], measured: dict, candidate: tuple) -> dict | None:
     return None if best is None else best[1]
 
 
-def candidates(rows: list[dict], measured: dict) -> dict:
+def candidates(
+    rows: list[dict],
+    measured: dict,
+    table: dict | None = None,
+    families: tuple[str, ...] = DRUMS,
+) -> dict:
     """
-    Per candidate, thresholds chosen on the training half (halves): "free", those that withhold
-    no right key there ({measurement: (signed threshold, most drum-like right value)}), and for
-    a single measurement "most", the strictest one (from the highest drum value down) that
-    withholds more than half of the training drum keys with each estimator. For each, the drum
-    counts ("...Drums") and per half the costs ("...Costs").
+    Per candidate (of `table`, CANDIDATES by default), thresholds chosen on the training half
+    (halves): "free", those that withhold no right key there ({measurement: (signed threshold,
+    most drum-like right value)}), and for a single measurement "most", the strictest one (from
+    the highest value of a drum it is aimed at down) that withholds more than half of the
+    training keys of the drums it is aimed at, with each estimator that served one. For each,
+    the counts of every family in `families` ("...Drums") and per half the costs ("...Costs").
     """
     half = halves(rows)
     parts = {h: [r for r in rows if half[r["name"]] == h] for h in ("training", "held out")}
 
     def judged(rule: tuple[str, dict]) -> dict:
         return {
-            "drums": _drum_counts(rows, measured, rule),
+            "drums": _drum_counts(rows, measured, rule, families),
             "costs": {h: _costs(part, measured, rule) for h, part in parts.items()},
         }
 
     out = {}
-    for name, candidate in CANDIDATES.items():
-        how, measures, _ = candidate
+    for name, candidate in (CANDIDATES if table is None else table).items():
+        how, measures, aimed = candidate
         free = _free(parts["training"], measured, candidate)
         entry = {"free": free, "most": None}
         if free is not None:
@@ -648,15 +669,20 @@ def candidates(rows: list[dict], measured: dict) -> dict:
             entry.update({"free" + k.title(): v for k, v in judged(entry["freeRule"]).items()})
         if len(measures) == 1:
             (measure,) = measures
-            training = parts["training"]
+            training = [
+                r
+                for r in parts["training"]
+                if r["drum"] and (aimed is None or r["drum"][0] in aimed)
+            ]
             for value in sorted(
-                {_value(measured, r["name"], measure) for r in training if r["drum"]} - {-np.inf},
+                {_value(measured, r["name"], measure) for r in training} - {-np.inf},
                 reverse=True,
             ):
-                counts = _drum_counts(training, measured, ("any", {measure: value}))
+                counts = _drum_counts(training, measured, ("any", {measure: value}), families)
                 if all(
                     2 * sum(h for h, _ in c.values()) > sum(n for _, n in c.values())
                     for c in counts.values()
+                    if sum(n for _, n in c.values())
                 ):
                     entry["most"] = value
                     entry.update(

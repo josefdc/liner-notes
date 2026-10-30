@@ -141,6 +141,20 @@ test. The membrane-mode rule takes no right key among the controls and clips, bu
 minor sixth over a strong partial (a major triad in first inversion, a minor triad in second)
 reads as membrane modes too (`tests/test_drum_rules.py` pins one whose right key it would take).
 None is shipped; services/audio/README.md gives the numbers and the reasons.
+`scripts/still_chord_rules.py` does the same for the cowbells, one-note basses and church bells
+(alone and over drums) that keep a key: their lines hold still, so the single-source rule asks
+what they spell, and they spell a chord. It reuses drum_rules.py's analysis, check, halves and
+threshold choice, asks each rule only where the lines hold still, and also checks that its copy
+of the notes test spells the recorded notes (`uv run python scripts/still_chord_rules.py
+../reports/audio-2026-10-29.json`, about 4 min at `--jobs 4`). Of its eight rules, the overtone
+and off-grid-third rules withhold too few keys and the decay, both-thirds and off-grid rules
+take right keys. One harmonic series stretched as a stiff string's withholds 5 of 7 Essentia
+and 1 of 2 librosa one-note-bass keys without taking a right key among the controls, but a triad
+with a third a little softer than any control's reads over its threshold
+(`tests/test_still_chord_rules.py` pins one whose right key it would take), and its variant with
+close lines merged was built after the held-out basses' recorded notes had been read. No
+GiantSteps+ clip with a served key has still lines, so the clips show nothing about these
+rules. None is shipped.
 A report whose runs were made with different analyzer versions says so at the top. The
 2026-10-29 report holds the controls, the Ballroom tempo and calibration runs, and the
 GiantSteps+ key and calibration runs, all at analyzer 2.3.4 (the controls and Ballroom runs at

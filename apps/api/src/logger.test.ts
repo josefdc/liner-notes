@@ -1032,6 +1032,8 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       [`x ROBOT ${TOKEN} y`, "ROBOT", `x [redacted] ${TOKEN} y`],
       [`x HMAC ${TOKEN} y`, "HMAC", `x [redacted] ${TOKEN} y`],
       [`x chatbot ${TOKEN} y`, "chatbot", `x [redacted] ${TOKEN} y`],
+      [`x mysecret ${TOKEN} y`, "mysecret", `x [redacted] ${TOKEN} y`],
+      [`x APITOKEN ${TOKEN} y`, "APITOKEN", `x [redacted] ${TOKEN} y`],
       // A scheme word glued so is read by the glued-scheme rule, not here.
       ["x VisualBasic Programming y", "VisualBasic", "x [redacted] Programming y"],
       // A name glued to a word in camel case is a name.

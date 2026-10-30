@@ -1,0 +1,3 @@
+# Fixture: a stricter window than the default.
+engine-strict=true
+min-release-age=30

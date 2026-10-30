@@ -254,6 +254,24 @@ it cannot read within three attempts per package and three minutes in all. An un
 unchanged registry settings makes no registry request. CI runs it in its own job, against the
 parent commit on a pull request and against the commit before the push on `main`.
 
+#### Dependency advisories
+
+`npm audit --omit=dev` advisories that stay in the lock, each with why the API is not affected:
+
+- **body-parser 2.3.0, [GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828)
+  (high).** The fixed 2.4.0 was published on 2026-10-22, so it can be taken from 2026-11-05. After
+  it reads a compressed body, body-parser 2.3.0 leaves the decoder piped from the request with no
+  error listener (`lib/read.js:113`, the success path of the `getBody` callback), so an error the
+  decoder raised on bytes arriving later would end the process. The API lets only gzip and deflate
+  reach the parser (`apps/api/src/http/middleware/encoding.ts:4` and `:16` answer brotli and
+  anything else with 415, ahead of `express.json` at `apps/api/src/http/app.ts:72-73`), and on Node
+  24 neither decoder raises that error: gzip reads what follows as another member and fails while
+  the body is still being read (400), and deflate ignores what follows the end of its stream. On
+  Node 24.16 and 24.21 (the API image), trailing bytes of eight kinds after a gzip, deflate or
+  brotli body, sent with it or 300 ms after it, ended no process. The test "keeps serving after
+  bytes that follow a compressed body" in `apps/api/src/http/app.test.ts:412` sends them through the
+  app and fails on any error thrown out of a decoder.
+
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 
 

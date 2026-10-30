@@ -310,23 +310,49 @@ describe("error handling", () => {
   });
 });
 
-/** Listens on a free port and returns a raw POST helper: node:http sends the body byte for byte. */
+/**
+ * Listens on a free port and returns a raw POST helper: node:http sends the body byte for byte.
+ * `later` is sent 50 ms after the body, and the helper settles once both are sent and answered.
+ */
 async function listen(server: express.Express) {
   const http = server.listen(0, "127.0.0.1");
   await new Promise((resolve) => http.once("listening", resolve));
   const { port } = http.address() as { port: number };
-  const post = (path: string, headers: Record<string, string | number>, body: Buffer) =>
+  const post = (
+    path: string,
+    headers: Record<string, string | number>,
+    body: Buffer,
+    later?: Buffer,
+  ) =>
     new Promise<{ status?: number; code?: string }>((resolve, reject) => {
+      let answer: { status?: number; code?: string } | undefined;
+      let sent = later === undefined;
+      const settle = () => {
+        if (answer && sent) resolve(answer);
+      };
       const req = httpRequest({ host: "127.0.0.1", port, method: "POST", path, headers }, (res) => {
         let text = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
           text += chunk;
         });
-        res.on("end", () => resolve({ status: res.statusCode, code: JSON.parse(text).code }));
+        res.on("end", () => {
+          answer = { status: res.statusCode, code: JSON.parse(text).code };
+          settle();
+        });
       });
       req.on("error", reject);
-      req.end(body);
+      if (later === undefined) {
+        req.end(body);
+        return;
+      }
+      req.write(body);
+      setTimeout(() => {
+        req.end(later, () => {
+          sent = true;
+          settle();
+        });
+      }, 50);
     });
   const close = async () => {
     http.closeAllConnections();
@@ -378,6 +404,55 @@ describe("content encodings", () => {
         status: 400,
         code: "bad_request",
       });
+    } finally {
+      await close();
+    }
+  });
+
+  it("keeps serving after bytes that follow a compressed body, sent with it or after it", async () => {
+    // GHSA-27r3-jxmh-p828: body-parser before 2.4.0 leaves the decoder piped with no error
+    // listener once it has read the body. Bytes that reach that decoder later must not throw
+    // out of it, which would end the process; vitest fails the run on such an error.
+    const { post, close } = await listen(app());
+    try {
+      const json = JSON.stringify({ padding: "a" });
+      const tails = [
+        Buffer.from("trailing bytes"),
+        Buffer.alloc(64 * 1024, 0x41),
+        gzipSync(json).subarray(0, 10),
+        deflateSync(json),
+      ];
+      // gzip reads what follows as a second member and fails while the body is still being
+      // read; deflate stops at the end of its stream, so the route answers.
+      const cases = [
+        ["gzip", gzipSync(json), { status: 400, code: "bad_request" }],
+        ["deflate", deflateSync(json), { status: 404, code: "not_found" }],
+      ] as const;
+      for (const [encoding, frame, expected] of cases) {
+        for (const tail of tails) {
+          const headers = {
+            "Content-Type": "application/json",
+            "Content-Encoding": encoding,
+            "Content-Length": frame.length + tail.length,
+          };
+          const label = `${encoding} + ${tail.length} bytes`;
+          expect(await post("/api/nope", headers, Buffer.concat([frame, tail])), label).toEqual(
+            expected,
+          );
+          expect(await post("/api/nope", headers, frame, tail), `${label}, later`).toEqual(
+            expected,
+          );
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const plain = Buffer.from(json);
+      expect(
+        await post(
+          "/api/nope",
+          { "Content-Type": "application/json", "Content-Length": plain.length },
+          plain,
+        ),
+      ).toEqual({ status: 404, code: "not_found" });
     } finally {
       await close();
     }

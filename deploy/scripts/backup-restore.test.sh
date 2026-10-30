@@ -291,8 +291,11 @@ echo "ok: SIGTERM during a restore started the API again, nothing changed"
 # output is shown, the API starts, exit 130.
 put_marker m6-before-swap
 swap_log="$BACKUP_DIR/.$project-restore-swap.log"
+# A job started in the background of a shell without job control inherits SIGINT as ignored, and
+# bash cannot trap a signal ignored on entry; a terminal's job gets SIGINT at its default, so this
+# one does too.
 set -m
-PATH="$work/bin:$PATH" "$here/restore.sh" --yes "$b4" 2>"$work/sigint.err" &
+PATH="$work/bin:$PATH" env --default-signal=INT "$here/restore.sh" --yes "$b4" 2>"$work/sigint.err" &
 pid=$!
 set +m
 for _ in $(seq 1 1200); do

@@ -140,12 +140,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.4+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.5+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.4+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.5+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -168,7 +168,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.5+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -651,7 +651,12 @@ drum loop as of a dense mix whose key a listener would name. The codes (the cont
 | any | `estimate_failed` | the estimator raised (logged), or gave a non-finite tempo |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
-times full scale, is refused with `422`.
+times full scale, is refused with `422`. So is an MP3 that still decodes to less than its frames
+hold after the second read described under "How it works" (step 2), with its own reason: `the
+MP3 decodes to less audio than its frames hold`. It is not measured, nor gated as too short, on
+the part that decoded. As with the MP4 and AAC refusal below, the API reports a failed
+analysis with this reason in its error detail. None of the files measured for this check was
+refused this way.
 
 The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
 refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
@@ -687,7 +692,7 @@ only written to the service log.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, non-finite or absurd samples) |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, an MP3 that decodes to less than its frames, non-finite or absurd samples) |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
@@ -714,11 +719,38 @@ analysis, whatever the outcome.
 1. **Download** the preview as described above.
 2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. An MP4 (M4A) or
    AAC file that `sniff.py` recognises by its first bytes is refused first (see the error
-   statuses above), since `libsndfile` reads neither. Each step that needs another rate gets a
-   resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1 kHz for
-   RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the models, as
-   `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The STFT, the
-   onset envelope, the harmonic part and its chromagram are computed once and shared.
+   statuses above), since `libsndfile` reads neither.
+
+   `libsndfile` reads an MP3 up to the length `mpg123` gives when the file is opened. With a
+   Xing or Info header in the first frame (what LAME, FFmpeg and `libsndfile` write by default)
+   that length is exact. Without one, `mpg123` estimates it from the file size and the first
+   frame's bitrate: close for CBR, but for VBR a fraction of the stream. A 1 s VBR file read
+   as 0.20 s, a 3.03 s one as 0.54 s, and 30 s VBR files at 22.05, 44.1 and 48 kHz, mono and
+   stereo, as 8.8 to 14.0 s. The gate then called the short ones too short, and the 30 s
+   ones were measured on their first seconds.
+
+   So for an MP3 without that header, `mpeg.py` counts the frames from their headers (each
+   gives its length in bytes and its samples). When the decode falls short of them by more
+   than 0.1 s and 2 % (`TRUNCATED_READ_SECONDS`, `TRUNCATED_READ_SHARE`), the file is decoded
+   again from a pipe. There `libsndfile` cannot ask for a length, so the read goes on to the
+   end of the stream, still at most 35 s. A whole read of such a file decodes to exactly its
+   counted frames, encoder delay and padding included, since no LAME tag says what to trim.
+   The second read's first samples are the first read's. The duration the service reports is
+   always that of the decoded samples; the frame count only decides whether the read was
+   whole. If the second read also falls short, the preview is refused (see the error statuses
+   above).
+
+   CBR files and files with a Xing or Info header decode to the same samples as before,
+   without a second read. The count stops at the first byte that does not start a frame like
+   the first one (an ID3v1 tag, junk), so after junk inside a stream it counts fewer frames
+   than `mpg123` decodes. Such a file is then not read again. A file with a Xing or Info
+   header is never checked, so a header with a wrong frame count is not caught.
+
+   Each step that needs another rate gets a resampled copy: 22.05 kHz (`soxr`) for the librosa
+   features, 44.1 kHz for RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at
+   quality 4 for the models, as `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the
+   MTG examples. The STFT, the onset envelope, the harmonic part and its chromagram are
+   computed once and shared.
 3. **Gate** (`signal_features.py`): duration, the 95th percentile of the frame RMS, and for
    noise the onset periodicity (a tempogram peak, tolerant of human timing), the share of
    energy in spectral lines and whether they form one harmonic series, and a pYIN pitch track
@@ -789,7 +821,10 @@ workflow, with Essentia, runs `-m "not seeded or estimators"` for their Essentia
 others do not depend on the estimator. A plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round
 trip, and for its reasons: every `null` has one and no measured value has one
-(`tests/checks.py`). `tests/test_v1_removed.py` checks that the response is the `v2` block alone. The Essentia cases and the real-model
+(`tests/checks.py`). `tests/test_v1_removed.py` checks that the response is the `v2` block alone.
+`tests/test_mp3_length.py` checks that a VBR MP3 without a Xing header decodes to its frames
+(`tests/fixtures/tone-vbr.mp3`, its generation command in the test's docstring) and that CBR
+files and files with a Xing or Info header decode as before. The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run
 `uv sync --locked --extra models` and `uv run python download_models.py` first to include them.
 `AUDIO_REQUIRE_MODELS=1` turns those skips into an error; CI's `audio models` workflow runs the

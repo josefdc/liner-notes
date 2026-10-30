@@ -123,7 +123,7 @@ _DECODABLE_MAGIC = frozenset(
 )
 
 
-def _id3_end(f, offset: int) -> int:
+def id3v2_end(f, offset: int) -> int:
     """The offset after the leading ID3v2 tags (up to _MAX_ID3_TAGS) of a file from ``offset``."""
     for _ in range(_MAX_ID3_TAGS):
         f.seek(offset)
@@ -235,7 +235,7 @@ def _loas_at(data: bytes, i: int) -> bool:
 
 def _head(f) -> bytes:
     """The first _WINDOW bytes after the ID3v2 tags, from the file's current position."""
-    f.seek(_id3_end(f, f.tell()))
+    f.seek(id3v2_end(f, f.tell()))
     return f.read(_WINDOW)
 
 

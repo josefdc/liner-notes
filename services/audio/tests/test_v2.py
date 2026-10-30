@@ -137,11 +137,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.4+librosa"
-    assert main.analyzer_version("essentia") == "2.3.4+essentia"
+    assert main.analyzer_version("librosa") == "2.3.5+librosa"
+    assert main.analyzer_version("essentia") == "2.3.5+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.4+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.5+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -153,7 +153,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.4+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.5+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -3366,7 +3366,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.4+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.5+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

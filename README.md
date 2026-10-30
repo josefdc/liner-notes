@@ -264,14 +264,16 @@ handles it.
   (2026-11-05).** After it reads a compressed body, body-parser 2.3.0 leaves the decoder piped from
   the request with no error listener (`lib/read.js:113`, the success path of the `getBody`
   callback), so an error the decoder raises on bytes that arrive later ends the process. The API
-  reaches that path for gzip and deflate bodies (`apps/api/src/http/middleware/encoding.ts:4,16`,
+  reaches that path for gzip and deflate bodies (`apps/api/src/http/middleware/encoding.ts:4,18`,
   ahead of `express.json` at `apps/api/src/http/app.ts:72-73`). It now gives that decoder an error
-  listener (`ignoreLateDecoderErrors`, `encoding.ts:17,44`), so a late decoder error cannot end the
-  process; a body that fails to decode is still answered with 400. Measured with the listener: 15
-  cases, 0 uncaught errors, on Node 24.16 and on the API image's 24.21. The test "keeps serving when
-  bytes reach the decoder after the body was read" (`apps/api/src/http/app.test.ts:400`) fails on
-  2.3.0 without the listener. The 2.3.0 charset check that follows the pipe runs only with a
-  `verify` option, which `express.json` here does not set. The listener goes when 2.4.0 is taken.
+  listener (`ignoreLateDecoderErrors`, `encoding.ts:19,46`), so a late decoder error cannot end the
+  process; a body that fails to decode is still answered with 400. The test "keeps serving when
+  bytes reach the decoder after the body was read" (`apps/api/src/http/app.test.ts:400`) sends gzip
+  and deflate bodies that end the decoder early, with a garbage tail and with a valid-member tail,
+  in one write and after the answer; it passes with the listener and fails on 2.3.0 without it. The
+  listener was also measured against the app on Node 24.16 and on the API image's 24.21. The 2.3.0
+  charset check that follows the pipe runs only with a `verify` option, which `express.json` here
+  does not set. The listener goes when 2.4.0 is taken.
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

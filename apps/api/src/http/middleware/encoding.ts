@@ -8,6 +8,8 @@ const ACCEPTED_CODINGS = new Set(["identity", "gzip", "deflate"]);
  * the body parser sees it. The JSON parser also decodes brotli, whose decoder allocates a
  * window of up to 16 MB for a body of a few bytes, well before the decoded-size limit stops it.
  * Several codings at once (e.g. "gzip, br") are refused too. A request without a body passes.
+ * For a gzip or deflate body it also gives the decoder an error listener (see
+ * `ignoreLateDecoderErrors`).
  */
 export const acceptedEncodingsOnly: RequestHandler = (req, _res, next) => {
   const coding = req.headers["content-encoding"];

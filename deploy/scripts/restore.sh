@@ -15,7 +15,8 @@
 #      each must be a service container of the project (not a `compose run` one-off), or the
 #      restore stops there and changes nothing;
 #   2. copies the volumes' files as they are (database, -wal, -shm, spend log) to
-#      <project>-pre-restore-<time>.tar.gz, which restore.sh can restore by its path;
+#      <project>-pre-restore-<time>.tar.gz (restore.sh restores it by its path when it holds a
+#      database);
 #   3. replaces the database, after the old one took in its -wal; the spend logs are merged
 #      (every record of both), so a restore never lowers what the API counts as spent;
 #   4. starts the containers it stopped and waits for each to turn healthy.

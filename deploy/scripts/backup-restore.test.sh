@@ -14,8 +14,9 @@
 # project's backup without --project, a held or unreadable lock, and a container that is not a
 # service of the project are refused with nothing changed; a one-off container is never taken
 # for the API; the volumes are copied first, -wal included, also with no API running; a -wal
-# left beside a damaged database is not applied to the restored one; spend logs are merged. Every
-# container the scripts start has no network, no capabilities and a read-only image filesystem.
+# left beside a damaged or lost database is not applied to the restored one; spend logs are
+# merged. Every container the scripts start has no network, no capabilities and a read-only image
+# filesystem.
 set -euo pipefail
 export LC_ALL=C
 
@@ -271,11 +272,12 @@ wait_healthy
 [ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after the restore with no API: $(markers)"
 echo "ok: with no API running, the volumes (and the -wal) were copied first; the copy restores"
 
-# A damaged database (its first page overwritten) with a -wal of another database beside it that
-# cannot be checkpointed into it: the -wal is not applied to the restored database.
-docker stop "$container" >/dev/null
-# shellcheck disable=SC2016 # a JavaScript template string
-vol_node '
+# A -wal of another database (only its second page) left beside the database: it must never be
+# applied to the restored one. foreign_wal writes it; the old database is then either damaged
+# (its first page overwritten: the checkpoint before the swap fails) or gone (lost, or moved
+# aside: there is nothing to checkpoint, so only the removal before the swap keeps the -wal out).
+# shellcheck disable=SC2016 # JavaScript template strings
+foreign_wal='
   const other = new D("/app/data/other.db");
   other.pragma("journal_mode = WAL");
   other.pragma("wal_autocheckpoint = 0");
@@ -283,7 +285,9 @@ vol_node '
   other.pragma("wal_checkpoint(TRUNCATE)");
   other.exec("INSERT INTO other VALUES (2)");
   fs.copyFileSync("/app/data/other.db-wal", "/app/data/sonic-agent.db-wal");
-  for (const f of ["other.db", "other.db-wal", "other.db-shm"]) fs.rmSync(`/app/data/${f}`, { force: true });
+  for (const f of ["other.db", "other.db-wal", "other.db-shm"]) fs.rmSync(`/app/data/${f}`, { force: true });'
+docker stop "$container" >/dev/null
+vol_node "$foreign_wal"'
   const fd = fs.openSync("/app/data/sonic-agent.db", "r+");
   fs.writeSync(fd, Buffer.alloc(4096, 0x5a), 0, 4096, 0);
   fs.closeSync(fd);
@@ -293,7 +297,18 @@ grep -q 'old database could not be checkpointed' <<<"$out" || fail "the old data
 docker start "$container" >/dev/null
 wait_healthy
 [ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after the restore over a damaged database: $(markers)"
-echo "ok: a -wal left beside a damaged database is not applied to the restored one"
+docker stop "$container" >/dev/null
+vol_node "$foreign_wal"'
+  fs.rmSync("/app/data/sonic-agent.db");
+  process.exit(0);'
+out=$(restore --yes latest 2>&1) || fail "the restore over a lost database failed: $out"
+copy=$(pre_restores | grep -v 20991231 | tail -1)
+[ "$(tar -tzf "$copy" | sort | tr '\n' ' ')" = "llm-spend.jsonl sonic-agent.db-wal " ] ||
+  fail "the pre-restore copy of a lost database holds: $(tar -tzf "$copy" | tr '\n' ' ')"
+docker start "$container" >/dev/null
+wait_healthy
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after the restore over a lost database: $(markers)"
+echo "ok: a -wal left beside a damaged or a lost database is copied first and never applied to the restored one"
 
 # A database that fails integrity_check on the volume is not backed up.
 docker stop "$container" >/dev/null

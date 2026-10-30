@@ -3,13 +3,16 @@
 // rings disappear and the outline is the only focus indicator left. What takes it away fails
 // here, in the spellings CASES lists: an outline, outline-style or outline-width whose value has
 // a `none` or a zero length in any unit (calc() and min() too), or resets it (unset, initial,
-// inherit); an outline colour of Canvas, which forced-colors mode keeps and so hides it; in a
-// stylesheet, a JSX style, the DOM or d3, through var() and the custom properties set in the
-// source; the same as a class (`outline-none`, `outline-0`, `outline-[0px]`, `[outline:2px_none]`,
+// inherit); an outline colour of Canvas, ButtonFace or Field, the backgrounds forced-colors mode
+// keeps and so hides it against (light-dark() and color-mix() too); in a stylesheet, a JSX
+// style, the DOM (el.style, setProperty, attributeStyleMap.set) or d3, an [property, value]
+// entry of a list or Map, through var() and the custom properties set in the source; the same
+// as a class (`outline-none`, `outline-0`, `outline-[0px]`, `[outline:2px_none]`,
 // `outline-[Canvas]`, any variant, `!`, @apply); `all: unset` or `initial`; any
 // `forced-color-adjust` but `auto`, under which the outline stays transparent; and a class name
-// built at run time from `outline-` or after a variant. A value known only at run time, such as
-// one read from data, is beyond what it reads.
+// built at run time from `outline-` or after a variant (`focus-visible:${x}`, `focus:!${x}`,
+// 'focus-visible:' + x). A value known only at run time, such as one read from data, is beyond
+// what it reads.
 // `focus-visible:outline-hidden` keeps a transparent outline that only forced-colors mode draws,
 // and looks the same as outline-none otherwise. A bare `outline-hidden` would draw it round the
 // element all the time in forced-colors mode, focused or not, so it takes a focus variant.
@@ -28,13 +31,31 @@ const REMOVES = /^(?:none|unset|initial|inherit|[+-]?(?:0+(?:\.0*)?|\.0+)(?:[a-z
 const NAMES = "outline(?:-?(?:style|width|color))?|all|forced-?color-?adjust";
 /** A declaration, wherever it is written: CSS, JSX, el.style.x or el.style['x'], a computed key. */
 const PROPERTY = new RegExp(`(?<![\\w-])(${NAMES})["'\x60]?\\]?\\s*[:=](?![=>])\\s*`, "gi");
-/** The same as the arguments of d3's style() or setProperty(). */
-const CALL = new RegExp(`\\b(?:style|setProperty)\\(\\s*["'\x60](${NAMES})["'\x60]\\s*,\\s*`, "gi");
+/**
+ * The same as the arguments of d3's style(), setProperty() or attributeStyleMap.set(), or as
+ * an entry of a list of pairs or a Map: [['outline', 'none']] (a lone pair is not one).
+ */
+const CALL = new RegExp(
+  `(?:\\b(?:style|setProperty|set)\\(|(?<=[\\[(,]\\s*)\\[)\\s*["'\x60](${NAMES})["'\x60]\\s*,\\s*`,
+  "gi",
+);
 /** Colour functions, whose arguments are not lengths. */
-const COLOUR = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)$/i;
-/** A class name built at run time: `outline-${x}`, 'focus:outline-' + x, `focus-visible:${x}`. */
-const DYNAMIC =
-  /outline-\$\{|["'\x60][^"'\x60\n]*outline-["'\x60]\s*\+|(?<![\w-])(?:(?:group|peer)-)?(?:focus(?:-visible|-within)?|hover|active|forced-colors|dark|(?:sm|md|lg|xl|2xl)):\$\{/g;
+const COLOUR = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i;
+/** Functions that mix colours: only the system colours named in them are read. */
+const MIX = /^(?:color-mix|light-dark)$/i;
+/** The system colours of the backgrounds forced-colors mode keeps. */
+const BACKGROUND = /^(?:canvas|buttonface|field)$/i;
+/** A Tailwind variant that a class built at run time can follow. */
+const VARIANT =
+  "(?<![\\w-])(?:(?:group|peer)-)?(?:focus(?:-visible|-within)?|hover|active|forced-colors|dark|sm|md|lg|xl|2xl):!?";
+/**
+ * A class name built at run time: `outline-${x}`, 'focus:outline-' + x, `focus-visible:${x}`,
+ * `focus:!${x}`, 'focus-visible:' + x.
+ */
+const DYNAMIC = new RegExp(
+  `outline-\\$\\{|["'\x60][^"'\x60\\n]*outline-["'\x60]\\s*\\+|${VARIANT}\\$\\{|["'\x60][^"'\x60\\n]*${VARIANT}["'\x60]\\s*\\+`,
+  "g",
+);
 const APPLY = /@apply\s+([^;}]+)/g;
 /** Custom properties, for the var() an outline's value reads. */
 const CUSTOM = /["']?(--[\w-]+)["']?\s*:\s*["']?([^;}'",]+)/g;
@@ -102,10 +123,18 @@ function tokens(value, vars) {
       (_, name, fallback) => ` ${vars.get(name) ?? ""} ${fallback ?? ""} `,
     );
   }
-  // Innermost first: a colour function goes, any other (calc, min) leaves its arguments.
+  // Innermost first: a colour function goes, a mix leaves the system colours it names, any
+  // other function (calc, min) leaves its arguments.
   for (let i = 0; i < 8 && /\(/.test(text); i += 1) {
     text = text.replace(/([\w-]*)\(([^()]*)\)/g, (_, name, inner) =>
-      COLOUR.test(name) ? " " : ` ${inner} `,
+      COLOUR.test(name)
+        ? " "
+        : MIX.test(name)
+          ? ` ${inner
+              .split(/[\s,]+/)
+              .filter((word) => BACKGROUND.test(word))
+              .join(" ")} `
+          : ` ${inner} `,
     );
   }
   return text
@@ -123,7 +152,7 @@ function removes(property, value, vars) {
   if (/^forced-?color-?adjust$/.test(name)) {
     return words.some((word) => !/^(?:auto|important)$/i.test(word));
   }
-  const canvas = words.some((word) => /^canvas$/i.test(word));
+  const canvas = words.some((word) => BACKGROUND.test(word));
   if (/color$/.test(name)) return canvas;
   return canvas || words.some((word) => REMOVES.test(word));
 }
@@ -428,6 +457,28 @@ const CASES = [
   ],
   ["k12.ts", "node.style('outline-color', 'Canvas');", true],
   ["k13.css", ".x:focus { outline: 2px solid rgb(calc(0) 0 0); outline-width: max(0em); }", true],
+  // Pairs and maps, other system backgrounds, colour mixes, variants joined at run time.
+  [
+    "m1.ts",
+    "export function f(el: HTMLElement) { el.attributeStyleMap.set('outline-style', 'none'); }",
+    true,
+  ],
+  ["m2.ts", "export const S = Object.fromEntries([['outline', 'none']]);", true],
+  ["m3.ts", "export const S = new Map([['outline-width', '0']]);", true],
+  ["m4.css", ".x:focus-visible { outline-color: ButtonFace; }", true],
+  ["m5.css", ".x:focus-visible { outline: 2px solid Field; }", true],
+  ["m6.css", ".x:focus-visible { outline-color: light-dark(Canvas, CanvasText); }", true],
+  ["m7.css", ".x:focus-visible { outline: 2px solid color-mix(in srgb, Field 80%, red); }", true],
+  [
+    "m8.tsx",
+    "export const A = ({ x }: { x: string }) => <a className={'focus-visible:' + x} />;",
+    true,
+  ],
+  [
+    "m9.tsx",
+    `export const A = ({ x }: { x: string }) => <a className={\`focus-visible:!\${x}\`} />;`,
+    true,
+  ],
   // Prose in a string is read like a class string: reported, the stricter side.
   ["fp3.tsx", "export const HELP = 'Do not use outline-none in this app';", true],
   // Allowed: comments, custom properties, prose, focus variant chains, a transparent colour.
@@ -489,6 +540,8 @@ const CASES = [
   ["s11.ts", "export const flat = (v: { outline: number }) => v.outline === 0;", false],
   ["s12.css", ".x:focus { outline: 2px solid rgb(0 0 0 / 0); outline-color: CanvasText; }", false],
   ["s13.ts", "node.style('outline-offset', '0px').style('outline-color', 'Highlight');", false],
+  ["s14.css", ".x:focus { outline: 2px solid color-mix(in srgb, CanvasText 0%, red); }", false],
+  ["s15.ts", "export const seen = new Set(['outline']);\nseen.has('outline');", false],
   [
     "tw11.tsx",
     'export const A = () => <a className="rounded-sm focus-visible:outline-transparent focus-visible:outline-hidden" />;',

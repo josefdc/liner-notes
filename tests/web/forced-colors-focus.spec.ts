@@ -417,6 +417,15 @@ async function checkScreen(page: Page, screen: string, notShown: string[] = []) 
  * each side's outline takes.
  */
 async function paintedSides(page: Page) {
+  return (await outlinePixels(page)).sides;
+}
+
+/**
+ * `paintedSides`, with `gaps`: per side, the pixels along its straight part (the element's box
+ * less its corner radius, within the window) at which the band does not paint across its whole
+ * width. Something that covers the outline there, or cuts it by even a pixel, leaves a gap.
+ */
+async function outlinePixels(page: Page) {
   await animationsSettled(page);
   const geometry = await page.evaluate(() => {
     const element = document.activeElement as Element;
@@ -424,7 +433,15 @@ async function paintedSides(page: Page) {
     const r = element.getBoundingClientRect();
     const width = Number.parseFloat(s.outlineWidth) || 0;
     const offset = Number.parseFloat(s.outlineOffset) || 0;
-    return { x: r.x, y: r.y, w: r.width, h: r.height, width, offset };
+    const radius = Math.max(
+      ...[
+        s.borderTopLeftRadius,
+        s.borderTopRightRadius,
+        s.borderBottomRightRadius,
+        s.borderBottomLeftRadius,
+      ].map((value) => Number.parseFloat(value) || 0),
+    );
+    return { x: r.x, y: r.y, w: r.width, h: r.height, width, offset, radius };
   });
   const outer = geometry.width + Math.max(geometry.offset, 0) + 2;
   const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
@@ -468,6 +485,15 @@ async function paintedSides(page: Page) {
       const inner = g.offset;
       const outerEdge = g.offset + g.width;
       const sides = { top: 0, right: 0, bottom: 0, left: 0 };
+      // How many of each band's pixels paint at each column (top and bottom sides) or row (left
+      // and right).
+      const hit = {
+        top: new Map<number, number>(),
+        right: new Map<number, number>(),
+        bottom: new Map<number, number>(),
+        left: new Map<number, number>(),
+      };
+      const add = (side: Map<number, number>, at: number) => side.set(at, (side.get(at) ?? 0) + 1);
       for (let y = 0; y < ia.height; y += 1) {
         for (let x = 0; x < ia.width; x += 1) {
           const i = (y * ia.width + x) * 4;
@@ -476,13 +502,59 @@ async function paintedSides(page: Page) {
           const py = y + 0.5;
           const across = px > left - outerEdge && px < right + outerEdge;
           const down = py > top - outerEdge && py < bottom + outerEdge;
-          if (across && py > top - outerEdge && py < top - inner) sides.top += 1;
-          if (across && py > bottom + inner && py < bottom + outerEdge) sides.bottom += 1;
-          if (down && px > left - outerEdge && px < left - inner) sides.left += 1;
-          if (down && px > right + inner && px < right + outerEdge) sides.right += 1;
+          if (across && py > top - outerEdge && py < top - inner) {
+            sides.top += 1;
+            add(hit.top, x);
+          }
+          if (across && py > bottom + inner && py < bottom + outerEdge) {
+            sides.bottom += 1;
+            add(hit.bottom, x);
+          }
+          if (down && px > left - outerEdge && px < left - inner) {
+            sides.left += 1;
+            add(hit.left, y);
+          }
+          if (down && px > right + inner && px < right + outerEdge) {
+            sides.right += 1;
+            add(hit.right, y);
+          }
         }
       }
-      return sides;
+      // Each side's straight part, in the screenshot's whole pixels: the box less its corner
+      // radius, or less the inset of an outline drawn inside it. At each pixel along it, every
+      // pixel across the band must paint, those beyond the window included (they cannot).
+      const span = (from: number, to: number, size: number) => {
+        const at: number[] = [];
+        for (let p = Math.max(0, Math.ceil(from)); p < Math.min(size, Math.floor(to)); p += 1) {
+          at.push(p);
+        }
+        return at;
+      };
+      const corner = Math.max(g.radius, -outerEdge, 0);
+      const columns = span(left + corner, right - corner, ia.width);
+      const rows = span(top + corner, bottom - corner, ia.height);
+      const depth = (from: number, to: number) => {
+        let count = 0;
+        for (let p = Math.floor(from) - 1; p <= Math.ceil(to); p += 1) {
+          if (p + 0.5 > from && p + 0.5 < to) count += 1;
+        }
+        return count;
+      };
+      const whole = {
+        top: depth(top - outerEdge, top - inner),
+        right: depth(right + inner, right + outerEdge),
+        bottom: depth(bottom + inner, bottom + outerEdge),
+        left: depth(left - outerEdge, left - inner),
+      };
+      const short = (side: keyof typeof hit, along: number[]) =>
+        along.filter((at) => (hit[side].get(at) ?? 0) < whole[side]).length;
+      const gaps = {
+        top: short("top", columns),
+        right: short("right", rows),
+        bottom: short("bottom", columns),
+        left: short("left", rows),
+      };
+      return { sides, gaps };
     },
     {
       a: `data:image/png;base64,${focused.toString("base64")}`,
@@ -501,6 +573,31 @@ async function expectPainted(page: Page, what: string, painted: string[]) {
     .map(([side]) => side);
   painted.push(`${what}: ${JSON.stringify(sides)}`);
   expect.soft(bare, `${what}: sides of its outline that paint nothing`).toEqual([]);
+}
+
+/**
+ * Checks that the focused element's outline paints on all four sides, and along the whole
+ * straight part of each: nothing covers or cuts any of it.
+ */
+async function expectWhole(page: Page, what: string, painted: string[]) {
+  const { sides, gaps } = await outlinePixels(page);
+  painted.push(`${what}: ${JSON.stringify(sides)}, gaps ${JSON.stringify(gaps)}`);
+  expect
+    .soft(
+      Object.entries(sides)
+        .filter(([, count]) => count === 0)
+        .map(([side]) => side),
+      `${what}: sides of its outline that paint nothing`,
+    )
+    .toEqual([]);
+  expect
+    .soft(
+      Object.entries(gaps)
+        .filter(([, count]) => count > 0)
+        .map(([side, count]) => `${side} ${count}px`),
+      `${what}: lengths of its outline's sides not painted across its width (covered or cut)`,
+    )
+    .toEqual([]);
 }
 
 /** The analysis held before its result: the progress screen stays. */
@@ -760,6 +857,97 @@ test.describe("forced-colors mode", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("tab", { selected: true }).focus();
     await expectPainted(page, "phone tab", painted);
+    test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
+  });
+
+  test("with the activity log open, the Sonic Fingerprint panel shows its whole outline", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const painted: string[] = [];
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await useMockApi(page, fullResult);
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await page.getByRole("button", { name: /activity log/ }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+    await animationsSettled(page);
+
+    // The panel takes the focus by script (after its chart's "Try again"): from where the
+    // log's toggle left the screen, and with the screen scrolled to its top and to its end.
+    const panel = page.getByRole("region", { name: "Sonic Fingerprint" });
+    for (const from of ["after the log's toggle", "from the top", "from the end"] as const) {
+      await panel.evaluate((element, start) => {
+        if (start === "after the log's toggle") return;
+        (document.activeElement as HTMLElement | null)?.blur();
+        const screen = element.closest(".overflow-y-auto") as HTMLElement;
+        screen.scrollTop = start === "from the top" ? 0 : screen.scrollHeight;
+      }, from);
+      await panel.focus();
+      await expect(panel).toBeFocused();
+      const stop = await focusedStop(page);
+      expectOutlines(stop ? [stop] : [], `the Sonic Fingerprint panel, focused ${from}`);
+
+      // The panel and its outline lie in the view of the screen it scrolls in (the window less
+      // the footer), which the focus scrolls to.
+      const fit = await panel.evaluate((element) => {
+        const s = getComputedStyle(element);
+        const grow = Math.max(
+          (Number.parseFloat(s.outlineWidth) || 0) + (Number.parseFloat(s.outlineOffset) || 0),
+          0,
+        );
+        const screen = (element.closest(".overflow-y-auto") as HTMLElement).getBoundingClientRect();
+        const box = element.getBoundingClientRect();
+        return {
+          outline: [box.top - grow, box.bottom + grow],
+          view: [screen.top, screen.bottom],
+        };
+      });
+      expect
+        .soft(
+          fit.outline[0] >= fit.view[0] && fit.outline[1] <= fit.view[1],
+          `focused ${from}, the panel's outline (${fit.outline.join("..")}) in the screen's view (${fit.view.join("..")})`,
+        )
+        .toBe(true);
+      await expectWhole(page, `Sonic Fingerprint panel, focused ${from}`, painted);
+    }
+    test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
+  });
+
+  test("the open activity log's list shows its whole outline at rest and scrolled", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const painted: string[] = [];
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await useMockApi(page, fullResult);
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    const toggle = page.getByRole("button", { name: /activity log/ });
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+    await animationsSettled(page);
+
+    // Tab goes from the toggle to the list, as before.
+    await page.keyboard.press("Tab");
+    const list = page.locator("#activity-log-content .overflow-y-auto");
+    await expect(list).toBeFocused();
+    const range = await list.evaluate((element) => element.scrollHeight - element.clientHeight);
+    expect(range, "the list scrolls").toBeGreaterThan(0);
+
+    for (const [where, at] of [
+      ["at rest", 0],
+      ["scrolled to the middle", Math.round(range / 2)],
+      ["scrolled to the end", range],
+    ] as const) {
+      await list.evaluate((element, top) => {
+        element.scrollTop = top;
+      }, at);
+      expect(await list.evaluate((element) => element.scrollTop)).toBe(at);
+      const stop = await focusedStop(page);
+      expectOutlines(stop ? [stop] : [], `the activity log's list ${where}`);
+      await expectWhole(page, `activity log list ${where}`, painted);
+    }
     test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
   });
 

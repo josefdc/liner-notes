@@ -137,32 +137,35 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
       >
         <div className="border-t border-white/5">
           {/* Log list: a scroller, so a Tab stop; in forced-colors mode its outline is drawn
-              inside it, where the panel's overflow-hidden does not cut it. */}
-          <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain forced-colors:focus-visible:-outline-offset-2">
-            {/* Timeline line */}
-            <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
+              inside it, where the panel's overflow-hidden does not cut it. Its entries and their
+              dots are positioned, so they paint over that outline: the layer after it draws the
+              outline again, above them and outside the scroll, while the list has the focus. */}
+          <div className="relative">
+            <div className="peer relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain forced-colors:focus-visible:-outline-offset-2">
+              {/* Timeline line */}
+              <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
 
-            {/* Empty state */}
-            {logs.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-6 text-text-muted">
-                <span className="text-chrome font-mono">No events yet</span>
-              </div>
-            )}
+              {/* Empty state */}
+              {logs.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-6 text-text-muted">
+                  <span className="text-chrome font-mono">No events yet</span>
+                </div>
+              )}
 
-            {displayLogs.map((log, idx) => {
-              const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
-              const isLive = idx === 0 && !isComplete;
-              const time = timeOf(log);
+              {displayLogs.map((log, idx) => {
+                const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
+                const isLive = idx === 0 && !isComplete;
+                const time = timeOf(log);
 
-              return (
-                <div
-                  key={log.id}
-                  data-log-code={log.code}
-                  className="relative pl-7 pb-3 last:pb-0 group/item"
-                >
-                  {/* Timeline dot */}
+                return (
                   <div
-                    className={`
+                    key={log.id}
+                    data-log-code={log.code}
+                    className="relative pl-7 pb-3 last:pb-0 group/item"
+                  >
+                    {/* Timeline dot */}
+                    <div
+                      className={`
                     absolute left-[9px] top-1 w-2 h-2 rounded-full border-2 transition-all duration-(--duration-normal) z-10 box-border
                     ${
                       isLive
@@ -170,38 +173,43 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
                         : 'bg-void-lighter border-white/30 group-hover/item:border-white/55'
                     }
                   `}
-                  ></div>
+                    ></div>
 
-                  {/* Entry */}
-                  <div
-                    className={`
+                    {/* Entry */}
+                    <div
+                      className={`
                     relative p-2 rounded-md border transition-all duration-(--duration-normal)
                     ${isLive ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent hover:bg-white/5'}
                   `}
-                  >
-                    <div className="flex justify-between items-start mb-0.5">
-                      <span
-                        data-log-label
-                        className={`text-chrome font-bold font-mono inline-flex items-center gap-1 ${tone}`}
-                      >
-                        <Icon size={12} aria-hidden="true" className="shrink-0" />
-                        {label}
-                      </span>
-                      {time !== null && (
-                        <span className="text-chrome text-text-muted font-mono">
-                          <span data-log-time>{time}</span>
-                          {recorded && <span className="sr-only"> into the recorded run</span>}
+                    >
+                      <div className="flex justify-between items-start mb-0.5">
+                        <span
+                          data-log-label
+                          className={`text-chrome font-bold font-mono inline-flex items-center gap-1 ${tone}`}
+                        >
+                          <Icon size={12} aria-hidden="true" className="shrink-0" />
+                          {label}
                         </span>
-                      )}
-                    </div>
+                        {time !== null && (
+                          <span className="text-chrome text-text-muted font-mono">
+                            <span data-log-time>{time}</span>
+                            {recorded && <span className="sr-only"> into the recorded run</span>}
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="text-xs text-text-secondary">
-                      <span className="leading-relaxed line-clamp-2">{log.message}</span>
+                      <div className="text-xs text-text-secondary">
+                        <span className="leading-relaxed line-clamp-2">{log.message}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-20 hidden forced-colors:peer-focus-visible:block outline-2 outline-solid outline-[color:Highlight] -outline-offset-2"
+            />
           </div>
 
           {/* Footer: how much of the log is shown */}

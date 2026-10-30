@@ -366,12 +366,18 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Main Grid (P2:17 — stagger animations). It fills spare height but never shrinks below its
           content, and the hero above never shrinks: the page scrolls instead of clipping them. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
-        {/* Hero: Sonic Fingerprint */}
+        {/* Hero: Sonic Fingerprint. It takes the focus by script; in forced-colors mode it shows
+            it with an outline 4px outside it. From lg it stretches to the row, which the open
+            activity log makes taller than the screen above the footer, so no scroll showed the
+            whole outline. In that mode it stops 3rem short of the window's height (the footer,
+            and room for the outline), never under 28rem (its content needs about 26), and a
+            focus scroll leaves 8px beyond it (Chrome's scroll lands up to 1px past the margin),
+            so the outline stays in view. */}
         <section
           ref={fingerprintRef}
           tabIndex={-1}
           aria-label="Sonic Fingerprint"
-          className="focus-visible:outline-hidden focus-visible:border-cyber/70 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="focus-visible:outline-hidden focus-visible:border-cyber/70 forced-colors:scroll-my-2 forced-colors:lg:max-h-[max(calc(100dvh-3rem),28rem)] lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel subtitle={fingerprintText} className="flex-1">

@@ -153,9 +153,9 @@ def test_a_cowbells_third_harmonic_over_half_its_oscillator_is_a_note():
 
 def test_a_one_note_bass_keeps_harmonics_off_its_fundamental_line():
     """
-    one-note-bass-s501 (G2, 98 Hz): a line at 90.9 Hz next to the note pulls the fundamental
-    line to 97.4 Hz, so its third harmonic (293.6 Hz) lies 0.46 % off, beyond
-    SOURCE_NOTE_TOLERANCE, and counts as a note.
+    one-note-bass-s501 (G2, 98 Hz): a line at 90.9 Hz next to the note (the bass's own, from
+    re-striking it every sixteenth) pulls the fundamental line to 97.4 Hz, so its third harmonic
+    (293.6 Hz) lies 0.46 % off, beyond SOURCE_NOTE_TOLERANCE, and counts as a note.
     """
     script, _, lines = measured_lines("one-note-bass-s501")
     _, E = service.load()
@@ -211,6 +211,9 @@ def test_kept_because_reads_each_cause_on_lines_whose_answer_is_known():
     # Loudness is over the note's own level: here the strongest line folds into the note an
     # octave under it (0.5), and a fifth harmonic at 0.3 is more than half of that.
     assert script.kept_because([(f0, 0.5), (200.0, 1.0), (500.0, 0.3)]) == {500.0: script.LOUD}
+    # An octave 3 % off is off the line, not beside the note; past the sixteenth harmonic, above.
+    lines = [(f0, 1.0), (206.0, 0.4), (1730.0, 0.3)]
+    assert script.kept_because(lines) == {206.0: script.OFF, 1730.0: script.ABOVE}
     assert script.kept_because([]) == {}
 
 
@@ -351,14 +354,9 @@ SERIES_THRESHOLD = 0.9048
 MERGED_THRESHOLD = 0.9461
 
 
-def test_a_chord_with_a_softer_third_reads_as_one_stretched_series():
-    """
-    A known cost of the stretched-series rule: an F major triad in a saw timbre with its root
-    doubled an octave down, the third 7.5 dB softer and with tremolo, gets its right key (from
-    librosa, and from Essentia where it is installed), yet its lines read as one series over
-    the threshold, as a one-note bass's do. With the close lines merged it stays under it.
-    """
-    script = load_script()
+def softer_third():
+    """An F major triad in a saw timbre, its root doubled an octave down, the third 7.5 dB
+    softer, with tremolo."""
     _, E = service.load()
     sig = C.signals()
     triad = sig._triad(5, "major")
@@ -367,14 +365,32 @@ def test_a_chord_with_a_softer_third_reads_as_one_stretched_series():
         doubled = sig._chord_tone([triad[0], triad[2], triad[0] - 12], t, "saw")
         return doubled + 10 ** (-7.5 / 20) * sig._chord_tone([triad[1]], t, "saw")
 
-    s = E.Signals(np.asarray(sig._shaped(y_of, "tremolo"), dtype=np.float32), SR)
+    return E.Signals(np.asarray(sig._shaped(y_of, "tremolo"), dtype=np.float32), SR)
+
+
+def test_a_chord_with_a_softer_third_reads_as_one_stretched_series():
+    """
+    A known cost of the stretched-series rule: softer_third() gets its right key from librosa
+    (and from Essentia: the next test), yet its lines read 0.9055 as one series, over the
+    threshold, as a one-note bass's do. With the close lines merged it stays under it.
+    """
+    script = load_script()
+    _, E = service.load()
+    s = softer_third()
     assert s.key_withheld() is None and s.source_evidence.still
-    for est in ("essentia", "librosa") if HAS_ESSENTIA else ("librosa",):
-        key = E.select_estimator(est).key(s)
-        assert (key.tonic, key.mode) == ("F", "major"), est
+    key = E.select_estimator("librosa").key(s)
+    assert (key.tonic, key.mode) == ("F", "major")
     lines = script.note_lines(s.harmonic_stft, s.sr, s.hop)
+    assert script.series_share(lines) == pytest.approx(0.9055, abs=1e-4)
     assert script.series_share(lines) > SERIES_THRESHOLD
     assert script.series_share(script.merged(lines, script.CLOSE_CENTS)) < MERGED_THRESHOLD
+
+
+@pytest.mark.skipif(not HAS_ESSENTIA, reason="Essentia is not installed (the models extra)")
+def test_essentia_keys_the_chord_with_a_softer_third_right():
+    _, E = service.load()
+    key = E.select_estimator("essentia").key(softer_third())
+    assert (key.tonic, key.mode) == ("F", "major")
 
 
 # Each measurement on four keyed controls, from this script's own analysis (the run on the
@@ -580,6 +596,7 @@ def test_probe_chords_lie_just_outside_the_controls():
     )
     assert chords["organ C#add9, tremolo"][1] == [49, 53, 56, 63, 37]
     assert chords["saw Dm9, tremolo"][1] == [50, 53, 57, 60, 64, 38]
+    assert chords["organ Cmaj9, pumped"][1] == [48, 52, 55, 59, 62, 36]
     assert chords["pad C major add2 20 c flat, tremolo"][1] == [48, 49.8, 52, 55]
 
 
@@ -616,6 +633,69 @@ def test_a_chord_outside_the_controls_with_its_right_key_crosses_a_plain_reading
     got = script.probe_analyse(chord)
     truth = script.probe_chords()[chord][-1]
     assert got["withheld"] is None
-    for est in ("essentia", "librosa") if HAS_ESSENTIA else ("librosa",):
-        assert tuple(got["keys"][est][:2]) == truth, est
+    assert tuple(got["keys"]["librosa"][:2]) == truth
     assert crosses(got[measure]), got[measure]
+
+
+@pytest.mark.skipif(not HAS_ESSENTIA, reason="Essentia is not installed (the models extra)")
+@pytest.mark.parametrize(
+    "chord",
+    ["pad C5 major, tremolo", "organ C#add9, tremolo", "pad C major add2 20 c flat, pumped"],
+)
+def test_essentia_keys_the_chords_outside_the_controls_right(chord):
+    script = load_script()
+    got = script.probe_analyse(chord)
+    assert got["withheld"] is None
+    assert tuple(got["keys"]["essentia"][:2]) == script.probe_chords()[chord][-1]
+
+
+def test_probe_rows_and_costs_count_right_keys_served_and_taken():
+    """
+    Five high triads, all truly C major, and one added-second triad: right and over the
+    lowest-note threshold (taken), right and under it, withheld by an evidence rule, the wrong
+    tonic, the wrong mode. Only right keys count, and only those a rule withholds are taken; the
+    "most" rule of a reading withheld at or under its threshold takes the close lowest notes.
+    """
+    script = load_script()
+    est = ("essentia", "librosa")
+
+    def got(key, lowest, interval, withheld=None):
+        return {
+            "withheld": withheld,
+            "keys": dict.fromkeys(est, None if key is None else (*key, 0.8)),
+            "the lowest note": lowest,
+            "the two lowest notes' interval": interval,
+        }
+
+    measured = {
+        "pad C5 major, tremolo": got(("C", "major"), 523.3, 100.0),
+        "saw C5 major, tremolo": got(("C", "major"), 400.0, 300.0),
+        "organ C5 major, tremolo": got(("C", "major"), 600.0, 100.0, "one_harmonic_series"),
+        "flute C5 major, tremolo": got(("D", "major"), 600.0, 100.0),
+        "e-piano C5 major, tremolo": got(("C", "minor"), 600.0, 100.0),
+        "pad C major add2, tremolo": got(("C", "major"), 130.8, 300.0),
+    }
+    rows = {r["name"]: r["keys"]["essentia"] for r in script.probe_rows(measured)}
+    assert list(rows.values()) == [
+        (True, True),
+        (True, True),
+        (False, False),
+        (True, False),
+        (True, False),
+        (True, True),
+    ]
+    entries = {
+        "the lowest note": {"freeRule": ("any", {"the lowest note": 505.8}), "most": None},
+        "the two lowest notes' interval": {"most": -193.0},
+    }
+    costs = script.probe_costs(entries, script.probe_rows(measured), measured)
+    counts = {"triads C5-G#5": dict.fromkeys(est, (1, 2)), "add2": dict.fromkeys(est, (0, 1))}
+    assert costs == {
+        "the lowest note": {"free": counts},
+        "the two lowest notes' interval": {"most": counts},
+    }
+    # The nearest right keys: the highest lowest note, the closest two lowest notes.
+    nearest = script.probe_nearest(script.probe_rows(measured), measured)
+    assert nearest["the lowest note"] == (523.3, "pad C5 major, tremolo")
+    assert nearest["the two lowest notes' interval"] == (100.0, "pad C5 major, tremolo")
+    assert "pitch classes" not in nearest

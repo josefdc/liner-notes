@@ -462,6 +462,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
   three causes, read per control. Harmonics lie further than `SOURCE_NOTE_TOLERANCE` (0.3 %) from
   the multiples of the note's line: in seeds 500, 611, 617 and 626, whose harmonics the generator
   stretches as a stiff string's, and in 501, whose line a line 120 cents under it pulls off.
+  That line, like the line beside 615's note, is the bass's own: it is there without the drums,
+  and comes from re-striking the note every sixteenth, which is not a whole number of its periods
+  (a re-strike every 11 or 12 periods leaves one note).
   Harmonics on the line are louder than half the note: in 611 (0.60), 612 (0.53 and 0.51) and 615
   (0.60). And lines under or beside the note count as notes of their own, in every keyed bass but
   617. Without the line beside its note, 615 spells no chord, and 617 none without its harmonics
@@ -534,15 +537,23 @@ times are seconds from the start of the preview. Every block is `null` when it w
   - the pitch-class rule takes 5 of the 118 right keys of the ninth chords, and 9 of the 69 (7 of
     61) of the added-second triads;
   - the two-lowest-notes rule takes 39 of the 69 right keys of the added-second triads (33 of 61);
-  - the stretched series, plain or merged, at either threshold, and the overtone and
-    off-grid-third rules take none.
+  - the overtone and off-grid-third rules take none;
+  - the probe is no test of the stretched series: on it, no chord keyed right reads more than
+    0.6394 (an organ B add9 chord), far under both of its thresholds.
+
+  By the held-out protocol alone the lowest-note rule would ship. It is rejected because it is a
+  register cutoff: it takes the right keys of 48 of the 60 triads from C5 to G#5, all keyed right
+  today, and only the organ chords escape it. The added-second counts depend on how the probe was
+  built (two thirds of that set is 10-20 cents flat by design), so they show that a rule can fail,
+  not how often.
 
   None is shipped:
   - The overtone and off-grid-third rules withhold too few keys.
-  - The decay, both-thirds and off-grid rules take right keys among the controls.
+  - The energy-after-each-hit, decay, both-thirds and off-grid rules take right keys among the
+    controls.
   - The three plain readings take right keys of chords just outside the controls.
   - The stretched series withholds most Essentia bass keys without taking a right key among the
-    controls or those chords, but:
+    controls, but:
     - it withholds only 1 of the 2 librosa keys;
     - at the threshold the training half sets, it withholds 1 of the 2 training bass keys;
     - without the merge it takes the right key of a chord whose third is a little softer than any

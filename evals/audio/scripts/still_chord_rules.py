@@ -27,6 +27,8 @@ strongest line). The run prints the notes of every keyed control, and for the ba
   of three reasons. Harmonics lie further than SOURCE_NOTE_TOLERANCE from a multiple of the
   note's line: in s500, s611, s617 and s626, whose harmonics the generator stretches as a stiff
   string's (B = 0.0008), and in s501 (B = 0), whose line a line 120 cents under it pulls off.
+  That line, like the line beside s615's note, is the bass's own: it is there without the
+  drums, from re-striking the note every sixteenth, not a whole number of its periods.
   Harmonics on the line are louder than SOURCE_OVERTONE_RATIO of the note: in s611 (0.60), s612
   (0.53 and 0.51) and s615 (0.60). Lines under or beside the note count as notes of their own:
   in s500, s501, s611, s612, s615 and s626. Without the line beside its note, s615 spells no
@@ -87,12 +89,13 @@ The controls' chords have their roots in C3-B4, and none has a ninth or a second
 so a rule that takes no right key among them can still take the keys of chords just outside
 them. probe_chords() makes 276 such chords (triads from C5 up, ninth chords, triads with an
 added second, some of it flat), analyses them as the controls are, and the run prints the right
-keys each chosen threshold would take from them.
+keys each chosen threshold would take from them, and how near to each threshold the chords keyed
+right come.
 
     cd evals/audio && uv sync --extra models
     uv run python scripts/still_chord_rules.py ../reports/audio-2026-10-29.json [--jobs J]
 
-About 5 min at --jobs 4 on a shared machine. Needs what drum_rules.py needs: the GiantSteps+
+5-10 min at --jobs 4 on a shared machine, as its load allows. Needs what drum_rules.py needs: the GiantSteps+
 audio and mirdata's index, checked first, and Essentia (the models extra; without it the
 service answers for Essentia with librosa and the check against the report stops the run). In
 a fresh environment, run once with --jobs 1 first: librosa's numba cache written by several
@@ -699,6 +702,22 @@ def probe_costs(entries: dict, rows: list[dict], measured: dict) -> dict:
     return out
 
 
+def probe_nearest(rows: list[dict], measured: dict) -> dict:
+    """
+    {measurement: (value, chord)}: the most family-like value among the probe chords that some
+    estimator keys right (None when none reads one): how near a threshold they come.
+    """
+    values = signed(measured)
+    right = [r["name"] for r in rows if any(ok for _, ok in r["keys"].values())]
+    out = {}
+    for m in MEASURES:
+        read = [(values[n][m], n) for n in right if values[n][m] is not None]
+        if read:
+            top, name = max(read)
+            out[m] = (MEASURES[m] * top, name)
+    return out
+
+
 def _fmt_threshold(measure: str, signed_value: float) -> str:
     side = "at or above" if MEASURES[measure] > 0 else "at or under"
     return f"{measure} {side} {MEASURES[measure] * signed_value:.4g}"
@@ -819,6 +838,8 @@ def main() -> None:
             for group in dict.fromkeys(r["group"] for r in found)
         )
     )
+    for m, (value, chord) in probe_nearest(found, probed).items():
+        print(f"  the most family-like right key among them, {m}: {value:.4g}, {chord}")
     for name, rules in probe_costs(entries, found, probed).items():
         for kind, groups in rules.items():
             print(

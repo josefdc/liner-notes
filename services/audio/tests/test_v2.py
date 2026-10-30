@@ -1960,8 +1960,8 @@ def test_still_sources_whose_lines_spell_a_chord_keep_their_key(family, seed, sp
     whose lines hold still and move together, so the single-source rule asks what they spell,
     and they spell a chord. Two cowbell oscillators lie a minor sixth apart, or the third
     harmonic of one oscillator is louder than SOURCE_OVERTONE_RATIO of it and stays a note; a
-    line next to the bass note pulls its fundamental line off, so its harmonics lie beyond
-    SOURCE_NOTE_TOLERANCE of it; a bell's tierce is a minor tenth over its hum (bell 509 is
+    line next to the bass note (the bass's own, from re-striking it every sixteenth) pulls its
+    fundamental line off, so its harmonics lie beyond SOURCE_NOTE_TOLERANCE of it; a bell's tierce is a minor tenth over its hum (bell 509 is
     pinned above). The estimators that ONE_PITCH_CLASS_KEYED says key the seed do.
     evals/audio/scripts/still_chord_rules.py measures eleven rules that could withhold these
     keys; none ships (services/audio/README.md gives the numbers).

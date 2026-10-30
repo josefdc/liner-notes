@@ -146,7 +146,7 @@ None is shipped; services/audio/README.md gives the numbers and the reasons.
 what they spell, and they spell a chord. It reuses drum_rules.py's analysis, check, halves and
 threshold choice, asks each rule only where the lines hold still, and also checks that its copy
 of the notes test spells the recorded notes (`uv sync --extra models`, then `uv run python
-scripts/still_chord_rules.py ../reports/audio-2026-10-29.json`, about 5 min at `--jobs 4`;
+scripts/still_chord_rules.py ../reports/audio-2026-10-29.json`, 5-10 min at `--jobs 4`;
 without Essentia the check against the report stops it; the `--jobs 1` caution above applies,
 and after such a crash the numba cache files, `*.nbi` and `*.nbc` under librosa's `__pycache__`
 directories, must be deleted first). It prints each keyed control's notes and, per one-note
@@ -164,8 +164,10 @@ basses' recorded notes had been read. Three plain readings of the notes (the low
 number of pitch classes, the interval between the two lowest notes) take no right key among the
 controls either. But the controls' chords have their roots in C3-B4 and none has a ninth or a
 second at the bottom, so "no right key among the controls" is a weak test: the script also
-makes 276 chords just outside them (`probe_chords()`), and the plain readings take many of their
-right keys (48 of 60 triads from C5 up for the lowest note). No GiantSteps+ clip with a served
+makes 276 chords just outside them (`probe_chords()`), and the plain readings take right keys
+of them: the lowest note 48 of 60 triads from C5 up; the pitch classes 5 of 118 ninth chords and
+9 of 69 triads with an added second (7 of 61 with librosa); the two lowest notes 39 of those 69
+(33 of 61). No GiantSteps+ clip with a served
 key has still lines, so the clips show nothing about these rules. None is shipped;
 services/audio/README.md gives the numbers.
 A report whose runs were made with different analyzer versions says so at the top. The

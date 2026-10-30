@@ -28,7 +28,10 @@
 //   tarball when the parent bundles it, and otherwise resolves name@version from the registry, so
 //   its version is checked too;
 // - a workspace package, or a link to one of the `workspaces` of the base (its lock's root entry
-//   or its package.json); these are not releases and need no check.
+//   or its package.json), or of the working tree's package.json, which npm ci reads (a workspace
+//   added there must be a local folder with no resolved URL or integrity, and its link must
+//   carry no integrity); these are not releases and need no check. The head lock's root entry
+//   is never used for this.
 // A release passes when its version was published at least N days ago and, except for the
 // bundled kind above, the lock's integrity matches the registry's for that version
 // (versions[v].dist.integrity, and dist.shasum for a sha1 integrity); an entry without an
@@ -290,10 +293,13 @@ function workspaceMatcher(patterns) {
  * `check` (registry releases to look up: path, name, version, and the integrity to compare, or
  * `bundled: true`), `allowed` (workspace packages and links; path and reason) and `problems`
  * (entries that fail closed; path and reason). Removed entries are in none of them. `workspaces`
- * are the base's workspace patterns.
+ * are the base's workspace patterns; `headWorkspaces` are those of the working tree's package.json
+ * (what npm ci reads), which allow only a folder entry with no resolved URL or integrity, or a link
+ * to such a folder with no integrity.
  */
-export function lockChanges(basePackages, headPackages, workspaces = []) {
+export function lockChanges(basePackages, headPackages, workspaces = [], headWorkspaces = []) {
   const isWorkspace = workspaceMatcher(workspaces);
+  const isHeadWorkspace = workspaceMatcher(headWorkspaces);
   const check = [];
   const allowed = [];
   const problems = [];
@@ -303,15 +309,30 @@ export function lockChanges(basePackages, headPackages, workspaces = []) {
     if (before && FIELDS.every((field) => before[field] === entry[field])) continue;
     const fail = (reason) => problems.push({ path, reason });
     const name = typeof entry.name === "string" ? entry.name : pathName(path);
+    const plain = entry.integrity === undefined;
     if (!inNodeModules(path)) {
-      if (isWorkspace(path)) allowed.push({ path, reason: "workspace package" });
-      else fail("a package outside node_modules that is not one of the base's workspaces");
+      if (isWorkspace(path)) {
+        allowed.push({ path, reason: "workspace package" });
+      } else if (!isHeadWorkspace(path)) {
+        fail(
+          "a package outside node_modules that is not a workspace of the base or of package.json",
+        );
+      } else if (entry.resolved === undefined && plain) {
+        allowed.push({ path, reason: "workspace package added in package.json" });
+      } else {
+        fail("a workspace folder added in package.json, but with a resolved URL or an integrity");
+      }
     } else if (entry.link === true) {
-      if (isWorkspace(entry.resolved)) {
-        allowed.push({ path, reason: `link to the workspace ${entry.resolved}` });
+      const target = entry.resolved;
+      const local = typeof target === "string" && !/^[a-z][a-z0-9+.-]*:/i.test(target);
+      if (isWorkspace(target)) {
+        allowed.push({ path, reason: `link to the workspace ${target}` });
+      } else if (local && plain && isHeadWorkspace(target)) {
+        allowed.push({ path, reason: `link to the workspace ${target}, added in package.json` });
       } else {
         fail(
-          `a link to ${JSON.stringify(redact(entry.resolved))}, which is not one of the base's workspaces`,
+          `a link to ${JSON.stringify(redact(target))}, which is not a workspace of the base or ` +
+            "(as a local folder, with no integrity) of package.json",
         );
       }
     } else if (
@@ -682,7 +703,8 @@ export async function run(argv, options = {}) {
       }
     }
 
-    // Workspaces come from the base, so a change cannot widen them for itself.
+    // Workspaces come from the base, or from the working tree's package.json (which npm ci reads)
+    // for local folders only; never from the head lock's root entry, which npm ci does not use.
     const basePackageJson = showAt(cwd, env, ref, "package.json");
     const workspaces =
       basePackageJson === null
@@ -694,6 +716,10 @@ export async function run(argv, options = {}) {
       baseLocks[name] = readLock(base[name], `${name} at ${ref}`);
       workspaces.push(...workspacesOf(baseLocks[name][""]));
     }
+    const packageJsonPath = join(cwd, "package.json");
+    const headWorkspaces = existsSync(packageJsonPath)
+      ? workspacesOf(parseJson(readFileSync(packageJsonPath, "utf8"), "package.json"))
+      : [];
 
     const check = [];
     const allowed = [];
@@ -718,6 +744,7 @@ export async function run(argv, options = {}) {
         pair.base === null ? {} : baseLocks[pair.base],
         headPackages,
         workspaces,
+        headWorkspaces,
       );
       check.push(...changes.check.map((entry) => ({ ...entry, path: label(entry.path) })));
       allowed.push(...changes.allowed.map((entry) => ({ ...entry, path: label(entry.path) })));

@@ -194,8 +194,10 @@ flag changed must be one of:
   parent's tarball if the parent bundles it and resolves that version otherwise, so its version is
   checked too; a bundled entry with a resolved URL is checked like any other;
 - a workspace package, or a link to one of the `workspaces` at `<ref>` (in its lock's root entry or
-  its `package.json`; no check needed). A change that adds a workspace therefore fails until the
-  workspace is on the base branch.
+  its `package.json`) or in the working tree's `package.json`, which npm ci reads (no check
+  needed). A workspace that only the working tree's `package.json` declares must be a local folder
+  whose entry has no resolved URL and no integrity, and its link must have no integrity; otherwise
+  it fails. The `workspaces` in the lock's own root entry are never used for this.
 
 A release passes when npmjs lists a publish time for its version at least the minimum age before
 the check and, unless it is the bundled kind above, the lock's integrity matches the one npmjs

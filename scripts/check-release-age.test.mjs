@@ -182,6 +182,9 @@ const release = (name, version) => ({
   integrity: integrityOf(name, version),
 });
 
+const notWorkspace = (target) =>
+  `a link to "${target}", which is not a workspace of the base or (as a local folder, with no integrity) of package.json`;
+
 /** Runs the check in `cwd` against HEAD; returns the exit code, output, registry calls and waits. */
 async function check(cwd, options = {}) {
   const { registry = stubRegistry(), argv = ["--base", "HEAD"], env = {}, ...rest } = options;
@@ -488,28 +491,67 @@ describe("lockChanges", () => {
     expect(problems).toEqual([
       {
         path: "vendor/b",
-        reason: "a package outside node_modules that is not one of the base's workspaces",
+        reason:
+          "a package outside node_modules that is not a workspace of the base or of package.json",
       },
       {
         path: "node_modules/b",
-        reason: 'a link to "vendor/b", which is not one of the base\'s workspaces',
+        reason: `${notWorkspace("vendor/b")}`,
       },
       {
         path: "node_modules/c",
-        reason:
-          'a link to "https://registry.npmjs.org/c/-/c-1.0.0.tgz", which is not one of the base\'s workspaces',
+        reason: `${notWorkspace("https://registry.npmjs.org/c/-/c-1.0.0.tgz")}`,
       },
       {
         path: "node_modules/d",
-        reason: 'a link to "packages/a/node_modules/d", which is not one of the base\'s workspaces',
+        reason: `${notWorkspace("packages/a/node_modules/d")}`,
       },
       {
         path: "node_modules/e",
-        reason: 'a link to "packages/a/e", which is not one of the base\'s workspaces',
+        reason: `${notWorkspace("packages/a/e")}`,
       },
     ]);
     // Without base workspaces, nothing outside node_modules or linked passes.
     expect(lockChanges({}, head).allowed).toEqual([]);
+  });
+
+  it("allows a workspace added in package.json only as a local folder with no resolved URL or integrity", () => {
+    const head = {
+      "packages/new": { name: "new", version: "0.1.0" },
+      "node_modules/new": { resolved: "packages/new", link: true },
+      "packages/tgz": { name: "tgz", ...release("tgz", "1.0.0") },
+      "packages/hashed": { name: "hashed", version: "1.0.0", integrity: integrityOf("x", "1") },
+      "packages/git": { name: "git", version: "1.0.0", resolved: "git+ssh://git@github.com/e/g" },
+      "node_modules/hashed-link": {
+        resolved: "packages/new",
+        link: true,
+        integrity: integrityOf("x", "1"),
+      },
+      "node_modules/url-link": { resolved: tarball("c", "1.0.0"), link: true },
+      "vendor/x": { name: "x", version: "1.0.0" },
+    };
+    const { check, allowed, problems } = lockChanges({}, head, [], ["packages/*", "**"]);
+    expect(check).toEqual([]);
+    expect(allowed).toEqual([
+      { path: "packages/new", reason: "workspace package added in package.json" },
+      {
+        path: "node_modules/new",
+        reason: "link to the workspace packages/new, added in package.json",
+      },
+      { path: "vendor/x", reason: "workspace package added in package.json" },
+    ]);
+    const folder =
+      "a workspace folder added in package.json, but with a resolved URL or an integrity";
+    expect(problems).toEqual([
+      { path: "packages/tgz", reason: folder },
+      { path: "packages/hashed", reason: folder },
+      { path: "packages/git", reason: folder },
+      { path: "node_modules/hashed-link", reason: notWorkspace("packages/new") },
+      {
+        path: "node_modules/url-link",
+        reason: notWorkspace("https://registry.npmjs.org/c/-/c-1.0.0.tgz"),
+      },
+    ]);
   });
 
   it("reads workspaces as a list or as { packages }, ignoring anything else", () => {
@@ -652,7 +694,56 @@ describe("run", () => {
     expect(calls).toEqual([]);
   });
 
-  it("takes the workspaces from the base, so the head cannot widen them for itself", async () => {
+  it("does not take workspaces from the head lock's root entry", async () => {
+    // W1: the lock alone says "**", and the linked folder's entry carries a registry tarball.
+    const w1 = lockWith({
+      "": { name: "fixture", version: "0.0.0", workspaces: ["**"] },
+      "node_modules/w": { resolved: "vendor/w", link: true },
+      "vendor/w": { name: "w", ...release("fresh", "1.1.0") },
+    });
+    const { code, err, calls } = await check(repo({ head: { "package-lock.json": text(w1) } }));
+    expect(code).toBe(1);
+    expect(err).toContain(`node_modules/w: ${notWorkspace("vendor/w")}`);
+    expect(err).toContain(
+      "vendor/w: a package outside node_modules that is not a workspace of the base or of package.json",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("allows a workspace that the head's package.json adds, with no registry request", async () => {
+    const packageJson = '{"name":"fixture","workspaces":["apps/*","packages/new"]}\n';
+    const lock = lockWith({
+      "packages/new": { name: "@fixture/new", version: "0.1.0" },
+      "node_modules/@fixture/new": { resolved: "packages/new", link: true },
+    });
+    const { code, out, calls } = await check(
+      repo({ head: { "package.json": packageJson, "package-lock.json": text(lock) } }),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain("2 workspace entries with no check needed, 0 failures");
+    expect(out).toContain(
+      "  no check needed  node_modules/@fixture/new: link to the workspace packages/new, added in package.json",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("fails a workspace that the head's package.json adds when its folder entry has a registry tarball", async () => {
+    const packageJson = '{"name":"fixture","workspaces":["apps/*","packages/new"]}\n';
+    const lock = lockWith({
+      "packages/new": { name: "fresh", ...release("fresh", "1.1.0") },
+      "node_modules/fresh": { resolved: "packages/new", link: true },
+    });
+    const { code, err, calls } = await check(
+      repo({ head: { "package.json": packageJson, "package-lock.json": text(lock) } }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain(
+      "packages/new: a workspace folder added in package.json, but with a resolved URL or an integrity",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("takes the workspaces from the base, so the head lock cannot widen them for itself", async () => {
     const head = lockWith({
       "": { name: "fixture", version: "0.0.0", workspaces: ["**"] },
       "node_modules/w": { resolved: "vendor/w", link: true },
@@ -660,18 +751,16 @@ describe("run", () => {
     });
     const widened = await check(repo({ head: { "package-lock.json": text(head) } }));
     expect(widened.code).toBe(1);
+    expect(widened.err).toContain(`node_modules/w: ${notWorkspace("vendor/w")}`);
     expect(widened.err).toContain(
-      'node_modules/w: a link to "vendor/w", which is not one of the base\'s workspaces',
-    );
-    expect(widened.err).toContain(
-      "vendor/w: a package outside node_modules that is not one of the base's workspaces",
+      "vendor/w: a package outside node_modules that is not a workspace of the base or of package.json",
     );
     expect(widened.calls).toEqual([]);
-    // The base's package.json can name them.
+    // The base's package.json can name them, even when the working tree's no longer does.
     const named = await check(
       repo({
         base: { ...BASE_FILES, "package.json": '{"name":"fixture","workspaces":["vendor/*"]}\n' },
-        head: { "package-lock.json": text(head) },
+        head: { "package-lock.json": text(head), "package.json": '{"name":"fixture"}\n' },
       }),
     );
     expect(named.code).toBe(0);

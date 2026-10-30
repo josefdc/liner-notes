@@ -124,19 +124,36 @@ wave, and triads struck on bars: a marimba-like bar or a glockenspiel) carry the
 truth: that rule must not take it. The calibration records what the rule measures and the
 values the run was made with (`Rules.one_source`), and derives each run at its own values; it
 does not vary them. The `held-out-seeded` group (the same families at seeds 600-629 and
-800-829) is evaluation only: the choice does not see it and no test pins it. A report whose
-runs were made with different analyzer versions says so at the top. The 2026-10-29 report holds
-the controls, the Ballroom tempo and calibration runs, and the GiantSteps+ key and calibration
-runs, all at analyzer 2.3.4 (the controls and Ballroom runs at commit `9682a4a` of #244, the
-GiantSteps+ runs at `2901b7f` of #256: the same analyzer code, a harness changed only in how
-it writes the report); GiantSteps Tempo, its calibration, the golden set and the costs were
-not run for it, and were last measured for the 2026-10-25 report, at analyzer 2.1.0. Runs made
-on the same day (UTC) go into one dated report. The results file keeps each run's commit and
-analyzer version. The Markdown gives the commit of a tempo or key run in that run's section;
-the calibration section lists the commits of the calibration and controls runs together,
-without saying which run was made at which. The single-source rule came in 2.2.0; on the
-GiantSteps+ keys at 2.3.4 it withholds none of the 250 clips, and every clip's key, strength,
-score and reason for withholding is the same as at 2.1.0 (two reasons are worded differently).
+800-829) is evaluation only: the choice does not see it and no test pins it.
+`scripts/drum_rules.py` measures rules that could withhold the keys of the toms, kit toms and
+tabla, on every control and GiantSteps+ clip whose key the newest report's runs served. It
+analyses each again and stops before reporting if any differs from the report (`uv run python
+scripts/drum_rules.py ../reports/audio-2026-10-29.json`, 5-11 min at `--jobs 4` on a shared
+machine; in a fresh environment, run it once with `--jobs 1` first, as librosa's numba cache
+written by several workers at once can crash them). Each rule's thresholds are chosen on a
+training half and judged on the rest, with one threshold for both estimators: seeded controls go
+by seed (500-529 and 700-729 train, 600-629 and 800-829 are held out), the unseeded controls and
+the clips alternately, sorted by name, so near-copies of one chord in the grids fall on both
+sides. All five rules were first measured on all the data; the split came later, with two of the
+first three measures revised, and two rules (membrane modes or a falling partial, and the tabla
+pair) were proposed after held-out numbers had been seen, so no held-out number is an untouched
+test. The membrane-mode rule takes no right key among the controls and clips, but a chord with a
+minor sixth over a strong partial (a major triad in first inversion, a minor triad in second)
+reads as membrane modes too (`tests/test_drum_rules.py` pins one whose right key it would take).
+None is shipped; services/audio/README.md gives the numbers and the reasons.
+A report whose runs were made with different analyzer versions says so at the top. The
+2026-10-29 report holds the controls, the Ballroom tempo and calibration runs, and the
+GiantSteps+ key and calibration runs, all at analyzer 2.3.4 (the controls and Ballroom runs at
+commit `9682a4a` of #244, the GiantSteps+ runs at `2901b7f` of #256: the same analyzer code, a
+harness changed only in how it writes the report); GiantSteps Tempo, its calibration, the golden
+set and the costs were not run for it, and were last measured for the 2026-10-25 report, at
+analyzer 2.1.0. Runs made on the same day (UTC) go into one dated report. The results file keeps
+each run's commit and analyzer version. The Markdown gives the commit of a tempo or key run in
+that run's section; the calibration section lists the commits of the calibration and controls
+runs together, without saying which run was made at which. The single-source rule came in 2.2.0;
+on the GiantSteps+ keys at 2.3.4 it withholds none of the 250 clips, and every clip's key,
+strength, score and reason for withholding is the same as at 2.1.0 (two reasons are worded
+differently).
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

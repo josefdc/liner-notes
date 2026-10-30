@@ -189,7 +189,8 @@ It compares the lock npm ci would use (`npm-shrinkwrap.json` if there is one, el
 `package-lock.json` is also compared with `package-lock.json` at `<ref>`, so it cannot change
 unchecked and take over when the shrinkwrap is removed. An entry counts as changed when it is new
 or its version, resolved URL, integrity, name, link, bundle or `hasShrinkwrap` flag changed. A
-changed entry fails if its `name` field is not a valid package name, or if it has `hasShrinkwrap`
+changed entry fails if its `name` field is not a package name npm accepts (its rule for old
+packages, which allows a leading `_` in a scope and `!'()*`), or if it has `hasShrinkwrap`
 (npm then installs what the package's own shrinkwrap names). Otherwise it must be one of:
 
 - an `https://registry.npmjs.org/<name>/-/<basename>-<version>.tgz` tarball (`<basename>` is the
@@ -198,6 +199,8 @@ changed entry fails if its `name` field is not a valid package name, or if it ha
   with a resolved URL are checked the same way;
 - an entry with no resolved URL but a semver version and an integrity, which npm resolves again
   as that version;
+- a bundled (`inBundle`) entry with no resolved URL and no integrity, when the nearest entry above
+  it that is not bundled is new or changed here, and so checked: its bytes come from that tarball;
 - a workspace package, or a link to one of the `workspaces` at `<ref>` (in its lock's root entry or
   its `package.json`) or in the working tree's `package.json`, which npm ci reads (no check
   needed). A workspace that only the working tree's `package.json` declares must be a local folder
@@ -210,26 +213,34 @@ the check, and the lock's integrity agrees with the one npmjs lists for that ver
 lists for that version, and every hash must match. Anything else fails (exit 1): git, codeload,
 `file:`, `http:` or other-host tarballs, links to other folders, an entry that disagrees with its
 tarball, a missing integrity or one that differs from npmjs's, a bundled entry with no resolved URL
-and no integrity (if its parent does not bundle it, npm resolves it with nothing to verify it
-against, so a dependency that bundles its own dependencies needs a maintainer), a version that is
-not semver or has no publish time, or a release that is too new (named with its version, publish
-time and age).
+and no integrity under a package whose tarball is not checked here (unchanged, a workspace, or
+not a registry release; if that package does not bundle it after all, npm resolves it with nothing
+to verify it against), a version that is not semver or has no publish time, or a release that is
+too new (named with its version, publish time and age). The hint to resolve the lock again with npm and its `min-release-age` is printed only for failures
+that doing so can fix (a release too new, or an entry that disagrees with npmjs or lacks an
+integrity); any other failure gets a note that the change must be undone or approved.
 
-Two other changes fail too, even with an unchanged lock:
+Two more things fail, even with an unchanged lock:
 
 - a change to npm's registry settings in `.npmrc` (`registry`, `<scope>:registry`,
   `replace-registry-host`), which decide where npm ci fetches the tarballs from. A maintainer
   changes them on the base branch, past this check;
 - a dependency spec in the root or a workspace `package.json` (`dependencies`, `devDependencies`,
   `optionalDependencies`, `peerDependencies`, `overrides`) that is not a registry range, a tag, an
-  `npm:` alias of one, or a `file:` or `workspace:` path to a workspace folder. npm ci resolves a
-  spec the lock no longer satisfies again, outside the lock, so a git or URL dependency would
-  escape the age rule.
+  `npm:` alias of one, a `$name` override reference to a dependency the root `package.json`
+  declares, or a `file:` path to a workspace folder (a `workspace:` spec is let through: npm does
+  not support it and stops). npm ci resolves a spec the lock no longer satisfies again, outside the
+  lock, so a git or URL dependency would escape the age rule.
 
 What it does not cover:
 
 - other `.npmrc` settings that change where the bytes come from or how they are fetched:
   proxies, `userconfig` and `globalconfig`, CA and TLS settings;
+- `workspaces` patterns other than plain names, `*` and `**` (braces, `[]`, `?` and negation);
+- `min-release-age-exclude[]` and `before`: a release npm would let through because of them still
+  fails here;
+- a dependency published with a shrinkwrap (`hasShrinkwrap`): it fails, and a maintainer must
+  approve it;
 - in CI, when the commit before a push to `main` cannot be fetched (after a force-push, or in a
   private repository without credentials), the job compares with the parent commit, with a
   notice, so it checks only the last commit of that push.

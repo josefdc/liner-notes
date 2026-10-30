@@ -183,8 +183,9 @@ const release = (name, version) => ({
   integrity: integrityOf(name, version),
 });
 
-const BUNDLED =
-  "bundled, with no resolved URL and no integrity: if its parent does not bundle it, npm resolves it with nothing to verify it against";
+/** The failure of a bundled entry with no resolved URL or integrity under an unchanged `owner`. */
+const bundledUnder = (owner) =>
+  `bundled in ${owner}, whose tarball is not checked here, with no resolved URL and no integrity: if it is not bundled after all, npm resolves it with nothing to verify it against`;
 const notWorkspace = (target) =>
   `a link to "${target}", which is not a workspace of the base or (as a local folder, with no integrity) of package.json`;
 
@@ -384,12 +385,16 @@ describe("lockChanges", () => {
       checked("node_modules/parent/node_modules/old", "old", "1.0.0"),
       checked("node_modules/parent/node_modules/child", "child", "1.1.0"),
     ]);
-    // The removed entry ("gone") is in no list; the git dependency and the bundled entry with no
-    // integrity fail closed.
+    // The removed entry ("gone") is in no list; the git dependency fails closed; the bundled entry
+    // comes from node_modules/old's tarball, which is checked.
     expect(allowed).toEqual([
       { path: "apps/api", reason: "workspace package" },
       { path: "apps/web", reason: "workspace package" },
       { path: "node_modules/@fixture/web", reason: "link to the workspace apps/web" },
+      {
+        path: "node_modules/old/node_modules/bundled",
+        reason: "bundled in node_modules/old, which is checked",
+      },
     ]);
     expect(problems).toEqual([
       {
@@ -398,7 +403,6 @@ describe("lockChanges", () => {
           "resolved from git+ssh://git@github.com/example/from-git.git#0123456789abcdef0123456789abcdef01234567: " +
           "not a tarball from https://registry.npmjs.org/",
       },
-      { path: "node_modules/old/node_modules/bundled", reason: BUNDLED },
     ]);
   });
 
@@ -587,19 +591,16 @@ describe("lockChanges", () => {
     expect(workspacesOf(undefined)).toEqual([]);
   });
 
-  it("checks inBundle entries like any other, and fails one with no resolved URL or integrity", () => {
+  it("checks inBundle entries with a resolved URL like any other", () => {
     const base = { "node_modules/p": release("p", "1.0.0") };
     const head = {
       "node_modules/p": release("p", "1.1.0"),
       // A resolved URL: npm fetches it when the parent does not bundle it.
       "node_modules/p/node_modules/x": { ...release("x", "9.9.9"), inBundle: true },
-      // No resolved URL or integrity: npm resolves y@1.0.0, unverified, if the parent does not
-      // bundle it.
-      "node_modules/p/node_modules/y": { version: "1.0.0", inBundle: true },
-      "node_modules/p/node_modules/z": { version: "latest", inBundle: true },
     };
     const { check, allowed, problems } = lockChanges(base, head);
     expect(allowed).toEqual([]);
+    expect(problems).toEqual([]);
     expect(check).toEqual([
       { path: "node_modules/p", name: "p", version: "1.1.0", integrity: integrityOf("p", "1.1.0") },
       {
@@ -609,9 +610,75 @@ describe("lockChanges", () => {
         integrity: integrityOf("x", "9.9.9"),
       },
     ]);
-    expect(problems).toEqual([
-      { path: "node_modules/p/node_modules/y", reason: BUNDLED },
-      { path: "node_modules/p/node_modules/z", reason: BUNDLED },
+  });
+
+  it("allows a bundled entry with no resolved URL or integrity when the package that bundles it is checked", () => {
+    const base = {
+      "node_modules/p": release("p", "1.0.0"),
+      "node_modules/q": release("q", "1.0.0"),
+    };
+    const head = {
+      // p is new here: checked, so its tarball's bundled files come with it.
+      "node_modules/p": release("p", "1.1.0"),
+      "node_modules/p/node_modules/y": { version: "1.0.0", inBundle: true },
+      // Nested bundled entries belong to the nearest package above them that is not bundled.
+      "node_modules/p/node_modules/y/node_modules/@s/z": { version: "latest", inBundle: true },
+      // q is unchanged, so the tarball that would hold this entry is not checked here.
+      "node_modules/q": release("q", "1.0.0"),
+      "node_modules/q/node_modules/w": { version: "1.0.0", inBundle: true },
+      // A top-level bundled entry has no package above it.
+      "node_modules/v": { version: "1.0.0", inBundle: true },
+      // r's own entry fails, so the entry it bundles does too.
+      "node_modules/r": { version: "1.0.0", resolved: "git+ssh://git@github.com/e/r.git" },
+      "node_modules/r/node_modules/u": { version: "1.0.0", inBundle: true },
+      // Bundled with an integrity: checked by its version, as any entry with no resolved URL.
+      "node_modules/p/node_modules/i": {
+        ...release("i", "1.0.0"),
+        resolved: undefined,
+        inBundle: true,
+      },
+      // Bundled with a resolved URL but no integrity: a tarball entry, which needs one.
+      "node_modules/p/node_modules/t": {
+        ...release("t", "1.0.0"),
+        integrity: undefined,
+        inBundle: true,
+      },
+      // The entry between it and p is missing, so nothing is known to bundle it.
+      "node_modules/p/node_modules/gone/node_modules/m": { version: "1.0.0", inBundle: true },
+      // A workspace package needs no check, so nothing checks what it would bundle.
+      "packages/w": { name: "w", version: "1.0.0" },
+      "packages/w/node_modules/b": { version: "1.0.0", inBundle: true },
+    };
+    const { check, allowed, problems } = lockChanges(base, head, ["packages/*"]);
+    expect(check.map((entry) => entry.path)).toEqual([
+      "node_modules/p",
+      "node_modules/p/node_modules/i",
+    ]);
+    expect(allowed).toEqual([
+      { path: "packages/w", reason: "workspace package" },
+      {
+        path: "node_modules/p/node_modules/y",
+        reason: "bundled in node_modules/p, which is checked",
+      },
+      {
+        path: "node_modules/p/node_modules/y/node_modules/@s/z",
+        reason: "bundled in node_modules/p, which is checked",
+      },
+    ]);
+    expect(problems.map(({ path, reason }) => [path, reason])).toEqual([
+      ["node_modules/r", expect.stringMatching(/^resolved from git\+ssh:/)],
+      ["node_modules/p/node_modules/t", "t@1.0.0 has no integrity in the lock"],
+      ["node_modules/q/node_modules/w", bundledUnder("node_modules/q")],
+      [
+        "node_modules/v",
+        "bundled with no resolved URL and no integrity: if it is not bundled after all, npm resolves it with nothing to verify it against",
+      ],
+      ["node_modules/r/node_modules/u", bundledUnder("node_modules/r")],
+      [
+        "node_modules/p/node_modules/gone/node_modules/m",
+        "bundled with no resolved URL and no integrity: if it is not bundled after all, npm resolves it with nothing to verify it against",
+      ],
+      ["packages/w/node_modules/b", bundledUnder("packages/w")],
     ]);
   });
 });
@@ -647,6 +714,47 @@ describe("names and dependency specs", () => {
         { "node_modules/a@x": { version: "1.0.0", integrity: integrityOf("a", "1") } },
       ).problems[0].reason,
     ).toBe('no resolved URL, and its path names "a@x", not a package name');
+  });
+
+  it("takes names as npm's rule for old packages does, and never one npm reads as a URL or path", () => {
+    const valid = (name) =>
+      lockChanges({}, { "node_modules/x": { version: "1.0.0", integrity: "sha512-AA==", name } })
+        .problems.length === 0;
+    for (const name of [
+      "JSONStream",
+      "@scope/_foo",
+      "@_scope/foo",
+      "@.scope/foo",
+      "foo!",
+      "foo(bar)",
+      "it's",
+      "foo*",
+      "@sc*pe/foo",
+      "~foo",
+      "a".repeat(215),
+    ]) {
+      expect(valid(name), name).toBe(true);
+    }
+    for (const name of [
+      "@scope/.foo",
+      "@sc#pe/foo",
+      "@scope/a:b",
+      "-foo",
+      "_foo",
+      "node_modules",
+      "Favicon.ico",
+      "@foo",
+      "@/foo",
+      "@scope/",
+      " foo",
+      "a:b",
+      "a#b",
+      "a%2fb",
+      "a/b",
+      "git+ssh://x",
+    ]) {
+      expect(valid(name), name).toBe(false);
+    }
   });
 
   it.each([
@@ -796,7 +904,7 @@ describe("run", () => {
     expect(code).toBe(0);
     expect(out).not.toContain("no new or changed");
     expect(out).toContain(
-      "0 registry releases to check, 3 workspace entries with no check needed, 0 failures before any registry request",
+      "0 registry releases to check, 3 entries with no check needed, 0 failures before any registry request",
     );
     expect(out).toContain(
       "  no check needed  node_modules/@fixture/web: link to the workspace apps/web",
@@ -831,7 +939,7 @@ describe("run", () => {
       repo({ head: { "package.json": packageJson, "package-lock.json": text(lock) } }),
     );
     expect(code).toBe(0);
-    expect(out).toContain("2 workspace entries with no check needed, 0 failures");
+    expect(out).toContain("2 entries with no check needed, 0 failures");
     expect(out).toContain(
       "  no check needed  node_modules/@fixture/new: link to the workspace packages/new, added in package.json",
     );
@@ -892,19 +1000,23 @@ describe("run", () => {
     );
     expect(code).toBe(1);
     expect(out).toContain(
-      "5 registry releases to check, 3 workspace entries with no check needed, 2 failures before any registry request; minimum age 14 days",
+      "5 registry releases to check, 4 entries with no check needed, 1 failure before any registry request; minimum age 14 days",
     );
     // Two versions of "old" (node_modules/old and parent/node_modules/old), one request.
     expect(out).toContain("ok   old@1.0.0  published 2025-01-01T00:00:00.000Z");
     expect(out).toContain("ok   old@1.1.0  published 2026-09-01T00:00:00.000Z");
     expect(out).toContain("[release-age] 4 registry requests; 5 integrities match the registry's");
     const lines = err.split("\n");
-    expect(lines[0]).toBe("[release-age] 3 failures (minimum age 14 days):");
+    expect(lines[0]).toBe("[release-age] 2 failures (minimum age 14 days):");
     expect(lines[1]).toMatch(
       /^ {2}node_modules\/from-git: resolved from git\+ssh:.* not a tarball from/,
     );
-    expect(lines[2]).toBe(`  node_modules/old/node_modules/bundled: ${BUNDLED}`);
-    expect(lines[3]).toMatch(/^ {2}fresh@1\.1\.0 was published /);
+    expect(lines[2]).toMatch(/^ {2}fresh@1\.1\.0 was published /);
+    // One hint for the release that is too new, one for the git dependency.
+    expect(lines[3]).toMatch(/^\[release-age\] take registry releases that are old enough/);
+    expect(lines[4]).toBe(
+      "[release-age] re-resolving the lock does not fix the other failures: undo the change, or a maintainer must approve it",
+    );
     expect(lines).toHaveLength(5);
     expect([...calls].sort()).toEqual([
       "https://registry.npmjs.org/@scope%2fedge",
@@ -1016,14 +1128,35 @@ describe("run", () => {
     ]);
   });
 
-  it("fails an inBundle entry with no resolved URL or integrity, however old its version", async () => {
+  it("fails a bundled entry with no resolved URL or integrity under an unchanged package", async () => {
     const path = "node_modules/old/node_modules/ok";
     const { code, err, calls } = await check(
       changed({ [path]: { version: "1.0.0", inBundle: true } }),
     );
     expect(code).toBe(1);
-    expect(err).toContain(`  ${path}: ${BUNDLED}`);
+    expect(err).toContain(`  ${path}: ${bundledUnder("node_modules/old")}`);
+    // Re-resolving the lock would not help here.
+    expect(err).not.toContain("take registry releases");
+    expect(err).toContain("re-resolving the lock does not fix these failures");
     expect(calls).toEqual([]);
+  });
+
+  it("passes bundled entries with no resolved URL or integrity under a package checked here", async () => {
+    const lock = lockWith({
+      "node_modules/old": release("old", "1.1.0"),
+      "node_modules/old/node_modules/ok": { version: "1.0.0", inBundle: true },
+      "node_modules/old/node_modules/ok/node_modules/deep": { version: "2.0.0", inBundle: true },
+    });
+    const { code, out, err, calls } = await check(
+      repo({ head: { "package-lock.json": text(lock) } }),
+    );
+    expect(err).toBe("");
+    expect(code).toBe(0);
+    expect(out).toContain(
+      "  no check needed  node_modules/old/node_modules/ok: bundled in node_modules/old, which is checked",
+    );
+    expect(out).toContain("ok   old@1.1.0");
+    expect(calls).toEqual(["https://registry.npmjs.org/old"]);
   });
 
   it("fails a bundled entry whose name field is not a string (A1)", async () => {
@@ -1125,6 +1258,78 @@ describe("run", () => {
     expect(code).toBe(1);
     expect(err).toContain('package.json: overrides["old"] is "https://evil.example/old-1.0.0.tgz"');
     expect(err).not.toContain('overrides["parent"]');
+  });
+
+  it.each([
+    ["a release too new", { "node_modules/fresh": release("fresh", "1.1.0") }],
+    [
+      "an entry that disagrees with its tarball",
+      { "node_modules/old": { ...release("old", "1.0.0"), version: "1.0.1" } },
+    ],
+    [
+      "an entry with no integrity",
+      { "node_modules/old": { ...release("old", "1.1.0"), integrity: undefined } },
+    ],
+    [
+      "an integrity that is not the registry's",
+      {
+        "node_modules/old": { ...release("old", "1.0.0"), integrity: integrityOf("old", "6.6.6") },
+      },
+    ],
+  ])("hints at re-resolving the lock, and only that, for %s", async (_, changes) => {
+    const { code, err } = await check(changed(changes));
+    expect(code).toBe(1);
+    expect(err).toContain("take registry releases that are old enough");
+    expect(err).not.toContain("re-resolving the lock does not fix");
+  });
+
+  it("follows a $name override only to a dependency the root package.json declares", async () => {
+    const run = (manifest) =>
+      check(repo({ head: { "package.json": `${JSON.stringify(manifest)}\n` } }));
+    // Declared at the root (in any of the four fields): that spec is the one checked.
+    const declared = await run({
+      devDependencies: { old: "^1.0.0" },
+      overrides: { child: "$old" },
+    });
+    expect(declared.err).toBe("");
+    expect(declared.code).toBe(0);
+    // Not declared, or declared empty: npm takes it from each dependent, which is not followed.
+    for (const manifest of [
+      { overrides: { child: "$old" } },
+      { dependencies: { old: "" }, overrides: { child: "$old" } },
+    ]) {
+      const { code, err } = await run(manifest);
+      expect(code).toBe(1);
+      expect(err).toContain(
+        'package.json: overrides["child"] is "$old": a reference to "old", which the root package.json does not declare, so npm takes it from each dependent',
+      );
+    }
+    // In a workspace's package.json too, the reference is looked up in the root's.
+    const workspace = (root, api) => {
+      const dir = repo({
+        head: { "package.json": `${JSON.stringify({ workspaces: ["apps/*"], ...root })}\n` },
+      });
+      mkdirSync(join(dir, "apps", "api"), { recursive: true });
+      writeFileSync(join(dir, "apps", "api", "package.json"), `${JSON.stringify(api)}\n`);
+      return check(dir);
+    };
+    const fromRoot = await workspace(
+      { dependencies: { old: "^1.0.0" } },
+      { overrides: { child: "$old" } },
+    );
+    expect(fromRoot.err).toBe("");
+    expect(fromRoot.code).toBe(0);
+    const fromSelf = await workspace(
+      {},
+      {
+        dependencies: { old: "^1.0.0" },
+        overrides: { child: "$old" },
+      },
+    );
+    expect(fromSelf.code).toBe(1);
+    expect(fromSelf.err).toContain(
+      'apps/api/package.json: overrides["child"] is "$old": a reference to "old", which the root package.json does not declare',
+    );
   });
 
   it("checks the package.json of every workspace folder, and passes plain ranges", async () => {
@@ -1524,7 +1729,7 @@ describe("run", () => {
     );
     // With no workspaces at the base, the workspace package and its link fail too.
     expect(out).toContain(
-      "6 registry releases to check, 0 workspace entries with no check needed, 2 failures",
+      "6 registry releases to check, 0 entries with no check needed, 2 failures",
     );
     expect(err).toContain("fresh@1.1.0 was published");
   });

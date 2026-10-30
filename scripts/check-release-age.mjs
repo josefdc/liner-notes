@@ -15,8 +15,11 @@
 // Threat model: this guards against honest mistakes like that one. It is not a security boundary
 // against a change written to defeat it; such a change could as well edit the CI workflow.
 // Not covered: .npmrc settings other than the registry ones below (proxies, userconfig,
-// globalconfig, CA and TLS settings), and in CI the fallback to the parent commit when the commit
-// before a push cannot be fetched.
+// globalconfig, CA and TLS settings); workspace patterns other than * and ** globs (braces, [],
+// ?, negation); min-release-age-exclude[] and `before`, which npm honours but this check does
+// not (an excluded release still fails here); and in CI the fallback to the parent commit when
+// the commit before a push cannot be fetched. A dependency published with a shrinkwrap
+// (hasShrinkwrap) needs a maintainer.
 //
 // Locks: npm ci uses npm-shrinkwrap.json when there is one, else package-lock.json. The head's
 // lock is compared with the one npm would have used at <git-ref> (its shrinkwrap if it had one);
@@ -32,6 +35,8 @@
 //   field (an npm alias) or else its path, with an integrity;
 // - an entry with no resolved URL but a semver version and an integrity, which npm resolves again
 //   from the registry as name@version;
+// - a bundled (inBundle) entry with no resolved URL and no integrity, when the nearest entry above
+//   it that is not bundled is new or changed here and checked: its bytes come from that tarball;
 // - a workspace package, or a link to one of the `workspaces` of the base (its lock's root entry
 //   or its package.json), or of the working tree's package.json, which npm ci reads (a workspace
 //   added there must be a local folder with no resolved URL or integrity, and its link must
@@ -42,11 +47,13 @@
 // sha1): every hash in it must parse, use an algorithm the registry lists, and match. Anything
 // else fails closed (exit 1): git, codeload, file, http or other-host tarballs, links elsewhere,
 // an entry whose fields disagree with its tarball, a version that is not semver, an entry with no
-// integrity (including a bundled one, which npm resolves with nothing to verify it against when
-// the parent does not bundle it). So does a change to npm's registry settings in .npmrc
-// (registry, <scope>:registry, replace-registry-host), and a dependency spec in the root or a
-// workspace package.json that is not a registry range, a tag, an npm: alias of one, or a path to
-// a workspace: npm ci would resolve such a spec again, outside the lock.
+// integrity (including a bundled one under a package whose tarball is not checked here: if it is
+// not bundled after all, npm resolves it with nothing to verify it against). So does a change to
+// npm's registry settings in .npmrc (registry, <scope>:registry, replace-registry-host), and a
+// dependency spec in the root or a workspace package.json that is not a registry range, a tag, an
+// npm: alias of one, a `$name` reference to a dependency of the root package.json, or a file:
+// path to a workspace folder (a `workspace:` spec is let through: npm does not support it and
+// stops): npm ci would resolve such a spec again, outside the lock.
 // Packuments are the full ones (the abbreviated one has no `time`), one request per name; an
 // unchanged lock makes no registry request.
 //
@@ -74,13 +81,16 @@ const ATTEMPTS = 3;
 const MAX_RETRY_AFTER_MS = 30_000;
 const CONCURRENCY = 4;
 const PREFIX = "[release-age]";
+// Failures that resolving the lock again with npm fixes.
+const RESOLVABLE =
+  / was published |but resolved is the tarball of|no integrity in the lock|is not the registry's/;
 // https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 // Compared to decide whether an entry changed.
 const FIELDS = ["version", "resolved", "integrity", "name", "link", "inBundle", "hasShrinkwrap"];
-// npm's rule for package names (validate-npm-package-name), with the capitals of old packages.
-const PACKAGE_NAME = /^(?:@[a-z0-9\-*~][a-z0-9\-*._~]*\/)?[a-z0-9\-~][a-z0-9\-._~]*$/i;
+// A package name, an optional scope and a name, split as validate-npm-package-name splits it.
+const SCOPED_NAME = /^(?:@([^/]+?)\/)?([^/]+?)$/;
 
 /** The check could not run (exit 2). */
 export class CheckError extends Error {}
@@ -282,9 +292,33 @@ export function compareIntegrity(lockIntegrity, dist) {
 
 const pathName = (path) => path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
 const inNodeModules = (path) => /(?:^|\/)node_modules\//.test(path);
-/** Whether `name` is a package name npm would accept (with the capitals of old packages). */
-const isPackageName = (name) =>
-  typeof name === "string" && name.length <= 214 && PACKAGE_NAME.test(name);
+/**
+ * Whether `name` is a package name by validate-npm-package-name's rule for old packages (capitals,
+ * long names and `~'!()*` allowed). Each part must be URL-safe as it is, so no accepted name holds
+ * the `/`, `:`, `#` or `@` that would make npm read `name@version` as a URL, git or path spec.
+ */
+function isPackageName(name) {
+  if (typeof name !== "string" || name === "" || name.trim() !== name) return false;
+  if (/^[._-]/.test(name)) return false;
+  if (["node_modules", "favicon.ico"].includes(name.toLowerCase())) return false;
+  if (encodeURIComponent(name) === name) return true;
+  const match = SCOPED_NAME.exec(name);
+  if (!match || match[1] === undefined || match[2].startsWith(".")) return false;
+  return match.slice(1).every((part) => encodeURIComponent(part) === part);
+}
+
+/** The path of the nearest entry above `path` that is not itself bundled, or null. */
+function bundlerOf(packages, path) {
+  let current = path;
+  for (;;) {
+    const at = current.lastIndexOf("/node_modules/");
+    if (at === -1) return null;
+    current = current.slice(0, at);
+    const entry = packages[current];
+    if (!entry) return null;
+    if (entry.inBundle !== true) return current;
+  }
+}
 
 /** The `workspaces` patterns of a package.json or lock root entry (an array, or `{ packages }`). */
 export function workspacesOf(manifest) {
@@ -327,6 +361,7 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
   const check = [];
   const allowed = [];
   const problems = [];
+  const bundled = [];
   for (const [path, entry] of Object.entries(headPackages)) {
     if (path === "") continue;
     const before = basePackages[path];
@@ -368,12 +403,8 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
         );
       }
     } else if (entry.inBundle === true && entry.resolved === undefined && plain) {
-      // If the parent does not bundle it after all, npm resolves name@version from the registry
-      // with nothing to verify the bytes against.
-      fail(
-        "bundled, with no resolved URL and no integrity: if its parent does not bundle it, npm " +
-          "resolves it with nothing to verify it against",
-      );
+      // Decided once every entry is sorted: see below.
+      bundled.push(path);
     } else if (typeof entry.resolved === "string") {
       const tarball = parseTarball(entry.resolved);
       if (tarball.error) {
@@ -411,6 +442,25 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
       fail("no resolved URL and no version");
     }
   }
+  // A bundled entry with no resolved URL and no integrity comes from the tarball of the package
+  // that bundles it, when that package is new or changed here and so checked itself. If the
+  // package does not bundle it after all, npm resolves name@version with nothing to verify it
+  // against, so under any other package (unchanged, a workspace, or failing here) it fails closed.
+  const checked = new Set(check.map((entry) => entry.path));
+  for (const path of bundled) {
+    const owner = bundlerOf(headPackages, path);
+    if (owner !== null && checked.has(owner)) {
+      allowed.push({ path, reason: `bundled in ${owner}, which is checked` });
+    } else {
+      problems.push({
+        path,
+        reason:
+          `bundled${owner === null ? "" : ` in ${owner}, whose tarball is not checked here,`} ` +
+          "with no resolved URL and no integrity: if it is not bundled after all, npm resolves " +
+          "it with nothing to verify it against",
+      });
+    }
+  }
   return { check, allowed, problems };
 }
 
@@ -429,9 +479,10 @@ const isRangeOrTag = (text) =>
 
 /**
  * Why npm would resolve a package.json dependency `spec` outside the registry, or null when it is a
- * registry range, a tag, an npm: alias of one, or a workspace: or file: path to a workspace folder
- * (`isWorkspaceFolder`, given the path relative to the repository root). `from` is the folder of
- * the package.json, relative to the root ("" for the root).
+ * registry range, a tag, an npm: alias of one, or a file: path to a workspace folder
+ * (`isWorkspaceFolder`, given the path relative to the repository root). A `workspace:` spec with
+ * a range is let through: npm does not support the protocol and stops. `from` is the folder of the
+ * package.json, relative to the root ("" for the root).
  */
 export function specProblem(spec, isWorkspaceFolder = () => false, from = "") {
   if (typeof spec !== "string") return "not a string";
@@ -462,8 +513,11 @@ export function specProblem(spec, isWorkspaceFolder = () => false, from = "") {
     : "not a registry range, a tag, an npm: alias of one, or a path to a workspace";
 }
 
-/** The dependency specs of a package.json, including `overrides`, as [label, spec] pairs. */
-function dependencySpecs(manifest) {
+/**
+ * The dependency specs of a package.json, including `overrides`, as [label, spec] pairs, or
+ * [label, spec, problem] for a `$name` override reference that cannot be checked.
+ */
+function dependencySpecs(manifest, rootManifest = manifest) {
   const specs = [];
   for (const field of DEPENDENCY_FIELDS) {
     const deps = manifest?.[field];
@@ -481,8 +535,24 @@ function dependencySpecs(manifest) {
         walk(`${label}[${JSON.stringify(key)}]`, inner);
       }
     } else if (typeof value === "string" && /^\$/.test(value)) {
-      // A reference to a root dependency's spec, which is checked on its own.
-      specs.push([label, isPackageName(value.slice(1)) ? "*" : value]);
+      // npm takes `$name` from the root package.json's dependencies when it declares `name` (that
+      // spec is checked on its own); otherwise from each dependent's own package.json, which this
+      // check does not follow.
+      const ref = value.slice(1);
+      const declared = DEPENDENCY_FIELDS.some((field) => {
+        const spec = rootManifest?.[field]?.[ref];
+        return typeof spec === "string" && spec !== "";
+      });
+      if (declared) {
+        specs.push([label, "*"]);
+      } else {
+        specs.push([
+          label,
+          value,
+          `a reference to "${ref}", which the root package.json does not declare, so npm takes ` +
+            "it from each dependent",
+        ]);
+      }
     } else {
       specs.push([label, value]);
     }
@@ -547,12 +617,14 @@ function packageJsonProblems(cwd, patterns, isWorkspaceFolder) {
       existsSync(join(cwd, folder, "package.json")),
     ),
   ];
+  let rootManifest = null;
   for (const folder of folders) {
     const file = folder ? `${folder}/package.json` : "package.json";
     if (!existsSync(join(cwd, file))) continue;
     const manifest = parseJson(readFileSync(join(cwd, file), "utf8"), file);
-    for (const [label, spec] of dependencySpecs(manifest)) {
-      const problem = specProblem(spec, isWorkspaceFolder, folder);
+    if (folder === "") rootManifest = manifest;
+    for (const [label, spec, reason] of dependencySpecs(manifest, rootManifest)) {
+      const problem = reason ?? specProblem(spec, isWorkspaceFolder, folder);
       if (problem) {
         const shown =
           typeof spec === "string" ? JSON.stringify(redact(spec)) : JSON.stringify(spec);
@@ -948,7 +1020,7 @@ export async function run(argv, options = {}) {
     log(
       `${PREFIX} ${against}: ` +
         `${plural(check.length, "registry release", "registry releases")} to check, ` +
-        `${plural(allowed.length, "workspace entry", "workspace entries")} with no check needed, ` +
+        `${plural(allowed.length, "entry", "entries")} with no check needed, ` +
         `${plural(failures.length, "failure", "failures")} before any registry request; ` +
         `minimum age ${minDays} days (the largest of 14 and min-release-age in .npmrc at ${ref} ` +
         "and in the working tree)",
@@ -1019,10 +1091,22 @@ export async function run(argv, options = {}) {
         `${PREFIX} ${plural(failures.length, "failure", "failures")} (minimum age ${minDays} days):`,
       );
       for (const failure of failures) error(`  ${failure}`);
-      error(
-        `${PREFIX} take registry releases that are old enough, and resolve the lock with npm and ` +
-          "its min-release-age (.npmrc) instead of editing it by hand",
-      );
+      // Re-resolving the lock fixes a release that is too new, an entry that disagrees with its
+      // tarball, and a missing or wrong integrity; nothing else.
+      const resolvable = failures.filter((failure) => RESOLVABLE.test(failure)).length;
+      if (resolvable > 0) {
+        error(
+          `${PREFIX} take registry releases that are old enough, and resolve the lock with npm ` +
+            "and its min-release-age (.npmrc) instead of editing it by hand",
+        );
+      }
+      if (resolvable < failures.length) {
+        error(
+          `${PREFIX} re-resolving the lock does not fix ` +
+            `${resolvable > 0 ? "the other failures" : "these failures"}: undo the change, or a ` +
+            "maintainer must approve it",
+        );
+      }
       return 1;
     }
     log(`${PREFIX} every changed registry release is at least ${minDays} days old`);

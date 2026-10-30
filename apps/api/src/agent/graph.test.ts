@@ -7,14 +7,22 @@
  * - when every model call fails with 429, the run makes at most MAX_LLM_CALLS_PER_RUN calls,
  *   returns the honest fallback and does not throw (it used to make 12 calls and then fail);
  * - a cancelled run stops the model call in flight;
- * - the composer runs once, after both branches (one list-form fan-in).
+ * - the composer runs once, after both branches (one list-form fan-in);
+ * - a run paused for the pick resumes after a restart on the SQLite checkpointer, also from a
+ *   database that checkpoint-sqlite 1.0 wrote.
  */
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
+import {
+  type BaseCheckpointSaver,
+  Command,
+  InMemoryStore,
+  MemorySaver,
+} from "@langchain/langgraph";
 import { analysisIssues, claimIsRejected, runIssues, TrackAnalysis } from "@liner-notes/contract";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 
@@ -171,9 +179,13 @@ import { DEEZER_MAX_PER_WINDOW, deezerPreviewByIsrc } from "../sources/deezer.js
 import { SourceError } from "../sources/http.js";
 import { setUnpacedForTests } from "../sources/pacing.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
+import { PreviewFreeSqliteSaver } from "../store/checkpointer.js";
+import { isWaitingAtInterrupt } from "../store/threads.js";
 import { ANALYZER_VERSION, audioV2, keyWithheldV2 } from "./testing/measuredAudio.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 import { statementsIn } from "./verifier/testing.js";
+
+const FIXTURES = join(import.meta.dirname, "../../test/fixtures");
 
 // The web's query names the artist: a title alone always asks which recording is meant.
 const QUERY = "Ice Ice Baby Vanilla Ice";
@@ -671,7 +683,7 @@ async function drive(
     at?: string;
     query?: string;
     /** Run on this checkpointer; with `resume`, resume its paused thread with that track id. */
-    checkpointer?: MemorySaver;
+    checkpointer?: BaseCheckpointSaver;
     resume?: string;
   } = {},
 ): Promise<Driven> {
@@ -1061,6 +1073,104 @@ describe("the analysis graph's stored results", () => {
 
     expect(complete(again.events)?.data.id).toBe("4Fcfwhm8oRrBvBZ8KGhteb");
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+  });
+});
+
+// =============================================================================
+// The pick across a restart, on the app's SQLite checkpointer
+// =============================================================================
+
+describe("the analysis graph paused for a pick, on the SQLite checkpointer", () => {
+  const TRACK_ID = "3Fcfwhm8oRrBvBZ8KGhtea";
+  const complete = (events: Driven["events"]) =>
+    events.find((event) => event.type === "complete") as { data: TrackData } | undefined;
+  const columnsOf = (db: Database.Database, table: string) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+      ({ name }) => name,
+    );
+  /** The task path of each saved write of `channel`, oldest first. */
+  const pathsOf = (db: Database.Database, threadId: string, channel: string) =>
+    (
+      db
+        .prepare("SELECT task_path FROM writes WHERE thread_id = ? AND channel = ? ORDER BY rowid")
+        .all(threadId, channel) as Array<{ task_path: string }>
+    ).map(({ task_path }) => task_path);
+
+  it("resumes the pick after a restart, from the database file alone", async () => {
+    const file = join(dir, "checkpoints.db");
+    const threadId = "t-restart";
+    const before = new Database(file);
+    const asked = await drive(stubModel(["done"]), {
+      checkpointer: new PreviewFreeSqliteSaver(before),
+      threadId,
+      query: "Ice Ice Baby",
+    });
+    expect(asked.threw).toBeNull();
+    expect(asked.events.some((event) => event.type === "candidates")).toBe(true);
+    expect(complete(asked.events)).toBeUndefined();
+    before.close();
+
+    // A new process: a new connection, saver and graph, and an empty store.
+    const after = new Database(file);
+    onTestFinished(() => {
+      after.close();
+    });
+    expect(await isWaitingAtInterrupt(after, threadId)).toBe(true);
+    const picked = await drive(stubModel(["done"]), {
+      checkpointer: new PreviewFreeSqliteSaver(after),
+      threadId,
+      resume: TRACK_ID,
+    });
+
+    expect(picked.threw).toBeNull();
+    expect(complete(picked.events)?.data).toMatchObject({ id: TRACK_ID });
+    expect(await isWaitingAtInterrupt(after, threadId)).toBe(false);
+    // Each node's writes keep the path of the task that made them (the saver passes it on): the
+    // scout offers the candidates, the clarification clears them.
+    expect(pathsOf(after, threadId, "candidates")).toEqual([
+      expect.stringContaining("scout"),
+      expect.stringContaining("clarification"),
+    ]);
+    expect(pathsOf(after, threadId, "selectedTrackId")).toEqual([
+      expect.stringContaining("clarification"),
+    ]);
+  });
+
+  it("resumes a run paused in a database written by checkpoint-sqlite 1.0", async () => {
+    const file = join(dir, "checkpoints-1.0.db");
+    const old = new Database(file);
+    old.exec(readFileSync(join(FIXTURES, "checkpoints-sqlite-1.0.4.sql"), "utf8"));
+    expect(columnsOf(old, "writes")).not.toContain("task_path");
+    old.close();
+
+    const db = new Database(file);
+    onTestFinished(() => {
+      db.close();
+    });
+    const threadId = "t-paused-1.0";
+    expect(await isWaitingAtInterrupt(db, threadId)).toBe(true);
+    const picked = await drive(stubModel(["done"]), {
+      checkpointer: new PreviewFreeSqliteSaver(db),
+      threadId,
+      resume: TRACK_ID,
+    });
+
+    expect(picked.threw).toBeNull();
+    expect(complete(picked.events)?.data).toMatchObject({
+      id: TRACK_ID,
+      title: "Ice Ice Baby",
+      queryMatch: "exact",
+    });
+    expect(await isWaitingAtInterrupt(db, threadId)).toBe(false);
+    // The saver added the column: the rows saved before it have no path, the resume's have one.
+    expect(columnsOf(db, "writes")).toContain("task_path");
+    expect(pathsOf(db, threadId, "candidates")).toEqual([
+      "",
+      expect.stringContaining("clarification"),
+    ]);
+    expect(pathsOf(db, threadId, "selectedTrackId")).toEqual([
+      expect.stringContaining("clarification"),
+    ]);
   });
 });
 

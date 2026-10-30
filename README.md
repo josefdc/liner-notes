@@ -179,28 +179,43 @@ service. npm applies the setting only when it resolves a version, so add or upda
 `npm install` and do not edit `package-lock.json` by hand.
 
 `npm run check:release-age -- --base <ref>` (`scripts/check-release-age.mjs`) compares the lock
-(`npm-shrinkwrap.json` if there is one, else `package-lock.json`) with the same file at `<ref>`
-(`package-lock.json` there for a new shrinkwrap). Every entry that is
-new or whose version, resolved URL, integrity, name, link or bundle flag changed must be one of:
+npm ci would use (`npm-shrinkwrap.json` if there is one, else `package-lock.json`) with the one npm
+would have used at `<ref>`. While both files exist, `package-lock.json` is also compared with
+`package-lock.json` at `<ref>`, so it cannot change unchecked and take over when the shrinkwrap is
+removed. Every entry that is new or whose version, resolved URL, integrity, name, link or bundle
+flag changed must be one of:
 
-- an `https://registry.npmjs.org/<name>/-/<name>-<version>.tgz` tarball whose name and semver
-  version match the entry (its `version`, and its `name` field or else its path), published at
-  least the minimum age before the check, by the tarball version's publish time on npmjs;
-- an entry with no resolved URL but a semver version, checked the same way by that version;
-- a workspace package, or a link to one of the root `workspaces` (no check needed);
-- a bundled (`inBundle`) entry inside a package checked in the same change (no check needed).
+- an `https://registry.npmjs.org/<name>/-/<basename>-<version>.tgz` tarball (`<basename>` is the
+  name without its scope) whose name and semver version match the entry (its `version`, and its
+  `name` field or else its path), with an integrity in the lock;
+- an entry with no resolved URL but a semver version and an integrity, which npm resolves again
+  as that version;
+- a bundled (`inBundle`) entry with neither a resolved URL nor an integrity: npm takes it from its
+  parent's tarball if the parent bundles it and resolves that version otherwise, so its version is
+  checked too; a bundled entry with a resolved URL is checked like any other;
+- a workspace package, or a link to one of the `workspaces` at `<ref>` (in its lock's root entry or
+  its `package.json`; no check needed). A change that adds a workspace therefore fails until the
+  workspace is on the base branch.
 
-Anything else fails (exit 1): git, codeload, `file:`, `http:` or other-host tarballs, links to
-other folders, an entry that disagrees with its tarball, a version that is not semver, a version
-with no publish time, or a release that is too new (named with its version, publish time and
-age). The
-minimum age is the largest of 14 days and `min-release-age` in `.npmrc` at `<ref>` and in the
-working tree, so a change cannot lower it for itself. Publish times come from registry.npmjs.org
-whatever npm's settings say (`--registry <url>` overrides it). The check exits 2 when it cannot
-run: an unknown base, an unreadable lock or `.npmrc`, or a registry it cannot read within three
-attempts per package and three minutes in all. An unchanged lock makes no registry request. CI
-runs it in its own job, against the parent commit on a pull request and against the commit before
-the push on `main`.
+A release passes when npmjs lists a publish time for its version at least the minimum age before
+the check and, unless it is the bundled kind above, the lock's integrity matches the one npmjs
+lists for that version (`dist.integrity`, or `dist.shasum` for a `sha1-` integrity). Anything else
+fails (exit 1): git, codeload, `file:`, `http:` or other-host tarballs, links to other folders, an
+entry that disagrees with its tarball, a missing integrity or one that differs from npmjs's, a
+version that is not semver or has no publish time, or a release that is too new (named with its
+version, publish time and age). A change to npm's registry settings in `.npmrc` (`registry`,
+`<scope>:registry`, `replace-registry-host`) fails too, even with an unchanged lock: those settings
+decide where npm ci fetches the tarballs from, which this check does not see.
+
+The minimum age is the largest of 14 days and `min-release-age` in `.npmrc` at `<ref>` and in the
+working tree (a `min-release-age[]` list counts by its largest value, which can only be stricter
+than npm), so a change cannot lower it for itself. Publish times and integrities come from
+registry.npmjs.org whatever npm's settings say (`--registry <url>` overrides it). The check exits 2
+when it cannot run: an unknown base, an unreadable lock or `.npmrc`, or a registry it cannot read
+within three attempts per package and three minutes in all. An unchanged lock with unchanged
+registry settings makes no registry request. CI runs it in its own job, against the parent commit
+on a pull request and against the commit before the push on `main` (fetched if a force-push left it
+out of the history, or the parent commit if it cannot be fetched).
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

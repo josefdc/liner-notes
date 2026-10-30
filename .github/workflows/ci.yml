@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
           # A pull request compares with the merge commit's parent; a push compares with the commit
-          # before the push, which needs the history in between.
+          # before the push, which the full history holds unless the push was forced.
           fetch-depth: ${{ github.event_name == 'push' && '0' || '2' }}
       - uses: actions/setup-node@v7
         with:
@@ -40,7 +40,13 @@ jobs:
           base=HEAD^1
           # A push that creates the branch has an all-zero "before".
           if [ "$EVENT_NAME" = push ] && [ -n "$BEFORE" ] && ! [[ "$BEFORE" =~ ^0+$ ]]; then
-            base=$BEFORE
+            # After a force-push the commit before it is not in the history: fetch it.
+            if git cat-file -e "$BEFORE^{commit}" 2>/dev/null ||
+              git fetch --no-tags --depth=1 origin "$BEFORE"; then
+              base=$BEFORE
+            else
+              echo "::notice::cannot fetch $BEFORE, the commit before the push; comparing with HEAD^1"
+            fi
           fi
           node scripts/check-release-age.mjs --base "$base"
 

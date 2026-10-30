@@ -1,18 +1,22 @@
 // Fixture tests for the release-age check, with a stub registry (no network). Run with `npm test`.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  compareIntegrity,
   DEFAULT_MIN_DAYS,
   lockChanges,
   packumentUrl,
   parseTarball,
   readMinReleaseAge,
   redact,
+  registrySettings,
   run,
+  workspacesOf,
 } from "./check-release-age.mjs";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "release-age");
@@ -37,13 +41,39 @@ for (const key of [
   delete isolatedEnv[key];
 }
 
+/** The integrity the stub registry lists for name@version (the fixture locks use the same). */
+const integrityOf = (name, version) =>
+  `sha512-${createHash("sha512").update(`${name}@${version}`).digest("base64")}`;
+/** The sha1 shasum (hex) the stub registry lists for name@version. */
+const shasumOf = (name, version) => createHash("sha1").update(`${name}@${version}`).digest("hex");
+const sha1IntegrityOf = (name, version) =>
+  `sha1-${createHash("sha1").update(`${name}@${version}`).digest("base64")}`;
+
 // Publish times of the versions in the fixture locks, as of NOW.
 const TIMES = {
   fresh: { created: ago(900), "1.0.0": "2026-01-01T00:00:00.000Z", "1.1.0": ago(3) },
   "@scope/edge": { "2.0.0": "2026-01-01T00:00:00.000Z", "2.1.0": ago(14) },
   old: { "1.0.0": "2025-01-01T00:00:00.000Z", "1.1.0": "2026-09-01T00:00:00.000Z" },
   child: { "1.0.0": "2026-01-01T00:00:00.000Z", "1.1.0": ago(20) },
+  bundled: { "1.0.0": "2025-06-01T00:00:00.000Z" },
 };
+
+/** A full packument: `time`, and a dist integrity and shasum for each version in it. */
+function packumentOf(name, time) {
+  const versions = Object.fromEntries(
+    Object.keys(time)
+      .filter((key) => /^\d/.test(key))
+      .map((version) => [
+        version,
+        {
+          name,
+          version,
+          dist: { integrity: integrityOf(name, version), shasum: shasumOf(name, version) },
+        },
+      ]),
+  );
+  return { name, "dist-tags": {}, versions, time };
+}
 
 /** A stub `fetch` serving full packuments with `times`; `calls` lists the requested URLs. */
 function stubRegistry(times = TIMES) {
@@ -52,7 +82,7 @@ function stubRegistry(times = TIMES) {
     calls.push(url);
     const name = decodeURIComponent(new URL(url).pathname.split("/").pop());
     if (!(name in times)) return new Response('{"error":"Not found"}', { status: 404 });
-    return Response.json({ name, "dist-tags": {}, versions: {}, time: times[name] });
+    return Response.json(packumentOf(name, times[name]));
   };
   return { fetch, calls };
 }
@@ -78,7 +108,7 @@ const hangs = (signal) =>
   new Promise((_resolve, reject) => {
     signal.addEventListener("abort", () => reject(signal.reason), { once: true });
   });
-const packument = (time) => () => Response.json({ name: "old", time });
+const packument = (time) => () => Response.json(packumentOf("old", time));
 
 const dirs = [];
 afterEach(() => {
@@ -90,6 +120,33 @@ const BASE_FILES = {
   ".npmrc": fixtureText("npmrc-unset"),
 };
 
+const gitIn = (dir, ...args) =>
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args,
+    ],
+    { cwd: dir, stdio: "ignore", env: isolatedEnv },
+  );
+const commitAll = (dir, message) => {
+  gitIn(dir, "add", "--all");
+  gitIn(dir, "commit", "-q", "--allow-empty", "-m", message);
+};
+const writeFiles = (dir, files) => {
+  for (const [name, text] of Object.entries(files)) {
+    if (text === null) rmSync(join(dir, name));
+    else writeFileSync(join(dir, name), text);
+  }
+};
+
 /**
  * A git repository whose HEAD commit holds `base` (file name -> text; base-lock.json as
  * package-lock.json and an .npmrc without the setting by default); `head` then writes (text) or
@@ -98,30 +155,10 @@ const BASE_FILES = {
 function repo({ base = BASE_FILES, head = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "release-age-"));
   dirs.push(dir);
-  for (const [name, text] of Object.entries(base)) writeFileSync(join(dir, name), text);
-  const git = (...args) =>
-    execFileSync("git", args, { cwd: dir, stdio: "ignore", env: isolatedEnv });
-  git("init", "-q");
-  git("add", "--all");
-  git(
-    "-c",
-    "user.name=Fixture",
-    "-c",
-    "user.email=fixture@example.invalid",
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "core.hooksPath=/dev/null",
-    "commit",
-    "-q",
-    "--allow-empty",
-    "-m",
-    "base",
-  );
-  for (const [name, text] of Object.entries(head)) {
-    if (text === null) rmSync(join(dir, name));
-    else writeFileSync(join(dir, name), text);
-  }
+  writeFiles(dir, base);
+  gitIn(dir, "init", "-q");
+  commitAll(dir, "base");
+  writeFiles(dir, head);
   return dir;
 }
 
@@ -142,7 +179,7 @@ const tarball = (name, version) =>
 const release = (name, version) => ({
   version,
   resolved: tarball(name, version),
-  integrity: "sha512-CCCC",
+  integrity: integrityOf(name, version),
 });
 
 /** Runs the check in `cwd` against HEAD; returns the exit code, output, registry calls and waits. */
@@ -191,6 +228,12 @@ describe("readMinReleaseAge", () => {
     expect(readMinReleaseAge("min-release-age=20\r\n[section]\nmin-release-age=0\n")).toBe(20);
   });
 
+  it("counts min-release-age[] values too, taking the largest", () => {
+    expect(readMinReleaseAge("min-release-age[]=30\nmin-release-age[]=20\n")).toBe(30);
+    expect(readMinReleaseAge("min-release-age=7\nmin-release-age[]=21\n")).toBe(21);
+    expect(() => readMinReleaseAge("min-release-age[]=soon\n")).toThrow(/must be a number/);
+  });
+
   it.each([
     "min-release-age=",
     "min-release-age=two",
@@ -199,6 +242,23 @@ describe("readMinReleaseAge", () => {
     "min-release-age=# only a comment",
   ])("refuses %j", (npmrc) => {
     expect(() => readMinReleaseAge(npmrc)).toThrow(/min-release-age must be a number of days/);
+  });
+});
+
+describe("registrySettings", () => {
+  it("lists registry, <scope>:registry and replace-registry-host, sorted", () => {
+    expect(
+      registrySettings(
+        "min-release-age=14\nreplace-registry-host=never\n@acme:registry=https://npm.acme/\n" +
+          "registry = https://mirror.example/ # a mirror\n//npm.acme/:_authToken=x\n" +
+          "[section]\nregistry=https://ignored/\n",
+      ),
+    ).toEqual([
+      ["@acme:registry", "https://npm.acme/"],
+      ["registry", "https://mirror.example/"],
+      ["replace-registry-host", "never"],
+    ]);
+    expect(registrySettings(fixtureText("npmrc-unset"))).toEqual([]);
   });
 });
 
@@ -233,25 +293,78 @@ describe("parseTarball", () => {
   });
 });
 
+describe("compareIntegrity", () => {
+  const dist = { integrity: integrityOf("a", "1.0.0"), shasum: shasumOf("a", "1.0.0") };
+
+  it("passes a sha512 that the registry lists, and a sha1 that matches its shasum", () => {
+    expect(compareIntegrity(integrityOf("a", "1.0.0"), dist)).toEqual({ compared: ["sha512"] });
+    expect(compareIntegrity(sha1IntegrityOf("a", "1.0.0"), dist)).toEqual({ compared: ["sha1"] });
+    expect(compareIntegrity(sha1IntegrityOf("a", "1.0.0"), { shasum: dist.shasum })).toEqual({
+      compared: ["sha1"],
+    });
+    expect(
+      compareIntegrity(`${integrityOf("a", "1.0.0")} ${sha1IntegrityOf("a", "1.0.0")}`, dist),
+    ).toEqual({ compared: ["sha512", "sha1"] });
+  });
+
+  it("fails a hash that differs, in any algorithm both have", () => {
+    expect(compareIntegrity(integrityOf("a", "9.9.9"), dist).problem).toMatch(
+      /^its integrity sha512-\S+\.\.\. is not the registry's sha512-\S+\.\.\.$/,
+    );
+    expect(compareIntegrity(sha1IntegrityOf("a", "9.9.9"), dist).problem).toMatch(
+      /^its integrity sha1-\S+ is not the registry's sha1-/,
+    );
+    expect(
+      compareIntegrity(`${integrityOf("a", "1.0.0")} ${sha1IntegrityOf("a", "9.9.9")}`, dist)
+        .problem,
+    ).toMatch(/^its integrity sha1-/);
+  });
+
+  it("fails when there is nothing to compare", () => {
+    expect(compareIntegrity(integrityOf("a", "1.0.0"), undefined).problem).toBe(
+      "the registry lists no integrity for this version",
+    );
+    expect(compareIntegrity(integrityOf("a", "1.0.0"), { shasum: dist.shasum }).problem).toBe(
+      "its integrity (sha512) cannot be compared with the registry's (sha1)",
+    );
+    expect(compareIntegrity("md5-abc", dist).problem).toBe(
+      'its integrity "md5-abc" holds no sha1 or sha2 hash',
+    );
+  });
+});
+
 describe("lockChanges", () => {
   it("sorts the fixture lock's changes into checks, entries needing no check, and failures", () => {
+    const base = fixtureLock("base-lock.json").packages;
     const { check, allowed, problems } = lockChanges(
-      fixtureLock("base-lock.json").packages,
+      base,
       fixtureLock("head-lock.json").packages,
+      workspacesOf(base[""]),
     );
+    const checked = (path, name, version) => ({
+      path,
+      name,
+      version,
+      integrity: integrityOf(name, version),
+    });
     expect(check).toEqual([
-      { path: "node_modules/@scope/edge", name: "@scope/edge", version: "2.1.0" },
-      { path: "node_modules/fresh", name: "fresh", version: "1.1.0" },
-      { path: "node_modules/old", name: "old", version: "1.1.0" },
-      { path: "node_modules/parent/node_modules/old", name: "old", version: "1.0.0" },
-      { path: "node_modules/parent/node_modules/child", name: "child", version: "1.1.0" },
+      checked("node_modules/@scope/edge", "@scope/edge", "2.1.0"),
+      checked("node_modules/fresh", "fresh", "1.1.0"),
+      checked("node_modules/old", "old", "1.1.0"),
+      {
+        path: "node_modules/old/node_modules/bundled",
+        name: "bundled",
+        version: "1.0.0",
+        bundled: true,
+      },
+      checked("node_modules/parent/node_modules/old", "old", "1.0.0"),
+      checked("node_modules/parent/node_modules/child", "child", "1.1.0"),
     ]);
     // The removed entry ("gone") is in no list; the git dependency fails closed.
     expect(allowed).toEqual([
       { path: "apps/api", reason: "workspace package" },
       { path: "apps/web", reason: "workspace package" },
       { path: "node_modules/@fixture/web", reason: "link to the workspace apps/web" },
-      { path: "node_modules/old/node_modules/bundled", reason: "bundled in node_modules/old" },
     ]);
     expect(problems).toEqual([
       {
@@ -264,7 +377,7 @@ describe("lockChanges", () => {
   });
 
   it("counts a change to the version, resolved, integrity, name, link or inBundle field", () => {
-    const base = { "node_modules/a": { ...release("a", "1.0.0"), integrity: "sha512-AAAA" } };
+    const base = { "node_modules/a": release("a", "1.0.0") };
     for (const change of [
       { version: "1.0.1" },
       { resolved: tarball("a", "1.0.1") },
@@ -309,14 +422,37 @@ describe("lockChanges", () => {
     );
     // An npm alias whose name field is the tarball's package is checked as that package.
     expect(one({ ...release("real", "2.0.0"), name: "real" }, "node_modules/alias").check).toEqual([
-      { path: "node_modules/alias", name: "real", version: "2.0.0" },
+      {
+        path: "node_modules/alias",
+        name: "real",
+        version: "2.0.0",
+        integrity: integrityOf("real", "2.0.0"),
+      },
+    ]);
+  });
+
+  it("fails an entry with no integrity in the lock", () => {
+    const one = (entry) => lockChanges({}, { "node_modules/fresh": entry }).problems;
+    expect(one({ version: "1.1.0", resolved: tarball("fresh", "1.1.0") })).toEqual([
+      { path: "node_modules/fresh", reason: "fresh@1.1.0 has no integrity in the lock" },
+    ]);
+    expect(one({ version: "1.1.0" })).toEqual([
+      {
+        path: "node_modules/fresh",
+        reason: "fresh@1.1.0 has no resolved URL and no integrity in the lock",
+      },
     ]);
   });
 
   it("checks an entry with no resolved URL by its version, and fails it without a semver one", () => {
     const one = (entry) => lockChanges({}, { "node_modules/fresh": entry });
-    expect(one({ version: "1.1.0" }).check).toEqual([
-      { path: "node_modules/fresh", name: "fresh", version: "1.1.0" },
+    expect(one({ version: "1.1.0", integrity: integrityOf("fresh", "1.1.0") }).check).toEqual([
+      {
+        path: "node_modules/fresh",
+        name: "fresh",
+        version: "1.1.0",
+        integrity: integrityOf("fresh", "1.1.0"),
+      },
     ]);
     expect(one({ version: "created" }).problems[0].reason).toBe(
       'no resolved URL, and its version "created" is not semver',
@@ -326,9 +462,10 @@ describe("lockChanges", () => {
     );
   });
 
-  it("allows only links to the root workspaces, and only workspace packages outside node_modules", () => {
+  it("allows only links to the base's workspaces, and only workspace packages outside node_modules", () => {
     const head = {
-      "": { name: "x", workspaces: ["packages/*", "./tools/cli/"] },
+      // The head's own root workspaces are not used.
+      "": { name: "x", workspaces: ["**"] },
       "packages/a": { name: "a", version: "1.0.0" },
       "tools/cli": { name: "cli", version: "1.0.0" },
       "vendor/b": { name: "b", version: "1.0.0" },
@@ -337,8 +474,10 @@ describe("lockChanges", () => {
       "node_modules/b": { resolved: "vendor/b", link: true },
       "node_modules/c": { ...release("c", "1.0.0"), link: true },
       "node_modules/d": { resolved: "packages/a/node_modules/d", link: true },
+      // `*` matches one folder level only.
+      "node_modules/e": { resolved: "packages/a/e", link: true },
     };
-    const { check, allowed, problems } = lockChanges({}, head);
+    const { check, allowed, problems } = lockChanges({}, head, ["packages/*", "./tools/cli/"]);
     expect(check).toEqual([]);
     expect(allowed.map(({ path }) => path)).toEqual([
       "packages/a",
@@ -349,51 +488,66 @@ describe("lockChanges", () => {
     expect(problems).toEqual([
       {
         path: "vendor/b",
-        reason: "a package outside node_modules that is not one of the root workspaces",
+        reason: "a package outside node_modules that is not one of the base's workspaces",
       },
       {
         path: "node_modules/b",
-        reason: 'a link to "vendor/b", which is not one of the root workspaces',
+        reason: 'a link to "vendor/b", which is not one of the base\'s workspaces',
       },
       {
         path: "node_modules/c",
         reason:
-          'a link to "https://registry.npmjs.org/c/-/c-1.0.0.tgz", which is not one of the root workspaces',
+          'a link to "https://registry.npmjs.org/c/-/c-1.0.0.tgz", which is not one of the base\'s workspaces',
       },
       {
         path: "node_modules/d",
-        reason: 'a link to "packages/a/node_modules/d", which is not one of the root workspaces',
+        reason: 'a link to "packages/a/node_modules/d", which is not one of the base\'s workspaces',
+      },
+      {
+        path: "node_modules/e",
+        reason: 'a link to "packages/a/e", which is not one of the base\'s workspaces',
       },
     ]);
+    // Without base workspaces, nothing outside node_modules or linked passes.
+    expect(lockChanges({}, head).allowed).toEqual([]);
   });
 
-  it("allows an inBundle entry only inside a package checked in the same change", () => {
+  it("reads workspaces as a list or as { packages }, ignoring anything else", () => {
+    expect(workspacesOf({ workspaces: ["apps/*", 3] })).toEqual(["apps/*"]);
+    expect(workspacesOf({ workspaces: { packages: ["apps/*"], nohoist: ["x"] } })).toEqual([
+      "apps/*",
+    ]);
+    expect(workspacesOf({ workspaces: "apps/*" })).toEqual([]);
+    expect(workspacesOf(undefined)).toEqual([]);
+  });
+
+  it("checks inBundle entries like any other, and one with no resolved URL or integrity by its version", () => {
     const base = { "node_modules/p": release("p", "1.0.0") };
-    const bundled = { version: "1.0.0", inBundle: true };
-    const nested = {
-      "node_modules/p/node_modules/b": bundled,
-      "node_modules/p/node_modules/b/node_modules/c": bundled,
+    const head = {
+      "node_modules/p": release("p", "1.1.0"),
+      // A resolved URL: npm fetches it when the parent does not bundle it.
+      "node_modules/p/node_modules/x": { ...release("x", "9.9.9"), inBundle: true },
+      // No resolved URL or integrity: npm resolves y@1.0.0 when the parent does not bundle it.
+      "node_modules/p/node_modules/y": { version: "1.0.0", inBundle: true },
+      "node_modules/p/node_modules/z": { version: "latest", inBundle: true },
     };
-    // p changed: its bundled entries (and theirs) come from its checked tarball.
-    const updated = lockChanges(base, { "node_modules/p": release("p", "1.1.0"), ...nested });
-    expect(updated.problems).toEqual([]);
-    expect(updated.allowed).toEqual([
-      { path: "node_modules/p/node_modules/b", reason: "bundled in node_modules/p" },
-      { path: "node_modules/p/node_modules/b/node_modules/c", reason: "bundled in node_modules/p" },
-    ]);
-    // p unchanged: a new bundled entry cannot come from it.
-    expect(lockChanges(base, { ...base, ...nested }).problems).toEqual([
+    const { check, allowed, problems } = lockChanges(base, head);
+    expect(allowed).toEqual([]);
+    expect(check).toEqual([
+      { path: "node_modules/p", name: "p", version: "1.1.0", integrity: integrityOf("p", "1.1.0") },
       {
-        path: "node_modules/p/node_modules/b",
-        reason: "bundled in node_modules/p, which is not a changed registry release",
+        path: "node_modules/p/node_modules/x",
+        name: "x",
+        version: "9.9.9",
+        integrity: integrityOf("x", "9.9.9"),
       },
-      {
-        path: "node_modules/p/node_modules/b/node_modules/c",
-        reason: "bundled in node_modules/p, which is not a changed registry release",
-      },
+      { path: "node_modules/p/node_modules/y", name: "y", version: "1.0.0", bundled: true },
     ]);
-    expect(lockChanges({}, { "node_modules/b": bundled }).problems).toEqual([
-      { path: "node_modules/b", reason: "marked inBundle, but no package above it bundles it" },
+    expect(problems).toEqual([
+      {
+        path: "node_modules/p/node_modules/z",
+        reason: 'bundled, with no resolved URL and the version "latest"',
+      },
     ]);
   });
 });
@@ -447,12 +601,13 @@ describe("run", () => {
     );
   });
 
-  it("passes an old entry", async () => {
+  it("passes an old entry whose integrity matches the registry's", async () => {
     const { code, out, calls } = await check(
       changed({ "node_modules/old": release("old", "1.1.0") }),
     );
     expect(code).toBe(0);
     expect(out).toContain("ok   old@1.1.0  published 2026-09-01T00:00:00.000Z  59.5 days old");
+    expect(out).toContain("[release-age] 1 registry request; 1 integrity matches the registry's");
     expect(out).toContain("every changed registry release is at least 14 days old");
     expect(calls).toHaveLength(1);
   });
@@ -478,9 +633,8 @@ describe("run", () => {
     expect(young.err).toContain(`(${path})`);
   });
 
-  it("lets workspace links and packages through without a registry request, and says so", async () => {
+  it("lets the base's workspace links and packages through without a registry request, and says so", async () => {
     const head = lockWith({
-      "": { name: "fixture", version: "0.0.0", workspaces: ["apps/api", "apps/web"] },
       "apps/api": { name: "@fixture/api", version: "0.2.0" },
       "apps/web": { name: "@fixture/web", version: "0.1.0" },
       "node_modules/@fixture/web": { resolved: "apps/web", link: true },
@@ -489,13 +643,38 @@ describe("run", () => {
     expect(code).toBe(0);
     expect(out).not.toContain("no new or changed");
     expect(out).toContain(
-      "0 registry releases to check, 3 workspace or bundled entries with no check needed, 0 entries that cannot be checked",
+      "0 registry releases to check, 3 workspace entries with no check needed, 0 failures before any registry request",
     );
     expect(out).toContain(
       "  no check needed  node_modules/@fixture/web: link to the workspace apps/web",
     );
     expect(out).toContain("[release-age] no registry request made");
     expect(calls).toEqual([]);
+  });
+
+  it("takes the workspaces from the base, so the head cannot widen them for itself", async () => {
+    const head = lockWith({
+      "": { name: "fixture", version: "0.0.0", workspaces: ["**"] },
+      "node_modules/w": { resolved: "vendor/w", link: true },
+      "vendor/w": { name: "w", version: "9.9.9" },
+    });
+    const widened = await check(repo({ head: { "package-lock.json": text(head) } }));
+    expect(widened.code).toBe(1);
+    expect(widened.err).toContain(
+      'node_modules/w: a link to "vendor/w", which is not one of the base\'s workspaces',
+    );
+    expect(widened.err).toContain(
+      "vendor/w: a package outside node_modules that is not one of the base's workspaces",
+    );
+    expect(widened.calls).toEqual([]);
+    // The base's package.json can name them.
+    const named = await check(
+      repo({
+        base: { ...BASE_FILES, "package.json": '{"name":"fixture","workspaces":["vendor/*"]}\n' },
+        head: { "package-lock.json": text(head) },
+      }),
+    );
+    expect(named.code).toBe(0);
   });
 
   it("makes no registry request when the lock is unchanged", async () => {
@@ -513,14 +692,15 @@ describe("run", () => {
     );
     expect(code).toBe(1);
     expect(out).toContain(
-      "5 registry releases to check, 4 workspace or bundled entries with no check needed, 1 entry that cannot be checked; minimum age 14 days",
+      "6 registry releases to check, 3 workspace entries with no check needed, 1 failure before any registry request; minimum age 14 days",
     );
     // Two versions of "old" (node_modules/old and parent/node_modules/old), one request.
     expect(out).toContain("ok   old@1.0.0  published 2025-01-01T00:00:00.000Z");
     expect(out).toContain("ok   old@1.1.0  published 2026-09-01T00:00:00.000Z");
-    expect(out).toContain("[release-age] 4 registry requests");
+    expect(out).toContain("ok   bundled@1.0.0  published 2025-06-01T00:00:00.000Z");
+    expect(out).toContain("[release-age] 5 registry requests; 5 integrities match the registry's");
     const lines = err.split("\n");
-    expect(lines[0]).toBe("[release-age] 2 entries fail the check (minimum age 14 days):");
+    expect(lines[0]).toBe("[release-age] 2 failures (minimum age 14 days):");
     expect(lines[1]).toMatch(
       /^ {2}node_modules\/from-git: resolved from git\+ssh:.* not a tarball from/,
     );
@@ -528,6 +708,7 @@ describe("run", () => {
     expect(lines).toHaveLength(4);
     expect([...calls].sort()).toEqual([
       "https://registry.npmjs.org/@scope%2fedge",
+      "https://registry.npmjs.org/bundled",
       "https://registry.npmjs.org/child",
       "https://registry.npmjs.org/fresh",
       "https://registry.npmjs.org/old",
@@ -561,43 +742,89 @@ describe("run", () => {
       { name: "lodash", version: "4.17.21", resolved: tarball("fresh", "1.1.0") },
     ],
     ["a link to a registry tarball", { ...release("fresh", "1.1.0"), link: true }],
+    ["no integrity", { version: "1.0.0", resolved: tarball("fresh", "1.0.0") }],
+    ["no resolved URL and no integrity", { version: "1.0.0" }],
   ])("fails closed on %s, with no registry request", async (_label, entry) => {
     const { code, out, err, calls } = await check(changed({ "node_modules/fresh": entry }));
     expect(code).toBe(1);
-    expect(out).toContain("1 entry that cannot be checked");
+    expect(out).toContain("1 failure before any registry request");
     expect(err).toContain("  node_modules/fresh: ");
     expect(calls).toEqual([]);
   });
 
   it("checks an entry whose resolved URL was removed by its version", async () => {
     const { code, err, calls } = await check(
-      changed({ "node_modules/fresh": { version: "1.1.0" } }),
+      changed({
+        "node_modules/fresh": { version: "1.1.0", integrity: integrityOf("fresh", "1.1.0") },
+      }),
     );
     expect(code).toBe(1);
     expect(err).toContain("fresh@1.1.0 was published 2026-10-27T12:00:00.000Z, 3.0 days before");
     expect(calls).toEqual(["https://registry.npmjs.org/fresh"]);
   });
 
-  it("checks an entry whose only change is its integrity", async () => {
+  it("fails an entry whose integrity is not the registry's, even when only the integrity changed", async () => {
     const entry = {
       ...fixtureLock("base-lock.json").packages["node_modules/old"],
-      integrity: "sha512-EVIL",
+      integrity: integrityOf("old", "6.6.6"),
     };
-    const { code, out, calls } = await check(changed({ "node_modules/old": entry }));
-    expect(code).toBe(0);
+    const { code, out, err, calls } = await check(changed({ "node_modules/old": entry }));
+    expect(code).toBe(1);
     expect(out).toContain("ok   old@1.0.0");
+    expect(err).toMatch(
+      /node_modules\/old: old@1\.0\.0: its integrity sha512-\S+ is not the registry's sha512-/,
+    );
     expect(calls).toEqual(["https://registry.npmjs.org/old"]);
   });
 
-  it("fails a new bundled entry inside an unchanged package", async () => {
-    const { code, err, calls } = await check(
-      changed({ "node_modules/old/node_modules/fresh": { version: "1.1.0", inBundle: true } }),
+  it("compares a sha1 integrity with the registry's shasum", async () => {
+    const sha1 = { ...release("old", "1.1.0"), integrity: sha1IntegrityOf("old", "1.1.0") };
+    const matching = await check(changed({ "node_modules/old": sha1 }));
+    expect(matching.code).toBe(0);
+    expect(matching.out).toContain("1 integrity matches the registry's");
+    const other = { ...sha1, integrity: sha1IntegrityOf("old", "6.6.6") };
+    const differing = await check(changed({ "node_modules/old": other }));
+    expect(differing.code).toBe(1);
+    expect(differing.err).toMatch(
+      /old@1\.1\.0: its integrity sha1-\S+ is not the registry's sha1-/,
     );
+  });
+
+  it("fails a release whose packument lists no integrity for it", async () => {
+    const registry = scriptedRegistry(() =>
+      Response.json({ name: "old", time: { "1.1.0": "2026-09-01T00:00:00.000Z" } }),
+    );
+    const { code, err } = await check(changed({ "node_modules/old": release("old", "1.1.0") }), {
+      registry,
+    });
     expect(code).toBe(1);
     expect(err).toContain(
-      "node_modules/old/node_modules/fresh: bundled in node_modules/old, which is not a changed registry release",
+      "node_modules/old: old@1.1.0: the registry lists no integrity for this version",
     );
-    expect(calls).toEqual([]);
+  });
+
+  it("checks an inBundle entry with an npmjs resolved URL under a changed parent", async () => {
+    const lock = lockWith({
+      "node_modules/old": release("old", "1.1.0"),
+      "node_modules/old/node_modules/fresh": { ...release("fresh", "1.1.0"), inBundle: true },
+    });
+    const { code, err, calls } = await check(repo({ head: { "package-lock.json": text(lock) } }));
+    expect(code).toBe(1);
+    expect(err).toContain("fresh@1.1.0 was published 2026-10-27T12:00:00.000Z, 3.0 days before");
+    expect([...calls].sort()).toEqual([
+      "https://registry.npmjs.org/fresh",
+      "https://registry.npmjs.org/old",
+    ]);
+  });
+
+  it("checks an inBundle entry with no resolved URL or integrity by its version", async () => {
+    const path = "node_modules/old/node_modules/fresh";
+    const young = await check(changed({ [path]: { version: "1.1.0", inBundle: true } }));
+    expect(young.code).toBe(1);
+    expect(young.err).toContain("fresh@1.1.0 was published 2026-10-27T12:00:00.000Z");
+    const old = await check(changed({ [path]: { version: "1.0.0", inBundle: true } }));
+    expect(old.code).toBe(0);
+    expect(old.out).toContain("1 registry request; 0 integrities match the registry's");
   });
 
   it("fails a version that the registry has no publish time for", async () => {
@@ -632,9 +859,7 @@ describe("run", () => {
     const registry = scriptedRegistry(reply);
     const { code, err, waits } = await check(
       changed({ "node_modules/old": release("old", "1.1.0") }),
-      {
-        registry,
-      },
+      { registry },
     );
     expect(code).toBe(2);
     expect(err).toMatch(
@@ -785,6 +1010,57 @@ describe("run", () => {
     expect(code).toBe(0);
   });
 
+  it.each([
+    [
+      "adds registry=",
+      "",
+      "registry=https://mirror.evil/\n",
+      "from none to registry=https://mirror.evil/",
+    ],
+    [
+      "changes a scope's registry",
+      "@acme:registry=https://npm.acme/\n",
+      "@acme:registry=https://evil.example/\n",
+      "from @acme:registry=https://npm.acme/ to @acme:registry=https://evil.example/",
+    ],
+    [
+      "adds replace-registry-host",
+      "",
+      "replace-registry-host=always\n",
+      "from none to replace-registry-host=always",
+    ],
+    [
+      "removes registry=",
+      "registry=https://registry.npmjs.org/\n",
+      "",
+      "from registry=https://registry.npmjs.org/ to none",
+    ],
+  ])(
+    "fails closed when the change %s in .npmrc, with the lock unchanged",
+    async (_label, before, after, message) => {
+      const { code, err, calls } = await check(
+        repo({ base: { ...BASE_FILES, ".npmrc": before }, head: { ".npmrc": after } }),
+      );
+      expect(code).toBe(1);
+      expect(err).toContain(`  .npmrc: npm's registry settings change ${message}; they decide`);
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it("passes registry settings that are the same at the base, and masks credentials in the message", async () => {
+    const npmrc = "registry=https://registry.npmjs.org/ # the default\n";
+    const same = await check(
+      repo({ base: { ...BASE_FILES, ".npmrc": npmrc }, head: { ".npmrc": `${npmrc}\n` } }),
+    );
+    expect(same.code).toBe(0);
+    const secret = await check(
+      repo({ head: { ".npmrc": "registry=https://user:s3cret@npm.example/\n" } }),
+    );
+    expect(secret.code).toBe(1);
+    expect(secret.err).toContain("to registry=https://***:***@npm.example/");
+    expect(secret.err).not.toContain("s3cret");
+  });
+
   it("reads from registry.npmjs.org unless --registry is given, whatever npm's settings say", async () => {
     const head = {
       "package-lock.json": text(lockWith({ "node_modules/old": release("old", "1.1.0") })),
@@ -792,6 +1068,8 @@ describe("run", () => {
     };
     const dir = repo({ head });
     const settings = await check(dir, { env: { npm_config_registry: "https://mirror.evil/" } });
+    // The .npmrc change fails the check; the packuments still come from npmjs.
+    expect(settings.code).toBe(1);
     expect(settings.calls).toEqual(["https://registry.npmjs.org/old"]);
     const option = await check(dir, {
       argv: ["--base", "HEAD", "--registry", "https://npm.example/repo"],
@@ -831,8 +1109,43 @@ describe("run", () => {
       }),
     );
     expect(code).toBe(0);
-    expect(out).toContain("npm-shrinkwrap.json against npm-shrinkwrap.json at HEAD");
+    expect(out).toContain(
+      "npm-shrinkwrap.json against npm-shrinkwrap.json at HEAD, and package-lock.json against package-lock.json at HEAD",
+    );
     expect(calls).toEqual(["https://registry.npmjs.org/old"]);
+  });
+
+  it("checks package-lock.json too while a shrinkwrap is beside it", async () => {
+    // Step 1 of 2: a clean copy as the shrinkwrap, a new release in package-lock.json.
+    const { code, err } = await check(
+      repo({
+        head: {
+          "npm-shrinkwrap.json": fixtureText("base-lock.json"),
+          "package-lock.json": text(lockWith({ "node_modules/fresh": release("fresh", "1.1.0") })),
+        },
+      }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain("fresh@1.1.0 was published");
+    expect(err).toContain("(package-lock.json: node_modules/fresh)");
+  });
+
+  it("compares package-lock.json with the base's shrinkwrap when the shrinkwrap goes", async () => {
+    // Step 2 of 2: the base has both files; the head removes the shrinkwrap.
+    const poisoned = text(lockWith({ "node_modules/fresh": release("fresh", "1.1.0") }));
+    const { code, out, err } = await check(
+      repo({
+        base: {
+          ...BASE_FILES,
+          "npm-shrinkwrap.json": fixtureText("base-lock.json"),
+          "package-lock.json": poisoned,
+        },
+        head: { "npm-shrinkwrap.json": null },
+      }),
+    );
+    expect(code).toBe(1);
+    expect(out).toContain("package-lock.json against npm-shrinkwrap.json at HEAD");
+    expect(err).toContain("fresh@1.1.0 was published");
   });
 
   it("counts every entry as new when the base has no lock", async () => {
@@ -853,9 +1166,12 @@ describe("run", () => {
     );
     expect(code).toBe(1);
     expect(out).toContain(
-      "no package-lock.json at HEAD: every entry of package-lock.json counts as new",
+      "no lock to compare package-lock.json with at HEAD: every entry counts as new",
     );
-    expect(out).toContain("6 registry releases to check");
+    // With no workspaces at the base, the workspace package and its link fail too.
+    expect(out).toContain(
+      "6 registry releases to check, 0 workspace entries with no check needed, 2 failures",
+    );
     expect(err).toContain("fresh@1.1.0 was published");
   });
 
@@ -891,10 +1207,7 @@ describe("run", () => {
 
   it.each([
     [[], "usage: check-release-age.mjs --base <git-ref>"],
-    [
-      ["--base", "no-such-ref"],
-      'unknown base "no-such-ref": not a commit in this repository (a shallow clone',
-    ],
+    [["--base", "no-such-ref"], 'unknown base "no-such-ref": not a commit in this repository'],
     [["--base", "HEAD", "--registry", "registry.npmjs.org"], "--registry must be an http(s) URL"],
     [["--base", "HEAD", "--registry", "ftp://npm.example/"], "--registry must be an http(s) URL"],
     [["--base", "HEAD", "--frobnicate"], "Unknown option '--frobnicate'"],
@@ -903,6 +1216,23 @@ describe("run", () => {
     expect(code).toBe(2);
     expect(err).toContain(message);
     expect(calls).toEqual([]);
+  });
+
+  it("says how to fetch a base that a shallow clone does not have", async () => {
+    const origin = repo();
+    writeFiles(origin, { "README.md": "second\n" });
+    commitAll(origin, "second");
+    const clone = mkdtempSync(join(tmpdir(), "release-age-shallow-"));
+    dirs.push(clone);
+    execFileSync("git", ["clone", "-q", "--depth=1", `file://${origin}`, clone], {
+      stdio: "ignore",
+      env: isolatedEnv,
+    });
+    const { code, err } = await check(clone, { argv: ["--base", "HEAD^1"] });
+    expect(code).toBe(2);
+    expect(err).toContain(
+      'unknown base "HEAD^1": this clone is shallow and does not have it; fetch it first (git fetch --no-tags --depth=1 origin <sha>)',
+    );
   });
 
   it("exits 2, not 1, on an unexpected error", async () => {

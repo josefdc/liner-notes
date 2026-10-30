@@ -7,7 +7,10 @@
     "": {
       "name": "fixture",
       "version": "0.0.0",
-      "workspaces": ["apps/api", "apps/web"]
+      "workspaces": [
+        "apps/api",
+        "apps/web"
+      ]
     },
     "apps/api": {
       "name": "@fixture/api",
@@ -28,7 +31,7 @@
     "node_modules/@scope/edge": {
       "version": "2.1.0",
       "resolved": "https://registry.npmjs.org/@scope/edge/-/edge-2.1.0.tgz",
-      "integrity": "sha512-BBBB"
+      "integrity": "sha512-xs/qD7hWyCor4h4rPIRKgUMZtl33ZgQ6ta7kw5DIQzzNmkdEaBP0/F+SUnDGuDSXkln+6/8Ohjln2e1nMUUcwA=="
     },
     "node_modules/from-git": {
       "version": "1.0.0",
@@ -38,12 +41,12 @@
     "node_modules/fresh": {
       "version": "1.1.0",
       "resolved": "https://registry.npmjs.org/fresh/-/fresh-1.1.0.tgz",
-      "integrity": "sha512-BBBB"
+      "integrity": "sha512-RBiM4JIQ3ftFxkcnoTRBSQ8NVrhi3Ke5qxz7I5lwzY204k7lE0C5KsDHL9+VEGTfzh6M0yVnL5CHszL2G4m3Ww=="
     },
     "node_modules/old": {
       "version": "1.1.0",
       "resolved": "https://registry.npmjs.org/old/-/old-1.1.0.tgz",
-      "integrity": "sha512-BBBB"
+      "integrity": "sha512-QRC5y1wduAjyWQ8L/keZNP+VsO0VU0DVNUgPTQLmBbI78QvtgO4qAV0hNIkNH3NadtPJaN/QuP3mx8N9wMWBPw=="
     },
     "node_modules/old/node_modules/bundled": {
       "version": "1.0.0",
@@ -52,17 +55,17 @@
     "node_modules/parent": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/parent/-/parent-1.0.0.tgz",
-      "integrity": "sha512-AAAA"
+      "integrity": "sha512-GjcbYCLwbGk2iuuP5l5Y4J+juGAM6XSgIrLL/2K8rduT8nTZbqYZBa1DNDSOrv7F61hyCTAAexPhVpB5mdvWAg=="
     },
     "node_modules/parent/node_modules/old": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/old/-/old-1.0.0.tgz",
-      "integrity": "sha512-AAAA"
+      "integrity": "sha512-7Poow9KOJBIhhwyaIu9DaG8suFiDZtPBN0rh+6SVYqfmo4vKZePoZjJleIdAehs4KGy1UhRyzk6DDdmWPatsCA=="
     },
     "node_modules/parent/node_modules/child": {
       "version": "1.1.0",
       "resolved": "https://registry.npmjs.org/child/-/child-1.1.0.tgz",
-      "integrity": "sha512-BBBB"
+      "integrity": "sha512-FoAoO6pHLzrzeHSv0HCw+miGmCtyQoVD9HUhniQYFH5TdT3JIpD59KAcj9B8ygaAoyK2KugRUo6EvmI25kovUg=="
     }
   }
 }

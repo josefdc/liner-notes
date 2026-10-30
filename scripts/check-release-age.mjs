@@ -5,37 +5,48 @@
 // The window rolls with the publish time, as `exclude-newer = "14 days"` does in the audio service.
 //
 //   npm run check:release-age -- --base <git-ref>
-//     --registry <url>   read publish times from this registry instead of registry.npmjs.org
+//     --registry <url>   read packuments from this registry instead of registry.npmjs.org
 //     --lock <path>      check this lock instead of npm-shrinkwrap.json / package-lock.json
 //
 // npm's own min-release-age applies only when npm resolves a version: `npm ci` installs whatever
 // the lock names, so a lock edited by hand or resolved without the setting could bring in a
-// release that is too new. The lock checked is npm-shrinkwrap.json when there is one (npm ci
-// prefers it), else package-lock.json; it is compared with the same file at <git-ref>, or with
-// package-lock.json there when the shrinkwrap is new.
+// release that is too new.
+//
+// Locks: npm ci uses npm-shrinkwrap.json when there is one, else package-lock.json. The head's
+// lock is compared with the one npm would have used at <git-ref> (its shrinkwrap if it had one);
+// while both files exist in the working tree, package-lock.json is also compared with the base's
+// package-lock.json, so it cannot change unchecked and take over when the shrinkwrap goes.
 //
 // An entry counts as changed when it is new or its version, resolved, integrity, name, link or
 // inBundle field differs. Each changed entry must be one of:
-// - a tarball at https://registry.npmjs.org/<name>/-/<basename>-<version>.tgz whose name and
-//   semver version match the entry's version, and its name field (an npm alias) or else its
-//   path; its age is the publish time of the tarball's version;
+// - a tarball at https://registry.npmjs.org/<name>/-/<basename>-<version>.tgz (<basename> is the
+//   name without its scope) whose name and semver version match the entry's version, and its name
+//   field (an npm alias) or else its path;
 // - an entry with no resolved URL but a semver version, which npm resolves again from the
-//   registry as name@version; its age is the publish time of that version;
-// - a workspace package, or a link to one of the root `workspaces`; these are not releases;
-// - an inBundle entry inside a package that is itself checked in this change (its files come
-//   from that package's tarball).
-// Anything else fails closed (exit 1): git, codeload, file, http or other-host tarballs, links
-// elsewhere, an entry whose fields disagree with its tarball, or a version that is not semver.
-// Publish times come from each package's full packument (the abbreviated one has no `time`), one
-// request per name. An unchanged lock makes no registry request.
+//   registry as name@version;
+// - an inBundle entry with neither a resolved URL nor an integrity: npm takes it from its parent's
+//   tarball when the parent bundles it, and otherwise resolves name@version from the registry, so
+//   its version is checked too;
+// - a workspace package, or a link to one of the `workspaces` of the base (its lock's root entry
+//   or its package.json); these are not releases and need no check.
+// A release passes when its version was published at least N days ago and, except for the
+// bundled kind above, the lock's integrity matches the registry's for that version
+// (versions[v].dist.integrity, and dist.shasum for a sha1 integrity); an entry without an
+// integrity fails. Anything else fails closed (exit 1): git, codeload, file, http or other-host
+// tarballs, links elsewhere, an entry whose fields disagree with its tarball, a version that is
+// not semver. So does a change to npm's registry settings in .npmrc (registry, <scope>:registry,
+// replace-registry-host), which decide where npm ci fetches the tarballs from.
+// Packuments are the full ones (the abbreviated one has no `time`), one request per name; an
+// unchanged lock makes no registry request.
 //
-// Exit codes: 0 every changed entry passes; 1 an entry fails (too new, no publish time, or not a
-// checkable registry release); 2 the check could not run (bad arguments, unknown base, unreadable
-// lock or .npmrc value, a registry that cannot be read, or the 3-minute deadline).
+// Exit codes: 0 every changed entry passes; 1 an entry fails (too new, no publish time, an
+// integrity that differs or is missing, a registry setting changed, or not a checkable registry
+// release); 2 the check could not run (bad arguments, unknown base, unreadable lock or .npmrc
+// value, a registry that cannot be read, or the 3-minute deadline).
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { setTimeout as sleepFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -44,6 +55,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_MIN_DAYS = 14;
 export const NPM_REGISTRY = "https://registry.npmjs.org/";
 const TARBALL_HOST = "registry.npmjs.org";
+const SHRINKWRAP = "npm-shrinkwrap.json";
+const PACKAGE_LOCK = "package-lock.json";
 const DAY_MS = 86_400_000;
 const ATTEMPTS = 3;
 const MAX_RETRY_AFTER_MS = 30_000;
@@ -91,12 +104,12 @@ function iniValue(raw) {
 }
 
 /**
- * `min-release-age` in days from the text of an .npmrc, read as npm reads it (comment lines,
- * inline comments and quotes; keys under a [section] are not top-level settings; the last
- * setting wins), or 14 without one.
+ * The top-level settings of an .npmrc, read as npm's ini parser reads it (comment lines, inline
+ * comments, quotes; keys under a [section] are not top-level; the last setting wins). A `key[]`
+ * setting collects every value in an array under `key[]`; a key without `=` has the value "".
  */
-export function readMinReleaseAge(npmrcText) {
-  let days = DEFAULT_MIN_DAYS;
+export function readNpmrc(npmrcText) {
+  const settings = new Map();
   let inSection = false;
   for (const line of npmrcText.split(/[\r\n]+/)) {
     if (/^\s*$/.test(line) || /^\s*[;#]/.test(line)) continue;
@@ -105,17 +118,47 @@ export function readMinReleaseAge(npmrcText) {
       continue;
     }
     const pair = /^([^=]+)(?:=(.*))?$/.exec(line);
-    if (!pair || inSection || iniValue(pair[1]) !== "min-release-age") continue;
+    if (!pair || inSection) continue;
+    const key = iniValue(pair[1]);
     const value = pair[2] === undefined ? "" : iniValue(pair[2]);
-    const parsed = Number(value);
-    if (value === "" || !Number.isFinite(parsed) || parsed < 0) {
-      throw new CheckError(
-        `min-release-age must be a number of days, got ${JSON.stringify(value)}`,
-      );
-    }
-    days = parsed;
+    if (key.endsWith("[]")) settings.set(key, [...(settings.get(key) ?? []), value]);
+    else settings.set(key, value);
   }
-  return days;
+  return settings;
+}
+
+/**
+ * `min-release-age` in days from the text of an .npmrc, or 14 without one. `min-release-age[]`
+ * values count too and the largest value wins, which can only make the check stricter than npm.
+ */
+export function readMinReleaseAge(npmrcText) {
+  const settings = readNpmrc(npmrcText);
+  const values = [
+    ...(settings.has("min-release-age") ? [settings.get("min-release-age")] : []),
+    ...(settings.get("min-release-age[]") ?? []),
+  ];
+  if (values.length === 0) return DEFAULT_MIN_DAYS;
+  return Math.max(
+    ...values.map((value) => {
+      const parsed = Number(value);
+      if (value === "" || !Number.isFinite(parsed) || parsed < 0) {
+        throw new CheckError(
+          `min-release-age must be a number of days, got ${JSON.stringify(value)}`,
+        );
+      }
+      return parsed;
+    }),
+  );
+}
+
+/** The .npmrc settings that decide where npm fetches packages from, as sorted [key, value] pairs. */
+export function registrySettings(npmrcText) {
+  return [...readNpmrc(npmrcText)]
+    .filter(([key]) => {
+      const bare = key.replace(/\[\]$/, "");
+      return bare === "registry" || bare.endsWith(":registry") || bare === "replace-registry-host";
+    })
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /** A URL with any credentials in it masked, for printing; other text unchanged. */
@@ -156,79 +199,133 @@ export function parseTarball(resolved) {
   return { name, version };
 }
 
+const HASH = /^(sha1|sha256|sha384|sha512)-([A-Za-z0-9+/]+={0,2})(?:\?\S*)?$/;
+
+/** The hashes of an SRI integrity string, as algorithm -> set of base64 digests. */
+function hashesOf(integrity) {
+  const hashes = new Map();
+  for (const token of String(integrity ?? "")
+    .trim()
+    .split(/\s+/)) {
+    const match = HASH.exec(token);
+    if (!match) continue;
+    if (!hashes.has(match[1])) hashes.set(match[1], new Set());
+    hashes.get(match[1]).add(match[2]);
+  }
+  return hashes;
+}
+
+const abridged = (digest) => (digest.length > 16 ? `${digest.slice(0, 16)}...` : digest);
+
+/**
+ * Compares a lock entry's integrity with a packument version's `dist` (its `integrity`, and its
+ * `shasum` as a sha1). Every hash of an algorithm both have must match. Returns `{ compared }`
+ * (the algorithms) or `{ problem }`.
+ */
+export function compareIntegrity(lockIntegrity, dist) {
+  const lock = hashesOf(lockIntegrity);
+  if (lock.size === 0) {
+    return { problem: `its integrity ${JSON.stringify(lockIntegrity)} holds no sha1 or sha2 hash` };
+  }
+  const registry = hashesOf(dist?.integrity);
+  if (typeof dist?.shasum === "string" && /^[0-9a-f]{40}$/i.test(dist.shasum)) {
+    if (!registry.has("sha1")) registry.set("sha1", new Set());
+    registry.get("sha1").add(Buffer.from(dist.shasum, "hex").toString("base64"));
+  }
+  if (registry.size === 0) return { problem: "the registry lists no integrity for this version" };
+  const compared = [...lock.keys()].filter((algorithm) => registry.has(algorithm));
+  if (compared.length === 0) {
+    return {
+      problem:
+        `its integrity (${[...lock.keys()].join(", ")}) cannot be compared with the ` +
+        `registry's (${[...registry.keys()].join(", ")})`,
+    };
+  }
+  for (const algorithm of compared) {
+    const listed = registry.get(algorithm);
+    for (const digest of lock.get(algorithm)) {
+      if (!listed.has(digest)) {
+        return {
+          problem:
+            `its integrity ${algorithm}-${abridged(digest)} is not the registry's ` +
+            `${algorithm}-${abridged([...listed][0])}`,
+        };
+      }
+    }
+  }
+  return { compared };
+}
+
 const pathName = (path) => path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
 const inNodeModules = (path) => /(?:^|\/)node_modules\//.test(path);
 
-/** Matches the root package's `workspaces` (an array, or `{ packages }`), with * and ** globs. */
-function workspaceMatcher(rootEntry) {
-  const list = Array.isArray(rootEntry?.workspaces)
-    ? rootEntry.workspaces
-    : Array.isArray(rootEntry?.workspaces?.packages)
-      ? rootEntry.workspaces.packages
+/** The `workspaces` patterns of a package.json or lock root entry (an array, or `{ packages }`). */
+export function workspacesOf(manifest) {
+  const list = Array.isArray(manifest?.workspaces)
+    ? manifest.workspaces
+    : Array.isArray(manifest?.workspaces?.packages)
+      ? manifest.workspaces.packages
       : [];
-  const patterns = list
-    .filter((pattern) => typeof pattern === "string")
-    .map((pattern) => {
-      const clean = pattern.replace(/^\.\//, "").replace(/\/+$/, "");
-      const source = clean
-        .split(/(\*\*|\*)/)
-        .map((part) =>
-          part === "**"
-            ? ".*"
-            : part === "*"
-              ? "[^/]*"
-              : part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"),
-        )
-        .join("");
-      return new RegExp(`^${source}$`);
-    });
-  return (path) =>
-    typeof path === "string" && !inNodeModules(path) && patterns.some((re) => re.test(path));
+  return list.filter((pattern) => typeof pattern === "string");
 }
 
-/** The package an inBundle entry was bundled by: its nearest ancestor that is not inBundle. */
-function bundlerOf(path, packages) {
-  let current = path;
-  for (;;) {
-    const cut = current.lastIndexOf("/node_modules/");
-    if (cut < 0) return null;
-    current = current.slice(0, cut);
-    const entry = packages[current];
-    if (!entry) return null;
-    if (entry.inBundle !== true) return current;
-  }
+/** Matches workspace folders against `patterns`, with * and ** globs. */
+function workspaceMatcher(patterns) {
+  const regexps = patterns.map((pattern) => {
+    const clean = pattern.replace(/^\.\//, "").replace(/\/+$/, "");
+    const source = clean
+      .split(/(\*\*|\*)/)
+      .map((part) =>
+        part === "**" ? ".*" : part === "*" ? "[^/]*" : part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"),
+      )
+      .join("");
+    return new RegExp(`^${source}$`);
+  });
+  return (path) =>
+    typeof path === "string" && !inNodeModules(path) && regexps.some((re) => re.test(path));
 }
 
 /**
  * The lock entries of `headPackages` that are new or changed since `basePackages`, sorted into
- * `check` (registry releases to look up: path, name, version), `allowed` (workspace packages and
- * links, and bundled entries of a checked package; path and reason) and `problems` (entries that
- * fail closed; path and reason). Removed entries are in none of them.
+ * `check` (registry releases to look up: path, name, version, and the integrity to compare, or
+ * `bundled: true`), `allowed` (workspace packages and links; path and reason) and `problems`
+ * (entries that fail closed; path and reason). Removed entries are in none of them. `workspaces`
+ * are the base's workspace patterns.
  */
-export function lockChanges(basePackages, headPackages) {
-  const isWorkspace = workspaceMatcher(headPackages[""]);
+export function lockChanges(basePackages, headPackages, workspaces = []) {
+  const isWorkspace = workspaceMatcher(workspaces);
   const check = [];
   const allowed = [];
   const problems = [];
-  const bundled = [];
   for (const [path, entry] of Object.entries(headPackages)) {
     if (path === "") continue;
     const before = basePackages[path];
     if (before && FIELDS.every((field) => before[field] === entry[field])) continue;
     const fail = (reason) => problems.push({ path, reason });
+    const name = typeof entry.name === "string" ? entry.name : pathName(path);
     if (!inNodeModules(path)) {
       if (isWorkspace(path)) allowed.push({ path, reason: "workspace package" });
-      else fail("a package outside node_modules that is not one of the root workspaces");
+      else fail("a package outside node_modules that is not one of the base's workspaces");
     } else if (entry.link === true) {
       if (isWorkspace(entry.resolved)) {
         allowed.push({ path, reason: `link to the workspace ${entry.resolved}` });
       } else {
         fail(
-          `a link to ${JSON.stringify(redact(entry.resolved))}, which is not one of the root workspaces`,
+          `a link to ${JSON.stringify(redact(entry.resolved))}, which is not one of the base's workspaces`,
         );
       }
-    } else if (entry.inBundle === true) {
-      bundled.push(path);
+    } else if (
+      entry.inBundle === true &&
+      entry.resolved === undefined &&
+      entry.integrity === undefined
+    ) {
+      // Taken from the parent's tarball if the parent bundles it; if not, npm resolves
+      // name@version from the registry, so the version must be old enough either way.
+      if (typeof entry.version === "string" && SEMVER.test(entry.version)) {
+        check.push({ path, name, version: entry.version, bundled: true });
+      } else {
+        fail(`bundled, with no resolved URL and the version ${JSON.stringify(entry.version)}`);
+      }
     } else if (typeof entry.resolved === "string") {
       const tarball = parseTarball(entry.resolved);
       if (tarball.error) {
@@ -245,31 +342,23 @@ export function lockChanges(basePackages, headPackages) {
         disagree.push(`its path names ${JSON.stringify(pathName(path))}`);
       }
       const id = `${tarball.name}@${tarball.version}`;
-      if (disagree.length === 0) {
-        check.push({ path, ...tarball });
-      } else {
+      if (disagree.length > 0) {
         fail(`${disagree.join(" and ")}, but resolved is the tarball of ${id}`);
+      } else if (typeof entry.integrity !== "string") {
+        fail(`${id} has no integrity in the lock`);
+      } else {
+        check.push({ path, ...tarball, integrity: entry.integrity });
       }
     } else if (typeof entry.version === "string") {
-      const name = typeof entry.name === "string" ? entry.name : pathName(path);
-      if (SEMVER.test(entry.version)) check.push({ path, name, version: entry.version });
-      else fail(`no resolved URL, and its version ${JSON.stringify(entry.version)} is not semver`);
+      if (!SEMVER.test(entry.version)) {
+        fail(`no resolved URL, and its version ${JSON.stringify(entry.version)} is not semver`);
+      } else if (typeof entry.integrity !== "string") {
+        fail(`${name}@${entry.version} has no resolved URL and no integrity in the lock`);
+      } else {
+        check.push({ path, name, version: entry.version, integrity: entry.integrity });
+      }
     } else {
       fail("no resolved URL and no version");
-    }
-  }
-  const checked = new Set(check.map(({ path }) => path));
-  for (const path of bundled) {
-    const owner = bundlerOf(path, headPackages);
-    if (owner && checked.has(owner)) {
-      allowed.push({ path, reason: `bundled in ${owner}` });
-    } else if (owner) {
-      problems.push({
-        path,
-        reason: `bundled in ${owner}, which is not a changed registry release`,
-      });
-    } else {
-      problems.push({ path, reason: "marked inBundle, but no package above it bundles it" });
     }
   }
   return { check, allowed, problems };
@@ -293,8 +382,8 @@ function retryAfterMs(header, now) {
 const PROXY_VARIABLES = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"];
 const CONNECT_ERRORS = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN"]);
 
-/** The packument's `time` map (version -> ISO publish time), with retries; CheckError if it fails. */
-async function publishTimes(name, context) {
+/** A package's full packument (`time` and `versions`), with retries; CheckError if it fails. */
+async function readPackument(name, context) {
   const { registry, fetch, retryDelayMs, requestTimeoutMs, deadline, sleep, env } = context;
   const url = packumentUrl(registry, name);
   const cannot = (why) => new CheckError(`cannot read ${name} from ${redact(url)}: ${why}`);
@@ -337,7 +426,7 @@ async function publishTimes(name, context) {
       if (!body || typeof body.time !== "object" || body.time === null) {
         throw cannot('the packument has no "time" field');
       }
-      return body.time;
+      return body;
     }
     if (attempt < ATTEMPTS) {
       try {
@@ -357,22 +446,23 @@ async function publishTimes(name, context) {
 }
 
 /**
- * Reads the publish time of every release in `entries` (path, name, version) and compares its
- * age at `now` with `minDays`. Returns one result per name@version (`tooNew`, or `problem` when
- * the registry has no publish time for it) and the number of registry requests. Throws
- * CheckError when the registry cannot be read.
+ * Reads the packument of every release in `entries` (path, name, version, and integrity or
+ * `bundled`), compares each version's age at `now` with `minDays` and each entry's integrity
+ * with the registry's. Returns one result per name@version (`tooNew`, or `problem` when the
+ * registry has no publish time for it, and `integrity`: the entries whose integrity differs or
+ * cannot be compared), the number of integrity comparisons that matched, and the number of
+ * registry requests. Throws CheckError when the registry cannot be read.
  */
 export async function checkReleases(entries, options) {
   const { minDays, now, fetch } = options;
   const byName = new Map();
   for (const entry of entries) {
     const versions = byName.get(entry.name) ?? new Map();
-    const paths = versions.get(entry.version) ?? [];
-    paths.push(entry.path);
-    versions.set(entry.version, paths);
+    versions.set(entry.version, [...(versions.get(entry.version) ?? []), entry]);
     byName.set(entry.name, versions);
   }
   let requests = 0;
+  let matched = 0;
   const counted = (...args) => {
     requests += 1;
     return fetch(...args);
@@ -384,16 +474,17 @@ export async function checkReleases(entries, options) {
   async function worker() {
     while (!failed && next < names.length) {
       const name = names[next++];
-      let times;
+      let packument;
       try {
-        times = await publishTimes(name, { ...options, fetch: counted });
+        packument = await readPackument(name, { ...options, fetch: counted });
       } catch (error) {
         failed = true;
         throw error;
       }
-      for (const [version, paths] of byName.get(name)) {
-        const result = { name, version, paths };
-        const published = Object.hasOwn(times, version) ? times[version] : undefined;
+      const { time } = packument;
+      for (const [version, located] of byName.get(name)) {
+        const result = { name, version, paths: located.map(({ path }) => path), integrity: [] };
+        const published = Object.hasOwn(time, version) ? time[version] : undefined;
         const publishedMs = typeof published === "string" ? Date.parse(published) : Number.NaN;
         if (Number.isNaN(publishedMs)) {
           result.problem = "the registry has no publish time for this version";
@@ -402,26 +493,40 @@ export async function checkReleases(entries, options) {
           result.ageMs = now - publishedMs;
           result.tooNew = result.ageMs < minDays * DAY_MS;
         }
+        // A semver version is never an inherited key, so no own-property check is needed.
+        const listed = packument.versions?.[version];
+        for (const entry of located) {
+          if (entry.bundled) continue;
+          const comparison = compareIntegrity(entry.integrity, listed?.dist);
+          if (comparison.problem) {
+            result.integrity.push({ path: entry.path, reason: comparison.problem });
+          } else {
+            matched += 1;
+          }
+        }
         results.push(result);
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, names.length) }, worker));
   results.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
-  return { results, requests };
+  return { results, matched, requests };
 }
 
 /** Days with one decimal, rounded down, so an age under the limit never prints as the limit. */
 const days = (ms) => `${(Math.floor((ms / DAY_MS) * 10) / 10).toFixed(1)} days`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-function readLock(text, where) {
-  let lock;
+function parseJson(text, where) {
   try {
-    lock = JSON.parse(text);
+    return JSON.parse(text);
   } catch (error) {
     throw new CheckError(`${where} is not valid JSON: ${error.message}`);
   }
+}
+
+function readLock(text, where) {
+  const lock = parseJson(text, where);
   if (!lock || typeof lock.packages !== "object" || lock.packages === null) {
     throw new CheckError(`${where} has no "packages" (lockfileVersion 2 or 3 is needed)`);
   }
@@ -459,9 +564,43 @@ function registryOption(value) {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new CheckError(`--registry must be an http(s) URL, got ${shown}`);
   }
-  if (url.username || url.password)
+  if (url.username || url.password) {
     throw new CheckError(`--registry must not hold credentials: ${shown}`);
+  }
   return url.href;
+}
+
+/** Throws CheckError when `ref` is not a commit here, saying how to get it in a shallow clone. */
+function verifyBase(cwd, env, ref) {
+  try {
+    git(cwd, env, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    return;
+  } catch {}
+  let shallow = false;
+  try {
+    shallow = git(cwd, env, ["rev-parse", "--is-shallow-repository"], true).trim() === "true";
+  } catch {}
+  throw new CheckError(
+    shallow
+      ? `unknown base ${JSON.stringify(ref)}: this clone is shallow and does not have it; fetch ` +
+          "it first (git fetch --no-tags --depth=1 origin <sha>) or clone more history"
+      : `unknown base ${JSON.stringify(ref)}: not a commit in this repository`,
+  );
+}
+
+/** The settings of two .npmrc texts that decide where npm fetches from, when they differ. */
+function registryChange(baseNpmrc, headNpmrc) {
+  const before = registrySettings(baseNpmrc);
+  const after = registrySettings(headNpmrc);
+  if (JSON.stringify(before) === JSON.stringify(after)) return null;
+  const shown = (pairs) =>
+    pairs.length === 0
+      ? "none"
+      : pairs.map(([key, value]) => `${key}=${[value].flat().map(redact).join(",")}`).join(", ");
+  return (
+    `.npmrc: npm's registry settings change from ${shown(before)} to ${shown(after)}; they ` +
+    "decide where npm ci fetches every tarball from, so they need a change of their own"
+  );
 }
 
 /**
@@ -502,72 +641,107 @@ export async function run(argv, options = {}) {
       );
     }
     const ref = values.base;
-    // Only an explicit --registry replaces npmjs: the .npmrc and environment under review could
-    // otherwise point the check at a registry that reports any publish time.
+    // Only an explicit --registry replaces npmjs: the .npmrc and environment of the change being
+    // checked could otherwise point the check at a registry that reports any publish time.
     const registry = values.registry === undefined ? NPM_REGISTRY : registryOption(values.registry);
-
-    try {
-      git(cwd, env, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-    } catch {
-      throw new CheckError(
-        `unknown base ${JSON.stringify(ref)}: not a commit in this repository (a shallow clone ` +
-          "needs enough history, e.g. fetch-depth: 2 for HEAD^1)",
-      );
-    }
+    verifyBase(cwd, env, ref);
 
     const npmrcPath = join(cwd, ".npmrc");
-    const headDays = existsSync(npmrcPath)
-      ? readMinReleaseAge(readFileSync(npmrcPath, "utf8"))
-      : DEFAULT_MIN_DAYS;
-    const baseNpmrc = showAt(cwd, env, ref, ".npmrc");
-    const baseDays = baseNpmrc === null ? DEFAULT_MIN_DAYS : readMinReleaseAge(baseNpmrc);
-    const minDays = Math.max(DEFAULT_MIN_DAYS, baseDays, headDays);
+    const headNpmrc = existsSync(npmrcPath) ? readFileSync(npmrcPath, "utf8") : "";
+    const baseNpmrc = showAt(cwd, env, ref, ".npmrc") ?? "";
+    const minDays = Math.max(
+      DEFAULT_MIN_DAYS,
+      readMinReleaseAge(baseNpmrc),
+      readMinReleaseAge(headNpmrc),
+    );
+    const failures = [];
+    const changedRegistry = registryChange(baseNpmrc, headNpmrc);
+    if (changedRegistry) failures.push(changedRegistry);
 
-    const shrinkwrap = join(cwd, "npm-shrinkwrap.json");
-    const lockPath = values.lock
-      ? resolve(cwd, values.lock)
-      : existsSync(shrinkwrap)
-        ? shrinkwrap
-        : join(cwd, "package-lock.json");
-    const shortName = relative(cwd, lockPath);
-    const lockName = shortName && !shortName.startsWith("..") ? shortName : lockPath;
-    let lockText;
-    try {
-      lockText = readFileSync(lockPath, "utf8");
-    } catch (problem) {
-      throw new CheckError(`cannot read ${lockPath}: ${problem.message}`);
+    // The locks to check, each with the base file it is compared with (null: none at the base).
+    const base = {
+      [SHRINKWRAP]: showAt(cwd, env, ref, SHRINKWRAP),
+      [PACKAGE_LOCK]: showAt(cwd, env, ref, PACKAGE_LOCK),
+    };
+    // npm's own choice at the base: its shrinkwrap if it had one.
+    const baseUsed =
+      base[SHRINKWRAP] !== null ? SHRINKWRAP : base[PACKAGE_LOCK] !== null ? PACKAGE_LOCK : null;
+    const pairs = [];
+    if (values.lock) {
+      pairs.push({ head: resolve(cwd, values.lock), base: baseUsed });
+    } else {
+      const hasShrinkwrap = existsSync(join(cwd, SHRINKWRAP));
+      const hasLock = existsSync(join(cwd, PACKAGE_LOCK));
+      if (hasShrinkwrap) pairs.push({ head: join(cwd, SHRINKWRAP), base: baseUsed });
+      if (hasLock) {
+        const lockBase = base[PACKAGE_LOCK] !== null ? PACKAGE_LOCK : null;
+        pairs.push({ head: join(cwd, PACKAGE_LOCK), base: hasShrinkwrap ? lockBase : baseUsed });
+      }
+      if (pairs.length === 0) {
+        throw new CheckError(`no ${SHRINKWRAP} or ${PACKAGE_LOCK} in ${cwd}`);
+      }
     }
-    const head = readLock(lockText, lockName);
-    let baseName =
-      basename(lockPath) === "npm-shrinkwrap.json" ? "npm-shrinkwrap.json" : "package-lock.json";
-    let baseText = showAt(cwd, env, ref, baseName);
-    if (baseText === null && baseName === "npm-shrinkwrap.json") {
-      baseName = "package-lock.json";
-      baseText = showAt(cwd, env, ref, baseName);
-    }
-    if (baseText === null) {
-      log(`${PREFIX} no ${baseName} at ${ref}: every entry of ${lockName} counts as new`);
-    }
-    const base = baseText === null ? {} : readLock(baseText, `${baseName} at ${ref}`);
 
-    const { check, allowed, problems } = lockChanges(base, head);
-    const against = `${lockName} against ${baseName} at ${ref}`;
-    if (check.length + allowed.length + problems.length === 0) {
+    // Workspaces come from the base, so a change cannot widen them for itself.
+    const basePackageJson = showAt(cwd, env, ref, "package.json");
+    const workspaces =
+      basePackageJson === null
+        ? []
+        : workspacesOf(parseJson(basePackageJson, `package.json at ${ref}`));
+    const baseLocks = {};
+    for (const name of [SHRINKWRAP, PACKAGE_LOCK]) {
+      if (base[name] === null) continue;
+      baseLocks[name] = readLock(base[name], `${name} at ${ref}`);
+      workspaces.push(...workspacesOf(baseLocks[name][""]));
+    }
+
+    const check = [];
+    const allowed = [];
+    const problems = [];
+    const described = [];
+    for (const pair of pairs) {
+      const shortName = relative(cwd, pair.head);
+      const headName = shortName && !shortName.startsWith("..") ? shortName : pair.head;
+      let text;
+      try {
+        text = readFileSync(pair.head, "utf8");
+      } catch (problem) {
+        throw new CheckError(`cannot read ${pair.head}: ${problem.message}`);
+      }
+      const headPackages = readLock(text, headName);
+      if (pair.base === null) {
+        log(`${PREFIX} no lock to compare ${headName} with at ${ref}: every entry counts as new`);
+      }
+      described.push(`${headName} against ${pair.base ?? "no lock"} at ${ref}`);
+      const label = (path) => (pairs.length > 1 ? `${headName}: ${path}` : path);
+      const changes = lockChanges(
+        pair.base === null ? {} : baseLocks[pair.base],
+        headPackages,
+        workspaces,
+      );
+      check.push(...changes.check.map((entry) => ({ ...entry, path: label(entry.path) })));
+      allowed.push(...changes.allowed.map((entry) => ({ ...entry, path: label(entry.path) })));
+      problems.push(...changes.problems.map((entry) => ({ ...entry, path: label(entry.path) })));
+    }
+    const against = described.join(", and ");
+    if (check.length + allowed.length + problems.length + failures.length === 0) {
       log(`${PREFIX} ${against}: no new or changed entries; no registry request made`);
       return 0;
     }
+    failures.push(...problems.map(({ path, reason }) => `${path}: ${reason}`));
     log(
-      `${PREFIX} ${against}: ${plural(check.length, "registry release", "registry releases")} to check, ` +
-        `${plural(allowed.length, "workspace or bundled entry", "workspace or bundled entries")} with no check needed, ` +
-        `${plural(problems.length, "entry", "entries")} that cannot be checked; minimum age ${minDays} days ` +
-        `(the largest of 14 and min-release-age in .npmrc at ${ref} and in the working tree)`,
+      `${PREFIX} ${against}: ` +
+        `${plural(check.length, "registry release", "registry releases")} to check, ` +
+        `${plural(allowed.length, "workspace entry", "workspace entries")} with no check needed, ` +
+        `${plural(failures.length, "failure", "failures")} before any registry request; ` +
+        `minimum age ${minDays} days (the largest of 14 and min-release-age in .npmrc at ${ref} ` +
+        "and in the working tree)",
     );
     for (const { path, reason } of allowed) log(`  no check needed  ${path}: ${reason}`);
-    const failures = problems.map(({ path, reason }) => `${path}: ${reason}`);
     for (const failure of failures) log(`  FAIL ${failure}`);
 
     if (check.length > 0) {
-      log(`${PREFIX} reading publish times from ${redact(registry)}`);
+      log(`${PREFIX} reading packuments from ${redact(registry)}`);
       const deadline = {
         signal: AbortSignal.timeout(deadlineMs),
         error: () =>
@@ -575,7 +749,7 @@ export async function run(argv, options = {}) {
             `the registry reads did not finish within the ${deadlineMs / 1000} s deadline`,
           ),
       };
-      let outcome;
+      let outcome = null;
       try {
         outcome = await checkReleases(check, {
           minDays,
@@ -592,27 +766,33 @@ export async function run(argv, options = {}) {
         // Entries that already fail decide the exit code; the registry error is reported too.
         if (!(problem instanceof CheckError) || failures.length === 0) throw problem;
         error(`${PREFIX} ${problem.message}`);
-        outcome = { results: [], requests: Number.NaN };
       }
-      const at = new Date(now).toISOString();
-      for (const result of outcome.results) {
-        const id = `${result.name}@${result.version}`;
-        if (result.problem) {
-          failures.push(`${id}: ${result.problem} (${result.paths.join(", ")})`);
-          log(`  FAIL ${id}: ${result.problem}`);
-        } else if (result.tooNew) {
-          const from = new Date(Date.parse(result.published) + minDays * DAY_MS).toISOString();
-          failures.push(
-            `${id} was published ${result.published}, ${days(result.ageMs)} before ${at}; ` +
-              `it can be taken from ${from} (${result.paths.join(", ")})`,
-          );
-          log(`  FAIL ${id}  published ${result.published}  ${days(result.ageMs)} old`);
-        } else {
-          log(`  ok   ${id}  published ${result.published}  ${days(result.ageMs)} old`);
+      if (outcome) {
+        const at = new Date(now).toISOString();
+        for (const result of outcome.results) {
+          const id = `${result.name}@${result.version}`;
+          if (result.problem) {
+            failures.push(`${id}: ${result.problem} (${result.paths.join(", ")})`);
+            log(`  FAIL ${id}: ${result.problem}`);
+          } else if (result.tooNew) {
+            const from = new Date(Date.parse(result.published) + minDays * DAY_MS).toISOString();
+            failures.push(
+              `${id} was published ${result.published}, ${days(result.ageMs)} before ${at}; ` +
+                `it can be taken from ${from} (${result.paths.join(", ")})`,
+            );
+            log(`  FAIL ${id}  published ${result.published}  ${days(result.ageMs)} old`);
+          } else {
+            log(`  ok   ${id}  published ${result.published}  ${days(result.ageMs)} old`);
+          }
+          for (const { path, reason } of result.integrity) {
+            failures.push(`${path}: ${id}: ${reason}`);
+            log(`  FAIL ${path}: ${id}: ${reason}`);
+          }
         }
-      }
-      if (!Number.isNaN(outcome.requests)) {
-        log(`${PREFIX} ${plural(outcome.requests, "registry request", "registry requests")}`);
+        log(
+          `${PREFIX} ${plural(outcome.requests, "registry request", "registry requests")}; ` +
+            `${plural(outcome.matched, "integrity matches", "integrities match")} the registry's`,
+        );
       }
     } else {
       log(`${PREFIX} no registry request made`);
@@ -620,8 +800,7 @@ export async function run(argv, options = {}) {
 
     if (failures.length > 0) {
       error(
-        `${PREFIX} ${plural(failures.length, "entry fails", "entries fail")} the check ` +
-          `(minimum age ${minDays} days):`,
+        `${PREFIX} ${plural(failures.length, "failure", "failures")} (minimum age ${minDays} days):`,
       );
       for (const failure of failures) error(`  ${failure}`);
       error(

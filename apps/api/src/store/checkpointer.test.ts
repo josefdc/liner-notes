@@ -204,4 +204,23 @@ describe("PreviewFreeSqliteSaver", () => {
     expect(base.mock.calls[0]?.slice(2)).toEqual([{ source: "loop" }, newVersions]);
     base.mockRestore();
   });
+
+  it("passes on the task id and the task path of a node write", async () => {
+    const base = vi.spyOn(SqliteSaver.prototype, "putWrites").mockResolvedValue();
+    const saver = new PreviewFreeSqliteSaver(new Database(":memory:"));
+
+    await saver.putWrites(
+      { configurable: { thread_id: "t-4", checkpoint_id: "c-1" } },
+      [["previewUrl", CLIP]],
+      "task-1",
+      "~__pregel_pull, engineer",
+    );
+
+    expect(base.mock.calls[0]?.slice(1)).toEqual([
+      [["previewUrl", null]],
+      "task-1",
+      "~__pregel_pull, engineer",
+    ]);
+    base.mockRestore();
+  });
 });

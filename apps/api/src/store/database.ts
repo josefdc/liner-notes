@@ -12,11 +12,12 @@
  * file untouched and throws a DatabaseOpenError that says how to fix it.
  */
 
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import {
+  appliedByThisStart,
   LATEST_SCHEMA_VERSION,
   MigrationFailedError,
   runMigrations,
@@ -24,6 +25,7 @@ import {
   SchemaTooNewError,
 } from "./migrations.js";
 import { logger } from "../logger.js";
+import { getDefaultDbPath } from "./paths.js";
 
 const log = logger("Database");
 
@@ -91,14 +93,20 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
     });
   }
 
-  // A failed migration is classified by what made it fail; the message says which migrations
-  // were applied, since the file is no longer as it was found.
+  // A failed migration, or a failed checkpoint table setup after the migrations, is classified
+  // by what made it fail; the message says which migrations were applied, since the file is no
+  // longer as it was found.
   let cause: unknown = err;
   let context = "";
   let outcome = LEFT_UNTOUCHED;
+  const applying = err instanceof MigrationFailedError || err instanceof CheckpointSetupFailedError;
   if (err instanceof MigrationFailedError) {
     cause = err.cause;
     context = `migration ${err.migration.version} (${err.migration.name}) failed, `;
+    outcome = err.outcome;
+  } else if (err instanceof CheckpointSetupFailedError) {
+    cause = err.cause;
+    context = "setting up the checkpoint tables failed, ";
     outcome = err.outcome;
   }
 
@@ -111,7 +119,7 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
       dbPath,
       `Database ${dbPath} reported corruption after passing its integrity check (${detail}). ` +
         "It was not moved aside automatically; move it aside by hand, then start again." +
-        (err instanceof MigrationFailedError ? ` ${outcome}` : ""),
+        (applying ? ` ${outcome}` : ""),
       { cause: err },
     );
   }
@@ -278,13 +286,49 @@ function quarantineCorruptDatabase(
   return corruptPath;
 }
 
-/** Opens a checked file read-write, configures and migrates it. Closes it on any failure. */
+/** The checkpoint saver's table setup (`setup()` is protected), run on its own. */
+class CheckpointTables extends SqliteSaver {
+  create(): void {
+    this.setup();
+  }
+}
+
+/** The checkpoint tables could not be set up, after this start's migrations had run. */
+class CheckpointSetupFailedError extends Error {
+  constructor(
+    readonly applied: readonly number[],
+    options: { cause: unknown },
+  ) {
+    super("Setting up the checkpoint tables failed", options);
+    this.name = "CheckpointSetupFailedError";
+  }
+
+  /** What state the failure left the database in, for error messages. */
+  get outcome(): string {
+    return appliedByThisStart(this.applied);
+  }
+}
+
+/**
+ * Opens a checked file read-write, configures and migrates it, and sets up the checkpoint
+ * saver's tables. Closes it on any failure.
+ */
 function openAndPrepare(dbPath: string, busyTimeoutMs: number): Database.Database {
   let db: Database.Database | null = null;
   try {
     db = new Database(dbPath, { timeout: busyTimeoutMs });
     configurePragmas(db);
-    runMigrations(db);
+    const applied = runMigrations(db);
+    // The checkpoint saver's own tables, set up here rather than at the first run: a database
+    // from checkpoint-sqlite 1.0 gets the `writes.task_path` column now, and a failure (a lock
+    // held by another process) stops the start with a DatabaseOpenError instead of failing a
+    // run. A file SQLite only lets us read is not upgraded: the saver leaves the column out
+    // there and reads every write as having no task path.
+    try {
+      new CheckpointTables(db).create();
+    } catch (err) {
+      throw new CheckpointSetupFailedError(applied, { cause: err });
+    }
     return db;
   } catch (err) {
     try {
@@ -294,33 +338,6 @@ function openAndPrepare(dbPath: string, busyTimeoutMs: number): Database.Databas
     }
     throw err;
   }
-}
-
-// =============================================================================
-// Paths
-// =============================================================================
-
-/** The API package root: the nearest directory above this module with a package.json. */
-function apiPackageRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (;;) {
-    if (existsSync(join(dir, "package.json"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return process.cwd();
-    dir = parent;
-  }
-}
-
-/**
- * The database path: SQLITE_DB_PATH, or `data/sonic-agent.db` in the API package. A relative
- * SQLITE_DB_PATH is resolved against the API package root as well, so the file does not move
- * with the directory the server was started from.
- */
-export function getDefaultDbPath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.SQLITE_DB_PATH?.trim();
-  const root = apiPackageRoot();
-  if (!configured) return join(root, "data", "sonic-agent.db");
-  return isAbsolute(configured) ? configured : resolve(root, configured);
 }
 
 // =============================================================================

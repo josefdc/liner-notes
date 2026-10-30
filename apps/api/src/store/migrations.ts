@@ -496,12 +496,15 @@ export class MigrationFailedError extends Error {
 
   /** What state the failure left the database in, for error messages. */
   get outcome(): string {
-    const before =
-      this.appliedBefore.length > 0
-        ? `Migrations ${this.appliedBefore.join(", ")} were applied by this start and stay applied.`
-        : "No migration was applied by this start.";
-    return `Migration ${this.migration.version} was rolled back. ${before}`;
+    return `Migration ${this.migration.version} was rolled back. ${appliedByThisStart(this.appliedBefore)}`;
   }
+}
+
+/** Which migrations a start applied before it failed, for error messages. */
+export function appliedByThisStart(applied: readonly number[]): string {
+  return applied.length > 0
+    ? `Migrations ${applied.join(", ")} were applied by this start and stay applied.`
+    : "No migration was applied by this start.";
 }
 
 /**

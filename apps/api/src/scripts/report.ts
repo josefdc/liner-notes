@@ -73,7 +73,7 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
-import { getDefaultDbPath } from "../store/database.js";
+import { getDefaultDbPath } from "../store/paths.js";
 import {
   DEFAULT_RETENTION,
   MIN_RUN_RETENTION_MS,

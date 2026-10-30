@@ -49,7 +49,7 @@ import { API_ROOT } from "../config/apiPackage.js";
 import { checkoutCommitOrNull } from "../config/checkoutCommit.js";
 import { knownSecrets } from "../llm/cassette.js";
 import { isMainModule } from "../scripts/isMain.js";
-import { getDefaultDbPath } from "../store/database.js";
+import { getDefaultDbPath } from "../store/paths.js";
 import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
 import {
   buildRecord,

@@ -23,6 +23,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import {
   initializeDatabase,
@@ -30,8 +31,8 @@ import {
   isDatabaseHealthy,
   getDb,
   DatabaseOpenError,
-  getDefaultDbPath,
 } from "./database.js";
+import { getDefaultDbPath } from "./paths.js";
 import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from "./migrations.js";
 import { appendRunEvent, getRun, listRunEvents, startRun, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
@@ -485,6 +486,7 @@ const isRoot = process.getuid?.() === 0;
 const betterSqlitePath = createRequire(import.meta.url).resolve("better-sqlite3");
 const apiRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = join(apiRoot, "..", "..");
+const FIXTURES = join(apiRoot, "test", "fixtures");
 
 /** Runs a CommonJS snippet in a child Node process with `Database` (better-sqlite3) in scope. */
 function runChild(code: string, ...args: string[]) {
@@ -816,6 +818,32 @@ const audioRow = (extra: Record<string, unknown>) => ({
 describe("migrations", () => {
   afterEach(cleanup);
 
+  it("sets up the checkpoint tables at startup, adding task_path to those of checkpoint-sqlite 1.0", () => {
+    const columns = (db: Database.Database) =>
+      (db.prepare("PRAGMA table_info(writes)").all() as Array<{ name: string }>).map(
+        ({ name }) => name,
+      );
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    raw.exec(readFileSync(join(FIXTURES, "checkpoints-sqlite-1.0.4.sql"), "utf8"));
+    expect(columns(raw)).not.toContain("task_path");
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+
+    expect(columns(db)).toContain("task_path");
+    // The rows saved before keep their values, with no path.
+    expect(
+      db.prepare("SELECT DISTINCT task_path FROM writes WHERE thread_id = 't-paused-1.0'").all(),
+    ).toEqual([{ task_path: "" }]);
+    expect(db.prepare("SELECT COUNT(*) FROM writes").pluck().get()).toBe(8);
+
+    // A new database has the saver's tables from the start too.
+    closeDatabase();
+    const fresh = initializeDatabase(join(tmpDir, "fresh.db"));
+    expect(columns(fresh)).toContain("task_path");
+  });
+
   it("migrates a database created by the code before numbered migrations", () => {
     const dbPath = setup();
     const raw = new Database(dbPath);
@@ -971,6 +999,40 @@ describe("migrations", () => {
     const check = new Database(dbPath, { readonly: true });
     expect(check.prepare("SELECT version FROM schema_migrations").pluck().all()).toEqual([1, 2]);
     check.close();
+  });
+
+  it("says which migrations were applied when the checkpoint tables then cannot be set up", () => {
+    const busy = Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    const setupTables = vi
+      .spyOn(SqliteSaver.prototype as unknown as { setup: () => void }, "setup")
+      .mockImplementation(() => {
+        throw busy;
+      });
+    try {
+      const dbPath = setup();
+
+      const err = thrown(() => initializeDatabase(dbPath));
+      expect(setupTables).toHaveBeenCalledTimes(1);
+      expect(err.kind).toBe("busy");
+      expect(err.message).toContain("setting up the checkpoint tables failed");
+      expect(err.message).toContain(
+        `Migrations ${MIGRATIONS.map((m) => m.version).join(", ")} were applied by this start ` +
+          "and stay applied.",
+      );
+      expect(err.message).not.toContain("left untouched");
+      const check = new Database(dbPath, { readonly: true });
+      expect(check.prepare("SELECT MAX(version) FROM schema_migrations").pluck().get()).toBe(
+        LATEST_SCHEMA_VERSION,
+      );
+      check.close();
+
+      // The next start has no migration left to apply.
+      const again = thrown(() => initializeDatabase(dbPath));
+      expect(again.message).toContain("No migration was applied by this start.");
+      expect(again.message).not.toContain("left untouched");
+    } finally {
+      setupTables.mockRestore();
+    }
   });
 
   it("runs each migration once", () => {

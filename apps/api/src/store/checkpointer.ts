@@ -83,11 +83,13 @@ export class PreviewFreeSqliteSaver extends SqliteSaver {
     return basePut.call(this, config, { ...checkpoint, channel_values: values }, ...rest);
   }
 
-  override async putWrites(...[config, writes, taskId]: PutWritesArgs) {
+  // The task id and every argument after it are passed on as given: the task path (from
+  // checkpoint-sqlite 1.1), which orders a step's saved writes as the run applied them.
+  override async putWrites(...[config, writes, ...rest]: PutWritesArgs) {
     return super.putWrites(
       config,
       writes.map(([channel, value]) => [channel, saved(channel, value)]),
-      taskId,
+      ...rest,
     );
   }
 }

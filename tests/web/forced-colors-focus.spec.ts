@@ -61,6 +61,7 @@ async function installProbe(page: Page) {
       __notShown: string[];
       __colour: (colour: string) => number[] | null;
       __contrast: (colour: string, behind?: string) => number;
+      __ringColour: (ring: Element) => string;
     };
     w.__notShown = [];
     const parse = (colour: string): number[] | null => {
@@ -101,6 +102,22 @@ async function installProbe(page: Page) {
       const mixed = fg.slice(0, 3).map((v, i) => v * fg[3] + bg[i] * (1 - fg[3]));
       const [a, b] = [luminance(mixed), luminance(bg)].sort((x, y) => y - x);
       return (a + 0.05) / (b + 0.05);
+    };
+
+    /**
+     * An SVG ring's colour as drawn: its stroke, with the stroke colour's own alpha times its
+     * stroke-opacity and the opacity of it and each ancestor up to the svg.
+     */
+    w.__ringColour = (ring: Element) => {
+      const s = getComputedStyle(ring);
+      const rgba = parse(s.stroke);
+      if (s.display === "none" || !rgba) return "transparent";
+      let alpha = rgba[3] * Number(s.strokeOpacity);
+      for (let at: Element | null = ring; at; at = at.parentElement) {
+        alpha *= Number(getComputedStyle(at).opacity);
+        if (at.tagName.toLowerCase() === "svg") break;
+      }
+      return `rgba(${rgba.slice(0, 3).join(", ")}, ${alpha})`;
     };
 
     /** Whether `a` is the containing block a box positioned `position` would have, if a parent. */
@@ -547,27 +564,27 @@ async function mapItems(page: Page): Promise<MapItem[]> {
     if (i > 0) await page.keyboard.press("ArrowRight");
     await animationsSettled(page);
     const item = await page.evaluate(() => {
-      const w = window as unknown as { __contrast: (colour: string) => number };
+      const w = window as unknown as {
+        __contrast: (colour: string) => number;
+        __ringColour: (ring: Element) => string;
+      };
       const element = document.activeElement as SVGElement | null;
       if (!element?.matches("g.nodes > g, g.link-targets > path")) return null;
       const id =
         element.getAttribute("data-node-id") ?? `link ${element.getAttribute("data-link-index")}`;
-      // The ring's colour as drawn: its stroke at its stroke-opacity and opacity.
+      // The ring's colour as drawn, composited over the Canvas for its contrast.
       const ring = element.matches("g.nodes > g")
         ? element.querySelector<SVGElement>(".focus-ring")
         : element;
       if (!ring) return { id, what: id, ring: "no ring", contrast: 0, stroke: "" };
-      const s = getComputedStyle(ring);
-      const alpha = Number(s.strokeOpacity) * Number(s.opacity);
-      const shown = s.display !== "none" && s.stroke !== "none" && alpha > 0;
-      const rgb = /^rgba?\(([^)]*)\)$/.exec(s.stroke)?.[1].split(/[\s,/]+/) ?? [];
-      const colour = rgb.length >= 3 ? `rgba(${rgb.slice(0, 3).join(", ")}, ${alpha})` : s.stroke;
+      const colour = w.__ringColour(ring);
+      const alpha = Number(/([\d.]+)\)$/.exec(colour)?.[1] ?? 0);
       return {
         id,
         what: element.getAttribute("aria-label")?.slice(0, 60) ?? id,
-        ring: shown ? "ring" : `no ring (stroke ${s.stroke}, opacity ${alpha})`,
+        ring: alpha > 0 ? "ring" : `no ring (${colour})`,
         contrast: w.__contrast(colour),
-        stroke: `${s.stroke} at ${alpha}`,
+        stroke: colour,
       };
     });
     if (!item || seen.has(item.id)) continue;
@@ -643,6 +660,15 @@ test.describe("forced-colors mode", () => {
     ).toEqual([]);
     expect(dashboard.scripted.some((stop) => stop.what.startsWith("h1 "))).toBe(true);
 
+    // Open, the log's list is a scroller and a Tab stop of its own.
+    await page.getByRole("button", { name: /activity log/ }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+    await animationsSettled(page);
+    const inLog = (await tabThrough(page, 200)).filter((stop) => stop.inLog);
+    expect(inLog.length, "the open activity log's list is a Tab stop").toBeGreaterThan(0);
+    expectOutlines(inLog, "the open activity log");
+
     await openPlayer(page);
     const player = await checkScreen(page, "the Player");
     expect(
@@ -711,6 +737,11 @@ test.describe("forced-colors mode", () => {
     await expectPainted(page, "provenance chip", painted);
     await page.getByRole("button", { name: "View full analysis" }).focus();
     await expectPainted(page, "View full analysis", painted);
+    await page.getByRole("button", { name: /activity log/ }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+    await page.locator("#activity-log-content .overflow-y-auto").focus();
+    await expectPainted(page, "activity log list", painted);
 
     await openPlayer(page);
     await page.keyboard.press("Tab");
@@ -777,6 +808,34 @@ test.describe("forced-colors mode", () => {
     expect(Object.values(await paintedSides(page))).toEqual([0, 0, 0, 0]);
     await page.locator("#plain").focus();
     expect(Object.values(await paintedSides(page)).every((count) => count > 0)).toBe(true);
+
+    // A map ring's contrast counts its stroke colour's own alpha, its stroke-opacity and the
+    // opacity of its groups, composited over the Canvas.
+    const rings = await page.evaluate(() => {
+      const w = window as unknown as {
+        __contrast: (colour: string) => number;
+        __ringColour: (ring: Element) => string;
+      };
+      document.body.innerHTML = `
+        <svg width="300" height="60">
+          <rect id="faint" x="5" y="5" width="40" height="40" fill="none" style="stroke: rgba(128, 128, 128, 0.05)" />
+          <rect id="faded" x="55" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" stroke-opacity="0.2" />
+          <g opacity="0.1"><rect id="group" x="105" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" /></g>
+          <rect id="solid" x="155" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" />
+        </svg>`;
+      return Object.fromEntries(
+        ["faint", "faded", "group", "solid"].map((id) => {
+          const colour = w.__ringColour(document.getElementById(id) as Element);
+          return [id, `${colour} ${w.__contrast(colour).toFixed(2)}`];
+        }),
+      );
+    });
+    expect(rings).toEqual({
+      faint: "rgba(128, 128, 128, 0.05) 1.06",
+      faded: "rgba(0, 0, 0, 0.2) 1.61",
+      group: "rgba(0, 0, 0, 0.1) 1.25",
+      solid: "rgba(0, 0, 0, 1) 21.00",
+    });
   });
 
   test("a selected lineage card is told apart from a focused one", async ({ page }) => {
@@ -900,7 +959,11 @@ test.describe("normal mode", () => {
     const items = await mapItems(page);
     const strokes = new Set(items.map((item) => item.stroke));
     // The measured cyan: the cards' ring at full strength, a focused link's band at 0.3.
-    expect([...strokes].sort()).toEqual(["rgb(0, 240, 255) at 0.3", "rgb(0, 240, 255) at 1"]);
+    // (A card the pointed or selected track is not joined to fades, its ring with it.)
+    expect([...strokes].filter((stroke) => !stroke.startsWith("rgba(0, 240, 255, "))).toEqual([]);
+    expect([...strokes]).toEqual(
+      expect.arrayContaining(["rgba(0, 240, 255, 0.3)", "rgba(0, 240, 255, 1)"]),
+    );
     expect(items.filter((item) => item.outline?.outlineStyle !== "none")).toEqual([]);
   });
 });

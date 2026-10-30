@@ -20,9 +20,11 @@
 #   3. replaces the database, after the old one took in its -wal; the spend logs are merged
 #      (every record of both), so the result is never below the spend either log records;
 #   4. starts the containers it stopped and waits for each to turn healthy.
-# Once a container is stopped, every exit starts it again: success, a failure, or SIGINT, SIGTERM
-# or SIGHUP (taken after the step under way ends; the swap itself runs in its own session, out
-# of reach of a terminal's ^C). A container that does not come back makes the run fail.
+# Once a container is stopped, the script starts it again on success, on a failure, and on
+# SIGINT, SIGTERM, SIGHUP or SIGPIPE (taken after the step under way ends); not on SIGKILL or a
+# power loss. The swap runs in its own session as a named container, its output in a file, so a
+# ^C or a closed terminal cannot cut it short, and the containers start only once it has ended.
+# A container that does not come back makes the run fail.
 #
 # Settings (environment): COMPOSE_PROJECT_NAME, BACKUP_DIR, API_IMAGE and LOCK_TIMEOUT as in
 # backup.sh; HEALTH_TIMEOUT, the seconds to wait for a container to turn healthy (default 180).
@@ -110,6 +112,19 @@ if docker volume inspect "$spend_volume" >/dev/null 2>&1; then
   spend_rw=(-v "$spend_volume:/app/spend")
 fi
 
+# A backup whose spend log broke the API's rules (backup.sh exit 3) holds none to restore: into
+# volumes with no valid spend log, it would start the visitors' budget again at USD 0.
+if tar -tzf "$file" | grep -x llm-spend.jsonl.invalid >/dev/null &&
+  ! { [ "${#spend_ro[@]}" -gt 0 ] && ops_container "${spend_ro[@]}" -- \
+    'node /ops/backup-ops.cjs total /app/spend/llm-spend.jsonl' </dev/null >/dev/null 2>&1; }; then
+  fail "$name holds no valid spend log (only llm-spend.jsonl.invalid), and $spend_volume has" \
+    "none either, so the visitors' budget would start again at USD 0; nothing changed. Recover" \
+    "the log first: tar -xzf $file llm-spend.jsonl.invalid; stop the API; deploy/scripts/spend-log.sh" \
+    "place llm-spend.jsonl.invalid (it moves a cut last line aside, as repair-tail does; with a" \
+    "broken log already on the volume, run spend-log.sh repair-tail instead); start the API;" \
+    "restore again (deploy/RUNBOOK.md, \"Backups\")"
+fi
+
 if [ "$from" != "$project" ]; then
   echo "restore: $name is a backup of project \"${from:-unknown}\", not of $project" >&2
   if $yes && ! $target_given; then
@@ -141,49 +156,71 @@ for id in "${holders[@]}"; do
   fi
 done
 
-# Starts the containers stopped so far and waits for each to turn healthy (or running, without
-# a health check); returns non-zero, naming it, when one does not.
+# Messages that a closed terminal or a dead pipe cannot turn into a failure.
+note() { echo "restore: $*" >&2 || true; }
+
+# Starts the containers still stopped, each in a session of its own and taken off the list as it
+# starts, and waits for each to turn healthy (or running, without a health check); returns
+# non-zero, naming it, when one does not.
 stopped=()
-started=false
 restart() {
-  local id cname status ok=0
-  started=true
-  for id in "${stopped[@]}"; do
-    cname=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-) || cname=$id
-    echo "restore: starting $cname" >&2
-    if ! docker start "$id" >/dev/null; then
-      echo "restore: $cname did not start: see docker logs $cname" >&2
+  local id cname err status deadline ok=0
+  while [ "${#stopped[@]}" -gt 0 ]; do
+    id=${stopped[0]}
+    cname=$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null | cut -c2-) || true
+    cname=${cname:-$id}
+    note "starting $cname"
+    stopped=("${stopped[@]:1}")
+    err=$(setsid -w docker start "$id" 2>&1 >/dev/null) || {
+      note "$cname did not start: ${err:-no message}"
       ok=1
       continue
-    fi
+    }
     status=
-    for _ in $(seq 1 "$health_timeout"); do
-      status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
+    deadline=$((SECONDS + health_timeout))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+      status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null) || true
       case $status in healthy | running | unhealthy | exited | dead) break ;; esac
       sleep 1
     done
     case $status in
-      healthy | running) echo "restore: $cname is $status" >&2 ;;
+      healthy | running) note "$cname is $status" ;;
       *)
-        echo "restore: $cname is $status: see docker logs $cname" >&2
+        note "$cname is ${status:-unknown}: see docker logs $cname"
         ok=1
         ;;
     esac
   done
   return "$ok"
 }
+
+# Once the swap has started: waits for its container to end (its client may have ended first),
+# then prints its output, kept in a file.
+swap_log=
+end_swap() {
+  [ -n "$swap_log" ] || return 0
+  setsid -w docker wait "$project-restore-swap" >/dev/null 2>&1 || true
+  cat "$swap_log" >&2 || true
+  rm -f "$swap_log"
+  swap_log=
+}
+
 partial=
 on_exit() {
   local code=$?
-  trap - EXIT INT TERM HUP
+  trap - EXIT
+  trap '' INT TERM HUP PIPE
+  # A signal taken during the swap runs this inside its redirection to the swap log.
+  exec 1>&3 2>&4
   [ -z "$partial" ] || rm -f "$partial" "$partial.sha256"
-  if ! $started && [ "${#stopped[@]}" -gt 0 ]; then
-    restart || code=1
-  fi
+  end_swap
+  [ "${#stopped[@]}" -eq 0 ] || restart || code=1
   exit "$code"
 }
+exec 3>&1 4>&2
 trap on_exit EXIT
 trap 'exit 130' INT TERM HUP
+trap 'exit 141' PIPE
 
 for id in "${holders[@]}"; do
   echo "restore: stopping $(docker inspect -f '{{.Name}}' "$id" | cut -c2-)" >&2
@@ -208,11 +245,16 @@ if [ -s "$partial" ]; then
   echo "restore: the volumes as they were are in $safety" >&2
 fi
 
-# The swap, in a session of its own: a ^C at the terminal reaches this script only, which takes
-# it once the swap has ended.
-ops_session=own ops_container -v "$data_volume:/app/data" "${spend_rw[@]}" -- \
-  'mkdir /tmp/in && tar -xzf - -C /tmp/in && node /ops/backup-ops.cjs install /tmp/in' <"$file" ||
+# The swap: a named container in a session of its own, its output in a file, so neither a ^C nor
+# a closed terminal ends its client; this script takes a signal once it has ended.
+swap_log="$backup_dir/.$project-restore-swap.log"
+if ! ops_session=own ops_container --name "$project-restore-swap" -v "$data_volume:/app/data" \
+  "${spend_rw[@]}" -- 'mkdir /tmp/in && tar -xzf - -C /tmp/in && node /ops/backup-ops.cjs install /tmp/in' \
+  <"$file" >"$swap_log" 2>&1; then
+  end_swap
   fail "the restore failed; the volumes as they were are in ${safety##*/} (if it was written)"
+fi
+end_swap
 
 if [ "${#stopped[@]}" -eq 0 ]; then
   echo "restore: done; no running container of $project used the volumes, none started" >&2

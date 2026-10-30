@@ -17,9 +17,11 @@ data_volume=${project}_sonic-data
 # shellcheck disable=SC2034
 spend_volume=${project}_llm-spend
 
-# whole_number <name> <value> <least>: prints the value in base 10 (KEEP=08 is 8), or fails.
+# whole_number <name> <value> <least>: prints the value in base 10 (KEEP=08 is 8), or fails;
+# at most 9 digits.
 whole_number() {
   case $2 in '' | *[!0-9]*) fail "$1 must be a whole number, not \"$2\"" ;; esac
+  [ "${#2}" -le 9 ] || fail "$1 must have at most 9 digits, not ${#2}"
   [ "$((10#$2))" -ge "$3" ] || fail "$1 must be $3 or more, not $2"
   echo "$((10#$2))"
 }

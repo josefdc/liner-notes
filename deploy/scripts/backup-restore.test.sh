@@ -17,9 +17,12 @@
 # damaged archive, a missing --yes off a terminal, another project's backup without --project, a
 # held or unreadable lock, and a container that is not a service of the project (a one-off
 # included) are refused with nothing changed; a restore that fails after stopping the API, or
-# gets SIGTERM, starts it again with the data unchanged; a one-off container is never taken for
-# the API; the volumes are copied first, -wal included, also with no API running; a -wal left
-# beside a damaged or lost database is not applied to the restored one; spend logs are merged.
+# gets SIGTERM, starts it again with the data unchanged; a ^C to the job during the swap lets the
+# swap finish, then starts the API (exit 130); a one-off container is never taken for the API;
+# the volumes are copied first, -wal included, also with no API running; a -wal left beside a
+# damaged or lost database is not applied to the restored one; spend logs are merged; a backup
+# with no valid spend log is refused before any stop into a volume with none, until
+# spend-log.sh place puts the backup's log there.
 # Every container the scripts start has no network, no capabilities and a read-only image
 # filesystem.
 set -euo pipefail
@@ -284,6 +287,28 @@ grep -q "$container is healthy" "$work/signal.err" || fail "SIGTERM left the API
 sql "DELETE FROM store_items WHERE key = 'm5-signal'"
 echo "ok: SIGTERM during a restore started the API again, nothing changed"
 
+# A terminal's ^C (SIGINT to the job's process group) during the swap: the swap finishes, its
+# output is shown, the API starts, exit 130.
+put_marker m6-before-swap
+swap_log="$BACKUP_DIR/.$project-restore-swap.log"
+set -m
+PATH="$work/bin:$PATH" "$here/restore.sh" --yes "$b4" 2>"$work/sigint.err" &
+pid=$!
+set +m
+for _ in $(seq 1 1200); do
+  grep -q 'database: integrity ok' "$swap_log" 2>/dev/null && break
+  sleep 0.05
+done
+grep -q 'database: integrity ok' "$swap_log" 2>/dev/null || fail "the swap was not seen running: $(cat "$work/sigint.err")"
+kill -INT -- -"$pid"
+code=0
+wait "$pid" || code=$?
+[ "$code" = 130 ] || fail "the restore that got ^C during the swap gave exit $code: $(cat "$work/sigint.err")"
+grep -q 'database: restored to' "$work/sigint.err" || fail "^C cut the swap short: $(cat "$work/sigint.err")"
+wait_healthy
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after ^C during the swap: $(markers)"
+echo "ok: ^C during the swap let it finish, showed its output and started the API (exit 130)"
+
 # The lock: a backup or restore running holds it; one that cannot open it says so.
 before=$(started)
 flock "$BACKUP_DIR/.lock" sleep 60 &
@@ -451,6 +476,34 @@ out=$(restore --yes "$b2" 2>&1) || fail "the second restore failed: $out"
 grep -q 'holds every record' <<<"$out" || fail "a second restore changed the spend log: $out"
 [ "$(spend_records)" = 3 ] || fail "spend records after the second restore: $(spend_records)"
 echo "ok: the spend logs were merged, never shortened"
+
+# A backup with no valid spend log (exit 3), into a volume with none: refused before any stop,
+# naming the recovery; spend-log.sh place puts the backup's log there (its cut line moved aside).
+docker stop "$container" >/dev/null
+vol_node 'fs.rmSync("/app/spend/llm-spend.jsonl")'
+docker start "$container" >/dev/null
+wait_healthy
+before=$(started)
+n=$(pre_restores | wc -l)
+if out=$(restore --yes "$bt" 2>&1); then fail "a backup with no valid spend log was restored into a volume with none: $out"; fi
+if ! grep -q 'holds no valid spend log' <<<"$out" || ! grep -q 'spend-log.sh place llm-spend.jsonl.invalid' <<<"$out"; then
+  fail "the restore with no spend log failed for another reason: $out"
+fi
+[ "$(started)" = "$before" ] || fail "the refused restore stopped the API"
+[ "$(pre_restores | wc -l)" = "$n" ] || fail "the refused restore wrote a pre-restore copy"
+(cd "$work" && tar -xzf "$bt" llm-spend.jsonl.invalid)
+if out=$(spend_log place "$work/llm-spend.jsonl.invalid" 2>&1); then fail "place ran beside the API: $out"; fi
+docker stop "$container" >/dev/null
+out=$(spend_log place "$work/llm-spend.jsonl.invalid" 2>&1) || fail "place failed: $out"
+if ! grep -q 'moved the last line (40 bytes)' <<<"$out" || ! grep -q 'placed at /app/spend/llm-spend.jsonl, 3 records' <<<"$out"; then
+  fail "place printed: $out"
+fi
+if out=$(spend_log place "$work/llm-spend.jsonl.invalid" 2>&1); then fail "place wrote over a spend log: $out"; fi
+docker start "$container" >/dev/null
+wait_healthy
+out=$(restore --yes "$bt" 2>&1) || fail "the restore after place failed: $out"
+[ "$(spend_records)" = 3 ] || fail "spend records after place and the restore: $(spend_records)"
+echo "ok: a backup with no valid spend log is refused into a volume with none; place recovers it"
 
 # KEEP removes the oldest backups of the project only.
 sleep 1

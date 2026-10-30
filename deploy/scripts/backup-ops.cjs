@@ -20,6 +20,8 @@
 //   node backup-ops.cjs repair-tail <log>  with the API stopped: moves the last line to <log>.torn
 //                                       when it is not a valid record (a write cut by a crash),
 //                                       as the API's repairTornTail does
+//   node backup-ops.cjs place <log>     with the API stopped and no log at <log>: writes the log
+//                                       on stdin there, its last line moved aside as above
 //
 // Spend logs are merged, never replaced by a shorter one: the volume's log keeps every line, and
 // the backup's records it lacks are appended. The API sums the records in any order (a settle
@@ -315,28 +317,68 @@ function total(file) {
   if (spend.bad) fail(`spend log: ${spend.bad} is not a spend record; the API refuses the log`);
 }
 
-/** The API's repairTornTail (apps/api/src/llm/spendLog.ts), line for line. */
-function repairTail(file) {
-  if (!fs.existsSync(file)) fail(`no spend log at ${file}`);
-  const text = fs.readFileSync(file, "utf8");
+/**
+ * The API's repairTornTail (apps/api/src/llm/spendLog.ts) on a log's text: the part to keep and
+ * the last line to move aside, or null when that line is a valid record (or there is none).
+ */
+function tornTail(text) {
   const body = text.replace(/\n+$/, "");
   const cut = body.lastIndexOf("\n") + 1;
   const lastLine = body.slice(cut);
-  if (body === "" || lineProblem(lastLine) === null) {
+  if (body === "" || lineProblem(lastLine) === null) return null;
+  return { keep: text.slice(0, cut), lastLine, bytes: Buffer.byteLength(text.slice(cut), "utf8") };
+}
+
+function moveAside(file, tail) {
+  fs.appendFileSync(
+    `${file}.torn`,
+    `# ${new Date().toISOString()} last line (${tail.bytes} bytes) moved from the spend log by hand\n${tail.lastLine}\n`,
+  );
+  say(`spend log: moved the last line (${tail.bytes} bytes), not a valid record, to ${file}.torn`);
+}
+
+function repairTail(file) {
+  if (!fs.existsSync(file)) fail(`no spend log at ${file}`);
+  const tail = tornTail(fs.readFileSync(file, "utf8"));
+  if (!tail) {
     say("spend log: its last line is a valid record (or it is empty); nothing moved");
   } else {
-    const bytes = Buffer.byteLength(text.slice(cut), "utf8");
-    fs.appendFileSync(
-      `${file}.torn`,
-      `# ${new Date().toISOString()} last line (${bytes} bytes) moved from the spend log by hand\n${lastLine}\n`,
-    );
-    fs.truncateSync(file, Buffer.byteLength(text.slice(0, cut), "utf8"));
-    say(`spend log: moved the last line (${bytes} bytes), not a valid record, to ${file}.torn`);
+    moveAside(file, tail);
+    fs.truncateSync(file, Buffer.byteLength(tail.keep, "utf8"));
   }
   const spend = readSpend(fs.readFileSync(file, "utf8"));
   if (spend.bad)
     fail(`spend log: ${spend.bad} is still not a spend record: fix or remove it by hand`);
   say(`spend log: ${describeSpend(spend)}, all valid`);
+}
+
+/**
+ * Puts the log on stdin (a backup's llm-spend.jsonl.invalid, say) where there is none: its last
+ * line moved aside first when it is not a valid record, as repairTail does; any other malformed
+ * line refuses it.
+ */
+function place(file) {
+  if (fs.existsSync(file))
+    fail(`${file} exists; place only fills a volume with none (repair-tail repairs one)`);
+  const text = fs.readFileSync(0, "utf8");
+  const tail = tornTail(text);
+  const keep = tail ? tail.keep : text;
+  const spend = readSpend(keep);
+  if (spend.bad)
+    fail(
+      `spend log: ${spend.bad} is not a spend record: fix or remove it by hand; nothing changed`,
+    );
+  const temp = `${file}.placing`;
+  fs.writeFileSync(temp, keep, { mode: 0o600 });
+  fsyncPath(temp);
+  try {
+    fs.linkSync(temp, file);
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
+  if (tail) moveAside(file, tail);
+  fsyncPath(path.dirname(file));
+  say(`spend log: placed at ${file}, ${describeSpend(spend)}, all valid`);
 }
 
 const [command, dir] = process.argv.slice(2);
@@ -348,4 +390,5 @@ else if (command === "verify") verify(dir);
 else if (command === "install") install(dir);
 else if (command === "total") total(dir);
 else if (command === "repair-tail") repairTail(dir);
+else if (command === "place") place(dir);
 else fail(`unknown command ${command}`);

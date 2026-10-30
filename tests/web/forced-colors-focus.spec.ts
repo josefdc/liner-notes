@@ -589,9 +589,12 @@ async function outlinePixels(page: Page, drawnBy?: string) {
   );
 }
 
-/** Checks that the focused element's outline paints on all four sides. */
-async function expectPainted(page: Page, what: string, painted: string[]) {
-  const sides = await paintedSides(page);
+/**
+ * Checks that the focused element's outline (or `drawnBy`'s, see `outlinePixels`) paints on all
+ * four sides.
+ */
+async function expectPainted(page: Page, what: string, painted: string[], drawnBy?: string) {
+  const { sides } = await outlinePixels(page, drawnBy);
   const bare = Object.entries(sides)
     .filter(([, count]) => count === 0)
     .map(([side]) => side);
@@ -965,10 +968,15 @@ test.describe("forced-colors mode", () => {
     await page.getByRole("button", { name: /activity log/ }).focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
+    // The log has opened before the list takes the focus. Focused before its open height is laid
+    // out, the list is scrolled into view only as far as the page's height with the log closed
+    // allows, and once the log opens the list's bottom lies below the view.
+    await animationsSettled(page);
     const list = page.locator("#activity-log-content .overflow-y-auto");
     await list.focus();
     await expect(list).toBeFocused();
-    await expectPainted(page, "activity log list", painted);
+    // The outline seen is the one the layer above the entries draws for the list.
+    await expectPainted(page, "activity log list", painted, LOG_LAYER);
 
     await openPlayer(page);
     await page.keyboard.press("Tab");

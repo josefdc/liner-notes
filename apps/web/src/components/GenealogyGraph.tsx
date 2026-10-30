@@ -113,9 +113,17 @@ function graphNodes(
 /**
  * Takes the outline off a map card or link: each shows its focus with a ring or band of its own
  * (recoloured for forced-colors mode in index.css). Forced-colors mode does not recolour SVG,
- * so an outline there would stay transparent. The one place the web app removes an outline.
+ * so an outline there would stay transparent. The one place the web app removes an outline,
+ * and for SVG only: an HTML selection does not type-check.
  */
-function withoutOutline<T extends { style(name: string, value: string): unknown }>(selection: T) {
+type SvgSelection<T> = T extends { node(): infer N }
+  ? [Extract<N, HTMLElement>] extends [never]
+    ? T
+    : never
+  : never;
+function withoutOutline<T extends { node(): unknown; style(name: string, value: string): unknown }>(
+  selection: SvgSelection<T>,
+) {
   selection.style('outline', 'none');
 }
 

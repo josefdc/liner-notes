@@ -39,6 +39,7 @@ import {
   untilSentOrSettled,
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
+import { growth } from "../sources/testing/strings.js";
 
 // Each call reserves and settles its cost in the spend log, flushing each line to disk
 // (budget.ts): from 0.1 ms to 9 ms a flush here, but a flush waits for the disk, and other
@@ -621,6 +622,38 @@ describe("retries", () => {
     const llm = classifyError(error, state);
     expect(llm.message).toBe("scout: connect to [provider endpoint] failed: Bearer [redacted]");
   });
+
+  it.each([
+    ["white space after a name", (size: number) => `password=token${" ".repeat(size)}`],
+    ["line breaks after a scheme", (size: number) => `authorization: Bearer${"\n".repeat(size)}`],
+    ["pairs whose value is a name", (size: number) => "password=token&".repeat(size / 15)],
+    ["pairs with a % between", (size: number) => "password=token%".repeat(size / 15)],
+    [
+      "a link's names as values",
+      (size: number) => `https://h.example/x?${"sig=token&".repeat(size / 10)}`,
+    ],
+    [
+      "a link's names as values, then a %",
+      (size: number) => `https://h.example/x?${"sig=token&".repeat(size / 10)}%`,
+    ],
+  ])(
+    "reads a model error in linear time, up to 1 MB: %s",
+    (_name, make) => {
+      // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+      // from each place about 64 times, or takes seconds on 1 MB.
+      const state = {
+        timedOut: false,
+        aborted: false,
+        callSite: "x",
+        secrets: ["K7jK8jK9jKajKbjKcj"],
+      };
+      const call = (text: string) =>
+        classifyError(Object.assign(new Error(text), { status: 400 }), state).message.length;
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
 });
 
 describe("timeout", () => {

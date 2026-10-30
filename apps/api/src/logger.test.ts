@@ -785,6 +785,14 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       "a hexadecimal key after a lowercase scheme in a link",
       `http://;accesstoken="bearer  ${HEX_KEY}`,
     ],
+    ["a hexadecimal key before a full stop", `call failed: Token ${HEX_KEY}.`],
+    ["a hexadecimal key after a glued scheme, before a full stop", `call failedBearer ${HEX_KEY}.`],
+    [
+      "a hexadecimal key after a link's scheme, before a full stop",
+      `https://h.example/xBearer ${HEX_KEY}.`,
+    ],
+    ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
+    ["a pair in backticks as a pair's value, after =", `x token=\`password: ${TOKEN}\``],
   ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
     expect(leaks(text)).toEqual([]);
     expect(scrub(text)).toContain("[redacted]");
@@ -897,18 +905,17 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       [`${endpoint}/xBearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
       [`${endpoint}Bearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
       [`${endpoint}/xBearer ${HEX_KEY}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}/xBearer ${HEX_KEY}.`, "[provider endpoint]Bearer [redacted]"],
     ]) {
       expect(scrub(text)).toBe(expected);
       expect(shows(scrub(logText(text)))).toBe(false);
     }
   });
 
-  it("hides in scrubbedSpans what scrub hides, an empty value it writes REDACTED for too", () => {
+  it("hides around an empty secret parameter what scrub hides, on hideScrubbed", () => {
     // Fake values only. scrub writes "[redacted]" for an empty secret parameter (`?token=`) and
     // reads on after it; scrubbedSpans replays that insertion, and also reads the text with the
-    // empty value left out (the value then takes the backtick and the name after it). Pair names,
-    // schemes, separators, quotes and tails composed at random (seeded) after links with empty
-    // secret parameters.
+    // empty value left out (the value then takes the backtick and the name after it).
     configureLogger({ LOG_LEVEL: "silent" });
     for (const [text, expected] of [
       [
@@ -928,9 +935,30 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
         "https://h.example/x?a=1&password=`token=Basic   https://h.example/x?token=&authorization: \f` x",
         "https://h.example/x?a=1&password=[redacted]   [redacted] \f[redacted] x",
       ],
+      // The link after the second "[redacted]" is hidden from its own start, not from the text's.
+      [
+        "https://h.example/x?a=1&password='Bearer \r\n https://h.example/x?token=&password: x",
+        "https://h.example/x?a=1&password='[redacted] \r\n [redacted] [redacted]",
+      ],
     ]) {
       expect(hideScrubbed(text)).toBe(expected);
     }
+  });
+
+  it("hides in scrubbedSpans alone what scrub hides, an empty value it writes REDACTED for too", () => {
+    // Fake values only. Pair names, schemes, separators, quotes and tails composed at random
+    // (seeded) after links with empty secret parameters; the text with scrubbedSpans' spans
+    // replaced, without what hideScrubbed adds to them.
+    configureLogger({ LOG_LEVEL: "silent" });
+    const hidden = (text: string) => {
+      let out = "";
+      let at = 0;
+      for (const [start, end] of scrubbedSpans(text)) {
+        out += `${text.slice(at, start)}[redacted]`;
+        at = end;
+      }
+      return out + text.slice(at);
+    };
     const links = [
       "https://h.example/x?token=",
       "GET https://h.example/v1?access_token=",
@@ -974,7 +1002,7 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
           Array.from({ length: value.length - 3 }, (_, j) => value.slice(j, j + 4)),
         );
         const scrubbed = scrub(text);
-        const spans = hideScrubbed(text);
+        const spans = hidden(text);
         if (parts.some((part) => !scrubbed.includes(part) && spans.includes(part)))
           shown.push(JSON.stringify(text));
       }
@@ -993,9 +1021,50 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       [`x token\f${TOKEN} y`, "token", "x [redacted] y"],
       [`x 'Bearer'\r\n${TOKEN}`, "'Bearer", "x [redacted]"],
       ["x token expired", "token", "x [redacted] expired"],
+      // A name after the name, then the credential: read on, a level deeper.
+      [`x token password ${TOKEN} y`, "token", "x [redacted] y"],
+      [`x token 'Bearer'\n${TOKEN} y`, "token", "x [redacted] y"],
+      // Not a name: the end of a longer word.
+      [`x robot ${TOKEN} y`, "robot", `x [redacted] ${TOKEN} y`],
+      [`x hmac ${TOKEN} y`, "hmac", `x [redacted] ${TOKEN} y`],
     ]) {
       expect(hideScrubbed(text, [], [() => at(text, name)])).toBe(expected);
     }
+  });
+
+  it("never leaves a credential shown after a name it hid, composed at random", () => {
+    // Fake values only. Names, quotes, separators and credentials composed at random (seeded),
+    // with only the name hidden by another redaction's step: the credential after it is hidden.
+    const at = (text: string, name: string): Array<[number, number]> => [
+      [text.indexOf(name), text.indexOf(name) + name.length],
+    ];
+    const names = ["token", "password", "Bearer", "Basic", "authorization", "api_key", "Token"];
+    const quotes = ["", "", "'", '"', "`", "\u201c"];
+    const separators = [" ", "\n", "\r\n", "\f", "\v", "\t", ": ", " = ", ":\n", "\n\n"];
+    let x = 31;
+    const random = () => {
+      x ^= x << 13;
+      x >>>= 0;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      x >>>= 0;
+      return x / 4294967296;
+    };
+    const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+    const shown: string[] = [];
+    for (let i = 0; i < 2000; i++) {
+      const value = Array.from({ length: 20 }, () => {
+        const at = Math.floor(random() * 26);
+        return `${"ABCDEFGHJKLMNPQRSTUVWXYZQR"[at]}${at % 10}`;
+      }).join("");
+      const quote = pick(quotes);
+      const name = pick(names);
+      const text = `x ${quote}${name}${quote}${pick(separators)}${value} y`;
+      const out = hideScrubbed(text, [], [() => at(text, name)]);
+      const parts = Array.from({ length: value.length - 3 }, (_, j) => value.slice(j, j + 4));
+      if (parts.some((part) => out.includes(part))) shown.push(JSON.stringify(text));
+    }
+    expect(shown).toEqual([]);
   });
 
   it("reads a scheme glued to a link's end only outside the link's secret values", () => {
@@ -1176,6 +1245,28 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
     expect(ratio).toBeLessThan(20);
   });
+
+  it.each([
+    ["white space after a name", (size: number) => `password=token${" ".repeat(size)}`],
+    ["line breaks after a scheme", (size: number) => `authorization: Bearer${"\n".repeat(size)}`],
+    ["white space after a quoted name", (size: number) => `x 'token' =${" ".repeat(size)},`],
+    ["pairs whose value is a name", filled("password=token&")],
+    ["pairs with a % between", filled("password=token%")],
+    ["a link's names as values", filled("sig=token&", "https://h.example/x?")],
+    ["a link's names as values, then a %", filled("sig=token&", "https://h.example/x?", "%")],
+    ["names glued in a run", filled("tokenpassword", "Bearer ")],
+  ])(
+    "takes the credential after a name on in linear time, up to 1 MB: %s",
+    (_name, make) => {
+      // hideScrubbed reads the token after each span that ends on a name: once per place.
+      const name = (text: string): Array<[number, number]> => [[0, Math.min(text.length, 8)]];
+      const call = (text: string) =>
+        hideScrubbed(text).length + hideScrubbed(text, [], [name]).length;
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
 });
 
 describe("configured values escaped, folded, overlapping or in a token (#237)", () => {

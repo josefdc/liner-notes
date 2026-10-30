@@ -592,7 +592,10 @@ const BASIC_WORD = /^Basic\s+(?=\S)/i;
  * `spans` (of `text`, sorted, apart), each that ends on a scheme word or a pair's name taken up to
  * the end of the token after it when that token is a credential and not hidden: whatever hid the
  * name, the credential it names is never left shown after it, across any white space (a line
- * break, a form feed). A name after a name is read on, a few deep.
+ * break, a form feed). A name after a name is read on, a few deep. A credential here is a token of
+ * TOKEN_CREDENTIAL's characters; one with others in it (a "%") is not taken. A span inside one
+ * taken on before is not read again, and a token is read MAX_TOKEN characters deep before it is
+ * known to be one: linear time.
  */
 function withCredentialsAfterNames(
   text: string,
@@ -612,18 +615,32 @@ function withCredentialsAfterNames(
     return false;
   };
   const out: Array<[number, number]> = [];
+  // Where the spans taken on so far end: a span inside that is read already.
+  let reach = 0;
   for (const [start, stop] of spans) {
     let end = stop;
+    if (stop <= reach) {
+      out.push([start, end]);
+      continue;
+    }
     for (let depth = 0; depth < NESTED_DEPTH + 2; depth++) {
-      if (!NAME_AT_END.test(text.slice(Math.max(start, end - 64), end))) break;
+      if (!NAME_AT_END.test(text.slice(Math.max(start, end - NAME_WINDOW), end))) break;
       TOKEN_AFTER_NAME.lastIndex = end;
       const token = TOKEN_AFTER_NAME.exec(text)?.[1] ?? "";
-      const after = TOKEN_AFTER_NAME.lastIndex;
+      let after = TOKEN_AFTER_NAME.lastIndex;
       if (!token || hidden(after - token.length)) break;
-      const named = NAME_AT_END.test(token);
+      // A token read only in part (TOKEN_AFTER_NAME bounds it) is no name.
+      const whole = token.length < MAX_TOKEN;
+      const named = whole && NAME_AT_END.test(token.slice(-NAME_WINDOW));
       if (!named && (!TOKEN_CREDENTIAL.test(token) || STATUS_WORD.test(token))) break;
+      if (!whole) {
+        TOKEN_REST.lastIndex = after;
+        TOKEN_REST.test(text);
+        after = TOKEN_REST.lastIndex;
+      }
       end = after;
     }
+    reach = Math.max(reach, end);
     out.push([start, end]);
   }
   return unionSpans(out, []);
@@ -1048,7 +1065,10 @@ function linkLength(text: string, at: number, link: string): number {
   if (!scheme) return link.length;
   AFTER_LINK.lastIndex = at + link.length;
   const credential = AFTER_LINK.exec(text)?.[1];
-  if (!credential || !(GLUED_CREDENTIAL.test(credential) || HEX_KEY.test(credential)))
+  if (
+    !credential ||
+    !(GLUED_CREDENTIAL.test(credential) || HEX_KEY.test(credential.replace(/\.$/, "")))
+  )
     return link.length;
   for (const param of link.matchAll(SECRET_PARAM)) {
     const value = param.index + (param[1] ?? "").length;
@@ -1170,7 +1190,7 @@ type Rewrite = [
 /**
  * `current` with each of `parts` (sorted, not overlapping) replaced; adds what each hides. A part
  * with nothing in it is an insertion, as a rule writes REDACTED for an empty value (`?token=`):
- * what it writes stands for no character of the text it was given, and is placed where it falls.
+ * what it writes stands for no character of the text it was given.
  */
 function rewrite(
   current: Rewritten,
@@ -1208,12 +1228,9 @@ function rewrite(
       }
     }
   };
-  // Where an insertion at `i` falls in the text it was given.
-  const placeOf = (i: number) =>
-    i < current.text.length ? fromOf(i) : i > 0 ? toOf(current.text.length - 1) : 0;
   for (const [start, end, replacement, hideStart, hideEnd] of used) {
     keep(start);
-    const first = end > start ? fromOf(start) : placeOf(start);
+    const first = fromOf(start);
     const last = end > start ? toOf(end - 1) : first;
     if (hideEnd > hideStart) hidden.push([fromOf(hideStart), toOf(hideEnd - 1)]);
     chunks.push(replacement);
@@ -1947,11 +1964,11 @@ function moreSpans(text: string, glued = true): Array<[number, number]> {
 
 /** A pair's name and its ":" or "=", then another's, for a quick look first. */
 const NESTED_NAME = new RegExp(
-  String.raw`(?:${PAIR_NAMES})["']?[ \t]*[:=][ \t]*["']?(?:${PAIR_NAMES})["']?[ \t]*[:=]`,
+  String.raw`(?:${PAIR_NAMES})["'\`]?[ \t]*[:=][ \t]*["'\`]?(?:${PAIR_NAMES})["'\`]?[ \t]*[:=]`,
   "i",
 );
 /** A pair's name, in a quote or not, and its ":" or "=", where a value starts. */
-const PAIR_START = new RegExp(String.raw`["']?\b(?:${PAIR_NAMES})["']?\s*[:=]`, "iy");
+const PAIR_START = new RegExp(String.raw`["'\`]?\b(?:${PAIR_NAMES})["'\`]?\s*[:=]`, "iy");
 /** SECRET_PAIR, read only where it is placed. */
 const SECRET_PAIR_HERE = new RegExp(SECRET_PAIR.source, "iy");
 /** How many pairs, one in the value of the other, nestedPairs reads after the first. */
@@ -1968,7 +1985,7 @@ function nestedPairs(text: string, spans: Array<[number, number]>): void {
     let from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
     for (let depth = 0; depth < NESTED_DEPTH; depth++) {
       if (stickyEnd(PAIR_START, text, from) === -1) break;
-      const at = /["']/.test(text.charAt(from)) ? from + 1 : from;
+      const at = /["'`]/.test(text.charAt(from)) ? from + 1 : from;
       SECRET_PAIR_HERE.lastIndex = at;
       const inner = SECRET_PAIR_HERE.exec(text);
       if (!inner) break;
@@ -2008,14 +2025,27 @@ function gluedPairs(read: Rewritten, text: string, spans: Array<[number, number]
   }
 }
 
-/** A scheme word or a pair's name, with its ":" or "=" and quotes or not, ending a text. */
+/**
+ * A scheme word or a pair's name, not the end of a longer word ("robot", "hmac"), with its ":" or
+ * "=" and quotes or not, ending a text. Each white space can be read one way only.
+ */
 const NAME_AT_END = new RegExp(
-  String.raw`(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})["'\`\u2018-\u201f]?(?:\s*[:=])?\s*["'\`\u2018-\u201f]?$`,
+  String.raw`(?<![A-Za-z0-9])(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})["'\`\u2018-\u201f]?\s*(?:[:=]\s*)?["'\`\u2018-\u201f]?$`,
   "i",
 );
-/** After a name: white space, its ":" or "=", a quote, then a token (group 1). */
+/** How much of the end of a span, or of a token, NAME_AT_END reads. */
+const NAME_WINDOW = 64;
+/** How much of a token TOKEN_AFTER_NAME reads at most. */
+const MAX_TOKEN = 256;
+/**
+ * After a name: white space, a quote, its ":" or "=", a quote, then a token (group 1), at most
+ * MAX_TOKEN characters of it. Each white space can be read one way only: a long run of it with no
+ * token after it is read in linear time.
+ */
 const TOKEN_AFTER_NAME =
-  /\s*["'`\u2018-\u201f]?\s*[:=]?\s*["'`\u2018-\u201f]?([^\s"'`,;}\]\u2026]+)/y;
+  /\s*(?:["'`\u2018-\u201f]\s*)?(?:[:=]\s*)?["'`\u2018-\u201f]?([^\s"'`,;}\]\u2026]{1,256})/y;
+/** The rest of a token TOKEN_AFTER_NAME read only in part. */
+const TOKEN_REST = /[^\s"'`,;}\]\u2026]*/y;
 /** A token after a name that is a credential: 8 or more of a token's characters. */
 const TOKEN_CREDENTIAL = /^[A-Za-z0-9._~+/=&-]{8,}$/;
 
@@ -2024,7 +2054,7 @@ const TOKEN_CREDENTIAL = /^[A-Za-z0-9._~+/=&-]{8,}$/;
  * Basic or Token, glued to a word or not, in quotes or not: after a scheme, that shape is a key.
  */
 const HEX_AFTER_SCHEME =
-  /(?:[Bb]earer|BEARER|[Bb]asic|BASIC|[Tt]oken|TOKEN)\s+["'`\u2018-\u201f]?([0-9a-f]{24,})(?![\w.~+/=-])/g;
+  /(?:[Bb]earer|BEARER|[Bb]asic|BASIC|[Tt]oken|TOKEN)\s+["'`\u2018-\u201f]?([0-9a-f]{24,})(?![\w~+/=-]|\.[\w~+/=-])/g;
 /** A key HEX_AFTER_SCHEME reads, alone. */
 const HEX_KEY = /^[0-9a-f]{24,}$/;
 

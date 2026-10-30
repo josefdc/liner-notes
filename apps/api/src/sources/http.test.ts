@@ -1840,6 +1840,8 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
     ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
     ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
+    ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
+    ["a pair in backticks after =", `x token=\`password: ${TOKEN}\``],
   ])("hides the value in every text a client or a log line is shown: %s", (_label, text) => {
     expect(shown(text).filter(shows)).toEqual([]);
   });

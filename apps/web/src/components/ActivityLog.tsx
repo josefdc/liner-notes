@@ -136,8 +136,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
         className={`relative z-10 overflow-hidden transition-all duration-(--duration-normal) ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
       >
         <div className="border-t border-white/5">
-          {/* Log list */}
-          <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain">
+          {/* Log list: a scroller, so a Tab stop; in forced-colors mode its outline is drawn
+              inside it, where the panel's overflow-hidden does not cut it. */}
+          <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain forced-colors:focus-visible:-outline-offset-2">
             {/* Timeline line */}
             <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
 

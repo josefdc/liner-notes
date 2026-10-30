@@ -2507,7 +2507,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         // Opaque and above the graph: nodes the graph draws past its edge do not cover it. Above
         // the selected track's panel too (z-30): a list opened here (the links, the previews)
         // lies over the map and the panel, as what was opened last, and Escape closes it first.
-        <div className="relative z-40 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void">
+        // In a short window from md up (a phone held sideways) its parts are set closer, side by
+        // side where they fit: the map keeps the room.
+        <div className="relative z-40 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 bg-void landscape-short:flex-row landscape-short:flex-wrap landscape-short:items-center landscape-short:gap-x-4 landscape-short:gap-y-1 landscape-short:pt-2 landscape-short:pb-2">
           {(links.length > 0 || hidden > 0) && (
             <LinkLegend
               types={links.map((link) => link.type)}

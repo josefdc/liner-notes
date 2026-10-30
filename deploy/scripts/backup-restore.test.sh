@@ -6,16 +6,21 @@
 #
 #   deploy/scripts/backup-restore.test.sh     API_IMAGE: the image (default liner-notes-api:latest)
 #
-# Backups: written with their checksum while the API runs; "latest" is the newest of two, never
-# a pre-restore copy or another project's file; a spend log with a blank line is kept, one caught
-# mid-append is read again, one with a malformed line and a database that fails integrity_check
-# are refused with no archive kept; KEEP removes the oldest only. Restores: a dry run verifies
-# and changes nothing; a changed byte, a damaged archive, a missing --yes off a terminal, another
-# project's backup without --project, a held or unreadable lock, and a container that is not a
-# service of the project are refused with nothing changed; a one-off container is never taken
-# for the API; the volumes are copied first, -wal included, also with no API running; a -wal
-# left beside a damaged or lost database is not applied to the restored one; spend logs are
-# merged. Every container the scripts start has no network, no capabilities and a read-only image
+# Backups: written with their checksum while the API runs, in the API container's image when
+# API_IMAGE is unset (a missing image is refused); "latest" is the newest of two, never a
+# pre-restore copy or another project's file; a spend log with a blank line is kept, one caught
+# mid-append is read again; one with a line cut by a crash or a malformed line leaves the
+# database backed up and the log aside, with exit 3, and spend-log.sh repair-tail (refused while
+# the API runs) moves a cut last line aside as the API does; a database that fails
+# integrity_check is refused with no archive kept; KEEP removes the oldest only. Restores: a dry
+# run verifies and changes nothing; a changed byte, a checksum written for another file, a
+# damaged archive, a missing --yes off a terminal, another project's backup without --project, a
+# held or unreadable lock, and a container that is not a service of the project (a one-off
+# included) are refused with nothing changed; a restore that fails after stopping the API, or
+# gets SIGTERM, starts it again with the data unchanged; a one-off container is never taken for
+# the API; the volumes are copied first, -wal included, also with no API running; a -wal left
+# beside a damaged or lost database is not applied to the restored one; spend logs are merged.
+# Every container the scripts start has no network, no capabilities and a read-only image
 # filesystem.
 set -euo pipefail
 export LC_ALL=C
@@ -33,7 +38,7 @@ holder=
 
 cleanup() {
   [ -z "$holder" ] || kill "$holder" 2>/dev/null || true
-  docker rm -f "$container" "$project-oneoff" "$project-intruder" >/dev/null 2>&1 || true
+  docker rm -f "$container" "$project-oneoff" "$project-intruder" "$project-runner" >/dev/null 2>&1 || true
   docker volume rm -f "$data" "$spend" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -52,6 +57,7 @@ printf '#!/bin/sh\n[ "$1" = run ] && printf "%%s\\n" "$*" >>"%s"\nexec %s "$@"\n
 chmod +x "$work/bin/docker"
 backup() { PATH="$work/bin:$PATH" "$here/backup.sh"; }
 restore() { PATH="$work/bin:$PATH" "$here/restore.sh" "$@"; }
+spend_log() { PATH="$work/bin:$PATH" "$here/spend-log.sh" "$@"; }
 
 # The API of the throwaway project, labelled as compose labels a service container, on its
 # volumes (created when missing), checked every 2 s; returns once it is healthy.
@@ -73,6 +79,7 @@ wait_healthy() {
   fail "the API did not turn healthy"
 }
 started() { docker inspect -f '{{.State.StartedAt}}' "$container"; }
+health() { docker inspect -f '{{.State.Health.Status}}' "$container"; }
 
 # Node in a throwaway container on the volumes (the API's user): vol_node <script> [arg...].
 vol_node() {
@@ -132,7 +139,18 @@ echo "ok: backup.sh wrote $(basename "$b1") and its checksum while the API ran"
 # "latest" is the newest backup of the project, not another project's or a pre-restore copy.
 sleep 1
 put_marker m2-second
-b2=$(backup)
+runs=$(wc -l <"$work/docker-runs.log")
+b2=$(
+  unset API_IMAGE
+  backup
+)
+api_id=$(docker inspect -f '{{.Image}}' "$container")
+new_runs=$(tail -n +$((runs + 1)) "$work/docker-runs.log")
+if [ -z "$new_runs" ] || grep -vF " $api_id " <<<"$new_runs" >/dev/null; then
+  fail "with API_IMAGE unset, the backup did not run in the API container's image $api_id"
+fi
+if out=$(API_IMAGE=$project-missing:none backup 2>&1); then fail "a missing image was used: $out"; fi
+grep -q "no image $project-missing:none on this host" <<<"$out" || fail "a missing image failed for another reason: $out"
 for decoy in "$project-2-20991231T235959Z.tar.gz" "$project-pre-restore-20991231T235959Z.tar.gz"; do
   cp "$b1" "$BACKUP_DIR/$decoy"
   printf '%s  %s\n' "$(sha256sum <"$b1" | cut -d' ' -f1)" "$decoy" >"$BACKUP_DIR/$decoy.sha256"
@@ -156,7 +174,12 @@ changed="$work/changed/$(basename "$b2")"
 printf 'x' | dd of="$changed" bs=1 seek=100 conv=notrunc status=none
 if out=$(restore --dry-run "$changed" 2>&1); then fail "a changed backup passed: $out"; fi
 grep -q 'checksum mismatch' <<<"$out" || fail "a changed backup failed for another reason: $out"
-echo "ok: a changed backup is refused (checksum)"
+renamed="$work/changed/$project-20260101T000000Z.tar.gz"
+cp "$b2" "$renamed"
+cp "$b2.sha256" "$renamed.sha256"
+if out=$(restore --dry-run "$renamed" 2>&1); then fail "a checksum written for another file passed: $out"; fi
+grep -q "is the checksum of \"$(basename "$b2")\"" <<<"$out" || fail "the renamed backup failed for another reason: $out"
+echo "ok: a changed backup, and a checksum written for another file, are refused"
 
 # A damaged database with a matching checksum fails the integrity check.
 mkdir -p "$work/damaged/in"
@@ -175,7 +198,7 @@ echo "ok: a damaged database is refused (integrity_check)"
 printf '%s' "$(spend_line 0.04)" | head -c 40 | spend_append
 backup >"$work/b-append.out" 2>"$work/b-append.err" &
 pid=$!
-for _ in $(seq 1 150); do
+for _ in $(seq 1 600); do
   grep -q 'append was in progress' "$work/b-append.err" && break
   sleep 0.1
 done
@@ -187,15 +210,79 @@ b3=$(cat "$work/b-append.out")
 tar -xzOf "$b3" llm-spend.jsonl | grep -q '"usd_est":0.04,' || fail "the backup lacks the appended line"
 echo "ok: a spend log caught mid-append was read again; the backup holds the whole line"
 
-# A malformed spend line is refused: no archive, a non-zero exit.
+# A last spend line cut by a crash (never finished): the database is backed up, the log kept
+# aside under a name no restore applies, exit 3, nothing pruned. repair-tail is refused while the
+# API runs; with it stopped, it moves the line to llm-spend.jsonl.torn as the API does.
 n=$(backups | wc -l)
+printf '%s' "$(spend_line 0.06)" | head -c 40 | spend_append
+code=0
+out=$(backup 2>&1) || code=$?
+[ "$code" = 3 ] || fail "a cut last spend line gave exit $code: $out"
+grep -q "FAILED for the spend log" <<<"$out" || fail "a cut last spend line failed for another reason: $out"
+grep -q "the last one, cut short" <<<"$out" || fail "the cut last spend line was not named: $out"
+[ "$(backups | wc -l)" = $((n + 1)) ] || fail "the database was not backed up beside a cut spend line"
+bt="$BACKUP_DIR/$(backups | tail -1)"
+[ "$(tar -tzf "$bt" | sort | tr '\n' ' ')" = "llm-spend.jsonl.invalid sonic-agent.db " ] ||
+  fail "the backup beside a cut spend line holds: $(tar -tzf "$bt" | tr '\n' ' ')"
+out=$(restore --dry-run "$bt" 2>&1) || fail "the backup beside a cut spend line does not verify: $out"
+grep -q 'not in this backup (one that broke' <<<"$out" || fail "the dry run did not flag the log: $out"
+if out=$(spend_log repair-tail 2>&1); then fail "repair-tail ran beside the API: $out"; fi
+grep -q "$container uses $spend: stop it first" <<<"$out" || fail "repair-tail failed for another reason: $out"
+docker stop "$container" >/dev/null
+out=$(spend_log repair-tail 2>&1) || fail "repair-tail failed: $out"
+grep -q 'moved the last line (40 bytes)' <<<"$out" || fail "repair-tail moved nothing: $out"
+vol_node '
+  const torn = fs.readFileSync("/app/spend/llm-spend.jsonl.torn", "utf8").split("\n");
+  const log = fs.readFileSync("/app/spend/llm-spend.jsonl", "utf8");
+  const head = /^# \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z last line \(40 bytes\) moved from the spend log by hand$/;
+  process.exit(head.test(torn[0]) && torn[1] === process.argv[1] && torn.length === 3 && log.endsWith("}\n") ? 0 : 1);' \
+  "$(spend_line 0.06 | head -c 40)" || fail "repair-tail did not move the line as the API does"
+docker start "$container" >/dev/null
+wait_healthy
+echo "ok: a cut last spend line: database backed up, log kept aside, exit 3; repair-tail fixed it"
+
+# A malformed line further up: the same. A restore over it fails after stopping the API, which
+# is started again with the data unchanged.
 echo '{"ts":"not a date","usd_est":1}' | spend_append
 spend_line 0.05 | spend_append && echo | spend_append
-if out=$(backup 2>&1); then fail "a malformed spend log was backed up: $out"; fi
-grep -q 'malformed line' <<<"$out" || fail "a malformed spend log failed for another reason: $out"
-[ "$(backups | wc -l)" = "$n" ] || fail "a backup was kept for a malformed spend log"
+code=0
+out=$(backup 2>&1) || code=$?
+[ "$code" = 3 ] || fail "a malformed spend line gave exit $code: $out"
+grep -Eq 'spend log: INVALID: line [0-9]+ \(ts is not a date\) breaks' <<<"$out" || fail "a malformed spend line failed for another reason: $out"
+before=$(started)
+lines=$(spend_records)
+if out=$(restore --yes "$b3" 2>&1); then fail "a restore over a malformed spend log passed: $out"; fi
+grep -Eq 'the spend log on the volume has a malformed line [0-9]+ \(ts is not a date\)' <<<"$out" || fail "the restore failed for another reason: $out"
+grep -q "$container is healthy" <<<"$out" || fail "the failed restore did not start the API again: $out"
+if [ "$(started)" = "$before" ] || [ "$(health)" != healthy ]; then
+  fail "the API is not running again after a failed restore"
+fi
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "a failed restore changed the database: $(markers)"
+[ "$(spend_records)" = "$lines" ] || fail "a failed restore changed the spend log"
 vol_node 'const f = "/app/spend/llm-spend.jsonl"; fs.writeFileSync(f, fs.readFileSync(f, "utf8").split("\n").filter((l) => !l.includes("not a date")).join("\n"));'
-echo "ok: a malformed spend log is refused, no backup kept"
+sleep 1
+b4=$(backup)
+out=$(spend_log total 2>&1) || fail "spend-log.sh total failed: $out"
+grep -qx 'spend log: 4 records, USD 0.1200 counted' <<<"$out" || fail "spend-log.sh total printed: $out"
+echo "ok: a malformed spend line: exit 3; a restore failing after the stop started the API again, nothing changed"
+
+# SIGTERM once the API is stopped: the restore ends (130) and starts the API again.
+put_marker m5-signal
+PATH="$work/bin:$PATH" "$here/restore.sh" --yes "$b4" 2>"$work/signal.err" &
+pid=$!
+for _ in $(seq 1 600); do
+  grep -q "stopping $container" "$work/signal.err" && break
+  sleep 0.1
+done
+kill -TERM "$pid"
+code=0
+wait "$pid" || code=$?
+[ "$code" = 130 ] || fail "the restore that got SIGTERM gave exit $code: $(cat "$work/signal.err")"
+grep -q "$container is healthy" "$work/signal.err" || fail "SIGTERM left the API stopped: $(cat "$work/signal.err")"
+[ "$(health)" = healthy ] || fail "the API is not running after SIGTERM"
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups,m5-signal" ] || fail "SIGTERM changed the database: $(markers)"
+sql "DELETE FROM store_items WHERE key = 'm5-signal'"
+echo "ok: SIGTERM during a restore started the API again, nothing changed"
 
 # The lock: a backup or restore running holds it; one that cannot open it says so.
 before=$(started)
@@ -210,13 +297,17 @@ kill "$holder"
 wait "$holder" 2>/dev/null || true
 holder=
 [ "$(started)" = "$before" ] || fail "a refused restore stopped the API"
-chmod 000 "$BACKUP_DIR/.lock"
-if out=$(backup 2>&1); then fail "a backup ran with an unreadable lock: $out"; fi
-grep -q 'cannot open the lock' <<<"$out" || fail "an unreadable lock failed for another reason: $out"
-chmod 600 "$BACKUP_DIR/.lock"
+# (root opens any file: the check needs another user)
+if [ "$(id -u)" != 0 ]; then
+  chmod 000 "$BACKUP_DIR/.lock"
+  if out=$(backup 2>&1); then fail "a backup ran with an unreadable lock: $out"; fi
+  grep -q 'cannot open the lock' <<<"$out" || fail "an unreadable lock failed for another reason: $out"
+  chmod 600 "$BACKUP_DIR/.lock"
+fi
 echo "ok: a held lock and an unreadable lock are refused"
 
 # Off a terminal, a restore needs --yes; another project's backup needs --project.
+n=$(pre_restores | wc -l)
 if out=$(restore latest 2>&1 </dev/null); then fail "a restore ran unconfirmed: $out"; fi
 grep -q 'pass --yes' <<<"$out" || fail "an unconfirmed restore failed for another reason: $out"
 other="$work/other-20261001T000000Z.tar.gz"
@@ -225,18 +316,27 @@ printf '%s  %s\n' "$(sha256sum <"$other" | cut -d' ' -f1)" "$(basename "$other")
 if out=$(restore --yes "$other" 2>&1); then fail "another project's backup was restored: $out"; fi
 grep -q "pass --project $project" <<<"$out" || fail "another project's backup failed for another reason: $out"
 [ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "a refused restore changed the database"
-if pre_restores | grep -qv 20991231; then fail "a refused restore wrote a pre-restore copy"; fi
+[ "$(pre_restores | wc -l)" = "$n" ] || fail "a refused restore wrote a pre-restore copy"
 echo "ok: no --yes off a terminal, and another project's backup without --project, are refused"
 
-# A running container on the volumes that is not a service of the project stops the restore.
+# A running container on the volumes that is not a service of the project stops the restore: one
+# of another project, and a running one-off of this project (`compose run api ...`).
 docker run -d --name "$project-intruder" --pull never --network none -v "$data:/x:ro" \
   --entrypoint sleep "$image" 300 >/dev/null
 if out=$(restore --yes latest 2>&1); then fail "a restore ran beside another container: $out"; fi
 grep -q "$project-intruder uses the volumes of $project but is not one of its service containers" <<<"$out" ||
   fail "the other container failed it for another reason: $out"
-[ "$(started)" = "$before" ] || fail "a refused restore stopped the API"
 docker rm -f "$project-intruder" >/dev/null
-echo "ok: a container that is not a service of the project stops the restore, nothing changed"
+docker run -d --name "$project-runner" --pull never --network none \
+  --label "com.docker.compose.project=$project" --label com.docker.compose.service=api \
+  --label com.docker.compose.oneoff=True -v "$data:/x:ro" --entrypoint sleep "$image" 300 >/dev/null
+if out=$(restore --yes latest 2>&1); then fail "a restore ran beside a running one-off: $out"; fi
+grep -q "$project-runner uses the volumes of $project but is not one of its service containers" <<<"$out" ||
+  fail "the running one-off failed it for another reason: $out"
+docker rm -f "$project-runner" >/dev/null
+[ "$(started)" = "$before" ] || fail "a refused restore stopped the API"
+[ "$(pre_restores | wc -l)" = "$n" ] || fail "a refused restore wrote a pre-restore copy"
+echo "ok: a container that is not a service of the project, a running one-off included, stops the restore"
 
 # A newer, exited one-off container of the service is never taken for the API.
 docker run --name "$project-oneoff" --pull never --network none \
@@ -356,10 +456,10 @@ echo "ok: the spend logs were merged, never shortened"
 sleep 1
 KEEP=2 backup >/dev/null
 mapfile -t left < <(backups)
-if [ "${#left[@]}" != 2 ] || [ "${left[0]}" != "$(basename "$b3")" ]; then
-  fail "KEEP=2 left: ${left[*]} (expected $(basename "$b3") and the new one)"
+if [ "${#left[@]}" != 2 ] || [ "${left[0]}" != "$(basename "$b4")" ]; then
+  fail "KEEP=2 left: ${left[*]} (expected $(basename "$b4") and the new one)"
 fi
-for old in "$b1" "$b1.sha256" "$b2" "$b2.sha256"; do
+for old in "$b1" "$b1.sha256" "$b2" "$b2.sha256" "$b3" "$bt"; do
   [ ! -e "$old" ] || fail "KEEP=2 kept $(basename "$old")"
 done
 for decoy in "$project-2-20991231T235959Z.tar.gz" "$project-pre-restore-20991231T235959Z.tar.gz"; do

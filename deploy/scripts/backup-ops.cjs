@@ -4,7 +4,9 @@
 //   node backup-ops.cjs snapshot <out>  a consistent copy of /app/data/sonic-agent.db (VACUUM
 //                                       INTO, one read transaction, while the API runs) and of
 //                                       /app/spend/llm-spend.jsonl when it exists, into <out>;
-//                                       fails when the copy does not pass `verify`
+//                                       fails when the copy does not pass `verify`. A spend log
+//                                       that breaks the API's rules is kept as
+//                                       llm-spend.jsonl.invalid, which no restore applies
 //   node backup-ops.cjs copy <out>      the files as they are (database, its -wal and -shm, spend
 //                                       log), for the copy restore.sh takes with the API stopped
 //   node backup-ops.cjs verify <dir>    <dir>/sonic-agent.db (with any -wal beside it applied)
@@ -14,10 +16,15 @@
 //   node backup-ops.cjs install <dir>   with every container using the volumes stopped: the
 //                                       database of <dir> replaces the volume's, and the spend
 //                                       logs are merged (below)
+//   node backup-ops.cjs total <log>     the log's records and USD total, as the API counts them
+//   node backup-ops.cjs repair-tail <log>  with the API stopped: moves the last line to <log>.torn
+//                                       when it is not a valid record (a write cut by a crash),
+//                                       as the API's repairTornTail does
 //
 // Spend logs are merged, never replaced by a shorter one: the volume's log keeps every line, and
 // the backup's records it lacks are appended. The API sums the records in any order (a settle
-// line replaces the reservation with its id), so the merged log counts all that either counted.
+// line replaces the reservation with its id), so the merged log is never below the spend either
+// log records.
 //
 // Messages go to stderr: backup.sh streams the archive on stdout.
 "use strict";
@@ -26,14 +33,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 
-// better-sqlite3 as the API itself resolves it (/app/apps/api in the image).
-const Database = createRequire("/app/apps/api/package.json")("better-sqlite3");
+// better-sqlite3 as the API itself resolves it (/app/apps/api in the image), loaded when a
+// command needs it.
+let sqlite = null;
+function openDatabase(file, options) {
+  sqlite ??= createRequire("/app/apps/api/package.json")("better-sqlite3");
+  return new sqlite(file, options);
+}
 
 const DATA = "/app/data";
 const DB = `${DATA}/sonic-agent.db`;
 const SPEND = "/app/spend/llm-spend.jsonl";
 const DB_NAME = "sonic-agent.db";
 const SPEND_NAME = "llm-spend.jsonl";
+const INVALID_NAME = `${SPEND_NAME}.invalid`;
 
 function say(message) {
   process.stderr.write(`${message}\n`);
@@ -130,7 +143,7 @@ function describeSpend(spend) {
 
 /** Checkpoints any -wal beside the database at `file` into it, and leaves it a single file. */
 function settle(file) {
-  const db = new Database(file, { fileMustExist: true, timeout: 15000 });
+  const db = openDatabase(file, { fileMustExist: true, timeout: 15000 });
   try {
     db.pragma("wal_checkpoint(TRUNCATE)");
     db.pragma("journal_mode = DELETE");
@@ -146,7 +159,7 @@ function checkDatabase(file) {
   let tables;
   try {
     settle(file);
-    const db = new Database(file, { fileMustExist: true });
+    const db = openDatabase(file, { fileMustExist: true });
     try {
       result = db.pragma("integrity_check", { simple: false }).map((row) => row.integrity_check);
       version = db.pragma("user_version", { simple: true });
@@ -169,7 +182,11 @@ function verify(dir) {
   checkDatabase(file);
   const spendFile = path.join(dir, SPEND_NAME);
   if (!fs.existsSync(spendFile)) {
-    say("spend log: not in this backup");
+    say(
+      fs.existsSync(path.join(dir, INVALID_NAME))
+        ? `spend log: not in this backup (one that broke the API's rules is in ${INVALID_NAME})`
+        : "spend log: not in this backup",
+    );
     return null;
   }
   const spend = readSpend(fs.readFileSync(spendFile, "utf8"));
@@ -186,7 +203,7 @@ function snapshot(out) {
   // writes meanwhile, and waits up to 15 s for a lock. It copies a damaged index as it is, so
   // the copy is checked below.
   try {
-    const db = new Database(DB, { fileMustExist: true, timeout: 15000 });
+    const db = openDatabase(DB, { fileMustExist: true, timeout: 15000 });
     try {
       db.exec(`VACUUM INTO '${target}'`);
     } finally {
@@ -198,11 +215,12 @@ function snapshot(out) {
 
   if (fs.existsSync(SPEND)) {
     // The log only grows, a line at a time: a copy that ends inside a line caught an append in
-    // progress, so it is read again (for up to 10 s). Any other malformed line is refused, as
-    // the API refuses it.
+    // progress, so it is read again (for up to 30 s). A log that still breaks the API's rules
+    // (a line cut by a crash, or a malformed one) does not stop the database's backup: it is
+    // kept under a name no restore applies, and backup.sh fails the run.
     let text = "";
     let spend = null;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    for (let attempt = 0; attempt < 120; attempt++) {
       text = fs.readFileSync(SPEND, "utf8");
       spend = readSpend(text);
       if (!spend.torn) break;
@@ -210,9 +228,12 @@ function snapshot(out) {
       sleep(250);
     }
     if (spend.bad) {
-      fail(`the spend log on the volume has a malformed ${spend.bad} (the API refuses it too)`);
+      const cut = spend.torn ? ", the last one, cut short (a crash during an append?)" : "";
+      say(`spend log: INVALID: ${spend.bad}${cut} breaks the API's rules; kept as ${INVALID_NAME}`);
+      fs.writeFileSync(path.join(out, INVALID_NAME), text, { mode: 0o600 });
+    } else {
+      fs.writeFileSync(path.join(out, SPEND_NAME), text, { mode: 0o600 });
     }
-    fs.writeFileSync(path.join(out, SPEND_NAME), text, { mode: 0o600 });
   } else {
     say("spend log: none on the volume");
   }
@@ -234,6 +255,7 @@ function install(dir) {
     if (spend) say("warning: no spend log volume is mounted; the backup's spend log is left out");
     spend = null;
   }
+  if (!spend) say("spend log: the volume's is left as it is");
 
   // The spend log to write, worked out before anything changes.
   let spendText = null;
@@ -286,10 +308,44 @@ function install(dir) {
   }
 }
 
+function total(file) {
+  if (!fs.existsSync(file)) fail(`no spend log at ${file}`);
+  const spend = readSpend(fs.readFileSync(file, "utf8"));
+  say(`spend log: ${describeSpend(spend)}`);
+  if (spend.bad) fail(`spend log: ${spend.bad} is not a spend record; the API refuses the log`);
+}
+
+/** The API's repairTornTail (apps/api/src/llm/spendLog.ts), line for line. */
+function repairTail(file) {
+  if (!fs.existsSync(file)) fail(`no spend log at ${file}`);
+  const text = fs.readFileSync(file, "utf8");
+  const body = text.replace(/\n+$/, "");
+  const cut = body.lastIndexOf("\n") + 1;
+  const lastLine = body.slice(cut);
+  if (body === "" || lineProblem(lastLine) === null) {
+    say("spend log: its last line is a valid record (or it is empty); nothing moved");
+  } else {
+    const bytes = Buffer.byteLength(text.slice(cut), "utf8");
+    fs.appendFileSync(
+      `${file}.torn`,
+      `# ${new Date().toISOString()} last line (${bytes} bytes) moved from the spend log by hand\n${lastLine}\n`,
+    );
+    fs.truncateSync(file, Buffer.byteLength(text.slice(0, cut), "utf8"));
+    say(`spend log: moved the last line (${bytes} bytes), not a valid record, to ${file}.torn`);
+  }
+  const spend = readSpend(fs.readFileSync(file, "utf8"));
+  if (spend.bad)
+    fail(`spend log: ${spend.bad} is still not a spend record: fix or remove it by hand`);
+  say(`spend log: ${describeSpend(spend)}, all valid`);
+}
+
 const [command, dir] = process.argv.slice(2);
-if (!dir) fail("usage: backup-ops.cjs snapshot|copy|verify|install <dir>");
+if (!dir)
+  fail("usage: backup-ops.cjs snapshot|copy|verify|install <dir> | total|repair-tail <log>");
 if (command === "snapshot") snapshot(dir);
 else if (command === "copy") copy(dir);
 else if (command === "verify") verify(dir);
 else if (command === "install") install(dir);
+else if (command === "total") total(dir);
+else if (command === "repair-tail") repairTail(dir);
 else fail(`unknown command ${command}`);

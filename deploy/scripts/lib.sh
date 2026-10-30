@@ -11,14 +11,19 @@ umask 077
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project=${COMPOSE_PROJECT_NAME:-liner-notes}
 backup_dir=${BACKUP_DIR:-$here/../backups}
-lock_timeout=${LOCK_TIMEOUT:-600}
 stamp_glob='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'
 # shellcheck disable=SC2034 # used by the scripts that source this file
 data_volume=${project}_sonic-data
 # shellcheck disable=SC2034
 spend_volume=${project}_llm-spend
 
-case $lock_timeout in '' | *[!0-9]*) fail "LOCK_TIMEOUT must be a whole number of seconds" ;; esac
+# whole_number <name> <value> <least>: prints the value in base 10 (KEEP=08 is 8), or fails.
+whole_number() {
+  case $2 in '' | *[!0-9]*) fail "$1 must be a whole number, not \"$2\"" ;; esac
+  [ "$((10#$2))" -ge "$3" ] || fail "$1 must be $3 or more, not $2"
+  echo "$((10#$2))"
+}
+lock_timeout=$(whole_number LOCK_TIMEOUT "${LOCK_TIMEOUT:-600}" 0)
 
 # The project's backups (not its pre-restore copies), oldest first: the names sort by time.
 project_backups() {
@@ -28,22 +33,24 @@ project_backups() {
   shopt -u nullglob
 }
 
-# The API image: API_IMAGE, else the image of the project's API service container (never a
-# one-off `compose run` container), else ${IMAGE_PREFIX:-liner-notes}-api:${IMAGE_TAG:-latest}.
-api_image() {
+# Sets `image`, the image the throwaway containers run: API_IMAGE, else the image the project's
+# API service container was created from (by its ID; never a one-off `compose run` container),
+# else ${IMAGE_PREFIX:-liner-notes}-api:${IMAGE_TAG:-latest}. Fails unless it is on this host.
+use_api_image() {
   local api
-  if [ -n "${API_IMAGE:-}" ]; then
-    echo "$API_IMAGE"
-    return
+  image=${API_IMAGE:-}
+  if [ -z "$image" ]; then
+    api=$(docker ps -aq --filter "label=com.docker.compose.project=$project" \
+      --filter label=com.docker.compose.service=api --filter label=com.docker.compose.oneoff=False |
+      head -1)
+    if [ -n "$api" ]; then
+      image=$(docker inspect -f '{{.Image}}' "$api")
+    else
+      image=${IMAGE_PREFIX:-liner-notes}-api:${IMAGE_TAG:-latest}
+    fi
   fi
-  api=$(docker ps -aq --filter "label=com.docker.compose.project=$project" \
-    --filter label=com.docker.compose.service=api --filter label=com.docker.compose.oneoff=False |
-    head -1)
-  if [ -n "$api" ]; then
-    docker inspect -f '{{.Config.Image}}' "$api"
-  else
-    echo "${IMAGE_PREFIX:-liner-notes}-api:${IMAGE_TAG:-latest}"
-  fi
+  docker image inspect "$image" >/dev/null 2>&1 ||
+    fail "no image $image on this host: build it (docker compose -f deploy/compose.prod.yml build api) or set API_IMAGE"
 }
 
 # Takes the lock that keeps backups and restores of BACKUP_DIR from overlapping (fd 9); $1 is
@@ -60,17 +67,21 @@ take_lock() {
 # Runs backup-ops.cjs in a throwaway container of the API image: no network, no capabilities,
 # no new privileges, the image's own files read-only; scratch space in /tmp. Volumes come as
 # extra docker arguments before `--`, then the shell command run in the container. The caller
-# sets `image` (api_image).
+# sets `image` (use_api_image). With ops_session=own, docker runs in a session of its own, so a
+# terminal's ^C reaches the script only (which takes it when the container is done), and no
+# signal is passed on to the container.
 # shellcheck disable=SC2154
 ops_container() {
-  local args=()
+  local args=() wrap=()
   while [ "$1" != -- ]; do
     args+=("$1")
     shift
   done
   shift
-  docker run --rm -i --pull never --network none --read-only --tmpfs /tmp \
-    --cap-drop ALL --security-opt no-new-privileges "${args[@]}" \
+  if [ "${ops_session:-}" = own ]; then wrap=(setsid -w); fi
+  "${wrap[@]}" docker run --rm -i --sig-proxy=false --pull never \
+    --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+    "${args[@]}" \
     -v "$here/backup-ops.cjs:/ops/backup-ops.cjs:ro" \
     --entrypoint sh "$image" -c "$1"
 }
@@ -82,6 +93,14 @@ verify_archive() {
 
 # Writes the checksum of $1 for the name $2 into $1.sha256, then flushes both to disk.
 write_checksum() {
-  printf '%s  %s\n' "$(sha256sum <"$1" | cut -d' ' -f1)" "$2" >"$1.sha256"
+  local sum
+  sum=$(sha256sum <"$1" | cut -d' ' -f1)
+  [[ $sum =~ ^[0-9a-f]{64}$ ]] || fail "could not compute the checksum of $1"
+  printf '%s  %s\n' "$sum" "$2" >"$1.sha256"
   sync "$1" "$1.sha256"
+}
+
+# Every running container that uses the volume $1, by ID.
+volume_users() {
+  docker ps -q --no-trunc --filter "volume=$1"
 }

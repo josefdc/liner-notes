@@ -18,8 +18,11 @@
 #      <project>-pre-restore-<time>.tar.gz (restore.sh restores it by its path when it holds a
 #      database);
 #   3. replaces the database, after the old one took in its -wal; the spend logs are merged
-#      (every record of both), so a restore never lowers what the API counts as spent;
+#      (every record of both), so the result is never below the spend either log records;
 #   4. starts the containers it stopped and waits for each to turn healthy.
+# Once a container is stopped, every exit starts it again: success, a failure, or SIGINT, SIGTERM
+# or SIGHUP (taken after the step under way ends; the swap itself runs in its own session, out
+# of reach of a terminal's ^C). A container that does not come back makes the run fail.
 #
 # Settings (environment): COMPOSE_PROJECT_NAME, BACKUP_DIR, API_IMAGE and LOCK_TIMEOUT as in
 # backup.sh; HEALTH_TIMEOUT, the seconds to wait for a container to turn healthy (default 180).
@@ -60,7 +63,7 @@ done
 
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-health_timeout=${HEALTH_TIMEOUT:-180}
+health_timeout=$(whole_number HEALTH_TIMEOUT "${HEALTH_TIMEOUT:-180}" 1)
 
 if [ "$target" = latest ]; then
   mapfile -t backups < <(project_backups)
@@ -85,11 +88,13 @@ fi
 [ -f "$file.sha256" ] || fail "no checksum $file.sha256"
 read -r expected recorded <"$file.sha256" || true
 [ "$recorded" = "$name" ] || fail "$file.sha256 is the checksum of \"$recorded\""
+[[ $expected =~ ^[0-9a-f]{64}$ ]] || fail "$file.sha256 holds no SHA-256 checksum"
 actual=$(sha256sum <"$file" | cut -d' ' -f1)
+[[ $actual =~ ^[0-9a-f]{64}$ ]] || fail "could not compute the checksum of $file"
 [ "$actual" = "$expected" ] || fail "checksum mismatch: $file is not the file backup.sh wrote"
 echo "restore: checksum ok ($actual)" >&2
 
-image=$(api_image)
+use_api_image
 verify_archive <"$file" || fail "the backup did not pass its checks"
 if $dry_run; then
   echo "restore: dry run, nothing changed" >&2
@@ -124,8 +129,8 @@ take_lock "nothing changed"
 # Every running container that uses the volumes; each must be a service container of the
 # project, so that the ones stopped here are the ones compose would start again.
 mapfile -t holders < <({
-  docker ps -q --no-trunc --filter "volume=$data_volume"
-  docker ps -q --no-trunc --filter "volume=$spend_volume"
+  volume_users "$data_volume"
+  volume_users "$spend_volume"
 } | sort -u)
 for id in "${holders[@]}"; do
   labels=$(docker inspect -f \
@@ -136,12 +141,53 @@ for id in "${holders[@]}"; do
   fi
 done
 
+# Starts the containers stopped so far and waits for each to turn healthy (or running, without
+# a health check); returns non-zero, naming it, when one does not.
+stopped=()
+started=false
 restart() {
-  local id
-  for id in "${holders[@]}"; do docker start "$id" >/dev/null || true; done
+  local id cname status ok=0
+  started=true
+  for id in "${stopped[@]}"; do
+    cname=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-) || cname=$id
+    echo "restore: starting $cname" >&2
+    if ! docker start "$id" >/dev/null; then
+      echo "restore: $cname did not start: see docker logs $cname" >&2
+      ok=1
+      continue
+    fi
+    status=
+    for _ in $(seq 1 "$health_timeout"); do
+      status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
+      case $status in healthy | running | unhealthy | exited | dead) break ;; esac
+      sleep 1
+    done
+    case $status in
+      healthy | running) echo "restore: $cname is $status" >&2 ;;
+      *)
+        echo "restore: $cname is $status: see docker logs $cname" >&2
+        ok=1
+        ;;
+    esac
+  done
+  return "$ok"
 }
+partial=
+on_exit() {
+  local code=$?
+  trap - EXIT INT TERM HUP
+  [ -z "$partial" ] || rm -f "$partial" "$partial.sha256"
+  if ! $started && [ "${#stopped[@]}" -gt 0 ]; then
+    restart || code=1
+  fi
+  exit "$code"
+}
+trap on_exit EXIT
+trap 'exit 130' INT TERM HUP
+
 for id in "${holders[@]}"; do
   echo "restore: stopping $(docker inspect -f '{{.Name}}' "$id" | cut -c2-)" >&2
+  stopped+=("$id")
   docker stop "$id" >/dev/null
 done
 
@@ -149,15 +195,12 @@ done
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 safety="$backup_dir/$project-pre-restore-$stamp.tar.gz"
 partial="$backup_dir/.$(basename "$safety").partial"
-trap 'rm -f "$partial" "$partial.sha256"' EXIT
 # shellcheck disable=SC2016 # expanded in the container
-if ! ops_container -v "$data_volume:/app/data:ro" "${spend_ro[@]}" -- \
+ops_container -v "$data_volume:/app/data:ro" "${spend_ro[@]}" -- \
   'node /ops/backup-ops.cjs copy /tmp/out >&2 && cd /tmp/out && if [ -n "$(ls)" ]; then tar -czf - *; fi' \
-  >"$partial" </dev/null; then
-  restart
-  fail "could not copy the volumes before the restore; nothing changed"
-fi
+  >"$partial" </dev/null || fail "could not copy the volumes before the restore; nothing changed"
 if [ -s "$partial" ]; then
+  tar -tzf "$partial" >/dev/null || fail "the copy of the volumes is not a readable archive; nothing changed"
   write_checksum "$partial" "$(basename "$safety")"
   mv "$partial" "$safety"
   mv "$partial.sha256" "$safety.sha256"
@@ -165,29 +208,15 @@ if [ -s "$partial" ]; then
   echo "restore: the volumes as they were are in $safety" >&2
 fi
 
-if ! ops_container -v "$data_volume:/app/data" "${spend_rw[@]}" -- \
-  'mkdir /tmp/in && tar -xzf - -C /tmp/in && node /ops/backup-ops.cjs install /tmp/in' <"$file"; then
-  restart
+# The swap, in a session of its own: a ^C at the terminal reaches this script only, which takes
+# it once the swap has ended.
+ops_session=own ops_container -v "$data_volume:/app/data" "${spend_rw[@]}" -- \
+  'mkdir /tmp/in && tar -xzf - -C /tmp/in && node /ops/backup-ops.cjs install /tmp/in' <"$file" ||
   fail "the restore failed; the volumes as they were are in ${safety##*/} (if it was written)"
-fi
 
-if [ "${#holders[@]}" -eq 0 ]; then
+if [ "${#stopped[@]}" -eq 0 ]; then
   echo "restore: done; no running container of $project used the volumes, none started" >&2
   exit 0
 fi
-for id in "${holders[@]}"; do
-  cname=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
-  echo "restore: starting $cname" >&2
-  docker start "$id" >/dev/null
-  status=
-  for _ in $(seq 1 "$health_timeout"); do
-    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
-    case $status in healthy | running | unhealthy | exited | dead) break ;; esac
-    sleep 1
-  done
-  case $status in
-    healthy | running) echo "restore: $cname is $status" >&2 ;;
-    *) fail "$cname is $status after the restore: see docker logs $cname" ;;
-  esac
-done
+restart || fail "the data is restored, but a container did not come back (above)"
 echo "restore: done" >&2

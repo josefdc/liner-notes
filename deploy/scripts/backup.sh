@@ -12,6 +12,11 @@
 # The archive is then checked as restore.sh checks it (integrity_check, and the spend log by the
 # API's rules); one that fails is never kept, and the run exits non-zero.
 #
+# A spend log that breaks the API's rules (its last line cut by a crash, say) does not stop the
+# database's backup: it goes into the archive as llm-spend.jsonl.invalid, which no restore
+# applies, nothing is pruned, and the run exits 3 so cron reports it. The API refuses model calls
+# on such a log too; deploy/scripts/spend-log.sh repair-tail fixes a cut last line.
+#
 # Safe from cron: runs never overlap (a lock in BACKUP_DIR), a backup is flushed to disk and
 # renamed into place only when complete, and only the newest KEEP backups of the project stay
 # (restore.sh's pre-restore copies are neither counted nor removed).
@@ -32,15 +37,14 @@ fail() {
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-keep=${KEEP:-14}
-case $keep in '' | *[!0-9]*) fail "KEEP must be a whole number, not \"$keep\"" ;; esac
+keep=$(whole_number KEEP "${KEEP:-14}" 0)
 docker volume inspect "$data_volume" >/dev/null 2>&1 ||
   fail "no volume $data_volume (is COMPOSE_PROJECT_NAME right? has the stack started once?)"
 spend_mount=()
 if docker volume inspect "$spend_volume" >/dev/null 2>&1; then
   spend_mount=(-v "$spend_volume:/app/spend:ro")
 fi
-image=$(api_image)
+use_api_image
 
 mkdir -p "$backup_dir"
 backup_dir=$(cd "$backup_dir" && pwd)
@@ -69,6 +73,14 @@ mv "$partial" "$backup_dir/$name"
 mv "$partial.sha256" "$backup_dir/$name.sha256"
 sync "$backup_dir"
 echo "backup: $name, $(du -h "$backup_dir/$name" | cut -f1)" >&2
+if tar -tzf "$backup_dir/$name" | grep -x llm-spend.jsonl.invalid >/dev/null; then
+  echo "$backup_dir/$name"
+  echo "backup: FAILED for the spend log: $name holds the database, but the spend log broke the" \
+    "API's rules (above) and is in it as llm-spend.jsonl.invalid, which no restore applies;" \
+    "no backup was pruned. A cut last line: stop the API, run deploy/scripts/spend-log.sh" \
+    "repair-tail, start it, back up again (deploy/RUNBOOK.md, \"Backups\")" >&2
+  exit 3
+fi
 
 # The newest KEEP backups of this project stay.
 if [ "$keep" -gt 0 ]; then

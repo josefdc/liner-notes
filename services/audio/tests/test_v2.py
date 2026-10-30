@@ -1800,8 +1800,11 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # one-note basses. The seeds that get a key are pinned exactly, in both directions: a change
 # that keys one more or one fewer fails here. Still keyed: bells, alone and over drums (the
 # tierce is a minor third over the hum: two notes a third apart, as in a chord); three cowbells
-# whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
-# harmonics the notes test does not fold within its tolerance; toms (two or three drums, each
+# whose oscillators read as a sixth (508, 515) or where the third harmonic of one oscillator is
+# louder than half of it and counts as a note (528); two basses whose harmonics the notes test
+# does not fold within its tolerance (the rules measured by
+# evals/audio/scripts/still_chord_rules.py for these four families take right keys or too few
+# of theirs); toms (two or three drums, each
 # with its own envelope, alone or over a kit) and tabla, whose lines mostly move apart, and
 # where they hold still (tabla 504, 516, 520; kit toms 528) spell a chord (a known limit: the
 # rule measured by evals/audio/scripts/drum_rules.py that withholds most tom and kit-tom keys
@@ -1909,6 +1912,68 @@ def test_drums_whose_lines_rise_and_fall_apart_keep_their_key(family, seed):
     assert not evidence.still and evidence.notes is None, evidence
     for name in KEY_ESTIMATORS:
         assert estimators.select_estimator(name).key(signals_) is not None, name
+
+
+def _cents_apart(high: float, low: float) -> float:
+    return 1200 * float(np.log2(high / low))
+
+
+def _sixth_apart(notes) -> bool:
+    """Two cowbell oscillators within SOURCE_THIRD_CENTS of a minor sixth."""
+    off = abs(_cents_apart(notes[1], notes[0]) - 800)
+    return len(notes) == 2 and off <= estimators.SOURCE_THIRD_CENTS
+
+
+def _third_harmonic_kept(notes) -> bool:
+    """The top note is within SOURCE_NOTE_TOLERANCE of three times the one under it."""
+    *_, under, top = notes
+    return abs(top - 3 * under) <= estimators.SOURCE_NOTE_TOLERANCE * top
+
+
+def _harmonic_off_the_line(notes) -> bool:
+    """
+    A bass's third harmonic lies further than SOURCE_NOTE_TOLERANCE from 3x its line, but within
+    1 % of it: off the line, not another note (bass 501 reads 0.46 %).
+    """
+    line = max(notes[:2])
+    third = min(notes, key=lambda f: abs(f - 3 * line))
+    return estimators.SOURCE_NOTE_TOLERANCE * third < abs(third - 3 * line) < 0.01 * third
+
+
+def _tierce_over_hum(notes) -> bool:
+    """A bell's second note is its tierce, a minor tenth over the hum."""
+    return abs(_cents_apart(notes[1], notes[0]) - 1500) <= estimators.SOURCE_THIRD_CENTS
+
+
+@pytest.mark.parametrize(
+    "family, seed, spelled",
+    [
+        ("cowbell", 508, _sixth_apart),
+        ("cowbell", 528, _third_harmonic_kept),
+        ("one-note-bass", 501, _harmonic_off_the_line),
+        ("bell-over-drums", 522, _tierce_over_hum),
+    ],
+)
+def test_still_sources_whose_lines_spell_a_chord_keep_their_key(family, seed, spelled):
+    """
+    A known limit, pinned as it is: a cowbell, a one-note bass and a church bell over drums
+    whose lines hold still and move together, so the single-source rule asks what they spell,
+    and they spell a chord. Two cowbell oscillators lie a minor sixth apart, or the third
+    harmonic of one oscillator is louder than SOURCE_OVERTONE_RATIO of it and stays a note; a
+    line next to the bass note (the bass's own, from re-striking it every sixteenth) pulls its
+    fundamental line off, so its harmonics lie beyond SOURCE_NOTE_TOLERANCE of it; a bell's tierce is a minor tenth over its hum (bell 509 is
+    pinned above). The estimators that ONE_PITCH_CLASS_KEYED says key the seed do.
+    evals/audio/scripts/still_chord_rules.py measures eleven rules that could withhold these
+    keys; none ships (services/audio/README.md gives the numbers).
+    """
+    signals_ = estimators.Signals(signals.ONE_PITCH_CLASS_SEEDED[family](seed), FIXTURE_SR)
+    assert signals_.key_withheld() is None
+    evidence = signals_.source_evidence
+    assert evidence.still and evidence.chord and not evidence.single, evidence
+    assert spelled(evidence.notes), evidence.notes
+    for name in KEY_ESTIMATORS:
+        keyed = seed in ONE_PITCH_CLASS_KEYED.get((family, name), set())
+        assert (estimators.select_estimator(name).key(signals_) is not None) == keyed, name
 
 
 def one_source_withheld(signals_: estimators.Signals) -> bool:

@@ -552,3 +552,42 @@ def test_a_major_triad_in_second_inversion_does_not_read_as_membrane_modes():
     assert got["membrane modes"] < -0.4
     if HAS_ESSENTIA:
         assert got["keys"]["essentia"][:2] == ("C", "major")
+
+
+def test_most_counts_the_aimed_families_and_the_estimators_that_served_one():
+    """
+    A table of candidates and families passed in (as scripts/still_chord_rules.py does): the
+    tabla row is not aimed at, so its 0.95 neither starts the search nor counts; librosa serves
+    no training tom, so only Essentia's four count: 3 of 4 from 0.7 (2 of 4 at 0.8 is half).
+    """
+    script = load_script()
+    rows, measured = search_table()
+    for r in rows:
+        if r["drum"]:
+            r["keys"]["librosa"] = (False, False)
+    rows.append(
+        {
+            "name": "tabla-s510",
+            "kind": "control",
+            "drum": ("tabla", "pinned"),
+            "group": "tabla",
+            "keys": {"essentia": (True, False), "librosa": (True, False)},
+        }
+    )
+    measured["tabla-s510"] = {"r": 0.95, "q": 0.8}
+    table = {"one": ("any", ("r",), ("toms",))}
+    got = script.candidates(rows, measured, table, ("toms", "tabla"))["one"]
+    assert got["most"] == 0.7
+    assert got["mostDrums"]["essentia"][("toms", "pinned")] == (3, 4)
+    assert got["mostDrums"]["essentia"][("tabla", "pinned")] == (1, 1)
+    assert got["mostDrums"]["librosa"][("toms", "pinned")] == (0, 0)
+    only_toms = script.candidates(rows, measured, table, ("toms",))["one"]
+    assert set(only_toms["mostDrums"]["essentia"]) == {("toms", "pinned"), ("toms", "held out")}
+
+
+def test_served_rows_mark_the_families_asked_for(served):
+    script, controls_run, _ = served
+    _, _, key_run, calibration_run = script.newest(REPORT)
+    rows = script.served_rows(controls_run, key_run, calibration_run, ("cowbell",))
+    marked = {r["drum"] for r in rows if r["drum"]}
+    assert marked == {("cowbell", "pinned"), ("cowbell", "held out")}

@@ -52,10 +52,10 @@ fail() {
   exit 1
 }
 
-# The scripts run with a docker that logs the arguments of every `docker run`.
+# The scripts run with a docker that logs the session and the arguments of every `docker run`.
 mkdir "$work/bin"
 # shellcheck disable=SC2016 # the shim's own variables
-printf '#!/bin/sh\n[ "$1" = run ] && printf "%%s\\n" "$*" >>"%s"\nexec %s "$@"\n' \
+printf '#!/bin/sh\n[ "$1" = run ] && printf "session %%s %%s\\n" "$(ps -o sid= -p $$ | tr -d " ")" "$*" >>"%s"\nexec %s "$@"\n' \
   "$work/docker-runs.log" "$(command -v docker)" >"$work/bin/docker"
 chmod +x "$work/bin/docker"
 backup() { PATH="$work/bin:$PATH" "$here/backup.sh"; }
@@ -307,7 +307,11 @@ wait "$pid" || code=$?
 grep -q 'database: restored to' "$work/sigint.err" || fail "^C cut the swap short: $(cat "$work/sigint.err")"
 wait_healthy
 [ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after ^C during the swap: $(markers)"
-echo "ok: ^C during the swap let it finish, showed its output and started the API (exit 130)"
+swap_session=$(grep -F -- "--name $project-restore-swap " "$work/docker-runs.log" | tail -1 | cut -d' ' -f2)
+if [ -z "$swap_session" ] || [ "$swap_session" = "$(ps -o sid= -p $$ | tr -d ' ')" ]; then
+  fail "the swap did not run in a session of its own (session ${swap_session:-none})"
+fi
+echo "ok: ^C during the swap let it finish in its own session, showed its output and started the API (exit 130)"
 
 # The lock: a backup or restore running holds it; one that cannot open it says so.
 before=$(started)

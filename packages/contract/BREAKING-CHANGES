@@ -11,4 +11,4 @@ ComposerOutput input $.claims[].scope: new required field
 ComposerOutput input $.factoids[].scope: new required field
 FactoidsOutput input $.factoids[].scope: new required field
 ComposerOutput input $.genealogyLinks[].scope: new required field
-engine changed: zod 4.6.5 -> 4.6.7 for GHSA-mrhx-c7xc-m3w5: an array, map or set with a size bound now fails on its size before its elements are parsed; def, checks and the 25 JSON Schema snapshots are unchanged and no comparison code changes
+engine changed: zod 4.6.5 -> 4.6.7 for GHSA-mrhx-c7xc-m3w5: an array, map or set with a size bound now fails on its size before its elements are parsed, and that issue aborts, so later refinements on it or its parent do not run (the only capped collection is TrackDataSchema.factoids in apps/api/src/agent/schema.ts, which is not parsed at runtime); def, checks and the 25 JSON Schema snapshots are unchanged and no comparison code changes

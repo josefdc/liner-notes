@@ -312,7 +312,8 @@ describe("error handling", () => {
 
 /**
  * Listens on a free port and returns a raw POST helper: node:http sends the body byte for byte.
- * `later` is sent 50 ms after the body, and the helper settles once both are sent and answered.
+ * `later`, when given, is sent only once the answer has arrived, so the server reads it apart from
+ * the body; the helper settles when it has been sent.
  */
 async function listen(server: express.Express) {
   const http = server.listen(0, "127.0.0.1");
@@ -325,11 +326,6 @@ async function listen(server: express.Express) {
     later?: Buffer,
   ) =>
     new Promise<{ status?: number; code?: string }>((resolve, reject) => {
-      let answer: { status?: number; code?: string } | undefined;
-      let sent = later === undefined;
-      const settle = () => {
-        if (answer && sent) resolve(answer);
-      };
       const req = httpRequest({ host: "127.0.0.1", port, method: "POST", path, headers }, (res) => {
         let text = "";
         res.setEncoding("utf8");
@@ -337,22 +333,14 @@ async function listen(server: express.Express) {
           text += chunk;
         });
         res.on("end", () => {
-          answer = { status: res.statusCode, code: JSON.parse(text).code };
-          settle();
+          const answer = { status: res.statusCode, code: JSON.parse(text).code };
+          if (later === undefined) resolve(answer);
+          else req.end(later, () => resolve(answer));
         });
       });
       req.on("error", reject);
-      if (later === undefined) {
-        req.end(body);
-        return;
-      }
-      req.write(body);
-      setTimeout(() => {
-        req.end(later, () => {
-          sent = true;
-          settle();
-        });
-      }, 50);
+      if (later === undefined) req.end(body);
+      else req.write(body);
     });
   const close = async () => {
     http.closeAllConnections();
@@ -409,50 +397,50 @@ describe("content encodings", () => {
     }
   });
 
-  it("keeps serving after bytes that follow a compressed body, sent with it or after it", async () => {
-    // GHSA-27r3-jxmh-p828: body-parser before 2.4.0 leaves the decoder piped with no error
-    // listener once it has read the body. Bytes that reach that decoder later must not throw
-    // out of it, which would end the process; vitest fails the run on such an error.
+  it("keeps serving when bytes reach the decoder after the body was read", async () => {
+    // body-parser 2.3.0 leaves the decoder without an error listener once it has read the body
+    // (GHSA-27r3-jxmh-p828). A gzip member followed by a zero byte, or a deflate stream followed
+    // by any byte, ends the decoder before the request ends, so the route answers first; what is
+    // sent after the answer then reaches the finished decoder. An error it throws would end the process, and
+    // vitest fails the run on one.
     const { post, close } = await listen(app());
     try {
       const json = JSON.stringify({ padding: "a" });
-      const tails = [
-        Buffer.from("trailing bytes"),
-        Buffer.alloc(64 * 1024, 0x41),
-        gzipSync(json).subarray(0, 10),
-        deflateSync(json),
-      ];
-      // gzip reads what follows as a second member and fails while the body is still being
-      // read; deflate stops at the end of its stream, so the route answers.
-      const cases = [
-        ["gzip", gzipSync(json), { status: 400, code: "bad_request" }],
-        ["deflate", deflateSync(json), { status: 404, code: "not_found" }],
-      ] as const;
-      for (const [encoding, frame, expected] of cases) {
-        for (const tail of tails) {
-          const headers = {
-            "Content-Type": "application/json",
-            "Content-Encoding": encoding,
-            "Content-Length": frame.length + tail.length,
-          };
-          const label = `${encoding} + ${tail.length} bytes`;
-          expect(await post("/api/nope", headers, Buffer.concat([frame, tail])), label).toEqual(
-            expected,
-          );
-          expect(await post("/api/nope", headers, frame, tail), `${label}, later`).toEqual(
-            expected,
-          );
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      const gzipThenZero = Buffer.concat([gzipSync(json), Buffer.from([0])]);
+      const deflateThenByte = Buffer.concat([deflateSync(json), Buffer.from("x")]);
+      const garbage = Buffer.from("not a compressed body");
       const plain = Buffer.from(json);
-      expect(
-        await post(
-          "/api/nope",
-          { "Content-Type": "application/json", "Content-Length": plain.length },
-          plain,
-        ),
-      ).toEqual({ status: 404, code: "not_found" });
+      const cases = [
+        ["gzip", gzipThenZero, garbage],
+        ["gzip", gzipThenZero, gzipSync(json)],
+        ["deflate", deflateThenByte, garbage],
+        ["deflate", deflateThenByte, deflateSync(json)],
+      ] as const;
+      for (const [encoding, body, tail] of cases) {
+        const headers = {
+          "Content-Type": "application/json",
+          "Content-Encoding": encoding,
+          "Content-Length": body.length + tail.length,
+        };
+        const label = `${encoding}, ${body.length} + ${tail.length} bytes`;
+        expect(await post("/api/nope", headers, Buffer.concat([body, tail])), label).toEqual({
+          status: 404,
+          code: "not_found",
+        });
+        expect(await post("/api/nope", headers, body, tail), `${label}, after`).toEqual({
+          status: 404,
+          code: "not_found",
+        });
+        // The next request on the connection is read after the tail.
+        expect(
+          await post(
+            "/api/nope",
+            { "Content-Type": "application/json", "Content-Length": plain.length },
+            plain,
+          ),
+          `${label}, next`,
+        ).toEqual({ status: 404, code: "not_found" });
+      }
     } finally {
       await close();
     }

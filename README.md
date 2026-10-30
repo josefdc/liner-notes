@@ -256,23 +256,22 @@ parent commit on a pull request and against the commit before the push on `main`
 
 #### Dependency advisories
 
-`npm audit --omit=dev` advisories that stay in the lock, each with what was measured: whether the API
-reaches the advisory's code path, and whether its failure reproduces.
+`npm audit --omit=dev` advisories that stay in the lock, each with what was measured and how the API
+handles it.
 
 - **body-parser 2.3.0, [GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828)
-  (high): reached; did not reproduce on Node 24 (24.16 and the image's 24.21); 2.4.0 is taken once
-  it is 14 days old (2026-11-05).** After it reads a compressed body, body-parser 2.3.0 leaves the
-  decoder piped from the request with no error listener (`lib/read.js:113`, the success path of the
-  `getBody` callback), so an error the decoder raised on bytes arriving later would end the process.
-  The API reaches that path: it lets gzip and deflate bodies through to the parser
-  (`apps/api/src/http/middleware/encoding.ts:4` and `:16` answer brotli and anything else with 415,
-  ahead of `express.json` at `apps/api/src/http/app.ts:72-73`). In what was tried, neither decoder
-  raised that error: gzip read what followed as another member and failed while the body was still
-  being read (400), and deflate ignored what followed the end of its stream. Trailing bytes of eight
-  kinds after a gzip, deflate or brotli body, sent with it or 300 ms after it, ended no process. The
-  test "keeps serving after bytes that follow a compressed body" in
-  `apps/api/src/http/app.test.ts:412` sends them through the app and fails on any error thrown out
-  of a decoder.
+  (high): reproduces against the API; mitigated in the API; 2.4.0 is taken once it is 14 days old
+  (2026-11-05).** After it reads a compressed body, body-parser 2.3.0 leaves the decoder piped from
+  the request with no error listener (`lib/read.js:113`, the success path of the `getBody`
+  callback), so an error the decoder raises on bytes that arrive later ends the process. The API
+  reaches that path for gzip and deflate bodies (`apps/api/src/http/middleware/encoding.ts:4,16`,
+  ahead of `express.json` at `apps/api/src/http/app.ts:72-73`). It now gives that decoder an error
+  listener (`ignoreLateDecoderErrors`, `encoding.ts:17,44`), so a late decoder error cannot end the
+  process; a body that fails to decode is still answered with 400. Measured with the listener: 15
+  cases, 0 uncaught errors, on Node 24.16 and on the API image's 24.21. The test "keeps serving when
+  bytes reach the decoder after the body was read" (`apps/api/src/http/app.test.ts:400`) fails on
+  2.3.0 without the listener. The 2.3.0 charset check that follows the pipe runs only with a
+  `verify` option, which `express.json` here does not set. The listener goes when 2.4.0 is taken.
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

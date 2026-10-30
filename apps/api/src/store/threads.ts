@@ -7,8 +7,9 @@ import { INTERRUPT } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type Database from "better-sqlite3";
 
-// One saver per connection: it sets up its tables once and keeps its prepared reads. A closed
-// connection's saver goes with it.
+// One saver per connection: it sets up its tables once and keeps its prepared reads. The map
+// holds the connection weakly, so a saver is collected with its connection once nothing else
+// refers to that connection.
 const savers = new WeakMap<Database.Database, SqliteSaver>();
 
 function saverFor(db: Database.Database): SqliteSaver {

@@ -23,6 +23,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import {
   initializeDatabase,
@@ -30,8 +31,8 @@ import {
   isDatabaseHealthy,
   getDb,
   DatabaseOpenError,
-  getDefaultDbPath,
 } from "./database.js";
+import { getDefaultDbPath } from "./paths.js";
 import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from "./migrations.js";
 import { appendRunEvent, getRun, listRunEvents, startRun, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
@@ -998,6 +999,40 @@ describe("migrations", () => {
     const check = new Database(dbPath, { readonly: true });
     expect(check.prepare("SELECT version FROM schema_migrations").pluck().all()).toEqual([1, 2]);
     check.close();
+  });
+
+  it("says which migrations were applied when the checkpoint tables then cannot be set up", () => {
+    const busy = Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    const setupTables = vi
+      .spyOn(SqliteSaver.prototype as unknown as { setup: () => void }, "setup")
+      .mockImplementation(() => {
+        throw busy;
+      });
+    try {
+      const dbPath = setup();
+
+      const err = thrown(() => initializeDatabase(dbPath));
+      expect(setupTables).toHaveBeenCalledTimes(1);
+      expect(err.kind).toBe("busy");
+      expect(err.message).toContain("setting up the checkpoint tables failed");
+      expect(err.message).toContain(
+        `Migrations ${MIGRATIONS.map((m) => m.version).join(", ")} were applied by this start ` +
+          "and stay applied.",
+      );
+      expect(err.message).not.toContain("left untouched");
+      const check = new Database(dbPath, { readonly: true });
+      expect(check.prepare("SELECT MAX(version) FROM schema_migrations").pluck().get()).toBe(
+        LATEST_SCHEMA_VERSION,
+      );
+      check.close();
+
+      // The next start has no migration left to apply.
+      const again = thrown(() => initializeDatabase(dbPath));
+      expect(again.message).toContain("No migration was applied by this start.");
+      expect(again.message).not.toContain("left untouched");
+    } finally {
+      setupTables.mockRestore();
+    }
   });
 
   it("runs each migration once", () => {

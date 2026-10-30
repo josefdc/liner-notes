@@ -1160,7 +1160,8 @@ describe("the analysis graph paused for a pick, on the SQLite checkpointer", () 
       queryMatch: "exact",
     });
     expect(await isWaitingAtInterrupt(db, threadId)).toBe(false);
-    // The saver added the column: the rows saved before it have no path, the resume's have one.
+    // The first saver on the connection (the resume check's) added the column: the rows 1.0
+    // saved have an empty path, and each write of the resume has the path of its task.
     expect(columnsOf(db, "writes")).toContain("task_path");
     expect(pathsOf(db, threadId, "candidates")).toEqual(["", "~__pregel_pull, clarification"]);
     expect(pathsOf(db, threadId, "selectedTrackId")).toEqual(["~__pregel_pull, clarification"]);

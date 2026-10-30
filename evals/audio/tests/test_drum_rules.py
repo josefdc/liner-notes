@@ -14,6 +14,9 @@ from evals_audio import service
 from evals_audio.service import REPO_ROOT
 
 SCRIPT = REPO_ROOT / "evals" / "audio" / "scripts" / "drum_rules.py"
+# Without the models extra the service answers for Essentia with librosa, so Essentia's own
+# keys are checked only where it is installed.
+HAS_ESSENTIA = importlib.util.find_spec("essentia") is not None
 REPORT = REPO_ROOT / "evals" / "reports" / "audio-2026-10-29.json"
 SR = 22050
 
@@ -336,14 +339,14 @@ def test_a_minor_sixth_over_the_bass_reads_as_membrane_modes_and_would_lose_its_
     A known cost of the membrane-mode rule: 1.594 lies 7 cents from a minor sixth, so a chord
     with a minor sixth over a strong partial reads as membrane modes, as a minor triad in
     second inversion does. A minor struck as E4-A4-C5 in a triangle timbre gets its right key
-    from both estimators, and reads far above the threshold; the same timbre in root position
-    (C4-E4-G4) reads below it.
+    (from librosa, and from Essentia where it is installed), and reads far above the
+    threshold; the same timbre in root position (C4-E4-G4) reads below it.
     """
     script = load_script()
     _, E = service.load()
     sixth = E.Signals(stabs((329.63, 440.0, 523.25), TRIANGLE), SR)
     assert sixth.key_withheld() is None
-    for est in ("essentia", "librosa"):
+    for est in ("essentia", "librosa") if HAS_ESSENTIA else ("librosa",):
         key = E.select_estimator(est).key(sixth)
         assert (key.tonic, key.mode) == ("A", "minor"), est
     assert script.membrane_modes(sixth) > 10 * MEMBRANE_THRESHOLD
@@ -540,10 +543,12 @@ def test_a_pair_keeps_the_first_threshold_that_withholds_most_drums(monkeypatch)
 def test_a_major_triad_in_second_inversion_does_not_read_as_membrane_modes():
     """
     The controls' C major stabs voiced G3-C4-E4-G4 (a fourth and a major sixth over the bass)
-    read well below the threshold; seed 826 is one, with Essentia's right key.
+    read well below the threshold; seed 826 is one (Essentia, where it is installed, serves
+    its right key).
     """
     script = load_script()
     assert int(np.random.default_rng(826).integers(0, 3)) == 2  # the G3-C4-E4-G4 voicing
     got = script.analyse(("control", "c-major-stabs-s826", 1, ""))
-    assert got["keys"]["essentia"][:2] == ("C", "major")
     assert got["membrane modes"] < -0.4
+    if HAS_ESSENTIA:
+        assert got["keys"]["essentia"][:2] == ("C", "major")

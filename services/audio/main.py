@@ -98,11 +98,12 @@ for _client_logger in ("httpx", "httpcore"):
 # its phase is left out too. A run off the grid, or whose part from its first onset is off it,
 # is left out as a whole, so a band's sparse or drifting first or last beats in such a run are
 # missing with it; tempo, confidence and sections are unchanged.
-# 2.3.5: an MP3 without a Xing or Info header is decoded to the end of its stream, where
-# libsndfile stopped at mpg123's length estimate (a fraction of a VBR stream: the gate called a
-# 6.3 s stream too short at 1.2 s, and a 30 s one was measured on its first 8.8 to 14.0 s), or
-# refused when it cannot be (mpeg.py, decode()). Every other file decodes as before.
-ANALYZER_VERSION = "2.3.5"
+# 2.3.6 (2.3.5 names a key rule that was tried and not shipped): an MP3 without a Xing or Info
+# header is decoded to the end of its stream, where libsndfile stopped at mpg123's length
+# estimate (a fraction of a VBR stream: in the tests the gate called a 6.3 s stream too short at
+# 1.2 s, and the 30 s files measured for this were read as 5.3 to 18.8 s), or refused when it
+# cannot be (mpeg.py, decode()). Every other file decodes as before.
+ANALYZER_VERSION = "2.3.6"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -110,8 +111,8 @@ ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
 # An MP3 without a Xing or Info header whose decode falls short of its counted frames by more
 # than both of these is decoded again from a pipe (mpeg.py, decode()). Read whole, such a file
-# decodes to exactly its frames; read to mpg123's length estimate, the measured VBR files lost
-# 53 to 82 % of their length (0.54 of 3.06 s; 8.8 to 14.0 of 30 s).
+# decodes to exactly its frames; read to mpg123's length estimate, the VBR files measured for
+# this lost 37.6 to 82 % of their length (0.54 of the issue's 3.06 s file).
 TRUNCATED_READ_SECONDS = 0.1
 TRUNCATED_READ_SHARE = 0.02
 # Decoded samples beyond this magnitude are not audio (a float WAV can hold 1e30); float
@@ -156,7 +157,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.3.5+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.6+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)
@@ -210,9 +211,11 @@ class InvalidAudioError(ValueError):
 # stream (a tenth of a second of the 1 s test fixture, which the gate then calls too short).
 # A form sniff.py does not recognise gets the generic reason.
 UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does not decode"
-# Why an MP3 is refused when even a read to the end of the stream decodes less than its frames
-# hold (decode()): it is not measured, nor gated as too short, on part of the preview.
-TRUNCATED_MP3 = "the MP3 decodes to less audio than its frames hold"
+# Why an MP3 is refused when even a read to the end of the stream falls short of its counted
+# frames by more than TRUNCATED_READ_SECONDS and TRUNCATED_READ_SHARE (decode()), or when that
+# read fails: it is not measured, nor gated as too short, on that part of the preview.
+TRUNCATED_MP3 = "the MP3 decodes to less audio than its MPEG audio frames hold"
+MP3_READ_FAILED = "the MP3 could not be decoded to the end of its MPEG audio frames"
 
 
 # Why the gate measured nothing, for each block it leaves null (v2.withheld).
@@ -380,7 +383,8 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
 def _rereader(source: str | BinaryIO) -> Callable[[], bytes] | None:
     """
     A function that reads the whole file again after it was decoded: a path, or a binary file
-    object from its current position. None for an integer file descriptor (soundfile closes it).
+    object from its current position. None for an integer file descriptor (soundfile closes it)
+    and for a file object that cannot tell its position (a pipe), which the decoder refuses.
     """
     if isinstance(source, (str, bytes, os.PathLike)):
 
@@ -391,7 +395,10 @@ def _rereader(source: str | BinaryIO) -> Callable[[], bytes] | None:
         return read_path
     if not all(hasattr(source, name) for name in ("read", "seek", "tell")):
         return None
-    start = source.tell()
+    try:
+        start = source.tell()
+    except (OSError, ValueError):  # io.UnsupportedOperation is both
+        return None
 
     def read_object() -> bytes:
         source.seek(start)
@@ -412,20 +419,41 @@ def _feed(fd: int, data: bytes) -> None:
         os.close(fd)
 
 
-def _decode_through_pipe(data: bytes) -> np.ndarray:
+# Frames per read from the pipe (one MPEG-1 layer III frame): a read that fails loses its block.
+PIPE_BLOCK = 1152
+
+
+def _decode_through_pipe(data: bytes) -> tuple[np.ndarray, bool]:
     """
-    Decode the file's bytes read from a pipe, at most MAX_DECODE_SECONDS. libsndfile cannot ask
-    mpg123 for a length on a pipe, so the read goes on until the stream ends.
+    Decode an MPEG audio stream (from its first frame: libsndfile cannot skip a large ID3v2 tag
+    or one with a footer on a pipe) read from a pipe, at most MAX_DECODE_SECONDS. libsndfile
+    cannot ask mpg123 for a length on a pipe, so the read goes on until the stream ends. It is
+    read in blocks of PIPE_BLOCK frames, and a block that fails (libsndfile fails on a cut last
+    frame) ends it: the samples and whether a read failed. Raises when the pipe cannot be opened.
     """
     read_end, write_end = os.pipe()
     feeder = threading.Thread(target=_feed, args=(write_end, data), daemon=True)
     feeder.start()
+    blocks: list[np.ndarray] = []
+    failed = False
     try:
         with sf.SoundFile(read_end, closefd=False) as f:
-            return f.read(int(MAX_DECODE_SECONDS * f.samplerate), dtype="float32", always_2d=True)
+            channels, left = f.channels, int(MAX_DECODE_SECONDS * f.samplerate)
+            while left > 0:
+                try:
+                    block = f.read(min(PIPE_BLOCK, left), dtype="float32", always_2d=True)
+                except (sf.LibsndfileError, RuntimeError, EOFError):
+                    failed = True
+                    break
+                if not len(block):
+                    break
+                blocks.append(block)
+                left -= len(block)
     finally:
         os.close(read_end)
         feeder.join()
+    samples = np.concatenate(blocks) if blocks else np.zeros((0, channels), np.float32)
+    return samples, failed
 
 
 def _short_of(decoded: int, stream: mpeg.StreamLength) -> bool:
@@ -442,10 +470,11 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
     The decoded MPEG audio ``data``, or the whole stream when libsndfile stopped at mpg123's
     estimate of its length (a VBR file without a Xing or Info header; see mpeg.py). The frames
     are counted, and a decode that falls short of them by more than TRUNCATED_READ_SECONDS and
-    TRUNCATED_READ_SHARE is decoded again from a pipe. A file with a Xing or Info header, one
-    whose frames cannot be counted, and one that decoded to its frames keep the first decode.
-    Raises InvalidAudioError (TRUNCATED_MP3) when the second decode still falls short: no
-    duration is measured or gated on part of the stream.
+    TRUNCATED_READ_SHARE is decoded again from a pipe, from the first frame. A file with a Xing
+    or Info header that gives its frame count, one whose frames cannot be counted, and one that
+    decoded to its frames keep the first decode. Raises InvalidAudioError when the second decode
+    still falls short by more than that: MP3_READ_FAILED when it failed, TRUNCATED_MP3 when it
+    ended early. Such a file is not measured, nor gated, on the part that decoded.
     """
     stream = mpeg.stream_length(raw)
     if stream is None or stream.length_header or stream.sample_rate != sr:
@@ -453,9 +482,9 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
     if not _short_of(len(data), stream):
         return data
     try:
-        whole = _decode_through_pipe(raw)
+        whole, failed = _decode_through_pipe(raw[stream.start :])
     except (sf.LibsndfileError, RuntimeError, EOFError) as e:
-        raise InvalidAudioError(TRUNCATED_MP3) from e
+        raise InvalidAudioError(MP3_READ_FAILED) from e
     logger.info(
         "The MP3 decoded to %.2f s of the %.2f s its %d frames hold; decoded again to %.2f s",
         len(data) / sr,
@@ -464,7 +493,7 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
         len(whole) / sr,
     )
     if _short_of(len(whole), stream):
-        raise InvalidAudioError(TRUNCATED_MP3)
+        raise InvalidAudioError(MP3_READ_FAILED if failed else TRUNCATED_MP3)
     return whole
 
 
@@ -480,9 +509,9 @@ def decode(file_path: str | BinaryIO) -> Signals:
 
     Raises InvalidAudioError (a 422) for a file sniff.py recognises as MP4 (M4A) or AAC
     (UNSUPPORTED_FORMAT, before any decoding), when the file cannot be decoded, when an MP3
-    decodes to less than its frames hold (TRUNCATED_MP3), or when it holds non-finite or absurd
-    sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the downmix
-    (antiphase stereo), the loudest channel is analysed instead.
+    does not decode to its frames (TRUNCATED_MP3, MP3_READ_FAILED), or when it holds non-finite
+    or absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the
+    downmix (antiphase stereo), the loudest channel is analysed instead.
     """
     if sniff.is_mp4_or_aac(file_path):
         raise InvalidAudioError(UNSUPPORTED_FORMAT)

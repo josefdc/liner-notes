@@ -3,9 +3,9 @@ An MP3 is decoded to its real length. libsndfile reads an MP3 up to the length m
 the file is opened; without a Xing or Info header that is an estimate from the file's size and
 the first frame's bitrate, and for VBR it can be a fraction of the stream. The service counts the
 frames (mpeg.py) and decodes such a file again from a pipe, where the read goes on to the end;
-when even that falls short, the preview is refused with its own reason. It is never measured, nor
-gated as too short, on part of the stream. CBR files and files with a Xing or Info header decode
-as before.
+when even that falls short by more than max(0.1 s, 2 %), the preview is refused with its own
+reason instead of being measured, or gated as too short, on that part. CBR files and files with
+a Xing or Info header that gives the frame count decode as before.
 
 The fixtures are 1 s of a 440 Hz sine, mono at 44.1 kHz, VBR (LAME quality 6), made with FFmpeg
 (N-127579, libmp3lame) without metadata:
@@ -19,7 +19,9 @@ ID3v2 tag.
 """
 
 import io
+import os
 import struct
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +40,8 @@ VBR_XING = FIXTURES / "tone-vbr-xing.mp3"
 # Samples in the 40 frames of tone-vbr.mp3, and what libsndfile reads of them on its own.
 VBR_SAMPLES = 40 * 1152
 VBR_ESTIMATED = 8700
-TRUNCATED = "the MP3 decodes to less audio than its frames hold"
+TRUNCATED = "the MP3 decodes to less audio than its MPEG audio frames hold"
+READ_FAILED = "the MP3 could not be decoded to the end of its MPEG audio frames"
 
 
 @pytest.fixture
@@ -94,6 +97,25 @@ def _without_length_header(raw: bytes) -> bytes:
     return raw[:start] + raw[start + first.length :]
 
 
+def _syncsafe(n: int) -> bytes:
+    return bytes((n >> shift) & 0x7F for shift in (21, 14, 7, 0))
+
+
+def _parts(raw: bytes) -> tuple[bytes, list[bytes], bytes]:
+    """The ID3v2 tags, the frames one by one, and what follows them."""
+    at = tag = sniff.id3v2_end(io.BytesIO(raw), 0)
+    frames = []
+    while (frame := mpeg.parse_header(raw, at)) is not None and at + frame.length <= len(raw):
+        frames.append(raw[at : at + frame.length])
+        at += frame.length
+    return raw[:tag], frames, raw[at:]
+
+
+def _whole(source) -> tuple[np.ndarray, mpeg.StreamLength]:
+    """decode()'s samples and the frame count of a file (a path)."""
+    return main.decode(str(source)).native, mpeg.stream_length(Path(source).read_bytes())
+
+
 def _never_decoded_again(monkeypatch):
     def fail(data):
         raise AssertionError("decoded again from a pipe")
@@ -135,30 +157,172 @@ def test_a_vbr_mp3_without_a_xing_header_is_analysed_over_http(client, cdn, monk
     assert response.json()["v2"]["window"]["durationSeconds"] == round(6 * VBR_SAMPLES / 44100, 3)
 
 
+# Through the real pipe: a cut last frame, large or footed ID3v2 tags, junk the frame count
+# skips, and first frames whose Xing or Info header mpg123 does not use.
+
+
+@pytest.mark.parametrize("cut", [1, 10, 100, 300])
+def test_a_30_s_stream_with_a_cut_last_frame_is_measured_whole(tmp_path, cut):
+    path = tmp_path / "cut.mp3"
+    path.write_bytes(_repeated(29)[:-cut])  # 30.3 s of frames
+    assert len(_plain_read(path)) < 0.5 * 29 * VBR_SAMPLES
+    native, stream = _whole(path)
+    assert native.size == stream.samples  # every whole frame
+    assert native.size / 44100 >= 30.0
+    # The pipe read fails at the cut frame; what decoded before it was kept.
+    assert main._decode_through_pipe(path.read_bytes()[stream.start :])[1] is True
+
+
+@pytest.mark.parametrize("form", ["300 KB cover art", "ID3v2.4 with a footer"])
+def test_a_stream_behind_a_large_or_footed_id3v2_tag_is_measured_whole(tmp_path, form):
+    _, frames, _ = _parts(_repeated(29))
+    if form == "300 KB cover art":
+        body = b"APIC" + struct.pack(">I", 300_000) + b"\x00\x00" + bytes(300_000)
+        tag = b"ID3\x03\x00\x00" + _syncsafe(len(body)) + body
+    else:
+        body = b"APIC" + _syncsafe(1000) + b"\x00\x00" + bytes(1000)
+        tag = b"ID3\x04\x00\x10" + _syncsafe(len(body)) + body + b"3DI\x04\x00\x10"
+        tag += _syncsafe(len(body))
+    path = tmp_path / "tagged.mp3"
+    path.write_bytes(tag + b"".join(frames))
+    assert len(_plain_read(path)) < 0.7 * 29 * VBR_SAMPLES
+    native, stream = _whole(path)
+    assert stream.start == len(tag)
+    assert native.size == stream.samples == 29 * VBR_SAMPLES
+
+
+@pytest.mark.parametrize(
+    "form", ["zeros after the ID3v2 tag", "one zero byte and no tag", "junk after frame 3"]
+)
+def test_a_stream_the_count_resyncs_in_is_measured_whole(tmp_path, form):
+    tag, frames, _ = _parts(_repeated(6))
+    if form == "zeros after the ID3v2 tag":
+        raw = tag + bytes(1000) + b"".join(frames)
+    elif form == "one zero byte and no tag":
+        raw = b"\x00" + b"".join(frames)
+    else:
+        raw = tag + b"".join(frames[:3]) + b"JUNKJUNK" + b"".join(frames[3:])
+    path = tmp_path / "junk.mp3"
+    path.write_bytes(raw)
+    assert len(_plain_read(path)) < 0.5 * 6 * VBR_SAMPLES
+    native, stream = _whole(path)
+    assert native.size == stream.samples == 6 * VBR_SAMPLES
+
+
+def test_a_xing_header_without_a_frame_count_is_read_whole(tmp_path):
+    # mpg123 skips such a header frame but takes no length from it: the size estimate again.
+    tag, frames, tail = _parts(_sine_mp3(44100, seconds=6.0, channels=2))
+    header = bytearray(frames[0])
+    at = header.find(b"Xing")
+    header[at + 4 : at + 8] = bytes(4)
+    path = tmp_path / "no-count.mp3"
+    path.write_bytes(tag + bytes(header) + b"".join(frames[1:]) + tail)
+    assert len(_plain_read(path)) < 0.5 * 6 * 44100
+    native, stream = _whole(path)
+    assert stream.length_header is False
+    # Every frame but the header frame, which mpg123 skips.
+    assert native.size == stream.samples - 1152
+    assert native.size >= 6 * 44100
+
+
+@pytest.mark.parametrize("sr", [8000, 22050, 44100])
+def test_a_crc_protected_xing_frame_is_no_length_header(tmp_path, sr):
+    # The header sits 2 bytes later, behind the CRC; libsndfile 1.2.2 does not use it either and
+    # reads such a file to its size estimate. Made by hand (protection bit cleared, 2 CRC bytes
+    # inserted): the encoders at hand do not write CRCs.
+    tag, frames, tail = _parts(_sine_mp3(sr, seconds=1.5))
+    first = bytearray(frames[0])
+    first[1] &= 0xFE
+    crc_first = bytes(first[:4]) + b"\x00\x00" + bytes(first[4:-2])
+    path = tmp_path / "crc.mp3"
+    path.write_bytes(tag + crc_first + b"".join(frames[1:]) + tail)
+    assert len(_plain_read(path)) < 0.7 * 1.5 * sr
+    native, stream = _whole(path)
+    assert stream.length_header is False
+    assert native.size == stream.samples  # every frame, the header frame decoded as audio
+
+
+def test_a_stale_xing_frame_count_is_trusted_a_known_limit(tmp_path):
+    # mpg123 reads to the header's count, on the pipe too: such a file is measured on the part
+    # that decodes, as before the count existed.
+    tag, frames, tail = _parts(_sine_mp3(44100, seconds=6.0, channels=2))
+    header = bytearray(frames[0])
+    at = header.find(b"Xing")
+    header[at + 8 : at + 12] = struct.pack(">I", 50)
+    path = tmp_path / "stale.mp3"
+    path.write_bytes(tag + bytes(header) + b"".join(frames[1:]) + tail)
+    assert mpeg.stream_length(path.read_bytes()).length_header is True
+    assert np.array_equal(main.decode(str(path)).native, _plain_read(path))
+    assert len(_plain_read(path)) < 50 * 1152
+
+
+def _write_and_close(fd: int, data: bytes) -> None:
+    try:
+        os.write(fd, data)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+# soundfile's length callback raises inside libsndfile on such a source (as before the count).
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+def test_a_source_that_cannot_seek_is_refused_as_undecodable():
+    read_end, write_end = os.pipe()
+    feeder = threading.Thread(target=_write_and_close, args=(write_end, _repeated(6)))
+    feeder.start()
+    with os.fdopen(read_end, "rb") as source:
+        with pytest.raises(
+            main.InvalidAudioError, match="^the file could not be decoded as audio$"
+        ):
+            main.decode(source)
+    feeder.join()
+
+
 # A read that stays short is refused with its own reason, never measured or gated.
 
 
 def test_a_read_that_stays_short_is_refused_with_its_reason(monkeypatch):
     first = sf.read(str(VBR), dtype="float32", always_2d=True)[0]
-    monkeypatch.setattr(main, "_decode_through_pipe", lambda data: first)
+    monkeypatch.setattr(main, "_decode_through_pipe", lambda data: (first, False))
     with pytest.raises(main.InvalidAudioError, match=f"^{TRUNCATED}$"):
         main.decode(str(VBR))
 
 
-def test_a_second_decode_that_fails_is_refused_with_the_same_reason(monkeypatch):
+def test_a_second_read_that_fails_short_is_refused_with_that_reason(monkeypatch):
+    first = sf.read(str(VBR), dtype="float32", always_2d=True)[0]
+    monkeypatch.setattr(main, "_decode_through_pipe", lambda data: (first, True))
+    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$"):
+        main.decode(str(VBR))
+
+
+def test_a_second_decode_that_cannot_start_is_refused_with_that_reason(monkeypatch):
     def fail(data):
         raise sf.LibsndfileError(1)
 
     monkeypatch.setattr(main, "_decode_through_pipe", fail)
-    with pytest.raises(main.InvalidAudioError, match=f"^{TRUNCATED}$"):
+    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$"):
         main.decode(str(VBR))
+
+
+def test_a_stream_that_turns_mono_is_refused_through_the_real_pipe(tmp_path):
+    # A known limit: stereo frames, then mono frames at the same rate. The frames count both,
+    # libsndfile stops at the change, so the preview is refused.
+    tag, stereo, _ = _parts(_without_length_header(_sine_mp3(44100, seconds=6.0, channels=2)))
+    _, mono, _ = _parts(VBR.read_bytes())
+    path = tmp_path / "turns-mono.mp3"
+    path.write_bytes(tag + b"".join(stereo + mono * 6))
+    with pytest.raises(main.InvalidAudioError, match=f"^{TRUNCATED}$"):
+        main.decode(str(path))
 
 
 def test_a_truncated_preview_is_refused_over_http(client, cdn, monkeypatch, temp_dir):
     base, server = cdn
     server.files["/api/1/1/a/b/0/preview.mp3"] = VBR.read_bytes()
     monkeypatch.setattr(preview, "validate_preview_url", lambda url: None)
-    monkeypatch.setattr(main, "_decode_through_pipe", lambda data: np.zeros((0, 1), np.float32))
+    monkeypatch.setattr(
+        main, "_decode_through_pipe", lambda data: (np.zeros((0, 1), np.float32), False)
+    )
     response = client.post("/analyze", json={"preview_url": f"{base}/api/1/1/a/b/0/preview.mp3"})
     assert response.status_code == 422, response.text
     assert response.json() == {"detail": f"The preview is not analysable audio: {TRUNCATED}"}
@@ -223,14 +387,14 @@ def test_the_mp3s_the_other_tests_write_decode_as_before(monkeypatch, tmp_path):
 
 def test_a_shortfall_within_the_tolerance_keeps_the_first_decode():
     stream = mpeg.StreamLength(
-        frames=1000, samples=1000 * 1152, sample_rate=44100, length_header=False
+        frames=1000, samples=1000 * 1152, sample_rate=44100, length_header=False, start=0
     )
     seconds = stream.samples / 44100  # 26.1 s: 2 % is 0.52 s
     assert not main._short_of(stream.samples, stream)
     assert not main._short_of(int((seconds - 0.5) * 44100), stream)
     assert main._short_of(int((seconds - 0.6) * 44100), stream)
     short = mpeg.StreamLength(
-        frames=40, samples=VBR_SAMPLES, sample_rate=44100, length_header=False
+        frames=40, samples=VBR_SAMPLES, sample_rate=44100, length_header=False, start=0
     )
     assert not main._short_of(VBR_SAMPLES - 4000, short)  # 0.09 s
     assert main._short_of(VBR_SAMPLES - 4800, short)  # 0.11 s
@@ -252,16 +416,16 @@ def test_the_frame_count_is_what_a_whole_decode_gives():
         stream = mpeg.stream_length(raw)
         assert stream is not None and not stream.length_header
         assert stream.sample_rate == 44100
-        assert stream.samples == len(main._decode_through_pipe(raw))
+        assert main._decode_through_pipe(raw[stream.start :])[0].shape[0] == stream.samples
     assert mpeg.stream_length(VBR.read_bytes()) == mpeg.StreamLength(
-        frames=40, samples=VBR_SAMPLES, sample_rate=44100, length_header=False
+        frames=40, samples=VBR_SAMPLES, sample_rate=44100, length_header=False, start=20
     )
 
 
 def test_the_frame_count_sees_the_xing_header():
     stream = mpeg.stream_length(VBR_XING.read_bytes())
     assert stream == mpeg.StreamLength(
-        frames=41, samples=41 * 1152, sample_rate=44100, length_header=True
+        frames=41, samples=41 * 1152, sample_rate=44100, length_header=True, start=20
     )
 
 
@@ -281,9 +445,54 @@ def test_the_frame_count_stops_at_a_trailing_tag_and_a_cut_frame():
     assert mpeg.stream_length(raw[:-1]).frames == full.frames - 1
 
 
-def test_the_frame_count_stops_at_a_frame_of_another_stream():
-    raw = VBR.read_bytes() + _sine_mp3(22050)[sniff.id3v2_end(io.BytesIO(_sine_mp3(22050)), 0) :]
-    assert mpeg.stream_length(raw).frames == 40
+def test_the_frame_count_skips_frames_of_another_stream():
+    _, other, _ = _parts(_sine_mp3(22050))
+    raw = VBR.read_bytes()
+    tag, frames, _ = _parts(raw)
+    assert mpeg.stream_length(raw + b"".join(other)).frames == 40
+    mixed = tag + b"".join(frames[:20] + other + frames[20:])
+    assert mpeg.stream_length(mixed).frames == 40
+
+
+@pytest.mark.parametrize(
+    "where", ["zeros before the first frame", "junk after frame 3", "junk after frame 30"]
+)
+def test_the_frame_count_resyncs_after_junk(where):
+    tag, frames, _ = _parts(VBR.read_bytes())
+    if where == "zeros before the first frame":
+        raw = tag + bytes(1000) + b"".join(frames)
+    else:
+        n = 3 if where == "junk after frame 3" else 30
+        raw = tag + b"".join(frames[:n]) + b"JUNK\xff\xfbJUNK" + b"".join(frames[n:])
+    stream = mpeg.stream_length(raw)
+    assert (stream.frames, stream.samples) == (40, VBR_SAMPLES)
+    assert stream.start == len(tag) + (1000 if where.startswith("zeros") else 0)
+
+
+def test_the_frame_count_takes_no_false_sync():
+    # A sync word whose next frames do not follow is not a frame, before or inside the stream.
+    tag, frames, _ = _parts(VBR.read_bytes())
+    false = frames[0][:4] + bytes(10)
+    stream = mpeg.stream_length(tag + false + b"".join(frames[:5]) + false + b"".join(frames[5:]))
+    assert (stream.frames, stream.start) == (40, len(tag) + len(false))
+
+
+def test_the_frame_count_of_large_inputs_without_frames_or_of_tiny_frames():
+    # 2 MB, the download limit: sync words with an invalid third byte, then 32-byte frames.
+    assert mpeg.stream_length(b"\xff\xfb" * (1 << 20)) is None
+    tiny = bytes([0xFF, 0xFF, 0x14, 0xC0]) + bytes(28)  # MPEG-1 layer I, 32 kbit/s, 48 kHz
+    stream = mpeg.stream_length(tiny * (1 << 16))
+    assert (stream.frames, stream.samples, stream.sample_rate) == (1 << 16, 384 << 16, 48000)
+
+
+def test_a_xing_header_without_a_frame_count_is_no_length_header():
+    tag, frames, tail = _parts(VBR_XING.read_bytes())
+    header = bytearray(frames[0])
+    at = header.find(b"Xing")
+    assert header[at + 7] & 1
+    header[at + 4 : at + 8] = bytes(4)
+    raw = tag + bytes(header) + b"".join(frames[1:]) + tail
+    assert mpeg.stream_length(raw).length_header is False
 
 
 @pytest.mark.parametrize(
@@ -308,4 +517,6 @@ def test_the_frame_count_skips_id3v2_tags():
     tag = sniff.id3v2_end(io.BytesIO(raw), 0)
     frame = b"TIT2" + struct.pack(">I", 5) + b"\x00\x00" + b"\x03tone"
     second = b"ID3\x03\x00\x00" + bytes([0, 0, 0, len(frame)]) + frame
-    assert mpeg.stream_length(raw[:tag] + second + raw[tag:]) == mpeg.stream_length(raw)
+    both = mpeg.stream_length(raw[:tag] + second + raw[tag:])
+    one = mpeg.stream_length(raw)
+    assert (both.frames, both.samples, both.start) == (one.frames, one.samples, tag + len(second))

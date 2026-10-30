@@ -140,12 +140,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.5+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.6+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.5+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.6+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -168,7 +168,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.5+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -651,12 +651,12 @@ drum loop as of a dense mix whose key a listener would name. The codes (the cont
 | any | `estimate_failed` | the estimator raised (logged), or gave a non-finite tempo |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
-times full scale, is refused with `422`. So is an MP3 that still decodes to less than its frames
-hold after the second read described under "How it works" (step 2), with its own reason: `the
-MP3 decodes to less audio than its frames hold`. It is not measured, nor gated as too short, on
-the part that decoded. As with the MP4 and AAC refusal below, the API reports a failed
-analysis with this reason in its error detail. None of the files measured for this check was
-refused this way.
+times full scale, is refused with `422`. So is an MP3 whose second read, described under "How
+it works" (step 2), still falls short of its frames by more than 0.1 s and 2 %, with its own
+reason: `the MP3 could not be decoded to the end of its MPEG audio frames` when that read
+failed, `the MP3 decodes to less audio than its MPEG audio frames hold` when it ended early.
+It is not measured, nor gated as too short, on the part that decoded. As with the MP4 and AAC
+refusal below, the API reports a failed analysis with this reason in its error detail.
 
 The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
 refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
@@ -724,27 +724,38 @@ analysis, whatever the outcome.
    `libsndfile` reads an MP3 up to the length `mpg123` gives when the file is opened. With a
    Xing or Info header in the first frame (what LAME, FFmpeg and `libsndfile` write by default)
    that length is exact. Without one, `mpg123` estimates it from the file size and the first
-   frame's bitrate: close for CBR, but for VBR a fraction of the stream. A 1 s VBR file read
-   as 0.20 s, a 3.03 s one as 0.54 s, and 30 s VBR files at 22.05, 44.1 and 48 kHz, mono and
-   stereo, as 8.8 to 14.0 s. The gate then called the short ones too short, and the 30 s
-   ones were measured on their first seconds.
+   frame's bitrate: close for CBR, but for VBR a fraction of the stream. The VBR files measured
+   for this (FFmpeg and `libsndfile` encodes, 1 to 30 s, 8 to 48 kHz) were read short by 37.6
+   to 82 %: the issue's 3.03 s file as 0.54 s, a 1 s one as 0.20 s. The gate then called the
+   short ones too short, and the 30 s ones were measured on their first seconds.
 
-   So for an MP3 without that header, `mpeg.py` counts the frames from their headers (each
-   gives its length in bytes and its samples). When the decode falls short of them by more
-   than 0.1 s and 2 % (`TRUNCATED_READ_SECONDS`, `TRUNCATED_READ_SHARE`), the file is decoded
-   again from a pipe. There `libsndfile` cannot ask for a length, so the read goes on to the
-   end of the stream, still at most 35 s. A whole read of such a file decodes to exactly its
+   So `mpeg.py` counts the frames of an MP3 from their headers (each gives its length in bytes
+   and its samples). It takes a sync word for the first frame only when two more frames follow
+   it where the lengths put them, so leading zeros or junk and false sync words are skipped,
+   and after junk inside the stream it looks for the next such frame, as `mpg123` does. When
+   the file has no Xing or Info header with a frame count and the decode falls short of the
+   frames by more than 0.1 s and 2 % (`TRUNCATED_READ_SECONDS`, `TRUNCATED_READ_SHARE`), the
+   file is decoded again from a pipe, from its first frame (`libsndfile` cannot skip a large
+   ID3v2 tag, or one with a footer, on a pipe). There `libsndfile` cannot ask for a length, so
+   the read goes on to the end of the stream, still at most 35 s. It reads in blocks of one
+   frame's samples and keeps what decoded before a failure: `libsndfile` fails on a cut last
+   frame, after every whole frame decoded. A whole read of such a file decodes to exactly its
    counted frames, encoder delay and padding included, since no LAME tag says what to trim.
    The second read's first samples are the first read's. The duration the service reports is
    always that of the decoded samples; the frame count only decides whether the read was
    whole. If the second read also falls short, the preview is refused (see the error statuses
    above).
 
-   CBR files and files with a Xing or Info header decode to the same samples as before,
-   without a second read. The count stops at the first byte that does not start a frame like
-   the first one (an ID3v1 tag, junk), so after junk inside a stream it counts fewer frames
-   than `mpg123` decodes. Such a file is then not read again. A file with a Xing or Info
-   header is never checked, so a header with a wrong frame count is not caught.
+   CBR files and files with a Xing or Info header with a frame count decode to the same
+   samples as before, without a second read. A Xing header without a frame count, or one in a
+   CRC-protected first frame (2 bytes further in), is no length header to `libsndfile` 1.2.2,
+   and here neither. Known limits:
+   - A Xing or Info frame count is trusted: a stale one (lower than the frames that follow) is
+     not caught, and such a file is measured on the part that decodes, as before.
+   - A file given as an integer file descriptor (soundfile closes it) is not read again or
+     counted, and is measured on the part that decodes, as before. The service passes a path.
+   - A stream that changes from stereo to mono at the same rate decodes only to the change and
+     is refused (before, the first read's part was measured).
 
    Each step that needs another rate gets a resampled copy: 22.05 kHz (`soxr`) for the librosa
    features, 44.1 kHz for RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at
@@ -823,8 +834,10 @@ result in both files is checked against the contract's JSON Schema after a stric
 trip, and for its reasons: every `null` has one and no measured value has one
 (`tests/checks.py`). `tests/test_v1_removed.py` checks that the response is the `v2` block alone.
 `tests/test_mp3_length.py` checks that a VBR MP3 without a Xing header decodes to its frames
-(`tests/fixtures/tone-vbr.mp3`, its generation command in the test's docstring) and that CBR
-files and files with a Xing or Info header decode as before. The Essentia cases and the real-model
+(`tests/fixtures/tone-vbr.mp3`, its generation command in the test's docstring), also with a cut
+last frame, behind a large or footed ID3v2 tag and around junk, through the real pipe; that the
+refusals carry their reasons; and that CBR files and files with a Xing or Info header with a
+frame count decode as before. The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run
 `uv sync --locked --extra models` and `uv run python download_models.py` first to include them.
 `AUDIO_REQUIRE_MODELS=1` turns those skips into an error; CI's `audio models` workflow runs the

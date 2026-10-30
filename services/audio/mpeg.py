@@ -8,17 +8,27 @@ be far off for VBR: a 3.03 s VBR file whose first frame has a high bitrate is es
 read, as 0.54 s. Each frame header gives its own length in bytes and its number of samples, so
 counting the frames gives the stream's real length without decoding it.
 
-The scan starts right after the leading ID3v2 tags, where libsndfile looks for the first frame,
-and counts frames whose header has the first frame's version, layer and sample rate, each where
-the previous frame's length puts it. It stops at the first byte that does not start such a frame
-(an ID3v1 or APE tag, junk, the end of the file) and leaves out a last frame the file cuts short.
-mpg123 resyncs after junk inside a stream, so the count may fall short of what it decodes. A
-free-format stream (bitrate index 0) gives frames no length and is not counted.
+The scan starts after the leading ID3v2 tags and takes the first sync word followed by
+CONFIRMING_FRAMES frames in a row (each where the previous frame's length puts it) for the first
+frame, so leading zeros or junk are skipped and a false sync is not counted. It then counts the
+frames whose header has the first frame's version, layer and sample rate. At a byte that does
+not start such a frame (junk inside the stream, an ID3v1 or APE tag, a cut last frame) it looks
+for the next confirmed frame, as mpg123 resyncs, and the count goes on from there. The scan is
+linear in the file's size. A free-format stream (bitrate index 0) gives frames no length and is
+not counted.
+
+Known limits; such a file is measured on the part that decodes, as before the count existed:
+- A Xing or Info header with a frame count is trusted (mpg123 reads to it), so a header whose
+  count is stale (lower than the frames that follow) is not caught.
+- main.decode cannot read an integer file descriptor again (soundfile closes it), so a file
+  given that way is not counted.
 """
 
 from __future__ import annotations
 
+import functools
 import io
+import re
 from dataclasses import dataclass
 
 import sniff
@@ -40,6 +50,24 @@ _VERSIONS = {0: 25, 2: 2, 3: 1}
 # Where a Xing or Info header starts in the first frame (after the 4-byte header and the side
 # information), by version and whether the frame is mono.
 _XING_OFFSETS = {(1, False): 36, (1, True): 21, (2, False): 21, (2, True): 13}
+# The Xing flag that says the header holds the number of frames.
+_XING_FRAMES_FLAG = 0x01
+# Frames with the same version, layer and sample rate that must follow each other (each where the
+# previous one's length puts it) before the scan takes a sync word for a frame, at the start and
+# after junk; fewer do when they end exactly at the end of the file.
+CONFIRMING_FRAMES = 3
+# The first three bytes of a header parse_header accepts: the sync, a version other than the
+# reserved 01 and a layer other than the reserved 00, then a bitrate index of 1-14 and a rate
+# index of 0-2. The sync search runs in C; only these candidates are parsed.
+_SYNC = re.compile(
+    b"\\xff["
+    + b"".join(
+        re.escape(bytes([b])) for b in range(0xE0, 0x100) if (b >> 3) & 3 != 1 and (b >> 1) & 3
+    )
+    + b"]["
+    + b"".join(re.escape(bytes([b])) for b in range(0x10, 0xF0) if (b >> 2) & 3 != 3)
+    + b"]"
+)
 
 
 @dataclass(frozen=True)
@@ -61,10 +89,11 @@ class StreamLength:
     frames: int
     samples: int  # per channel, over every frame counted
     sample_rate: int
-    # A Xing or Info header in the first frame: mpg123 takes the length from it, and trims the
-    # encoder delay and padding its LAME tag gives, so the decoded length is that header frame
-    # and up to two more frames shorter than the count.
+    # A Xing or Info header with a frame count in the first frame: mpg123 takes the length from
+    # it, and trims the encoder delay and padding its LAME tag gives, so the decoded length is
+    # that header frame and up to two more frames shorter than the count.
     length_header: bool
+    start: int  # the offset of the first frame in the file
 
     @property
     def seconds(self) -> float:
@@ -73,14 +102,23 @@ class StreamLength:
 
 def parse_header(data: bytes, i: int) -> Header | None:
     """The MPEG audio frame header at ``i``, or None (no sync, a reserved or free-format field)."""
-    if i + 4 > len(data) or data[i] != 0xFF or (data[i + 1] & 0xE0) != 0xE0:
+    if i + 4 > len(data) or data[i] != 0xFF:
         return None
-    version = _VERSIONS.get((data[i + 1] >> 3) & 0x03)
-    layer = 4 - ((data[i + 1] >> 1) & 0x03)
-    bitrate_index, rate_index = data[i + 2] >> 4, (data[i + 2] >> 2) & 0x03
+    return _header(data[i + 1], data[i + 2], data[i + 3] >> 6)
+
+
+@functools.cache
+def _header(b1: int, b2: int, mode: int) -> Header | None:
+    """The header for its second and third bytes and channel mode (cached: a scan of junk full
+    of sync words parses the same few headers over and over)."""
+    if (b1 & 0xE0) != 0xE0:
+        return None
+    version = _VERSIONS.get((b1 >> 3) & 0x03)
+    layer = 4 - ((b1 >> 1) & 0x03)
+    bitrate_index, rate_index = b2 >> 4, (b2 >> 2) & 0x03
     if version is None or layer == 4 or bitrate_index in (0, 15) or rate_index == 3:
         return None
-    padding = (data[i + 2] >> 1) & 0x01
+    padding = (b2 >> 1) & 0x01
     bitrate = _BITRATES[(min(version, 2), layer)][bitrate_index - 1] * 1000
     sample_rate = _SAMPLE_RATES[version][rate_index]
     if layer == 1:
@@ -89,35 +127,81 @@ def parse_header(data: bytes, i: int) -> Header | None:
         length, samples = 144 * bitrate // sample_rate + padding, 1152
     else:
         length, samples = 72 * bitrate // sample_rate + padding, 576
-    mono = (data[i + 3] >> 6) == 0x03
-    return Header(version, layer, sample_rate, mono, length, samples)
+    return Header(version, layer, sample_rate, mode == 0x03, length, samples)
 
 
-def _has_length_header(data: bytes, first: Header) -> bool:
-    """Whether the first frame is a Xing or Info header."""
-    at = _XING_OFFSETS[(min(first.version, 2), first.mono)]
-    return data[at : at + 4] in (b"Xing", b"Info")
+def _has_length_header(data: bytes, i: int, first: Header) -> bool:
+    """
+    Whether the first frame (at ``i``) is a Xing or Info header that gives the number of frames.
+    The offset is the one for a frame without CRC: libsndfile 1.2.2 reads a file whose header
+    sits 2 bytes further in, behind a CRC, to its size estimate, as if it had none.
+    """
+    at = i + _XING_OFFSETS[(min(first.version, 2), first.mono)]
+    if data[at : at + 4] not in (b"Xing", b"Info"):
+        return False
+    return len(data) >= at + 8 and bool(data[at + 7] & _XING_FRAMES_FLAG)
+
+
+def _key(frame: Header) -> tuple[int, int, int]:
+    return frame.version, frame.layer, frame.sample_rate
+
+
+def _confirmed(data: bytes, i: int, key: tuple[int, int, int] | None) -> Header | None:
+    """
+    The frame at ``i`` when CONFIRMING_FRAMES frames with its version, layer and sample rate
+    (``key``, when given) follow each other from it, or fewer that end exactly at the end.
+    """
+    first = parse_header(data, i)
+    if first is None or (key is not None and _key(first) != key):
+        return None
+    at = i
+    for _ in range(CONFIRMING_FRAMES):
+        frame = parse_header(data, at)
+        if frame is None or _key(frame) != _key(first) or at + frame.length > len(data):
+            return None
+        at += frame.length
+        if at == len(data):
+            break
+    return first
+
+
+def _sync(data: bytes, i: int, key: tuple[int, int, int] | None) -> int | None:
+    """The offset of the first confirmed frame at or after ``i`` (see _confirmed), or None."""
+    while (found := _SYNC.search(data, i)) is not None:
+        if _confirmed(data, found.start(), key) is not None:
+            return found.start()
+        i = found.start() + 1
+    return None
 
 
 def stream_length(data: bytes) -> StreamLength | None:
     """
     The frames counted in the bytes of an MPEG audio file (see the module docstring), or None
-    when they do not start with an MPEG audio frame after the ID3v2 tags (any other format), or
-    when that frame is free-format.
+    when no confirmed frame follows the ID3v2 tags (any other format, a free-format stream).
     """
-    data = data[sniff.id3v2_end(io.BytesIO(data), 0) :]
-    first = parse_header(data, 0)
-    if first is None:
+    start = _sync(data, sniff.id3v2_end(io.BytesIO(data), 0), None)
+    if start is None:
         return None
-    frames = samples = at = 0
-    while (frame := parse_header(data, at)) is not None and at + frame.length <= len(data):
-        if (frame.version, frame.layer, frame.sample_rate) != (
-            first.version,
-            first.layer,
-            first.sample_rate,
-        ):
-            break
-        frames += 1
-        samples += frame.samples
-        at += frame.length
-    return StreamLength(frames, samples, first.sample_rate, _has_length_header(data, first))
+    first = parse_header(data, start)
+    key = _key(first)
+    frames = samples = 0
+    at: int | None = start
+    while at is not None:
+        frame = parse_header(data, at)
+        if frame is None or _key(frame) != key or at + frame.length > len(data):
+            # Junk, a frame of another stream or a cut last frame: on to the next confirmed frame.
+            at = _sync(data, at + 1, key)
+            continue
+        end = at + frame.length
+        following = parse_header(data, end)
+        if end == len(data) or (following is not None and _key(following) == key):
+            frames, samples, at = frames + 1, samples + frame.samples, end
+            continue
+        # No frame follows: the last frame before junk or a tag, or a false sync word inside the
+        # stream, which a confirmed frame starts before the end of.
+        resync = _sync(data, at + 1, key)
+        if resync is None or resync >= end:
+            frames, samples = frames + 1, samples + frame.samples
+        at = resync
+    header = _has_length_header(data, start, first)
+    return StreamLength(frames, samples, first.sample_rate, header, start)

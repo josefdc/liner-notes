@@ -160,6 +160,7 @@ Then open http://localhost:3000
 npm run lint           # Biome (lint + formatting); `npm run format` rewrites files
 npm run typecheck      # TypeScript in every workspace
 npm run guard:honest   # ratcheted counts (see below); lower the baselines with -- --update
+npm run check:release-age -- --base origin/main   # changed lock entries are releases at least 14 days old
 npm test               # Vitest: API, web and script tests
 npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
 npm run test:e2e       # Playwright against a development build of the web app served by vite preview with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
@@ -171,6 +172,15 @@ The honesty guard (`scripts/guard-honest.mjs`) counts patterns that may only go 
 data (random values, stock images, unscoped colours), the prototype's old copy and product name, and
 emoji in progress and log messages, in the source and in the messages of the recorded runs
 (`fixtures/replays`). Each count fails CI if it rises above its baseline in `scripts/guard-baseline.json`.
+
+Dependencies take only releases that are at least 14 days old, a rolling window by publish time:
+`min-release-age=14` in `.npmrc` for npm and `exclude-newer = "14 days"` for uv in the audio
+service. npm applies the setting only when it resolves a version, so add or update packages with
+`npm install` and do not edit `package-lock.json` by hand.
+`npm run check:release-age -- --base <ref>` (`scripts/check-release-age.mjs`) reads from the
+registry the publish time of every lock entry that is new or changed against `<ref>` and fails on
+any release younger than `.npmrc`'s `min-release-age`, naming its version, publish time and age;
+it exits 2 when the registry cannot be read. CI runs it against the parent commit.
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

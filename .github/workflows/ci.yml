@@ -41,6 +41,12 @@ jobs:
           fi
           npm --version
       - run: npm ci
+      # npm ci installs what the lock names without checking its age: every lock entry that is new
+      # or changed against the parent commit must be a release at least min-release-age (.npmrc)
+      # days old. An unchanged lock makes no registry request.
+      - name: Release age of changed lock entries
+        if: matrix.node == 24
+        run: npm run check:release-age -- --base HEAD^1
       # The contract tests validate the audio JSON Schema with Python jsonschema, run through uv.
       - uses: astral-sh/setup-uv@v10.3.0
       - name: Lint

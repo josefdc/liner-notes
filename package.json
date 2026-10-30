@@ -20,6 +20,7 @@
     "format": "biome format --write .",
     "guard:honest": "node scripts/guard-honest.mjs",
     "check:css": "node scripts/check-built-css.mjs",
+    "check:release-age": "node scripts/check-release-age.mjs",
     "check:theme": "node scripts/check-theme-sync.mjs",
     "check:contrast": "node scripts/contrast.mjs apps/web/src/styles/tokens.css",
     "test:e2e": "playwright test",

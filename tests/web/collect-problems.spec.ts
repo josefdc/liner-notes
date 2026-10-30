@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { collectProblems, loadFixture, useMockApi } from "./mock";
 
-// useMockApi keeps every spec off the network: a request to a host other than 127.0.0.1 or
+// useMockApi keeps every spec off the network: an HTTP request to a host other than 127.0.0.1 or
 // localhost is never sent. A Cover Art Archive picture is an empty image, a host the spec routes
-// itself is left to its route, and anything else is refused and listed by collectProblems.
+// itself is left to its route, and anything else (a Cover Art Archive fetch too) is refused and
+// listed by collectProblems.
 
 // Should the guard ever be missing, the browser here still resolves no outside name, so these
 // tests send nothing off the machine either way.
@@ -16,7 +17,7 @@ test.use({
 const OUTSIDE = "https://outside.example";
 const COVER = "https://coverartarchive.org/release/0000/front-500";
 
-test("a request to an outside host is refused and listed, and a cover is an empty picture", async ({
+test("a request to an outside host is refused and listed, and only a cover picture is answered", async ({
   page,
 }) => {
   const problems = collectProblems(page);
@@ -24,13 +25,18 @@ test("a request to an outside host is refused and listed, and a cover is an empt
   await page.setContent(
     `<img id="cover" src="${COVER}" alt=""><img src="${OUTSIDE}/pic.png" alt="">`,
   );
-  await page.evaluate((url) => fetch(url).catch(() => null), `${OUTSIDE}/data.json`);
+  await page.evaluate(
+    (urls) => Promise.all(urls.map((url) => fetch(url).catch(() => null))),
+    [`${OUTSIDE}/data.json`, COVER],
+  );
 
   await expect
     .poll(() => [...problems].sort())
     .toEqual([
       "error: Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector",
       "error: Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector",
+      "error: Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector",
+      `outside request: GET ${COVER}`,
       `outside request: GET ${OUTSIDE}/data.json`,
       `outside request: GET ${OUTSIDE}/pic.png`,
     ]);

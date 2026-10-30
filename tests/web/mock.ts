@@ -280,12 +280,17 @@ const offTheNetwork = new WeakSet<BrowserContext>();
 const COVER_ART = "coverartarchive.org";
 
 /**
- * Keeps a test's pages off the network (useMockApi does this for every spec). A request to any
- * host other than 127.0.0.1 or localhost is never sent:
+ * Keeps a test's pages off the network, for the page's context (useMockApi does this for every
+ * spec). An HTTP request to any host other than 127.0.0.1 or localhost is never sent:
  * - a Cover Art Archive picture is an empty image, as the recordings' covers need one;
- * - anything else is refused, and listed by collectProblems as "outside request: <method> <url>".
+ * - any other request, a Cover Art Archive fetch too, is refused, and listed by collectProblems
+ *   as "outside request: <method> <url>". In a spec that never calls collectProblems it is
+ *   refused silently.
  * The route is the context's, so a spec's own page routes for a host (offline(), a cover it
  * serves, a fake Turnstile script) are tried first: that is how a spec allows an outside host.
+ * Under offline(), a refused request other than a picture shows only as a console line
+ * "Failed to load resource: net::ERR_FAILED", without its address.
+ * A WebSocket is not guarded; the app opens none.
  */
 async function keepOffTheNetwork(page: Page) {
   const context = page.context();
@@ -302,7 +307,8 @@ async function keepOffTheNetwork(page: Page) {
       try {
         from = request.frame().page();
       } catch {
-        // A service worker's request has no frame: it is put down to the page given.
+        // A request with no frame yet is put down to the page the guard was set up for: a
+        // service worker's, and a popup's first request, which is listed with the opener's.
       }
       for (const problems of problemLists.get(from) ?? []) {
         problems.push(`outside request: ${request.method()} ${request.url()}`);
@@ -313,8 +319,8 @@ async function keepOffTheNetwork(page: Page) {
 }
 
 /**
- * Collects console errors and warnings, uncaught page errors, and the requests to an outside host
- * that keepOffTheNetwork refused (once useMockApi has been called for the page).
+ * Collects console errors and warnings, uncaught page errors, and the HTTP requests to an outside
+ * host that keepOffTheNetwork refused (once useMockApi has been called for the page's context).
  */
 export function collectProblems(page: Page) {
   const problems: string[] = [];

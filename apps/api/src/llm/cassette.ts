@@ -176,6 +176,27 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\bsk-[A-Za-z0-9_-]{16,}/g, "sk-[redacted]"],
 ];
 
+/**
+ * What SECRET_PATTERNS replace in `text`, each read on `text` itself, as [start, end) spans: the
+ * parts scrubString writes as "[redacted]" after the values (llm/invoke.ts hides them with the
+ * logger's, all found in the same text).
+ */
+export function secretPatternSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    for (const match of text.matchAll(pattern)) {
+      // The part the replacement keeps: the groups it writes back, and "sk-".
+      const kept = replacement.startsWith("sk-")
+        ? 3
+        : (match[1] ?? "").length + (replacement.startsWith("$1$2") ? (match[2] ?? "").length : 1);
+      const start = match.index + kept;
+      const end = match.index + match[0].length;
+      if (end > start) spans.push([start, end]);
+    }
+  }
+  return spans.sort((a, b) => a[0] - b[0]);
+}
+
 function scrubString(text: string, secrets: readonly string[]): string {
   let out = text;
   for (const secret of secrets) out = out.split(secret).join("[redacted]");

@@ -460,6 +460,68 @@ describe("retries", () => {
     }
     expect(shown).toEqual([]);
   });
+
+  it("hides what the logger's rules and its own hide, all read in the message as it came", () => {
+    // Fake values only. Run on the other's output, one set of rules loses a scheme word or a
+    // pair's name the other took, and leaves the credential after it.
+    const key = "K7jK8jK9jKajKbjKcj";
+    const endpoint = "https://contoso-prod.openai.azure.com";
+    const settings = { AZURE_OPENAI_API_KEY: key, AZURE_OPENAI_ENDPOINT: endpoint };
+    configureLogger({ ...settings, LOG_LEVEL: "info" });
+    const logs = captureLogsForTests();
+    onTestFinished(() => {
+      logs.restore();
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "V7qW6rE5tY4uI3oP2aS1";
+    const parts = Array.from({ length: token.length - 3 }, (_, i) => token.slice(i, i + 4));
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [key, endpoint] };
+    const shown: string[] = [];
+    for (const tail of [
+      `Bearer Bearer ${token}==&x`,
+      `authorization: 'Bearer ${token}=&x'`,
+      `token: authorization: "${token}"`,
+      `${endpoint}/xBearer ${token}`,
+      `${endpoint}Bearer ${token}`,
+      `password=authorization: "${token}"`,
+    ]) {
+      for (const n of [0, ...Array.from({ length: 124 }, (_, i) => 140 + i * 3)]) {
+        const text = `${"w ".repeat(Math.ceil(n / 2)).slice(0, n)}${tail}`;
+        const llm = classifyError(Object.assign(new Error(text), { status: 400 }), state);
+        logs.clear();
+        logger("llm").warn("model call failed", { err: llm });
+        for (const out of [
+          llm.message,
+          String((llm.cause as Error).message),
+          logs.lines().join(""),
+        ]) {
+          if (parts.some((part) => out.includes(part))) shown.push(`${n}: ${out.slice(-70)}`);
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+    const llm = classifyError(
+      Object.assign(new Error(`token: authorization: "${token}"`), { status: 400 }),
+      state,
+    );
+    expect(llm.message).toBe('scout: token: [redacted] "[redacted]"');
+    // A key only scrubSecrets' own patterns read.
+    const own = classifyError(
+      Object.assign(new Error("invalid key sk-proj1234567890abcdefXYZ given"), { status: 401 }),
+      state,
+    );
+    expect(own.message).toBe("scout: invalid key sk-[redacted] given");
+  });
+
+  it("writes what the logger writes in place of a part, not a bare mask", () => {
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const error = Object.assign(
+      new Error("connect to other-res.openai.azure.com failed: Bearer T9zB8yC7xD6wE5vF4uG3"),
+      { status: 400 },
+    );
+    const llm = classifyError(error, state);
+    expect(llm.message).toBe("scout: connect to [provider endpoint] failed: Bearer [redacted]");
+  });
 });
 
 describe("timeout", () => {

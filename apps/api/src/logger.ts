@@ -124,7 +124,11 @@ const BARE_PREVIEW =
 /** Azure OpenAI resource hosts, configured or not. Starts only at a host's first character. */
 const PROVIDER_HOST =
   /(?<![a-z0-9.-])[a-z0-9][a-z0-9.-]{0,252}\.(?:openai|cognitiveservices|services\.ai)\.azure\.com(?![a-z0-9-])/gi;
-const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>\\`]+/gi;
+/**
+ * A link in a text. It does not take Bearer or Basic glued to its end before a space
+ * (`…/xBearer <token>`): the Authorization rule reads them, with the credential after them.
+ */
+const URL_IN_TEXT = /\bhttps?:\/\/(?:(?!(?<=[A-Za-z0-9_])(?:Bearer|Basic)[ \t])[^\s"'<>\\`])+/gi;
 /** Credentials written into a URL (`https://user:password@host`). */
 const USERINFO = /^(https?:\/\/)[^/?#@\s]+@/i;
 /** Query parameters that carry a key, a token or a signature (run tokens and Turnstile's too). */
@@ -533,20 +537,54 @@ export function hideKnownValues(text: string, values: readonly string[] = []): s
 }
 
 /**
- * `text` with what scrub replaces in it (scrubbedSpans: configured values, links, hosts, pairs,
- * Authorization values and the shapes of moreSpans) and `values` (knownValueSpans) replaced by
- * "[redacted]": for a text cut to a length before the logger sees it (llm/invoke.ts). A plain cut
- * of the text as it came can leave a part of a credential that no rule reads any more (a Basic
- * one shorter than 8 characters, a quoted one without its closing quote), and another redaction
- * before the cut can take the scheme word and leave the credential.
+ * `text` with what scrub replaces in it (scrubbedSpans), `values` (knownValueSpans) and what
+ * `more` finds in the text with the configured values and `values` replaced as hideKnownValues
+ * replaces them, all found in `text` itself and hidden as one: for a text cut to a length before
+ * the logger sees it (llm/invoke.ts). A plain cut of the text as it came can leave a part of a
+ * credential that no rule reads any more (a Basic one shorter than 8 characters, a quoted one
+ * without its closing quote); and one redaction run on another's output can lose what the other
+ * took (a scheme word, a pair's name) and leave the credential. A part that scrub writes as a
+ * label alone (the provider endpoint, a preview link) is written so; the word Basic before a
+ * credential holds no secret and stays.
  */
-export function hideScrubbed(text: string, values: readonly string[] = []): string {
-  const spans = scrubbedSpans(text);
-  return hideSpans(
-    text,
-    values.length > 0 ? unionSpans(spans, knownValueSpans(text, values)) : spans,
-  );
+export function hideScrubbed(
+  text: string,
+  values: readonly string[] = [],
+  more?: (hidden: string) => Array<[number, number]>,
+): string {
+  let spans = scrubbedSpans(text);
+  if (values.length > 0) spans = unionSpans(spans, knownValueSpans(text, values));
+  if (more) {
+    const known = unionSpans(configuredSpans(text), knownValueSpans(text, values));
+    const hidden = rewrite(
+      { text },
+      known.map(([start, end]): Rewrite => [start, end, REDACTED, start, end]),
+      [],
+    );
+    const fromOf = (i: number) => (hidden.from ? (hidden.from[i] as number) : i);
+    const toOf = (i: number) => (hidden.to ? (hidden.to[i] as number) : i + 1);
+    const found = more(hidden.text).filter(([start, end]) => end > start);
+    spans = unionSpans(
+      spans,
+      found.map(([start, end]): [number, number] => [fromOf(start), toOf(end - 1)]),
+    );
+  }
+  const parts: string[] = [];
+  let at = 0;
+  for (const [from, to] of spans) {
+    const start = from + (BASIC_WORD.exec(text.slice(from, to))?.[0].length ?? 0);
+    const label = scrub(text.slice(start, to));
+    parts.push(text.slice(at, start), LABELS_ONLY.test(label) ? label : REDACTED);
+    at = to;
+  }
+  parts.push(text.slice(at));
+  return parts.join("");
 }
+
+/** The word Basic and the spaces after it, at the start of a span with more after it. */
+const BASIC_WORD = /^Basic\s+(?=\S)/i;
+/** What scrub writes for a part that holds nothing else: its labels alone. */
+const LABELS_ONLY = /^(?:\[(?:redacted|provider endpoint|preview link)\])+$/;
 
 /** Runs of the characters isFolded folds, for a quick look (spansOf): each one FOLDED_RUN. */
 const FOLDED_RUNS = /[\0-\x20\x7f-\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/g;
@@ -1328,21 +1366,32 @@ function readPairs(
   const fromOf = (i: number) => (before.from ? (before.from[i] ?? 0) : i);
   const toOf = (i: number) => (before.to ? (before.to[i] ?? 0) : i + 1);
   if (added) {
-    // What moreSpans adds to the two rules (pairShapeSpans), but pairs glued to a word; and a
+    // What moreSpans adds to the two rules (pairShapeSpans), but pairs glued to a word; a
     // credential after a scheme that looks like one, which the Authorization rule hides and the
-    // redaction of source errors does not read (it needs 12 token characters after one space).
+    // redaction of source errors does not read (it needs 12 token characters after one space);
+    // and a pair's value that looks like a credential (pairCredential), which that redaction
+    // reads in few shapes (`authorization: "<token>"` it does not).
     const more = moreSpans(before.text, false);
+    const pairs: Array<[number, number]> = [];
+    pairRules({ text: before.text }, pairs, true, false);
+    const values = pairs.filter(([start, end]) => pairCredential(before.text, start, end));
+    for (const [start, end] of values) added.push([fromOf(start), toOf(end - 1)]);
     if (more.length === 0) return;
     const two: Array<[number, number]> = [];
     pairRules({ text: before.text }, two, true, true);
     const credentials = schemeSpans(before.text).filter(([start, end]) => {
       const credential = before.text.slice(start, end);
-      const read =
-        READ_THERE.test(before.text.slice(Math.max(0, start - 8), start)) &&
-        BEARER_TOKEN.test(credential);
-      return CREDENTIAL_LIKE.test(credential) && (credential.includes("&") || !read);
+      const head = before.text.slice(Math.max(0, start - 8), start);
+      const read = READ_THERE.test(head) && BEARER_TOKEN.test(credential);
+      // As that redaction reads them, the schemes are capitalised: `basic <word>` is prose there.
+      return (
+        CREDENTIAL_LIKE.test(credential) &&
+        (credential.includes("&") || !read) &&
+        !LOWER_SCHEME.test(head)
+      );
     });
-    for (const [start, end] of unionSpans(lostSpans(more, unionSpans(two, [])), credentials)) {
+    const lost = lostSpans(more, unionSpans(two, []));
+    for (const [start, end] of unionSpans(lost, credentials)) {
       added.push([fromOf(start), toOf(end - 1)]);
     }
     return;
@@ -1364,16 +1413,37 @@ function readPairs(
   pairRules(before, hidden, withPairs, withAuth);
 }
 
+/** A run of token characters. */
+const TOKEN_RUN = /^[A-Za-z0-9._~+/=-]+$/;
+
+/**
+ * Whether the value of a pair at [start, end) of `text` looks like a credential: one run of token
+ * characters that GLUED_CREDENTIAL takes, on the line of its name.
+ */
+function pairCredential(text: string, start: number, end: number): boolean {
+  const value = text.slice(start, end);
+  if (!TOKEN_RUN.test(value) || !GLUED_CREDENTIAL.test(value)) return false;
+  let at = start - 1;
+  while (at >= 0 && /[\s"'`]/.test(text.charAt(at))) {
+    if (/[\r\n\v\f\u0085\u2028\u2029]/.test(text.charAt(at))) return false;
+    at--;
+  }
+  return true;
+}
+
 /**
  * A credential the redaction of source errors reads itself: 12 token characters after Bearer or
  * Basic and one space, not glued to a word before.
  */
 const READ_THERE = /(?:^|[^A-Za-z0-9_])(?:Bearer|Basic) $/;
 const BEARER_TOKEN = /^[A-Za-z0-9._~+/=-]{12}/;
+/** A scheme written in lower case right before a credential. */
+const LOWER_SCHEME = /\b(?:bearer|basic)[ \t]+["']?$/;
 
 /**
  * readPairs' two rules of scrub, secret pairs and Authorization values, on `current`; with
- * `pairPattern`, pairs of another shape (GLUED_PAIR).
+ * `pairPattern`, pairs of another shape (GLUED_PAIR); without `basicWord`, a Basic credential's
+ * span starts after its scheme word, as scrub writes it.
  */
 function pairRules(
   before: Rewritten,
@@ -1381,6 +1451,7 @@ function pairRules(
   withPairs: boolean,
   withAuth: boolean,
   pairPattern = SECRET_PAIR,
+  basicWord = true,
 ): void {
   let current = before;
   const pairs: Rewrite[] = [];
@@ -1398,7 +1469,7 @@ function pairRules(
     // A Basic credential's span keeps its scheme word, as it always has: spans that touch are
     // merged, so with the word a cut through the credential also falls before a host or a value
     // written right before it, and without it the cut would show them where it hid them before.
-    const from = auth.index + (auth[1] ?? "").length;
+    const from = auth.index + (auth[1] ?? (basicWord ? "" : auth[2]) ?? "").length;
     auths.push(valueRewrite(current.text, from, auth.index + auth[0].length));
   }
   rewrite(current, auths, hidden);
@@ -1459,11 +1530,12 @@ function readAsWritten(text: string): Rewritten | undefined {
 const MORE_SCHEMES =
   "Token|Digest|Bot|ApiKey|Api-Key|OAuth|SSWS|JWT|DPoP|MAC|Hawk|Negotiate|NTLM|AWS4-HMAC-SHA256";
 /**
- * Where an Authorization scheme starts (group 1: one of SCHEMES), or one of MORE_SCHEMES after an
- * Authorization name. The name is looked for at most a few characters back.
+ * Where an Authorization scheme starts (group 1: Bearer, Basic, or Discogs before its `token=`),
+ * or one of MORE_SCHEMES or Discogs after an Authorization name. The name is looked for at most a
+ * few characters back. Discogs alone is the name of a source (`Discogs not asked`), not a scheme.
  */
 const SCHEME_AT = new RegExp(
-  String.raw`\b(?:(Bearer|Basic|Discogs)|(?<=authorization["']?[ \t]{0,8}[:=][ \t]{0,8}${QUOTE}?)(?:${MORE_SCHEMES}))(?![\w-])`,
+  String.raw`\b(?:(Bearer|Basic|Discogs(?=[ \t]+token=))|(?<=authorization["']?[ \t]{0,8}[:=][ \t]{0,8}${QUOTE}?)(?:${MORE_SCHEMES}|Discogs))(?![\w-])`,
   "gi",
 );
 /**
@@ -1472,10 +1544,12 @@ const SCHEME_AT = new RegExp(
  */
 const GLUED_SCHEME = /(?<=[A-Za-z0-9_])(Bearer|Basic)(?=[ \t])/g;
 /**
- * A credential after a glued scheme: 12 characters or more, with a digit, a "+", "/" or "=", or
- * two capital letters (`VisualBasic Programming` is prose).
+ * A credential after a glued scheme or a glued pair's name: 12 characters or more, with a "+",
+ * "/" or "=", or two digits and both cases, or 20 characters or more with a digit and both cases
+ * (`VisualBasic ProgrammingInVB6` and `mypassword=must-be-set-here` are prose).
  */
-const GLUED_CREDENTIAL = /^(?=.{12})(?:.*[0-9+/=]|.*[A-Z].*[A-Z])/s;
+const GLUED_CREDENTIAL =
+  /^(?=.{12})(?:[^+/=]*[+/=]|(?=(?:[^0-9]*[0-9]){2})(?=[^A-Z]*[A-Z])(?=[^a-z]*[a-z])|(?=.{20})(?=[^0-9]*[0-9])(?=[^A-Z]*[A-Z])(?=[^a-z]*[a-z]))/s;
 /** A credential that looks like one (GLUED_CREDENTIAL), or that holds an `&`. */
 const CREDENTIAL_LIKE = /&|^(?=.{12})(?:.*[0-9+/=]|.*[A-Z].*[A-Z])/s;
 /** The next scheme of a run of them (`Bearer Bearer <token>`): any, or SCHEMES only (group 1). */
@@ -1490,15 +1564,26 @@ const SCHEME_BREAK = /[ \t]*(?:\r\n|[\r\n\v\f\u0085\u2028\u2029])[ \t]*/y;
 /** An Authorization value's parameters (`Digest username="u", response="v"`), quoted or not. */
 const AUTH_PARAM = String.raw`[A-Za-z0-9_.-]+[ \t]*=[ \t]*(?:\\?"[^"\r\n]*?\\?"|[^\s,"'\`;}\]]*)`;
 const AUTH_PARAMS = new RegExp(String.raw`${AUTH_PARAM}(?:[ \t]*,[ \t]*${AUTH_PARAM})*`, "y");
+/** A first parameter whose value is quoted (`username="u"`). */
+const QUOTED_FIRST_PARAM = /[A-Za-z0-9_.-]+[ \t]*=[ \t]*\\?"/y;
 /** Each parameter of a list AUTH_PARAMS read: group 1 its name, group 2 or 3 its value. */
 const AUTH_PARAM_VALUE = /([A-Za-z0-9_.-]+)[ \t]*=[ \t]*(?:\\?"([^"\r\n]*?)\\?"|([^\s,"'`;}\]]*))/g;
+/**
+ * The parameters of an Authorization value that hold a secret: Digest's `response` and `cnonce`,
+ * Hawk's `mac`, and any whose name says so (`oauth_signature`, `Credential`, `secret`); the
+ * others (`username`, `nonce`, `uri`, `qop`, `ts`) are read as they are.
+ */
+const SECRET_PARAM_NAME = /^(?:response|cnonce|mac)$|token|secret|passw|key|sig|credential/i;
 /** A word in place of a credential, which says it is missing or bad (`Token expired`). */
 const STATUS_WORD =
   /^(?:invalid|required|missing|expired|undefined|null|none|empty|true|false|unknown|revoked|nil|unset)[.!,;]*$/i;
 /** A credential written as one token (RFC 7235's token68), "=" only at its end. */
 const TOKEN68 = /[A-Za-z0-9._~+/-]+=*/y;
-/** A credential: what an Authorization value holds after its scheme, to a quote or a space. */
-const CREDENTIAL = /[^\s"'`,;}\]]+/y;
+/**
+ * A credential: what an Authorization value holds after its scheme, to a quote, a space or the
+ * "…" a cut writes.
+ */
+const CREDENTIAL = /[^\s"'`,;}\]\u2026]+/y;
 /** A Basic credential's start, as AUTH_SCHEME reads one: 8 characters of base64. */
 const BASIC_START = /[A-Za-z0-9+/=]{8}/y;
 /** A character of a token, glued to a closing quote after a scheme (`'Bearer'<token>`). */
@@ -1515,12 +1600,14 @@ function stickyEnd(pattern: RegExp, text: string, at: number): number {
  * shapes the two rules leave it in, and where reading stopped. A run of schemes is read whole
  * (`Bearer Bearer '<token>'`, `Discogs Discogs token=<token>`); in quotes (the one before the
  * first scheme), a comma or one line break can follow a scheme (`'Bearer, <token>'`, `'Basic
- * <line break> <credential>'`), and then only a credential that ends at the closing quote is
- * taken: a line of prose after a quoted scheme stays. The quote can close right after the scheme,
- * with the token glued to it (`'Bearer'<token>`). The credential is one run to a space, a quote, a
- * comma or a ";" (an `&` too: `Bearer abc&<token>`), or the value of each parameter of a list but
- * the realm (`Digest a="u", realm="r", response="v"`); a Basic one starts with 8 characters of
- * base64, as AUTH_SCHEME reads it. A value that starts with a REDACTED or a configured value (a
+ * <line break> <credential>'`), and then only a credential that looks like one (CREDENTIAL_LIKE)
+ * and ends at the closing quote, or at the end of the text, is taken: a line of prose after a
+ * quoted scheme stays, and so does a word (`"Bearer, please"`). The quote can close right after
+ * the scheme, with the token glued to it (`'Bearer'<token>`). The credential is one run to a
+ * space, a quote, a comma or a ";" (an `&` too: `Bearer abc&<token>`), or the value of each
+ * parameter of a list that holds a secret (SECRET_PARAM_NAME: `Digest username="u",
+ * response="v"`), or of each but the realm in a list that names none; a Basic one starts with 8
+ * characters of base64, as AUTH_SCHEME reads it. A value that starts with a REDACTED or a configured value (a
  * MASK) is left, and so is a status word (`Token expired`).
  */
 function credentialAt(
@@ -1566,7 +1653,15 @@ function credentialAt(
     NEXT_SCHEME.lastIndex = p;
     const next = NEXT_SCHEME.exec(text);
     if (!next || (next[1] === undefined && !anyScheme)) break;
-    last = next[0].toLowerCase();
+    // Discogs is a scheme of the run only before its `token=`, or in an Authorization value.
+    const word = next[0].toLowerCase();
+    if (
+      word === "discogs" &&
+      !anyScheme &&
+      stickyEnd(DISCOGS_TOKEN, text, NEXT_SCHEME.lastIndex) === -1
+    )
+      break;
+    last = word;
     p = NEXT_SCHEME.lastIndex;
   }
   let inner = "";
@@ -1578,9 +1673,14 @@ function credentialAt(
     return { spans: [], end: p };
   if (last === "basic" && stickyEnd(BASIC_START, text, p) === -1) return { spans: [], end: p };
   // A list of parameters reads further than the token its first name starts: one token
-  // (`Basic <base64>==`) is a credential, not a parameter.
+  // (`Basic <base64>==`) is a credential, not a parameter. Nor is a token with "=" in it and more
+  // after (`<token68>=&x`): a list is one whose first value is quoted, or with a second parameter
+  // after a comma.
   const list = stickyEnd(AUTH_PARAMS, text, p);
-  const params = list > stickyEnd(TOKEN68, text, p) ? list : -1;
+  const isList =
+    list > stickyEnd(TOKEN68, text, p) &&
+    (stickyEnd(QUOTED_FIRST_PARAM, text, p) !== -1 || text.slice(p, list).includes(","));
+  const params = isList ? list : -1;
   const end = params > p ? params : stickyEnd(CREDENTIAL, text, p);
   if (end <= p) return { spans: [], end: p };
   const credential = text.slice(p, end);
@@ -1588,22 +1688,28 @@ function credentialAt(
   if (glued && !GLUED_CREDENTIAL.test(credential)) return { spans: [], end };
   if (params <= p && STATUS_WORD.test(credential)) return { spans: [], end };
   const quoted = shape === "comma" || shape === "break";
-  // Taken only before the closing quote, which the last span holds too: a cut between the two
-  // would leave a credential no longer read as one.
-  if (quoted && text.charAt(end) !== closer) return { spans: [], end };
+  // Taken before the closing quote, or where a cut ended the text (its end, or the "…" it
+  // writes): a cut between the two leaves a credential still read as one. The quote is not part
+  // of it.
+  const closed = end === text.length || text.charAt(end) === closer || text.charAt(end) === "…";
+  if (quoted && !closed) return { spans: [], end };
+  if (quoted && !CREDENTIAL_LIKE.test(credential)) return { spans: [], end };
   const spans: Array<[number, number]> = [];
   if (params > p) {
-    for (const param of credential.matchAll(AUTH_PARAM_VALUE)) {
+    // The parameters that hold a secret; in a list that names none, each but the realm.
+    const list = [...credential.matchAll(AUTH_PARAM_VALUE)];
+    const named = list.some((param) => SECRET_PARAM_NAME.test(param[1] ?? ""));
+    for (const param of list) {
       const value = param[2] ?? param[3] ?? "";
-      if (!value || (param[1] ?? "").toLowerCase() === "realm" || STATUS_WORD.test(value)) continue;
+      const name = param[1] ?? "";
+      const secret = named ? SECRET_PARAM_NAME.test(name) : name.toLowerCase() !== "realm";
+      if (!value || !secret || STATUS_WORD.test(value)) continue;
       const close = param[2] === undefined ? 0 : param[0].endsWith('\\"') ? 2 : 1;
       const stop = p + param.index + param[0].length - close;
       spans.push([stop - value.length, stop]);
     }
   } else spans.push([p, end]);
-  const lastSpan = spans.at(-1);
-  if (quoted && lastSpan) lastSpan[1] = end + 1;
-  return { spans, end: quoted ? end + 1 : end };
+  return { spans, end };
 }
 
 /** Each credential credentialAt finds in `text`, as spans of it. */
@@ -1652,8 +1758,9 @@ const GLUED_USERINFO = /(?<=[A-Za-z0-9_])https?:\/\/([^/?#@\s"'<>\\`]+)@/gi;
 function moreSpans(text: string, glued = true): Array<[number, number]> {
   if (!SHAPE_HINT.test(text)) return [];
   const spans = schemeSpans(text);
+  if (NESTED_NAME.test(text)) nestedPairs(text, spans);
   if (glued) {
-    if (GLUED_NAME.test(text)) pairRules({ text }, spans, true, false, GLUED_PAIR);
+    if (GLUED_NAME.test(text)) gluedPairs({ text }, text, spans);
     for (const link of text.matchAll(GLUED_USERINFO)) {
       const start = link.index + link[0].indexOf("//") + 2;
       spans.push([start, start + (link[1] ?? "").length]);
@@ -1663,16 +1770,81 @@ function moreSpans(text: string, glued = true): Array<[number, number]> {
   if (read) {
     const from = read.from as Int32Array;
     const to = read.to as Int32Array;
-    pairRules(read, spans, true, true);
-    if (glued) pairRules(read, spans, true, false, GLUED_PAIR);
+    // The word Basic is not hidden with its credential here: scrub writes it.
+    pairRules(read, spans, true, true, SECRET_PAIR, false);
+    if (glued) gluedPairs(read, text, spans);
     for (const [start, end] of schemeSpans(read.text)) {
       spans.push([from[start] as number, to[end - 1] as number]);
     }
   }
-  const credentials = spans.filter(
-    ([start, end]) => !QUOTED_SCHEME_WORD.test(text.slice(start, end)),
-  );
+  const credentials: Array<[number, number]> = [];
+  for (const [from, to] of spans) {
+    // A quote at either end holds no secret: hidden, it would break the text around it (a JSON
+    // string, a title in curly quotes) or show as a second mask.
+    let start = from;
+    let end = to;
+    while (start < end && QUOTE_CHAR.test(text.charAt(start))) start++;
+    while (end > start && QUOTE_CHAR.test(text.charAt(end - 1))) end--;
+    if (start < end && !QUOTED_SCHEME_WORD.test(text.slice(start, end)))
+      credentials.push([start, end]);
+  }
   return unionSpans(credentials, []);
+}
+
+/** A pair's name and its ":" or "=", then another's, for a quick look first. */
+const NESTED_NAME = new RegExp(
+  String.raw`(?:${PAIR_NAMES})["']?[ \t]*[:=][ \t]*["']?(?:${PAIR_NAMES})["']?[ \t]*[:=]`,
+  "i",
+);
+/** A pair's name, in a quote or not, and its ":" or "=", where a value starts. */
+const PAIR_START = new RegExp(String.raw`["']?\b(?:${PAIR_NAMES})["']?\s*[:=]`, "iy");
+/** SECRET_PAIR, read only where it is placed. */
+const SECRET_PAIR_HERE = new RegExp(SECRET_PAIR.source, "iy");
+/** How many pairs, one in the value of the other, nestedPairs reads after the first. */
+const NESTED_DEPTH = 4;
+
+/**
+ * The values of the pairs whose name is the value of another pair (`token: authorization:
+ * "<secret>"`) that look like a credential (CREDENTIAL_LIKE), added to `spans`: the pair rule
+ * takes the second name as the first one's value, and the second pair is not read. A few levels
+ * deep only.
+ */
+function nestedPairs(text: string, spans: Array<[number, number]>): void {
+  for (const pair of text.matchAll(SECRET_PAIR)) {
+    let from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
+    for (let depth = 0; depth < NESTED_DEPTH; depth++) {
+      if (stickyEnd(PAIR_START, text, from) === -1) break;
+      const at = /["']/.test(text.charAt(from)) ? from + 1 : from;
+      SECRET_PAIR_HERE.lastIndex = at;
+      const inner = SECRET_PAIR_HERE.exec(text);
+      if (!inner) break;
+      const value = at + (inner[1] ?? "").length + (inner[2] ?? "").length;
+      const part = valueRewrite(text, value, at + inner[0].length);
+      const scheme = inner[3] ?? "";
+      if (scheme && value + scheme.length < part[1])
+        part[3] = Math.max(part[3], value + scheme.length);
+      // Only a value that looks like a credential: the name of the next pair, or a word, is not.
+      if (part[4] > part[3] && CREDENTIAL_LIKE.test(text.slice(part[3], part[4])))
+        spans.push([part[3], part[4]]);
+      from = value;
+    }
+  }
+}
+
+/** A straight or curly quote. */
+const QUOTE_CHAR = /["'`\u2018-\u201f]/;
+/**
+ * The values of the pairs whose name is glued to the word before it (GLUED_PAIR) in `read` (a
+ * reading of `text`), added to `spans` as spans of `text`: only a value that looks like a
+ * credential (GLUED_CREDENTIAL), since a longer name in prose is often followed by one
+ * (`db_password: must be set`).
+ */
+function gluedPairs(read: Rewritten, text: string, spans: Array<[number, number]>): void {
+  const found: Array<[number, number]> = [];
+  pairRules(read, found, true, false, GLUED_PAIR);
+  for (const [start, end] of found) {
+    if (GLUED_CREDENTIAL.test(text.slice(start, end))) spans.push([start, end]);
+  }
 }
 
 /** A scheme word alone, in any quotes. */

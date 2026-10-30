@@ -727,6 +727,11 @@ function headerLineSpans(text: string): Span[] {
 const MID_LINE_NAME = /(?<![\w.-])([A-Za-z0-9_.-]{1,64})[ \t]*[:=][ \t]*/g;
 /** A value written mid-line: one token-shaped run, then a space, a "," a ";" a ")" or the end. */
 const MID_LINE_VALUE = /[A-Za-z0-9._~+/=-]{8,}(?=[\s,;)]|$)/y;
+/**
+ * A value of a pair in the middle of a line that looks like a credential: with a digit, or 16
+ * characters or more in both cases (`password=must-be-set-here` is prose).
+ */
+const MID_LINE_CREDENTIAL = /\d|^(?=.{16})(?=[^A-Z]*[A-Z])[^a-z]*[a-z]/;
 /** The secret keys a name glued to a word can end in (`wpassword`, `db_password`, `xtoken`). */
 const GLUED_SECRET_KEYS = [...SECRET_KEYS].filter((key) => key.length >= 5);
 
@@ -749,9 +754,11 @@ function midLinePairSpans(text: string): Span[] {
     const start = pair.index + pair[0].length;
     MID_LINE_VALUE.lastIndex = start;
     const value = MID_LINE_VALUE.exec(text)?.[0];
-    if (!value || isStatusWord(value) || !(/\d/.test(value) || value.length >= 16)) continue;
-    spans.push([start, start + value.length]);
+    if (!value) continue;
+    // A value is read once: the names inside a run of token characters are part of it.
     MID_LINE_NAME.lastIndex = start + value.length;
+    if (isStatusWord(value) || !MID_LINE_CREDENTIAL.test(value)) continue;
+    spans.push([start, start + value.length]);
   }
   return spans;
 }

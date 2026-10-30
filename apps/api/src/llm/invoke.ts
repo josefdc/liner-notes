@@ -75,7 +75,7 @@ import {
   type LlmMessage,
   normaliseMessages,
   readCassette,
-  scrubSecrets,
+  secretPatternSpans,
   writeCassette,
 } from "./cassette.js";
 import { isLlmError, isTransient, LlmError, type LlmErrorDetails } from "./errors.js";
@@ -471,12 +471,13 @@ export function classifyError(error: unknown, state: ErrorState): LlmError {
     headers?: HeaderSource;
     error?: { code?: unknown; type?: unknown };
   };
-  // The values, and what the logger's rules hide, are hidden before the message is cut below: a
-  // value written escaped or folded, or a credential after a scheme, cut, is a part that no rule
-  // reads when the logger gets it; and scrubSecrets' own rules can take a scheme word and leave
-  // the credential after it.
+  // The values, what the logger's rules hide and what scrubSecrets' rules hide are all found in
+  // the message as it came, and hidden before it is cut below: a value written escaped or folded,
+  // or a credential after a scheme, cut, is a part that no rule reads when the logger gets it;
+  // and one set of rules run on the other's output can lose a scheme word or a pair's name that
+  // the other took, and leave the credential after it.
   const text = typeof e.message === "string" ? e.message : String(error);
-  const detail = scrubSecrets(hideScrubbed(text, secrets), secrets);
+  const detail = hideScrubbed(text, secrets, secretPatternSpans);
   const message = `${state.callSite}: ${detail}`.slice(0, 500);
   const code = errorCode(error);
   const cause: LlmErrorDetails["cause"] = {

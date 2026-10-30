@@ -763,6 +763,11 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ["entities around a value", `password=&quot;${TOKEN}&quot; x`],
     ["a secret key at the end of a longer name", `connect failed: db_password: ${TOKEN}`],
     ["a scheme glued to the word before it", `call failedBasic ${CRED}`],
+    ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
+    ["a token with == and & after two schemes", `Bearer Bearer ${TOKEN}==&x`],
+    ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
+    ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
+    ["a scheme glued to the end of a link", `GET https://h.example/xBearer ${TOKEN} failed`],
   ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
     expect(leaks(text)).toEqual([]);
     expect(scrub(text)).toContain("[redacted]");
@@ -770,7 +775,7 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
 
   it("writes what the two rules wrote, with what the new shapes add hidden as well", () => {
     for (const [text, expected] of [
-      [`{ authorization: ‘Bearer ${TOKEN}’ }`, "{ authorization: [redacted] [redacted] }"],
+      [`{ authorization: ‘Bearer ${TOKEN}’ }`, "{ authorization: [redacted] [redacted]’ }"],
       [`authorization: 'Bearer abc&${TOKEN}'`, "authorization: [redacted] [redacted]'"],
       [`authorization: Bearer abc&${TOKEN}`, "authorization: [redacted]"],
       [`{&quot;token&quot;:&quot;${TOKEN}&quot;}`, "{&quot;token&quot;:&quot;[redacted]&quot;}"],
@@ -792,8 +797,46 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       "Digest of the week: 5 songs",
       "{ authorization: '' }",
       "“Bohemian Rhapsody” by Queen",
+      // Discogs is the name of a source; only `Discogs token=` starts a credential.
+      "Discogs not asked: no key is configured for it",
+      "Discogs not asked again: its 3 records come from the research cache (read 2026-10-01)",
+      "discogs asked to slow down; retrying once in 3 s",
+      "discogs answered HTTP 502 with a body that is not JSON",
+      "Discogs search unavailable: HTTP 503",
+      "Discogs release 249504 lists no credits for the track",
+      "MusicBrainz links no Discogs release to an original release of the recording",
+      "Sources asked: MusicBrainz, Discogs, WhoSampled",
+      "Discogs said Release not found.",
+      // A word after a quoted scheme and a comma is prose, and the quote closes the string.
+      '{"error":{"message":"Bearer, please"},"code":401}',
+      // A word glued before a scheme or a pair's name, with prose after it.
+      "VisualBasic ProgrammingInVB6",
+      "mypassword=must-be-set-here",
+      "db_password: must be set",
+      "AZURE_OPENAI_API_KEY: expected printable ASCII with no spaces",
     ]) {
       expect(scrub(text)).toBe(text);
+    }
+    // What the Authorization rule read in prose before, it reads the same, with no more hidden.
+    for (const [text, expected] of [
+      ["no match for ‘Basic Instinct’ here", "no match for ‘Basic [redacted]’ here"],
+      ["x ‘Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==’ y", "x ‘Basic [redacted]’ y"],
+      [
+        "the work “Bearer of Bad News” could not be read",
+        "the work “Bearer [redacted] Bad News” could not be read",
+      ],
+      // In a list that names no secret, each value but the realm is hidden.
+      [
+        `{ authorization: 'Digest realm="api", opaque="c2VjcmV0MTIzNDU2"' }`,
+        `{ authorization: [redacted] realm="api", opaque="[redacted]"' }`,
+      ],
+      // Digest's nonce, uri and qop are not secrets; its cnonce and response are.
+      [
+        'Authorization: Digest username="u", realm="r", nonce="abc123", uri="/x", qop=auth, cnonce="c0ffee", response="6629fae49393a053"',
+        'Authorization: [redacted] username="u", realm="r", nonce="abc123", uri="/x", qop=auth, cnonce="[redacted]", response="[redacted]"',
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
     }
     // A quoted scheme followed by prose on the next line keeps the line, as before.
     for (const [text, expected] of [
@@ -808,6 +851,20 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       ["authorization: 'Bearer, then retried'", "authorization: [redacted], then retried'"],
     ]) {
       expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("reads the scheme glued to the end of the provider endpoint's link", () => {
+    // Fake values only: the link rule writes the endpoint's link as a label, and the scheme is
+    // not part of it.
+    const endpoint = "https://contoso-prod.openai.azure.com";
+    configureLogger({ AZURE_OPENAI_ENDPOINT: endpoint, LOG_LEVEL: "silent" });
+    for (const [text, expected] of [
+      [`${endpoint}/xBearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}Bearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+      expect(shows(scrub(logText(text)))).toBe(false);
     }
   });
 
@@ -937,6 +994,12 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ["glued runs, then long gaps", filled(`${"x".repeat(64)}Bearer${" ".repeat(64)}`)],
     ["quote-only values", filled("'", "authorization: Bearer ")],
     ["many links", filled("://", "Bearer ")],
+    ["pairs whose value is a pair", filled("token: authorization: ")],
+    ["pairs glued as values", filled("token:authorization:")],
+    ["Discogs words", filled("Discogs ")],
+    ["quoted schemes, commas and words", filled("'Bearer, please' ")],
+    ["tokens with = and &", filled("=&x", "authorization: 'Bearer ")],
+    ["links glued to schemes", filled("https://h.example/xBearer ")],
   ])("reads the new shapes in linear time, up to 1 MB: %s", (_name, make) => {
     // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
     // from each place about 64 times, or takes seconds on 1 MB.

@@ -12,7 +12,15 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { captureLogsForTests, configureLogger, logCut, MAX_LOGGED_TEXT, scrub } from "../logger.js";
+import { secretPatternSpans } from "../llm/cassette.js";
+import {
+  captureLogsForTests,
+  configureLogger,
+  hideScrubbed,
+  logCut,
+  MAX_LOGGED_TEXT,
+  scrub,
+} from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -1829,6 +1837,9 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     ["a Discogs token with & after two schemes", `'Discogs Discogs token=abc&${TOKEN}'`],
     ["a token with & after a scheme glued to a word", `xauthorization: Bearer abc&${TOKEN}`],
     ["a Basic credential glued to a word", `call failedBasic QWxh${TOKEN}== end`],
+    ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
+    ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
+    ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
   ])("hides the value in every text a client or a log line is shown: %s", (_label, text) => {
     expect(shown(text).filter(shows)).toEqual([]);
   });
@@ -1844,9 +1855,22 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
       "Quota resets at 10:30:00 UTC",
       "VisualBasic Programming is fun",
       "the max_tokens: 4096 limit was reached",
+      "Discogs not asked: no key is configured for it",
+      "discogs asked to slow down; retrying once in 3 s",
+      "discogs answered HTTP 502 with a body that is not JSON",
+      "Discogs release 249504 lists no credits for the track",
+      "MusicBrainz links no Discogs release to an original release of the recording",
+      "Sources asked: MusicBrainz, Discogs, WhoSampled",
+      "no match for ‘Basic Instinct’ here",
+      "the work “Bearer of Bad News” could not be read: no answer within 10000 ms",
+      '{"error":{"message":"Bearer, please"},"code":401}',
+      "VisualBasic ProgrammingInVB6",
+      "mypassword=must-be-set-here",
+      "db_password: must be set",
     ]) {
       expect(plainReason(text), text).toBe(text);
       expect(redactText(text), text).toBe(text);
+      expect(scrubText(text), text).toBe(text);
     }
   });
 
@@ -1923,6 +1947,11 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
       `authorization: Bearer abc&${TOKEN}`,
       `authorization: 'Bearer, ${TOKEN}'`,
       `sent X-Api-Key: ${TOKEN} then`,
+      `Bearer Bearer ${TOKEN}==&x`,
+      `authorization: 'Bearer ${TOKEN}=&x'`,
+      `token: authorization: "${TOKEN}"`,
+      `password=authorization: "${TOKEN}"`,
+      `https://h.example/xBearer ${TOKEN}`,
     ];
     const paths: Array<[number, (text: string) => string | undefined]> = [
       [120, (text) => plainReason(text)],
@@ -1942,6 +1971,41 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
           }
         }
     expect(missed.slice(0, 5)).toEqual([]);
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  const NEW_SHAPES: Array<[string, (size: number) => string]> = [
+    ["Discogs words", filled("Discogs ")],
+    ["Discogs tokens", filled("Discogs token=")],
+    ["quoted schemes and commas", filled("'Bearer, ")],
+    ["curly-quoted Basic titles", filled("‘Basic Instinct’ ")],
+    ["pairs whose value is a pair", filled("token: authorization: ")],
+    ["pairs glued as values", filled("token:authorization:")],
+    ["glued pair names", filled("xpassword=")],
+    ["Digest parameters", filled('a="1", ', "authorization: Digest ")],
+    ["tokens with = and &", filled("=&x", "authorization: 'Bearer ")],
+    ["links glued to schemes", filled("https://h.example/xBearer ")],
+  ];
+  const PATHS: Array<[string, (text: string) => unknown]> = [
+    ["plainReason", (text) => plainReason(text)],
+    ["describeError", (text) => describeError(new Error(text))],
+    ["scrubText", (text) => scrubText(text)],
+    ["scrubReadText", (text) => scrubReadText(text)],
+    ["hideScrubbed", (text) => hideScrubbed(text, ["K7jK8jK9jKajKbjKcj"], secretPatternSpans)],
+  ];
+  it.each(
+    PATHS.flatMap(([path, call]) =>
+      NEW_SHAPES.map(([shape, make]) => [path, shape, call, make] as const),
+    ),
+  )("reads the new shapes in linear time, up to 1 MB: %s, %s", (_path, _shape, call, make) => {
+    // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+    // from each place about 64 times.
+    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
+    expect(ratio).toBeLessThan(20);
   });
 
   it("places the HTTP log's cut by reading only the text near it (logCut)", () => {
@@ -3057,7 +3121,7 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
   // after other text on its line (`… password= v`) are read too: text with one of them redacts
   // more.
   const readSince237 =
-    /[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S/i;
+    /[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
     const plain = corpus.filter(

@@ -15,7 +15,8 @@ import {
 } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
-import { captureLogsForTests, configureLogger, logger } from "../logger.js";
+import { captureLogsForTests, configureLogger, hideKnownValues, logger, scrub } from "../logger.js";
+import { scrubSecrets } from "./cassette.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
 import {
@@ -484,6 +485,8 @@ describe("retries", () => {
       `${endpoint}/xBearer ${token}`,
       `${endpoint}Bearer ${token}`,
       `password=authorization: "${token}"`,
+      `token: authorization: 'Bearer Basic\n${token} more'`,
+      `api_key=Discogs token=\n${token}`,
     ]) {
       for (const n of [0, ...Array.from({ length: 124 }, (_, i) => 140 + i * 3)]) {
         const text = `${"w ".repeat(Math.ceil(n / 2)).slice(0, n)}${tail}`;
@@ -511,6 +514,94 @@ describe("retries", () => {
       state,
     );
     expect(own.message).toBe("scout: invalid key sk-[redacted] given");
+  });
+
+  it("hides on the log line what the values, scrubSecrets and then the logger would hide", () => {
+    // Fake values only. Pair names, schemes, separators, quotes, credentials and tails composed
+    // at random (seeded): what the log line of the model error shows of a credential, the
+    // logger's line of the message the values and scrubSecrets wrote does not hide either.
+    const key = "K7jK8jK9jKajKbjKcj";
+    configureLogger({ AZURE_OPENAI_API_KEY: key, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const basic = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+    const sk = "sk-proj1234567890abcdefXYZ";
+    const fours = (value: string) =>
+      Array.from({ length: value.length - 3 }, (_, i) => value.slice(i, i + 4));
+    const parts = [...new Set([token, basic.slice(0, 26), sk.slice(3), key].flatMap(fours))];
+    const names = [
+      "",
+      "",
+      "token: ",
+      "password: ",
+      "api_key=",
+      "authorization: ",
+      "Authorization=",
+      "secret: ",
+      "x-api-key: ",
+      '"token": ',
+      "access_token=",
+      "apiKey: ",
+    ];
+    const quotes = ["", "", "'", '"', "`", "\u2018", "\u201c"];
+    const schemes = [
+      "",
+      "Bearer ",
+      "Basic ",
+      "Bearer Basic",
+      "Basic Bearer",
+      "Bearer Bearer",
+      "Token ",
+      "Discogs token=",
+      "Bearer, ",
+      "Bearer",
+      "Basic",
+      "failedBearer",
+    ];
+    const separators = [" ", "\n", "\r\n", "\t", " \n", "", ",", "\n\n"];
+    const credentials = [
+      token,
+      basic,
+      sk,
+      key,
+      `abc&${token}`,
+      `${token}=&x`,
+      `x${key}`,
+      `${key}${token}`,
+    ];
+    const tails = ["", "'", '"', "\u2019", ", x'", " more'", ", x", " more", "&y", ";", "\n"];
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [key] };
+    const shown: string[] = [];
+    for (const seed of [11, 12, 13]) {
+      let x = seed;
+      const random = () => {
+        x ^= x << 13;
+        x >>>= 0;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        x >>>= 0;
+        return x / 4294967296;
+      };
+      const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+      for (let i = 0; i < 1500; i++) {
+        let text = "";
+        for (let k = 1 + Math.floor(random() * 3); k > 0; k--) {
+          text += pick(names) + pick(names) + pick(quotes) + pick(schemes) + pick(separators);
+          text += pick(credentials) + pick(tails) + (random() < 0.3 ? " w " : "");
+        }
+        // Short of both cuts, which can fall elsewhere once a part is hidden.
+        if (text.length > 280) continue;
+        const llm = classifyError(Object.assign(new Error(text), { status: 400 }), state);
+        const line = scrub(`${llm.message} ${(llm.cause as Error).message}`);
+        const written = scrubSecrets(hideKnownValues(text, state.secrets), state.secrets);
+        const before = scrub(`scout: ${written} ${written}`);
+        if (parts.some((part) => line.includes(part) && !before.includes(part)))
+          shown.push(JSON.stringify(text));
+      }
+    }
+    expect(shown).toEqual([]);
   });
 
   it("writes what the logger writes in place of a part, not a bare mask", () => {

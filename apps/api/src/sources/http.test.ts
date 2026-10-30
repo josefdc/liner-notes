@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { secretPatternSpans } from "../llm/cassette.js";
+import { scrubSecretsSteps } from "../llm/cassette.js";
 import {
   captureLogsForTests,
   configureLogger,
@@ -1989,13 +1989,20 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     ["Digest parameters", filled('a="1", ', "authorization: Digest ")],
     ["tokens with = and &", filled("=&x", "authorization: 'Bearer ")],
     ["links glued to schemes", filled("https://h.example/xBearer ")],
+    ["pair names in a run before a quote", filled("password=x/", "", '"')],
+    ["header names in a run before a quote", filled("x-api-key=ab/", "", "'")],
+    ["glued names in a run before a quote", filled("userpassword=/", "", '"')],
   ];
   const PATHS: Array<[string, (text: string) => unknown]> = [
     ["plainReason", (text) => plainReason(text)],
     ["describeError", (text) => describeError(new Error(text))],
     ["scrubText", (text) => scrubText(text)],
     ["scrubReadText", (text) => scrubReadText(text)],
-    ["hideScrubbed", (text) => hideScrubbed(text, ["K7jK8jK9jKajKbjKcj"], secretPatternSpans)],
+    [
+      "hideScrubbed",
+      (text) =>
+        hideScrubbed(text, ["K7jK8jK9jKajKbjKcj"], scrubSecretsSteps(["K7jK8jK9jKajKbjKcj"])),
+    ],
   ];
   it.each(
     PATHS.flatMap(([path, call]) =>

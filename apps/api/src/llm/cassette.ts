@@ -170,37 +170,67 @@ export function knownSecrets(
   return [...new Set(all)].sort((a, b) => b.length - a.length);
 }
 
-const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g, "$1 [redacted]"],
-  [/\b(api[-_]?key|authorization)(["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1$2[redacted]"],
-  [/\bsk-[A-Za-z0-9_-]{16,}/g, "sk-[redacted]"],
+/**
+ * The credentials scrubSecrets replaces after the values, each written "[redacted]" after what
+ * its pattern's `keep` group matched (the scheme word, the name and its ":" or "=", "sk-").
+ */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /\b(?<keep>(?:Bearer|Basic) )[A-Za-z0-9._~+/=-]{12,}/g,
+  /\b(?<keep>(?:api[-_]?key|authorization)["']?\s*[:=]\s*["']?)[^\s"',}]+/gi,
+  /\b(?<keep>sk-)[A-Za-z0-9_-]{16,}/g,
 ];
 
+/** One step of scrubSecrets: the [start, end) spans it replaces in `text`, sorted, apart. */
+export type SecretStep = (text: string) => Array<[number, number]>;
+
 /**
- * What SECRET_PATTERNS replace in `text`, each read on `text` itself, as [start, end) spans: the
- * parts scrubString writes as "[redacted]" after the values (llm/invoke.ts hides them with the
- * logger's, all found in the same text).
+ * scrubSecrets' steps, each run on the text the one before it wrote: each of `secrets` where it
+ * appears, then each of SECRET_PATTERNS. llm/invoke.ts reads them to hide what scrubSecrets
+ * would hide, found in the text as it came.
  */
-export function secretPatternSpans(text: string): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
-  for (const [pattern, replacement] of SECRET_PATTERNS) {
-    for (const match of text.matchAll(pattern)) {
-      // The part the replacement keeps: the groups it writes back, and "sk-".
-      const kept = replacement.startsWith("sk-")
-        ? 3
-        : (match[1] ?? "").length + (replacement.startsWith("$1$2") ? (match[2] ?? "").length : 1);
-      const start = match.index + kept;
-      const end = match.index + match[0].length;
-      if (end > start) spans.push([start, end]);
-    }
-  }
-  return spans.sort((a, b) => a[0] - b[0]);
+export function scrubSecretsSteps(secrets: readonly string[] = knownSecrets()): SecretStep[] {
+  const values = secrets.filter((secret) => secret.length > 0);
+  return [
+    ...values.map(
+      (secret): SecretStep =>
+        (text) => {
+          const spans: Array<[number, number]> = [];
+          for (
+            let at = text.indexOf(secret);
+            at !== -1;
+            at = text.indexOf(secret, at + secret.length)
+          )
+            spans.push([at, at + secret.length]);
+          return spans;
+        },
+    ),
+    ...SECRET_PATTERNS.map(
+      (pattern): SecretStep =>
+        (text) => {
+          const spans: Array<[number, number]> = [];
+          for (const match of text.matchAll(pattern)) {
+            const start = match.index + (match.groups?.keep ?? "").length;
+            const end = match.index + match[0].length;
+            if (end > start) spans.push([start, end]);
+          }
+          return spans;
+        },
+    ),
+  ];
 }
 
 function scrubString(text: string, secrets: readonly string[]): string {
   let out = text;
-  for (const secret of secrets) out = out.split(secret).join("[redacted]");
-  for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
+  for (const step of scrubSecretsSteps(secrets)) {
+    const parts: string[] = [];
+    let at = 0;
+    for (const [start, end] of step(out)) {
+      parts.push(out.slice(at, start), "[redacted]");
+      at = end;
+    }
+    parts.push(out.slice(at));
+    out = parts.join("");
+  }
   return out;
 }
 

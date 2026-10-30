@@ -768,6 +768,14 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
     ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
     ["a scheme glued to the end of a link", `GET https://h.example/xBearer ${TOKEN} failed`],
+    [
+      "a Digest response in single quotes",
+      `authorization: Digest username="u", response='${TOKEN}'`,
+    ],
+    ["a token68 before a parameter list", `authorization: Token ${TOKEN}==, realm="x"`],
+    ["a token68 and = before a Digest list", `authorization: Digest ${TOKEN}=, realm="r"`],
+    ["a scheme glued to a word before a line break", `call failedBearer\n${TOKEN}`],
+    ["a scheme glued to a word before a no-break space", `call failedBearer\u00a0${TOKEN}`],
   ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
     expect(leaks(text)).toEqual([]);
     expect(scrub(text)).toContain("[redacted]");
@@ -814,6 +822,10 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       "mypassword=must-be-set-here",
       "db_password: must be set",
       "AZURE_OPENAI_API_KEY: expected printable ASCII with no spaces",
+      // A title after a scheme, in curly quotes; a word glued before a scheme, then a title.
+      "Basic “Training”",
+      "theBasic RemasteredEdition2011 not found",
+      "call failedBearer\nProgrammingInVB6 next",
     ]) {
       expect(scrub(text)).toBe(text);
     }
@@ -829,6 +841,19 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       [
         `{ authorization: 'Digest realm="api", opaque="c2VjcmV0MTIzNDU2"' }`,
         `{ authorization: [redacted] realm="api", opaque="[redacted]"' }`,
+      ],
+      [
+        `{ authorization: 'Digest realm="Api2Region9Zone", opaque="c2VjcmV0MTIzNDU2"' }`,
+        `{ authorization: [redacted] realm="Api2Region9Zone", opaque="[redacted]"' }`,
+      ],
+      // In a list that names no secret, a value that does not look like a credential stays.
+      [
+        'authorization: Digest realm="r", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", qop=auth',
+        'authorization: [redacted] realm="r", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", qop=auth',
+      ],
+      [
+        'authorization: MAC id="h480djs93hd8", ts="1336363200", nonce="dj83hs9s"',
+        'authorization: [redacted] id="h480djs93hd8", ts="1336363200", nonce="dj83hs9s"',
       ],
       // Digest's nonce, uri and qop are not secrets; its cnonce and response are.
       [
@@ -865,6 +890,44 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ]) {
       expect(scrub(text)).toBe(expected);
       expect(shows(scrub(logText(text)))).toBe(false);
+    }
+  });
+
+  it("reads a scheme glued to a link's end only outside the link's secret values", () => {
+    // Fake values only. In a secret parameter's value or the user info, the word is part of the
+    // value the link rule hides; before a word of prose, it is not a scheme.
+    for (const [text, expected] of [
+      [
+        "https://h.example/x?token=Zz9Yy8Xx7Ww6basic rest",
+        "https://h.example/x?token=[redacted] rest",
+      ],
+      [
+        "GET https://h.example/login?password=SuperBasic\tfailed",
+        "GET https://h.example/login?password=[redacted]\tfailed",
+      ],
+      [
+        "https://h.example/x?sig=Qq1Rr2Ss3Tt4BEARER next",
+        "https://h.example/x?sig=[redacted] next",
+      ],
+      [
+        "https://h.example/x?token=Zz9Yy8Xx7Ww6Basic V7qW6rE5tY4uI3oP2aS1",
+        "https://h.example/x?token=[redacted] V7qW6rE5tY4uI3oP2aS1",
+      ],
+      ["https://p.scdn.co/mp3-preview/Zz9Yy8Xx7Ww6Basic x", "[preview link] x"],
+      [
+        "https://u:Qq1Rr2Ss3Tt4@h.example/x?api_key=Zz9Yy8Xx7Ww6basic rest",
+        "https://[redacted]@h.example/x?api_key=[redacted] rest",
+      ],
+      [
+        "https://h.example/x?token=a&b=xBearer V7qW6rE5tY4uI3oP2aS1",
+        "https://h.example/x?token=[redacted]&b=xBearer [redacted]",
+      ],
+      [
+        "https://p.scdn.co/mp3-preview/abcBasic V7qW6rE5tY4uI3oP2aS1",
+        "[preview link]Basic [redacted]",
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
     }
   });
 

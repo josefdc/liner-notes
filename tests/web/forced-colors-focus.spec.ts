@@ -106,16 +106,17 @@ async function installProbe(page: Page) {
 
     /**
      * An SVG ring's colour as drawn: its stroke, with the stroke colour's own alpha times its
-     * stroke-opacity and the opacity of it and each ancestor up to the svg.
+     * stroke-opacity and the opacity of it and each ancestor up to the document's root; none
+     * at all when it is not visible or its stroke has no width.
      */
     w.__ringColour = (ring: Element) => {
       const s = getComputedStyle(ring);
       const rgba = parse(s.stroke);
       if (s.display === "none" || !rgba) return "transparent";
       let alpha = rgba[3] * Number(s.strokeOpacity);
+      if (s.visibility !== "visible" || !(Number.parseFloat(s.strokeWidth) > 0)) alpha = 0;
       for (let at: Element | null = ring; at; at = at.parentElement) {
         alpha *= Number(getComputedStyle(at).opacity);
-        if (at.tagName.toLowerCase() === "svg") break;
       }
       return `rgba(${rgba.slice(0, 3).join(", ")}, ${alpha})`;
     };
@@ -740,7 +741,9 @@ test.describe("forced-colors mode", () => {
     await page.getByRole("button", { name: /activity log/ }).focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
-    await page.locator("#activity-log-content .overflow-y-auto").focus();
+    const list = page.locator("#activity-log-content .overflow-y-auto");
+    await list.focus();
+    await expect(list).toBeFocused();
     await expectPainted(page, "activity log list", painted);
 
     await openPlayer(page);
@@ -822,9 +825,16 @@ test.describe("forced-colors mode", () => {
           <rect id="faded" x="55" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" stroke-opacity="0.2" />
           <g opacity="0.1"><rect id="group" x="105" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" /></g>
           <rect id="solid" x="155" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" />
-        </svg>`;
+          <rect id="unseen" x="205" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" visibility="hidden" />
+          <rect id="thin" x="255" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" stroke-width="0" />
+        </svg>
+        <div style="opacity: 0.1">
+          <svg width="60" height="60">
+            <rect id="outer" x="5" y="5" width="40" height="40" fill="none" stroke="rgb(0, 0, 0)" />
+          </svg>
+        </div>`;
       return Object.fromEntries(
-        ["faint", "faded", "group", "solid"].map((id) => {
+        ["faint", "faded", "group", "solid", "unseen", "thin", "outer"].map((id) => {
           const colour = w.__ringColour(document.getElementById(id) as Element);
           return [id, `${colour} ${w.__contrast(colour).toFixed(2)}`];
         }),
@@ -835,6 +845,9 @@ test.describe("forced-colors mode", () => {
       faded: "rgba(0, 0, 0, 0.2) 1.61",
       group: "rgba(0, 0, 0, 0.1) 1.25",
       solid: "rgba(0, 0, 0, 1) 21.00",
+      unseen: "rgba(0, 0, 0, 0) 1.00",
+      thin: "rgba(0, 0, 0, 0) 1.00",
+      outer: "rgba(0, 0, 0, 0.1) 1.25",
     });
   });
 
@@ -960,7 +973,9 @@ test.describe("normal mode", () => {
     const strokes = new Set(items.map((item) => item.stroke));
     // The measured cyan: the cards' ring at full strength, a focused link's band at 0.3.
     // (A card the pointed or selected track is not joined to fades, its ring with it.)
-    expect([...strokes].filter((stroke) => !stroke.startsWith("rgba(0, 240, 255, "))).toEqual([]);
+    expect(
+      [...strokes].filter((stroke) => !/^rgba\(0, 240, 255, (?:0\.3|0\.45|1)\)$/.test(stroke)),
+    ).toEqual([]);
     expect([...strokes]).toEqual(
       expect.arrayContaining(["rgba(0, 240, 255, 0.3)", "rgba(0, 240, 255, 1)"]),
     );

@@ -520,6 +520,31 @@ describe("retries", () => {
     expect(own.message).toBe("scout: invalid key sk-[redacted] given");
   });
 
+  it("hides a credential after a name another rule hid: glued, long, or in curly quotes", () => {
+    // Fake values only. The name ends what another rule hid; the credential after it goes with it.
+    const token = "V7qW6rE5tY4uI3oP2aS1";
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [] };
+    for (const [text, expected] of [
+      [`x password=apiToken ${token} y`, "scout: x password=[redacted] y"],
+      [`x password=S3Token ${token} y`, "scout: x password=[redacted] y"],
+      [`x password=APIToken ${token} y`, "scout: x password=[redacted] y"],
+      // A word glued in one case is no name.
+      [`x password=robot ${token} y`, `scout: x password=[redacted] ${token} y`],
+      [`x password=HMAC ${token} y`, `scout: x password=[redacted] ${token} y`],
+      // A "%" past the characters read before a token is known to be one: taken whole.
+      [`x token: password ${"a".repeat(256)}%2F${token} y`, "scout: x token: [redacted] y"],
+      [
+        `x token: \u2018password: ${token}\u2019 y`,
+        "scout: x token: [redacted] [redacted]\u2019 y",
+      ],
+      [`x token=\u201cpassword: ${token}\u201d y`, "scout: x token=[redacted] [redacted]\u201d y"],
+    ]) {
+      expect(classifyError(Object.assign(new Error(text), { status: 400 }), state).message).toBe(
+        expected,
+      );
+    }
+  });
+
   it("hides on the log line what the values, scrubSecrets and then the logger would hide", () => {
     // Fake values only. Pair names, schemes, separators, quotes, credentials and tails composed
     // at random (seeded): what the log line of the model error shows of a credential, the

@@ -793,6 +793,8 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ],
     ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
     ["a pair in backticks as a pair's value, after =", `x token=\`password: ${TOKEN}\``],
+    ["a pair in curly quotes as a pair's value", `x token: \u2018password: ${TOKEN}\u2019`],
+    ["a pair in curly quotes as a pair's value, after =", `x token=\u201cpassword: ${TOKEN}\u201d`],
   ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
     expect(leaks(text)).toEqual([]);
     expect(scrub(text)).toContain("[redacted]");
@@ -1027,6 +1029,23 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       // Not a name: the end of a longer word.
       [`x robot ${TOKEN} y`, "robot", `x [redacted] ${TOKEN} y`],
       [`x hmac ${TOKEN} y`, "hmac", `x [redacted] ${TOKEN} y`],
+      [`x ROBOT ${TOKEN} y`, "ROBOT", `x [redacted] ${TOKEN} y`],
+      [`x HMAC ${TOKEN} y`, "HMAC", `x [redacted] ${TOKEN} y`],
+      [`x chatbot ${TOKEN} y`, "chatbot", `x [redacted] ${TOKEN} y`],
+      // A scheme word glued so is read by the glued-scheme rule, not here.
+      ["x VisualBasic Programming y", "VisualBasic", "x [redacted] Programming y"],
+      // A name glued to a word in camel case is a name.
+      [`x apiToken ${TOKEN} y`, "apiToken", "x [redacted] y"],
+      [`x S3Token ${TOKEN} y`, "S3Token", "x [redacted] y"],
+      [`x APIToken ${TOKEN} y`, "APIToken", "x [redacted] y"],
+      [`x myaccessToken ${TOKEN} y`, "myaccessToken", "x [redacted] y"],
+      [`x idToken\n${TOKEN} y`, "idToken", "x [redacted] y"],
+      // Longer than a token is read before it is known to be one: taken whole.
+      [`x token ${TOKEN.repeat(15)} y`, "token", "x [redacted] y"],
+      [`x token ${TOKEN.repeat(15)}%2F${TOKEN} y`, "token", "x [redacted] y"],
+      // A curly quote around it is no part of it.
+      [`x token \u2019${TOKEN}\u2019 y`, "token", "x [redacted]\u2019 y"],
+      [`x token \u201c${TOKEN}\u201d y`, "token", "x [redacted]\u201d y"],
     ]) {
       expect(hideScrubbed(text, [], [() => at(text, name)])).toBe(expected);
     }

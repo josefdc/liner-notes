@@ -589,13 +589,14 @@ export function hideScrubbed(
 /** The word Basic and the spaces after it, at the start of a span with more after it. */
 const BASIC_WORD = /^Basic\s+(?=\S)/i;
 /**
- * `spans` (of `text`, sorted, apart), each that ends on a scheme word or a pair's name taken up to
- * the end of the token after it when that token is a credential and not hidden: whatever hid the
- * name, the credential it names is never left shown after it, across any white space (a line
- * break, a form feed). A name after a name is read on, a few deep. A credential here is a token of
- * TOKEN_CREDENTIAL's characters; one with others in it (a "%") is not taken. A span inside one
- * taken on before is not read again, and a token is read MAX_TOKEN characters deep before it is
- * known to be one: linear time.
+ * `spans` (of `text`, sorted, apart), each that ends on a scheme word or a pair's name (nameAtEnd:
+ * `apiToken` too) taken up to the end of the token after it when that token is a credential and
+ * not hidden, a straight or curly quote around it left out: whatever hid the name, the credential
+ * it names is never left shown after it, across any white space (a line break, a form feed). A
+ * name after a name is read on, a few deep. A credential here is a token whose first MAX_TOKEN
+ * characters are TOKEN_CREDENTIAL's: one with others there (a "%") is not taken, and past them
+ * the rest of the token is taken whatever it holds. A span inside one taken on before is not read
+ * again, and a token is read MAX_TOKEN characters deep before it is known to be one: linear time.
  */
 function withCredentialsAfterNames(
   text: string,
@@ -624,14 +625,14 @@ function withCredentialsAfterNames(
       continue;
     }
     for (let depth = 0; depth < NESTED_DEPTH + 2; depth++) {
-      if (!NAME_AT_END.test(text.slice(Math.max(start, end - NAME_WINDOW), end))) break;
+      if (!nameAtEnd(text.slice(Math.max(start, end - NAME_WINDOW), end))) break;
       TOKEN_AFTER_NAME.lastIndex = end;
       const token = TOKEN_AFTER_NAME.exec(text)?.[1] ?? "";
       let after = TOKEN_AFTER_NAME.lastIndex;
       if (!token || hidden(after - token.length)) break;
       // A token read only in part (TOKEN_AFTER_NAME bounds it) is no name.
       const whole = token.length < MAX_TOKEN;
-      const named = whole && NAME_AT_END.test(token.slice(-NAME_WINDOW));
+      const named = whole && nameAtEnd(token.slice(-NAME_WINDOW));
       if (!named && (!TOKEN_CREDENTIAL.test(token) || STATUS_WORD.test(token))) break;
       if (!whole) {
         TOKEN_REST.lastIndex = after;
@@ -1964,11 +1965,14 @@ function moreSpans(text: string, glued = true): Array<[number, number]> {
 
 /** A pair's name and its ":" or "=", then another's, for a quick look first. */
 const NESTED_NAME = new RegExp(
-  String.raw`(?:${PAIR_NAMES})["'\`]?[ \t]*[:=][ \t]*["'\`]?(?:${PAIR_NAMES})["'\`]?[ \t]*[:=]`,
+  String.raw`(?:${PAIR_NAMES})["'\`\u2018-\u201f]?[ \t]*[:=][ \t]*["'\`\u2018-\u201f]?(?:${PAIR_NAMES})["'\`\u2018-\u201f]?[ \t]*[:=]`,
   "i",
 );
 /** A pair's name, in a quote or not, and its ":" or "=", where a value starts. */
-const PAIR_START = new RegExp(String.raw`["'\`]?\b(?:${PAIR_NAMES})["'\`]?\s*[:=]`, "iy");
+const PAIR_START = new RegExp(
+  String.raw`["'\`\u2018-\u201f]?\b(?:${PAIR_NAMES})["'\`\u2018-\u201f]?\s*[:=]`,
+  "iy",
+);
 /** SECRET_PAIR, read only where it is placed. */
 const SECRET_PAIR_HERE = new RegExp(SECRET_PAIR.source, "iy");
 /** How many pairs, one in the value of the other, nestedPairs reads after the first. */
@@ -1985,7 +1989,7 @@ function nestedPairs(text: string, spans: Array<[number, number]>): void {
     let from = pair.index + (pair[1] ?? "").length + (pair[2] ?? "").length;
     for (let depth = 0; depth < NESTED_DEPTH; depth++) {
       if (stickyEnd(PAIR_START, text, from) === -1) break;
-      const at = /["'`]/.test(text.charAt(from)) ? from + 1 : from;
+      const at = QUOTE_CHAR.test(text.charAt(from)) ? from + 1 : from;
       SECRET_PAIR_HERE.lastIndex = at;
       const inner = SECRET_PAIR_HERE.exec(text);
       if (!inner) break;
@@ -2025,27 +2029,59 @@ function gluedPairs(read: Rewritten, text: string, spans: Array<[number, number]
   }
 }
 
+/** What follows a name at the end of a text: a quote, white space, its ":" or "=", a quote. */
+const AFTER_NAME = String.raw`["'\`\u2018-\u201f]?\s*(?:[:=]\s*)?["'\`\u2018-\u201f]?$`;
 /**
  * A scheme word or a pair's name, not the end of a longer word ("robot", "hmac"), with its ":" or
  * "=" and quotes or not, ending a text. Each white space can be read one way only.
  */
 const NAME_AT_END = new RegExp(
-  String.raw`(?<![A-Za-z0-9])(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})["'\`\u2018-\u201f]?\s*(?:[:=]\s*)?["'\`\u2018-\u201f]?$`,
+  `(?<![A-Za-z0-9])(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})${AFTER_NAME}`,
   "i",
 );
-/** How much of the end of a span, or of a token, NAME_AT_END reads. */
+/**
+ * A pair's name glued to the letter or digit before it, whose case nameAtEnd checks. A scheme
+ * word glued so ("VisualBasic") is read by the glued-scheme rule, not here.
+ */
+const GLUED_NAME_AT_END = new RegExp(`[A-Za-z0-9](?:${PAIR_NAMES})${AFTER_NAME}`, "gi");
+const UPPER = /[A-Z]/;
+const LOWER = /[a-z]/;
+
+/**
+ * Whether a text ends with a name (NAME_AT_END), or with a pair's name glued in camel case:
+ * `apiToken`, `S3Token` (an upper-case letter after a lower-case one or a digit), `APIToken` (an
+ * upper-case letter after another, a lower-case one after it). The case is read here, as the
+ * patterns read it either way; a word glued in one case ("robot", "HMAC") is no name.
+ */
+function nameAtEnd(text: string): boolean {
+  if (NAME_AT_END.test(text)) return true;
+  GLUED_NAME_AT_END.lastIndex = 0;
+  for (let glued = GLUED_NAME_AT_END.exec(text); glued; glued = GLUED_NAME_AT_END.exec(text)) {
+    const before = text.charAt(glued.index);
+    const first = text.charAt(glued.index + 1);
+    if (UPPER.test(first) && (!UPPER.test(before) || LOWER.test(text.charAt(glued.index + 2))))
+      return true;
+    GLUED_NAME_AT_END.lastIndex = glued.index + 1;
+  }
+  return false;
+}
+/** How much of the end of a span, or of a token, nameAtEnd reads. */
 const NAME_WINDOW = 64;
 /** How much of a token TOKEN_AFTER_NAME reads at most. */
 const MAX_TOKEN = 256;
+/** A character of a token after a name: not white space, a quote (curly ones too) or a stop. */
+const TOKEN_CHAR = String.raw`[^\s"'\`,;}\]\u2026\u2018-\u201f]`;
 /**
  * After a name: white space, a quote, its ":" or "=", a quote, then a token (group 1), at most
  * MAX_TOKEN characters of it. Each white space can be read one way only: a long run of it with no
  * token after it is read in linear time.
  */
-const TOKEN_AFTER_NAME =
-  /\s*(?:["'`\u2018-\u201f]\s*)?(?:[:=]\s*)?["'`\u2018-\u201f]?([^\s"'`,;}\]\u2026]{1,256})/y;
+const TOKEN_AFTER_NAME = new RegExp(
+  String.raw`\s*(?:["'\`\u2018-\u201f]\s*)?(?:[:=]\s*)?["'\`\u2018-\u201f]?(${TOKEN_CHAR}{1,${MAX_TOKEN}})`,
+  "y",
+);
 /** The rest of a token TOKEN_AFTER_NAME read only in part. */
-const TOKEN_REST = /[^\s"'`,;}\]\u2026]*/y;
+const TOKEN_REST = new RegExp(`${TOKEN_CHAR}*`, "y");
 /** A token after a name that is a credential: 8 or more of a token's characters. */
 const TOKEN_CREDENTIAL = /^[A-Za-z0-9._~+/=&-]{8,}$/;
 

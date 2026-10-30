@@ -1842,6 +1842,8 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
     ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
     ["a pair in backticks after =", `x token=\`password: ${TOKEN}\``],
+    ["a pair in curly quotes as a pair's value", `x token: \u2018password: ${TOKEN}\u2019`],
+    ["a pair in curly quotes after =", `x token=\u201cpassword: ${TOKEN}\u201d`],
   ])("hides the value in every text a client or a log line is shown: %s", (_label, text) => {
     expect(shown(text).filter(shows)).toEqual([]);
   });

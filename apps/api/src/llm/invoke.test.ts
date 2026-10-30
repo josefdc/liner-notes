@@ -512,6 +512,20 @@ describe("retries", () => {
       state,
     );
     expect(llm.message).toBe('scout: token: [redacted] "[redacted]"');
+    // A credential the logger's rules find only in the text the values and scrubSecrets wrote.
+    for (const [text, expected] of [
+      [
+        `authorization: Discogs token=\n${token}token: y`,
+        "scout: authorization: [redacted] [redacted]\n[redacted] y",
+      ],
+      [
+        "secret: apiKey: Bearer Basic\r\nQWxhZGRpbjpvcGVuIHNlc2FtZQ==&ytoken: x",
+        "scout: secret: [redacted] [redacted] Basic\r\n[redacted]&ytoken: x",
+      ],
+    ]) {
+      const message = classifyError(Object.assign(new Error(text), { status: 400 }), state).message;
+      expect(message).toBe(expected);
+    }
     // A key only scrubSecrets' own patterns read.
     const own = classifyError(
       Object.assign(new Error("invalid key sk-proj1234567890abcdefXYZ given"), { status: 401 }),

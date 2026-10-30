@@ -2,7 +2,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,6 +16,7 @@ import {
   redact,
   registrySettings,
   run,
+  specProblem,
   workspacesOf,
 } from "./check-release-age.mjs";
 
@@ -55,7 +56,7 @@ const TIMES = {
   "@scope/edge": { "2.0.0": "2026-01-01T00:00:00.000Z", "2.1.0": ago(14) },
   old: { "1.0.0": "2025-01-01T00:00:00.000Z", "1.1.0": "2026-09-01T00:00:00.000Z" },
   child: { "1.0.0": "2026-01-01T00:00:00.000Z", "1.1.0": ago(20) },
-  bundled: { "1.0.0": "2025-06-01T00:00:00.000Z" },
+  ok: { "1.0.0": "2025-06-01T00:00:00.000Z" },
 };
 
 /** A full packument: `time`, and a dist integrity and shasum for each version in it. */
@@ -182,6 +183,8 @@ const release = (name, version) => ({
   integrity: integrityOf(name, version),
 });
 
+const BUNDLED =
+  "bundled, with no resolved URL and no integrity: if its parent does not bundle it, npm resolves it with nothing to verify it against";
 const notWorkspace = (target) =>
   `a link to "${target}", which is not a workspace of the base or (as a local folder, with no integrity) of package.json`;
 
@@ -327,11 +330,35 @@ describe("compareIntegrity", () => {
     expect(compareIntegrity(integrityOf("a", "1.0.0"), undefined).problem).toBe(
       "the registry lists no integrity for this version",
     );
-    expect(compareIntegrity(integrityOf("a", "1.0.0"), { shasum: dist.shasum }).problem).toBe(
-      "its integrity (sha512) cannot be compared with the registry's (sha1)",
+    expect(compareIntegrity("", dist).problem).toBe("its integrity is empty");
+    expect(compareIntegrity(undefined, dist).problem).toBe("its integrity is empty");
+  });
+
+  it("fails an algorithm the registry does not list, even beside a hash that matches", () => {
+    // npm verifies with the strongest algorithm in the string: here sha256, which npmjs does not
+    // list, so the matching sha1 beside it would vouch for nothing.
+    const other = `sha256-${createHash("sha256").update("other bytes").digest("base64")}`;
+    expect(compareIntegrity(`${other} ${sha1IntegrityOf("a", "1.0.0")}`, dist).problem).toBe(
+      "its integrity has a sha256 hash, but the registry lists only sha512, sha1 for this version",
     );
-    expect(compareIntegrity("md5-abc", dist).problem).toBe(
-      'its integrity "md5-abc" holds no sha1 or sha2 hash',
+    expect(compareIntegrity(integrityOf("a", "1.0.0"), { shasum: dist.shasum }).problem).toBe(
+      "its integrity has a sha512 hash, but the registry lists only sha1 for this version",
+    );
+    expect(
+      compareIntegrity(`${integrityOf("x", "1")} ${sha1IntegrityOf("a", "1.0.0")}`, {
+        shasum: dist.shasum,
+      }).problem,
+    ).toBe("its integrity has a sha512 hash, but the registry lists only sha1 for this version");
+    expect(compareIntegrity("sha224-abc", dist).problem).toMatch(/has a sha224 hash/);
+    expect(compareIntegrity("md5-abc", dist).problem).toMatch(/has a md5 hash/);
+  });
+
+  it("fails an integrity with a token that is not a hash", () => {
+    expect(compareIntegrity(`${integrityOf("a", "1.0.0")} sha512`, dist).problem).toBe(
+      'its integrity holds "sha512", which is not a hash',
+    );
+    expect(compareIntegrity("SHA512-abc", dist).problem).toBe(
+      'its integrity holds "SHA512-abc", which is not a hash',
     );
   });
 });
@@ -354,16 +381,11 @@ describe("lockChanges", () => {
       checked("node_modules/@scope/edge", "@scope/edge", "2.1.0"),
       checked("node_modules/fresh", "fresh", "1.1.0"),
       checked("node_modules/old", "old", "1.1.0"),
-      {
-        path: "node_modules/old/node_modules/bundled",
-        name: "bundled",
-        version: "1.0.0",
-        bundled: true,
-      },
       checked("node_modules/parent/node_modules/old", "old", "1.0.0"),
       checked("node_modules/parent/node_modules/child", "child", "1.1.0"),
     ]);
-    // The removed entry ("gone") is in no list; the git dependency fails closed.
+    // The removed entry ("gone") is in no list; the git dependency and the bundled entry with no
+    // integrity fail closed.
     expect(allowed).toEqual([
       { path: "apps/api", reason: "workspace package" },
       { path: "apps/web", reason: "workspace package" },
@@ -376,10 +398,11 @@ describe("lockChanges", () => {
           "resolved from git+ssh://git@github.com/example/from-git.git#0123456789abcdef0123456789abcdef01234567: " +
           "not a tarball from https://registry.npmjs.org/",
       },
+      { path: "node_modules/old/node_modules/bundled", reason: BUNDLED },
     ]);
   });
 
-  it("counts a change to the version, resolved, integrity, name, link or inBundle field", () => {
+  it("counts a change to the version, resolved, integrity, name, link, inBundle or hasShrinkwrap field", () => {
     const base = { "node_modules/a": release("a", "1.0.0") };
     for (const change of [
       { version: "1.0.1" },
@@ -388,6 +411,7 @@ describe("lockChanges", () => {
       { name: "a" },
       { link: true },
       { inBundle: true },
+      { hasShrinkwrap: false },
     ]) {
       const { check, allowed, problems } = lockChanges(base, {
         "node_modules/a": { ...base["node_modules/a"], ...change },
@@ -563,13 +587,14 @@ describe("lockChanges", () => {
     expect(workspacesOf(undefined)).toEqual([]);
   });
 
-  it("checks inBundle entries like any other, and one with no resolved URL or integrity by its version", () => {
+  it("checks inBundle entries like any other, and fails one with no resolved URL or integrity", () => {
     const base = { "node_modules/p": release("p", "1.0.0") };
     const head = {
       "node_modules/p": release("p", "1.1.0"),
       // A resolved URL: npm fetches it when the parent does not bundle it.
       "node_modules/p/node_modules/x": { ...release("x", "9.9.9"), inBundle: true },
-      // No resolved URL or integrity: npm resolves y@1.0.0 when the parent does not bundle it.
+      // No resolved URL or integrity: npm resolves y@1.0.0, unverified, if the parent does not
+      // bundle it.
       "node_modules/p/node_modules/y": { version: "1.0.0", inBundle: true },
       "node_modules/p/node_modules/z": { version: "latest", inBundle: true },
     };
@@ -583,14 +608,100 @@ describe("lockChanges", () => {
         version: "9.9.9",
         integrity: integrityOf("x", "9.9.9"),
       },
-      { path: "node_modules/p/node_modules/y", name: "y", version: "1.0.0", bundled: true },
     ]);
     expect(problems).toEqual([
-      {
-        path: "node_modules/p/node_modules/z",
-        reason: 'bundled, with no resolved URL and the version "latest"',
-      },
+      { path: "node_modules/p/node_modules/y", reason: BUNDLED },
+      { path: "node_modules/p/node_modules/z", reason: BUNDLED },
     ]);
+  });
+});
+
+describe("names and dependency specs", () => {
+  it("fails a changed entry whose name field is not a package name", () => {
+    const one = (name) =>
+      lockChanges({}, { "node_modules/a": { ...release("a", "1.0.0"), name } }).problems;
+    for (const name of [["a"], 7, null, "", "a@1", "a b", "https://x/a.tgz", "@s/a/b", ".a"]) {
+      expect(one(name), JSON.stringify(name)).toEqual([
+        {
+          path: "node_modules/a",
+          reason: `its name ${JSON.stringify(name)} is not a package name`,
+        },
+      ]);
+    }
+    expect(one("a")).toEqual([]);
+    expect(
+      lockChanges(
+        {},
+        {
+          "node_modules/@s/JSONStream": {
+            ...release("@s/JSONStream", "1.0.0"),
+            name: "@s/JSONStream",
+          },
+        },
+      ).check,
+    ).toHaveLength(1);
+    // A path that names no package, for an entry npm resolves by name@version.
+    expect(
+      lockChanges(
+        {},
+        { "node_modules/a@x": { version: "1.0.0", integrity: integrityOf("a", "1") } },
+      ).problems[0].reason,
+    ).toBe('no resolved URL, and its path names "a@x", not a package name');
+  });
+
+  it.each([
+    "1.0.0",
+    "^1.2.3",
+    "~1.0.0",
+    ">=1 <2 || 3.x",
+    "1.0.0 - 2.0.0",
+    "",
+    "*",
+    "latest",
+    "next-2",
+    "npm:other@^1.0.0",
+    "npm:@scope/other@1",
+    "npm:other",
+    "workspace:*",
+  ])("accepts the spec %j", (spec) => {
+    expect(specProblem(spec)).toBeNull();
+  });
+
+  it.each([
+    ["https://evil.example/a-1.0.0.tgz", "not a registry range"],
+    ["http://evil.example/a.tgz", "not a registry range"],
+    ["git+https://github.com/e/a.git", "not a registry range"],
+    ["git://github.com/e/a.git#v1", "not a registry range"],
+    ["github:e/a", "not a registry range"],
+    ["e/a", "not a registry range"],
+    ["e/a#main", "not a registry range"],
+    ["./vendor/a", "not a registry range"],
+    ["..", "not a registry range"],
+    ["a-1.0.0.tgz", "not a registry range"],
+    ["~/a", "not a registry range"],
+    ["link:../a", "not a registry range"],
+    ["npm:a@https://evil.example/a.tgz", "an npm: alias with something other"],
+    ["npm:a b@1", "an npm: alias of something that is not a package name"],
+    ["workspace:../../a", "a workspace: spec with something other than a range"],
+    ["file:vendor/a", "a file: path that is not a workspace folder"],
+    ["file:../../etc", "a file: path that is not a workspace folder"],
+  ])("refuses the spec %j", (spec, message) => {
+    expect(specProblem(spec, (folder) => folder === "apps/web", "apps/api")).toContain(message);
+  });
+
+  it("accepts a file: path to a workspace folder, relative to the package.json", () => {
+    const isWorkspace = (folder) => folder === "apps/web";
+    expect(specProblem("file:../web", isWorkspace, "apps/api")).toBeNull();
+    expect(specProblem("file:apps/web/", isWorkspace, "")).toBeNull();
+    expect(specProblem("file:./apps/web", isWorkspace)).toBeNull();
+    expect(specProblem(5)).toBe("not a string");
+    // Never a folder outside the repository, whatever the workspace patterns match.
+    expect(specProblem("file:../../../x", () => true, "apps/api")).toBe(
+      "a file: path that is not a workspace folder",
+    );
+    expect(specProblem("file:/etc", () => true)).toBe(
+      "a file: path that is not a workspace folder",
+    );
   });
 });
 
@@ -781,23 +892,22 @@ describe("run", () => {
     );
     expect(code).toBe(1);
     expect(out).toContain(
-      "6 registry releases to check, 3 workspace entries with no check needed, 1 failure before any registry request; minimum age 14 days",
+      "5 registry releases to check, 3 workspace entries with no check needed, 2 failures before any registry request; minimum age 14 days",
     );
     // Two versions of "old" (node_modules/old and parent/node_modules/old), one request.
     expect(out).toContain("ok   old@1.0.0  published 2025-01-01T00:00:00.000Z");
     expect(out).toContain("ok   old@1.1.0  published 2026-09-01T00:00:00.000Z");
-    expect(out).toContain("ok   bundled@1.0.0  published 2025-06-01T00:00:00.000Z");
-    expect(out).toContain("[release-age] 5 registry requests; 5 integrities match the registry's");
+    expect(out).toContain("[release-age] 4 registry requests; 5 integrities match the registry's");
     const lines = err.split("\n");
-    expect(lines[0]).toBe("[release-age] 2 failures (minimum age 14 days):");
+    expect(lines[0]).toBe("[release-age] 3 failures (minimum age 14 days):");
     expect(lines[1]).toMatch(
       /^ {2}node_modules\/from-git: resolved from git\+ssh:.* not a tarball from/,
     );
-    expect(lines[2]).toMatch(/^ {2}fresh@1\.1\.0 was published /);
-    expect(lines).toHaveLength(4);
+    expect(lines[2]).toBe(`  node_modules/old/node_modules/bundled: ${BUNDLED}`);
+    expect(lines[3]).toMatch(/^ {2}fresh@1\.1\.0 was published /);
+    expect(lines).toHaveLength(5);
     expect([...calls].sort()).toEqual([
       "https://registry.npmjs.org/@scope%2fedge",
-      "https://registry.npmjs.org/bundled",
       "https://registry.npmjs.org/child",
       "https://registry.npmjs.org/fresh",
       "https://registry.npmjs.org/old",
@@ -906,14 +1016,169 @@ describe("run", () => {
     ]);
   });
 
-  it("checks an inBundle entry with no resolved URL or integrity by its version", async () => {
-    const path = "node_modules/old/node_modules/fresh";
-    const young = await check(changed({ [path]: { version: "1.1.0", inBundle: true } }));
-    expect(young.code).toBe(1);
-    expect(young.err).toContain("fresh@1.1.0 was published 2026-10-27T12:00:00.000Z");
-    const old = await check(changed({ [path]: { version: "1.0.0", inBundle: true } }));
-    expect(old.code).toBe(0);
-    expect(old.out).toContain("1 registry request; 0 integrities match the registry's");
+  it("fails an inBundle entry with no resolved URL or integrity, however old its version", async () => {
+    const path = "node_modules/old/node_modules/ok";
+    const { code, err, calls } = await check(
+      changed({ [path]: { version: "1.0.0", inBundle: true } }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain(`  ${path}: ${BUNDLED}`);
+    expect(calls).toEqual([]);
+  });
+
+  it("fails a bundled entry whose name field is not a string (A1)", async () => {
+    // A lock-only edit: npm resolves `${name}@${version}` from the field as it is, here a URL.
+    const lock = lockWith({
+      "node_modules/old": {
+        ...fixtureLock("base-lock.json").packages["node_modules/old"],
+        dependencies: { ok: "*" },
+      },
+      "node_modules/old/node_modules/ok": {
+        version: "1.0.0",
+        inBundle: true,
+        name: ["ok@https://evil.example/ok-1.0.0.tgz?"],
+      },
+    });
+    const { code, err, calls } = await check(repo({ head: { "package-lock.json": text(lock) } }));
+    expect(code).toBe(1);
+    expect(err).toContain(
+      'node_modules/old/node_modules/ok: its name ["ok@https://evil.example/ok-1.0.0.tgz?"] is not a package name',
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("fails an entry with an integrity whose name field is not a string (A2)", async () => {
+    const entry = {
+      version: "1.0.0",
+      integrity: integrityOf("old", "1.0.0"),
+      name: ["old@git+https://github.com/e/r.git#main"],
+    };
+    const { code, err, calls } = await check(changed({ "node_modules/old": entry }));
+    expect(code).toBe(1);
+    expect(err).toContain(
+      'node_modules/old: its name ["old@git+https://github.com/e/r.git#main"] is not a package name',
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("fails a sha1 that matches beside a sha256 the registry does not list (B1)", async () => {
+    const other = `sha256-${createHash("sha256").update("other bytes").digest("base64")}`;
+    const entry = {
+      ...fixtureLock("base-lock.json").packages["node_modules/old"],
+      integrity: `${other} ${sha1IntegrityOf("old", "1.0.0")}`,
+    };
+    const { code, err } = await check(
+      repo({
+        head: {
+          ".npmrc": "https-proxy=http://127.0.0.1:9/\nstrict-ssl=false\n",
+          "package-lock.json": text(lockWith({ "node_modules/old": entry })),
+        },
+      }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain(
+      "node_modules/old: old@1.0.0: its integrity has a sha256 hash, but the registry lists only sha512, sha1 for this version",
+    );
+  });
+
+  it("fails an entry that gains hasShrinkwrap", async () => {
+    const entry = {
+      ...fixtureLock("base-lock.json").packages["node_modules/old"],
+      hasShrinkwrap: true,
+    };
+    const { code, err, calls } = await check(changed({ "node_modules/old": entry }));
+    expect(code).toBe(1);
+    expect(err).toContain(
+      "node_modules/old: it has hasShrinkwrap: npm then installs what the package's own npm-shrinkwrap.json names",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("fails a URL dependency in package.json, with the lock unchanged (P1)", async () => {
+    const packageJson = {
+      name: "fixture",
+      workspaces: ["apps/*"],
+      dependencies: { old: "https://evil.example/old-1.0.0.tgz" },
+    };
+    const { code, err, calls } = await check(
+      repo({ head: { "package.json": `${JSON.stringify(packageJson)}\n` } }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain(
+      'package.json: dependencies["old"] is "https://evil.example/old-1.0.0.tgz": not a registry range, a tag, an npm: alias of one, or a path to a workspace; npm ci would resolve it outside the lock',
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("fails a URL in package.json overrides, with the lock unchanged (P2)", async () => {
+    const packageJson = {
+      name: "fixture",
+      dependencies: { old: "1.0.0" },
+      overrides: {
+        old: "https://evil.example/old-1.0.0.tgz",
+        parent: { ".": "1.0.0", child: "$old" },
+      },
+    };
+    const { code, err } = await check(
+      repo({ head: { "package.json": `${JSON.stringify(packageJson)}\n` } }),
+    );
+    expect(code).toBe(1);
+    expect(err).toContain('package.json: overrides["old"] is "https://evil.example/old-1.0.0.tgz"');
+    expect(err).not.toContain('overrides["parent"]');
+  });
+
+  it("checks the package.json of every workspace folder, and passes plain ranges", async () => {
+    const base = {
+      ...BASE_FILES,
+      "package.json":
+        '{"name":"fixture","workspaces":["apps/*"],"devDependencies":{"old":"^1.0.0"}}\n',
+    };
+    const plain = await check(repo({ base }));
+    expect(plain.code).toBe(0);
+    const dir = repo({ base });
+    mkdirSync(join(dir, "apps", "api"), { recursive: true });
+    writeFileSync(
+      join(dir, "apps", "api", "package.json"),
+      '{"name":"@fixture/api","dependencies":{"old":"github:e/old","@fixture/web":"file:../web"}}\n',
+    );
+    const { code, err } = await check(dir);
+    expect(code).toBe(1);
+    expect(err).toContain('apps/api/package.json: dependencies["old"] is "github:e/old"');
+    // A file: path to a workspace folder is fine.
+    expect(err).not.toContain("@fixture/web");
+  });
+
+  it("finds workspace package.json files under ** globs, outside node_modules", async () => {
+    const dir = repo({
+      base: {
+        ...BASE_FILES,
+        "package.json": '{"name":"fixture","workspaces":["libs/**"]}\n',
+      },
+    });
+    const write = (folder, manifest) => {
+      mkdirSync(join(dir, folder), { recursive: true });
+      writeFileSync(join(dir, folder, "package.json"), `${JSON.stringify(manifest)}\n`);
+    };
+    write("libs/a/b", { name: "b", devDependencies: { old: "https://evil.example/old.tgz" } });
+    write("libs/node_modules/c", { name: "c", dependencies: { old: "github:e/old" } });
+    const { code, err } = await check(dir);
+    expect(code).toBe(1);
+    expect(err).toContain(
+      'libs/a/b/package.json: devDependencies["old"] is "https://evil.example/old.tgz"',
+    );
+    expect(err).not.toContain("node_modules/c");
+  });
+
+  it("accepts a file: path to a workspace that only the base declares", async () => {
+    const dir = repo({
+      base: { ...BASE_FILES, "package.json": '{"name":"fixture","workspaces":["apps/*"]}\n' },
+      head: {
+        "package.json": '{"name":"fixture","dependencies":{"@fixture/web":"file:apps/web"}}\n',
+      },
+    });
+    const { code, err } = await check(dir);
+    expect(err).toBe("");
+    expect(code).toBe(0);
   });
 
   it("fails a version that the registry has no publish time for", async () => {

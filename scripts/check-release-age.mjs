@@ -8,48 +8,57 @@
 //     --registry <url>   read packuments from this registry instead of registry.npmjs.org
 //     --lock <path>      check this lock instead of npm-shrinkwrap.json / package-lock.json
 //
-// npm's own min-release-age applies only when npm resolves a version: `npm ci` installs whatever
-// the lock names, so a lock edited by hand or resolved without the setting could bring in a
-// release that is too new.
+// npm's own min-release-age applies only when npm resolves a version: `npm ci` installs what the
+// lock names wherever the lock still agrees with package.json, so a lock edited by hand or resolved
+// without the setting could bring in a release that is too new.
+//
+// Threat model: this guards against honest mistakes like that one. It is not a security boundary
+// against a change written to defeat it; such a change could as well edit the CI workflow.
+// Not covered: .npmrc settings other than the registry ones below (proxies, userconfig,
+// globalconfig, CA and TLS settings), and in CI the fallback to the parent commit when the commit
+// before a push cannot be fetched.
 //
 // Locks: npm ci uses npm-shrinkwrap.json when there is one, else package-lock.json. The head's
 // lock is compared with the one npm would have used at <git-ref> (its shrinkwrap if it had one);
 // while both files exist in the working tree, package-lock.json is also compared with the base's
 // package-lock.json, so it cannot change unchecked and take over when the shrinkwrap goes.
 //
-// An entry counts as changed when it is new or its version, resolved, integrity, name, link or
-// inBundle field differs. Each changed entry must be one of:
+// An entry counts as changed when it is new or its version, resolved, integrity, name, link,
+// inBundle or hasShrinkwrap field differs. A changed entry with a name field that is not a valid
+// package name, or with hasShrinkwrap (npm then installs what the package's own shrinkwrap names),
+// fails. Otherwise each changed entry must be one of:
 // - a tarball at https://registry.npmjs.org/<name>/-/<basename>-<version>.tgz (<basename> is the
 //   name without its scope) whose name and semver version match the entry's version, and its name
-//   field (an npm alias) or else its path;
-// - an entry with no resolved URL but a semver version, which npm resolves again from the
-//   registry as name@version;
-// - an inBundle entry with neither a resolved URL nor an integrity: npm takes it from its parent's
-//   tarball when the parent bundles it, and otherwise resolves name@version from the registry, so
-//   its version is checked too;
+//   field (an npm alias) or else its path, with an integrity;
+// - an entry with no resolved URL but a semver version and an integrity, which npm resolves again
+//   from the registry as name@version;
 // - a workspace package, or a link to one of the `workspaces` of the base (its lock's root entry
 //   or its package.json), or of the working tree's package.json, which npm ci reads (a workspace
 //   added there must be a local folder with no resolved URL or integrity, and its link must
 //   carry no integrity); these are not releases and need no check. The head lock's root entry
 //   is never used for this.
-// A release passes when its version was published at least N days ago and, except for the
-// bundled kind above, the lock's integrity matches the registry's for that version
-// (versions[v].dist.integrity, and dist.shasum for a sha1 integrity); an entry without an
-// integrity fails. Anything else fails closed (exit 1): git, codeload, file, http or other-host
-// tarballs, links elsewhere, an entry whose fields disagree with its tarball, a version that is
-// not semver. So does a change to npm's registry settings in .npmrc (registry, <scope>:registry,
-// replace-registry-host), which decide where npm ci fetches the tarballs from.
+// A release passes when its version was published at least N days ago and the lock's integrity
+// agrees with the registry's for that version (versions[v].dist.integrity, and dist.shasum as
+// sha1): every hash in it must parse, use an algorithm the registry lists, and match. Anything
+// else fails closed (exit 1): git, codeload, file, http or other-host tarballs, links elsewhere,
+// an entry whose fields disagree with its tarball, a version that is not semver, an entry with no
+// integrity (including a bundled one, which npm resolves with nothing to verify it against when
+// the parent does not bundle it). So does a change to npm's registry settings in .npmrc
+// (registry, <scope>:registry, replace-registry-host), and a dependency spec in the root or a
+// workspace package.json that is not a registry range, a tag, an npm: alias of one, or a path to
+// a workspace: npm ci would resolve such a spec again, outside the lock.
 // Packuments are the full ones (the abbreviated one has no `time`), one request per name; an
 // unchanged lock makes no registry request.
 //
 // Exit codes: 0 every changed entry passes; 1 an entry fails (too new, no publish time, an
-// integrity that differs or is missing, a registry setting changed, or not a checkable registry
-// release); 2 the check could not run (bad arguments, unknown base, unreadable lock or .npmrc
-// value, a registry that cannot be read, or the 3-minute deadline).
+// integrity that differs or is missing, a registry setting changed, a dependency spec npm would
+// resolve outside the registry, or not a checkable registry release); 2 the check could not run
+// (bad arguments, unknown base, unreadable lock, package.json or .npmrc value, a registry that
+// cannot be read, or the 3-minute deadline).
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, posix, relative, resolve } from "node:path";
 import { setTimeout as sleepFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -69,7 +78,9 @@ const PREFIX = "[release-age]";
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 // Compared to decide whether an entry changed.
-const FIELDS = ["version", "resolved", "integrity", "name", "link", "inBundle"];
+const FIELDS = ["version", "resolved", "integrity", "name", "link", "inBundle", "hasShrinkwrap"];
+// npm's rule for package names (validate-npm-package-name), with the capitals of old packages.
+const PACKAGE_NAME = /^(?:@[a-z0-9\-*~][a-z0-9\-*._~]*\/)?[a-z0-9\-~][a-z0-9\-._~]*$/i;
 
 /** The check could not run (exit 2). */
 export class CheckError extends Error {}
@@ -202,46 +213,56 @@ export function parseTarball(resolved) {
   return { name, version };
 }
 
-const HASH = /^(sha1|sha256|sha384|sha512)-([A-Za-z0-9+/]+={0,2})(?:\?\S*)?$/;
+// An SRI hash as npm's ssri reads one: any algorithm name, a base64 digest and optional options.
+const HASH = /^([a-z0-9]+)-([A-Za-z0-9+/]+={0,2})(?:\?\S*)?$/;
 
-/** The hashes of an SRI integrity string, as algorithm -> set of base64 digests. */
+/**
+ * The hashes of an SRI integrity string, as algorithm -> set of base64 digests, and the tokens
+ * that are not hashes.
+ */
 function hashesOf(integrity) {
   const hashes = new Map();
-  for (const token of String(integrity ?? "")
-    .trim()
-    .split(/\s+/)) {
+  const unparsed = [];
+  const text = typeof integrity === "string" ? integrity.trim() : "";
+  for (const token of text === "" ? [] : text.split(/\s+/)) {
     const match = HASH.exec(token);
-    if (!match) continue;
+    if (!match) {
+      unparsed.push(token);
+      continue;
+    }
     if (!hashes.has(match[1])) hashes.set(match[1], new Set());
     hashes.get(match[1]).add(match[2]);
   }
-  return hashes;
+  return { hashes, unparsed };
 }
 
 const abridged = (digest) => (digest.length > 16 ? `${digest.slice(0, 16)}...` : digest);
 
 /**
  * Compares a lock entry's integrity with a packument version's `dist` (its `integrity`, and its
- * `shasum` as a sha1). Every hash of an algorithm both have must match. Returns `{ compared }`
- * (the algorithms) or `{ problem }`.
+ * `shasum` as a sha1). npm verifies with the strongest algorithm in the lock's string, so every
+ * token must be a hash, every algorithm must be one the registry lists for the version, and every
+ * hash must match. Returns `{ compared }` (the algorithms) or `{ problem }`.
  */
 export function compareIntegrity(lockIntegrity, dist) {
-  const lock = hashesOf(lockIntegrity);
-  if (lock.size === 0) {
-    return { problem: `its integrity ${JSON.stringify(lockIntegrity)} holds no sha1 or sha2 hash` };
+  const { hashes: lock, unparsed } = hashesOf(lockIntegrity);
+  if (unparsed.length > 0) {
+    return { problem: `its integrity holds ${JSON.stringify(unparsed[0])}, which is not a hash` };
   }
-  const registry = hashesOf(dist?.integrity);
+  if (lock.size === 0) return { problem: "its integrity is empty" };
+  const { hashes: registry } = hashesOf(dist?.integrity);
   if (typeof dist?.shasum === "string" && /^[0-9a-f]{40}$/i.test(dist.shasum)) {
     if (!registry.has("sha1")) registry.set("sha1", new Set());
     registry.get("sha1").add(Buffer.from(dist.shasum, "hex").toString("base64"));
   }
   if (registry.size === 0) return { problem: "the registry lists no integrity for this version" };
-  const compared = [...lock.keys()].filter((algorithm) => registry.has(algorithm));
-  if (compared.length === 0) {
+  const compared = [...lock.keys()];
+  const unknown = compared.find((algorithm) => !registry.has(algorithm));
+  if (unknown) {
     return {
       problem:
-        `its integrity (${[...lock.keys()].join(", ")}) cannot be compared with the ` +
-        `registry's (${[...registry.keys()].join(", ")})`,
+        `its integrity has a ${unknown} hash, but the registry lists only ` +
+        `${[...registry.keys()].join(", ")} for this version`,
     };
   }
   for (const algorithm of compared) {
@@ -261,6 +282,9 @@ export function compareIntegrity(lockIntegrity, dist) {
 
 const pathName = (path) => path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
 const inNodeModules = (path) => /(?:^|\/)node_modules\//.test(path);
+/** Whether `name` is a package name npm would accept (with the capitals of old packages). */
+const isPackageName = (name) =>
+  typeof name === "string" && name.length <= 214 && PACKAGE_NAME.test(name);
 
 /** The `workspaces` patterns of a package.json or lock root entry (an array, or `{ packages }`). */
 export function workspacesOf(manifest) {
@@ -290,8 +314,8 @@ function workspaceMatcher(patterns) {
 
 /**
  * The lock entries of `headPackages` that are new or changed since `basePackages`, sorted into
- * `check` (registry releases to look up: path, name, version, and the integrity to compare, or
- * `bundled: true`), `allowed` (workspace packages and links; path and reason) and `problems`
+ * `check` (registry releases to look up: path, name, version, and the integrity to compare),
+ * `allowed` (workspace packages and links; path and reason) and `problems`
  * (entries that fail closed; path and reason). Removed entries are in none of them. `workspaces`
  * are the base's workspace patterns; `headWorkspaces` are those of the working tree's package.json
  * (what npm ci reads), which allow only a folder entry with no resolved URL or integrity, or a link
@@ -310,7 +334,15 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
     const fail = (reason) => problems.push({ path, reason });
     const name = typeof entry.name === "string" ? entry.name : pathName(path);
     const plain = entry.integrity === undefined;
-    if (!inNodeModules(path)) {
+    if (Object.hasOwn(entry, "name") && !isPackageName(entry.name)) {
+      // npm builds the spec it resolves from this field as it is.
+      fail(`its name ${JSON.stringify(entry.name)} is not a package name`);
+    } else if (entry.hasShrinkwrap === true) {
+      fail(
+        "it has hasShrinkwrap: npm then installs what the package's own npm-shrinkwrap.json " +
+          "names, which this check does not see",
+      );
+    } else if (!inNodeModules(path)) {
       if (isWorkspace(path)) {
         allowed.push({ path, reason: "workspace package" });
       } else if (!isHeadWorkspace(path)) {
@@ -335,18 +367,13 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
             "(as a local folder, with no integrity) of package.json",
         );
       }
-    } else if (
-      entry.inBundle === true &&
-      entry.resolved === undefined &&
-      entry.integrity === undefined
-    ) {
-      // Taken from the parent's tarball if the parent bundles it; if not, npm resolves
-      // name@version from the registry, so the version must be old enough either way.
-      if (typeof entry.version === "string" && SEMVER.test(entry.version)) {
-        check.push({ path, name, version: entry.version, bundled: true });
-      } else {
-        fail(`bundled, with no resolved URL and the version ${JSON.stringify(entry.version)}`);
-      }
+    } else if (entry.inBundle === true && entry.resolved === undefined && plain) {
+      // If the parent does not bundle it after all, npm resolves name@version from the registry
+      // with nothing to verify the bytes against.
+      fail(
+        "bundled, with no resolved URL and no integrity: if its parent does not bundle it, npm " +
+          "resolves it with nothing to verify it against",
+      );
     } else if (typeof entry.resolved === "string") {
       const tarball = parseTarball(entry.resolved);
       if (tarball.error) {
@@ -371,7 +398,9 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
         check.push({ path, ...tarball, integrity: entry.integrity });
       }
     } else if (typeof entry.version === "string") {
-      if (!SEMVER.test(entry.version)) {
+      if (!isPackageName(name)) {
+        fail(`no resolved URL, and its path names ${JSON.stringify(name)}, not a package name`);
+      } else if (!SEMVER.test(entry.version)) {
         fail(`no resolved URL, and its version ${JSON.stringify(entry.version)} is not semver`);
       } else if (typeof entry.integrity !== "string") {
         fail(`${name}@${entry.version} has no resolved URL and no integrity in the lock`);
@@ -383,6 +412,157 @@ export function lockChanges(basePackages, headPackages, workspaces = [], headWor
     }
   }
   return { check, allowed, problems };
+}
+
+const DEPENDENCY_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
+// A registry range or a dist-tag: none of the characters that make npm read a spec as a URL, a
+// git repository, a path or an alias.
+const RANGE_OR_TAG = /^[0-9A-Za-z.\-+*^~<>=|_ ]*$/;
+const TARBALL_FILE = /\.(?:tgz|tar\.gz|tar)$/i;
+const isRangeOrTag = (text) =>
+  RANGE_OR_TAG.test(text) && !TARBALL_FILE.test(text.trim()) && !text.trim().startsWith(".");
+
+/**
+ * Why npm would resolve a package.json dependency `spec` outside the registry, or null when it is a
+ * registry range, a tag, an npm: alias of one, or a workspace: or file: path to a workspace folder
+ * (`isWorkspaceFolder`, given the path relative to the repository root). `from` is the folder of
+ * the package.json, relative to the root ("" for the root).
+ */
+export function specProblem(spec, isWorkspaceFolder = () => false, from = "") {
+  if (typeof spec !== "string") return "not a string";
+  const text = spec.trim();
+  if (text.startsWith("npm:")) {
+    const rest = text.slice("npm:".length);
+    const at = rest.indexOf("@", 1);
+    const alias = at === -1 ? rest : rest.slice(0, at);
+    if (!isPackageName(alias)) return "an npm: alias of something that is not a package name";
+    return at === -1 || isRangeOrTag(rest.slice(at + 1))
+      ? null
+      : "an npm: alias with something other than a registry range or tag";
+  }
+  if (text.startsWith("workspace:")) {
+    return isRangeOrTag(text.slice("workspace:".length))
+      ? null
+      : "a workspace: spec with something other than a range";
+  }
+  if (text.startsWith("file:")) {
+    const target = posix.normalize(posix.join(from, text.slice("file:".length)));
+    const inside = !target.startsWith("../") && target !== ".." && !posix.isAbsolute(target);
+    return inside && isWorkspaceFolder(target.replace(/\/+$/, ""))
+      ? null
+      : "a file: path that is not a workspace folder";
+  }
+  return isRangeOrTag(text)
+    ? null
+    : "not a registry range, a tag, an npm: alias of one, or a path to a workspace";
+}
+
+/** The dependency specs of a package.json, including `overrides`, as [label, spec] pairs. */
+function dependencySpecs(manifest) {
+  const specs = [];
+  for (const field of DEPENDENCY_FIELDS) {
+    const deps = manifest?.[field];
+    if (deps === undefined) continue;
+    if (!deps || typeof deps !== "object" || Array.isArray(deps)) {
+      specs.push([field, deps]);
+      continue;
+    }
+    for (const [name, spec] of Object.entries(deps))
+      specs.push([`${field}[${JSON.stringify(name)}]`, spec]);
+  }
+  const walk = (label, value) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [key, inner] of Object.entries(value)) {
+        walk(`${label}[${JSON.stringify(key)}]`, inner);
+      }
+    } else if (typeof value === "string" && /^\$/.test(value)) {
+      // A reference to a root dependency's spec, which is checked on its own.
+      specs.push([label, isPackageName(value.slice(1)) ? "*" : value]);
+    } else {
+      specs.push([label, value]);
+    }
+  };
+  if (manifest?.overrides !== undefined) walk("overrides", manifest.overrides);
+  return specs;
+}
+
+/** The folders under `cwd` that match workspace `patterns` (* and ** globs), relative to it. */
+function workspaceFolders(cwd, patterns) {
+  const found = new Set();
+  const subfolders = (folder) => {
+    try {
+      return readdirSync(join(cwd, folder), { withFileTypes: true })
+        .filter((dirent) => dirent.isDirectory() && dirent.name !== "node_modules")
+        .filter((dirent) => !dirent.name.startsWith("."))
+        .map((dirent) => (folder ? `${folder}/${dirent.name}` : dirent.name));
+    } catch {
+      return [];
+    }
+  };
+  const expand = (folder, parts) => {
+    if (parts.length === 0) {
+      if (folder) found.add(folder);
+      return;
+    }
+    const [part, ...rest] = parts;
+    if (part === "**") {
+      expand(folder, rest);
+      for (const sub of subfolders(folder)) expand(sub, parts);
+    } else if (part.includes("*")) {
+      const re = new RegExp(
+        `^${part
+          .split("*")
+          .map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+          .join("[^/]*")}$`,
+      );
+      for (const sub of subfolders(folder)) {
+        if (re.test(sub.slice(sub.lastIndexOf("/") + 1))) expand(sub, rest);
+      }
+    } else if (part !== "" && part !== "." && part !== "..") {
+      const next = folder ? `${folder}/${part}` : part;
+      if (existsSync(join(cwd, next))) expand(next, rest);
+    }
+  };
+  for (const pattern of patterns) {
+    expand("", pattern.replace(/^\.\//, "").replace(/\/+$/, "").split("/"));
+  }
+  return [...found].sort();
+}
+
+/**
+ * Failures for dependency specs in the working tree's root package.json and its workspaces'
+ * package.json files that npm ci would resolve outside the registry (it resolves a spec again
+ * when the lock no longer satisfies it).
+ */
+function packageJsonProblems(cwd, patterns, isWorkspaceFolder) {
+  const problems = [];
+  const folders = [
+    "",
+    ...workspaceFolders(cwd, patterns).filter((folder) =>
+      existsSync(join(cwd, folder, "package.json")),
+    ),
+  ];
+  for (const folder of folders) {
+    const file = folder ? `${folder}/package.json` : "package.json";
+    if (!existsSync(join(cwd, file))) continue;
+    const manifest = parseJson(readFileSync(join(cwd, file), "utf8"), file);
+    for (const [label, spec] of dependencySpecs(manifest)) {
+      const problem = specProblem(spec, isWorkspaceFolder, folder);
+      if (problem) {
+        const shown =
+          typeof spec === "string" ? JSON.stringify(redact(spec)) : JSON.stringify(spec);
+        problems.push(
+          `${file}: ${label} is ${shown}: ${problem}; npm ci would resolve it outside the lock`,
+        );
+      }
+    }
+  }
+  return problems;
 }
 
 /** The URL of a package's full packument (`@scope/name` as `@scope%2fname`). */
@@ -467,9 +647,9 @@ async function readPackument(name, context) {
 }
 
 /**
- * Reads the packument of every release in `entries` (path, name, version, and integrity or
- * `bundled`), compares each version's age at `now` with `minDays` and each entry's integrity
- * with the registry's. Returns one result per name@version (`tooNew`, or `problem` when the
+ * Reads the packument of every release in `entries` (path, name, version and integrity),
+ * compares each version's age at `now` with `minDays` and each entry's integrity with the
+ * registry's. Returns one result per name@version (`tooNew`, or `problem` when the
  * registry has no publish time for it, and `integrity`: the entries whose integrity differs or
  * cannot be compared), the number of integrity comparisons that matched, and the number of
  * registry requests. Throws CheckError when the registry cannot be read.
@@ -517,7 +697,6 @@ export async function checkReleases(entries, options) {
         // A semver version is never an inherited key, so no own-property check is needed.
         const listed = packument.versions?.[version];
         for (const entry of located) {
-          if (entry.bundled) continue;
           const comparison = compareIntegrity(entry.integrity, listed?.dist);
           if (comparison.problem) {
             result.integrity.push({ path: entry.path, reason: comparison.problem });
@@ -620,7 +799,8 @@ function registryChange(baseNpmrc, headNpmrc) {
       : pairs.map(([key, value]) => `${key}=${[value].flat().map(redact).join(",")}`).join(", ");
   return (
     `.npmrc: npm's registry settings change from ${shown(before)} to ${shown(after)}; they ` +
-    "decide where npm ci fetches every tarball from, so they need a change of their own"
+    "decide where npm ci fetches every tarball from, so this check fails on any change to them " +
+    "(a maintainer changes them on the base branch, past this check)"
   );
 }
 
@@ -720,6 +900,15 @@ export async function run(argv, options = {}) {
     const headWorkspaces = existsSync(packageJsonPath)
       ? workspacesOf(parseJson(readFileSync(packageJsonPath, "utf8"), "package.json"))
       : [];
+    const isBaseWorkspace = workspaceMatcher(workspaces);
+    const isHeadWorkspace = workspaceMatcher(headWorkspaces);
+    failures.push(
+      ...packageJsonProblems(
+        cwd,
+        [...new Set([...workspaces, ...headWorkspaces])],
+        (folder) => isBaseWorkspace(folder) || isHeadWorkspace(folder),
+      ),
+    );
 
     const check = [];
     const allowed = [];

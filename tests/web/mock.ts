@@ -7,7 +7,7 @@ import {
   ReplayRecord,
   RunResponse,
 } from "@liner-notes/contract";
-import { expect, type Locator, type Page } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, type Page } from "@playwright/test";
 import { replayedAnalysis, replayNotice } from "../../apps/api/src/replay/player";
 import {
   contractMisfits,
@@ -15,6 +15,7 @@ import {
   streamRuleBreaks,
   withEnvelope,
 } from "../mock-sse/envelope";
+import { EMPTY_SVG } from "./offline";
 
 const mockDir = join(dirname(fileURLToPath(import.meta.url)), "..", "mock-sse");
 
@@ -75,6 +76,7 @@ function storedRunMisfits(config: MockConfig): string[] {
 
 /** Installs the mocked API (tests/mock-sse/mock-api.js) configured with a fixture. */
 export async function useMockApi(page: Page, fixture: unknown) {
+  await keepOffTheNetwork(page);
   const config = mockConfig(fixture);
   await page.addInitScript((value) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = value;
@@ -270,9 +272,59 @@ export function replayedRecording(slug: string = DEMO_SLUG, runId = "replay-run"
   return { events, recordedAt: record.recordedAt as string };
 }
 
-/** Collects console errors and warnings, and uncaught page errors. */
+/** The lists collectProblems returned for each page: an outside request is added to them. */
+const problemLists = new WeakMap<Page, string[][]>();
+const offTheNetwork = new WeakSet<BrowserContext>();
+
+/** Cover Art Archive: the recorded fixtures and replays carry its real cover addresses. */
+const COVER_ART = "coverartarchive.org";
+
+/**
+ * Keeps a test's pages off the network, for the page's context (useMockApi does this for every
+ * spec). An HTTP request to any host other than 127.0.0.1 or localhost is never sent:
+ * - a Cover Art Archive picture is an empty image, as the recordings' covers need one;
+ * - any other request, a Cover Art Archive fetch too, is refused, and listed by collectProblems
+ *   as "outside request: <method> <url>". In a spec that never calls collectProblems it is
+ *   refused silently.
+ * The route is the context's, so a spec's own page routes for a host (offline(), a cover it
+ * serves, a fake Turnstile script) are tried first: that is how a spec allows an outside host.
+ * Under offline(), a refused request other than a picture shows only as a console line
+ * "Failed to load resource: net::ERR_FAILED", without its address.
+ * A WebSocket is not guarded; the app opens none.
+ */
+async function keepOffTheNetwork(page: Page) {
+  const context = page.context();
+  if (offTheNetwork.has(context)) return;
+  offTheNetwork.add(context);
+  await context.route(
+    (url) => url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
+    (route) => {
+      const request = route.request();
+      if (new URL(request.url()).hostname === COVER_ART && request.resourceType() === "image") {
+        return route.fulfill({ contentType: "image/svg+xml", body: EMPTY_SVG });
+      }
+      let from = page;
+      try {
+        from = request.frame().page();
+      } catch {
+        // A request with no frame yet is put down to the page the guard was set up for: a
+        // service worker's, and a popup's first request, which is listed with the opener's.
+      }
+      for (const problems of problemLists.get(from) ?? []) {
+        problems.push(`outside request: ${request.method()} ${request.url()}`);
+      }
+      return route.abort("blockedbyclient");
+    },
+  );
+}
+
+/**
+ * Collects console errors and warnings, uncaught page errors, and the HTTP requests to an outside
+ * host that keepOffTheNetwork refused (once useMockApi has been called for the page's context).
+ */
 export function collectProblems(page: Page) {
   const problems: string[] = [];
+  problemLists.set(page, [...(problemLists.get(page) ?? []), problems]);
   page.on("console", (message) => {
     if (message.type() === "error" || message.type() === "warning") {
       problems.push(`${message.type()}: ${message.text()}`);

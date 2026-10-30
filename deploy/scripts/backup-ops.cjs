@@ -2,13 +2,22 @@
 // container of the API image (node and better-sqlite3, as the API's user), never on the host:
 //
 //   node backup-ops.cjs snapshot <out>  a consistent copy of /app/data/sonic-agent.db (VACUUM
-//                                       INTO, a single read transaction, while the API runs) and
-//                                       of /app/spend/llm-spend.jsonl when it exists, into <out>
-//   node backup-ops.cjs verify <dir>    PRAGMA integrity_check on <dir>/sonic-agent.db, and every
-//                                       line of <dir>/llm-spend.jsonl (if any) parsed as JSON
-//   node backup-ops.cjs install <dir>   with the API stopped: <dir>/sonic-agent.db replaces the
-//                                       database; the spend log is copied only when the volume
-//                                       has none (an older log would undercount the spending)
+//                                       INTO, one read transaction, while the API runs) and of
+//                                       /app/spend/llm-spend.jsonl when it exists, into <out>;
+//                                       fails when the copy does not pass `verify`
+//   node backup-ops.cjs copy <out>      the files as they are (database, its -wal and -shm, spend
+//                                       log), for the copy restore.sh takes with the API stopped
+//   node backup-ops.cjs verify <dir>    <dir>/sonic-agent.db (with any -wal beside it applied)
+//                                       passes PRAGMA integrity_check, and every line of
+//                                       <dir>/llm-spend.jsonl, if any, is a spend record by the
+//                                       API's rules (apps/api/src/llm/spendLog.ts)
+//   node backup-ops.cjs install <dir>   with every container using the volumes stopped: the
+//                                       database of <dir> replaces the volume's, and the spend
+//                                       logs are merged (below)
+//
+// Spend logs are merged, never replaced by a shorter one: the volume's log keeps every line, and
+// the backup's records it lacks are appended. The API sums the records in any order (a settle
+// line replaces the reservation with its id), so the merged log counts all that either counted.
 //
 // Messages go to stderr: backup.sh streams the archive on stdout.
 "use strict";
@@ -20,7 +29,8 @@ const { createRequire } = require("node:module");
 // better-sqlite3 as the API itself resolves it (/app/apps/api in the image).
 const Database = createRequire("/app/apps/api/package.json")("better-sqlite3");
 
-const DB = "/app/data/sonic-agent.db";
+const DATA = "/app/data";
+const DB = `${DATA}/sonic-agent.db`;
 const SPEND = "/app/spend/llm-spend.jsonl";
 const DB_NAME = "sonic-agent.db";
 const SPEND_NAME = "llm-spend.jsonl";
@@ -34,40 +44,138 @@ function fail(message) {
   process.exit(1);
 }
 
-/** The lines of a spend log that do not parse as a JSON object (1-based numbers). */
-function badSpendLines(text) {
-  const bad = [];
-  const lines = text.split("\n");
-  if (lines.at(-1) === "") lines.pop();
-  lines.forEach((line, i) => {
-    try {
-      const value = JSON.parse(line);
-      if (value === null || typeof value !== "object" || Array.isArray(value)) bad.push(i + 1);
-    } catch {
-      bad.push(i + 1);
-    }
-  });
-  return { count: lines.length, bad };
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/** integrity_check, the schema version and the number of tables of a database file. */
-function checkDatabase(file) {
-  const db = new Database(file, { fileMustExist: true });
+function fsyncPath(file) {
+  const fd = fs.openSync(file, "r");
   try {
-    const result = db
-      .pragma("integrity_check", { simple: false })
-      .map((row) => row.integrity_check);
-    if (result.length !== 1 || result[0] !== "ok") {
-      fail(`integrity_check on ${path.basename(file)}: ${result.slice(0, 5).join("; ")}`);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Why one line is not a spend record (the API's parseLine), or null. */
+function lineProblem(row) {
+  let line;
+  try {
+    line = JSON.parse(row);
+  } catch {
+    return "not JSON";
+  }
+  if (!line || typeof line !== "object" || Array.isArray(line)) return "not an object";
+  if (typeof line.usd_est !== "number" || !Number.isFinite(line.usd_est) || line.usd_est < 0) {
+    return "usd_est is not an amount";
+  }
+  if (typeof line.ts !== "string" || Number.isNaN(Date.parse(line.ts))) return "ts is not a date";
+  if (line.kind !== undefined && line.kind !== "reserve" && line.kind !== "settle") {
+    return "unknown kind";
+  }
+  if (line.kind !== undefined && typeof line.id !== "string") return "no id";
+  return null;
+}
+
+/**
+ * The records of a spend log (blank lines skipped, as the API skips them), their USD total as
+ * the API counts it, and the first malformed line, if any.
+ */
+function readSpend(text) {
+  const records = [];
+  let bad = null;
+  let badRow = -1;
+  const rows = text.split("\n");
+  rows.forEach((row, index) => {
+    if (row.trim() === "") return;
+    const problem = lineProblem(row);
+    if (problem && !bad) {
+      bad = `line ${index + 1} (${problem})`;
+      badRow = index;
     }
-    const version = db.pragma("user_version", { simple: true });
-    const tables = db
-      .prepare("SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table'")
-      .get().n;
-    return { version, tables };
+    if (!problem) records.push(row);
+  });
+  // The only malformed line is the last one, with no newline after it: an append in progress.
+  const torn = bad !== null && badRow === rows.length - 1;
+  const lines = records.map((row) => JSON.parse(row));
+  const settled = new Set(lines.filter((l) => l.kind === "settle").map((l) => l.id));
+  const usd = lines
+    .filter((l) => !(l.kind === "reserve" && settled.has(l.id)))
+    .reduce((sum, l) => sum + l.usd_est, 0);
+  return { records, usd, bad, torn };
+}
+
+/**
+ * The records of `theirs` to append to `mine` so that the result counts all that either log
+ * counts. A record with an id (every line the API writes: reserve and settle) is the same record
+ * wherever it appears, so it is added when `mine` lacks it. Identical lines without an id
+ * (written by hand) cannot be told apart: each is kept as many times as the log with more of them
+ * holds it. Merging the same backup again adds nothing.
+ */
+function missingRecords(mine, theirs) {
+  const count = new Map();
+  for (const row of mine) count.set(row, (count.get(row) ?? 0) + 1);
+  const missing = [];
+  for (const row of theirs) {
+    const left = count.get(row) ?? 0;
+    if (left > 0) count.set(row, left - 1);
+    else missing.push(row);
+  }
+  return missing;
+}
+
+function describeSpend(spend) {
+  return `${spend.records.length} records, USD ${spend.usd.toFixed(4)} counted`;
+}
+
+/** Checkpoints any -wal beside the database at `file` into it, and leaves it a single file. */
+function settle(file) {
+  const db = new Database(file, { fileMustExist: true, timeout: 15000 });
+  try {
+    db.pragma("wal_checkpoint(TRUNCATE)");
+    db.pragma("journal_mode = DELETE");
   } finally {
     db.close();
   }
+}
+
+/** Fails unless the database at `file` passes integrity_check. */
+function checkDatabase(file) {
+  let result;
+  let version;
+  let tables;
+  try {
+    settle(file);
+    const db = new Database(file, { fileMustExist: true });
+    try {
+      result = db.pragma("integrity_check", { simple: false }).map((row) => row.integrity_check);
+      version = db.pragma("user_version", { simple: true });
+      tables = db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table'").get().n;
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    fail(`${path.basename(file)} cannot be read: ${error.message}`);
+  }
+  if (result.length !== 1 || result[0] !== "ok") {
+    fail(`integrity_check on ${path.basename(file)}: ${result.slice(0, 5).join("; ")}`);
+  }
+  say(`database: integrity ok, schema version ${version}, ${tables} tables`);
+}
+
+function verify(dir) {
+  const file = path.join(dir, DB_NAME);
+  if (!fs.existsSync(file)) fail(`no ${DB_NAME} in the backup`);
+  checkDatabase(file);
+  const spendFile = path.join(dir, SPEND_NAME);
+  if (!fs.existsSync(spendFile)) {
+    say("spend log: not in this backup");
+    return null;
+  }
+  const spend = readSpend(fs.readFileSync(spendFile, "utf8"));
+  if (spend.bad) fail(`spend log: ${spend.bad} is not a spend record`);
+  say(`spend log: ${describeSpend(spend)}, all valid`);
+  return spend;
 }
 
 function snapshot(out) {
@@ -75,82 +183,113 @@ function snapshot(out) {
   if (!fs.existsSync(DB)) fail(`${DB} does not exist (has the API ever started on this volume?)`);
   const target = path.join(out, DB_NAME);
   // Opened as the API opens it; VACUUM INTO reads one consistent snapshot, whatever the API
-  // writes meanwhile, and waits up to 15 s for a lock.
-  const db = new Database(DB, { fileMustExist: true, timeout: 15000 });
+  // writes meanwhile, and waits up to 15 s for a lock. It copies a damaged index as it is, so
+  // the copy is checked below.
   try {
-    db.exec(`VACUUM INTO '${target}'`);
-  } finally {
-    db.close();
+    const db = new Database(DB, { fileMustExist: true, timeout: 15000 });
+    try {
+      db.exec(`VACUUM INTO '${target}'`);
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    fail(`the database on the volume cannot be copied: ${error.message}`);
   }
-  // A single file: the copy needs no -wal next to it.
-  const copy = new Database(target, { fileMustExist: true });
-  copy.pragma("journal_mode = DELETE");
-  copy.close();
-  const { version, tables } = checkDatabase(target);
-  say(`database: integrity ok, schema version ${version}, ${tables} tables`);
 
-  if (!fs.existsSync(SPEND)) {
+  if (fs.existsSync(SPEND)) {
+    // The log only grows, a line at a time: a copy that ends inside a line caught an append in
+    // progress, so it is read again (for up to 10 s). Any other malformed line is refused, as
+    // the API refuses it.
+    let text = "";
+    let spend = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      text = fs.readFileSync(SPEND, "utf8");
+      spend = readSpend(text);
+      if (!spend.torn) break;
+      if (attempt === 0) say("spend log: an append was in progress; reading it again");
+      sleep(250);
+    }
+    if (spend.bad) {
+      fail(`the spend log on the volume has a malformed ${spend.bad} (the API refuses it too)`);
+    }
+    fs.writeFileSync(path.join(out, SPEND_NAME), text, { mode: 0o600 });
+  } else {
     say("spend log: none on the volume");
-    return;
   }
-  // The log only grows, a line at a time. A copy that ends inside a line caught an append in
-  // progress: read it again.
-  let text = "";
-  let check = { count: 0, bad: [] };
-  for (let attempt = 0; attempt < 20; attempt++) {
-    text = fs.readFileSync(SPEND, "utf8");
-    check = badSpendLines(text);
-    if (check.bad.length === 0) break;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-  }
-  fs.writeFileSync(path.join(out, SPEND_NAME), text, { mode: 0o600 });
-  if (check.bad.length > 0) {
-    say(
-      `warning: the spend log has malformed lines (${check.bad.slice(0, 5).join(", ")}); copied as is`,
-    );
-  }
-  say(`spend log: ${check.count} lines`);
+  verify(out);
 }
 
-function verify(dir) {
-  const { version, tables } = checkDatabase(path.join(dir, DB_NAME));
-  say(`database: integrity ok, schema version ${version}, ${tables} tables`);
-  const spend = path.join(dir, SPEND_NAME);
-  if (!fs.existsSync(spend)) {
-    say("spend log: not in this backup");
-    return;
-  }
-  const check = badSpendLines(fs.readFileSync(spend, "utf8"));
-  if (check.bad.length > 0) fail(`spend log: malformed lines ${check.bad.slice(0, 5).join(", ")}`);
-  say(`spend log: ${check.count} lines, all valid`);
+function copy(out) {
+  fs.mkdirSync(out, { recursive: true });
+  const files = [DB, `${DB}-wal`, `${DB}-shm`, SPEND].filter((file) => fs.existsSync(file));
+  for (const file of files) fs.copyFileSync(file, path.join(out, path.basename(file)));
+  say(files.length ? `copied as they are: ${files.join(", ")}` : "nothing on the volumes to copy");
 }
 
 function install(dir) {
-  verify(dir);
-  // Written next to the database, then renamed over it. The old database's -wal and -shm go
-  // first: SQLite would otherwise apply the old log to the new file.
+  let spend = verify(dir);
+  try {
+    fs.accessSync(path.dirname(SPEND), fs.constants.W_OK);
+  } catch {
+    if (spend) say("warning: no spend log volume is mounted; the backup's spend log is left out");
+    spend = null;
+  }
+
+  // The spend log to write, worked out before anything changes.
+  let spendText = null;
+  if (spend && !fs.existsSync(SPEND)) {
+    spendText = spend.records.map((row) => `${row}\n`).join("");
+    say("spend log: none on the volume; the backup's is restored");
+  } else if (spend) {
+    const current = fs.readFileSync(SPEND, "utf8");
+    const mine = readSpend(current);
+    if (mine.bad) fail(`the spend log on the volume has a malformed ${mine.bad}; nothing changed`);
+    const missing = missingRecords(mine.records, spend.records);
+    if (missing.length === 0) {
+      say(`spend log: the volume's (${describeSpend(mine)}) holds every record of the backup's`);
+    } else {
+      const sep = current === "" || current.endsWith("\n") ? "" : "\n";
+      spendText = `${current}${sep}${missing.map((row) => `${row}\n`).join("")}`;
+      say(
+        `spend log: merged, ${missing.length} records of the backup's added to the volume's ` +
+          `(${describeSpend(mine)} before, ${describeSpend(readSpend(spendText))} now)`,
+      );
+    }
+  }
+
+  // The old database first takes in what its -wal holds (when it can still be read), so no
+  // committed write lives only in a file about to be removed; restore.sh has copied them all.
+  if (fs.existsSync(DB)) {
+    try {
+      settle(DB);
+    } catch (error) {
+      say(`warning: the old database could not be checkpointed (${error.message})`);
+    }
+  }
+  // Written next to the database and renamed over it. Any -wal and -shm left go before the
+  // rename: SQLite would otherwise apply an old log to the new file.
   const temp = `${DB}.restoring`;
   fs.copyFileSync(path.join(dir, DB_NAME), temp);
-  const fd = fs.openSync(temp, "r+");
-  fs.fsyncSync(fd);
-  fs.closeSync(fd);
+  fsyncPath(temp);
   for (const suffix of ["-wal", "-shm"]) fs.rmSync(`${DB}${suffix}`, { force: true });
   fs.renameSync(temp, DB);
+  fsyncPath(DATA);
   say(`database: restored to ${DB}`);
 
-  const spend = path.join(dir, SPEND_NAME);
-  if (!fs.existsSync(spend)) return;
-  if (fs.existsSync(SPEND)) {
-    say(`spend log: kept the one on the volume (${SPEND}); the backup's copy was not restored`);
-    return;
+  if (spendText !== null) {
+    const spendTemp = `${SPEND}.restoring`;
+    fs.writeFileSync(spendTemp, spendText, { mode: 0o600 });
+    fsyncPath(spendTemp);
+    fs.renameSync(spendTemp, SPEND);
+    fsyncPath(path.dirname(SPEND));
+    say(`spend log: written to ${SPEND}`);
   }
-  fs.copyFileSync(spend, SPEND, fs.constants.COPYFILE_EXCL);
-  say(`spend log: restored to ${SPEND}`);
 }
 
 const [command, dir] = process.argv.slice(2);
-if (!dir) fail("usage: backup-ops.cjs snapshot|verify|install <dir>");
+if (!dir) fail("usage: backup-ops.cjs snapshot|copy|verify|install <dir>");
 if (command === "snapshot") snapshot(dir);
+else if (command === "copy") copy(dir);
 else if (command === "verify") verify(dir);
 else if (command === "install") install(dir);
 else fail(`unknown command ${command}`);

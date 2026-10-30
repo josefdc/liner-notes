@@ -1128,12 +1128,10 @@ describe("the analysis graph paused for a pick, on the SQLite checkpointer", () 
     // Each node's writes keep the path of the task that made them (the saver passes it on): the
     // scout offers the candidates, the clarification clears them.
     expect(pathsOf(after, threadId, "candidates")).toEqual([
-      expect.stringContaining("scout"),
-      expect.stringContaining("clarification"),
+      "~__pregel_pull, scout",
+      "~__pregel_pull, clarification",
     ]);
-    expect(pathsOf(after, threadId, "selectedTrackId")).toEqual([
-      expect.stringContaining("clarification"),
-    ]);
+    expect(pathsOf(after, threadId, "selectedTrackId")).toEqual(["~__pregel_pull, clarification"]);
   });
 
   it("resumes a run paused in a database written by checkpoint-sqlite 1.0", async () => {
@@ -1164,13 +1162,9 @@ describe("the analysis graph paused for a pick, on the SQLite checkpointer", () 
     expect(await isWaitingAtInterrupt(db, threadId)).toBe(false);
     // The saver added the column: the rows saved before it have no path, the resume's have one.
     expect(columnsOf(db, "writes")).toContain("task_path");
-    expect(pathsOf(db, threadId, "candidates")).toEqual([
-      "",
-      expect.stringContaining("clarification"),
-    ]);
-    expect(pathsOf(db, threadId, "selectedTrackId")).toEqual([
-      expect.stringContaining("clarification"),
-    ]);
+    expect(pathsOf(db, threadId, "candidates")).toEqual(["", "~__pregel_pull, clarification"]);
+    expect(pathsOf(db, threadId, "selectedTrackId")).toEqual(["~__pregel_pull, clarification"]);
+    expect(pathsOf(db, threadId, "audioFeatures")).toEqual(["~__pregel_pull, engineer"]);
   });
 });
 

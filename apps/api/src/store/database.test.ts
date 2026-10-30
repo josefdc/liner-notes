@@ -485,6 +485,7 @@ const isRoot = process.getuid?.() === 0;
 const betterSqlitePath = createRequire(import.meta.url).resolve("better-sqlite3");
 const apiRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = join(apiRoot, "..", "..");
+const FIXTURES = join(apiRoot, "test", "fixtures");
 
 /** Runs a CommonJS snippet in a child Node process with `Database` (better-sqlite3) in scope. */
 function runChild(code: string, ...args: string[]) {
@@ -815,6 +816,32 @@ const audioRow = (extra: Record<string, unknown>) => ({
 
 describe("migrations", () => {
   afterEach(cleanup);
+
+  it("sets up the checkpoint tables at startup, adding task_path to those of checkpoint-sqlite 1.0", () => {
+    const columns = (db: Database.Database) =>
+      (db.prepare("PRAGMA table_info(writes)").all() as Array<{ name: string }>).map(
+        ({ name }) => name,
+      );
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    raw.exec(readFileSync(join(FIXTURES, "checkpoints-sqlite-1.0.4.sql"), "utf8"));
+    expect(columns(raw)).not.toContain("task_path");
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+
+    expect(columns(db)).toContain("task_path");
+    // The rows saved before keep their values, with no path.
+    expect(
+      db.prepare("SELECT DISTINCT task_path FROM writes WHERE thread_id = 't-paused-1.0'").all(),
+    ).toEqual([{ task_path: "" }]);
+    expect(db.prepare("SELECT COUNT(*) FROM writes").pluck().get()).toBe(8);
+
+    // A new database has the saver's tables from the start too.
+    closeDatabase();
+    const fresh = initializeDatabase(join(tmpDir, "fresh.db"));
+    expect(columns(fresh)).toContain("task_path");
+  });
 
   it("migrates a database created by the code before numbered migrations", () => {
     const dbPath = setup();

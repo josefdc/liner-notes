@@ -12,6 +12,7 @@
  * file untouched and throws a DatabaseOpenError that says how to fix it.
  */
 
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -278,6 +279,13 @@ function quarantineCorruptDatabase(
   return corruptPath;
 }
 
+/** The checkpoint saver's table setup (`setup()` is protected), run on its own. */
+class CheckpointTables extends SqliteSaver {
+  create(): void {
+    this.setup();
+  }
+}
+
 /** Opens a checked file read-write, configures and migrates it. Closes it on any failure. */
 function openAndPrepare(dbPath: string, busyTimeoutMs: number): Database.Database {
   let db: Database.Database | null = null;
@@ -285,6 +293,10 @@ function openAndPrepare(dbPath: string, busyTimeoutMs: number): Database.Databas
     db = new Database(dbPath, { timeout: busyTimeoutMs });
     configurePragmas(db);
     runMigrations(db);
+    // The checkpoint saver's own tables, set up here rather than at the first run: a database
+    // from checkpoint-sqlite 1.0 gets the `writes.task_path` column now, and a failure (a lock
+    // held by another process) stops the start with a DatabaseOpenError instead of failing a run.
+    new CheckpointTables(db).create();
     return db;
   } catch (err) {
     try {

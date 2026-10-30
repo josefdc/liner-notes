@@ -2,7 +2,8 @@
 -- @langchain/langgraph-checkpoint-sqlite 1.0.4 saved it: the saver's own tables, where `writes` has
 -- no `task_path` column yet (1.1 adds it when it opens a database). Written by the app's graph
 -- (agent/graph.ts) with the stubbed sources of agent/graph.test.ts, on PreviewFreeSqliteSaver:
--- thread "t-paused-1.0", query "Ice Ice Baby", one candidate offered. Used by that test file.
+-- thread "t-paused-1.0", query "Ice Ice Baby", one candidate offered. Used by agent/graph.test.ts
+-- and store/database.test.ts.
 
 CREATE TABLE checkpoints (
   thread_id TEXT NOT NULL,

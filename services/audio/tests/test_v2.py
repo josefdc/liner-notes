@@ -1920,7 +1920,8 @@ def _cents_apart(high: float, low: float) -> float:
 
 def _sixth_apart(notes) -> bool:
     """Two cowbell oscillators within SOURCE_THIRD_CENTS of a minor sixth."""
-    return len(notes) == 2 and abs(_cents_apart(notes[1], notes[0]) - 800) <= 30
+    off = abs(_cents_apart(notes[1], notes[0]) - 800)
+    return len(notes) == 2 and off <= estimators.SOURCE_THIRD_CENTS
 
 
 def _third_harmonic_kept(notes) -> bool:
@@ -1930,7 +1931,10 @@ def _third_harmonic_kept(notes) -> bool:
 
 
 def _harmonic_off_the_line(notes) -> bool:
-    """A bass's third harmonic lies further than SOURCE_NOTE_TOLERANCE from 3x its line."""
+    """
+    A bass's third harmonic lies further than SOURCE_NOTE_TOLERANCE from 3x its line, but within
+    1 % of it: off the line, not another note (bass 501 reads 0.46 %).
+    """
     line = max(notes[:2])
     third = min(notes, key=lambda f: abs(f - 3 * line))
     return estimators.SOURCE_NOTE_TOLERANCE * third < abs(third - 3 * line) < 0.01 * third
@@ -1938,7 +1942,7 @@ def _harmonic_off_the_line(notes) -> bool:
 
 def _tierce_over_hum(notes) -> bool:
     """A bell's second note is its tierce, a minor tenth over the hum."""
-    return abs(_cents_apart(notes[1], notes[0]) - 1500) <= 30
+    return abs(_cents_apart(notes[1], notes[0]) - 1500) <= estimators.SOURCE_THIRD_CENTS
 
 
 @pytest.mark.parametrize(
@@ -1959,7 +1963,7 @@ def test_still_sources_whose_lines_spell_a_chord_keep_their_key(family, seed, sp
     line next to the bass note pulls its fundamental line off, so its harmonics lie beyond
     SOURCE_NOTE_TOLERANCE of it; a bell's tierce is a minor tenth over its hum (bell 509 is
     pinned above). The estimators that ONE_PITCH_CLASS_KEYED says key the seed do.
-    evals/audio/scripts/still_chord_rules.py measures eight rules that could withhold these
+    evals/audio/scripts/still_chord_rules.py measures eleven rules that could withhold these
     keys; none ships (services/audio/README.md gives the numbers).
     """
     signals_ = estimators.Signals(signals.ONE_PITCH_CLASS_SEEDED[family](seed), FIXTURE_SR)

@@ -453,54 +453,105 @@ times are seconds from the start of the preview. Every block is `null` when it w
   basses, 7 bells and 4 bells over drums of the 30 pinned seeds each, and 3, 5, 4 and 2 of the 30
   held-out ones; librosa 2, 0, 7 and 4, and 2, 2, 4 and 2. All 30 of those controls have lines
   that hold still and move together, so the single-source rule asks what they spell, and they
-  spell a chord. Four of the six cowbells' two oscillators lie within 30 cents of a minor sixth,
-  a chord interval; in the other two the third harmonic of one oscillator is more than half as
-  loud as it (0.51 and 0.53), so it is not folded and counts as a third pitch class. A one-note
-  bass's harmonics lie further than 0.3 % from the multiples of its fundamental line: a stiff
-  string's run sharp, and a line next to the note (a drum's, or the repeated note's own) pulls
-  the fundamental line off, so they count as notes. A church bell's tierce is a minor tenth over
-  its hum, and its quint and upper third lie 0.35-0.56 % off the hum's harmonics, so the bell
-  spells its hum's minor triad, most often with a major third over the hum too: by its notes it
-  is a chord. Eight rules aimed at these keys were measured on every control and GiantSteps+
-  clip with a served key (`evals/audio/scripts/still_chord_rules.py`, the same halves and
-  threshold choice as for the drums, each rule asked only where the lines hold still, after the
-  single-source rule has found a chord). Keys withheld are counted over both halves: 30 of these
-  families' keys with Essentia, 23 with librosa. No GiantSteps+ clip with a served key has still
-  lines, so the clips can show no cost of these rules, and no gain. Folding an overtone up to
-  0.54 of its note's level (the least that takes no right key in the training half) withholds 2
-  of the 6 cowbell keys with Essentia and 2 of the 4 with librosa, and no right key. A third or
-  sixth between two pitch classes 28 cents or more off equal temperament withholds 1 Essentia
-  cowbell key; detuned thirds read up to 26. The energy left 70 ms after each hit's loudest
-  frame takes right keys at any threshold: withholding more than half of the training cowbell
-  keys (0.0954 or under) takes 81 and 83 right keys in the training half and 84 and 93 held out.
-  One harmonic series whose harmonics are stretched as a stiff string's (k f0 sqrt(1 + B k^2), B
-  up to 0.002), its fundamental within 1 % of a line, explaining 0.9048 or more of the lines'
-  level withholds 5 of the 7 Essentia one-note-bass keys and 1 of the 2 librosa ones, and no
-  right key of any control or clip in either half. But the most bass-like right key of the
-  training half, an F major triad in a saw timbre with tremolo and its third 6 dB under a root
-  doubled an octave down, reads 0.8959, and the same triad with its third 7.5 dB under it, whose
-  right key both estimators serve, reads 0.9055 (`evals/audio/tests/test_still_chord_rules.py`
-  pins it): the rule would take that key. With the lines within 150 cents of a stronger one
-  merged into it first, 0.9461 or more withholds the same bass keys and no right key, and the
-  most bass-like right key of the training half reads 0.9094; for more than half of the training
-  bass keys (from 0.8609) it takes 5 and 7 right keys in the training half and 1 held out. A minor
-  and a major third over one note (a bell's tierce and upper third) withholds 9 of the 11 bell
-  keys and 4 of the 6 over drums with each estimator, but takes every one-chord riff's right key
-  (8 in the training half, 9 held out) and 5 more. A bell's partials decay at their own rates:
-  the fastest note's decay over the slowest's, the median over hits, is 5.033 or more for 7 of the
-  11 bell keys and 4 of the 6 over drums, but takes 3 right keys in each half with each estimator
-  (faded pads and seventh chords whose levels move, a soft chord), and no threshold takes a bell
-  key without a right one in the training half. The share of note pairs off the equal-tempered
-  grid, which sets the tubular bells apart, reads 0 on every church bell, as on most chords. None
-  is shipped. The overtone and off-grid-third rules withhold too few keys; the decay, both-thirds
-  and off-grid rules take right keys. The stretched series withholds most Essentia bass keys
-  without taking a right key among the controls, but only 1 of the 2 librosa ones, and at the
-  threshold the training half sets it withholds 1 of the 2 training bass keys. Without the merge
-  it takes the right key of a chord whose third is a little softer than any control's; the merge
-  was added after the recorded notes of every keyed bass, held-out seeds included, had been read,
-  so its held-out numbers are no untouched test, and the clips cannot show a cost. A church
-  bell's notes are a chord's; what tells it apart is that its partials decay at their own rates,
-  and chords whose levels move read as far apart.
+  spell a chord. In four cowbells (seeds 508, 515, 600 and 601) the two oscillators lie within
+  `SOURCE_THIRD_CENTS` of a minor sixth, a chord interval (515 at 830 cents, on the edge, which
+  counts; 601 also has a line at 49.2 Hz, a third pitch class). In the other two (528 and 606)
+  the line on the third harmonic of one oscillator reads 0.53 and 0.51 of that oscillator's
+  level, over `SOURCE_OVERTONE_RATIO`, so it is not folded and counts as a third pitch class. A
+  one-note bass keeps notes the overtone test does not fold into its note, for one or more of
+  three causes, read per control. Harmonics lie further than `SOURCE_NOTE_TOLERANCE` (0.3 %) from
+  the multiples of the note's line: in seeds 500, 611, 617 and 626, whose harmonics the generator
+  stretches as a stiff string's, and in 501, whose line a line 120 cents under it pulls off.
+  Harmonics on the line are louder than half the note: in 611 (0.60), 612 (0.53 and 0.51) and 615
+  (0.60). And lines under or beside the note count as notes of their own, in every keyed bass but
+  617. Without the line beside its note, 615 spells no chord, and 617 none without its harmonics
+  off the line; the others still spell one without any one of their causes. A church bell's
+  tierce, a minor tenth over its hum, already spells a chord with it (seed 513, alone and over
+  drums, has only these two pitch classes). The quint and upper third lie 0.35-0.56 % off the
+  hum's harmonics, so they count as notes too, and the bell spells its hum's minor triad, most
+  often with a major third over the hum as well: by its notes it is a chord. Eleven rules aimed
+  at these keys were measured on every control and GiantSteps+ clip with a served key
+  (`evals/audio/scripts/still_chord_rules.py`, the same halves and threshold choice as for the
+  drums, each rule asked only where the lines hold still, after the single-source rule has found
+  a chord). Keys withheld are counted over both halves: 30 of these families' keys with
+  Essentia, 23 with librosa. Every measurement and constant was set after the recorded notes of
+  every keyed control of the four families, held-out seeds included, had been read, so no
+  held-out number here is an untouched test. The stretched harmonic series below is the model the
+  bass controls are generated with (`seeded_one_note_bass`), so they fit it by construction. No
+  GiantSteps+ clip with a served key has still lines, so the clips can show no cost of these
+  rules, and no gain.
+  - **Overtones.** Folding an overtone up to 0.54 of its note's level withholds 2 of the 6 cowbell
+    keys with Essentia and 2 of the 4 with librosa, and no right key. 0.54 is just where cowbell
+    528 folds: no right key reads a value there, so nothing bounds the threshold from the other
+    side.
+  - **A third or sixth off the grid.** Between two pitch classes, 28 cents or more off equal
+    temperament withholds 1 Essentia cowbell key. The detuned thirds read up to 26 (C minor, its
+    third 25 cents sharp).
+  - **Energy after each hit.** The energy left 70 ms after each hit's loudest frame takes right
+    keys at any threshold. Withholding more than half of the training cowbell keys (0.0954 or
+    under) takes 81 and 83 right keys in the training half and 84 and 93 held out (Essentia and
+    librosa).
+  - **One stretched series.** One harmonic series whose harmonics are stretched as a stiff
+    string's (k f0 sqrt(1 + B k^2), B up to 0.002), its fundamental within 1 % of a line,
+    explaining 0.9048 or more of the lines' level withholds 5 of the 7 Essentia one-note-bass keys
+    and 1 of the 2 librosa ones, and no right key of any control or clip in either half. But the
+    most bass-like right key of the training half, an F major triad in a saw timbre with tremolo
+    and its third 6 dB under a root doubled an octave down, reads 0.8959. The same triad with its
+    third 7.5 dB under, whose right key both estimators serve, reads 0.9055
+    (`evals/audio/tests/test_still_chord_rules.py` pins it): the rule would take that key. For
+    more than half of the training bass keys (0.7969 or more) it takes 19 and 21 right keys of
+    soft-third chords in the training half and 19 and 20 held out (Essentia and librosa).
+  - **The same, close lines merged.** With the lines within 150 cents of a stronger one merged
+    into it first, 0.9461 or more withholds the same bass keys and no right key, and the most
+    bass-like right key of the training half reads 0.9094. For more than half of the training
+    bass keys (from 0.8609) it takes 5 and 7 right keys in the training half and 1 and 1 held out
+    (Essentia and librosa).
+  - **Both thirds.** A minor and a major third over one note (a bell's tierce and upper third)
+    withholds 9 of the 11 bell keys and 4 of the 6 over drums with each estimator. But it takes
+    every one-chord riff's right key (8 in the training half, 9 held out) and 5 more.
+  - **Decay rates.** A bell's partials decay at their own rates. The fastest note's decay over
+    the slowest's, the median over hits, is 5.033 or more for 7 of the 11 bell keys and 4 of the
+    6 over drums. But it takes 3 right keys in each half with each estimator (faded pads and
+    seventh chords whose levels move, a soft chord), and no threshold takes a bell key without a
+    right one in the training half.
+  - **Note pairs off the grid.** The share of note pairs off the equal-tempered grid, which sets
+    the tubular bells apart, reads 0 on every church bell, as on most chords.
+  - **Three plain readings of the notes,** proposed after the first run, each take no right key
+    of any control or clip in either half:
+    - a lowest note of 505.8 Hz or more withholds 5 of the 6 Essentia cowbell keys and all 4
+      librosa ones;
+    - 7 pitch classes or more withhold 5 of the 7 Essentia bass keys and 1 of the 2 librosa ones;
+    - two lowest notes 193 cents apart or less withhold 5 of the 7 Essentia bass keys and none of
+      the librosa ones.
+
+  "No right key among the controls" is a weak test of safety: the controls' chords have their
+  roots in C3-B4, and none has a ninth or a second at the bottom. The script also makes 276 chords
+  just outside them (`probe_chords()`: triads from C5 to G#5, add9, minor-ninth and major-ninth
+  chords, and triads with an added second, in tune or 10 or 20 cents flat, each held with tremolo
+  or pumped), and counts the right keys each threshold would take from them (Essentia; librosa
+  where it differs):
+  - the lowest-note rule takes 48 of the 60 right keys of the high triads;
+  - the pitch-class rule takes 5 of the 118 right keys of the ninth chords, and 9 of the 69 (7 of
+    61) of the added-second triads;
+  - the two-lowest-notes rule takes 39 of the 69 right keys of the added-second triads (33 of 61);
+  - the stretched series, plain or merged, at either threshold, and the overtone and
+    off-grid-third rules take none.
+
+  None is shipped:
+  - The overtone and off-grid-third rules withhold too few keys.
+  - The decay, both-thirds and off-grid rules take right keys among the controls.
+  - The three plain readings take right keys of chords just outside the controls.
+  - The stretched series withholds most Essentia bass keys without taking a right key among the
+    controls or those chords, but:
+    - it withholds only 1 of the 2 librosa keys;
+    - at the threshold the training half sets, it withholds 1 of the 2 training bass keys;
+    - without the merge it takes the right key of a chord whose third is a little softer than any
+      control's, and the merge was added after the held-out basses' notes had been read;
+    - the bass controls fit its model by construction;
+    - the clips cannot show a cost.
+  - A church bell's notes are a chord's. What tells it apart is that its partials decay at their
+    own rates, and chords whose levels move read as far apart.
+
   Neither strength separates atonal material from tonal music: random chromatic notes or a
   twelve-tone row can still get a key, and so can a bell or a few tuned drums whose partials
   spell three classes. The spectral-line rules are what keep keys off pitchless sound, and they

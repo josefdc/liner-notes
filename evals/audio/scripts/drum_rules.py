@@ -54,8 +54,11 @@ middle of the gap between the most drum-like right key there and the next drum (
 each measurement has its own; for an "and", the first is tried at each drum value and the second
 placed at its gap among the rows the first takes, keeping the pair that withholds most of the
 training drums it aims at). For each single measurement it also gives the strictest threshold
-(the highest drum value, searched from the top) that withholds more than half of the training
-drum keys with each estimator, with the right keys it takes in both halves.
+(the highest value of a drum it is aimed at, searched from the top) that withholds more than
+half of the training keys of the drums it is aimed at, with each estimator that served one of
+them, with the right keys it takes in both halves. A candidate is aimed at the families its
+entry in CANDIDATES names (None: every drum); scripts/still_chord_rules.py passes in its own
+table and families.
 
     cd evals/audio && uv run python scripts/drum_rules.py ../reports/audio-2026-10-29.json [--jobs J]
 

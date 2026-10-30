@@ -90,8 +90,8 @@ def test_every_kept_key_of_the_four_families_comes_from_still_lines_that_spell_a
     the recorded notes are a chord. Every bell's second note is its tierce, a minor tenth over
     the hum. Four cowbells' oscillators lie a minor sixth apart (one with a drum's line under
     them); in the other two the third harmonic of one oscillator is a note. The one-note
-    basses spell three pitch classes or more. No GiantSteps+ clip with a served key has still
-    lines.
+    basses spell three pitch classes or more (why: test_each_keyed_one_note_bass_keeps_its_notes_
+    for_the_causes_the_readme_gives). No GiantSteps+ clip with a served key has still lines.
     """
     script, controls_run, rows = served
     _, E = service.load()
@@ -103,16 +103,16 @@ def test_every_kept_key_of_the_four_families_comes_from_still_lines_that_spell_a
         assert r["source"]["chord"] and E.spells_chord(tuple(notes)), name
         family = r["drum"][0]
         if family in ("bell", "bell-over-drums"):
-            assert abs(cents(notes[1], notes[0]) - 1500) <= 30, name
+            assert abs(cents(notes[1], notes[0]) - 1500) <= E.SOURCE_THIRD_CENTS, name
         elif family == "one-note-bass":
             assert classes(notes) >= 3, name
     sixths = {"cowbell-s508", "cowbell-s515", "cowbell-s600", "cowbell-s601"}
     for name in sixths:
         low, high = [f for f in targets[name]["source"]["notes"] if f > 400]
-        assert abs(cents(high, low) - 800) <= 30, name
+        assert abs(cents(high, low) - 800) <= E.SOURCE_THIRD_CENTS, name
     for name in ("cowbell-s528", "cowbell-s606"):
         *lower, top = targets[name]["source"]["notes"]
-        assert any(abs(top - 3 * f) <= 0.003 * top for f in lower), name
+        assert any(abs(top - 3 * f) <= E.SOURCE_NOTE_TOLERANCE * top for f in lower), name
     cowbells = {n for n in targets if n.startswith("cowbell")}
     assert cowbells == sixths | {"cowbell-s528", "cowbell-s606"}
     assert not any(r["kind"] == "clip" for r in still)
@@ -137,15 +137,16 @@ def test_the_script_spells_the_services_notes_on_a_cowbell_and_a_bass():
 
 def test_a_cowbells_third_harmonic_over_half_its_oscillator_is_a_note():
     """
-    cowbell-s528: 2423 Hz is three times the weaker oscillator (808 Hz) but reaches 0.53 of
-    its level, over SOURCE_OVERTONE_RATIO, so it stays a third pitch class; folded at 0.54 the
+    cowbell-s528: 2423 Hz is three times the weaker oscillator (808 Hz) but its line reads 0.53
+    of that oscillator's level, over SOURCE_OVERTONE_RATIO, so it stays a third pitch class; folded at 0.54 the
     notes are a fourth apart, no chord.
     """
     script, _, lines = measured_lines("cowbell-s528")
+    _, E = service.load()
     level = dict(lines)
     low, mid, high = script.spelled(lines)
-    assert abs(high - 3 * mid) <= 0.003 * high
-    assert 0.5 < level[high] / level[mid] < 0.54
+    assert abs(high - 3 * mid) <= E.SOURCE_NOTE_TOLERANCE * high
+    assert E.SOURCE_OVERTONE_RATIO < level[high] / level[mid] < 0.54
     assert script.overtone_ratio(lines) == 0.54
     assert script.spelled(lines, 0.54) == (low, mid)
 
@@ -157,10 +158,60 @@ def test_a_one_note_bass_keeps_harmonics_off_its_fundamental_line():
     SOURCE_NOTE_TOLERANCE, and counts as a note.
     """
     script, _, lines = measured_lines("one-note-bass-s501")
+    _, E = service.load()
     notes = script.spelled(lines)
     assert 90 < notes[0] < 92 and 97 < notes[1] < 98
     third = next(f for f in notes if 280 < f < 300)
-    assert 0.003 < abs(third - 3 * notes[1]) / third < 0.006
+    # 0.46 % off in the run; under 2 tolerances, so it is the line's harmonic and not a note.
+    off = abs(third - 3 * notes[1]) / third
+    assert E.SOURCE_NOTE_TOLERANCE < off < 2 * E.SOURCE_NOTE_TOLERANCE
+
+
+# Why each keyed one-note bass's notes are not one note (kept_because, from its lines measured
+# again; the run prints the same): {cause: (notes kept for it, whether the other notes still spell
+# a chord)}. The generator stretches the harmonics of seeds 500, 611, 617 and 626 (seed % 3 ==
+# 2, B = 0.0008) and not those of 501, 612 and 615 (B = 0).
+OFF, LOUD = "a harmonic off its line", "a harmonic too loud to fold"
+UNDER, BESIDE = "under the note", "beside the note"
+BASS_CAUSES = {
+    500: {OFF: (9, True), BESIDE: (2, True), UNDER: (5, True)},
+    501: {OFF: (5, True), UNDER: (1, True)},
+    611: {OFF: (9, True), LOUD: (1, True), UNDER: (1, True)},
+    612: {LOUD: (2, True), BESIDE: (1, True), UNDER: (3, True)},
+    615: {LOUD: (1, True), BESIDE: (1, False)},
+    617: {OFF: (10, False)},
+    626: {OFF: (10, True), BESIDE: (1, True)},
+}
+
+
+@pytest.mark.parametrize("seed", sorted(BASS_CAUSES))
+def test_each_keyed_one_note_bass_keeps_its_notes_for_the_causes_the_readme_gives(seed, served):
+    script, _, rows = served
+    name = f"one-note-bass-s{seed}"
+    assert any(r["name"] == name and r["drum"] and r["keys"]["essentia"][0] for r in rows)
+    _, _, lines = measured_lines(name)
+    assert script.bass_causes(lines) == BASS_CAUSES[seed]
+
+
+def test_kept_because_reads_each_cause_on_lines_whose_answer_is_known():
+    script = load_script()
+    _, E = service.load()
+    f0 = 100.0
+    off = 3 * f0 * (1 + 2 * E.SOURCE_NOTE_TOLERANCE)
+    lines = [(95.0, 0.3), (f0, 1.0), (104.0, 0.3), (200.0, 0.4), (off, 0.3), (500.0, 0.6)]
+    assert script.kept_because(lines) == {
+        95.0: script.UNDER,
+        104.0: script.BESIDE,
+        off: script.OFF,
+        500.0: script.LOUD,
+    }
+    # The octave folds at any level within SOURCE_OCTAVE_TOLERANCE; a fifth harmonic at no more
+    # than SOURCE_OVERTONE_RATIO of the note folds too.
+    assert script.kept_because([(f0, 1.0), (200.0, 0.9), (500.0, 0.5)]) == {}
+    # Loudness is over the note's own level: here the strongest line folds into the note an
+    # octave under it (0.5), and a fifth harmonic at 0.3 is more than half of that.
+    assert script.kept_because([(f0, 0.5), (200.0, 1.0), (500.0, 0.3)]) == {500.0: script.LOUD}
+    assert script.kept_because([]) == {}
 
 
 def test_overtone_ratio_on_lines_whose_answer_is_known():
@@ -179,6 +230,9 @@ def test_series_share_finds_a_stiff_strings_stretched_harmonics():
     f0, stiffness = 98.0, 0.0008
     stretched = [(f0 * k * np.sqrt(1 + stiffness * k * k), 1.0 / k) for k in range(1, 11)]
     assert script.series_share(stretched) == pytest.approx(1.0)
+    # The stiffest string the series is sought for (B = 0.002), its tenth harmonic 9.5 % sharp.
+    stiffest = [(f0 * k * np.sqrt(1 + 0.002 * k * k), 1.0 / k) for k in range(1, 11)]
+    assert script.series_share(stiffest) == pytest.approx(1.0)
     # The same lines without a stretch to fit: from the fourth harmonic up they are off.
     stiff = script.STIFFNESS
     try:
@@ -291,8 +345,8 @@ def test_measure_reads_nothing_from_lines_that_do_not_hold_still():
     assert all(got[m] is None for m in script.MEASURES)
 
 
-# The stretched-series threshold the 2026-10-29 run chose on the training half, without and
-# with the close lines merged.
+# The stretched-series thresholds the run on the 2026-10-29 report chose on the training half
+# ("no right key of the training half taken at ..."), without and with the close lines merged.
 SERIES_THRESHOLD = 0.9048
 MERGED_THRESHOLD = 0.9461
 
@@ -321,3 +375,247 @@ def test_a_chord_with_a_softer_third_reads_as_one_stretched_series():
     lines = script.note_lines(s.harmonic_stft, s.sr, s.hop)
     assert script.series_share(lines) > SERIES_THRESHOLD
     assert script.series_share(script.merged(lines, script.CLOSE_CENTS)) < MERGED_THRESHOLD
+
+
+# Each measurement on four keyed controls, from this script's own analysis (the run on the
+# 2026-10-29 report printed the same counts): a cowbell whose oscillators lie a sixth apart, one
+# with an unfolded third harmonic, a one-note bass and a church bell. None: not read.
+PINNED = {
+    "cowbell-s508": {
+        "a higher overtone ratio": None,
+        "one stretched harmonic series": 0.563975,
+        "one stretched series, close lines merged": 0.573493,
+        "a third or sixth off the grid": 4.0,
+        "lines dying away after each hit": 0.095413,
+        "both thirds over one note": 0.0,
+        "notes decaying at different rates": 1.043334,
+        "note pairs off the grid": 0.0,
+        "the lowest note": 524.957662,
+        "pitch classes": 2.0,
+        "the two lowest notes' interval": 804.0,
+    },
+    "cowbell-s528": {
+        "a higher overtone ratio": 0.54,
+        "one stretched harmonic series": 0.589531,
+        "one stretched series, close lines merged": 0.517668,
+        "a third or sixth off the grid": None,
+        "lines dying away after each hit": 0.039950,
+        "both thirds over one note": 0.0,
+        "notes decaying at different rates": 1.060654,
+        "note pairs off the grid": 2 / 3,
+        "the lowest note": 527.389095,
+        "pitch classes": 3.0,
+        "the two lowest notes' interval": 738.0,
+    },
+    "one-note-bass-s501": {
+        "a higher overtone ratio": None,
+        "one stretched harmonic series": 0.913713,
+        "one stretched series, close lines merged": 0.982829,
+        "a third or sixth off the grid": None,
+        "lines dying away after each hit": 0.286824,
+        "both thirds over one note": 0.0,
+        "notes decaying at different rates": 5.410950,
+        "note pairs off the grid": 11 / 21,
+        "the lowest note": 90.890478,
+        "pitch classes": 7.0,
+        "the two lowest notes' interval": 120.0,
+    },
+    "bell-s503": {
+        "a higher overtone ratio": None,
+        "one stretched harmonic series": 0.770579,
+        "one stretched series, close lines merged": 0.806782,
+        "a third or sixth off the grid": None,
+        "lines dying away after each hit": 0.793168,
+        "both thirds over one note": 1.0,
+        "notes decaying at different rates": 5.028902,
+        "note pairs off the grid": 0.0,
+        "the lowest note": 146.801605,
+        "pitch classes": 4.0,
+        "the two lowest notes' interval": 1492.0,
+    },
+}
+
+
+@pytest.mark.parametrize("name", sorted(PINNED))
+def test_analyse_reads_each_measurement_of_a_keyed_control(name):
+    script = load_script()
+    got = script.analyse(("control", name, 1, ""))
+    assert set(PINNED[name]) == set(script.MEASURES)
+    for measure, value in PINNED[name].items():
+        if value is None:
+            assert got[measure] is None, measure
+        else:
+            assert got[measure] == pytest.approx(value, abs=1e-5), measure
+
+
+# The side each rule withholds on, as services/audio/README.md states it: an overtone that
+# folds at a lower ratio, lines that die away sooner and two lowest notes closer together are
+# more like the families aimed at; for the rest, higher values are.
+WITHHELD_AT_OR_UNDER = {
+    "a higher overtone ratio",
+    "lines dying away after each hit",
+    "the two lowest notes' interval",
+}
+
+
+@pytest.mark.parametrize("measure", sorted(load_script().MEASURES))
+def test_each_rule_withholds_on_its_side_of_the_threshold(measure):
+    script = load_script()
+    threshold = script.signed({"t": {measure: 0.5}})["t"][measure]
+    values = script.signed({"low": {measure: 0.4}, "high": {measure: 0.6}, "none": {}})
+    rule = ("any", {measure: threshold})
+    under = measure in WITHHELD_AT_OR_UNDER
+    assert script.D.withholds(values, "low", rule) is under
+    assert script.D.withholds(values, "high", rule) is not under
+    assert not script.D.withholds(values, "none", rule)
+
+
+def test_the_measurement_names_are_not_drum_rules_own():
+    """drum_rules signs its own measurements again: a shared name would be signed twice."""
+    script = load_script()
+    assert not set(script.MEASURES) & set(script.D.MEASURES)
+
+
+def test_each_rule_is_aimed_at_the_families_the_readme_names():
+    script = load_script()
+    bass, cowbell, bells = ("one-note-bass",), ("cowbell",), ("bell", "bell-over-drums")
+    assert {name: aimed for name, (_, _, aimed) in script.CANDIDATES.items()} == {
+        "a higher overtone ratio": cowbell + bass,
+        "a third or sixth off the grid": cowbell,
+        "lines dying away after each hit": cowbell,
+        "one stretched harmonic series": bass,
+        "one stretched series, close lines merged": bass,
+        "both thirds over one note": bells,
+        "notes decaying at different rates": bells,
+        "note pairs off the grid": bells,
+        "the lowest note": cowbell,
+        "pitch classes": bass,
+        "the two lowest notes' interval": bass,
+    }
+
+
+DYING = "lines dying away after each hit"
+
+
+def dying_table():
+    """
+    Training cowbells at 0.02 and 0.05 (Essentia served both, librosa neither), a held-out one
+    at 0.03, a training one-note bass at 0.035 (not aimed at) and a training chord at 0.04 with
+    a right key from both. The rule withholds at or under its threshold.
+    """
+    rows, measured = [], {}
+
+    def add(name, family, span, value, keys, group):
+        rows.append(
+            {
+                "name": name,
+                "kind": "control",
+                "drum": None if family is None else (family, span),
+                "group": group,
+                "keys": keys,
+            }
+        )
+        measured[name] = {DYING: value}
+
+    keyed = {"essentia": (True, False), "librosa": (False, False)}
+    add("cowbell-s500", "cowbell", "pinned", 0.02, keyed, "cowbell")
+    add("cowbell-s501", "cowbell", "pinned", 0.05, keyed, "cowbell")
+    add("cowbell-s600", "cowbell", "held out", 0.03, keyed, "cowbell")
+    add("one-note-bass-s502", "one-note-bass", "pinned", 0.035, keyed, "one-note-bass")
+    right = {"essentia": (True, True), "librosa": (True, True)}
+    add("chord-s700", None, None, 0.04, right, "chords")
+    return rows, measured
+
+
+def test_candidates_choose_a_threshold_under_which_a_rule_withholds():
+    """
+    The chord's 0.04 is the most cowbell-like right key; the next cowbell under it reads 0.02,
+    so no right key is taken at 0.03 or under. The bass's 0.035 is not aimed at: it neither
+    sets that gap nor counts towards "more than half", which needs both training cowbells
+    (0.05 or under). Only Essentia served one, so librosa does not count.
+    """
+    script = load_script()
+    rows, measured = dying_table()
+    table = {"dying": ("any", (DYING,), ("cowbell",))}
+    got = script.D.candidates(rows, script.signed(measured), table, script.FAMILIES)["dying"]
+    (threshold, top) = got["free"][DYING]
+    assert -threshold == pytest.approx(0.03) and -top == pytest.approx(0.04)
+    drums = got["freeDrums"]["essentia"]
+    assert drums[("cowbell", "pinned")] == (1, 2) and drums[("cowbell", "held out")] == (1, 1)
+    assert drums[("one-note-bass", "pinned")] == (0, 1)
+    assert got["freeCosts"]["training"]["essentia"] == {}
+    assert -got["most"] == pytest.approx(0.05)
+    assert got["mostDrums"]["essentia"][("cowbell", "pinned")] == (2, 2)
+
+
+def test_report_counts_the_four_families(capsys, monkeypatch):
+    script = load_script()
+    rows, measured = dying_table()
+    monkeypatch.setattr(script, "CANDIDATES", {DYING: script.CANDIDATES[DYING]})
+    entries = script.report(rows, measured)
+    out = capsys.readouterr().out
+    assert set(entries[DYING]["freeDrums"]["essentia"]) == {
+        (family, span) for family in script.FAMILIES for span in ("pinned", "held out")
+    }
+    assert "cowbell pinned 1/2" in out and "lines dying away after each hit at or under 0.03" in out
+    assert "(the most family-like right key there, lines dying away after each hit: 0.04, " in out
+    assert "chord-s700" in out
+
+
+def test_probe_chords_lie_just_outside_the_controls():
+    script = load_script()
+    chords = script.probe_chords()
+    groups = [group for group, *_ in chords.values()]
+    assert len(chords) == 276
+    assert {g: groups.count(g) for g in set(groups)} == {
+        "triads C5-G#5": 60,
+        "ninths": 144,
+        "add2": 72,
+    }
+    assert chords["flute C5 minor, pumped"][1:] == (
+        [72, 75, 79],
+        "flute",
+        "pumped",
+        ("C", "minor"),
+    )
+    assert chords["organ C#add9, tremolo"][1] == [49, 53, 56, 63, 37]
+    assert chords["saw Dm9, tremolo"][1] == [50, 53, 57, 60, 64, 38]
+    assert chords["pad C major add2 20 c flat, tremolo"][1] == [48, 49.8, 52, 55]
+
+
+# The thresholds the run on the 2026-10-29 report chose on the training half for the three plain
+# readings ("no right key of the training half taken at ..."): no right key of any control or
+# clip lies on their side.
+LOWEST_NOTE_THRESHOLD = 505.8  # Hz, at or above
+PITCH_CLASS_THRESHOLD = 6.5  # at or above
+LOWEST_INTERVAL_THRESHOLD = 193.0  # cents, at or under
+
+
+@pytest.mark.parametrize(
+    "chord, measure, crosses",
+    [
+        ("pad C5 major, tremolo", "the lowest note", lambda v: v >= LOWEST_NOTE_THRESHOLD),
+        ("organ C#add9, tremolo", "pitch classes", lambda v: v >= PITCH_CLASS_THRESHOLD),
+        (
+            "pad C major add2 20 c flat, pumped",
+            "the two lowest notes' interval",
+            lambda v: v <= LOWEST_INTERVAL_THRESHOLD,
+        ),
+    ],
+)
+def test_a_chord_outside_the_controls_with_its_right_key_crosses_a_plain_reading(
+    chord, measure, crosses
+):
+    """
+    Each plain reading takes no right key among the controls, yet a chord a little outside them
+    reads on its side: a C major triad from C5 (the cowbells' range), an add9 chord with seven
+    pitch classes, an add2 chord whose second lies next to its root (a one-note bass's line
+    beside its note). Both estimators serve each its right key.
+    """
+    script = load_script()
+    got = script.probe_analyse(chord)
+    truth = script.probe_chords()[chord][-1]
+    assert got["withheld"] is None
+    for est in ("essentia", "librosa") if HAS_ESSENTIA else ("librosa",):
+        assert tuple(got["keys"][est][:2]) == truth, est
+    assert crosses(got[measure]), got[measure]

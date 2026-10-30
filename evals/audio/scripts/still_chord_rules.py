@@ -14,19 +14,29 @@ report before anything is reported; here the notes the lines spell (read again b
 script's own copy of source_notes) must also be the recorded ones.
 
 Why each family keeps a key, from the lines source_notes reads (level: the line's share of the
-strongest line):
+strongest line). The run prints the notes of every keyed control, and for the basses the causes
+(kept_because, bass_causes); tests/test_still_chord_rules.py pins them.
 
-- **Cowbell**: two square waves. Their two notes lie a minor sixth apart (within
-  SOURCE_THIRD_CENTS of 800 cents: a sixth is a chord interval), or the third harmonic of one
-  oscillator is more than SOURCE_OVERTONE_RATIO of its level, so it is not folded and counts
-  as a third pitch class.
-- **One-note bass**: harmonics that are not within SOURCE_NOTE_TOLERANCE of a multiple of the
-  fundamental line count as notes: a stiff string's harmonics run sharp, and the fundamental
-  line itself can be pulled off by a line next to it.
-- **Church bell, alone and over drums**: the hum, the tierce a minor tenth over it and the
-  quint (BELL_RATIOS in services/audio/tests/signals.py) spell a minor triad on the hum; the
-  quint and the upper third lie 0.35-0.56 % off the hum's harmonics, beyond
-  SOURCE_NOTE_TOLERANCE, so they count as notes too.
+- **Cowbell**: two square waves. In s508, s515, s600 and s601 their two notes lie a minor sixth
+  apart, within SOURCE_THIRD_CENTS of 800 cents (s515 at 830, on the edge, which counts): a
+  sixth is a chord interval. s601 also has a line at 49.2 Hz, a third pitch class. In s528 and
+  s606 the line on the third harmonic of one oscillator reads 0.53 and 0.51 of that
+  oscillator's level, over SOURCE_OVERTONE_RATIO, so it is not folded and counts as a third
+  pitch class.
+- **One-note bass**: notes the overtone test does not fold into the bass note, for one or more
+  of three reasons. Harmonics lie further than SOURCE_NOTE_TOLERANCE from a multiple of the
+  note's line: in s500, s611, s617 and s626, whose harmonics the generator stretches as a stiff
+  string's (B = 0.0008), and in s501 (B = 0), whose line a line 120 cents under it pulls off.
+  Harmonics on the line are louder than SOURCE_OVERTONE_RATIO of the note: in s611 (0.60), s612
+  (0.53 and 0.51) and s615 (0.60). Lines under or beside the note count as notes of their own:
+  in s500, s501, s611, s612, s615 and s626. Without the line beside its note, s615 spells no
+  chord, and s617 none without its harmonics off the line; the others still spell one without
+  any one of their causes.
+- **Church bell, alone and over drums**: the tierce, a minor tenth over the hum, already spells a
+  chord with it (s513 alone and over drums has only these two pitch classes). In the rest, the
+  quint and the upper third (BELL_RATIOS in services/audio/tests/signals.py) lie 0.35-0.56 %
+  off the hum's harmonics, beyond SOURCE_NOTE_TOLERANCE, and count as notes too: with the hum
+  and the tierce they spell a minor triad on the hum, most often with a major third over it.
 
 The measurements, each on still lines only (None elsewhere):
 
@@ -36,7 +46,9 @@ The measurements, each on still lines only (None elsewhere):
 - **One stretched harmonic series**: the largest share of the lines' level that one harmonic
   series explains, its fundamental within OCTAVE_SPAN of a line and its harmonics stretched as
   a stiff string's, k f0 sqrt(1 + B k^2) with B up to STIFFNESS[-1]: the note tolerances of
-  source_notes around each (an octave's for the powers of two). With CLOSE_CENTS: the same
+  source_notes around each (an octave's for the powers of two). This is the model
+  seeded_one_note_bass (services/audio/tests/signals.py) makes the bass controls with, B 0,
+  0.0002 or 0.0008, so the bass controls fit it by construction. With CLOSE_CENTS: the same
   after the lines within CLOSE_CENTS of a stronger one are merged into it.
 - **A third or sixth off the grid**: when the notes spell two pitch classes a third or a sixth
   apart, the least distance from equal temperament among those pairs, in cents.
@@ -53,23 +65,40 @@ The measurements, each on still lines only (None elsewhere):
   together decay together.
 - **Note pairs off the grid** (source_rules.off_grid): the share of the notes' pairs more than
   20 cents off the equal-tempered grid.
+- **The lowest note** (Hz), **pitch classes** (how many the notes spell) and **the two lowest
+  notes' interval** (cents): three plain readings of the notes, aimed at the cowbells (whose
+  oscillators lie over 500 Hz) and the basses (many pitch classes; a line next to the note).
 
 Thresholds, halves and counts are drum_rules.candidates(): each threshold is chosen on the
 training half and judged on the held-out half, one threshold for both estimators; seeded
 controls go by seed (500-529 and 700-729 train), the unseeded ones and the clips alternately by
 name. "More than half" counts only the families a rule is aimed at, and only the estimators
 that served one of their keys in the training half (librosa served none of the training
-one-note basses). The measurements and their constants were set before any measurement of the
-held-out half was printed, but after the recorded notes of every keyed control of the four
-families, held-out seeds included, had been read from the report (the merge of close lines
-answers lines seen next to the bass notes of seeds 501, 611, 615 and 626), so no held-out number
-here is an untouched test. No GiantSteps+ clip with a served key has still lines, so the clips
-can show no cost of these rules, and no gain.
+one-note basses).
 
-    cd evals/audio && uv run python scripts/still_chord_rules.py ../reports/audio-2026-10-29.json [--jobs J]
+Every measurement and constant here was set after the recorded notes of every keyed control of
+the four families, held-out seeds included, had been read from the report (before any
+measurement of the held-out half was printed): the merge of close lines answers lines seen next
+to the bass notes of seeds 501, 611, 615 and 626, and the three plain readings were proposed
+after the first run. So no held-out number here is an untouched test. No GiantSteps+ clip with a
+served key has still lines, so the clips can show no cost of these rules, and no gain.
 
-About 4 min at --jobs 4 on a shared machine. Needs what drum_rules.py needs (the GiantSteps+
-audio and mirdata's index, checked first). Nothing is written. Deterministic.
+The controls' chords have their roots in C3-B4, and none has a ninth or a second at the bottom,
+so a rule that takes no right key among them can still take the keys of chords just outside
+them. probe_chords() makes 276 such chords (triads from C5 up, ninth chords, triads with an
+added second, some of it flat), analyses them as the controls are, and the run prints the right
+keys each chosen threshold would take from them.
+
+    cd evals/audio && uv sync --extra models
+    uv run python scripts/still_chord_rules.py ../reports/audio-2026-10-29.json [--jobs J]
+
+About 5 min at --jobs 4 on a shared machine. Needs what drum_rules.py needs: the GiantSteps+
+audio and mirdata's index, checked first, and Essentia (the models extra; without it the
+service answers for Essentia with librosa and the check against the report stops the run). In
+a fresh environment, run once with --jobs 1 first: librosa's numba cache written by several
+workers at once can crash them. After such a crash, delete the cache files (*.nbi, *.nbc under
+librosa's __pycache__ directories in the environment) before running again. Nothing is
+written. Deterministic.
 """
 
 from __future__ import annotations
@@ -108,7 +137,12 @@ MEASURES = {
     "both thirds over one note": 1,
     "notes decaying at different rates": 1,
     "note pairs off the grid": 1,
+    "the lowest note": 1,
+    "pitch classes": 1,
+    "the two lowest notes' interval": -1,
 }
+# Each script signs its own measurements: drum_rules signs its own names once more.
+assert not set(MEASURES) & set(D.MEASURES)
 # Per candidate, as drum_rules.CANDIDATES: how, measurements, the families it is aimed at.
 CANDIDATES = {
     "a higher overtone ratio": ("any", ("a higher overtone ratio",), ("cowbell", "one-note-bass")),
@@ -131,6 +165,13 @@ CANDIDATES = {
     "both thirds over one note": ("any", ("both thirds over one note",), BELLS),
     "notes decaying at different rates": ("any", ("notes decaying at different rates",), BELLS),
     "note pairs off the grid": ("any", ("note pairs off the grid",), BELLS),
+    "the lowest note": ("any", ("the lowest note",), ("cowbell",)),
+    "pitch classes": ("any", ("pitch classes",), ("one-note-bass",)),
+    "the two lowest notes' interval": (
+        "any",
+        ("the two lowest notes' interval",),
+        ("one-note-bass",),
+    ),
 }
 
 
@@ -357,7 +398,18 @@ def measure(signals) -> dict:
         "both thirds over one note": both_thirds(notes),
         "notes decaying at different rates": decay_spread(signals, notes),
         "note pairs off the grid": source_rules.off_grid(list(notes)) if len(notes) > 1 else None,
+        "the lowest note": float(notes[0]) if notes else None,
+        "pitch classes": float(pitch_classes(notes)),
+        "the two lowest notes' interval": lowest_interval(notes),
     }
+
+
+def lowest_interval(notes: tuple[float, ...]) -> float | None:
+    """The interval between the two lowest notes, in cents; None for fewer than two."""
+    if len(notes) < 2:
+        return None
+    low, next_up = sorted(notes)[:2]
+    return float(1200 * np.log2(next_up / low))
 
 
 def analyse(item: tuple[str, str, int, str]) -> dict:
@@ -403,6 +455,66 @@ def pitch_classes(notes) -> int:
     return len({int(round(69 + 12 * np.log2(f / 440.0))) % 12 for f in notes})
 
 
+# Why a note other than the loudest is not folded into the loudest one (kept_because).
+UNDER = "under the note"
+BESIDE = "beside the note"
+OFF = "a harmonic off its line"
+LOUD = "a harmonic too loud to fold"
+ABOVE = "above the harmonics"
+
+
+def kept_because(lines: list[tuple[float, float]]) -> dict[float, str]:
+    """
+    Per note spelled from `lines` other than the loudest, why the overtone test does not fold
+    it into the loudest note: it lies under it (UNDER) or under 1.5 times it (BESIDE); its
+    nearest harmonic of the loudest note is further off than the note tolerance
+    (SOURCE_OCTAVE_TOLERANCE at the powers of two, SOURCE_NOTE_TOLERANCE elsewhere: OFF), or
+    within it but over SOURCE_OVERTONE_RATIO of the loudest note's level (LOUD); or it lies past
+    SOURCE_NOTE_MAX_HARMONIC (ABOVE). A one-note bass's note is its loudest.
+    """
+    E = _service()
+    level = dict(lines)
+    notes = spelled(lines)
+    if not notes:
+        return {}
+    top = max(notes, key=lambda f: level[f])
+    out = {}
+    for f in notes:
+        if f == top:
+            continue
+        k = round(f / top)
+        if f < top:
+            out[f] = UNDER
+        elif k < 2:
+            out[f] = BESIDE
+        elif k > E.SOURCE_NOTE_MAX_HARMONIC:
+            out[f] = ABOVE
+        else:
+            tolerance = E.SOURCE_OCTAVE_TOLERANCE if k & (k - 1) == 0 else E.SOURCE_NOTE_TOLERANCE
+            if abs(f - k * top) > tolerance * f:
+                out[f] = OFF
+            elif level[f] > E.SOURCE_OVERTONE_RATIO * level[top]:
+                out[f] = LOUD
+            else:  # folded by the test; not reached for a note it spells
+                raise AssertionError(f"{f:.1f} Hz is an overtone of {top:.1f} Hz")
+    return out
+
+
+def bass_causes(lines: list[tuple[float, float]]) -> dict[str, tuple[int, bool]]:
+    """
+    {why: (notes kept for it, whether the other notes still spell a chord)} over kept_because():
+    the causes without which a one-note bass's notes would spell no chord.
+    """
+    E = _service()
+    why = kept_because(lines)
+    notes = spelled(lines)
+    out = {}
+    for cause in sorted(set(why.values())):
+        rest = tuple(f for f in notes if why.get(f) != cause)
+        out[cause] = (sum(c == cause for c in why.values()), bool(E.spells_chord(rest)))
+    return out
+
+
 def causes(rows: list[dict], measured: dict) -> dict:
     """
     {(family, span): [(name, pitch classes, detail)]} for each served row of the four
@@ -433,7 +545,157 @@ def causes(rows: list[dict], measured: dict) -> dict:
             else:
                 detail.append(f"{f:.1f} ({level[f]:.2f})")
         classes = pitch_classes(got["notes"] or [])
+        if r["drum"][0] == "one-note-bass":
+            detail.append(
+                "kept: "
+                + ", ".join(
+                    f"{cause} {n} ({'a chord' if chord else 'no chord'} without)"
+                    for cause, (n, chord) in bass_causes(lines).items()
+                )
+            )
         out.setdefault(r["drum"], []).append((r["name"], classes, detail))
+    return out
+
+
+# --- chords the controls leave out --------------------------------------------------------------
+
+PROBE_SHAPES = ("tremolo", "pumped")
+
+
+def probe_chords() -> dict[str, tuple]:
+    """
+    Chords the controls leave out (their triads' roots lie in C3-B4; none has a ninth or a second
+    at the bottom), {name: (group, MIDI notes, timbre, shape, (tonic, mode))}, held for 30 s with
+    tremolo or pumped at 128 BPM (signals._shaped; held without either, most do not hold still):
+
+    - "triads C5-G#5": C, E and G# major and minor triads from C5 up, in the three chord timbres
+      and the flute and electric-piano ones;
+    - "ninths": an add9, a minor ninth and a major ninth chord (the ninth over the triad, with
+      the seventh for the last two) on every root from C3, the root doubled an octave down, in
+      an organ and a saw timbre;
+    - "add2": a triad from C3 on every other root with the second added between the root and the
+      third, in tune or 10 or 20 cents flat, in a pad timbre.
+    """
+    from evals_audio import controls as C
+
+    sig = C.signals()
+    names = sig.PITCH_NAMES
+    out = {}
+    for shape in PROBE_SHAPES:
+        for root in (0, 4, 8):
+            for mode in ("major", "minor"):
+                for timbre in ("pad", "organ", "saw", "flute", "e-piano"):
+                    notes = sig._triad(root, mode, 72)
+                    out[f"{timbre} {names[root]}5 {mode}, {shape}"] = (
+                        "triads C5-G#5",
+                        notes,
+                        timbre,
+                        shape,
+                        (names[root], mode),
+                    )
+        for root in range(12):
+            for label, mode, extra in (
+                ("add9", "major", (14,)),
+                ("m9", "minor", (10, 14)),
+                ("maj9", "major", (11, 14)),
+            ):
+                triad = sig._triad(root, mode)
+                notes = [*triad, *(triad[0] + e for e in extra), triad[0] - 12]
+                for timbre in ("organ", "saw"):
+                    out[f"{timbre} {names[root]}{label}, {shape}"] = (
+                        "ninths",
+                        notes,
+                        timbre,
+                        shape,
+                        (names[root], mode),
+                    )
+        for root in range(0, 12, 2):
+            for mode in ("major", "minor"):
+                for flat in (0, 10, 20):
+                    triad = sig._triad(root, mode)
+                    notes = [triad[0], triad[0] + 2 - flat / 100, *triad[1:]]
+                    tag = f" {flat} c flat" if flat else ""
+                    out[f"pad {names[root]} {mode} add2{tag}, {shape}"] = (
+                        "add2",
+                        notes,
+                        "pad",
+                        shape,
+                        (names[root], mode),
+                    )
+    return out
+
+
+def probe_audio(name: str) -> np.ndarray:
+    """One of probe_chords() as samples at the controls' rate."""
+    from evals_audio import controls as C
+
+    sig = C.signals()
+    _, notes, timbre, shape, _ = probe_chords()[name]
+
+    def y_of(t):
+        if timbre in sig._SOFT_TIMBRES:
+            return sum(
+                w * np.sin(2 * np.pi * sig.hz(m) * r * t)
+                for m in notes
+                for r, w in sig._SOFT_TIMBRES[timbre]
+                if sig.hz(m) * r < 5000
+            )
+        return sig._chord_tone(notes, t, timbre)
+
+    return np.asarray(sig._shaped(y_of, shape), dtype=np.float32)
+
+
+def probe_analyse(name: str) -> dict:
+    """One probe chord, written and decoded as a WAV control is, and measured (in a worker)."""
+    import tempfile
+
+    import soundfile as sf
+
+    from evals_audio import controls as C
+    from evals_audio import service
+
+    with tempfile.TemporaryDirectory(prefix="still-chord-probe-") as tmp:
+        path = f"{tmp}/probe.wav"
+        sf.write(path, probe_audio(name), C.SR, format="WAV", subtype="FLOAT")
+        return measure(service.decode_file(path))
+
+
+def probe_rows(measured: dict) -> list[dict]:
+    """The probe chords as rows: group and, per estimator, (served, right)."""
+    chords = probe_chords()
+    rows = []
+    for name, got in measured.items():
+        group, *_, truth = chords[name]
+        keys = {}
+        for est, key in got["keys"].items():
+            served = got["withheld"] is None and key is not None
+            keys[est] = (served, served and tuple(key[:2]) == truth)
+        rows.append({"name": name, "group": group, "keys": keys})
+    return rows
+
+
+def probe_costs(entries: dict, rows: list[dict], measured: dict) -> dict:
+    """
+    {candidate: {rule ("free", "most"): {group: {estimator: (right keys taken, right keys)}}}}
+    for each rule candidates() chose, over the probe chords.
+    """
+    values = signed(measured)
+    out: dict = {}
+    for name, entry in entries.items():
+        rules = {}
+        if "freeRule" in entry:
+            rules["free"] = entry["freeRule"]
+        if entry["most"] is not None:
+            (m,) = CANDIDATES[name][1]
+            rules["most"] = ("any", {m: entry["most"]})
+        for kind, rule in rules.items():
+            groups: dict = {}
+            for r in rows:
+                for est, (_, right) in r["keys"].items():
+                    taken, total = groups.setdefault(r["group"], {}).get(est, (0, 0))
+                    hit = right and D.withholds(values, r["name"], rule)
+                    groups[r["group"]][est] = (taken + hit, total + right)
+            out.setdefault(name, {})[kind] = groups
     return out
 
 
@@ -448,7 +710,8 @@ def _print_judged(entry: dict, prefix: str) -> None:
         print(f"    right keys taken, {half} (of keys withheld): {D._fmt_costs(costs)}")
 
 
-def report(rows: list[dict], measured: dict) -> None:
+def report(rows: list[dict], measured: dict) -> dict:
+    """Print each candidate's thresholds and counts; returns candidates()."""
     values = signed(measured)
     half = D.halves(rows)
     for h in ("training", "held out"):
@@ -458,7 +721,9 @@ def report(rows: list[dict], measured: dict) -> None:
             f"{sum(D._right(r) for r in part)} other rows with a right key "
             f"({sum(r['kind'] == 'clip' for r in part)} clips)"
         )
-    for name, entry in D.candidates(rows, values, CANDIDATES, FAMILIES).items():
+    entries = D.candidates(rows, values, CANDIDATES, FAMILIES)
+    training = [r for r in rows if half[r["name"]] == "training" and D._right(r)]
+    for name, entry in entries.items():
         print(f"\n{name} (aimed at {', '.join(CANDIDATES[name][2])}):")
         free = entry["free"]
         if free is None:
@@ -470,7 +735,9 @@ def report(rows: list[dict], measured: dict) -> None:
             )
             for m, (_, top) in free.items():
                 shown = "none" if top == -np.inf else f"{MEASURES[m] * top:.4g}"
-                print(f"    (the most family-like right key there, {m}: {shown})")
+                which = [r["name"] for r in training if D._value(values, r["name"], m) == top]
+                at = f", {', '.join(which)}" if top != -np.inf else ""
+                print(f"    (the most family-like right key there, {m}: {shown}{at})")
             _print_judged(entry, "free")
         if entry["most"] is None:
             print("  no threshold withholds more than half of the training keys it is aimed at")
@@ -480,6 +747,7 @@ def report(rows: list[dict], measured: dict) -> None:
                 f"  more than half of the training keys aimed at: {_fmt_threshold(m, entry['most'])}"
             )
             _print_judged(entry, "most")
+    return entries
 
 
 def main() -> None:
@@ -534,7 +802,33 @@ def main() -> None:
         for row_name, classes, detail in found:
             print(f"  {family}, {span}, {row_name}: {classes}; {'; '.join(detail)}")
     print()
-    report(rows, measured)
+    entries = report(rows, measured)
+    chords = list(probe_chords())
+    with ProcessPoolExecutor(args.jobs, mp_context=get_context("spawn")) as pool:
+        probed = dict(zip(chords, pool.map(probe_analyse, chords, chunksize=4), strict=True))
+    found = probe_rows(probed)
+    print(
+        f"\n{len(found)} chords the controls leave out (probe_chords), right keys served: "
+        + "; ".join(
+            f"{group} "
+            + ", ".join(
+                f"{est} {sum(r['keys'][est][1] for r in found if r['group'] == group)}"
+                for est in D.ESTIMATORS
+            )
+            + f" of {sum(r['group'] == group for r in found)}"
+            for group in dict.fromkeys(r["group"] for r in found)
+        )
+    )
+    for name, rules in probe_costs(entries, found, probed).items():
+        for kind, groups in rules.items():
+            print(
+                f"  {name}, {kind}: right keys taken "
+                + "; ".join(
+                    f"{group} "
+                    + ", ".join(f"{est} {taken}/{total}" for est, (taken, total) in by_est.items())
+                    for group, by_est in groups.items()
+                )
+            )
 
 
 if __name__ == "__main__":

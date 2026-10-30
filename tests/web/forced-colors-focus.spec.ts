@@ -599,8 +599,11 @@ async function expectPainted(page: Page, what: string, painted: string[]) {
   expect.soft(bare, `${what}: sides of its outline that paint nothing`).toEqual([]);
 }
 
-/** How much further in `outlinePixels` checks an `auto` ring's sides, for its rounded corners. */
-const AUTO_RING_CORNER = 2;
+/**
+ * How much further in `outlinePixels` checks an `auto` ring's sides, for its rounded corners: the
+ * 1px measured. With none, every side of the list's ring had a 2px gap, one at each end.
+ */
+const AUTO_RING_CORNER = 1;
 
 /**
  * Checks that the focused element's outline (or `drawnBy`'s, see `outlinePixels`) paints on all
@@ -1033,8 +1036,9 @@ test.describe("forced-colors mode", () => {
               `${name} at ${size}, forced colors ${forcedColors}: content the panel hides`,
             )
             .toEqual([]);
-          // A chart is drawn, at least as tall as its area's 250px minimum: a panel sized by
-          // its content must still give it a height to draw in.
+          // A chart is drawn, at least as tall as its area's minimum (300px from md, and every
+          // size here is md or wider): a panel sized by its content must still give it a height
+          // to draw in.
           const drawn = await panel
             .locator("svg.recharts-surface")
             .evaluateAll((svgs) =>
@@ -1052,7 +1056,7 @@ test.describe("forced-colors mode", () => {
                 drawn[0],
                 `${name} at ${size}, forced colors ${forcedColors}: the chart's height`,
               )
-              .toBeGreaterThanOrEqual(250);
+              .toBeGreaterThanOrEqual(300);
           }
         }
         await page.emulateMedia({ forcedColors: "active" });
@@ -1125,6 +1129,10 @@ test.describe("forced-colors mode", () => {
     await expect(page.locator("#activity-log-content")).not.toHaveAttribute("inert");
     await animationsSettled(page);
     await expect(page.locator("#activity-log-content [data-log-code]")).toHaveCount(6);
+    // The layer draws the list's outline only while the list has the focus: none yet.
+    const layer = page.locator(LOG_LAYER);
+    await expect(toggle).toBeFocused();
+    await expect(layer).toBeHidden();
 
     // Tab goes from the toggle to the list, as before.
     await page.keyboard.press("Tab");
@@ -1184,6 +1192,11 @@ test.describe("forced-colors mode", () => {
       // entries; without the layer (or while it is not shown), the list's own outline.
       await expectWhole(page, `activity log list ${where}`, painted, LOG_LAYER);
     }
+
+    // Back on the toggle, the list shows no outline: one focus indicator, on the toggle.
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toBeFocused();
+    await expect(layer).toBeHidden();
     test.info().annotations.push({ type: "painted pixels", description: painted.join("\n") });
   });
 

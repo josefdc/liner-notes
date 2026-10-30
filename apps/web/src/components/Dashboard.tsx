@@ -369,11 +369,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         {/* Hero: Sonic Fingerprint. It takes the focus by script; in forced-colors mode it shows
             it with an outline 4px outside it. From lg it stretches to its row, and the row can be
             taller than the screen above the footer (at 1440×900 the open activity log makes it
-            901px, in an 875px view), so no scroll showed the whole outline. In that mode the
-            connected tracks beside it span a second row too (the grid's classes), so its own row
-            is as tall as its content: it still stretches to it (its chart sizes to that height),
-            and never hides any of it. A focus scroll leaves 8px beyond it (Chrome's scroll lands
-            up to 1px past the margin), so the outline stays in view wherever the content fits. */}
+            901px, in an 875px view), so no scroll showed the whole outline. In that mode the grid
+            has two rows and the connected tracks' column beside it spans both (its own class), so
+            the panel's row is as tall as its content: it still stretches to it (its chart sizes to
+            that height), and never hides any of it. A focus scroll leaves 8px beyond it (Chrome's
+            scroll lands up to 1px past the margin), so the outline stays in view wherever the
+            content fits. */}
         <section
           ref={fingerprintRef}
           tabIndex={-1}

@@ -270,11 +270,31 @@ export function replayedRecording(slug: string = DEMO_SLUG, runId = "replay-run"
   return { events, recordedAt: record.recordedAt as string };
 }
 
-/** Collects console errors and warnings, and uncaught page errors. */
-export function collectProblems(page: Page) {
-  const problems: string[] = [];
+/**
+ * Chromium's line for a request cut off because the host's network changed (a container network
+ * created or removed while the suite runs, for example). The page did nothing wrong, so the
+ * collector leaves it out; only this exact line, never another `net::` code.
+ */
+const NETWORK_CHANGED = "Failed to load resource: net::ERR_NETWORK_CHANGED";
+
+/** Console errors and warnings and page errors, and how many network-change lines were left out. */
+export type Problems = string[] & { networkChanged: number };
+
+/**
+ * Collects console errors and warnings, and uncaught page errors. A request cut off by a change
+ * of the host's network (NETWORK_CHANGED) is counted in `networkChanged` instead: a property
+ * that is not enumerable, so `expect(problems).toEqual([])` still compares the lines alone.
+ */
+export function collectProblems(page: Page): Problems {
+  const problems = Object.defineProperty([] as string[], "networkChanged", {
+    value: 0,
+    writable: true,
+    enumerable: false,
+  }) as Problems;
   page.on("console", (message) => {
-    if (message.type() === "error" || message.type() === "warning") {
+    if (message.type() === "error" && message.text() === NETWORK_CHANGED) {
+      problems.networkChanged += 1;
+    } else if (message.type() === "error" || message.type() === "warning") {
       problems.push(`${message.type()}: ${message.text()}`);
     }
   });

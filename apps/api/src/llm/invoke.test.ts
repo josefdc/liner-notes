@@ -487,6 +487,9 @@ describe("retries", () => {
       `password=authorization: "${token}"`,
       `token: authorization: 'Bearer Basic\n${token} more'`,
       `api_key=Discogs token=\n${token}`,
+      `https://h.example/x?token=\`password: ${token}`,
+      `GET https://h.example/v1?access_token=\`bearer \f${token}, realm="x"`,
+      `https://h.example/x?a=1&password=\`Basic\n \n${token}`,
     ]) {
       for (const n of [0, ...Array.from({ length: 124 }, (_, i) => 140 + i * 3)]) {
         const text = `${"w ".repeat(Math.ceil(n / 2)).slice(0, n)}${tail}`;
@@ -544,6 +547,11 @@ describe("retries", () => {
       '"token": ',
       "access_token=",
       "apiKey: ",
+      // Links whose secret parameter is empty: the logger writes "[redacted]" for it.
+      "https://h.example/x?token=",
+      "GET https://h.example/v1?access_token=",
+      "http://;accesstoken=",
+      "https://h.example/x?a=1&password=",
     ];
     const quotes = ["", "", "'", '"', "`", "\u2018", "\u201c"];
     const schemes = [
@@ -560,7 +568,7 @@ describe("retries", () => {
       "Basic",
       "failedBearer",
     ];
-    const separators = [" ", "\n", "\r\n", "\t", " \n", "", ",", "\n\n"];
+    const separators = [" ", "\n", "\r\n", "\t", " \n", "", ",", "\n\n", "\f", "\v"];
     const credentials = [
       token,
       basic,

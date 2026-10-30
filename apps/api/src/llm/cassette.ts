@@ -186,7 +186,8 @@ export type SecretStep = (text: string) => Array<[number, number]>;
 /**
  * scrubSecrets' steps, each run on the text the one before it wrote: each of `secrets` where it
  * appears, then each of SECRET_PATTERNS. llm/invoke.ts reads them to hide what scrubSecrets
- * would hide, found in the text as it came.
+ * would hide, found in the text as it came. An empty secret is no secret and is skipped (split
+ * on it would write "[redacted]" between every two characters).
  */
 export function scrubSecretsSteps(secrets: readonly string[] = knownSecrets()): SecretStep[] {
   const values = secrets.filter((secret) => secret.length > 0);
@@ -234,7 +235,7 @@ function scrubString(text: string, secrets: readonly string[]): string {
   return out;
 }
 
-/** A copy of `value` with every string scrubbed of credentials. */
+/** A copy of `value` with every string scrubbed of credentials; an empty secret is skipped. */
 export function scrubSecrets<T>(value: T, secrets: readonly string[] = knownSecrets()): T {
   if (typeof value === "string") return scrubString(value, secrets) as T;
   if (Array.isArray(value)) return value.map((item) => scrubSecrets(item, secrets)) as T;

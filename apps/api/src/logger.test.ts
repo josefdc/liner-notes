@@ -12,6 +12,7 @@ import {
   configureLogger,
   currentRunId,
   hideKnownValues,
+  hideScrubbed,
   installConsoleBridge,
   ipHash,
   logCut,
@@ -707,10 +708,12 @@ describe("Authorization values in quotes and at the cap", () => {
 
 describe("pair and scheme shapes the two rules leave (#237)", () => {
   const TOKEN = "V7qW6rE5tY4uI3oP2aS1";
+  /** A key in the shape of an Azure key: 32 lowercase hexadecimal characters (fake). */
+  const HEX_KEY = "71636424cb4b3499c7151dae886217af";
   const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
-  /** Whether `out` shows any 4 characters of the token or the credential. */
+  /** Whether `out` shows any 4 characters of the token, the credential or the key. */
   const shows = (out: string) =>
-    [TOKEN, CRED].some((secret) =>
+    [TOKEN, CRED, HEX_KEY].some((secret) =>
       Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
         out.includes(part),
       ),
@@ -776,6 +779,12 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     ["a token68 and = before a Digest list", `authorization: Digest ${TOKEN}=, realm="r"`],
     ["a scheme glued to a word before a line break", `call failedBearer\n${TOKEN}`],
     ["a scheme glued to a word before a no-break space", `call failedBearer\u00a0${TOKEN}`],
+    ["a hexadecimal key after a glued scheme", `call failedBearer ${HEX_KEY}`],
+    ["a hexadecimal key after Token", `call failed: Token ${HEX_KEY}`],
+    [
+      "a hexadecimal key after a lowercase scheme in a link",
+      `http://;accesstoken="bearer  ${HEX_KEY}`,
+    ],
   ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
     expect(leaks(text)).toEqual([]);
     expect(scrub(text)).toContain("[redacted]");
@@ -887,9 +896,105 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
     for (const [text, expected] of [
       [`${endpoint}/xBearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
       [`${endpoint}Bearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}/xBearer ${HEX_KEY}`, "[provider endpoint]Bearer [redacted]"],
     ]) {
       expect(scrub(text)).toBe(expected);
       expect(shows(scrub(logText(text)))).toBe(false);
+    }
+  });
+
+  it("hides in scrubbedSpans what scrub hides, an empty value it writes REDACTED for too", () => {
+    // Fake values only. scrub writes "[redacted]" for an empty secret parameter (`?token=`) and
+    // reads on after it; scrubbedSpans replays that insertion, and also reads the text with the
+    // empty value left out (the value then takes the backtick and the name after it). Pair names,
+    // schemes, separators, quotes and tails composed at random (seeded) after links with empty
+    // secret parameters.
+    configureLogger({ LOG_LEVEL: "silent" });
+    for (const [text, expected] of [
+      [
+        `https://h.example/x?token=\`password: ${TOKEN}`,
+        "https://h.example/x?token=[redacted] [redacted]",
+      ],
+      [
+        `GET https://h.example/v1?token=\`token: ${TOKEN}\``,
+        "GET https://h.example/v1?token=[redacted] [redacted]`",
+      ],
+      // The link is read as a credential after the "[redacted]" written for `?token=`, so its
+      // hidden span starts at that insertion.
+      ["a ?token= https://h.example/x?token=&y", "a ?token= [redacted]&y"],
+      // The span read after the "[redacted]" written for `?token=` starts there: the spaces
+      // before the link stay.
+      [
+        "https://h.example/x?a=1&password=`token=Basic   https://h.example/x?token=&authorization: \f` x",
+        "https://h.example/x?a=1&password=[redacted]   [redacted] \f[redacted] x",
+      ],
+    ]) {
+      expect(hideScrubbed(text)).toBe(expected);
+    }
+    const links = [
+      "https://h.example/x?token=",
+      "GET https://h.example/v1?access_token=",
+      "http://;accesstoken=",
+      "https://h.example/x?a=1&password=",
+      "",
+      "",
+    ];
+    const names = ["", "", "password: ", "token: ", "api_key=", "authorization: ", '"token": '];
+    const quotes = ["", "", "`", "'", '"', "\u2018"];
+    const schemes = ["", "Bearer ", "Basic ", "bearer ", "Token ", "Bearer", "Basic\n"];
+    const separators = [" ", "\n", "\r\n", "\f", "\v", "\t", ""];
+    const tails = ["", "`", "'", '"', ", x", " more", "&y"];
+    const shown: string[] = [];
+    for (const seed of [21, 22, 23]) {
+      let x = seed;
+      const random = () => {
+        x ^= x << 13;
+        x >>>= 0;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        x >>>= 0;
+        return x / 4294967296;
+      };
+      const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+      const credential = () =>
+        Array.from({ length: 7 }, () => {
+          const at = Math.floor(random() * 26);
+          return `${"ABCDEFGHJKLMNPQRSTUVWXYZQR"[at]}${at % 10}${"abcdefghijkmnpqrstuvwxyzqr"[at]}`;
+        }).join("");
+      for (let i = 0; i < 1500; i++) {
+        let text = "";
+        const planted: string[] = [];
+        for (let k = 1 + Math.floor(random() * 2); k > 0; k--) {
+          const value = credential();
+          planted.push(value);
+          text += pick(links) + pick(quotes) + pick(names) + pick(quotes) + pick(schemes);
+          text += `${pick(separators)}${value}${pick(tails)} `;
+        }
+        const parts = planted.flatMap((value) =>
+          Array.from({ length: value.length - 3 }, (_, j) => value.slice(j, j + 4)),
+        );
+        const scrubbed = scrub(text);
+        const spans = hideScrubbed(text);
+        if (parts.some((part) => !scrubbed.includes(part) && spans.includes(part)))
+          shown.push(JSON.stringify(text));
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("never leaves a credential shown after a scheme word or a pair's name it hid", () => {
+    // Fake values only. Whatever hid the name (here another redaction's step), the token after
+    // it, across any white space, is hidden with it; a status word is not.
+    const at = (text: string, name: string): Array<[number, number]> => [
+      [text.indexOf(name), text.indexOf(name) + name.length],
+    ];
+    for (const [text, name, expected] of [
+      [`x token ${TOKEN} y`, "token", "x [redacted] y"],
+      [`x token\f${TOKEN} y`, "token", "x [redacted] y"],
+      [`x 'Bearer'\r\n${TOKEN}`, "'Bearer", "x [redacted]"],
+      ["x token expired", "token", "x [redacted] expired"],
+    ]) {
+      expect(hideScrubbed(text, [], [() => at(text, name)])).toBe(expected);
     }
   });
 

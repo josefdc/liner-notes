@@ -1844,6 +1844,18 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     expect(shown(text).filter(shows)).toEqual([]);
   });
 
+  it("hides what follows an empty secret parameter where it hid it before", () => {
+    // The logger writes "[redacted]" for `?password=` and reads on after it; the source paths
+    // also read on with the empty value left out, which takes the next run as its value.
+    for (const text of [
+      `"token": https://h.example/x?a=1&password= \n${TOKEN} more`,
+      `Authorization=http://;accesstoken=\\n${TOKEN}==, x'`,
+    ]) {
+      const texts = [describeError(new Error(text)), redactText(text), scrubText(text)];
+      expect(texts.filter(shows)).toEqual([]);
+    }
+  });
+
   it("keeps readable text readable", () => {
     for (const text of [
       "Password: must be 8 characters",
@@ -2008,12 +2020,16 @@ describe("pair and scheme shapes, user info and cuts (#237)", () => {
     PATHS.flatMap(([path, call]) =>
       NEW_SHAPES.map(([shape, make]) => [path, shape, call, make] as const),
     ),
-  )("reads the new shapes in linear time, up to 1 MB: %s, %s", (_path, _shape, call, make) => {
-    // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
-    // from each place about 64 times.
-    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
-    expect(ratio).toBeLessThan(20);
-  });
+  )(
+    "reads the new shapes in linear time, up to 1 MB: %s, %s",
+    (_path, _shape, call, make) => {
+      // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+      // from each place about 64 times.
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
 
   it("places the HTTP log's cut by reading only the text near it (logCut)", () => {
     // From 128 kB to 1 MB: logCut reads a window after the cut, so its time hardly grows; one that

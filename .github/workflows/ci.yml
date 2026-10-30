@@ -15,6 +15,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # npm ci installs what the lock names without checking its age: every lock entry that is new or
+  # changed against the base must be an npmjs release at least 14 days old (or min-release-age in
+  # .npmrc, if larger). Its own job, with no install, so a registry outage hides no other result.
+  release-age:
+    name: release age of changed npm lock entries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # A pull request compares with the merge commit's parent; a push compares with the commit
+          # before the push, which needs the history in between.
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '2' }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Release age of changed lock entries
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=HEAD^1
+          # A push that creates the branch has an all-zero "before".
+          if [ "$EVENT_NAME" = push ] && [ -n "$BEFORE" ] && ! [[ "$BEFORE" =~ ^0+$ ]]; then
+            base=$BEFORE
+          fi
+          node scripts/check-release-age.mjs --base "$base"
+
   node:
     name: lint, typecheck, test, build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -41,12 +70,6 @@ jobs:
           fi
           npm --version
       - run: npm ci
-      # npm ci installs what the lock names without checking its age: every lock entry that is new
-      # or changed against the parent commit must be a release at least min-release-age (.npmrc)
-      # days old. An unchanged lock makes no registry request.
-      - name: Release age of changed lock entries
-        if: matrix.node == 24
-        run: npm run check:release-age -- --base HEAD^1
       # The contract tests validate the audio JSON Schema with Python jsonschema, run through uv.
       - uses: astral-sh/setup-uv@v10.3.0
       - name: Lint

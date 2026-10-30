@@ -177,10 +177,30 @@ Dependencies take only releases that are at least 14 days old, a rolling window 
 `min-release-age=14` in `.npmrc` for npm and `exclude-newer = "14 days"` for uv in the audio
 service. npm applies the setting only when it resolves a version, so add or update packages with
 `npm install` and do not edit `package-lock.json` by hand.
-`npm run check:release-age -- --base <ref>` (`scripts/check-release-age.mjs`) reads from the
-registry the publish time of every lock entry that is new or changed against `<ref>` and fails on
-any release younger than `.npmrc`'s `min-release-age`, naming its version, publish time and age;
-it exits 2 when the registry cannot be read. CI runs it against the parent commit.
+
+`npm run check:release-age -- --base <ref>` (`scripts/check-release-age.mjs`) compares the lock
+(`npm-shrinkwrap.json` if there is one, else `package-lock.json`) with the same file at `<ref>`
+(`package-lock.json` there for a new shrinkwrap). Every entry that is
+new or whose version, resolved URL, integrity, name, link or bundle flag changed must be one of:
+
+- an `https://registry.npmjs.org/<name>/-/<name>-<version>.tgz` tarball whose name and semver
+  version match the entry (its `version`, and its `name` field or else its path), published at
+  least the minimum age before the check, by the tarball version's publish time on npmjs;
+- an entry with no resolved URL but a semver version, checked the same way by that version;
+- a workspace package, or a link to one of the root `workspaces` (no check needed);
+- a bundled (`inBundle`) entry inside a package checked in the same change (no check needed).
+
+Anything else fails (exit 1): git, codeload, `file:`, `http:` or other-host tarballs, links to
+other folders, an entry that disagrees with its tarball, a version that is not semver, a version
+with no publish time, or a release that is too new (named with its version, publish time and
+age). The
+minimum age is the largest of 14 days and `min-release-age` in `.npmrc` at `<ref>` and in the
+working tree, so a change cannot lower it for itself. Publish times come from registry.npmjs.org
+whatever npm's settings say (`--registry <url>` overrides it). The check exits 2 when it cannot
+run: an unknown base, an unreadable lock or `.npmrc`, or a registry it cannot read within three
+attempts per package and three minutes in all. An unchanged lock makes no registry request. CI
+runs it in its own job, against the parent commit on a pull request and against the commit before
+the push on `main`.
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

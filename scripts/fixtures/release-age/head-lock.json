@@ -45,6 +45,10 @@
       "resolved": "https://registry.npmjs.org/old/-/old-1.1.0.tgz",
       "integrity": "sha512-BBBB"
     },
+    "node_modules/old/node_modules/bundled": {
+      "version": "1.0.0",
+      "inBundle": true
+    },
     "node_modules/parent": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/parent/-/parent-1.0.0.tgz",

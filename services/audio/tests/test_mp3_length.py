@@ -242,6 +242,41 @@ def test_a_crc_protected_xing_frame_is_no_length_header(tmp_path, sr):
     assert native.size == stream.samples  # every frame, the header frame decoded as audio
 
 
+def test_frames_before_the_first_chain_of_three_are_left_out_a_known_limit(tmp_path):
+    # Junk after frame 2: the count starts at the first frame two more follow, and the second
+    # read starts there too, so the first two frames (52 ms) are not measured. The read is
+    # still far longer than libsndfile's own.
+    tag, frames, _ = _parts(_repeated(29))
+    path = tmp_path / "junk-after-two.mp3"
+    path.write_bytes(tag + frames[0] + frames[1] + b"JUNKJUNK" + b"".join(frames[2:]))
+    native, stream = _whole(path)
+    assert stream.start == len(tag) + len(frames[0]) + len(frames[1]) + 8
+    assert stream.frames == len(frames) - 2
+    assert native.size == stream.samples == (len(frames) - 2) * 1152
+    assert native.size > 5 * len(_plain_read(path))
+
+
+def _open_fds() -> int:
+    return len(os.listdir("/proc/self/fd"))
+
+
+@pytest.mark.parametrize("failure", ["thread start", "no descriptors"])
+def test_a_second_read_that_cannot_be_set_up_is_refused_and_leaks_nothing(monkeypatch, failure):
+    def fail(*args, **kwargs):
+        if failure == "thread start":
+            raise RuntimeError("can't start new thread")
+        raise OSError(24, "Too many open files")
+
+    if failure == "thread start":
+        monkeypatch.setattr(threading.Thread, "start", fail)
+    else:
+        monkeypatch.setattr(os, "pipe", fail)
+    before = _open_fds()
+    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$"):
+        main.decode(str(VBR))
+    assert _open_fds() == before
+
+
 def test_a_stale_xing_frame_count_is_trusted_a_known_limit(tmp_path):
     # mpg123 reads to the header's count, on the pipe too: such a file is measured on the part
     # that decodes, as before the count existed.

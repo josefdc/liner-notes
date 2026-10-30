@@ -8,9 +8,10 @@ be far off for VBR: a 3.03 s VBR file whose first frame has a high bitrate is es
 read, as 0.54 s. Each frame header gives its own length in bytes and its number of samples, so
 counting the frames gives the stream's real length without decoding it.
 
-The scan starts after the leading ID3v2 tags and takes the first sync word followed by
-CONFIRMING_FRAMES frames in a row (each where the previous frame's length puts it) for the first
-frame, so leading zeros or junk are skipped and a false sync is not counted. It then counts the
+The scan starts after the leading ID3v2 tags and takes the first sync word that starts
+CONFIRMING_FRAMES frames in a row (itself and two more, each where the previous frame's length
+puts it) for the first frame, so leading zeros or junk are skipped and a false sync is not
+counted. It then counts the
 frames whose header has the first frame's version, layer and sample rate. At a byte that does
 not start such a frame (junk inside the stream, an ID3v1 or APE tag, a cut last frame) it looks
 for the next confirmed frame, as mpg123 resyncs, and the count goes on from there. The scan is
@@ -22,6 +23,10 @@ Known limits; such a file is measured on the part that decodes, as before the co
   count is stale (lower than the frames that follow) is not caught.
 - main.decode cannot read an integer file descriptor again (soundfile closes it), so a file
   given that way is not counted.
+- Frames before the first confirmed chain (junk after the first or second frame) are neither
+  counted nor fed to the second read, which starts at the chain: such a file is measured without
+  them (52 ms for junk after frame 2 of a 30 s file; 27.4 of 30.0 s with junk after every second
+  frame of the first 100), never on less than its first read.
 """
 
 from __future__ import annotations
@@ -102,17 +107,15 @@ class StreamLength:
 
 def parse_header(data: bytes, i: int) -> Header | None:
     """The MPEG audio frame header at ``i``, or None (no sync, a reserved or free-format field)."""
-    if i + 4 > len(data) or data[i] != 0xFF:
+    if i + 4 > len(data) or data[i] != 0xFF or (data[i + 1] & 0xE0) != 0xE0:
         return None
     return _header(data[i + 1], data[i + 2], data[i + 3] >> 6)
 
 
-@functools.cache
+@functools.lru_cache(maxsize=1024)
 def _header(b1: int, b2: int, mode: int) -> Header | None:
-    """The header for its second and third bytes and channel mode (cached: a scan of junk full
-    of sync words parses the same few headers over and over)."""
-    if (b1 & 0xE0) != 0xE0:
-        return None
+    """The header for its second and third bytes and channel mode (cached, as a scan of junk
+    full of sync words parses the same few headers over and over; a stream uses a few dozen)."""
     version = _VERSIONS.get((b1 >> 3) & 0x03)
     layer = 4 - ((b1 >> 1) & 0x03)
     bitrate_index, rate_index = b2 >> 4, (b2 >> 2) & 0x03

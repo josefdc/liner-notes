@@ -737,14 +737,14 @@ analysis, whatever the outcome.
    frames by more than 0.1 s and 2 % (`TRUNCATED_READ_SECONDS`, `TRUNCATED_READ_SHARE`), the
    file is decoded again from a pipe, from its first frame (`libsndfile` cannot skip a large
    ID3v2 tag, or one with a footer, on a pipe). There `libsndfile` cannot ask for a length, so
-   the read goes on to the end of the stream, still at most 35 s. It reads in blocks of one
-   frame's samples and keeps what decoded before a failure: `libsndfile` fails on a cut last
-   frame, after every whole frame decoded. A whole read of such a file decodes to exactly its
-   counted frames, encoder delay and padding included, since no LAME tag says what to trim.
-   The second read's first samples are the first read's. The duration the service reports is
-   always that of the decoded samples; the frame count only decides whether the read was
-   whole. If the second read also falls short, the preview is refused (see the error statuses
-   above).
+   the read goes on to the end of the stream, still at most 35 s. It reads in blocks of 1152
+   samples and keeps what decoded before a failure: `libsndfile` fails on a cut last frame,
+   after every whole frame decoded. A whole read of such a file decodes to exactly its counted
+   frames, encoder delay and padding included, since no LAME tag says what to trim. When the
+   stream starts with three whole frames, the second read's first samples are the first
+   read's. The duration the service reports is always that of the decoded samples; the frame
+   count only decides whether the read was whole. If the second read also falls short, the
+   preview is refused (see the error statuses above).
 
    CBR files and files with a Xing or Info header with a frame count decode to the same
    samples as before, without a second read. A Xing header without a frame count, or one in a
@@ -754,6 +754,10 @@ analysis, whatever the outcome.
      not caught, and such a file is measured on the part that decodes, as before.
    - A file given as an integer file descriptor (soundfile closes it) is not read again or
      counted, and is measured on the part that decodes, as before. The service passes a path.
+   - Frames before the first three in a row (junk after the first or second frame) are neither
+     counted nor read again: the second read starts after them, so such a file is measured
+     without them (52 ms for junk after frame 2 of a 30 s file, 2.6 s with junk after every
+     second frame of the first 100), and never on less than its first read.
    - A stream that changes from stereo to mono at the same rate decodes only to the change and
      is refused (before, the first read's part was measured).
 

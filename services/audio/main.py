@@ -419,7 +419,8 @@ def _feed(fd: int, data: bytes) -> None:
         os.close(fd)
 
 
-# Frames per read from the pipe (one MPEG-1 layer III frame): a read that fails loses its block.
+# Samples per read from the pipe (one MPEG-1 layer II or III frame; two MPEG-2/2.5 layer III
+# frames, three layer I frames): a read that fails loses its block.
 PIPE_BLOCK = 1152
 
 
@@ -428,15 +429,23 @@ def _decode_through_pipe(data: bytes) -> tuple[np.ndarray, bool]:
     Decode an MPEG audio stream (from its first frame: libsndfile cannot skip a large ID3v2 tag
     or one with a footer on a pipe) read from a pipe, at most MAX_DECODE_SECONDS. libsndfile
     cannot ask mpg123 for a length on a pipe, so the read goes on until the stream ends. It is
-    read in blocks of PIPE_BLOCK frames, and a block that fails (libsndfile fails on a cut last
-    frame) ends it: the samples and whether a read failed. Raises when the pipe cannot be opened.
+    read in blocks of PIPE_BLOCK samples, and a block that fails (libsndfile fails on a cut last
+    frame) ends it: the samples and whether a read failed. Raises when the pipe cannot be made,
+    fed or opened, and leaves no descriptor open.
     """
-    read_end, write_end = os.pipe()
-    feeder = threading.Thread(target=_feed, args=(write_end, data), daemon=True)
-    feeder.start()
     blocks: list[np.ndarray] = []
     failed = False
+    read_end: int | None = None
+    feeder: threading.Thread | None = None
     try:
+        read_end, write_end = os.pipe()
+        feeder = threading.Thread(target=_feed, args=(write_end, data), daemon=True)
+        try:
+            feeder.start()  # from here on _feed closes the write end
+        except BaseException:
+            feeder = None
+            os.close(write_end)
+            raise
         with sf.SoundFile(read_end, closefd=False) as f:
             channels, left = f.channels, int(MAX_DECODE_SECONDS * f.samplerate)
             while left > 0:
@@ -450,8 +459,10 @@ def _decode_through_pipe(data: bytes) -> tuple[np.ndarray, bool]:
                 blocks.append(block)
                 left -= len(block)
     finally:
-        os.close(read_end)
-        feeder.join()
+        if read_end is not None:
+            os.close(read_end)
+        if feeder is not None:
+            feeder.join()
     samples = np.concatenate(blocks) if blocks else np.zeros((0, channels), np.float32)
     return samples, failed
 
@@ -483,7 +494,7 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
         return data
     try:
         whole, failed = _decode_through_pipe(raw[stream.start :])
-    except (sf.LibsndfileError, RuntimeError, EOFError) as e:
+    except (sf.LibsndfileError, RuntimeError, EOFError, OSError) as e:
         raise InvalidAudioError(MP3_READ_FAILED) from e
     logger.info(
         "The MP3 decoded to %.2f s of the %.2f s its %d frames hold; decoded again to %.2f s",

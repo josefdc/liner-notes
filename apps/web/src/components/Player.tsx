@@ -111,7 +111,7 @@ const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'heading
     <h1
       ref={headingRef}
       tabIndex={-1}
-      className="text-xl font-light text-white tracking-tight outline-none"
+      className="text-xl font-light text-white tracking-tight focus-visible:outline-hidden"
     >
       No analysis loaded
     </h1>
@@ -555,7 +555,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                          border border-dashed border-white/20 rounded-md
                          text-xs font-mono text-text-secondary uppercase tracking-wider
                          hover:border-white/40 hover:text-white hover:bg-white/5
-                         focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden
                          disabled:opacity-50
                          ${more.finished ? 'disabled:cursor-not-allowed' : 'disabled:cursor-wait'}
                          transition-all duration-(--duration-fast)`}
@@ -661,7 +661,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ref={headingRef}
             tabIndex={-1}
             title={track.title}
-            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark outline-none break-words md:line-clamp-2"
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark focus-visible:outline-hidden break-words md:line-clamp-2"
           >
             {track.title}
           </h1>
@@ -718,7 +718,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               panel.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
               panel.focus({ preventScroll: true });
             }}
-            className="text-xs font-mono text-text-secondary hover:text-white rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+            className="text-xs font-mono text-text-secondary hover:text-white rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
           >
             Connections <span aria-hidden="true">↓</span>
           </button>
@@ -844,7 +844,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 <button
                   type="button"
                   onClick={() => setShowAllFactoids(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-hidden transition-colors"
                 >
                   <ChevronDown size={14} />
                   Show {hiddenCount} more {hiddenCount === 1 ? 'fact' : 'facts'}
@@ -855,7 +855,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               <button
                 type="button"
                 onClick={() => setShowAllFactoids(false)}
-                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-hidden"
               >
                 <ChevronDown size={14} className="rotate-180" />
                 Show less
@@ -1040,7 +1040,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           // and its ring shows it.
           tabIndex={-1}
           className={`
-            min-w-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            min-w-0 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >
@@ -1067,7 +1067,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   event.preventDefault();
                   onOpenMap();
                 }}
-                className="pointer-events-auto ml-auto text-xs font-mono text-text-secondary hover:text-white underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+                className="pointer-events-auto ml-auto text-xs font-mono text-text-secondary hover:text-white underline underline-offset-4 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
               >
                 Open the full map
               </a>
@@ -1143,7 +1143,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               tabIndex={open ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
-              className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-none ${open ? `border-t-2 ${tab.open}` : 'text-text-tertiary'}`}
+              className={`flex-1 py-3 text-center focus-visible:border-t-2 focus-visible:border-cyber focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 ${open ? `border-t-2 ${tab.open}` : 'text-text-tertiary'}`}
             >
               {tab.label}
             </button>

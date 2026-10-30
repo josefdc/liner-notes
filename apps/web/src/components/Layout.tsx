@@ -38,7 +38,7 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false, footer 
             href={SOURCE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center min-h-6 px-(--space-xs) text-chrome font-mono text-text-tertiary hover:text-text-secondary hover:underline underline-offset-4 rounded-sm transition-colors focus-visible:text-text-secondary focus-visible:underline focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:outline-none"
+            className="inline-flex items-center min-h-6 px-(--space-xs) text-chrome font-mono text-text-tertiary hover:text-text-secondary hover:underline underline-offset-4 rounded-sm transition-colors focus-visible:text-text-secondary focus-visible:underline focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
           >
             Source<span className="sr-only"> (opens in a new tab)</span>
           </a>

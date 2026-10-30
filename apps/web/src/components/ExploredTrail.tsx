@@ -23,7 +23,7 @@ const COMPACT_SHOWN = 2;
 
 // One line, its names cut with an ellipsis (each whole in its link's name and its tooltip).
 const LINK =
-  'block min-w-0 truncate rounded-sm underline underline-offset-4 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70';
+  'block min-w-0 truncate rounded-sm underline underline-offset-4 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70';
 
 /** "Title · Artist", or the title alone; "(map)" for a full-size map. */
 const nameOf = (step: { title: string; artist: string | null; view: TrailView }) =>
@@ -96,7 +96,7 @@ export const ExploredTrail: React.FC<ExploredTrailProps> = ({ trail, current, on
             onClick={(event) => {
               if (isPlainClick(event)) event.preventDefault();
             }}
-            className="block min-w-0 truncate rounded-sm text-white font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
+            className="block min-w-0 truncate rounded-sm text-white font-semibold focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
           >
             {currentName}
           </a>

@@ -475,7 +475,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
               tabIndex={0}
               data-segment-tint="inferred"
-              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[index % 2]}`}
+              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[index % 2]}`}
               style={{ width: `${Math.max(seg.end - seg.start, 0)}%` }}
             >
               {/* Tooltip */}

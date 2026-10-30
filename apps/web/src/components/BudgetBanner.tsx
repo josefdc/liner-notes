@@ -65,7 +65,7 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
         <h2
           ref={headingRef}
           tabIndex={-1}
-          className="text-status-warning text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+          className="text-status-warning text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2 focus-visible:outline-hidden"
         >
           <CirclePause size={16} aria-hidden="true" />
           {title}
@@ -97,7 +97,7 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
                 <button
                   type="button"
                   onClick={() => onPick(track)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/20 transition-colors focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/20 transition-colors focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden"
                 >
                   <Disc3
                     size={16}

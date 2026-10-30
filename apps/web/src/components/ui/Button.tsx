@@ -41,7 +41,7 @@ const baseStyles = [
   'transition-[color,background-color,border-color,box-shadow,translate,scale] ease-out-expo',
   'duration-[var(--duration-fast),var(--duration-fast),var(--duration-fast),var(--duration-focus),var(--duration-fast),var(--duration-fast)]',
   'active:scale-[0.97]',
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-void',
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-void',
   'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
 ].join(' ');
 

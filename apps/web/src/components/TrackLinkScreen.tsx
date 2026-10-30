@@ -44,7 +44,7 @@ const TEXT: Record<TrackLinkState, string> = {
 
 /** A secondary action, set as an underlined line of text. */
 const TEXT_BUTTON =
-  'text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none';
+  'text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden';
 
 export function TrackLinkScreen({
   state,
@@ -80,7 +80,7 @@ export function TrackLinkScreen({
           ref={headingRef}
           tabIndex={-1}
           aria-describedby="track-link-text"
-          className={`text-xl font-sans font-light tracking-wide text-balance flex items-center justify-center gap-2 focus:outline-none ${isProblem ? 'text-status-error' : 'text-text-primary'}`}
+          className={`text-xl font-sans font-light tracking-wide text-balance flex items-center justify-center gap-2 focus-visible:outline-hidden ${isProblem ? 'text-status-error' : 'text-text-primary'}`}
         >
           {isProblem && <CircleAlert size={18} aria-hidden="true" className="shrink-0" />}
           {TITLE[state]}

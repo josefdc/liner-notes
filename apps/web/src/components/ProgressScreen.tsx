@@ -219,7 +219,7 @@ export function ProgressScreen({
         ref={statusRef}
         tabIndex={-1}
         data-progress-status
-        className={`text-center mt-4 text-sm font-mono scroll-my-2 focus:outline-none ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
+        className={`text-center mt-4 text-sm font-mono scroll-my-2 focus-visible:outline-hidden ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
       >
         {status === 'complete' ? (
           <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">

@@ -110,6 +110,23 @@ function graphNodes(
   return Array.isArray(data?.nodes) ? data.nodes : [];
 }
 
+/**
+ * Takes the outline off a map card or link: each shows its focus with a ring or band of its own
+ * (recoloured for forced-colors mode in index.css). Forced-colors mode does not recolour SVG,
+ * so an outline there would stay transparent. The one place the web app removes an outline,
+ * and for SVG only: an HTML selection does not type-check.
+ */
+type SvgSelection<T> = T extends { node(): infer N }
+  ? [Extract<N, HTMLElement>] extends [never]
+    ? T
+    : never
+  : never;
+function withoutOutline<T extends { node(): unknown; style(name: string, value: string): unknown }>(
+  selection: SvgSelection<T>,
+) {
+  selection.style('outline', 'none');
+}
+
 // A card: a thumbnail, then the track's title (four lines at most), its artist and year (three
 // lines at most) and a tag for this track or an origin, in the graph's 12 px text.
 const PAD = 6;
@@ -1084,7 +1101,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('stroke-width', 12)
       .attr('vector-effect', 'non-scaling-stroke')
       .style('pointer-events', 'stroke')
-      .style('outline', 'none')
+      .call(withoutOutline)
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
@@ -1116,7 +1133,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('tabindex', -1)
       .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
       .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
-      .style('outline', 'none');
+      .call(withoutOutline);
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
     // with their glow; the others outlined in white (3:1 or more on the page).
@@ -2411,7 +2428,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                             focusMapRef.current?.();
                           });
                         }}
-                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
+                        className="pointer-events-auto inline-flex min-h-6 items-center gap-1 rounded-sm border border-white/15 bg-black/80 px-1.5 text-chrome font-mono text-text-secondary hover:text-white focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70"
                       >
                         {CUE_TEXT[side](cues[side])}
                       </button>

@@ -93,7 +93,7 @@ const MapScreen: React.FC<Omit<MapViewProps, 'trackData'> & { track: TrackData }
             event.preventDefault();
             onBackToTrack();
           }}
-          className="self-start inline-flex items-center gap-1.5 text-xs font-mono text-text-secondary hover:text-white rounded-sm break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70"
+          className="self-start inline-flex items-center gap-1.5 text-xs font-mono text-text-secondary hover:text-white rounded-sm break-words focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyber/70"
         >
           <ArrowLeft size={14} aria-hidden="true" className="shrink-0" />
           <span className="min-w-0 break-words">Back to {title}</span>
@@ -102,7 +102,7 @@ const MapScreen: React.FC<Omit<MapViewProps, 'trackData'> & { track: TrackData }
           <h1
             ref={headingRef}
             tabIndex={-1}
-            className="min-w-0 break-words text-base md:text-lg font-light text-white tracking-tight outline-none"
+            className="min-w-0 break-words text-base md:text-lg font-light text-white tracking-tight focus-visible:outline-hidden"
           >
             Song relations of {title}
             {track.artist && <span className="text-text-tertiary"> · {track.artist}</span>}
@@ -156,7 +156,7 @@ const NoAnalysis: React.FC<Pick<MapViewProps, 'onNewSearch' | 'headingRef'>> = (
     <h1
       ref={headingRef}
       tabIndex={-1}
-      className="text-xl font-light text-white tracking-tight outline-none"
+      className="text-xl font-light text-white tracking-tight focus-visible:outline-hidden"
     >
       No analysis loaded
     </h1>

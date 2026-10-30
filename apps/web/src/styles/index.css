@@ -285,8 +285,9 @@
     border-width: 0;
   }
 
+  /* No position here: the element's own focus: classes place it (the skip link floats with
+     focus:fixed), which a position set here would override. */
   .focus\:not-sr-only:focus {
-    position: static;
     width: auto;
     height: auto;
     padding: 0.5rem 1rem;
@@ -294,5 +295,24 @@
     overflow: visible;
     clip: auto;
     white-space: normal;
+  }
+}
+
+/* Forced-colors mode does not recolour SVG: the map's focus ring and a focused link's band take
+   the system highlight colour there, so they keep their contrast on light and dark themes. */
+@media (forced-colors: active) {
+  .focus-ring {
+    stroke: Highlight;
+  }
+
+  .link-targets > path:focus {
+    stroke: Highlight;
+    stroke-opacity: 1;
+  }
+
+  /* A focused card does not fade with the cards the pointed track is not joined to: its ring
+     keeps its contrast. (The fade is an inline style.) */
+  .nodes > g:focus {
+    opacity: 1 !important;
   }
 }

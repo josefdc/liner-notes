@@ -89,7 +89,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
             ? 'Collapse activity log'
             : `Expand activity log, ${isComplete ? 'done' : 'running'}${lastEvent}`
         }
-        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
       >
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
@@ -130,11 +130,15 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
         id="activity-log-content"
         role="region"
         aria-label="Activity log entries"
+        // Collapsed, its entries are out of sight: out of the Tab order and the reading order
+        // too (the scroller would otherwise be a Tab stop that shows nothing).
+        inert={!isExpanded}
         className={`relative z-10 overflow-hidden transition-all duration-(--duration-normal) ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
       >
         <div className="border-t border-white/5">
-          {/* Log list */}
-          <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain">
+          {/* Log list: a scroller, so a Tab stop; in forced-colors mode its outline is drawn
+              inside it, where the panel's overflow-hidden does not cut it. */}
+          <div className="relative overflow-y-auto p-3 space-y-0 scrollbar-hide max-h-[240px] overscroll-contain forced-colors:focus-visible:-outline-offset-2">
             {/* Timeline line */}
             <div className="absolute left-6 top-3 bottom-3 w-px bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
 

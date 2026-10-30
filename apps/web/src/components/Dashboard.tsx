@@ -247,7 +247,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <h1
             ref={headingRef}
             tabIndex={-1}
-            className="text-2xl font-medium tracking-tight text-white outline-none"
+            className="text-2xl font-medium tracking-tight text-white focus-visible:outline-hidden"
           >
             No analysis loaded
           </h1>
@@ -299,7 +299,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <h1
                 ref={headingRef}
                 tabIndex={-1}
-                className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1 outline-none"
+                className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1 focus-visible:outline-hidden"
               >
                 {trackData.title}
               </h1>
@@ -344,7 +344,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     href={trackData.spotifyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden"
                   >
                     <ExternalLink size={14} />
                     Spotify
@@ -371,7 +371,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           ref={fingerprintRef}
           tabIndex={-1}
           aria-label="Sonic Fingerprint"
-          className="outline-none focus-visible:border-cyber/70 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="focus-visible:outline-hidden focus-visible:border-cyber/70 lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel subtitle={fingerprintText} className="flex-1">
@@ -487,7 +487,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
+                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',

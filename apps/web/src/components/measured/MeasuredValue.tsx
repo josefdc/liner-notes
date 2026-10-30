@@ -140,7 +140,7 @@ const LINE = 'max-w-60 wrap-anywhere text-chrome font-mono text-text-chip text-l
 // The summary's disclosure: the lines' size and colour, a ring on keyboard focus; at least 24 px
 // high to touch, the extra height taken from the space around it so the layout does not move.
 const DISCLOSURE =
-  'relative inline-flex min-h-6 -my-1 max-w-60 items-center gap-1 rounded-sm text-chrome font-mono text-text-chip text-left underline decoration-dotted underline-offset-2 cursor-pointer hover:text-text-secondary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void';
+  'relative inline-flex min-h-6 -my-1 max-w-60 items-center gap-1 rounded-sm text-chrome font-mono text-text-chip text-left underline decoration-dotted underline-offset-2 cursor-pointer hover:text-text-secondary focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-void';
 
 export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   label,

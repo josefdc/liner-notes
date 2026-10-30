@@ -23,7 +23,7 @@ export const PreviewList: React.FC<{
       onToggle={closeOtherLists}
       className="text-chrome font-mono text-text-chip"
     >
-      <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70 rounded-sm">
+      <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-cyber/70 rounded-sm">
         Previews ({tracks.length})
       </summary>
       <ul
@@ -39,7 +39,7 @@ export const PreviewList: React.FC<{
                 aria-label={`Play preview of ${nameOf(id)}`}
                 aria-pressed={playing}
                 onClick={() => onToggle(id, url)}
-                className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-left hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70 ${playing ? 'border-cyber/50 text-cyber' : 'border-white/15 text-text-secondary'}`}
+                className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-left hover:text-white focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-cyber/70 ${playing ? 'border-cyber/50 text-cyber' : 'border-white/15 text-text-secondary'}`}
               >
                 {playing ? (
                   <Pause size={10} aria-hidden="true" className="shrink-0" />

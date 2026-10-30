@@ -91,7 +91,7 @@ class BannerBoundary extends Component<
           <h2
             ref={this.headingRef}
             tabIndex={-1}
-            className="text-status-warning text-sm font-mono uppercase tracking-widest text-center outline-none"
+            className="text-status-warning text-sm font-mono uppercase tracking-widest text-center focus-visible:outline-hidden"
           >
             {title}
           </h2>
@@ -133,7 +133,7 @@ function BannerLoading({ code }: { code: LiveUnavailableCode }) {
       ref={lineRef}
       tabIndex={-1}
       role="status"
-      className="text-text-tertiary text-xs font-mono outline-none"
+      className="text-text-tertiary text-xs font-mono focus-visible:outline-hidden"
     >
       {LIVE_UNAVAILABLE_COPY[code].title}. Loading the recorded tracks...
     </p>
@@ -604,7 +604,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-warning/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-warning/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden"
               >
                 or try a different song
               </button>
@@ -621,7 +621,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   ...shownError.lines.map((_, index) => `error-line-${index}`),
                   ...(retryWait > 0 ? ['error-wait'] : []),
                 ].join(' ')}
-                className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus:outline-none"
+                className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus-visible:outline-hidden"
               >
                 <CircleAlert size={16} aria-hidden="true" className="shrink-0" />
                 {ERROR_TITLE}
@@ -687,7 +687,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   <button
                     type="button"
                     onClick={handleReset}
-                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden"
                   >
                     or try a different song
                   </button>
@@ -701,7 +701,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
             <button
               type="button"
               onClick={onRestorePrevious}
-              className="text-text-tertiary hover:text-cyber text-xs font-mono animate-fade-in transition-colors focus-visible:outline-none focus-visible:underline flex items-center gap-1.5"
+              className="text-text-tertiary hover:text-cyber text-xs font-mono animate-fade-in transition-colors focus-visible:outline-hidden focus-visible:underline flex items-center gap-1.5"
             >
               <ArrowLeft size={12} />
               Back to the last result

@@ -47,33 +47,30 @@ as the deploy user, after `alias dc='docker compose -f deploy/compose.prod.yml'`
 ## Deploy a new release
 
 ```bash
-mkdir -p ~/releases && b=$(deploy/scripts/backup.sh) && cp "$b" "$b.sha256" ~/releases/  # out of KEEP's reach
+mkdir -p ~/releases && b=$(deploy/scripts/backup.sh); cp "$b" "$b.sha256" ~/releases/  # out of KEEP's reach, even on exit 3
 git fetch && git checkout <release commit>   # then IMAGE_TAG=<its short hash> in deploy/.env
 dc up -d --build && dc ps                    # then /api/ready, as above
+# When Cloudflare's ranges change: trusted_proxies in apps/web/Caddyfile, and the firewall.
 ```
-
-When Cloudflare's ranges change, update `trusted_proxies` (`apps/web/Caddyfile`) and the firewall.
 
 ## Secrets
 
-`deploy/.env.example` lists and explains every setting (required, the site, the API's keys):
-`cp deploy/.env.example deploy/.env && chmod 600 deploy/.env`, owned by the deploy user, never
-committed or printed (nor `dc config`'s output, which holds it). After a change, `dc up -d`;
-`VITE_*` are built into the page: `dc up -d --build web`. Outside the file: a read-only GitHub
-deploy key (`~deploy/.ssh`), the Origin CA key (README), the backups (what visitors looked up).
+`deploy/.env.example` explains every setting: `cp deploy/.env.example deploy/.env && chmod 600
+deploy/.env`, owned by the deploy user, never committed or printed (nor `dc config`'s output).
+After a change, `dc up -d`; `VITE_*` are built into the page: `dc up -d --build web`. Outside the
+file: a read-only deploy key (`~deploy/.ssh`), the Origin CA key (README), the backups.
 
 ## Azure: quota, budget alert, the app's cap
 
 - **The app's cap.** The API reserves each call's worst-case cost in the spend log first. Visitors'
   runs (purpose "dev") stop at `BUDGET_TOTAL_USD` − `BUDGET_EVAL_FLOOR_USD` over the log's whole
-  life: $5 with the defaults (25 − 20), so `BUDGET_DAILY_USD` (13.5 a day) never binds them.
-  Past it, `fallback` serves only the showcase tracks' recorded runs. To allow more, raise
-  `BUDGET_TOTAL_USD` or lower the floor (0 with no evaluations here); never rotate or truncate
-  the spend log, since a restore merges its old records back.
+  life: $5 with the defaults (25 − 20), so `BUDGET_DAILY_USD` (13.5 a day) never binds them. To
+  allow more, raise the total or lower the floor (0 with no evaluations here); never rotate or
+  truncate the spend log (a restore merges old records back). Past it, `fallback` replays only.
 - **Budget alert.** The resource group at what this server can spend (`BUDGET_TOTAL_USD` −
   `BUDGET_EVAL_FLOOR_USD`), alerts at 50, 80, 100 %; one ahead of the log: drift, or another client.
-- **TPM quota.** Tokens per minute is a rate limit, not a cost limit: give each deployment the
-  peak the site needs (`LLM_CONCURRENCY` calls at once, default 2) and no more.
+- **TPM quota.** A rate limit, not a cost limit: each deployment gets the peak the site needs
+  (`LLM_CONCURRENCY` calls at once, default 2) and no more.
 - **Watching it.** `deploy/scripts/spend-log.sh total`: the log's all-time total, as the API counts
   it. `dc exec api node dist/report.js --days 30`: USD per day, from rows retention prunes.
 
@@ -88,21 +85,25 @@ deploy/scripts/restore.sh latest             # asks, stops the API, saves, resto
 `backup.sh` copies the database (`VACUUM INTO`, API running) and the spend log, checks the
 archive as a restore would, and keeps the newest `KEEP` (14). A restore first saves the volumes
 (`<project>-pre-restore-<time>.tar.gz`, never "latest" or pruned), merges the spend logs (never
-below the spend either log records), and restarts the API however it ends. Backup exit 3: the
-database is saved, the spend log broke the API's rules and is kept aside; a last line cut by a
-crash is moved to `llm-spend.jsonl.torn` by `dc stop api && deploy/scripts/spend-log.sh
-repair-tail && dc start api`, then back up again. Cron mails only on failure (`MAILTO`):
+below the spend either log records), and starts the API again after a failure or an interrupt.
+Backup exit 3: the database is saved; the spend log broke the API's rules and is kept aside as
+`llm-spend.jsonl.invalid`. `dc stop api && deploy/scripts/spend-log.sh repair-tail && dc start api`
+moves a line cut by a crash to `llm-spend.jsonl.torn`; then back up again. Such a backup restores
+into a volume with no spend log only after `tar -xzf <backup> llm-spend.jsonl.invalid` and, API
+stopped, `spend-log.sh place llm-spend.jsonl.invalid`. Cron mails failures only, through `MAILTO`
+and a mail relay (an MTA such as `msmtp-mta`), or point the echo at another alert route:
 `17 3 * * * /srv/liner-notes/deploy/scripts/backup.sh >>/srv/liner-notes/deploy/backups/backup.log 2>&1 || echo "liner-notes backup failed"`
 
 Copy `deploy/backups` off the server encrypted (`restic` to a Storage Box, say), each `.sha256`
-beside its archive. Monthly, restore the newest off-site copy into a scratch project with test
-values, never `deploy/.env`: the required ones, `IMAGE_TAG`, `REPLAY_MODE=only`,
-`AUDIO_FETCH_MODELS=0`, `PROXY_PORT=3480`, `PROXY_TLS_PORT=3481`.
+beside its archive. Monthly, restore the newest off-site copy into a scratch project (another
+Docker host, or a quiet hour) with test values, never `deploy/.env`: the required ones,
+`IMAGE_TAG`, `REPLAY_MODE=only`, `AUDIO_FETCH_MODELS=0` (an exit-3 copy needs `place`, above).
 
 ```bash
 alias drill='docker compose -p ln-drill --env-file /tmp/drill.env -f deploy/compose.prod.yml'
-drill up -d --no-build --wait
-BACKUP_DIR=/tmp/ln-drill-backups deploy/scripts/restore.sh --yes --project ln-drill <copy> && drill down -v
+drill up -d --no-build --wait api           # the API and the audio service only
+BACKUP_DIR=/tmp/ln-drill-backups deploy/scripts/restore.sh --yes --project ln-drill <copy>
+drill exec api node dist/report.js --days 30 && drill down -v   # the restored runs, then away
 ```
 
 ## Replay switch
@@ -113,13 +114,12 @@ To stop all spending: `REPLAY_MODE=only`, `dc up -d api`; `/api/ready` shows pro
 
 ## Rollback
 
-Each release keeps its images (tagged `IMAGE_TAG`; `dc images`). Go back with web and API together
-(README, "Order"): `git checkout <previous commit>`, its `IMAGE_TAG` in `deploy/.env`, `dc up -d
---no-build` (`--build` if its images are gone). Migrations only go forward: an older API refuses
-a newer schema ("schema version N is newer than this code supports" in `dc logs api`). Then
-restore the pre-deploy copy with the previous image (losing the runs since), then web and API:
+Each release keeps its images (`IMAGE_TAG`; `dc images`). Go back with web and API together (README,
+"Order"): `git checkout <previous commit>`, its `IMAGE_TAG` in `deploy/.env`, `dc up -d --no-build`
+(`--build` if its images are gone). An older API refuses a newer schema ("schema version N is newer
+than this code supports" in `dc logs api`): restore the pre-deploy copy with the previous image:
 
 ```bash
-API_IMAGE=liner-notes-api:<previous tag> deploy/scripts/restore.sh ~/releases/liner-notes-<UTC time>.tar.gz
-dc up -d --no-build
+API_IMAGE=liner-notes-api:<previous tag> deploy/scripts/restore.sh ~/releases/<backup>.tar.gz  # <IMAGE_PREFIX>-api if set
+dc up -d --no-build                          # web and API on the same release; runs since are lost
 ```

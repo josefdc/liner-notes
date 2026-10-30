@@ -332,6 +332,12 @@ jobs:
             exit 1
           fi
           echo "API image is $size B ($(numfmt --to=si --round=nearest --format=%.2f "$size")), within its budget of $API_IMAGE_BUDGET B ($(numfmt --to=si --round=nearest --format=%.2f "$API_IMAGE_BUDGET"))"
+      # deploy/scripts/backup.sh and restore.sh, with the API image above, on a throwaway API
+      # container and volumes of their own: a backup while the API runs, a dry run that changes
+      # nothing, a changed or damaged backup refused, a restore into fresh volumes that brings the
+      # data back and keeps a newer spend log (deploy/RUNBOOK.md, "Backups and restore drill").
+      - name: Check the backup and restore scripts
+        run: deploy/scripts/backup-restore.test.sh
       # The production stack on this runner, through Caddy (deploy/check-stack.sh, which runs the
       # same way on a development machine): every service healthy, no published port but Caddy's,
       # a stream without a run token refused, the security headers and the policy on a page, a

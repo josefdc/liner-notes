@@ -224,9 +224,9 @@ a certificate and stores it on the `caddy-data` volume. Behind Cloudflare's prox
 - **A DNS challenge.** It needs a web image built with Caddy's Cloudflare DNS module, which the
   shipped image does not have, and an API token for the zone: not set up here.
 
-The runbook (#37) has the Cloudflare side. Caddy serves HTTP/1.1 and HTTP/2 only: behind
-Cloudflare a visitor's HTTP/3 ends at Cloudflare's edge, which reaches the server over TCP.
-Strict-Transport-Security is not sent here; it is set at Cloudflare (runbook, #37).
+The runbook, `deploy/RUNBOOK.md`, has the Cloudflare side. Caddy serves HTTP/1.1 and HTTP/2
+only: behind Cloudflare a visitor's HTTP/3 ends at Cloudflare's edge, which reaches the server
+over TCP. Strict-Transport-Security is not sent here; it is set at Cloudflare (runbook).
 
 | Service | Reached at | Notes |
 |---------|------------|-------|
@@ -300,15 +300,16 @@ No request headers or redirect targets are written, and addresses are shortened 
 **Content-Security-Policy.** The policy allows scripts from the site and Turnstile only. Cloudflare
 features that add scripts to the page (Rocket Loader, the Web Analytics beacon, Bot Fight Mode's
 JavaScript detections) are blocked by it: keep them off for the site, or extend the policy in
-`apps/web/Caddyfile` (runbook, #37).
+`apps/web/Caddyfile` (`deploy/RUNBOOK.md`).
 
 **Cloudflare's addresses.** Cloudflare publishes its ranges at https://www.cloudflare.com/ips-v4
 and https://www.cloudflare.com/ips-v6. Before each deploy, compare them with the list in
-`apps/web/Caddyfile`; when they differ, update the list and its date, and rebuild the web image.
+`apps/web/Caddyfile`; when they differ, update the list and its date, rebuild the web image, and
+update the origin's firewall to match (`deploy/RUNBOOK.md`).
 
 **Order.** Deploy the API before the web: a web build reads the event types of its own API
 version, not an older API's. Roll both back together. The server, DNS, Cloudflare and Turnstile
-settings, and backups are in the runbook (#37).
+settings, and backups are in the runbook, `deploy/RUNBOOK.md`.
 
 `GET /api/health` is the liveness probe the containers' health checks use. `GET /api/ready`
 answers 200 when the API can serve what it is set up to serve and 503 otherwise, listing each

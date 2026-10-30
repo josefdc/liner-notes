@@ -604,7 +604,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
 
   return (
-    <div ref={rootRef} className="h-full w-full flex flex-col bg-void relative overflow-hidden">
+    // On a phone held sideways (md up, 32rem tall or less) the nav and the track's header share
+    // one band, side by side, the recording label under the buttons: the panels get the height.
+    <div
+      ref={rootRef}
+      className="h-full w-full flex flex-col bg-void relative overflow-hidden landscape-short:grid landscape-short:grid-cols-[auto_minmax(0,1fr)] landscape-short:grid-rows-[auto_auto_minmax(0,1fr)]"
+    >
       {/* Background Atmosphere */}
       {cover.src && (
         <img
@@ -620,7 +625,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       {/* Each label stays on one line, its letters set closer on phones so both buttons fit a
           320 px row; a row still too narrow puts the second button under the first rather than
           past the window's edge. */}
-      <div className="z-20 px-4 sm:px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm">
+      <div className="z-20 px-4 sm:px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm landscape-short:pt-1.5 landscape-short:pb-0">
         <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-2 min-w-0">
           <Button
             variant="ghost"
@@ -651,30 +656,32 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           the columns, so it is kept short: a long title is cut at two lines and a long artist at
           one, each read whole by screen readers and shown whole on hover (title). On phones it
           is kept for screen readers only, and the Player tab shows the title and artist where
-          they scroll with it: no fixed band takes the phone's height. A div, not a page banner. */}
+          they scroll with it: no fixed band takes the phone's height. On a phone held sideways
+          it is beside the nav, the title and the artist each cut at one line. A div, not a page
+          banner. */}
       <div
         id="player-header"
-        className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only"
+        className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only landscape-short:row-span-2 landscape-short:items-start landscape-short:gap-x-4 landscape-short:py-1.5 landscape-short:pl-0 landscape-short:border-b-0"
       >
         <div className="min-w-0">
           <h1
             ref={headingRef}
             tabIndex={-1}
             title={track.title}
-            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark focus-visible:outline-hidden break-words md:line-clamp-2"
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark focus-visible:outline-hidden break-words md:line-clamp-2 landscape-short:text-xl landscape-short:line-clamp-1"
           >
             {track.title}
           </h1>
           <p
             title={track.artist}
-            className="text-sm md:text-base text-text-tertiary font-mono break-words md:line-clamp-1"
+            className="text-sm md:text-base text-text-tertiary font-mono break-words md:line-clamp-1 landscape-short:text-sm"
           >
             {track.artist}
           </p>
           {/* From md up a replayed result says so right under its title and artist, before any
-              column (phones show it below, above the tabs' panels) */}
+              column (phones, and phones held sideways, show it below, above the panels) */}
           {recorded && (
-            <div className="hidden md:block mt-2">
+            <div className="hidden md:block mt-2 landscape-short:hidden">
               <RecordedRunNotice track={track} compact />
             </div>
           )}
@@ -726,9 +733,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       </div>
 
       {/* On phones only one panel shows at a time: the recording label stays above all of them,
-          right after the (screen-reader) header, so it is reached before any panel */}
+          right after the (screen-reader) header, so it is reached before any panel. On a phone
+          held sideways it is under the nav's buttons, beside the header. */}
       {recorded && (
-        <div className="md:hidden z-20 mx-4 mt-2">
+        <div className="md:hidden z-20 mx-4 mt-2 landscape-short:block landscape-short:m-0 landscape-short:px-6 landscape-short:pb-1.5 landscape-short:bg-void/50 landscape-short:backdrop-blur-sm">
           <RecordedRunNotice track={track} compact />
         </div>
       )}
@@ -740,7 +748,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           (a timeline tooltip at rest past the window's edge must not let it scroll sideways). */}
       <div
         data-player-columns
-        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain"
+        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain landscape-short:col-span-2 landscape-short:border-t landscape-short:border-white/5"
       >
         {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
@@ -1028,11 +1036,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
 
         {/* Panel C: the connections (md up: a full-width row below the columns, 14rem shorter
-            than the window (the nav, the header and the footer take
-            about 12rem), so a strip of the scrolling area always shows beside it to grab, even
-            on a landscape phone, or as tall as its content when the connections are a compact
-            row; phones: the Connections tab, covering the panels' area, absolute, so it has
-            that area's height for the graph) */}
+            than the window (the nav, the header and the footer take about 12rem), so a strip of
+            the scrolling area always shows beside it to grab; on a phone held sideways, where
+            the nav and the header share a band of about 5rem, 8rem shorter; or as tall as its
+            content when the connections are a compact row; phones: the Connections tab,
+            covering the panels' area, absolute, so it has that area's height for the graph) */}
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
@@ -1040,7 +1048,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           // and its ring shows it.
           tabIndex={-1}
           className={`
-            min-w-0 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            min-w-0 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] landscape-short:h-[clamp(10rem,calc(100dvh_-_8rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >

@@ -2,6 +2,10 @@
 @import "./fonts.css";
 @import "./tokens.css";
 
+/* A window from md up (48rem) and 32rem tall or less: a phone held sideways. Its classes come
+   after the md: ones in the stylesheet, so they override them there. */
+@custom-variant landscape-short (@media (width >= 48rem) and (max-height: 32rem));
+
 /* Keyframes for the --animate-* tokens in tokens.css (emitted only when an animation is used) */
 @theme {
   @keyframes scan-vertical {

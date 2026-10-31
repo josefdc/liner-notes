@@ -169,10 +169,12 @@ export function recordsOf({
       : null,
     audio: analysis
       ? {
-          measured: analysis.audioSource === "analyzed",
-          unavailableReason: analysis.audioUnavailableReason ?? null,
+          // The service's block: measured when there is one and its gate passed. The flat
+          // audioSource copy says "unavailable" whenever no key was measured, so it is not used.
+          measured: analysis.audio != null && analysis.audio.gate?.passed === true,
           analyzerVersion: run?.analyzerVersion ?? null,
           tempoBpm: analysis.audio?.tempo?.bpm ?? null,
+          key: analysis.key ?? null,
         }
       : null,
     evidence: (analysis?.evidence ?? []).map((e) => ({

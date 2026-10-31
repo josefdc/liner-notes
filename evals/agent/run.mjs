@@ -21,6 +21,9 @@
 //   Each row writes <out>/<suite>/<isrc>.json: its run records (rows d, c and b), the audio
 //   service's version and the row's spend lines; <isrc>.events.json keeps the raw events.
 //
+// Rebuild (no call of any kind): node evals/agent/run.mjs --mode rebuild --suite <suite> --out <dir>
+//   derives the records again from the raw events kept in <out>/<suite>.
+//
 // Replay (no network, no spending):
 //
 //   node evals/agent/run.mjs --mode replay --subset ci [--runs <dir>] [--cassettes <dir>]
@@ -98,7 +101,9 @@ function parseArgs(argv) {
       opts[flag.slice(2).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = value();
     } else throw new Error(`unknown argument ${flag}`);
   }
-  if (!["live", "replay"].includes(opts.mode)) throw new Error("--mode live or replay");
+  if (!["live", "replay", "rebuild"].includes(opts.mode)) {
+    throw new Error("--mode live, replay or rebuild");
+  }
   if (!PURPOSE[opts.suite]) throw new Error("--suite golden or variance");
   if (!["all", "ci"].includes(opts.subset)) throw new Error("--subset all or ci");
   return opts;
@@ -249,12 +254,42 @@ async function live(opts) {
     console.log(
       `${row.isrc} ${row.title}: ${d.outcome}; clarification ${d.clarification.fired ? "fired" : "not fired"}; ` +
         `${d.edges.length} edges shown, ${records.c.edges.length} proposed; ${d.claims.length} claims; ` +
-        `audio ${d.audio?.measured ? "measured" : (d.audio?.unavailableReason ?? "none")}; ` +
+        `audio ${d.audio?.measured ? `measured, ${d.audio.tempoBpm} BPM` : "not measured"}; ` +
         `source errors ${d.sourceErrors.map((s) => `${s.source}:${s.code}`).join(" ") || "none"}; ` +
         `${calls.length} calls, ${usd(spent)} (spend log)`,
     );
   }
   console.log(`done: ${done} row(s) run, clarification fired in ${fired}`);
+}
+
+/**
+ * Rebuilds each row's records in <out>/<suite> from the raw events the live run kept, with the
+ * spend lines, commit and time it recorded: no call of any kind. For a change to how records are
+ * derived from a stream (lib/record.mjs) after the run.
+ */
+async function rebuild(opts) {
+  if (!opts.out) throw new Error("--mode rebuild needs --out");
+  const out = join(resolve(opts.out), opts.suite);
+  const check = await contractChecker();
+  const byIsrc = new Map(readGolden().rows.map((r) => [r.isrc, r]));
+  for (const name of readdirSync(out).filter((n) => /^[A-Z0-9]{12}\.json$/.test(n))) {
+    const file = join(out, name);
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    const result = JSON.parse(readFileSync(file.replace(/\.json$/, ".events.json"), "utf8"));
+    const was = saved.records.d;
+    const records = recordsOf({
+      row: byIsrc.get(was.isrc),
+      query: was.query,
+      result,
+      repeat: was.repeat,
+      commit: was.commit,
+      recordedAt: was.recordedAt,
+      calls: was.calls,
+      contractCheck: check,
+    });
+    writeFileSync(file, `${JSON.stringify({ ...saved, records }, null, 2)}\n`);
+    console.log(`${was.isrc}: rebuilt (${records.d.outcome})`);
+  }
 }
 
 /** The newest directory of run records under evals/agent/runs. */
@@ -434,6 +469,10 @@ async function main() {
   }
   if (opts.mode === "live") {
     await live(opts);
+    return;
+  }
+  if (opts.mode === "rebuild") {
+    await rebuild(opts);
     return;
   }
   const { ok, lines } = await replay(opts);

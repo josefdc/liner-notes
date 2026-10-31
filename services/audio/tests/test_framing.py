@@ -61,6 +61,20 @@ def _analyze(client, base):
     return client.post("/analyze", json={"preview_url": f"{base}{PATH}"})
 
 
+def _files_created(monkeypatch) -> list[str]:
+    """Records each temporary file fetch_to_file creates: the body is written only to one."""
+    created = []
+    mkstemp = preview.tempfile.mkstemp
+
+    def record(*args, **kwargs):
+        fd, path = mkstemp(*args, **kwargs)
+        created.append(path)
+        return fd, path
+
+    monkeypatch.setattr(preview.tempfile, "mkstemp", record)
+    return created
+
+
 def _never_measured(monkeypatch):
     def fail(path):
         raise AssertionError("measured a preview whose length was not checked")
@@ -73,6 +87,7 @@ def test_an_unframed_body_cut_short_is_refused_and_never_measured(
     client, cdn, temp_dir, monkeypatch, framing
 ):
     base, server = cdn
+    created = _files_created(monkeypatch)
     _serve(server, framing, cut=len(_preview()) // 2)
     # Measured, this half would report about 15 s as the preview's length.
     response = _analyze(client, base)
@@ -87,17 +102,21 @@ def test_an_unframed_body_cut_short_is_refused_and_never_measured(
     _never_measured(monkeypatch)
     assert _analyze(client, base).status_code == 502
     assert list(temp_dir.iterdir()) == []
+    # Refused on its headers, before any of the body was read.
+    assert created == []
 
 
 @pytest.mark.parametrize("framing", ["http/1.0", "close"])
-def test_an_unframed_body_that_is_whole_is_refused_too(client, cdn, temp_dir, framing):
+def test_an_unframed_body_that_is_whole_is_refused_too(client, cdn, temp_dir, monkeypatch, framing):
     base, server = cdn
+    created = _files_created(monkeypatch)
     _serve(server, framing)
     with pytest.raises(PreviewDownloadError, match=UNCHECKED):
         fetch(f"{base}{PATH}")
     response = _analyze(client, base)
     assert response.status_code == 502, response.json().get("v2", {}).get("window")
     assert list(temp_dir.iterdir()) == []
+    assert created == []
 
 
 @pytest.mark.parametrize("framing", ["length", "chunked"])

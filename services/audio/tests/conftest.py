@@ -99,6 +99,8 @@ class _Handler(BaseHTTPRequestHandler):
                 for _ in range(800):
                     self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
                     self.server.sent += len(chunk)
+                # Reached only by a client without the cap: the body then ends cleanly.
+                self.wfile.write(b"0\r\n\r\n")
             except OSError:
                 pass
         elif path == "/slow.mp3":
@@ -109,6 +111,8 @@ class _Handler(BaseHTTPRequestHandler):
                     self.wfile.write(b"1\r\n\x00\r\n")
                     self.wfile.flush()
                     time.sleep(0.2)
+                # Reached only by a client without the deadline: the body then ends cleanly.
+                self.wfile.write(b"0\r\n\r\n")
             except OSError:
                 pass
         else:

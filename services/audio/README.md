@@ -727,9 +727,11 @@ analysis, whatever the outcome.
 
 The body must be framed by a `Content-Length` or by chunked transfer encoding, so a download can
 be told whole: a body that ends before its declared length or its last chunk is a `502`. A body
-with neither (an HTTP/1.0 response, or one that ends with `Connection: close`) runs to the
-connection's close, and one cut short would be measured as if it were the whole preview. It is
-refused as a `502` before it is measured, even when it arrived whole, since nothing says so.
+with neither runs to the connection's close, and one cut short would be measured as if it were
+the whole preview. Such a body is refused as a `502` before it is read, even when it arrived
+whole, since nothing says so. An HTTP/1.0 response, or an HTTP/1.1 one with `Connection: close`,
+is refused only when it has no `Content-Length` and is not chunked; with a `Content-Length` it is
+accepted.
 
 ## How it works
 

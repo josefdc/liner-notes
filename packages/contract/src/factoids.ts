@@ -16,6 +16,13 @@ export const FIRST_FACTOID_ROUND = 0;
 /** How many rounds a track's "more facts" have: a `nextRound` this high has nothing left. */
 export const FACTOID_ROUNDS = 2;
 
+/**
+ * How many angles a round asks about: an answer's facts and errors are indexed 0 to
+ * FACTOIDS_PER_ROUND - 1 in their round, and a request names at most this many to ask again
+ * (`failedIndexes`).
+ */
+export const FACTOIDS_PER_ROUND = 3;
+
 /** Whether an answer whose `nextRound` is this leaves a round to ask for. */
 export function factoidRoundsLeft(nextRound: number): boolean {
   return nextRound < FACTOID_ROUNDS;

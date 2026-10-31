@@ -230,7 +230,17 @@ export const FactoidStreamEvent = z.discriminatedUnion("type", [
       .optional()
       .describe("Whether asking for nextRound can bring new facts; absent for recorded facts"),
   }),
-  factoidEvent("factoid", { data: Factoid, claim: Claim.optional() }),
+  factoidEvent("factoid", {
+    data: Factoid,
+    claim: Claim.optional(),
+    index: z
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "Which angle of the round the fact answers, as an error's index; absent for recorded facts",
+      ),
+  }),
   z.object({ type: z.literal("heartbeat"), runId: factoidEnvelope.runId }),
   factoidEvent("error", {
     code: OpenErrorCode,

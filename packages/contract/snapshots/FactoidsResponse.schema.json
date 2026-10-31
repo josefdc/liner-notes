@@ -51,6 +51,13 @@
       "roundsLeft": {
         "description": "Whether asking for nextRound can bring new facts; absent for recorded facts",
         "type": "boolean"
+      },
+      "failedIndexes": {
+        "description": "The indexes in the round of the facts that could not be written; send them back with the same round to ask only those again",
+        "minItems": 1,
+        "maxItems": 3,
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
       }
     },
     "required": ["factoids"]
@@ -109,6 +116,13 @@
       "roundsLeft": {
         "description": "Whether asking for nextRound can bring new facts; absent for recorded facts",
         "type": "boolean"
+      },
+      "failedIndexes": {
+        "description": "The indexes in the round of the facts that could not be written; send them back with the same round to ask only those again",
+        "minItems": 1,
+        "maxItems": 3,
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
       }
     },
     "required": ["factoids"],

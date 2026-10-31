@@ -9,14 +9,22 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { type Claim, FactoidsOutput, FactoidsResponse } from "@liner-notes/contract";
+import {
+  ApiError,
+  type Claim,
+  type Factoid,
+  FactoidsOutput,
+  FactoidsRequest,
+  FactoidsResponse,
+} from "@liner-notes/contract";
 import type { Router } from "express";
 import { FACTOIDS_SYSTEM_PROMPT } from "../../factoids/prompt.js";
-import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
+import { FACTOIDS_PER_REQUEST, writeFactoids } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
   evidenceItem,
+  type FakeModel,
   fakeModel,
   focusOf,
   isJudge,
@@ -24,6 +32,7 @@ import {
   restatingRecord,
   storedRun,
 } from "../../factoids/testing/fakes.js";
+import type { StubLlm } from "../../agent/testing/stubLlm.js";
 import { LlmError } from "../../llm/errors.js";
 import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
@@ -875,6 +884,293 @@ describe("each fact's claim", () => {
     const invalid = await openStream(streamQuery({ round: "x" }), router);
     await invalid.waitFor(ofType("done"));
     expect(invalid.messages.map((m) => m.code ?? m.type)).toEqual(["invalid_input", "done"]);
+  });
+});
+
+// =============================================================================
+// A round asked again after some of its angles failed
+// =============================================================================
+
+describe("a round asked again after some of its angles failed", () => {
+  const FIRST = "The synth line was played on a Roland Juno-106.";
+  // The same fact as FIRST in other words: the client holds FIRST's id, not its text.
+  const REWORDED = "A Roland Juno-106 played the main synth line.";
+  const SECOND = "The drums were sampled from a 1970s funk record.";
+  const THIRD = "A session saxophonist recorded the solo in one take.";
+  const busy = () => new LlmError("rate_limited", "factoids: 429");
+
+  /** A router whose fake model writes `cards` (by focus index), which a test may change. */
+  const withCards = (cards: FakeModel["cards"]) => {
+    const model: FakeModel = { cards };
+    const fake = fakeModel(model);
+    return { model, fake, router: createFactoidsRouter({ llm: fake }) };
+  };
+  const factCalls = (fake: StubLlm) =>
+    fake.calls.filter((call) => call.callSite === "factoids").map((call) => focusOf(call));
+  const streamQuery = (extra: Record<string, string> = {}) =>
+    new URLSearchParams({
+      trackTitle: DEMO_TRACK.trackTitle,
+      trackArtist: DEMO_TRACK.trackArtist,
+      ...extra,
+    }).toString();
+  const sent = (stream: OpenStream) =>
+    stream.messages
+      .filter((m) => m.type === "factoid" || m.type === "error")
+      .map((m) =>
+        m.type === "factoid"
+          ? ["factoid", (m.data as { content: string }).content]
+          : ["error", m.code, m.index],
+      );
+
+  /** Round 0 written for index 0 only: angles 1 and 2 hit the rate limit. */
+  async function firstAnswer(router: Router) {
+    const stream = await openStream(streamQuery({ round: "0" }), router);
+    await stream.waitFor(ofType("done"));
+    expect(sent(stream)).toEqual([
+      ["factoid", FIRST],
+      ["error", "rate_limited", 1],
+      ["error", "rate_limited", 2],
+    ]);
+    const [fact] = stream.messages.filter(ofType("factoid"));
+    return (fact.data as { id: string }).id;
+  }
+
+  it("asks only the angles that failed when the stream names them", async () => {
+    const { model, fake, router } = withCards([card(FIRST), busy(), busy()]);
+    const firstId = await firstAnswer(router);
+    expect(factCalls(fake)).toEqual([0, 1, 2]);
+
+    // Asked again, the model would word angle 0's fact otherwise.
+    model.cards = [card(REWORDED), card(SECOND), card(THIRD)];
+    const again = await openStream(
+      streamQuery({ round: "0", existingIds: firstId, failedIndexes: "1,2" }),
+      router,
+    );
+    await again.waitFor(ofType("done"));
+
+    expect(factCalls(fake).slice(3)).toEqual([1, 2]);
+    expect(sent(again)).toEqual([
+      ["factoid", SECOND],
+      ["factoid", THIRD],
+    ]);
+    expect(again.messages[0]).toMatchObject({ type: "connected", nextRound: 1, roundsLeft: true });
+  });
+
+  it("asks only the angles that failed when the POST body names them", async () => {
+    const { model, fake, router } = withCards([card(FIRST), busy(), busy()]);
+    const app = createTestApp(router);
+    const first = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+    expect(first.status).toBe(200);
+    expect(first.body.factoids.map((f: { content: string }) => f.content)).toEqual([FIRST]);
+
+    model.cards = [card(REWORDED), card(SECOND), card(THIRD)];
+    const again = await request(app)
+      .post(withRunToken("/api/factoids/more"))
+      .send({
+        ...DEMO_TRACK,
+        round: 0,
+        existingFactoidIds: [first.body.factoids[0].id],
+        failedIndexes: [1, 2],
+      })
+      .timeout(5000);
+
+    expect(again.status).toBe(200);
+    expect(factCalls(fake)).toEqual([0, 1, 2, 1, 2]);
+    expect(again.body.factoids.map((f: { content: string }) => f.content)).toEqual([SECOND, THIRD]);
+    expect(again.body).toMatchObject({ nextRound: 1, roundsLeft: true });
+  });
+
+  it("reports an angle that fails again as failed, under its own index", async () => {
+    const { model, fake, router } = withCards([card(FIRST), busy(), busy()]);
+    const firstId = await firstAnswer(router);
+
+    model.cards = [card(REWORDED), card(SECOND), busy()];
+    const again = await openStream(
+      streamQuery({ round: "0", existingIds: firstId, failedIndexes: "1,2" }),
+      router,
+    );
+    await again.waitFor(ofType("done"));
+    expect(factCalls(fake).slice(3)).toEqual([1, 2]);
+    expect(sent(again)).toEqual([
+      ["factoid", SECOND],
+      ["error", "rate_limited", 2],
+    ]);
+
+    // Every angle asked again failed: the POST answers the failure, never an empty success.
+    model.cards = [card(REWORDED), busy(), busy()];
+    const post = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0, existingFactoidIds: [firstId], failedIndexes: [1, 2] })
+      .timeout(5000);
+    expect(post.status).toBe(429);
+    expect(post.body.code).toBe("rate_limited");
+    expect(factCalls(fake).slice(5)).toEqual([1, 2]);
+  });
+
+  it("asks every angle of the round, as before, when the request names no failed angle", async () => {
+    const { model, fake, router } = withCards([card(FIRST), busy(), busy()]);
+    const firstId = await firstAnswer(router);
+
+    model.cards = [card(FIRST), card(SECOND), card(THIRD)];
+    const again = await openStream(streamQuery({ round: "0", existingIds: firstId }), router);
+    await again.waitFor(ofType("done"));
+    expect(factCalls(fake).slice(3)).toEqual([0, 1, 2]);
+    // Angle 0's fact came back in the same words: it is not sent again.
+    expect(sent(again)).toEqual([
+      ["factoid", SECOND],
+      ["factoid", THIRD],
+    ]);
+
+    const post = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0, existingFactoidIds: [firstId] })
+      .timeout(5000);
+    expect(post.status).toBe(200);
+    expect(factCalls(fake).slice(6)).toEqual([0, 1, 2]);
+  });
+
+  it("says on POST which angles failed, beside the facts written", async () => {
+    const { fake, router } = withCards([card(FIRST), busy(), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+
+    expect(res.status).toBe(200);
+    expect(FactoidsResponse.safeParse(res.body).success).toBe(true);
+    expect(res.body.factoids.map((f: { content: string }) => f.content)).toEqual([FIRST, THIRD]);
+    expect(res.body.failedIndexes).toEqual([1]);
+    expect(factCalls(fake)).toEqual([0, 1, 2]);
+
+    // Every angle written: no failedIndexes.
+    const whole = await request(createTestApp(withCards([card(FIRST), card(SECOND)]).router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+    expect(whole.status).toBe(200);
+    expect(whole.body).not.toHaveProperty("failedIndexes");
+  });
+
+  it("says on POST which angles failed when none could be written", async () => {
+    const { router } = withCards([null, busy(), busy()]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+
+    expect(res.status).toBe(429);
+    expect(res.body).toMatchObject({ success: false, code: "rate_limited", failedIndexes: [1, 2] });
+    expect(ApiError.safeParse(res.body).success).toBe(true);
+  });
+
+  it("names on the stream the angle each live fact answers", async () => {
+    const { router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const again = await openStream(streamQuery({ round: "0", failedIndexes: "0,2" }), router);
+    await again.waitFor(ofType("done"));
+    expect(
+      again.messages.filter(ofType("factoid")).map((m) => [(m.data as Factoid).content, m.index]),
+    ).toEqual([
+      [FIRST, 0],
+      [THIRD, 2],
+    ]);
+  });
+
+  it.each([
+    ["three indexes", [0, 1, 2], true],
+    ["a repeated index within three", [2, 0, 2], true],
+    ["four entries, all the same index", [1, 1, 1, 1], false],
+    ["four entries", [0, 1, 2, 0], false],
+    ["an index past the round's angles", [3], false],
+    ["an empty list", [], false],
+  ])("takes %s as the contract does", async (_label, failedIndexes, valid) => {
+    const body = { ...DEMO_TRACK, round: 0, failedIndexes };
+    expect(FactoidsRequest.safeParse(body).success).toBe(valid);
+    const { router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send(body)
+      .timeout(5000);
+    expect(res.status).toBe(valid ? 200 : 400);
+  });
+
+  it.each([
+    ["an empty list", 0, []],
+    ["an index the round does not have", 0, [3]],
+    ["a round with no angle left", 2, [0]],
+  ])(
+    "is a caller's error in the factoid service: %s, never an empty answer",
+    async (_l, round, failedIndexes) => {
+      const fake = fakeModel({ cards: [card(FIRST), card(SECOND), card(THIRD)] });
+      await expect(
+        writeFactoids(
+          {
+            track: { title: DEMO_TRACK.trackTitle, artist: DEMO_TRACK.trackArtist },
+            existingIds: [],
+            round,
+            failedIndexes,
+          },
+          { llm: fake, purpose: "dev", signal: new AbortController().signal, loadRun: () => null },
+        ),
+      ).rejects.toThrow(RangeError);
+      expect(fake.calls).toEqual([]);
+    },
+  );
+
+  it("asks each angle named once, in the round's order", async () => {
+    const { fake, router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0, failedIndexes: [2, 0, 2] })
+      .timeout(5000);
+
+    expect(res.status).toBe(200);
+    expect(factCalls(fake)).toEqual([0, 2]);
+    expect(res.body.factoids.map((f: { content: string }) => f.content)).toEqual([FIRST, THIRD]);
+  });
+
+  it.each([
+    ["an index the round does not have", { round: 0, failedIndexes: [3] }],
+    ["a negative index", { round: 0, failedIndexes: [-1] }],
+    ["an index that is not a whole number", { round: 0, failedIndexes: [1.5] }],
+    ["an index given as text", { round: 0, failedIndexes: ["1"] }],
+    ["an empty list", { round: 0, failedIndexes: [] }],
+    ["more indexes than a round has", { round: 0, failedIndexes: [0, 1, 2, 0] }],
+    ["a list that is not a list", { round: 0, failedIndexes: 1 }],
+    ["no round", { failedIndexes: [1] }],
+    ["a round with no angle left", { round: 2, failedIndexes: [0] }],
+  ])("POST answers 400 to %s, without calling the model", async (_label, extra) => {
+    const { fake, router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, ...extra })
+      .timeout(5000);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code: "invalid_input" });
+    expect(res.body.issues.join(" ")).toContain("failedIndexes");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([
+    ["an index the round does not have", { round: "0", failedIndexes: "3" }],
+    ["a negative index", { round: "0", failedIndexes: "-1" }],
+    ["an index that is not a number", { round: "0", failedIndexes: "a" }],
+    ["an empty entry", { round: "0", failedIndexes: "1,,2" }],
+    ["an empty value", { round: "0", failedIndexes: "" }],
+    ["more indexes than a round has", { round: "0", failedIndexes: "0,1,2,0" }],
+    ["no round", { failedIndexes: "1" }],
+    ["a round with no angle left", { round: "2", failedIndexes: "0" }],
+  ])("the stream refuses %s, without calling the model", async (_label, extra) => {
+    const { fake, router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const stream = await openStream(streamQuery(extra), router);
+    await stream.waitFor(ofType("done"));
+
+    expect(stream.messages.map((m) => m.code ?? m.type)).toEqual(["invalid_input", "done"]);
+    expect(JSON.stringify(stream.messages[0])).toContain("failedIndexes");
+    expect(fake.calls).toEqual([]);
   });
 });
 

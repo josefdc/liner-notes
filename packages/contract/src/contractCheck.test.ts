@@ -132,6 +132,79 @@ afterEach(() => {
   rmSync(repo, { recursive: true, force: true });
 });
 
+const ciFile = () => join(repo, ".github", "workflows", "ci.yml");
+const STEP_CHANGED = '.github/workflows/ci.yml (the "Contract compatibility" step)';
+const STEP_UNREADABLE = 'no step named "Contract compatibility" could be found';
+const OUTSIDE = "which this check does not read";
+/** The repository's own workflow. */
+const realCi = () => readFileSync(join(repoDir, ".github", "workflows", "ci.yml"), "utf8");
+const NAME = "      - name: Contract compatibility";
+const RUN = "        run: npm run contract:check -- --base HEAD^1";
+/** The real ci.yml's line that runs the check. */
+const GATE = `${RUN}\n`;
+/** The step as ci.yml writes it: a block scalar that runs the check. */
+const STEP = [
+  NAME,
+  "        if: matrix.node == 24",
+  "        run: |",
+  "          base=HEAD^1",
+  '          npm run contract:check -- --base "$base"',
+];
+
+/**
+ * A workflow with the given contract step between other steps of a matrix job, and a job after
+ * it that runs the steps `e2e` before its own.
+ */
+function ciWith(step: string[], e2e: string[] = []): string {
+  return [
+    "name: ci",
+    "on:",
+    "  pull_request:",
+    "  push:",
+    "    branches: [main]",
+    "jobs:",
+    "  node:",
+    "    runs-on: ubuntu-latest",
+    "    strategy:",
+    "      matrix:",
+    "        node: [24, 26]",
+    "    steps:",
+    "      - uses: actions/checkout@v7",
+    "        with:",
+    "          fetch-depth: 2",
+    "      - name: Lint",
+    "        run: npm run lint",
+    "      # The contract is additive-only: compare with the parent commit's snapshots.",
+    ...step,
+    "      - run: npm run typecheck",
+    "  e2e:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    ...e2e,
+    "      - run: npm run build -w packages/contract",
+    "      - run: npm run test:e2e",
+    "",
+  ].join("\n");
+}
+
+/** Commits a base with matching snapshots and the given ci.yml, which the check passes. */
+function ciBase(ci: string): string {
+  seedSnapshots();
+  mkdirSync(dirname(ciFile()), { recursive: true });
+  writeFileSync(ciFile(), ci);
+  writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+  const base = commit("ci at the base");
+  expect(check(base)).toMatchObject({ status: 0 });
+  return base;
+}
+
+/** Replaces the one occurrence of `from` in ci.yml (`$&` in `to` is the matched text). */
+function edit(from: string, to: string) {
+  const text = readFileSync(ciFile(), "utf8");
+  expect(text.split(from)).toHaveLength(2);
+  writeFileSync(ciFile(), text.replace(from, to));
+}
+
 /** Copies the code's own snapshots into the working tree of the repository. */
 function seedSnapshots() {
   mkdirSync(snapshotsDir(), { recursive: true });
@@ -241,9 +314,11 @@ describe("contract-check", { timeout: 120_000 }, () => {
     mkdirSync(join(repo, "packages", "contract", "src"), { recursive: true });
     mkdirSync(join(repo, ".github", "workflows"), { recursive: true });
     const compat = join(repo, "packages", "contract", "src", "compat.ts");
-    const ci = join(repo, ".github", "workflows", "ci.yml");
+    const ci = ciFile();
+    const step = (run: string, name = "Contract compatibility") =>
+      `jobs:\n  node:\n    steps:\n      - name: ${name}\n        run: ${run}\n`;
     writeFileSync(compat, "// comparison\n");
-    writeFileSync(ci, "steps:\n  - run: npm run contract:check -- --base HEAD^1\n");
+    writeFileSync(ci, step("npm run contract:check -- --base HEAD^1"));
     writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
     const base = commit("engine at the base");
     expect(check(base).status).toBe(0);
@@ -259,11 +334,450 @@ describe("contract-check", { timeout: 120_000 }, () => {
 
     writeFileSync(compat, "// comparison\n");
     writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
-    writeFileSync(ci, "steps:\n  - run: echo skipped\n");
-    expect(check(base).out).toContain(".github/workflows/ci.yml (the contract step)");
+    writeFileSync(ci, step("echo skipped"));
+    expect(check(base).out).toContain(STEP_CHANGED);
     expect(check(base).status).toBe(1);
-    writeFileSync(ci, "steps:\n  - run: npm run contract:check -- --base HEAD^1\n");
+    // A step that is gone, or renamed, is a change, and one that an engine-change line does
+    // not excuse.
+    writeFileSync(ci, step("npm run contract:check -- --base HEAD^1", "Contract check"));
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: rename\n");
+    const renamed = check(base);
+    expect(renamed.status).toBe(1);
+    expect(renamed.out).toContain(`${STEP_CHANGED.slice(0, -1)}, removed)`);
+    expect(renamed.out).toContain(STEP_UNREADABLE);
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+    writeFileSync(ci, step("npm run contract:check -- --base HEAD^1"));
     expect(check(base).status).toBe(0);
+  });
+
+  describe("the CI step", () => {
+    it("ignores lines about the contract outside the step", () => {
+      const base = ciBase(ciWith(STEP));
+      edit("      - run: npm run typecheck", "      # Not about the contract at all.\n$&");
+      edit("# The contract is additive-only", "# The contract check is additive-only");
+      // A blank line and a comment at column 0 between the step and the next one.
+      edit("      - run: npm run typecheck", "\n# Typecheck after the contract.\n$&");
+      // A blank line right after the step's block scalar.
+      edit('--base "$base"\n', "$&\n");
+      // Comments, which carry no meaning, inside the workflow, the job and the step.
+      edit("jobs:\n", "# The contract check runs in node.\n$&");
+      edit("  node:\n", "$&    # Runs the contract check.\n");
+      edit("        if: matrix.node == 24\n", "$&        # The contract is checked once.\n");
+      expect(check(base)).toMatchObject({ status: 0 });
+    });
+
+    it("passes when a different step or another job's settings change", () => {
+      // The other step's input is called name, as the step's own key is: not the step.
+      const base = ciBase(
+        ciWith([
+          "      - uses: actions/github-script@v8",
+          "        with:",
+          "          name: Contract compatibility",
+          "          script: console.log(1)",
+          ...STEP,
+        ]),
+      );
+      edit("npm run build -w packages/contract", "$& --if-present");
+      edit("npm run lint", "npm run lint -- --max-diagnostics=50");
+      edit("console.log(1)", "console.log(2)");
+      edit(
+        "  e2e:\n    runs-on: ubuntu-latest",
+        "  e2e:\n    runs-on: ubuntu-24.04\n    if: false",
+      );
+      expect(check(base)).toMatchObject({ status: 0 });
+    });
+
+    it("fails when a commented-out key in the step comes before the edit", () => {
+      // Comments at column 0 inside the step, as an editor's toggle-comment writes them.
+      const base = ciBase(ciWith([NAME, "#        continue-on-error: true", ...STEP.slice(1)]));
+      edit("base=HEAD^1", "base=HEAD");
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("fails when a key follows a comment ended by a lone CR", () => {
+      const base = ciBase(ciWith(STEP));
+      writeFileSync(
+        ciFile(),
+        ciWith([...STEP, "      # Advisory for now.\r        continue-on-error: true"]),
+      );
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("compares the lines of block scalars that start with #", () => {
+      const base = ciBase(
+        ciWith([
+          ...STEP.slice(0, 3),
+          "          cat > check.sh <<'EOF'",
+          "          #!/bin/sh -e",
+          "          EOF",
+          ...STEP.slice(3),
+        ]),
+      );
+      edit("#!/bin/sh -e", "#!/bin/true");
+      expect(check(base)).toMatchObject({ status: 1 });
+    });
+
+    it("reads a job whose steps are an indentless sequence", () => {
+      const indentless = (ci: string) => {
+        const [head, rest] = ci.split("    steps:\n");
+        const [steps, tail] = rest.split("  e2e:\n");
+        return `${head}    steps:\n${steps.replace(/^ {2}/gm, "")}  e2e:\n${tail}`;
+      };
+      const ci = indentless(ciWith(STEP));
+      expect(ci).toContain("    - name: Contract compatibility\n      if:");
+      const base = ciBase(ci);
+      const run = 'npm run contract:check -- --base "$base"\n';
+      writeFileSync(ciFile(), ci.replace(run, `${run}      continue-on-error: true\n`));
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.out).not.toContain(STEP_UNREADABLE);
+      expect(result.status).toBe(1);
+    });
+
+    // The workflow's own settings apply to every job.
+    it.each([
+      [
+        "a default shell that swallows errors",
+        'defaults:\n  run:\n    shell: bash -c "bash {0}; exit 0"\n',
+      ],
+      ["npm scripts run by /bin/true", "env:\n  npm_config_script_shell: /bin/true\n"],
+    ])("fails when the workflow gets %s", (_, settings) => {
+      const base = ciBase(ciWith(STEP));
+      edit("jobs:\n", `${settings}$&`);
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("fails when the workflow no longer runs on pull requests", () => {
+      const base = ciBase(ciWith(STEP));
+      edit("  pull_request:\n", "");
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    // YAML 1.1 parsers break lines there, so a "comment" could hold a key: fail, always.
+    it.each([
+      ["U+0085", "step", "\u0085"],
+      ["U+2028", "step", "\u2028"],
+      ["U+2029", "step", "\u2029"],
+      ["U+0085", "job", "\u0085"],
+      ["U+2028", "job", "\u2028"],
+      ["U+2029", "job", "\u2029"],
+    ])("fails on every run when ci.yml holds %s, at the %s's level", (code, level, character) => {
+      const base = ciBase(ciWith(STEP));
+      const line =
+        level === "step"
+          ? `      # Advisory for now.${character}        continue-on-error: true\n`
+          : `    # Advisory for now.${character}    continue-on-error: true\n`;
+      edit(level === "step" ? "      - run: npm run typecheck\n" : "  e2e:\n", `${line}$&`);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: advisory\n");
+      const result = check(base);
+      expect(result.out).toContain(`contains ${code}`);
+      expect(result.status).toBe(1);
+    });
+
+    it("fails on every run when ci.yml is renamed in .github/workflows", () => {
+      const base = ciBase(ciWith(STEP));
+      const renamed = join(dirname(ciFile()), "checks.yml");
+      git("mv", ciFile(), renamed);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: rename\n");
+      const moved = check(base);
+      expect(moved.status).toBe(1);
+      expect(moved.out).toContain(".github/workflows exists but .github/workflows/ci.yml does not");
+      const next = commit("ci.yml renamed");
+      writeFileSync(renamed, ciWith([...STEP, "        continue-on-error: true"]));
+      expect(check(next)).toMatchObject({ status: 1 });
+    });
+
+    it("reads the repository's own ci.yml, which is inside the YAML subset it reads", () => {
+      const base = ciBase(realCi());
+      const result = check(base);
+      expect(result.out).not.toContain(OUTSIDE);
+      expect(result.status).toBe(0);
+    });
+
+    // A block scalar's lines are those at least as deep as its first line, or as its key plus
+    // an indentation indicator; YAML parsers reject a line between that and the key.
+    it.each([
+      ["after its first line", (run: string) => `${run}         continue-on-error: true\n`],
+      [
+        "before a line at its first line's depth",
+        (run: string) =>
+          run.replace(
+            "          base=HEAD^1\n",
+            "            base=HEAD^1\n          continue-on-error: true\n",
+          ),
+      ],
+    ])(
+      "fails when a line inside a block scalar is less indented than its first line, %s",
+      (_, change) => {
+        const ci = realCi();
+        const run = "        run: |\n          base=HEAD^1\n";
+        const base = ciBase(ci);
+        writeFileSync(ciFile(), ci.replace(run, change(run)));
+        const result = check(base);
+        expect(result.out).toMatch(
+          new RegExp(
+            `ci\\.yml:4\\d: a line inside a block scalar that is less indented than its first line, ${OUTSIDE}`,
+          ),
+        );
+        expect(result.status).toBe(1);
+      },
+    );
+
+    it.each([
+      ["with an indentation indicator", [...STEP.slice(0, 2), "        run: |2", ...STEP.slice(3)]],
+      ["with blank lines inside", [...STEP.slice(0, 4), "", "", ...STEP.slice(4)]],
+    ])("reads a block scalar %s", (_, step) => {
+      const base = ciBase(ciWith(step));
+      edit("base=HEAD^1", "base=HEAD");
+      const result = check(base);
+      expect(result.out).not.toContain(OUTSIDE);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("reads the common idioms the YAML subset allows", () => {
+      const ci = ciWith(STEP, [
+        "      - if: >-",
+        "          github.event_name == 'push'",
+        "        uses: https://example.com/action@v1",
+        "        with:",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub expression, not a template
+        "          node: ${{ matrix.node }}",
+        "          paths:",
+        "            - '**/*.ts'",
+        '            - "src/**"',
+      ]);
+      const base = ciBase(ci);
+      expect(check(base).out).not.toContain(OUTSIDE);
+    });
+
+    it("reads a block scalar at the end of the file", () => {
+      const ci = `${ciWith(STEP)}      - run: |\n          echo done`;
+      const base = ciBase(ci);
+      writeFileSync(ciFile(), `${ci}\n          echo again`);
+      expect(check(base)).toMatchObject({ status: 0 });
+    });
+
+    // Each is valid YAML that this reader would misread: outside the subset, so it fails,
+    // whatever the change acknowledges.
+    it.each([
+      [
+        "a scalar that continues on the next line",
+        "        run: npm run lint\n",
+        "$&          --max-diagnostics=50\n",
+      ],
+      [
+        "a quoted scalar that does not close on its line",
+        "        run: npm run lint\n",
+        '        run: "npm run lint\n          --max-diagnostics=50"\n',
+      ],
+      ["an anchor", "        run: npm run lint\n", "        run: &lint npm run lint\n"],
+      ["a tag", "        run: npm run lint\n", "        run: !!str npm run lint\n"],
+      ["an alias", "        run: npm run lint\n", "        run: *lint\n"],
+      [
+        "a flow mapping",
+        "      - run: npm run typecheck\n",
+        "      - { run: npm run typecheck }\n",
+      ],
+      ["a flow sequence other than one of plain words", "node: [24, 26]", 'node: ["24", 26]'],
+      ["a flow sequence other than one of plain words", "node: [24, 26]", "node: [24, 26,]"],
+      ["a merge key", "        run: npm run lint\n", "$&        <<: {}\n"],
+      ["a complex key", "  node:\n", "$&    ? runs-on\n    : ubuntu-latest\n"],
+      ["a directive", "name: ci\n", "%YAML 1.1\n---\n$&"],
+      ["another YAML document", "  e2e:\n", "---\n$&"],
+      [
+        "a tab in the indentation",
+        "        run: npm run lint\n",
+        "$&\t\tcontinue-on-error: true\n",
+      ],
+      [
+        "a sequence that starts inside a sequence item",
+        "      - run: npm run typecheck\n",
+        "$&      - - echo nested\n",
+      ],
+    ])("fails on every run when ci.yml holds %s", (what, from, to) => {
+      const base = ciBase(ciWith(STEP));
+      edit(from, to);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: reformat\n");
+      const result = check(base);
+      expect(result.out).toMatch(new RegExp(`ci\\.yml:\\d+: ${what}, ${OUTSIDE}`));
+      expect(result.status).toBe(1);
+    });
+
+    // The repository's own ci.yml, edited so that YAML parsers read a key or a step that this
+    // reader, before it checked the subset, did not.
+    it.each([
+      [
+        "a quote that starts a continuation line hides the job's continue-on-error",
+        (ci: string) =>
+          ci.replace(
+            "        run: npm run check:css\n",
+            '        run: npm run check:css;#\n          "and nothing else\n    continue-on-error: true\n    # end"\n',
+          ),
+      ],
+      [
+        "a quote that starts a continuation line hides the workflow's env",
+        (ci: string) =>
+          `${ci.replace(/\n*$/, "\n")}      - name: Done\n        run: echo done;#\n          "and nothing else\nenv:\n  npm_config_script_shell: /bin/true\n`,
+      ],
+      [
+        "an apostrophe that starts a continuation line hides the workflow's env",
+        (ci: string) =>
+          `${ci.replace(/\n*$/, "\n")}      - name: Done\n        run: echo done;#\n          'tis all\nenv:\n  npm_config_script_shell: /bin/true\n`,
+      ],
+      ...(
+        [
+          ["an anchored", "&guard "],
+          ["a tagged", "!!str "],
+          ["a plain", ""],
+        ] as const
+      ).map(([kind, property]) => [
+        `${kind} quoted run in an earlier step swallows the step`,
+        (ci: string) =>
+          ci
+            .replace(
+              "        run: npm run guard:honest -- --base HEAD^1\n",
+              `        run: ${property}"npm run guard:honest -- --base HEAD^1\n`,
+            )
+            .replace(GATE, `${GATE}      # end of the guard"\n`),
+      ]),
+      [
+        "a flow step's quoted run swallows the step",
+        (ci: string) =>
+          ci
+            .replace(
+              "      - name: Honesty guard\n        if: matrix.node == 24\n        run: npm run guard:honest -- --base HEAD^1\n",
+              '      - { name: Honesty guard, if: matrix.node == 24, run: "npm run guard:honest -- --base HEAD^1\n',
+            )
+            .replace(GATE, `${GATE}      # end" }\n`),
+      ],
+    ] as [string, (ci: string) => string][])("fails when %s", (_, change) => {
+      const ci = realCi();
+      const base = ciBase(ci);
+      expect(change(ci)).not.toBe(ci);
+      writeFileSync(ciFile(), change(ci));
+      const result = check(base);
+      expect(result.out).toContain(OUTSIDE);
+      expect(result.status).toBe(1);
+    });
+
+    // The job decides whether the step runs, and whether its failure fails the run.
+    it.each([
+      ["the step moves to another job", () => ciWith([], STEP)],
+      [
+        "continue-on-error",
+        (ci: string) => ci.replace("  node:\n", "$&    continue-on-error: true\n"),
+      ],
+      ["if: false", (ci: string) => ci.replace("  node:\n", "$&    if: false\n")],
+      ["a matrix without Node 24", (ci: string) => ci.replace("node: [24, 26]", "node: [26, 28]")],
+      [
+        "a default shell that swallows errors",
+        (ci: string) =>
+          ci.replace(
+            "  node:\n",
+            '$&    defaults:\n      run:\n        shell: bash -c "bash {0}; exit 0"\n',
+          ),
+      ],
+    ])("fails when the step's job changes: %s", (_, change) => {
+      const ci = ciWith(STEP);
+      const base = ciBase(ci);
+      expect(change(ci)).not.toBe(ci);
+      writeFileSync(ciFile(), change(ci));
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it.each([
+      ["renamed", ciWith([NAME.replace("compatibility", "check"), ...STEP.slice(1)])],
+      [
+        // Outside the YAML subset the check reads, so also reported as such.
+        "in flow style",
+        ciWith([
+          "      - { name: Contract compatibility, run: npm run contract:check -- --base HEAD^1 }",
+        ]),
+      ],
+    ])("fails on every run while the step is %s, at the base and now", (_, ci) => {
+      seedSnapshots();
+      mkdirSync(dirname(ciFile()), { recursive: true });
+      writeFileSync(ciFile(), ci);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+      const base = commit("an unreadable step at the base");
+      const unchanged = check(base);
+      expect(unchanged.out).toContain(STEP_UNREADABLE);
+      if (ci.includes("{ name"))
+        expect(unchanged.out).toContain(`ci.yml:19: a flow mapping, ${OUTSIDE}`);
+      expect(unchanged.status).toBe(1);
+      edit("HEAD^1", "HEAD");
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: compare HEAD\n");
+      expect(check(base)).toMatchObject({ status: 1 });
+    });
+
+    it("fails when the step's run changes, though the changed line does not say contract", () => {
+      const base = ciBase(ciWith(STEP));
+      edit("base=HEAD^1", "base=HEAD");
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("reads the lines of block scalars as content, though they start with a dash", () => {
+      const base = ciBase(
+        ciWith([
+          // Another step whose script prints a step by that name: not the step.
+          "      - name: Example",
+          "        run: |",
+          "          cat <<'EOF'",
+          NAME.replace("      ", "          "),
+          "            run: true",
+          "          EOF",
+          ...STEP.slice(0, 3),
+          "          cat <<'EOF'",
+          "          - compares the schemas with the parent commit's snapshots",
+          "          - name: not a step",
+          "          EOF",
+          ...STEP.slice(3),
+        ]),
+      );
+      edit("run: true", "run: false");
+      expect(check(base)).toMatchObject({ status: 0 });
+      edit("base=HEAD^1", "base=HEAD");
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    // However the step is written, adding continue-on-error, which hides its failure, fails.
+    it.each([
+      ["with name: first", STEP],
+      ["with name: after - run:", [RUN.replace("        ", "      - "), NAME.replace("- ", "  ")]],
+      [
+        "with name: after - uses:",
+        ["      - uses: ./.github/actions/contract", NAME.replace("- ", "  ")],
+      ],
+      ["with a double-quoted name", ['      - name: "Contract compatibility"', RUN]],
+      [
+        "with a single-quoted name and a comment",
+        ["      - name: 'Contract compatibility' # x", RUN],
+      ],
+      ["with the dash on a line of its own", ["      -", NAME.replace("- ", "  "), RUN]],
+      ["after a comment at the dash's column", [...STEP, "      # Advisory for now."]],
+      ["after a comment at column 0", [...STEP, "# TODO: drop once the snapshots settle"]],
+    ])("fails when continue-on-error is added to the step %s, and names it", (_, step) => {
+      const base = ciBase(ciWith(step));
+      writeFileSync(ciFile(), ciWith([...step, "        continue-on-error: true"]));
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
   });
 
   it("needs an engine-change line when the zod the contract resolves changed", () => {

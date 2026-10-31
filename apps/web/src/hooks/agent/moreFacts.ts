@@ -4,9 +4,11 @@
  *
  * A request names the result's own analysis run (`runId`), so the new facts can cite its
  * evidence and do not repeat its facts, and the round the last answer named (`round`), so each
- * click asks about other angles. A result that names no run (from an older server) is asked for
- * without one: the API then writes facts without evidence, and every one of them reads as
- * inferred. The hook's own thread id is never sent in its place: it may be another result's run.
+ * click asks about other angles. A round asked again after some of its facts failed names them
+ * (`failedIndexes`), and only those angles are asked. A result that names no run (from an older
+ * server) is asked for without one: the API then writes facts without evidence, and every one of
+ * them reads as inferred. The hook's own thread id is never sent in its place: it may be another
+ * result's run.
  */
 
 import type { Claim } from '@liner-notes/contract';
@@ -31,6 +33,7 @@ export function newMoreFacts(result: TrackData): MoreFacts {
     nextRound: FIRST_FACTOID_ROUND,
     finished: false,
     failed: [],
+    failedIndexes: [],
     answerFailed: false,
     runId: null,
   };
@@ -54,6 +57,10 @@ export function moreFactsUrl(result: TrackData, moreFacts: MoreFacts, token: Run
     trackArtist: result.artist || '',
     existingIds: existingIds.join(','),
     round: String(moreFacts.nextRound),
+    // The round asked again after some of its facts failed: only those angles are asked.
+    ...(moreFacts.failedIndexes.length > 0
+      ? { failedIndexes: moreFacts.failedIndexes.join(',') }
+      : {}),
     ...(runId ? { runId } : {}),
     // More of a replayed result comes only from its recording, and more of a live result never
     // does (the API decides by this, not by what it allows right now).
@@ -107,13 +114,25 @@ export interface MoreFactsAnswer {
  * that could not write its facts leaves the round to ask again. An answer that names no round
  * (recorded facts) leaves it too. Whether rounds are left is the API's word when it says
  * (`roundsLeft`), else the contract's count. `runId` is the run the facts were checked against.
+ *
+ * A round left to ask again is asked again only for the facts that failed (`failedIndexes`): the
+ * indexes of this answer's failures (`moreFacts.failed`, cleared when it started). An answer that
+ * failed as a whole, or was refused before it named a failed fact, wrote nothing, so the angles
+ * left to ask are the ones they were. A round that moves on is asked whole.
  */
 export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
   const { nextRound, runId } = answer;
+  if (nextRound === undefined) return { ...moreFacts, failedIndexes: [], runId };
   const unwritten = answer.refused || (answer.facts === 0 && answer.failed > 0);
-  if (nextRound === undefined || unwritten) return { ...moreFacts, runId };
+  if (unwritten) {
+    const named = moreFacts.failed.length > 0 && !moreFacts.answerFailed;
+    const failedIndexes = named
+      ? [...new Set(moreFacts.failed.map((failure) => failure.index))].sort((a, b) => a - b)
+      : moreFacts.failedIndexes;
+    return { ...moreFacts, failedIndexes, runId };
+  }
   const roundsLeft = answer.roundsLeft ?? factoidRoundsLeft(nextRound);
-  return { ...moreFacts, nextRound, finished: !roundsLeft, runId };
+  return { ...moreFacts, nextRound, finished: !roundsLeft, failedIndexes: [], runId };
 }
 
 /**

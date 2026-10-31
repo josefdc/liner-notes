@@ -11,8 +11,10 @@
  *    context is used, the prompt names the stored result's track, as the judge's does.
  * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once: the three
  *    angles of FACTOID_FOCUSES for the request's round (roundFor, focusesFor), the next three on
- *    the next round. Once every angle has been asked there is nothing new to ask: the answer has
- *    no facts and no model is called. The provider layer runs at most LLM_CONCURRENCY calls at a
+ *    the next round. A round asked again after some of its angles failed asks only those
+ *    (`failedIndexes`: the facts the client holds from it are not asked for again, so they cannot
+ *    come back reworded), each under its index in the round. Once every angle has been asked
+ *    there is nothing new to ask: the answer has no facts and no model is called. The provider layer runs at most LLM_CONCURRENCY calls at a
  *    time. The calls and the judge's share one request run id, so a request makes at most
  *    MAX_LLM_CALLS_PER_RUN calls, and each is held to the budget. A focus whose call fails is
  *    reported as failed; the others are kept.
@@ -363,6 +365,12 @@ export interface FactoidRequest {
   existingIds: readonly string[];
   /** The round the client asks for: the `nextRound` of its last answer (roundFor). */
   round?: number;
+  /**
+   * The angles of the round to ask again, by index (0 to FACTOIDS_PER_REQUEST - 1): the ones the
+   * client's last answer for this round could not write. Absent, every angle of the round is
+   * asked. The routes check them against the round; one the round does not have is skipped.
+   */
+  failedIndexes?: readonly number[];
 }
 
 export interface FactoidServiceOptions {
@@ -473,6 +481,13 @@ export async function writeFactoids(
   const citable = new Set(shown.map((item) => item.id));
   const round = roundFor(request.existingIds, request.round);
   const focuses = focusesFor(round);
+  // The angles asked, by their index in the round: the ones named, else all of them. An angle
+  // keeps its index, so the client shows it where it was.
+  const asked = request.failedIndexes
+    ? [...new Set(request.failedIndexes)]
+        .filter((index) => Number.isInteger(index) && index >= 0 && index < focuses.length)
+        .sort((a, b) => a - b)
+    : focuses.map((_focus, index) => index);
   const nextRound = nextRoundAfter(round);
   // Ids hash the run the request names, found or not, so a fact keeps its id from click to click.
   const idRun = request.runId ?? null;
@@ -499,8 +514,8 @@ export async function writeFactoids(
     ? { title: context.analysis.title, artist: context.analysis.artist }
     : request.track;
 
-  // Every angle has been asked: nothing new to ask, and no model is called.
-  if (focuses.length === 0) {
+  // Every angle has been asked (or none named is the round's): nothing to ask, no model call.
+  if (asked.length === 0) {
     log.info("Every angle of more facts has been asked; nothing new");
     return { runId: context.runId, model: null, outcomes: [], round, nextRound };
   }
@@ -511,7 +526,8 @@ export async function writeFactoids(
   try {
     // 2. One call per focus, all at once (the provider layer bounds how many run together).
     const answers = await Promise.all(
-      focuses.map(async (focus) => {
+      asked.map(async (index) => {
+        const focus = focuses[index];
         try {
           const result = await llm.invoke(
             FACTOIDS_CALL_SITE,
@@ -520,9 +536,14 @@ export async function writeFactoids(
             FactoidsOutput,
             { purpose, runId: callRunId, maxOutputTokens: FACTOIDS_MAX_OUTPUT_TOKENS, signal },
           );
-          return { ok: true as const, card: result.output.factoids[0], model: result.deployment };
+          return {
+            index,
+            ok: true as const,
+            card: result.output.factoids[0],
+            model: result.deployment,
+          };
         } catch (error) {
-          return { ok: false as const, error };
+          return { index, ok: false as const, error };
         }
       }),
     );
@@ -538,7 +559,8 @@ export async function writeFactoids(
     const outcomes: FocusOutcome[] = [];
     // The written facts by focus index, until their claims are checked.
     const drafts = new Map<number, { factoid: Factoid; claim: Claim }>();
-    for (const [index, answer] of answers.entries()) {
+    for (const answer of answers) {
+      const { index } = answer;
       if (!answer.ok) {
         log.error(`Factoid ${index + 1} failed (${failure(answer.error)})`);
         outcomes.push({ index, status: "failed", error: answer.error });

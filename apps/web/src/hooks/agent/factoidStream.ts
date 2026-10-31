@@ -9,11 +9,13 @@
  * The round moves on only once an answer has ended (withAnswer): an answer whose every fact
  * failed, or that the API could not write now (a paused budget, an error for the whole answer),
  * leaves the round to ask again, and so does a stream that broke or was left before its end.
- * The API asks the round sent, as it is: the round's angles are asked again, and a fact of it
- * the client already shows (the same text, up to case, spacing and punctuation) is not sent
- * again. A fact that comes back in other words is not recognised (the client sends ids, not
- * texts). An answer that failed as a whole, or a stream that broke or stopped responding, sets
- * `moreFacts.answerFailed`, so the Player can say so.
+ * The API asks the round sent, as it is. When the last answer for it named the facts it could
+ * not write, only those angles are asked again (`failedIndexes`), so a fact already kept from the
+ * round is not asked for again and cannot come back in other words (the client sends ids, not
+ * texts); otherwise every angle of the round is asked, and a fact of it the client already shows
+ * (the same text, up to case, spacing and punctuation) is not sent again. An answer that failed
+ * as a whole, or a stream that broke or stopped responding, sets `moreFacts.answerFailed`, so the
+ * Player can say so.
  */
 
 import type { Factoid, TrackData } from '../../types';

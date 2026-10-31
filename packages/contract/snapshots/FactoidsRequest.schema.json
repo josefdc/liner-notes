@@ -17,6 +17,12 @@
         "type": "integer",
         "minimum": 0,
         "maximum": 9007199254740991
+      },
+      "failedIndexes": {
+        "description": "With round: the indexes of the facts the last answer for that round could not write; only those angles are asked again",
+        "minItems": 1,
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
       }
     },
     "required": ["trackId", "trackTitle"]
@@ -39,6 +45,12 @@
         "type": "integer",
         "minimum": 0,
         "maximum": 9007199254740991
+      },
+      "failedIndexes": {
+        "description": "With round: the indexes of the facts the last answer for that round could not write; only those angles are asked again",
+        "minItems": 1,
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
       }
     },
     "required": ["trackId", "trackTitle"],

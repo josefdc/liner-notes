@@ -114,6 +114,13 @@ export const FactoidsRequest = z.object({
     .min(0)
     .optional()
     .describe("The round of facts asked for: the nextRound of the last answer, so each asks anew"),
+  failedIndexes: z
+    .array(z.int().min(0))
+    .min(1)
+    .optional()
+    .describe(
+      "With round: the indexes of the facts the last answer for that round could not write; only those angles are asked again",
+    ),
 });
 
 export const FactoidsResponse = z.object({

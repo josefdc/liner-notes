@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Factoid, TrackData } from '../../types';
-import { isNewFact, type MoreFactsAction, moreFactsReducer, newMoreFacts } from './moreFacts';
+import {
+  isNewFact,
+  type MoreFactsAction,
+  moreFactsReducer,
+  moreFactsUrl,
+  newMoreFacts,
+} from './moreFacts';
 import type { MoreFacts } from './types';
 
 const result = {
@@ -64,6 +70,48 @@ describe('moreFactsReducer', () => {
       kept({ runId: 'run-1' }),
     ],
     [
+      'a round partly refused: only the facts that failed are asked again',
+      kept({
+        factoids: [fact('a')],
+        failed: [
+          { index: 2, code: 'rate_limited' },
+          { index: 1, code: 'rate_limited' },
+        ],
+      }),
+      { type: 'answerEnded', result, answer: { ...answer, refused: true, nextRound: 1 } },
+      kept({
+        factoids: [fact('a')],
+        failed: [
+          { index: 2, code: 'rate_limited' },
+          { index: 1, code: 'rate_limited' },
+        ],
+        failedIndexes: [1, 2],
+        runId: 'run-1',
+      }),
+    ],
+    [
+      'a round whose every fact failed: they are all asked again',
+      kept({ failed: [0, 1, 2].map((index) => ({ index, code: 'failed' })) }),
+      { type: 'answerEnded', result, answer: { ...answer, facts: 0, failed: 3, nextRound: 1 } },
+      kept({
+        failed: [0, 1, 2].map((index) => ({ index, code: 'failed' })),
+        failedIndexes: [0, 1, 2],
+        runId: 'run-1',
+      }),
+    ],
+    [
+      'a round asked again that was refused before any fact: the same facts are left to ask',
+      kept({ failedIndexes: [1, 2] }),
+      { type: 'answerEnded', result, answer: { ...answer, facts: 0, refused: true, nextRound: 1 } },
+      kept({ failedIndexes: [1, 2], runId: 'run-1' }),
+    ],
+    [
+      'a round asked again that was written: the next round is asked whole',
+      kept({ failedIndexes: [2] }),
+      { type: 'answerEnded', result, answer: { ...answer, nextRound: 1, roundsLeft: true } },
+      kept({ nextRound: 1, runId: 'run-1' }),
+    ],
+    [
       'an answer that failed as a whole',
       kept(),
       { type: 'answerFailed', result },
@@ -90,6 +138,17 @@ describe('moreFactsReducer', () => {
     expect(moreFactsReducer(before, { type: 'factReceived', result, factoid: fact('a') })).toBe(
       before,
     );
+  });
+});
+
+describe('moreFactsUrl', () => {
+  const token = { runToken: 'tok', expiresAt: Number.MAX_SAFE_INTEGER };
+  const params = (moreFacts: MoreFacts) =>
+    new URL(moreFactsUrl(result, moreFacts, token), 'http://x').searchParams;
+
+  it('names the facts to ask again only when there are some', () => {
+    expect(params(kept({ failedIndexes: [1, 2] })).get('failedIndexes')).toBe('1,2');
+    expect(params(kept()).has('failedIndexes')).toBe(false);
   });
 });
 

@@ -30,6 +30,7 @@ import {
   FACTOIDS_PER_REQUEST,
   type FactoidsResult,
   failure,
+  focusesFor,
   type LoadRun,
   nextRoundAfter,
   roundFor,
@@ -74,35 +75,97 @@ const analysisRunId = z
 /** Rounds past the last angle all ask for nothing new; this only bounds the number. */
 const MAX_ROUND = 99;
 
-const DecryptBodySchema = z.object({
-  trackId,
-  trackTitle: boundedText(1, { truncate: true }),
-  trackArtist: boundedText(0, { truncate: true }).optional(),
-  existingFactoidIds: z.array(factoidId).default([]),
-  // The analysis run the facts add to, so they cite its evidence and do not repeat its facts.
-  runId: analysisRunId,
-  // The round asked for: the nextRound of the last answer.
-  round: z.int().min(0).max(MAX_ROUND).optional(),
-});
+/** The indexes named once each, in the round's order. */
+const ascendingOnce = (indexes: number[]) => [...new Set(indexes)].sort((a, b) => a - b);
 
-const StreamQuerySchema = z.object({
-  trackTitle: boundedText(1, { truncate: true }),
-  trackArtist: boundedText(0, { truncate: true }).optional(),
-  existingIds: z
-    .string()
-    .max(16_000)
-    .optional()
-    .transform((value) => (value ? value.split(",").filter(Boolean) : []))
-    .pipe(z.array(factoidId)),
-  // How the result these facts add to was produced (its run.mode), when the client says so.
-  mode: RunMode.optional(),
-  runId: analysisRunId,
-  round: z
-    .string()
-    .regex(/^\d{1,2}$/, "The round is a whole number from 0 to 99")
-    .transform(Number)
-    .optional(),
-});
+/**
+ * `failedIndexes`: the angles of the round to ask again (the indexes of the facts the last answer
+ * for this round could not write), at most FACTOIDS_PER_REQUEST of them, each once.
+ */
+const failedIndexes = z
+  .array(z.int().min(0))
+  .min(1)
+  .max(FACTOIDS_PER_REQUEST)
+  .transform(ascendingOnce)
+  .optional();
+
+/** The stream's `failedIndexes`: the same list, as whole numbers separated by commas. */
+const failedIndexesQuery = z
+  .string()
+  .regex(
+    new RegExp(`^\\d{1,2}(?:,\\d{1,2}){0,${FACTOIDS_PER_REQUEST - 1}}$`),
+    `The failed indexes are 1 to ${FACTOIDS_PER_REQUEST} whole numbers separated by commas`,
+  )
+  .transform((value) => ascendingOnce(value.split(",").map(Number)))
+  .optional();
+
+/**
+ * The failed indexes name angles of the round they failed in: the request says which round
+ * (`round`), and each index is one of its angles. A round with no angle left has none. zod runs
+ * this even when a field failed (its value then as sent): it then adds nothing, the request is
+ * refused already.
+ */
+function checkFailedIndexes(
+  { round, failedIndexes }: { round?: unknown; failedIndexes?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  if (failedIndexes === undefined) return;
+  if (!Array.isArray(failedIndexes) || (round !== undefined && typeof round !== "number")) return;
+  const path = ["failedIndexes"];
+  if (round === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      message: "The failed indexes need the round they failed in",
+    });
+    return;
+  }
+  const angles = focusesFor(round).length;
+  if (failedIndexes.some((index) => index >= angles)) {
+    const message =
+      angles === 0
+        ? `Round ${round} has no angle to ask again`
+        : `An index of round ${round} is 0 to ${angles - 1}`;
+    ctx.addIssue({ code: "custom", path, message });
+  }
+}
+
+const DecryptBodySchema = z
+  .object({
+    trackId,
+    trackTitle: boundedText(1, { truncate: true }),
+    trackArtist: boundedText(0, { truncate: true }).optional(),
+    existingFactoidIds: z.array(factoidId).default([]),
+    // The analysis run the facts add to, so they cite its evidence and do not repeat its facts.
+    runId: analysisRunId,
+    // The round asked for: the nextRound of the last answer.
+    round: z.int().min(0).max(MAX_ROUND).optional(),
+    // The angles of that round to ask again: the ones its last answer could not write.
+    failedIndexes,
+  })
+  .superRefine(checkFailedIndexes);
+
+const StreamQuerySchema = z
+  .object({
+    trackTitle: boundedText(1, { truncate: true }),
+    trackArtist: boundedText(0, { truncate: true }).optional(),
+    existingIds: z
+      .string()
+      .max(16_000)
+      .optional()
+      .transform((value) => (value ? value.split(",").filter(Boolean) : []))
+      .pipe(z.array(factoidId)),
+    // How the result these facts add to was produced (its run.mode), when the client says so.
+    mode: RunMode.optional(),
+    runId: analysisRunId,
+    round: z
+      .string()
+      .regex(/^\d{1,2}$/, "The round is a whole number from 0 to 99")
+      .transform(Number)
+      .optional(),
+    failedIndexes: failedIndexesQuery,
+  })
+  .superRefine(checkFailedIndexes);
 
 const DECRYPT_EXAMPLE = {
   trackId: "6GyFP1nfCDB8lbD2bG0Hq9",
@@ -237,7 +300,8 @@ export function createFactoidsRouter({
    *
    * POST /api/factoids/more
    * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...",
-   *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1 }
+   *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1,
+   *         "failedIndexes": [1, 2] }
    * Returns: { factoids: Factoid[], claims: Claim[], nextRound, roundsLeft } - up to 3 new facts
    * with entities, one per focus, in focus order (fewer when the model knows fewer, or when one
    * only repeats a fact the client or the run already has), each with its checked claim
@@ -248,6 +312,12 @@ export function createFactoidsRouter({
    * angles (the client's ids count too, for a client that sends no round), and once every angle
    * has been asked the answer is an empty list, with no model call: nothing new. `roundsLeft`
    * says whether asking for `nextRound` can bring new facts.
+   * `failedIndexes`, optional, with `round`: the same round asked again after its last answer
+   * could not write some of its facts, by their index in the round (0 to 2, each once). Only
+   * those angles are asked, so a fact the client holds from the round is not asked for again
+   * (and cannot come back reworded); each keeps its index. Without it every angle of the round is
+   * asked, as before. An index the round does not have, a list of more than three, an empty one,
+   * or one without a round is a 400 `invalid_input`.
    * A malformed body is a 400 `invalid_input`. When no fact could be written because every call
    * failed: the model's rate limit a 429 `rate_limited`; the budget or the call cap a 503
    * `budget_exhausted`; any other failure a 500 `failed`. A track with no recording while live
@@ -323,6 +393,7 @@ export function createFactoidsRouter({
             runId: parsed.data.runId,
             existingIds: existingFactoidIds,
             round: parsed.data.round,
+            failedIndexes: parsed.data.failedIndexes,
           },
           { llm: layer, purpose, signal: disconnect.signal, loadRun },
         );
@@ -364,7 +435,7 @@ export function createFactoidsRouter({
   /**
    * Stream factoids via SSE, each with its checked claim
    *
-   * GET /api/factoids/more/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...&round=1
+   * GET /api/factoids/more/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...&round=1&failedIndexes=1,2
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
    * @liner-notes/contract with `seq` and `runId`: the analysis run the request names when its
    * stored result is what the facts add to (found, and about this track), else null, so a client
@@ -386,7 +457,9 @@ export function createFactoidsRouter({
    * cite, and its facts are not repeated. Without it, or when the run has no stored result or is
    * about another track (title and artist), every fact reads as inferred. A fact the client
    * already shows (by id) is not sent again, and a later click asks about other angles. Costs as
-   * the POST route's.
+   * the POST route's. `failedIndexes` (optional, with `round`: whole numbers separated by
+   * commas) asks only those angles of the round again, as on the POST route; their facts and
+   * errors keep their index in the round, and an angle that fails again is an error again.
    *
    * Under REPLAY_MODE the recorded factoids are sent instead, each with its recorded claim, or
    * one error live_disabled (or budget_exhausted, see above). `mode` (optional: the run.mode of
@@ -474,6 +547,7 @@ export function createFactoidsRouter({
               runId: parsed.data.runId,
               existingIds,
               round: parsed.data.round,
+              failedIndexes: parsed.data.failedIndexes,
             },
             { llm: layer, purpose, signal: stream.signal, context: context ?? undefined },
           ),

@@ -39,7 +39,7 @@ import {
   untilSentOrSettled,
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
-import { growth } from "../sources/testing/strings.js";
+import { growth, threadCpuMs, timed } from "../sources/testing/strings.js";
 
 // Each call reserves and settles its cost in the spend log, flushing each line to disk
 // (budget.ts): from 0.1 ms to 9 ms a flush here, but a flush waits for the disk, and other
@@ -354,6 +354,37 @@ describe("retries", () => {
     expect(kind(Object.assign(new Error("x"), { status: 408 }))).toBe("timeout");
     expect(kind(new Error("something else"))).toBe("provider");
     expect(classifyError(new Error("x"), { ...state, aborted: true }).kind).toBe("aborted");
+  });
+
+  it("reads a bounded start of a long model error, whatever its length", () => {
+    // A client's error can hold a whole error page: the message keeps 500 characters of it.
+    const value = "K7jK8jK9jKajKbjKcj";
+    const credential = "T9zB8yC7xD6wE5vF4uG3";
+    vi.stubEnv("SOME_SERVICE_PASSWORD", value);
+    configureLogger({ SOME_SERVICE_PASSWORD: value, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const entities = [...value].map((c) => `&#${c.codePointAt(0)};`).join("");
+    const piece = `x ${entities} &amp; Bearer ${credential} ${Buffer.from(`u:${value}`).toString("base64")} `;
+    const text = `token: ${credential} ${piece.repeat(Math.ceil((1 << 20) / piece.length))}`;
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const error = Object.assign(new Error(text), { status: 500 });
+    const { ms, result } = timed(() => classifyError(error, state), {
+      runs: 3,
+      clock: threadCpuMs,
+    });
+    expect(ms).toBeLessThan(100);
+    const out = `${result.message} ${String((result.cause as Error).message)}`;
+    expect(out).toContain("scout: token: [redacted]");
+    for (const part of [value.slice(0, 8), credential.slice(0, 8), entities.slice(0, 16)]) {
+      expect(out).not.toContain(part);
+    }
+    // The cut falls before a value it would split.
+    const across = Object.assign(new Error(`${"a ".repeat(4_090)}${value} end`), { status: 500 });
+    expect(classifyError(across, state).message).toBe(`scout: ${"a ".repeat(4_090)}`.slice(0, 500));
+    const glued = Object.assign(new Error(`${"a".repeat(8_180)}${value} end`), { status: 500 });
+    expect(classifyError(glued, state).message).toBe("scout: [redacted]");
   });
 
   it("hides a configured value written escaped before it cuts the message, at every offset", () => {

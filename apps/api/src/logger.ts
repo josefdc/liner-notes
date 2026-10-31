@@ -695,13 +695,12 @@ const LEGACY_ENTITIES: ReadonlySet<string> = new Set([
 const ENTITY_OR_PERCENT =
   /&(?:#[xX]0*([0-9A-Fa-f]{1,6});?|#0*(\d{1,7});?|([A-Za-z0-9]{1,16})(;?))|%([0-9A-Fa-f]{2})((?:%[89ABab][0-9A-Fa-f]){0,3})/g;
 const ENTITY_PERCENT_OR_PLUS = new RegExp(`${ENTITY_OR_PERCENT.source}|(\\+)`, "g");
-const ALPHANUMERIC = /[A-Za-z0-9]/;
 
 /**
  * What a match of ENTITY_OR_PERCENT (ENTITY_PERCENT_OR_PLUS with `plus`) stands for, or the match
- * itself. A named entity is read with its ";" (a legacy one also without it, where no letter or
- * digit follows, and in capitals). The bytes of one UTF-8 character are read as that character
- * (`%C3%A9` is "é"); a byte of none, as the Latin-1 character it is (`%E9`).
+ * itself. A named entity is read with its ";"; a legacy one also without it, and before more
+ * letters or digits, as HTML text reads it. The bytes of one UTF-8 character are read as that
+ * character (`%C3%A9` is "é"); a byte of none, as the Latin-1 character it is (`%E9`).
  */
 const decodedOf =
   (plus: boolean): ReadMatch =>
@@ -717,14 +716,19 @@ const decodedOf =
     }
     if (name === undefined) return match;
     // Own names only: `&valueOf;` is no entity.
-    const char = Object.hasOwn(NAMED_ENTITIES, name) ? NAMED_ENTITIES[name] : undefined;
-    if (char === undefined) return match;
-    const legacy = LEGACY_ENTITIES.has(name);
-    if (semicolon) return char;
-    const at = rest[plus ? 7 : 6] as number;
-    const text = rest[plus ? 8 : 7] as string;
-    return legacy && !ALPHANUMERIC.test(text.charAt(at + match.length)) ? char : match;
+    if (semicolon && Object.hasOwn(NAMED_ENTITIES, name)) return NAMED_ENTITIES[name] as string;
+    // Without its ";", or before more letters or digits, a legacy name is read as HTML text reads
+    // it: the longest one that starts the name (`&quotw0rd` is `"w0rd`, `&ampx;` is `&x;`).
+    for (let length = Math.min(name.length, LONGEST_LEGACY); length >= 2; length--) {
+      const legacy = name.slice(0, length);
+      if (LEGACY_ENTITIES.has(legacy)) {
+        return `${NAMED_ENTITIES[legacy] as string}${name.slice(length)}${semicolon ?? ""}`;
+      }
+    }
+    return match;
   };
+/** The length of the longest legacy name (LEGACY_ENTITIES). */
+const LONGEST_LEGACY = 4;
 const ENTITY_OR_PERCENT_OF = decodedOf(false);
 const ENTITY_PERCENT_OR_PLUS_OF = decodedOf(true);
 
@@ -1106,7 +1110,8 @@ function inLink(text: string): (at: number) => boolean {
  * (isTokenChar) that starts with "/" (`/v1/<value>/x`, `//host/…`, also after "~" or "." or
  * ".."), with a host name and a "/" (`api.example.org/v1/…`), or with a port and a "/" after a
  * ":" (`localhost:3001/v1/…`); and only past that first "/": a value in the host name
- * (`<key>.sig/<rest>`) is no path's. Asked for places in order, it reads each character once, and
+ * (`<key>.sig/<rest>`) is no path's. A run that is a credential's value (credentialValueAt) is
+ * no path either. Asked for places in order, it reads each character once, and
  * the start of each run once.
  */
 function inPath(text: string): (at: number) => boolean {
@@ -1122,9 +1127,28 @@ function inPath(text: string): (at: number) => boolean {
       if (after === -1 && text.charCodeAt(start - 1) === COLON) {
         after = stickyEnd(PORT_START, text, start);
       }
+      // A path that is a credential's value (`Bearer /v1/<key>/<rest>`, `token: ./<key>/…`,
+      // `Basic localhost:3001/<key>/…`) is the credential's: taken whole, as any token.
+      if (after !== -1 && credentialValueAt(text, start)) after = -1;
     }
     return after !== -1 && at >= after;
   };
+}
+
+/**
+ * Whether the run of token characters at `start` is a credential's value: a scheme word or a
+ * secret's name (CREDENTIAL_NAME_AT_END, glued to a word before it or not: `xpassword: /…`) ends
+ * the text before it, or before the word it is part of (a host and its port: `Basic
+ * localhost:3001/…`), up to white space or a quote; or a secret's name and its "=" or ":" are
+ * in that word (`xsecret=localhost:3001/…`). Such a path is hidden whole, as a token.
+ */
+function credentialValueAt(text: string, start: number): boolean {
+  const nameBefore = (at: number) =>
+    CREDENTIAL_NAME_AT_END.test(text.slice(Math.max(0, at - NAME_WINDOW), at));
+  if (nameBefore(start)) return true;
+  let word = start;
+  while (word > 0 && start - word < NAME_WINDOW && !endsLink(text.charCodeAt(word - 1))) word--;
+  return word < start && (nameBefore(word) || CREDENTIAL_NAME_IN.test(text.slice(word, start)));
 }
 
 /** The start of a path without a scheme: "/", "~/", "./", "../", or a host name and a "/". */
@@ -2430,6 +2454,16 @@ const NAME_AT_END = new RegExp(
   `(?<![A-Za-z0-9])(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})${AFTER_NAME}`,
   "i",
 );
+/**
+ * A scheme word, a pair's name or a secret parameter's, with its ":" or "=" and quotes,
+ * last, glued to a word before it or not (credentialValueAt).
+ */
+const CREDENTIAL_NAME_AT_END = new RegExp(
+  `(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES}|${SECRET_PARAM_NAMES})${AFTER_NAME}`,
+  "i",
+);
+/** A secret's name and its ":" or "=" in a word (`xsecret=localhost:3001/…`). */
+const CREDENTIAL_NAME_IN = new RegExp(`(?:${PAIR_NAMES}|${SECRET_PARAM_NAMES})["']?[:=]`, "i");
 /**
  * A pair's name glued to the letter or digit before it, whose case nameAtEnd checks. A scheme
  * word glued so ("VisualBasic") is read by the glued-scheme rule, not here.

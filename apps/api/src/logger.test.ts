@@ -24,9 +24,17 @@ import {
   serializeError,
   withRun,
 } from "./logger.js";
-import { growth, timed } from "./sources/testing/strings.js";
+import { growth, threadCpuMs, timed } from "./sources/testing/strings.js";
 import { logText } from "./http/middleware/errors.js";
-import { describeError, plainReason, redactText, SourceError, scrubText } from "./sources/http.js";
+import {
+  describeError,
+  plainReason,
+  redactText,
+  SourceError,
+  scrubReadPayload,
+  scrubReadText,
+  scrubText,
+} from "./sources/http.js";
 
 const KEY = "dummy-azure-key-0123456789";
 const ENDPOINT = "https://dummy-resource.example.net";
@@ -2097,6 +2105,8 @@ describe("configured values written decoded, paths without a scheme, and the sha
   const PEM =
     "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----";
   const CREDENTIAL = "T9zB8yC7xD6wE5vF4uG3";
+  /** A model key: a configured value that is no source's credential. */
+  const MODEL_KEY = "K7jK8jK9jKajKbjKcj";
   const MULTI = "M1xM2xM3x\nM4xM5xM6x";
   const BRACKET = "Br[ck]{t}|Zq77x";
   /** A value of letters only, which can be a host name's last label. */
@@ -2386,6 +2396,127 @@ describe("configured values written decoded, paths without a scheme, and the sha
       parts.some((part) => out.includes(part)),
     );
     expect(shown.map(([path]) => path)).toEqual([]);
+  });
+
+  it.each([
+    `Authorization: Bearer /${MODEL_KEY}/${CREDENTIAL}`,
+    `Authorization: Bearer api.x.io/${MODEL_KEY}/${CREDENTIAL}`,
+    `upstream said Bearer /v1/${MODEL_KEY}/${CREDENTIAL} invalid`,
+    `token: /a/${MODEL_KEY}/${CREDENTIAL} x`,
+    `password: ./${MODEL_KEY}/${CREDENTIAL} x`,
+    `{"api_key": "/v1/${MODEL_KEY}/${CREDENTIAL}"}`,
+    `X-Api-Key: /${MODEL_KEY}/${CREDENTIAL}`,
+    // A host and its port, a name glued to the word before it, a name in the host's word.
+    `Authorization: Basic localhost:3001/${MODEL_KEY}/a.b/${CREDENTIAL}/end y`,
+    `access_token = 'localhost:3001/${MODEL_KEY}/${CREDENTIAL}' y`,
+    `aaaapassword: /v1/${MODEL_KEY}/a.b/${CREDENTIAL}' y`,
+    `aaaasecret=localhost:3001/${MODEL_KEY}/x/${CREDENTIAL} x`,
+  ])("hides a path that is a credential's value whole, a cassette's text too: %s", (text) => {
+    // After a scheme or a secret's name, the path is the credential: no segment of it is shown. The
+    // value is no source's credential, which the source's own rules would take whole; set as the
+    // app sets it, in the environment too.
+    vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);
+    configureLogger({ AZURE_OPENAI_API_KEY: MODEL_KEY });
+    let outs: Record<string, string>;
+    try {
+      outs = {
+        ...written(text),
+        scrubReadText: scrubReadText(text),
+        scrubReadPayload: JSON.stringify(scrubReadPayload({ note: text })),
+      };
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(showing(outs, [MODEL_KEY, CREDENTIAL])).toEqual([]);
+    // A path that is no credential's value keeps the segments around a value.
+    expect(scrubReadText(`GET /a/${MODEL_KEY}/b ok`)).toBe("GET /a/[redacted]/b ok");
+  });
+
+  it("keeps the signed links a source returned in what a cassette records", () => {
+    configure();
+    const payload = {
+      url: "https://www.example.org/release/1?sig=abc123def456&page=2",
+      next: "https://api.example.org/v1/items?X-Amz-Signature=0a1b2c3d4e5f&X-Amz-Credential=AKIAEXAMPLE%2F2026&cursor=9",
+      note: "hmac=sha256 is used; signature=valid",
+    };
+    expect(scrubReadPayload(payload)).toEqual(payload);
+    // An error's text hides them.
+    expect(scrubText(payload.url)).toBe("https://www.example.org/release/1?sig=[redacted]&page=2");
+  });
+
+  it("reads a signed parameter only in a link, and ends its value where text around one resumes", () => {
+    configureLogger({});
+    // Prose is no link's.
+    const prose = "hmac=sha256 is used; signature=valid";
+    for (const out of [
+      describeError(new Error(prose)),
+      scrubText(prose),
+      plainReason(prose) ?? prose,
+    ]) {
+      expect(out).toBe(prose);
+    }
+    // A markdown link ends at ")": the pair after it is read.
+    const markdown = `[l](https://h/a?signature=Zz9yY8xX7wW6vV5uU4)token=${CREDENTIAL} x`;
+    expect(describeError(new Error(markdown))).toBe(
+      "[l](https://h/a?signature=[redacted])token=[redacted] x",
+    );
+    // A curly quote ends it too, and the scheme after it stays.
+    expect(describeError(new Error(`x https://h/a?sig=abc\u2019Bearer ${CREDENTIAL} y`))).toBe(
+      "x https://h/a?sig=[redacted]\u2019Bearer [redacted] y",
+    );
+  });
+
+  it.each([
+    `see https://h/a?hdnea=abc\u201ctoken: ${CREDENTIAL}\u201d x`,
+    `see https://h/a?page=2\u201ctoken: ${CREDENTIAL}\u201d x`,
+    `see https://h/a?sig=abc\u2018password: ${CREDENTIAL}\u2019 x`,
+    `x https://h/a?sig=abc\u2019Bearer ${CREDENTIAL} y`,
+  ])("hides a pair or a scheme written after a link's value and a curly quote: %s", (text) => {
+    // On the paths a source's text takes; the logger reads the text as it came as main does.
+    configureLogger({});
+    const { describe: d, source, scrubText: t, redactText: r, reason } = written(text);
+    expect(showing({ d, source, t, r, reason }, [CREDENTIAL])).toEqual([]);
+  });
+
+  it("reads legacy entities before letters and digits as HTML text does", () => {
+    configure();
+    const text = "pw p@ss&quotw0rd&lt&amp&gtx9Q end";
+    expect(showing(written(text), [PASSWORD, "w0rd&lt&amp&gtx9Q"])).toEqual([]);
+    expect(scrub("p@ss&quotw0rd&lt;&amp;&gt;x9Q")).toBe("[redacted]");
+    // An unknown name stays.
+    expect(scrub("a &quotx b")).toBe("a &quotx b");
+  });
+
+  it("reads a bounded start of a long source error, whatever its length", () => {
+    configure();
+    const piece = `x ${decimal(TOKEN)} &amp; Bearer ${CREDENTIAL} ${base64(`u:${TOKEN}`)} /a/b `;
+    const text = `token: ${CREDENTIAL} ${piece.repeat(Math.ceil((1 << 20) / piece.length))}`;
+    for (const call of [
+      () => new SourceError("discogs", "http", text).message,
+      () => scrubText(text),
+    ]) {
+      const { ms, result } = timed(call, { runs: 3, clock: threadCpuMs });
+      expect(ms).toBeLessThan(100);
+      expect(showing({ out: result }, [TOKEN, CREDENTIAL, base64(`u:${TOKEN}`)])).toEqual([]);
+    }
+    // A value the read cut falls in is hidden whole, not cut in two.
+    const across = `{"token":"${"\\".repeat(40_000)}`;
+    expect(new SourceError("discogs", "http", across).message).toBe(
+      'discogs: {"token":"[redacted]…',
+    );
+    expect(describeError(new Error(across))).toBe('{"token":"[redacted]…');
+    expect(scrubText(across)).toBe('{"token":"[redacted]');
+    // A value across the read cut, after text its masks make short, is hidden, not cut in two.
+    const unit = `${decimal(TOKEN)} `;
+    const lead = unit.repeat(Math.floor(19_450 / unit.length)).padEnd(19_450, "a");
+    const described = describeError(new Error(`${lead} ${TOKEN} end`));
+    expect(described.length).toBeLessThan(5_000);
+    expect(described).not.toContain(TOKEN.slice(0, 6));
+    expect(described.endsWith("[redacted]…")).toBe(true);
+    // A text read in part is cut where the whole text would be: a source's error keeps 200.
+    const long = new SourceError("discogs", "http", `${"a ".repeat(2_000)}${across}`).message;
+    expect(long.length).toBeLessThanOrEqual(201);
+    expect(long.endsWith("…")).toBe(true);
   });
 
   it.each([

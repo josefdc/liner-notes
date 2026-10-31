@@ -96,7 +96,7 @@ import {
   UNSOURCED_PRICE_MULTIPLIER,
 } from "./prices.js";
 import { type LlmUsageRow, recordToOpenDatabase } from "./usage.js";
-import { hideScrubbed, logger } from "../logger.js";
+import { hideScrubbed, knownValueSpans, logCut, logger } from "../logger.js";
 
 const log = logger("llm");
 
@@ -457,6 +457,32 @@ export interface ErrorState {
 }
 
 /**
+ * How much of a model error's message classifyError reads: it keeps 500 characters, and the
+ * logger reads 4,096 past a cut.
+ */
+const MODEL_ERROR_READ = 8 * 1024;
+
+/**
+ * The start of a model error's message that classifyError redacts: all of it, or, past
+ * MODEL_ERROR_READ characters, up to a cut there that never splits what the logger's rules, the
+ * values or scrubSecrets' steps hide in the text around it (logCut, which also looks a
+ * configured value's reach past the cut); and "[redacted]" when the cut moved back to the start
+ * of such a span, which the text left out then starts. A client's error can hold a whole error
+ * page; the message keeps far less of it.
+ */
+function readOfError(
+  text: string,
+  secrets: readonly string[],
+  steps: ReturnType<typeof scrubSecretsSteps>,
+): [string, string] {
+  if (text.length <= MODEL_ERROR_READ) return [text, ""];
+  const window = text.slice(0, MODEL_ERROR_READ + 4096);
+  const hidden = [...knownValueSpans(window, secrets), ...steps.flatMap((step) => step(window))];
+  const cut = logCut(text, MODEL_ERROR_READ, hidden);
+  return [text.slice(0, cut), cut < MODEL_ERROR_READ ? "[redacted]" : ""];
+}
+
+/**
  * The LlmError for an attempt that threw. `timedOut` and `aborted` say which of the attempt's
  * signals fired, since the client reports both as an abort.
  */
@@ -477,8 +503,13 @@ export function classifyError(error: unknown, state: ErrorState): LlmError {
   // no rule reads when the logger gets it; one set of rules run on the other's output can lose a
   // scheme word or a pair's name that the other took, and leave the credential after it; and
   // one read alone can miss what the other's output lets it read.
-  const text = typeof e.message === "string" ? e.message : String(error);
-  const detail = hideScrubbed(text, secrets, scrubSecretsSteps(secrets));
+  const steps = scrubSecretsSteps(secrets);
+  const [text, hidden] = readOfError(
+    typeof e.message === "string" ? e.message : String(error),
+    secrets,
+    steps,
+  );
+  const detail = `${hideScrubbed(text, secrets, steps)}${hidden}`;
   const message = `${state.callSite}: ${detail}`.slice(0, 500);
   const code = errorCode(error);
   const cause: LlmErrorDetails["cause"] = {

@@ -3121,6 +3121,8 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     "\\/a.mp3",
     "/a.png",
     "?hdnea=exp=1",
+    "&sig=ab)c",
+    "hmac=sha256",
     "token=",
     "Bearer abcdefghijkl1",
     "header",
@@ -3146,16 +3148,46 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
   // Since #237, a scheme or a secret key glued to the word before it (`failedBearer v`,
   // `xtoken=v`), a scheme a pair's value ends in (`token=x=Bearer v`) and a pair for a secret
   // after other text on its line (`… password= v`) are read too: text with one of them redacts
-  // more. So does a signed link's parameter (`?hdnea=…`, `sig=`, `X-Amz-Signature=`).
+  // more.
   const readSince237 =
-    /\b(?:api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token)=|[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
+    /[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
+
+  // Since #237, a signed link's parameter (`?hdnea=…`, `&sig=`, `?X-Amz-Signature=`) has its value
+  // hidden: as before, but for that value (where the masks other rules wrote in it go with it).
+  // One glued to a Bearer credential (`Bearer <token>&sig=…`), or written as the value of a pair
+  // whose own value is a pair's name (`password=password=&sig=…`), goes with that value, as the
+  // logger reads it.
+  const signedAfterBearer =
+    /(?:(?:Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}\S*|(?:key|token|secret|password)=)[?&;~](?:api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+  const signedValue =
+    /(?<=[?&;~])(api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token)=([^&#\s"'`<>\\\u2018-\u201f)]*)/gi;
+  const signedFolded = (text: string) => text.replace(signedValue, "$1=¤");
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
     const plain = corpus.filter(
-      (text) => !quotedKeyOrEscapedSlash.test(text) && !readSince237.test(text),
+      (text) =>
+        !quotedKeyOrEscapedSlash.test(text) &&
+        !readSince237.test(text) &&
+        !signedAfterBearer.test(text),
     );
     expect(plain.length).toBeGreaterThan(20_000);
-    expect(disagreements(plain, scrubText, scrubTextBefore)).toEqual([]);
+    const signed = plain.filter((text) => signedFolded(text) !== text);
+    expect(signed.length).toBeGreaterThan(400);
+    expect(
+      disagreements(
+        plain,
+        (text) => signedFolded(scrubText(text)),
+        (text) => signedFolded(scrubTextBefore(text)),
+      ),
+    ).toEqual([]);
+    // Elsewhere, exactly as before.
+    expect(
+      disagreements(
+        plain.filter((text) => signedFolded(text) === text),
+        scrubText,
+        scrubTextBefore,
+      ),
+    ).toEqual([]);
   });
 
   /** The text with each media link written with JSON-escaped slashes written plainly. */
@@ -3177,7 +3209,12 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
     expect(other).toEqual([]);
     expect(changed.length).toBeGreaterThan(1_000);
     expect(
-      changed.every((text) => quotedKeyOrEscapedSlash.test(text) || readSince237.test(text)),
+      changed.every(
+        (text) =>
+          quotedKeyOrEscapedSlash.test(text) ||
+          readSince237.test(text) ||
+          signedFolded(text) !== text,
+      ),
     ).toBe(true);
   });
 

@@ -21,7 +21,8 @@ changes a score: the report counts each of these as a false positive, as the sco
 - **Account**: the title matches. The model's artist credit is WhoSampled's, which differs from
   gold's in spelling ("Gianfranco" and "Gian Franco") and in order, and the scorer matches an
   artist by its normalised text, so the proposal is not joined to the gold target. Row d does
-  not show this edge: the verifier did not source the model's link. This is the only held-out
+  not count it (it is shown as a possible relation, labelled model inference): the verifier did
+  not source the model's link. This is the only held-out
   gold target of the run: row a counts it as missed (0 of 1), and rows b to d leave it out,
   because those runs cite wikipedia.org, the site of its source.
 
@@ -54,7 +55,8 @@ changes a score: the report counts each of these as a false positive, as the sco
 - **Gold**: "Rappin' Duke (vocal)" by "The Rappin' Duke", from MusicBrainz.
 - **Account**: the scorer drops a leading article from an artist, so the artists match; the
   titles differ by the "(vocal)" suffix MusicBrainz gives the recording, and the proposal is
-  not joined to the gold target. Row d does not show this edge.
+  not joined to the gold target. Row d does not count it (it is shown as a possible relation,
+  labelled model inference).
 
 ## "My Name Is" and "Thunder - Thunder Clap and Rumble, Weather 01", Stan (Eminem feat. Dido), `USIR10001280`
 
@@ -65,8 +67,8 @@ changes a score: the report counts each of these as a false positive, as the sco
   MusicBrainz relations. WhoSampled, through Tavily, says "Stan" contains samples of "Thank
   You" by Dido, "My Name Is" by Eminem and "Thunder - Thunder Clap and Rumble, Weather 01" by
   Sound Ideas.
-- **Account**: both proposals repeat that excerpt; neither is in gold's sources. Row d shows
-  neither edge.
+- **Account**: both proposals repeat that excerpt; neither is in gold's sources. Row d counts
+  neither (each is shown as a possible relation, labelled model inference).
 
 ## A measured tempo to read with care: Bitter Sweet Symphony, `GBAAA9700049`
 

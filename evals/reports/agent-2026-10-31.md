@@ -1,10 +1,10 @@
 # Agent evals, 2026-10-31
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `d50da1f04a8323f58821b92068e7b81730914fe5bbfdbc67c7c55404d96be716`; 102 records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `dd729085e75424e2904ceb6ae9dbf1f20a6e37844b4ad314fa32559b662a2dee`; 102 records over 24 tracks (subset: all).
 - **Date**: 2026-10-31
 - **Commit**: `5fd193fa7a64` (runs recorded at `5fd193fa7a64`)
-- **Provenance**: Every run here, and the judge's record, was recorded at `5fd193fa7a64`, then the head of the branch that added this report, based on `3c5e5b9`; the branch is squashed when merged, so that commit is named for provenance and is not in main's history. After it the branch changed no app code: only the eval harness where it gathers, compares, scores and reports records (its live runs are unchanged), these records and their cassettes, docs, CI, lint settings and two API tests (`apps/api/src/sources/http-readable.test.ts`, `apps/api/src/sources/identity.test.ts`).
+- **Provenance**: Every run here, and the judge's record, was recorded at `5fd193fa7a64`, then the head of the branch that added this report, based on `3c5e5b9`; the branch is squashed when merged, so that commit is named for provenance and is not in main's history. After it the branch changed one app file, `apps/api/src/agent/verifier/index.ts`, where the rule that decides whether a verdict sources a claim became an exported function (`verdictSources`) with the same result, so the harness can call it; the replay of the CI subset gives the recorded result again at the branch's last commit. The rest is the eval harness where it gathers, compares, scores and reports records (its live runs are unchanged), these records and their cassettes, docs, CI, lint settings and two API tests (`apps/api/src/sources/http-readable.test.ts`, `apps/api/src/sources/identity.test.ts`).
 - **Results**: `agent-2026-10-31.json`
 - **Gold** is described by its sources, each read on the date given in the golden file: musicbrainz.org (20 references, read 2026-10-16); wikipedia.org (20 references, read 2026-10-16); rollingstone.com (3 references, read 2026-10-16); theguardian.com (2 references, read 2026-10-16); bbc.co.uk (1 reference, read 2026-10-16); billboard.com (1 reference, read 2026-10-16); ft.com (1 reference, read 2026-10-16); kexp.org (1 reference, read 2026-10-16); latimes.com (1 reference, read 2026-10-16); loudwire.com (1 reference, read 2026-10-16); npr.org (1 reference, read 2026-10-16); seattletimes.com (1 reference, read 2026-10-16). Every gold label cites one of these sources; none comes from listening.
 - **Models**: the pipeline writes on `fast gpt-6-luna`, `main gpt-6-luna` and judges on `gpt-6-sol`; the judge's model writes nothing the judge reads. The model-only baseline (row a) runs on `gpt-6-sol`, the judge's model, so it is never judged: none of its claims is shown as sourced. All of this is read from the spend lines the run records keep.
@@ -61,12 +61,13 @@ Every run is kept and counted whatever its sources answered; no run was repeated
 | metric | value | n | 95 % CI |
 | --- | --- | --- | --- |
 | runs with at least one source error (source-error rate) | 58.3 % (14/24) | 24 | [38.8 %, 75.5 %] |
+| runs with at least one source error, secondhandsongs left out (ran without its credential) | 12.5 % (3/24) | 24 | [4.3 %, 31.0 %] |
 | runs where genius: unavailable | 8.3 % (2/24) | 24 | [2.3 %, 25.8 %] |
 | runs where listenbrainz: unavailable | 4.2 % (1/24) | 24 | [0.7 %, 20.2 %] |
 | runs where musicbrainz: unavailable | 8.3 % (2/24) | 24 | [2.3 %, 25.8 %] |
 | runs where secondhandsongs: unavailable | 58.3 % (14/24) | 24 | [38.8 %, 75.5 %] |
 
-Not configured in these runs: discogs. Runs with no result: none.
+Not configured in these runs: discogs. Ran without its credential: secondhandsongs (`SHS_API_KEY` unset in the 12 runs that reached it, as their recordings note; its recorded responses there: HTTP 403 × 12); the source-error rate is also given with it left out. Runs with no result: none.
 
 ## Ablations
 
@@ -95,9 +96,11 @@ Not configured in these runs: discogs. Runs with no result: none.
 
 False positives with the right target and the wrong relation, included in precision: (a) 0; (b) 0; (c) 0; (d) 0. Left out of precision: (a) 0 duplicate, 0 other documented, 0 unresolved; (b) 0 duplicate, 0 other documented, 0 unresolved; (c) 0 duplicate, 0 other documented, 0 unresolved; (d) 0 duplicate, 0 other documented, 0 unresolved.
 
+Row a ran on `research gpt-6-sol`, the pipeline's composer (rows c and d) on `main gpt-6-luna`, so row a against rows b-d changes the model as well as the tools and evidence.
+
 | row | what it runs | claims shown as sourced | value | n | 95 % CI |
 | --- | --- | --- | --- | --- | --- |
-| a | model only, no tools or evidence | 0 by construction (no evidence, never judged) | 0.0 % (0/70) | 70 | [0.0 %, 5.2 %] |
+| a | model only, no tools or evidence | 0 by construction (no evidence, never judged) | 0/70 | 70 | n/a (by construction) |
 | b | deterministic only, no model | kind sourced | 100.0 % (164/164) | 164 | [97.7 %, 100.0 %] |
 | d | pipeline after the verifier (what the UI shows) | kind sourced | 84.1 % (232/276) | 276 | [79.3 %, 87.9 %] |
 

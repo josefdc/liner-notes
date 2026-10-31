@@ -1,4 +1,4 @@
-// The secret-shape and preview-link scan of the committed cassettes and run records
+// The secret-shape and preview-link scan of the committed cassettes, run records and reports
 // (lib/scan.mjs): the committed tree passes, and every planted sample is caught, in a file of a
 // scanned directory as well as on its own. The samples are built from parts, so no credential
 // shape is written here whole. Run with: node --test 'evals/**/*.test.mjs'
@@ -46,7 +46,7 @@ const PLANTED = [
   ],
 ];
 
-test("the committed cassettes and run records hold no secret shape and no preview link", () => {
+test("the committed cassettes, run records and reports hold no secret shape and no preview link", () => {
   const found = scanCommitted();
   assert.deepEqual(
     found.map((f) => `${f.file}: ${f.rules.join(", ")}`),
@@ -71,20 +71,49 @@ test("a redacted value and Spotify's token type pass", () => {
   assert.deepEqual(scanText('{"text": "Expires in 1997, the expiry of the deal"}'), []);
 });
 
-test("a planted file in a scanned directory is named, with its rule", () => {
+/** A root holding each scanned directory with one clean file. */
+function cleanRoot() {
   const root = mkdtempSync(join(tmpdir(), "scan-"));
+  for (const dir of SCANNED_DIRS) {
+    mkdirSync(join(root, dir), { recursive: true });
+    writeFileSync(join(root, dir, "clean.json"), '{"ok": true}\n');
+  }
+  return root;
+}
+
+test("the scan covers the cassettes, the run records and the reports", () => {
+  assert.deepEqual(SCANNED_DIRS, ["fixtures/cassettes", "evals/agent/runs", "evals/reports"]);
+});
+
+test("a planted file in a scanned directory is named with its rule, whatever its kind", () => {
+  const root = cleanRoot();
   try {
-    for (const dir of SCANNED_DIRS) mkdirSync(join(root, dir), { recursive: true });
-    writeFileSync(join(root, SCANNED_DIRS[0], "clean.json"), '{"ok": true}\n');
     const deep = join(root, SCANNED_DIRS[1], "2026-01-01", "perturb");
     mkdirSync(deep, { recursive: true });
     writeFileSync(join(deep, "judge.json"), JSON.stringify({ excerpt: PLANTED[16][1] }));
+    writeFileSync(join(root, SCANNED_DIRS[2], "agent-latest.md"), `- ${PLANTED[15][1]}\n`);
+    writeFileSync(join(root, SCANNED_DIRS[1], "2026-01-01", "provenance.txt"), PLANTED[8][1]);
     assert.deepEqual(scanCommitted(root), [
       {
         file: join(SCANNED_DIRS[1], "2026-01-01", "perturb", "judge.json"),
         rules: ["a Spotify CDN host"],
       },
+      { file: join(SCANNED_DIRS[1], "2026-01-01", "provenance.txt"), rules: ["a Tavily key"] },
+      { file: join(SCANNED_DIRS[2], "agent-latest.md"), rules: ["a Deezer preview host"] },
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a scanned directory that is missing or holds no file fails the scan", () => {
+  const root = cleanRoot();
+  try {
+    assert.deepEqual(scanCommitted(root), []);
+    rmSync(join(root, SCANNED_DIRS[2]), { recursive: true, force: true });
+    assert.throws(() => scanCommitted(root), /scan: evals\/reports does not exist/);
+    mkdirSync(join(root, SCANNED_DIRS[2], "empty"), { recursive: true });
+    assert.throws(() => scanCommitted(root), /scan: evals\/reports holds no file/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -30,7 +30,7 @@ evals/agent/
   lib/app.mjs         loads the app's TypeScript modules (tsx), one namespace
   lib/inproc.mjs      the app's model layer in this process (baseline, judge)
   runs/<date>/        the committed run records of a golden run (a-d, d-repeat, perturb/,
-                      results/, provenance.txt)
+                      results/, sources/, provenance.txt)
   testdata/           synthetic runs and reports for the tests (make-testdata.mjs writes them)
   *.test.mjs          node --test 'evals/**/*.test.mjs'
 ```
@@ -116,9 +116,9 @@ rendered from records marked `"synthetic": true` says so at the top.
 records and golden file its header names (with its date, commit and subset) and requires the
 Markdown and the results file (`agent-<date>.json`) to match byte for byte; the held-out
 exclusion is re-derived from the runs' evidence, never read from the results file. The header
-carries the sha256 of the run-record directory (its records, `perturb/` and `results/`), so
-records that changed since the report are named as such (keep each golden run's records in a
-directory of its own). It also checks the
+carries the sha256 of the run-record directory (its records, `perturb/`, `results/` and
+`sources/`), so records that changed since the report are named as such (keep each golden run's
+records in a directory of its own). It also checks the
 structure on its own: a header with the dataset (its sha256 must still match), run records,
 date, commit and results file; Markdown tables at the start of the line (no HTML, no indent)
 with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson interval
@@ -136,7 +136,7 @@ A commit in a report is provenance: the code revision the runs were recorded fro
 recorded on a branch, and a branch is squashed when merged, so that commit need not be in the
 repository's history, and nothing is read from it. What a report scored is checked by content:
 the golden file's sha256 and the run records' (every `*.json` of the directory, `perturb/`,
-`results/` and `provenance.txt`) must equal the working tree's. So a later edit to
+`results/`, `sources/` and `provenance.txt`) must equal the working tree's. So a later edit to
 `evals/golden.jsonl` or to a run record fails the check, and CI with it. If the golden file has
 to change, render the report again from its run records (`report.mjs`, with the same `--commit`),
 or record the runs again when the change is to what they ran. `provenance.txt`, when a run
@@ -168,15 +168,17 @@ newest directory under `evals/agent/runs` keeps, with 0 outbound attempts and 0 
   source errors.
 
 The normalisation (`RESULT_MASKS` in `lib/record.mjs`) masks only what changes between two runs
-of the same code on the same answers, and nothing else:
+of the same code on the same answers, or what the cassettes cannot give back, and nothing else:
 
 - the run's id, and the ids of claims, factoids and factoid entities, each replaced by its order
   of first appearance (new random ids every run; references to them keep pointing the same way);
 - `run.mode`, `run.replayed`, `run.recordedAt`, `run.commit` and `run.usage.usd`, left out (how
   and when the run was made; a replay spends nothing);
 - `previewUrl`, anywhere, left out (a signed link that expires; the cassettes keep none);
-- `coverUrl`, kept as present or absent, and a genealogy node's `img`, left out (CDN image
-  links, kept out of the committed files);
+- `coverUrl`: a link becomes `"[link]"` and an empty one stays `""`, so the committed result
+  shows whether the run had a cover; not compared, since the source cassettes keep no image
+  links and a replay cannot give it back;
+- a genealogy node's `img`, left out (a CDN image link, kept out of the committed files);
 - evidence `retrievedAt` (the time the run read the source).
 
 A difference exits 1, prints the first differing paths of the result
@@ -188,15 +190,18 @@ configured (the cassette directory's `credentials.json`). Only the CI subset's c
 committed, so `--subset all` fails on the other rows, naming each. `--runs <dir>` uses another
 directory; `--score-only` scores the records with no replay (the synthetic test data has no
 cassettes). The CI subset holds Stronger (`USUM70741299`), whose result links two related
-recordings (second-hop samples) and whose preview gave no measurement.
+recordings (second-hop samples) and for which no preview was found (`preview.available: false`, so
+no measurement).
 
 CI runs, with every outbound connection refused and no spending: the CI subset's replay;
 `check-report.mjs evals/reports/agent-latest.md`, which reads no older commit, so it passes on
-CI's two-commit checkout and after a squash merge; and `perturb-check.mjs`. `node --test 'evals/**/*.test.mjs'` also scans every committed file under
-`fixtures/cassettes` and `evals/agent/runs` for credential shapes (keys in their services'
-formats, api-key and Authorization headers, bearer tokens and token fields that are not
-`[redacted]`, credentials in a query), preview hosts with or without a scheme, and signed links'
-parameters (`lib/scan.mjs`, `scan.test.mjs`).
+CI's two-commit checkout and after a squash merge; and `perturb-check.mjs`. A cassette miss the
+API logs fails the replay even when the run still completes. `node --test 'evals/**/*.test.mjs'`
+also scans every file under `fixtures/cassettes`, `evals/agent/runs` and `evals/reports` (each
+must exist and hold a file) for credential shapes (keys in their services' formats, api-key and
+Authorization headers, bearer tokens and token fields that are not `[redacted]`, credentials in a
+query), preview hosts with or without a scheme, and signed links' parameters (`lib/scan.mjs`,
+`scan.test.mjs`).
 
 ## Recording the golden run
 
@@ -215,7 +220,7 @@ node evals/agent/baseline.mjs --mode live --subset all \
 node evals/agent/perturb-judge.mjs --mode live \
   --cassettes <dir> --spend-log <file> --out <file>                     # eval:perturb
 node evals/agent/assemble.mjs --golden <out>/golden --variance <out>/variance \
-  --baseline <out>/baseline --to evals/agent/runs/<date>
+  --baseline <out>/baseline --cassettes <golden cassettes dir> --to evals/agent/runs/<date>
 node evals/agent/spend.mjs --log <file>                                  # spend by purpose
 ```
 
@@ -224,7 +229,11 @@ its model positives beside it (`audit.json`), the cassettes of the CI subset to
 `fixtures/cassettes/{llm,sources}/golden/<isrc>`, the baseline's to
 `fixtures/cassettes/llm/baseline` and the judge's to `fixtures/cassettes/llm/perturb`, and
 render the report. Each run answers the clarification step with the top-ranked candidate. A run
-with source errors is kept and counted (the report gives the source-error rate); a run is
+with source errors is kept and counted (the report gives the source-error rate; with
+`--cassettes`, `assemble.mjs` also writes `sources/<ISRC>.json`, the names of the credentials
+each recording ran without and how many of each source's responses had each HTTP status, so a
+source that ran without its credential is listed apart and the rate is also given without it);
+a run is
 repeated only after an infrastructure failure of the harness, at most once, and the repeat is
 logged. `--mode rebuild` re-derives a directory's records from the event streams the live run
 kept, with no call. The baseline is never judged: its model is the judge's. `docs/failures.md`

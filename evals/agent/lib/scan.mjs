@@ -1,16 +1,16 @@
-// What a committed cassette or run record must never hold: a credential in a service's own
-// format (the shapes the replay recorder refuses, apps/api/src/replay/secretShapes.test.ts), a
+// What a committed cassette, run record or report must never hold: a credential in a service's
+// own format (the shapes the replay recorder refuses, apps/api/src/replay/secretShapes.test.ts), a
 // credential sent as a header or a field, a preview link (they are signed and expire), or a
 // signed link's parameters. Preview hosts are matched with or without a scheme, so a link a
 // source wrote into an error body without one is caught too. Pure: text in, rule names out.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import { REPO_ROOT } from "./golden.mjs";
 
-/** The committed directories the scan covers. */
-export const SCANNED_DIRS = ["fixtures/cassettes", "evals/agent/runs"];
+/** The committed directories the scan covers: every file in them, whatever its kind. */
+export const SCANNED_DIRS = ["fixtures/cassettes", "evals/agent/runs", "evals/reports"];
 
 /** Each rule: what it finds, and the pattern. A redacted value ("[redacted]") passes. */
 export const RULES = [
@@ -51,7 +51,10 @@ export function scanText(text) {
   return RULES.filter((r) => r.re.test(text)).map((r) => r.name);
 }
 
-/** Every committed file of SCANNED_DIRS that breaks a rule: [{ file, rules }]. */
+/**
+ * Every file of SCANNED_DIRS that breaks a rule: [{ file, rules }]. A scanned directory that is
+ * missing or holds no file is an error, so a moved directory cannot pass by being empty.
+ */
 export function scanCommitted(root = REPO_ROOT) {
   const out = [];
   for (const dir of SCANNED_DIRS) {
@@ -59,10 +62,11 @@ export function scanCommitted(root = REPO_ROOT) {
     try {
       names = readdirSync(join(root, dir), { recursive: true, encoding: "utf8" });
     } catch {
-      continue;
+      throw new Error(`scan: ${dir} does not exist`);
     }
-    for (const name of names.sort()) {
-      if (!name.endsWith(".json")) continue;
+    const files = names.sort().filter((name) => statSync(join(root, dir, name)).isFile());
+    if (!files.length) throw new Error(`scan: ${dir} holds no file`);
+    for (const name of files) {
       const path = join(root, dir, name);
       const rules = scanText(readFileSync(path, "utf8"));
       if (rules.length) out.push({ file: relative(root, path), rules });

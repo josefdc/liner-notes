@@ -534,3 +534,11 @@ test("the published report passes, and names its models, source errors and class
     "the audit of the model positives, or that it is pending",
   ]);
 });
+
+test('"n/a (by construction)" is accepted only on a count of none or all of n', () => {
+  assert.deepEqual(checkCells("x", "0/70", "70", "n/a (by construction)"), []);
+  assert.deepEqual(checkCells("x", "70/70", "70", "n/a (by construction)"), []);
+  assert.equal(checkCells("x", "3/70", "70", "n/a (by construction)").length, 1);
+  assert.equal(checkCells("x", "0.0 % (0/70)", "70", "n/a (by construction)").length, 1);
+  assert.equal(checkCells("x", "0/69", "70", "n/a (by construction)").length, 1);
+});

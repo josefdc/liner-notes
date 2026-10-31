@@ -17,7 +17,8 @@
 //    - every row's value agrees with its n: below n = 10, counts "k/n" (or the values
 //      themselves) with "counts only", never a rate; from n = 10, a rate "p % (k/n)" whose p and
 //      Wilson interval are recomputed from k and n, or a statistic with a numeric interval
-//      lo <= hi; "no data" only where n = 0;
+//      lo <= hi; "no data" only where n = 0; "n/a (by construction)" only on a count of none
+//      or all of n (row a's claims shown as sourced: it has no evidence and is never judged);
 //    - the ablation table has rows a, b, c and d; the clarification rate is reported;
 //    - the held-out table gives n before and after the exclusion, they add up, and the ablation
 //      table's held-out n is the one after it;
@@ -43,6 +44,7 @@ import { MIN_N_FOR_RATE, wilson } from "./lib/stats.mjs";
 import {
   ALL_EQUAL,
   buildReport,
+  BY_CONSTRUCTION,
   COUNTS_ONLY,
   inTestdata,
   runsSha256,
@@ -99,6 +101,13 @@ export function checkCells(label, value, nCell, ci) {
   }
   if (/no data|not measured|n\/a|pending/i.test(value)) {
     return [`${label}: "${value}" although n = ${n}`];
+  }
+  if (ci === BY_CONSTRUCTION) {
+    // A count fixed by how the row is built (none or all of n): no rate, no interval.
+    const counts = value.match(/^(\d+)\/(\d+)$/);
+    return counts && +counts[2] === n && (+counts[1] === 0 || +counts[1] === n)
+      ? []
+      : [`${label}: "${BY_CONSTRUCTION}" needs a count of none or all of n = ${n} ("${value}")`];
   }
   if (n < MIN_N_FOR_RATE) {
     const problems = [];

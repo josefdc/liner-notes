@@ -124,3 +124,31 @@ test("bad arguments exit 2", () => {
     assert.equal(out.status, 2, args.join(" "));
   }
 });
+
+test("the replay reads every cassette miss the API logged, from sources and from the model", async () => {
+  const { cassetteMisses } = await import("./run.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "agent-misses-"));
+  try {
+    const log = join(dir, "api.jsonl");
+    const line = (msg, extra = {}) => JSON.stringify({ level: "warn", msg, ...extra });
+    writeFileSync(
+      log,
+      [
+        line("SOURCE_CASSETTE=replay: answers come from fixtures/cassettes/sources/golden/x"),
+        line("Similar tracks error: lastfm: no cassette entry for GET https://ws.example.org/2.0/"),
+        line("Planner unavailable (cassette_miss)"),
+        line("composer: no LLM cassette for ComposerOutput on tier main (key 0123)"),
+        "not json, but no cassette entry either",
+        "",
+      ].join("\n"),
+    );
+    const misses = cassetteMisses(log);
+    assert.equal(misses.length, 4);
+    assert.match(misses[0], /^Similar tracks error: lastfm: no cassette entry/);
+    assert.deepEqual(cassetteMisses(join(dir, "none.jsonl")), []);
+    writeFileSync(log, `${line("SOURCE_CASSETTE=replay: answers come from x")}\n`);
+    assert.deepEqual(cassetteMisses(log), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

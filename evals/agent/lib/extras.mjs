@@ -3,7 +3,7 @@
 // row shows as sourced, and the verifier as a classifier on the perturbation set (from the judge
 // records kept beside the run records, in <runs>/perturb/). Pure: records in, counts out.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { bootstrap, MIN_N_FOR_RATE, mean, wilson } from "./stats.mjs";
@@ -21,6 +21,58 @@ const statOf = (values, f) => ({
   values: [...values],
 });
 const sorted = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+/**
+ * Where a run-record directory keeps, per track, what its sources answered: the credentials the
+ * recording ran without (the names its credentials.json lists, never a value) and, per source,
+ * how many responses had each HTTP status (sources/<ISRC>.json, written by assemble.mjs from the
+ * live run's source cassettes).
+ */
+export const SOURCES_DIR = "sources";
+
+/** The credential each source of the records needs, by the source's name in sourceErrors. */
+export const SOURCE_CREDENTIAL = {
+  discogs: "DISCOGS_TOKEN",
+  genius: "GENIUS_ACCESS_TOKEN",
+  lastfm: "LASTFM_API_KEY",
+  secondhandsongs: "SHS_API_KEY",
+  tavily: "TAVILY_API_KEY",
+};
+
+/** One track's source summary from its source-cassette directory: names and counts only. */
+export function sourceSummary(cassetteDir) {
+  const statuses = {};
+  let unset = [];
+  for (const name of readdirSync(cassetteDir).sort()) {
+    if (!name.endsWith(".json")) continue;
+    const data = JSON.parse(readFileSync(join(cassetteDir, name), "utf8"));
+    if (name === "credentials.json") {
+      unset = sorted(data.unset ?? []);
+      continue;
+    }
+    if (name === "audio.json") continue;
+    const counts = {};
+    for (const entry of Object.values(data.entries ?? {})) {
+      const status = String(entry?.status ?? "none");
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    statuses[name.replace(/\.json$/, "")] = counts;
+  }
+  return { version: 1, unset, statuses };
+}
+
+/** The source summaries a run-record directory keeps, by ISRC (empty when it keeps none). */
+export function readSourceSummaries(runsDir) {
+  const dir = join(runsDir, SOURCES_DIR);
+  const out = new Map();
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir).sort()) {
+    if (name.endsWith(".json")) {
+      out.set(name.slice(0, -5), JSON.parse(readFileSync(join(dir, name), "utf8")));
+    }
+  }
+  return out;
+}
 
 /** The judge record and the audit of a run-record directory, or nulls when there are none. */
 export function readPerturbRecords(runsDir) {
@@ -53,6 +105,19 @@ export function models(runs) {
     ),
     judges,
     baseline: of(a, () => true),
+    baselineTiers: sorted(
+      new Set(a.flatMap((r) => (r.calls ?? []).map((c) => `${c.tier} ${c.deployment}`))),
+    ),
+    // The pipeline's composer, the call row a stands in for.
+    composerTiers: sorted(
+      new Set(
+        d.flatMap((r) =>
+          (r.calls ?? [])
+            .filter((c) => c.callSite === "composer")
+            .map((c) => `${c.tier} ${c.deployment}`),
+        ),
+      ),
+    ),
     judgeIsGenerator: judges.some((j) => generators.includes(j)),
   };
 }
@@ -83,11 +148,13 @@ export function perTier(runs) {
 }
 
 /**
- * The sources the runs could not read (row d, first runs). A source with no credential set is
- * "not configured", which is the deployment's choice rather than an error, so it is counted
- * apart; the source-error rate is the share of runs with at least one other source error.
+ * The sources row d's first runs could not read. A source with no credential configured
+ * (`not_configured`) is not an error of the run and is listed apart. So is a source that ran
+ * without its credential, as the source summaries record it (sources/<ISRC>.json): its errors
+ * are counted, and the source-error rate is also given without them, with the statuses its
+ * responses had.
  */
-export function sourceErrors(runs) {
+export function sourceErrors(runs, summaries = new Map()) {
   const d = runs.filter((r) => r.ablation === "d" && (r.repeat ?? 0) === 0);
   const errorsOf = (r) => (r.sourceErrors ?? []).filter((s) => s.code !== "not_configured");
   const keys = sorted(new Set(d.flatMap((r) => errorsOf(r).map((s) => `${s.source}: ${s.code}`))));
@@ -98,8 +165,29 @@ export function sourceErrors(runs) {
       ),
     ),
   );
+  const summaryOf = (r) => summaries.get(r.isrc) ?? null;
+  const covered = d.length > 0 && d.every((r) => summaryOf(r));
+  const withoutCredential = covered
+    ? Object.entries(SOURCE_CREDENTIAL)
+        .filter(([source]) => !notConfigured.includes(source))
+        .map(([source, credential]) => {
+          const ran = d.filter((r) => summaryOf(r).unset.includes(credential));
+          const statuses = {};
+          for (const r of ran) {
+            for (const [status, n] of Object.entries(summaryOf(r).statuses[source] ?? {})) {
+              statuses[status] = (statuses[status] ?? 0) + n;
+            }
+          }
+          return { source, credential, runs: ran.length, statuses };
+        })
+        .filter((x) => x.runs > 0)
+    : [];
+  const apart = new Set(withoutCredential.map((x) => x.source));
   return {
     any: rate(d.filter((r) => errorsOf(r).length > 0).length, d.length),
+    withoutUncredentialed: apart.size
+      ? rate(d.filter((r) => errorsOf(r).some((s) => !apart.has(s.source))).length, d.length)
+      : null,
     bySource: keys.map((key) => ({
       key,
       ...rate(
@@ -108,6 +196,7 @@ export function sourceErrors(runs) {
       ),
     })),
     notConfigured,
+    withoutCredential,
     failed: d
       .filter((r) => r.outcome !== "complete")
       .map((r) => ({ isrc: r.isrc, outcome: r.outcome })),

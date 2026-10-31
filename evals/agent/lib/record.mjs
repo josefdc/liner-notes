@@ -283,8 +283,12 @@ export const RESULT_MASKS = [
     why: "a signed link that expires; the cassettes keep no signed link, so a replay has none",
   },
   {
-    what: "coverUrl: kept as present or absent; genealogy node img: left out",
-    why: "CDN image links, kept out of the committed files; the cassettes keep no image of a related recording",
+    what: 'coverUrl: a link becomes "[link]" and "" stays "" (so the result shows whether the run had a cover); not compared',
+    why: "a CDN image link, kept out of the committed files; the source cassettes keep no image links, so a replay cannot give it back",
+  },
+  {
+    what: "a genealogy node's img: left out",
+    why: "a CDN image link; the source cassettes keep no image links",
   },
   {
     what: "evidence retrievedAt",
@@ -294,6 +298,8 @@ export const RESULT_MASKS = [
 
 const DROPPED_KEYS = new Set(["previewUrl", "img"]);
 const LINK_KEYS = new Set(["coverUrl"]);
+/** Keys resultDifferences() does not compare, wherever they are: see RESULT_MASKS. */
+export const NOT_COMPARED = new Set(["coverUrl"]);
 const RUN_DROPPED = ["mode", "replayed", "recordedAt", "commit"];
 const TIME_KEYS = new Set(["retrievedAt"]);
 
@@ -317,7 +323,7 @@ export function normalisedResult(events) {
         Object.entries(value)
           .filter(([k]) => !DROPPED_KEYS.has(k))
           .map(([k, v]) => {
-            if (LINK_KEYS.has(k) && typeof v === "string") return [k, "[link]"];
+            if (LINK_KEYS.has(k) && typeof v === "string") return [k, v ? "[link]" : ""];
             if (TIME_KEYS.has(k) && typeof v === "string") return [k, "[time]"];
             return [k, walk(v)];
           }),
@@ -333,7 +339,10 @@ export function normalisedResult(events) {
   return out;
 }
 
-/** The paths where two normalised results differ, with both values, at most `limit` of them. */
+/**
+ * The paths where two normalised results differ, with both values, at most `limit` of them.
+ * Keys in NOT_COMPARED are skipped.
+ */
 export function resultDifferences(recorded, replayed, limit = 10) {
   const out = [];
   const short = (v) => {
@@ -346,7 +355,7 @@ export function resultDifferences(recorded, replayed, limit = 10) {
     if (container(a) && container(b) && Array.isArray(a) === Array.isArray(b)) {
       const keys = Array.isArray(a)
         ? [...Array(Math.max(a.length, b.length)).keys()]
-        : [...new Set([...Object.keys(a), ...Object.keys(b)])];
+        : [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => !NOT_COMPARED.has(k));
       for (const k of keys) visit(a[k], b[k], Array.isArray(a) ? `${path}[${k}]` : `${path}.${k}`);
       return;
     }

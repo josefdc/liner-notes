@@ -32,7 +32,7 @@
 //   golden), with every outbound connection refused and counted (tests/deny-network.mjs in each
 //   API process), dummy keys and an empty spend log, and compares the records it gets with the
 //   committed ones (default: the newest directory under evals/agent/runs). It fails on any
-//   difference, any cassette miss, any outbound attempt and any spend-log line.
+//   difference, any cassette miss the API logs, any outbound attempt and any spend-log line.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -328,6 +328,21 @@ function committedRecords(dir) {
 }
 
 /** Replays the subset; returns { ok, lines } (the lines say what was checked, and what failed). */
+/** What the cassettes could not answer, from an API process's log: one line per miss. */
+export function cassetteMisses(logFile) {
+  if (!existsSync(logFile)) return [];
+  return readFileSync(logFile, "utf8")
+    .split("\n")
+    .filter((line) => /cassette_miss|no cassette entry|no LLM cassette/.test(line))
+    .map((line) => {
+      let msg = line;
+      try {
+        msg = JSON.parse(line).msg ?? line;
+      } catch {}
+      return msg.length > 160 ? `${msg.slice(0, 157)}...` : msg;
+    });
+}
+
 export async function replay(opts) {
   requireContract();
   const runsDir = opts.runs ? resolve(opts.runs) : newestRuns();
@@ -419,15 +434,16 @@ export async function replay(opts) {
         calls: [],
         contractCheck: check,
       });
-      const misses = result.events
-        .filter((e) => e.type === "status" || e.type === "error")
-        .filter((e) => /cassette/i.test(`${e.message ?? ""} ${e.error ?? ""} ${e.code ?? ""}`));
+      // A cassette miss is any request or model call the cassettes could not answer, as the API
+      // logs it; the run may still complete (a source error, a fallback), so it is checked apart.
+      const misses = cassetteMisses(env.LOG_FILE);
       const diffs = ["d", "c", "b"].flatMap((id) =>
         differences(recorded[id], records[id]).map((f) => `row ${id} ${f}`),
       );
       // The whole result, not only what is scored: every shown field but RESULT_MASKS.
       const resultDiffs = resultDifferences(recordedResult, normalisedResult(result.events));
       if (resultDiffs.length) diffs.push("the result");
+      if (misses.length) diffs.push(`${misses.length} cassette miss(es)`);
       const label = `${row.isrc} ${row.title}`;
       if (diffs.length === 0)
         lines.push(
@@ -437,7 +453,7 @@ export async function replay(opts) {
         failures.push(`${label}: ${diffs.join(", ")}`);
         lines.push(`FAIL ${label}: ${records.d.outcome}; differs in ${diffs.join(", ")}`);
         for (const d of resultDiffs) lines.push(`     ${d}`);
-        if (misses.length) lines.push(`     ${misses.length} event(s) mention a cassette`);
+        for (const m of misses.slice(0, 3)) lines.push(`     cassette miss: ${m}`);
         writeFileSync(
           join(scratch, `${row.isrc}.replayed.json`),
           `${JSON.stringify({ records, result: normalisedResult(result.events) }, null, 2)}\n`,

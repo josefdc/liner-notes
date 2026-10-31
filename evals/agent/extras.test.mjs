@@ -5,7 +5,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { classifier, models, perTier, sourceErrors, sourcedClaims } from "./lib/extras.mjs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  classifier,
+  models,
+  perTier,
+  sourceErrors,
+  sourceSummary,
+  sourcedClaims,
+} from "./lib/extras.mjs";
 
 const call = (tier, deployment, usd, inputTokens = 100, outputTokens = 10) => ({
   tier,
@@ -26,6 +37,12 @@ test("models: the judge's deployment is never counted as a generator", () => {
   assert.deepEqual(m.judges, ["sol"]);
   assert.deepEqual(m.baseline, ["sol"]);
   assert.equal(m.judgeIsGenerator, false);
+  assert.deepEqual(m.baselineTiers, ["research sol"]);
+  assert.deepEqual(m.composerTiers, [], "no call is the composer's");
+  const composed = models([
+    run("A", "d", { calls: [{ ...call("main", "luna", 0), callSite: "composer" }] }),
+  ]);
+  assert.deepEqual(composed.composerTiers, ["main luna"]);
   const same = models([
     run("A", "d", { calls: [call("main", "sol", 0), call("judge", "sol", 0)] }),
   ]);
@@ -123,4 +140,66 @@ test("classifier: rejected is not shown as sourced; a mutation counts under its 
     ],
   );
   assert.equal(classifier(null), null);
+});
+
+test("sourceErrors: a source that ran without its credential is listed apart, with the rate without it", () => {
+  const runs = [
+    run("A", "d", {
+      outcome: "complete",
+      sourceErrors: [{ source: "secondhandsongs", code: "unavailable" }],
+    }),
+    run("B", "d", {
+      outcome: "complete",
+      sourceErrors: [
+        { source: "secondhandsongs", code: "unavailable" },
+        { source: "musicbrainz", code: "unavailable" },
+      ],
+    }),
+    run("C", "d", { outcome: "complete", sourceErrors: [] }),
+  ];
+  const summary = (unset, statuses) => ({ version: 1, unset, statuses });
+  const summaries = new Map([
+    ["A", summary(["SHS_API_KEY"], { secondhandsongs: { 403: 2 } })],
+    ["B", summary([], {})],
+    ["C", summary(["SHS_API_KEY"], { secondhandsongs: { 403: 1 } })],
+  ]);
+  const s = sourceErrors(runs, summaries);
+  assert.deepEqual([s.any.k, s.any.n], [2, 3]);
+  assert.deepEqual([s.withoutUncredentialed.k, s.withoutUncredentialed.n], [1, 3]);
+  assert.deepEqual(s.withoutCredential, [
+    { source: "secondhandsongs", credential: "SHS_API_KEY", runs: 2, statuses: { 403: 3 } },
+  ]);
+  // A run with no summary: nothing is said about credentials.
+  const partial = sourceErrors(runs, new Map([["A", summaries.get("A")]]));
+  assert.deepEqual(partial.withoutCredential, []);
+  assert.equal(partial.withoutUncredentialed, null);
+});
+
+test("sourceSummary: names of unset credentials and status counts, never a link or a body", () => {
+  const dir = mkdtempSync(join(tmpdir(), "source-summary-"));
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "credentials.json"),
+      '{"version":1,"unset":["SHS_API_KEY","DISCOGS_TOKEN"]}',
+    );
+    writeFileSync(join(dir, "audio.json"), '{"version":1,"entries":{"x":{"tempo":1}}}');
+    writeFileSync(
+      join(dir, "secondhandsongs.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          "GET https://a/1": { status: 403, text: "x" },
+          "GET https://a/2": { status: 403 },
+        },
+      }),
+    );
+    assert.deepEqual(sourceSummary(dir), {
+      version: 1,
+      unset: ["DISCOGS_TOKEN", "SHS_API_KEY"],
+      statuses: { secondhandsongs: { 403: 2 } },
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

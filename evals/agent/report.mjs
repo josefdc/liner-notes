@@ -33,6 +33,8 @@ import {
   PERTURB_DIR,
   perTier,
   readPerturbRecords,
+  readSourceSummaries,
+  SOURCES_DIR,
   sourcedClaims,
   sourceErrors,
 } from "./lib/extras.mjs";
@@ -109,7 +111,7 @@ export function runsSha256(dir) {
   }
   // The perturbation judge's record and its audit, and each row's whole normalised result (what
   // the replay compares), when the directory keeps them.
-  for (const sub of [PERTURB_DIR, RESULTS_DIR]) {
+  for (const sub of [PERTURB_DIR, RESULTS_DIR, SOURCES_DIR]) {
     const path = join(dir, sub);
     if (!existsSync(path)) continue;
     for (const name of readdirSync(path)
@@ -125,6 +127,8 @@ export function runsSha256(dir) {
 }
 
 export const COUNTS_ONLY = `counts only (n < ${MIN_N_FOR_RATE})`;
+/** The CI cell of a count that cannot be other than it is (none or all), so has no interval. */
+export const BY_CONSTRUCTION = "n/a (by construction)";
 const seconds = (ms) => `${(ms / 1000).toFixed(1)} s`;
 const tokens = (x) => String(Math.round(x));
 const usd = (x) => `USD ${x.toFixed(4)}`;
@@ -187,6 +191,21 @@ const sites = (counts) =>
   Object.entries(counts)
     .map(([s, n]) => `${s === ANY_SITE ? "a page whose site cannot be placed" : s} ${n}`)
     .join(", ");
+
+/**
+ * Which models rows a and b-d ran on, from the spend lines: when the baseline and the pipeline's
+ * composer differ, the comparison of row a with rows b-d changes the model as well as the tools.
+ */
+function modelMixLines(m) {
+  if (!m?.baselineTiers?.length || !m.composerTiers?.length) return [];
+  const same =
+    m.baselineTiers.length === m.composerTiers.length &&
+    m.baselineTiers.every((t, i) => t === m.composerTiers[i]);
+  return [
+    `Row a ran on ${list(m.baselineTiers)}, the pipeline's composer (rows c and d) on ${list(m.composerTiers)}${same ? ": row a against rows b-d changes the tools and evidence only." : ", so row a against rows b-d changes the model as well as the tools and evidence."}`,
+    "",
+  ];
+}
 
 /** Renders { md, json } from scored results and the report's metadata. */
 export function renderReport(
@@ -353,6 +372,7 @@ export function renderReport(
     "",
     `False positives with the right target and the wrong relation, included in precision: ${countedFalse.join("; ")}. Left out of precision: ${leftOut.join("; ")}.`,
     "",
+    ...modelMixLines(extras?.models),
     ...(extras?.sourcedClaims ? sourcedClaimLines(extras.sourcedClaims, json) : []),
     "## Held-out recall after the per-run domain exclusion",
     "",
@@ -511,21 +531,43 @@ function renderExtras(extras, lines, json) {
       ["metric", "value", "n", CI_HEADER],
       [
         ["runs with at least one source error (source-error rate)", ...rateCells(s.any)],
+        ...(s.withoutUncredentialed
+          ? [
+              [
+                `runs with at least one source error, ${s.withoutCredential.map((x) => x.source).join(", ")} left out (ran without its credential)`,
+                ...rateCells(s.withoutUncredentialed),
+              ],
+            ]
+          : []),
         ...s.bySource.map((b) => [`runs where ${b.key}`, ...rateCells(b)]),
       ],
     ),
     "",
-    `Not configured in these runs: ${s.notConfigured.length ? s.notConfigured.join(", ") : "none"}. Runs with no result: ${s.failed.length ? s.failed.map((f) => `\`${f.isrc}\` (${escapeMd(f.outcome)})`).join(", ") : "none"}.`,
+    `Not configured in these runs: ${s.notConfigured.length ? s.notConfigured.join(", ") : "none"}.${s.withoutCredential.map((x) => ` Ran without its credential: ${x.source} (\`${x.credential}\` unset in the ${x.runs} runs that reached it, as their recordings note; its recorded responses there: ${statusList(x.statuses)}); the source-error rate is also given with it left out.`).join("")} Runs with no result: ${s.failed.length ? s.failed.map((f) => `\`${f.isrc}\` (${escapeMd(f.outcome)})`).join(", ") : "none"}.`,
     "",
   );
   json.sources = {
     any: plainRate(s.any),
     bySource: s.bySource.map((b) => ({ key: b.key, ...plainRate(b) })),
     notConfigured: s.notConfigured,
+    ...(s.withoutUncredentialed
+      ? {
+          withoutCredential: s.withoutCredential,
+          anyWithoutUncredentialed: plainRate(s.withoutUncredentialed),
+        }
+      : {}),
     failed: s.failed,
   };
   json.models = extras.models;
 }
+
+/** HTTP statuses and their counts: "403 × 12", or "none" when there were no responses. */
+const statusList = (statuses) => {
+  const entries = Object.entries(statuses).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return entries.length
+    ? entries.map(([status, n]) => `HTTP ${status} × ${n}`).join(", ")
+    : "no response recorded";
+};
 
 /** The claims each row shows as sourced. */
 function sourcedClaimLines(sc, json) {
@@ -539,7 +581,9 @@ function sourcedClaimLines(sc, json) {
         id,
         ABLATIONS[id],
         id === "a" ? "0 by construction (no evidence, never judged)" : "kind sourced",
-        ...rateCells(sc[id]),
+        ...(id === "a" && sc[id].k === 0 && sc[id].n > 0
+          ? [`${sc[id].k}/${sc[id].n}`, sc[id].n, BY_CONSTRUCTION]
+          : rateCells(sc[id])),
       ]),
     ),
     "",
@@ -703,7 +747,7 @@ export async function buildReport(opts) {
       ? {
           models: recorded ? models(kept) : null,
           perTier: recorded ? perTier(kept) : null,
-          sources: recorded ? sourceErrors(kept) : null,
+          sources: recorded ? sourceErrors(kept, readSourceSummaries(runsPath)) : null,
           sourcedClaims: recorded ? sourcedClaims(kept) : null,
           classifier: classifier(perturb.judge),
           audit: perturb.audit,

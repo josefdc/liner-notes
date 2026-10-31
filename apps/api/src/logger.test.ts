@@ -2228,7 +2228,7 @@ describe("configured values written decoded, paths without a scheme, and the sha
       // Not a path: no "/" or host first. The whole token, as before.
       ["GET a/b/Zq9Wk3Xv7Tn5Rb/c x", "GET [redacted] x"],
       // A value's base64 form takes its whole token, a "/" of base64 too.
-      [`see /abc/${base64(TOKEN).replace(/=+$/, "")}/def end`, "see [redacted] end"],
+      [`GET /abc/${base64(TOKEN).replace(/=+$/, "")}/def end`, "GET [redacted] end"],
     ]) {
       expect(scrub(text)).toBe(expected);
       expect(describeError(new Error(text))).toBe(expected);
@@ -2411,6 +2411,12 @@ describe("configured values written decoded, paths without a scheme, and the sha
     `access_token = 'localhost:3001/${MODEL_KEY}/${CREDENTIAL}' y`,
     `aaaapassword: /v1/${MODEL_KEY}/a.b/${CREDENTIAL}' y`,
     `aaaasecret=localhost:3001/${MODEL_KEY}/x/${CREDENTIAL} x`,
+    // Names the secret words do not hold, after a method too; a secret's word in the host's word.
+    `Discogs api.x.io/${MODEL_KEY}/${CREDENTIAL} x`,
+    `xDiscogs api.x.io/${MODEL_KEY}/${CREDENTIAL} x`,
+    `x xsk=localhost:3001/${MODEL_KEY}/${CREDENTIAL} x`,
+    `GET xsk=localhost:3001/${MODEL_KEY}/${CREDENTIAL} x`,
+    `GET mysession=localhost:3001/${MODEL_KEY}/${CREDENTIAL} x`,
   ])("hides a path that is a credential's value whole, a cassette's text too: %s", (text) => {
     // After a scheme or a secret's name, the path is the credential: no segment of it is shown. The
     // value is no source's credential, which the source's own rules would take whole; set as the
@@ -2517,6 +2523,117 @@ describe("configured values written decoded, paths without a scheme, and the sha
     const long = new SourceError("discogs", "http", `${"a ".repeat(2_000)}${across}`).message;
     expect(long.length).toBeLessThanOrEqual(201);
     expect(long.endsWith("…")).toBe(true);
+    // With no value in what is read that makes it short, an error's log line keeps all a line
+    // can show, as for the whole text.
+    const plain = "word ".repeat(200_000);
+    expect(scrub(`Error: ${describeError(new Error(plain))}`)).toBe(scrub(`Error: ${plain}`));
+  });
+
+  it("never shows part of a value across the read cut, at any offset", () => {
+    // A filler of a long value, whose masks are far shorter, brings the read cut into what is
+    // shown; plain words leave it past the log's cut.
+    const long = Array.from({ length: 400 }, (_, i) => "Pk7Qx2Wm9Zr4"[(i * 7) % 12]).join("");
+    configureLogger({ DISCOGS_TOKEN: TOKEN, LONG_SECRET: long });
+    const forms = [TOKEN, `Bearer ${CREDENTIAL}`, `token: ${CREDENTIAL}`, decimal(TOKEN)];
+    const parts = [TOKEN, CREDENTIAL].flatMap((value) =>
+      Array.from({ length: value.length - 5 }, (_, i) => value.slice(i, i + 6)),
+    );
+    const line = scrub(`Error: ${"word ".repeat(5_000)}`).length;
+    const paths: Array<[string, number, number, (text: string) => string]> = [
+      ["describe", 19_456, line, (text) => scrub(`Error: ${describeError(new Error(text))}`)],
+      // A source's error as it is thrown, its source's name before the text: it keeps 200.
+      ["source", 4_296 - 9, 201, (text) => new SourceError("discogs", "http", text).message],
+      ["scrubText", 4_596, 500 + 10, (text) => scrubText(text)],
+    ];
+    const shown: string[] = [];
+    for (const [path, at, max, write] of paths) {
+      for (const unit of ["word ", `${long} `]) {
+        for (const form of forms) {
+          for (let offset = -form.length - 2; offset <= 2; offset += 2) {
+            const size = at + offset - 1;
+            const lead = unit.repeat(Math.floor(size / unit.length)).padStart(size, "a");
+            const out = write(`${lead} ${form} tail ${"word ".repeat(1_000)}`);
+            if (out.length > max || parts.some((part) => out.includes(part))) {
+              shown.push(`${path} ${unit.length} ${form.slice(0, 8)} ${offset}: ${out.slice(-80)}`);
+            }
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it.each([
+    ["a JSON array", 'token: ["'],
+    ["a YAML block", "token: |\n  "],
+    ["Markdown", "**token**: "],
+    ["a dash", "token \u2014 "],
+    ["a comma", "token, "],
+    ["a parenthesis", "token: ("],
+    ["an angle bracket", "token: <"],
+    ["blanks", `token:${" ".repeat(60)}`],
+    ["print_r", "[token] => "],
+    ["an arrow", "token -> "],
+    ["prose", "token is "],
+    ["credentials", "credentials: "],
+    ["pwd", "pwd: "],
+    ["passwd", "passwd: "],
+    ["passphrase", "passphrase: "],
+    ["session_id", "session_id: "],
+    ["sid", "sid="],
+    ["a cookie", "Cookie: session="],
+    ["a cookie set", "Set-Cookie: sid="],
+  ])("hides a path whole after words that do not say it is one: %s", (_, before) => {
+    // Its segments could be a credential's, whatever the name before it: none is shown.
+    vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);
+    configureLogger({ AZURE_OPENAI_API_KEY: MODEL_KEY });
+    const shown: string[] = [];
+    try {
+      for (const path of [
+        `/a/${MODEL_KEY}/${CREDENTIAL} x`,
+        `api.x.io/${MODEL_KEY}/${CREDENTIAL} x`,
+        `localhost:3001/${MODEL_KEY}/${CREDENTIAL} x`,
+        `./${MODEL_KEY}/${CREDENTIAL}`,
+      ]) {
+        const text = `${before}${path}`;
+        const outs = {
+          ...written(text),
+          scrubReadText: scrubReadText(text),
+          scrubReadPayload: JSON.stringify(scrubReadPayload({ note: text })),
+        };
+        shown.push(...showing(outs, [MODEL_KEY, CREDENTIAL]).map((out) => `${out}: ${path}`));
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("keeps the segments around a value in a path the text says is one", () => {
+    vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);
+    configureLogger({ AZURE_OPENAI_API_KEY: MODEL_KEY });
+    try {
+      for (const [text, expected] of [
+        [`GET /a/${MODEL_KEY}/b x`, "GET /a/[redacted]/b x"],
+        [`method=POST /a/${MODEL_KEY}/b x`, "method=POST /a/[redacted]/b x"],
+        [`path: /a/${MODEL_KEY}/b x`, "path: /a/[redacted]/b x"],
+        [`{"url":"/a/${MODEL_KEY}/b"}`, '{"url":"/a/[redacted]/b"}'],
+        [`Location: ./${MODEL_KEY}/b x`, "Location: ./[redacted]/b x"],
+        [`see api.example.org/a/${MODEL_KEY}/b x`, "see api.example.org/a/[redacted]/b x"],
+        [`GET localhost:3001/${MODEL_KEY}/b x`, "GET localhost:3001/[redacted]/b x"],
+        [`see localhost:3001/${MODEL_KEY}/b x`, "see localhost:3001/[redacted]/b x"],
+        // A secret's word in the path's name, or before a host: the whole run.
+        [`token_url: /a/${MODEL_KEY}/b x`, "token_url: [redacted] x"],
+        [`token sent to api.example.org/a/${MODEL_KEY}/b x`, "token sent to [redacted] x"],
+        [`see /a/${MODEL_KEY}/b x`, "see [redacted] x"],
+      ]) {
+        expect(scrubReadText(text)).toBe(expected);
+        expect(describeError(new Error(text))).toBe(expected);
+        expect(scrub(text)).toBe(expected);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it.each([

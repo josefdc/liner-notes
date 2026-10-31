@@ -1878,19 +1878,21 @@ const LOG_PREFIX_ROOM = 1024;
  * `text` redacted (redactText), for a log that cuts it to `max` characters, keeping `keep`. A
  * value moreSecretSpans masks can make the text shorter than the other rules leave it, so the
  * cut would fall further on: where they alone leave the text longer than `max`, it stops where
- * they would be cut, with "…", and the log never shows what that cut left out.
+ * they would be cut, with "…", and the log never shows what that cut left out. Only the start
+ * of a long text is read (readForLog): with no such value in it, it is cut to `plain`
+ * characters, with "…", or written whole, then the mask or "…" for the rest. A caller whose log
+ * keeps more than `max` of a text with no such value passes what it keeps.
  */
-function redactForLog(whole: string, max: number, keep: number): string {
+function redactForLog(whole: string, max: number, keep: number, plain = max): string {
   return withCredentials(() => {
     const [text, hidden] = readForLog(whole, keep);
     const rest = text.length < whole.length ? `${hidden}…` : "";
     const more = moreSecretSpans(text);
     const pieces = keyValuePieces(text, [], [], more);
-    // A text read in part is cut to `max` as one with such values: the part read can hold none
-    // where the whole text did, and the cut then is the whole text's.
     if (more.length === 0 && !rest) return render(text, pieces);
     const other = more.length > 0 ? keyValuePieces(text, [], [], []) : pieces;
-    const shown = safeCut(text, pieces, other, max, keep);
+    const [length, kept] = more.length > 0 ? [max, keep] : [plain, plain];
+    const shown = safeCut(text, pieces, other, length, kept);
     return shown < text.length
       ? `${render(text, piecesBefore(pieces, shown))}…`
       : `${render(text, pieces)}${rest}`;
@@ -2284,12 +2286,15 @@ export function isSourceError(error: unknown, kind?: SourceErrorKind): error is 
  * One line for logs and tool results, with credentials redacted. A log line keeps
  * MAX_LOGGED_TEXT characters, its own words before the error included: past that, the line
  * stops where the other rules alone would leave it with LOG_PREFIX_ROOM to spare (redactForLog).
+ * A long text read in part with no value those rules mask keeps MAX_LOGGED_TEXT characters, all
+ * a line can show.
  */
 export function describeError(error: unknown): string {
   return redactForLog(
     error instanceof Error ? error.message : String(error),
     MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
     MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+    MAX_LOGGED_TEXT,
   );
 }
 

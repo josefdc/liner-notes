@@ -387,6 +387,53 @@ describe("retries", () => {
     expect(classifyError(glued, state).message).toBe("scout: [redacted]");
   });
 
+  it("never shows part of a value across the model error's read cut, at any offset", () => {
+    // A filler of a long value, whose masks are far shorter, brings the read cut into the 500
+    // characters kept; plain words leave it past them.
+    const value = "K7jK8jK9jKajKbjKcj";
+    const long = Array.from({ length: 400 }, (_, i) => "Pk7Qx2Wm9Zr4"[(i * 7) % 12]).join("");
+    const credential = "T9zB8yC7xD6wE5vF4uG3";
+    vi.stubEnv("SOME_SERVICE_PASSWORD", value);
+    vi.stubEnv("OTHER_SERVICE_TOKEN", long);
+    configureLogger({
+      SOME_SERVICE_PASSWORD: value,
+      OTHER_SERVICE_TOKEN: long,
+      LOG_LEVEL: "silent",
+    });
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const entities = [...value].map((c) => `&#${c.codePointAt(0)};`).join("");
+    const parts = [value, credential].flatMap((one) =>
+      Array.from({ length: one.length - 5 }, (_, i) => one.slice(i, i + 6)),
+    );
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const shown: string[] = [];
+    let reached = 0;
+    for (const unit of ["word ", `${long} `]) {
+      for (const form of [value, `Bearer ${credential}`, `token: ${credential}`, entities]) {
+        for (let offset = -form.length - 2; offset <= 2; offset += 2) {
+          const size = 8_192 + offset - 1;
+          const lead = unit.repeat(Math.floor(size / unit.length)).padStart(size, "a");
+          const text = `${lead} ${form} tail ${"word ".repeat(1_000)}`;
+          const error = classifyError(Object.assign(new Error(text), { status: 500 }), state);
+          const cause = String((error.cause as Error).message);
+          if (!error.message.endsWith("…") && error.message.length < 500) reached++;
+          if (
+            error.message.length > 500 ||
+            cause.length > 300 ||
+            parts.some((part) => error.message.includes(part) || cause.includes(part))
+          ) {
+            shown.push(`${unit.length} ${form.slice(0, 8)} ${offset}: ${error.message.slice(-80)}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+    // The long filler's runs end at the read cut, inside what the message keeps.
+    expect(reached).toBeGreaterThan(0);
+  });
+
   it("hides a configured value written escaped before it cuts the message, at every offset", () => {
     // Cut to 500 and 300 characters, an escaped value is a part that no longer matches when the
     // logger reads the line: it is hidden before the cut.

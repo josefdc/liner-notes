@@ -1109,10 +1109,10 @@ function inLink(text: string): (at: number) => boolean {
  * Whether a place in `text` is in a path written without a scheme: in a run of token characters
  * (isTokenChar) that starts with "/" (`/v1/<value>/x`, `//host/…`, also after "~" or "." or
  * ".."), with a host name and a "/" (`api.example.org/v1/…`), or with a port and a "/" after a
- * ":" (`localhost:3001/v1/…`); and only past that first "/": a value in the host name
- * (`<key>.sig/<rest>`) is no path's. A run that is a credential's value (credentialValueAt) is
- * no path either. Asked for places in order, it reads each character once, and
- * the start of each run once.
+ * ":" (`localhost:3001/v1/…`), where the text says it is a path (pathEvidence); and only past
+ * that first "/": a value in the host name (`<key>.sig/<rest>`) is no path's. Any other run is
+ * taken whole, as a token. Asked for places in order, it reads each character once, and the
+ * start of each run once.
  */
 function inPath(text: string): (at: number) => boolean {
   let read = 0;
@@ -1124,16 +1124,63 @@ function inPath(text: string): (at: number) => boolean {
     if (judged !== start) {
       judged = start;
       after = stickyEnd(PATH_START, text, start);
+      // A host name starts with a letter or a digit; PATH_START's other forms, with "~", "." or "/".
+      let host = after !== -1 && !"~./".includes(text.charAt(start));
       if (after === -1 && text.charCodeAt(start - 1) === COLON) {
         after = stickyEnd(PORT_START, text, start);
+        host = true;
       }
-      // A path that is a credential's value (`Bearer /v1/<key>/<rest>`, `token: ./<key>/…`,
-      // `Basic localhost:3001/<key>/…`) is the credential's: taken whole, as any token.
-      if (after !== -1 && credentialValueAt(text, start)) after = -1;
+      if (after !== -1 && !pathEvidence(text, start, host)) after = -1;
     }
     return after !== -1 && at >= after;
   };
 }
+
+/**
+ * Whether the run of token characters at `start`, which starts like a path (inPath), is one by
+ * what is written before it: an HTTP method (`GET /v1/…`, `method=GET /v1/…`); a name that ends
+ * in a path's word, with its ":" or "=" (`path: /v1/…`, `"url":"/v1/…"`, `Location: /v1/…`) and
+ * no secret's word in it (SECRET_WORD); or a host name or a port that starts its word
+ * (`api.example.org/v1/…`, `localhost:3001/v1/…`), with no secret's word in the NAME_WINDOW
+ * characters before that word, past the blanks and stops right before it. Never a credential's
+ * value (credentialValueAt), nor a run whose own word holds a secret's word
+ * (`mysession=localhost:3001/…`). A value in any other run is the whole run's, whatever words
+ * come before it (`token — /v1/…`, `[token] => /v1/…`, `Cookie: sid=localhost:3001/…`): a run
+ * whose segments could be a credential's is never shown in part.
+ */
+function pathEvidence(text: string, start: number, host: boolean): boolean {
+  // A path that is a credential's value (`Bearer /v1/<key>/<rest>`, `token: ./<key>/…`,
+  // `Basic localhost:3001/<key>/…`) is the credential's: taken whole, as any token.
+  if (credentialValueAt(text, start)) return false;
+  let word = start;
+  while (word > 0 && start - word < NAME_WINDOW && !endsLink(text.charCodeAt(word - 1))) word--;
+  // A secret's word in the run's own word (`mysession=localhost:3001/…`).
+  if (SECRET_WORD.test(text.slice(word, start))) return false;
+  const before = text.slice(Math.max(0, word - NAME_WINDOW), word);
+  if (METHOD_BEFORE.test(before)) return true;
+  const name = PATH_NAME_BEFORE.exec(before);
+  if (name && !SECRET_WORD.test(name[1] ?? "")) return true;
+  if (!host) return false;
+  // Back over blanks and stops first (`token:` and a long run of blanks), at most MAX_TOKEN.
+  let from = word;
+  while (from > 0 && word - from < MAX_TOKEN && !ALPHANUMERIC.test(text.charAt(from - 1))) from--;
+  return !SECRET_WORD.test(text.slice(Math.max(0, from - NAME_WINDOW), word));
+}
+const ALPHANUMERIC = /[A-Za-z0-9]/;
+
+/** An HTTP method, then blanks, ending a text. */
+const METHOD_BEFORE =
+  /(?<![A-Za-z0-9_])(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|TRACE|CONNECT)[ \t]+$/;
+/** A name that ends in a path's word (group 1), quotes or not, and its ":" or "=", ending a text. */
+const PATH_NAME_BEFORE =
+  /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*?(?:path|url|uri|href|file|route|endpoint|location))["'`]?[ \t]*[:=][ \t]*["'`]?$/i;
+/**
+ * A word a secret's name holds, anywhere in a word ("x-api-key", "sessionid", "passwd"), or one
+ * of the shorter ones as a word of its own. It reads more words as secrets' than the rules do:
+ * a path next to one is taken whole, as a token.
+ */
+const SECRET_WORD =
+  /tok|secret|pass|pwd|key|auth|cred|sess|sid|cookie|sig|jwt|priv|cert|hmac|hdn|nonce|bearer|basic|digest|oauth|ssws|dpop|hawk|negotiate|ntlm|\b(?:sk|otp|mac|bot|pin)\b/i;
 
 /**
  * Whether the run of token characters at `start` is a credential's value: a scheme word or a

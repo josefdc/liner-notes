@@ -250,6 +250,23 @@ def test_the_newest_controls_run_is_of_the_service_as_it_is():
     assert newest["rules"].get("one_source") == calibration.source_values(est), name
 
 
+def test_the_2_3_6_controls_run_gives_every_control_what_the_2_3_4_run_gave():
+    """
+    The READMEs quote control counts from the 2026-10-29 run (analyzer 2.3.4); evals/audio's
+    README says they hold at 2.3.6 because the 2026-10-30 run records the same for every control.
+    """
+
+    def controls_of(date: str) -> dict:
+        doc = json.loads((REPO_ROOT / "evals" / "reports" / f"audio-{date}.json").read_text())
+        (run,) = [r for r in doc["runs"] if r["suite"] == "controls"]
+        return run
+
+    before, after = controls_of("2026-10-29"), controls_of("2026-10-30")
+    assert (before["analyzerVersion"], after["analyzerVersion"]) == ("2.3.4", "2.3.6")
+    assert after["rules"] == before["rules"]
+    assert after["controls"] == before["controls"]
+
+
 def test_a_group_names_the_families_added_to_it_only_in_reports_that_ran_them():
     """An older report keeps describing the controls it ran; a newer one names the added ones."""
     before = ["tabla-s500", "toms-s501", "cowbell-s502", "faded-pad-s700"]

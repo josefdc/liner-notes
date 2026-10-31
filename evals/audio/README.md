@@ -176,7 +176,11 @@ GiantSteps+ key and calibration runs, all at analyzer 2.3.4 (the controls and Ba
 commit `9682a4a` of #244, the GiantSteps+ runs at `2901b7f` of #256: the same analyzer code, a
 harness changed only in how it writes the report); GiantSteps Tempo, its calibration, the golden
 set and the costs were not run for it, and were last measured for the 2026-10-25 report, at
-analyzer 2.1.0. Runs made on the same day (UTC) go into one dated report. The results file keeps
+analyzer 2.1.0. The 2026-10-30 report holds a controls run alone, at analyzer 2.3.6 (commit
+`e911c9b` of #277, which reads MP3s to the end of their frames): every control's gate, evidence
+and served and raw estimates are the same as in the 2026-10-29 run, so the counts quoted from
+that run hold at 2.3.6. It shows no controls table, since the calibration section needs the
+calibration runs. Runs made on the same day (UTC) go into one dated report. The results file keeps
 each run's commit and analyzer version. The Markdown gives the commit of a tempo or key run in
 that run's section; the calibration section lists the commits of the calibration and controls
 runs together, without saying which run was made at which. The single-source rule came in 2.2.0;

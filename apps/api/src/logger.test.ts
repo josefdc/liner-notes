@@ -12,6 +12,7 @@ import {
   configureLogger,
   currentRunId,
   hideKnownValues,
+  hideScrubbed,
   installConsoleBridge,
   ipHash,
   logCut,
@@ -253,6 +254,19 @@ describe("scrubbedSpans", () => {
       "'Bearer abc.def1'",
       '"Basic abcdefgh12"',
       "proxy-authorization: ",
+      // The shapes of moreSpans: curly quotes, entities, other schemes, odd separators, glued names.
+      "‘",
+      "”",
+      "&quot;",
+      "password&#61;",
+      "authorization: 'Token ",
+      'Digest a="1", response=',
+      "'Bearer, ",
+      "'Bearer'",
+      "Bearer Bearer '",
+      "wpassword: ",
+      "xBasic ",
+      "QWxhZGRpbjpvcGVu1",
       "contoso-prod.openai.azure.com",
       "https://u:p@h.example/x?token=t1&a=b",
       "p.scdn.co/clip",
@@ -690,6 +704,590 @@ describe("Authorization values in quotes and at the cap", () => {
     const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
     expect(ratio).toBeLessThan(20);
   });
+});
+
+describe("pair and scheme shapes the two rules leave (#237)", () => {
+  const TOKEN = "V7qW6rE5tY4uI3oP2aS1";
+  /** A key in the shape of an Azure key: 32 lowercase hexadecimal characters (fake). */
+  const HEX_KEY = "71636424cb4b3499c7151dae886217af";
+  const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+  /** Whether `out` shows any 4 characters of the token, the credential or the key. */
+  const shows = (out: string) =>
+    [TOKEN, CRED, HEX_KEY].some((secret) =>
+      Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
+        out.includes(part),
+      ),
+    );
+  /** Every path to a log line: scrub, logText, serializeError, and a line written to LOG_FILE. */
+  const leaks = (text: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "log-shapes-"));
+    try {
+      const file = join(dir, "api.jsonl");
+      configureLogger({ LOG_FILE: file });
+      logger("Probe").warn(text);
+      logger("Probe").warn("failed", { err: new Error(text) });
+      return [
+        scrub(text),
+        scrub(logText(text)),
+        JSON.stringify(serializeError(new Error(text))),
+        readFileSync(file, "utf8"),
+      ].filter(shows);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it.each([
+    ["curly single quotes", `{ authorization: ‘Bearer ${TOKEN}’ }`],
+    ["curly double quotes", `authorization: “Bearer ${TOKEN}”`],
+    ["a curly-quoted name and value", `“password”: “${TOKEN}”`],
+    ["a name and value in curly single quotes", `‘token’: ‘${TOKEN}’`],
+    ["a quoted Token scheme", `{ authorization: 'Token ${TOKEN}' }`],
+    ["a Token scheme", `Authorization: Token ${TOKEN}`],
+    ["a quoted Digest scheme", `{ authorization: 'Digest username="u", response="${TOKEN}"' }`],
+    ["a Digest scheme", `Authorization: Digest response=${TOKEN}, nonce="n1"`],
+    [
+      "a Digest scheme in JSON",
+      `{"authorization":"Digest username=\\"u\\", response=\\"${TOKEN}\\""}`,
+    ],
+    ["a comma after a quoted scheme", `authorization: 'Bearer, ${TOKEN}'`],
+    ["a token glued to the quote after a scheme", `authorization: 'Bearer'${TOKEN}`],
+    ["a line break inside the quotes", `authorization: 'Basic\n${CRED}'`],
+    ["a line break and an indent inside the quotes", `authorization: 'Bearer\n    ${TOKEN}'`],
+    ["a token with & after a scheme", `authorization: Bearer abc&${TOKEN}`],
+    ["a quoted token with & after a scheme", `authorization: 'Bearer abc&${TOKEN}'`],
+    ["a Discogs token with & after two schemes", `'Discogs Discogs token=abc&${TOKEN}'`],
+    ["a quoted token with & after two schemes", `authorization: Bearer Bearer 'abc&${TOKEN}'`],
+    ["an entity for =", `login failed: password&#61;${TOKEN} for user`],
+    ["a hexadecimal entity for =", `password&#x3d;${TOKEN} x`],
+    ["entities for quotes in JSON", `{&quot;token&quot;:&quot;${TOKEN}&quot;,&quot;a&quot;:1}`],
+    ["entities for an api_key's quotes", `body &quot;api_key&quot;:&quot;${TOKEN}&quot; end`],
+    ["entities around a value", `password=&quot;${TOKEN}&quot; x`],
+    ["a secret key at the end of a longer name", `connect failed: db_password: ${TOKEN}`],
+    ["a scheme glued to the word before it", `call failedBasic ${CRED}`],
+    ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
+    ["a token with == and & after two schemes", `Bearer Bearer ${TOKEN}==&x`],
+    ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
+    ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
+    ["a scheme glued to the end of a link", `GET https://h.example/xBearer ${TOKEN} failed`],
+    [
+      "a Digest response in single quotes",
+      `authorization: Digest username="u", response='${TOKEN}'`,
+    ],
+    ["a token68 before a parameter list", `authorization: Token ${TOKEN}==, realm="x"`],
+    ["a token68 and = before a Digest list", `authorization: Digest ${TOKEN}=, realm="r"`],
+    ["a scheme glued to a word before a line break", `call failedBearer\n${TOKEN}`],
+    ["a scheme glued to a word before a no-break space", `call failedBearer\u00a0${TOKEN}`],
+    ["a hexadecimal key after a glued scheme", `call failedBearer ${HEX_KEY}`],
+    ["a hexadecimal key after Token", `call failed: Token ${HEX_KEY}`],
+    [
+      "a hexadecimal key after a lowercase scheme in a link",
+      `http://;accesstoken="bearer  ${HEX_KEY}`,
+    ],
+    ["a hexadecimal key before a full stop", `call failed: Token ${HEX_KEY}.`],
+    ["a hexadecimal key after a glued scheme, before a full stop", `call failedBearer ${HEX_KEY}.`],
+    [
+      "a hexadecimal key after a link's scheme, before a full stop",
+      `https://h.example/xBearer ${HEX_KEY}.`,
+    ],
+    ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
+    ["a pair in backticks as a pair's value, after =", `x token=\`password: ${TOKEN}\``],
+    ["a pair in curly quotes as a pair's value", `x token: \u2018password: ${TOKEN}\u2019`],
+    ["a pair in curly quotes as a pair's value, after =", `x token=\u201cpassword: ${TOKEN}\u201d`],
+  ])("leaves no part of a credential on any path to a line: %s", (_label, text) => {
+    expect(leaks(text)).toEqual([]);
+    expect(scrub(text)).toContain("[redacted]");
+  });
+
+  it("writes what the two rules wrote, with what the new shapes add hidden as well", () => {
+    for (const [text, expected] of [
+      [`{ authorization: ‘Bearer ${TOKEN}’ }`, "{ authorization: [redacted] [redacted]’ }"],
+      [`authorization: 'Bearer abc&${TOKEN}'`, "authorization: [redacted] [redacted]'"],
+      [`authorization: Bearer abc&${TOKEN}`, "authorization: [redacted]"],
+      [`{&quot;token&quot;:&quot;${TOKEN}&quot;}`, "{&quot;token&quot;:&quot;[redacted]&quot;}"],
+      [`token: Bearer ${TOKEN}`, "token: [redacted]"],
+      [`Bearer ${TOKEN} and Basic ${CRED}`, "Bearer [redacted] and Basic [redacted]"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("keeps readable text readable", () => {
+    for (const text of [
+      "the token count is 5; don’t retry",
+      "Token expired, please sign in again",
+      "authorization missing: ‘Bearer’ expected",
+      "scheme 'Basic', then 'Bearer'",
+      "the scheme is Bearer, then Basic",
+      "&quot;hello&quot; &amp; &lt;b&gt;goodbye&lt;/b&gt;",
+      "Digest of the week: 5 songs",
+      "{ authorization: '' }",
+      "“Bohemian Rhapsody” by Queen",
+      // Discogs is the name of a source; only `Discogs token=` starts a credential.
+      "Discogs not asked: no key is configured for it",
+      "Discogs not asked again: its 3 records come from the research cache (read 2026-10-01)",
+      "discogs asked to slow down; retrying once in 3 s",
+      "discogs answered HTTP 502 with a body that is not JSON",
+      "Discogs search unavailable: HTTP 503",
+      "Discogs release 249504 lists no credits for the track",
+      "MusicBrainz links no Discogs release to an original release of the recording",
+      "Sources asked: MusicBrainz, Discogs, WhoSampled",
+      "Discogs said Release not found.",
+      // A word after a quoted scheme and a comma is prose, and the quote closes the string.
+      '{"error":{"message":"Bearer, please"},"code":401}',
+      // A word glued before a scheme or a pair's name, with prose after it.
+      "VisualBasic ProgrammingInVB6",
+      "mypassword=must-be-set-here",
+      "db_password: must be set",
+      "AZURE_OPENAI_API_KEY: expected printable ASCII with no spaces",
+      // A title after a scheme, in curly quotes; a word glued before a scheme, then a title.
+      "Basic “Training”",
+      "theBasic RemasteredEdition2011 not found",
+      "call failedBearer\nProgrammingInVB6 next",
+    ]) {
+      expect(scrub(text)).toBe(text);
+    }
+    // What the Authorization rule read in prose before, it reads the same, with no more hidden.
+    for (const [text, expected] of [
+      ["no match for ‘Basic Instinct’ here", "no match for ‘Basic [redacted]’ here"],
+      ["x ‘Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==’ y", "x ‘Basic [redacted]’ y"],
+      [
+        "the work “Bearer of Bad News” could not be read",
+        "the work “Bearer [redacted] Bad News” could not be read",
+      ],
+      // In a list that names no secret, each value but the realm is hidden.
+      [
+        `{ authorization: 'Digest realm="api", opaque="c2VjcmV0MTIzNDU2"' }`,
+        `{ authorization: [redacted] realm="api", opaque="[redacted]"' }`,
+      ],
+      [
+        `{ authorization: 'Digest realm="Api2Region9Zone", opaque="c2VjcmV0MTIzNDU2"' }`,
+        `{ authorization: [redacted] realm="Api2Region9Zone", opaque="[redacted]"' }`,
+      ],
+      // In a list that names no secret, a value that does not look like a credential stays.
+      [
+        'authorization: Digest realm="r", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", qop=auth',
+        'authorization: [redacted] realm="r", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", qop=auth',
+      ],
+      [
+        'authorization: MAC id="h480djs93hd8", ts="1336363200", nonce="dj83hs9s"',
+        'authorization: [redacted] id="h480djs93hd8", ts="1336363200", nonce="dj83hs9s"',
+      ],
+      // Digest's nonce, uri and qop are not secrets; its cnonce and response are.
+      [
+        'Authorization: Digest username="u", realm="r", nonce="abc123", uri="/x", qop=auth, cnonce="c0ffee", response="6629fae49393a053"',
+        'Authorization: [redacted] username="u", realm="r", nonce="abc123", uri="/x", qop=auth, cnonce="[redacted]", response="[redacted]"',
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+    // A quoted scheme followed by prose on the next line keeps the line, as before.
+    for (const [text, expected] of [
+      [
+        "authorization: 'Bearer\n    at Object.<anonymous> (app.js:1:1)'",
+        "authorization: [redacted]\n    at Object.<anonymous> (app.js:1:1)'",
+      ],
+      [
+        "password: 'Basic\n\nThe server then retried'",
+        "password: [redacted]\n\nThe server then retried'",
+      ],
+      ["authorization: 'Bearer, then retried'", "authorization: [redacted], then retried'"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("reads the scheme glued to the end of the provider endpoint's link", () => {
+    // Fake values only: the link rule writes the endpoint's link as a label, and the scheme is
+    // not part of it.
+    const endpoint = "https://contoso-prod.openai.azure.com";
+    configureLogger({ AZURE_OPENAI_ENDPOINT: endpoint, LOG_LEVEL: "silent" });
+    for (const [text, expected] of [
+      [`${endpoint}/xBearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}Bearer ${TOKEN}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}/xBearer ${HEX_KEY}`, "[provider endpoint]Bearer [redacted]"],
+      [`${endpoint}/xBearer ${HEX_KEY}.`, "[provider endpoint]Bearer [redacted]"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+      expect(shows(scrub(logText(text)))).toBe(false);
+    }
+  });
+
+  it("hides around an empty secret parameter what scrub hides, on hideScrubbed", () => {
+    // Fake values only. scrub writes "[redacted]" for an empty secret parameter (`?token=`) and
+    // reads on after it; scrubbedSpans replays that insertion, and also reads the text with the
+    // empty value left out (the value then takes the backtick and the name after it).
+    configureLogger({ LOG_LEVEL: "silent" });
+    for (const [text, expected] of [
+      [
+        `https://h.example/x?token=\`password: ${TOKEN}`,
+        "https://h.example/x?token=[redacted] [redacted]",
+      ],
+      [
+        `GET https://h.example/v1?token=\`token: ${TOKEN}\``,
+        "GET https://h.example/v1?token=[redacted] [redacted]`",
+      ],
+      // The link is read as a credential after the "[redacted]" written for `?token=`, so its
+      // hidden span starts at that insertion.
+      ["a ?token= https://h.example/x?token=&y", "a ?token= [redacted]&y"],
+      // The span read after the "[redacted]" written for `?token=` starts there: the spaces
+      // before the link stay.
+      [
+        "https://h.example/x?a=1&password=`token=Basic   https://h.example/x?token=&authorization: \f` x",
+        "https://h.example/x?a=1&password=[redacted]   [redacted] \f[redacted] x",
+      ],
+      // The link after the second "[redacted]" is hidden from its own start, not from the text's.
+      [
+        "https://h.example/x?a=1&password='Bearer \r\n https://h.example/x?token=&password: x",
+        "https://h.example/x?a=1&password='[redacted] \r\n [redacted] [redacted]",
+      ],
+    ]) {
+      expect(hideScrubbed(text)).toBe(expected);
+    }
+  });
+
+  it("hides in scrubbedSpans alone what scrub hides, an empty value it writes REDACTED for too", () => {
+    // Fake values only. Pair names, schemes, separators, quotes and tails composed at random
+    // (seeded) after links with empty secret parameters; the text with scrubbedSpans' spans
+    // replaced, without what hideScrubbed adds to them.
+    configureLogger({ LOG_LEVEL: "silent" });
+    const hidden = (text: string) => {
+      let out = "";
+      let at = 0;
+      for (const [start, end] of scrubbedSpans(text)) {
+        out += `${text.slice(at, start)}[redacted]`;
+        at = end;
+      }
+      return out + text.slice(at);
+    };
+    const links = [
+      "https://h.example/x?token=",
+      "GET https://h.example/v1?access_token=",
+      "http://;accesstoken=",
+      "https://h.example/x?a=1&password=",
+      "",
+      "",
+    ];
+    const names = ["", "", "password: ", "token: ", "api_key=", "authorization: ", '"token": '];
+    const quotes = ["", "", "`", "'", '"', "\u2018"];
+    const schemes = ["", "Bearer ", "Basic ", "bearer ", "Token ", "Bearer", "Basic\n"];
+    const separators = [" ", "\n", "\r\n", "\f", "\v", "\t", ""];
+    const tails = ["", "`", "'", '"', ", x", " more", "&y"];
+    const shown: string[] = [];
+    for (const seed of [21, 22, 23]) {
+      let x = seed;
+      const random = () => {
+        x ^= x << 13;
+        x >>>= 0;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        x >>>= 0;
+        return x / 4294967296;
+      };
+      const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+      const credential = () =>
+        Array.from({ length: 7 }, () => {
+          const at = Math.floor(random() * 26);
+          return `${"ABCDEFGHJKLMNPQRSTUVWXYZQR"[at]}${at % 10}${"abcdefghijkmnpqrstuvwxyzqr"[at]}`;
+        }).join("");
+      for (let i = 0; i < 1500; i++) {
+        let text = "";
+        const planted: string[] = [];
+        for (let k = 1 + Math.floor(random() * 2); k > 0; k--) {
+          const value = credential();
+          planted.push(value);
+          text += pick(links) + pick(quotes) + pick(names) + pick(quotes) + pick(schemes);
+          text += `${pick(separators)}${value}${pick(tails)} `;
+        }
+        const parts = planted.flatMap((value) =>
+          Array.from({ length: value.length - 3 }, (_, j) => value.slice(j, j + 4)),
+        );
+        const scrubbed = scrub(text);
+        const spans = hidden(text);
+        if (parts.some((part) => !scrubbed.includes(part) && spans.includes(part)))
+          shown.push(JSON.stringify(text));
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("never leaves a credential shown after a scheme word or a pair's name it hid", () => {
+    // Fake values only. Whatever hid the name (here another redaction's step), the token after
+    // it, across any white space, is hidden with it; a status word is not.
+    const at = (text: string, name: string): Array<[number, number]> => [
+      [text.indexOf(name), text.indexOf(name) + name.length],
+    ];
+    for (const [text, name, expected] of [
+      [`x token ${TOKEN} y`, "token", "x [redacted] y"],
+      [`x token\f${TOKEN} y`, "token", "x [redacted] y"],
+      [`x 'Bearer'\r\n${TOKEN}`, "'Bearer", "x [redacted]"],
+      ["x token expired", "token", "x [redacted] expired"],
+      // A name after the name, then the credential: read on, a level deeper.
+      [`x token password ${TOKEN} y`, "token", "x [redacted] y"],
+      [`x token 'Bearer'\n${TOKEN} y`, "token", "x [redacted] y"],
+      // Not a name: the end of a longer word.
+      [`x robot ${TOKEN} y`, "robot", `x [redacted] ${TOKEN} y`],
+      [`x hmac ${TOKEN} y`, "hmac", `x [redacted] ${TOKEN} y`],
+      [`x ROBOT ${TOKEN} y`, "ROBOT", `x [redacted] ${TOKEN} y`],
+      [`x HMAC ${TOKEN} y`, "HMAC", `x [redacted] ${TOKEN} y`],
+      [`x chatbot ${TOKEN} y`, "chatbot", `x [redacted] ${TOKEN} y`],
+      [`x mysecret ${TOKEN} y`, "mysecret", `x [redacted] ${TOKEN} y`],
+      [`x APITOKEN ${TOKEN} y`, "APITOKEN", `x [redacted] ${TOKEN} y`],
+      // A scheme word glued so is read by the glued-scheme rule, not here.
+      ["x VisualBasic Programming y", "VisualBasic", "x [redacted] Programming y"],
+      // A name glued to a word in camel case is a name.
+      [`x apiToken ${TOKEN} y`, "apiToken", "x [redacted] y"],
+      [`x S3Token ${TOKEN} y`, "S3Token", "x [redacted] y"],
+      [`x APIToken ${TOKEN} y`, "APIToken", "x [redacted] y"],
+      [`x myaccessToken ${TOKEN} y`, "myaccessToken", "x [redacted] y"],
+      [`x idToken\n${TOKEN} y`, "idToken", "x [redacted] y"],
+      // Longer than a token is read before it is known to be one: taken whole.
+      [`x token ${TOKEN.repeat(15)} y`, "token", "x [redacted] y"],
+      [`x token ${TOKEN.repeat(15)}%2F${TOKEN} y`, "token", "x [redacted] y"],
+      // A curly quote around it is no part of it.
+      [`x token \u2019${TOKEN}\u2019 y`, "token", "x [redacted]\u2019 y"],
+      [`x token \u201c${TOKEN}\u201d y`, "token", "x [redacted]\u201d y"],
+    ]) {
+      expect(hideScrubbed(text, [], [() => at(text, name)])).toBe(expected);
+    }
+  });
+
+  it("never leaves a credential shown after a name it hid, composed at random", () => {
+    // Fake values only. Names, quotes, separators and credentials composed at random (seeded),
+    // with only the name hidden by another redaction's step: the credential after it is hidden.
+    const at = (text: string, name: string): Array<[number, number]> => [
+      [text.indexOf(name), text.indexOf(name) + name.length],
+    ];
+    const names = ["token", "password", "Bearer", "Basic", "authorization", "api_key", "Token"];
+    const quotes = ["", "", "'", '"', "`", "\u201c"];
+    const separators = [" ", "\n", "\r\n", "\f", "\v", "\t", ": ", " = ", ":\n", "\n\n"];
+    let x = 31;
+    const random = () => {
+      x ^= x << 13;
+      x >>>= 0;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      x >>>= 0;
+      return x / 4294967296;
+    };
+    const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+    const shown: string[] = [];
+    for (let i = 0; i < 2000; i++) {
+      const value = Array.from({ length: 20 }, () => {
+        const at = Math.floor(random() * 26);
+        return `${"ABCDEFGHJKLMNPQRSTUVWXYZQR"[at]}${at % 10}`;
+      }).join("");
+      const quote = pick(quotes);
+      const name = pick(names);
+      const text = `x ${quote}${name}${quote}${pick(separators)}${value} y`;
+      const out = hideScrubbed(text, [], [() => at(text, name)]);
+      const parts = Array.from({ length: value.length - 3 }, (_, j) => value.slice(j, j + 4));
+      if (parts.some((part) => out.includes(part))) shown.push(JSON.stringify(text));
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("reads a scheme glued to a link's end only outside the link's secret values", () => {
+    // Fake values only. In a secret parameter's value or the user info, the word is part of the
+    // value the link rule hides; before a word of prose, it is not a scheme.
+    for (const [text, expected] of [
+      [
+        "https://h.example/x?token=Zz9Yy8Xx7Ww6basic rest",
+        "https://h.example/x?token=[redacted] rest",
+      ],
+      [
+        "GET https://h.example/login?password=SuperBasic\tfailed",
+        "GET https://h.example/login?password=[redacted]\tfailed",
+      ],
+      [
+        "https://h.example/x?sig=Qq1Rr2Ss3Tt4BEARER next",
+        "https://h.example/x?sig=[redacted] next",
+      ],
+      [
+        "https://h.example/x?token=Zz9Yy8Xx7Ww6Basic V7qW6rE5tY4uI3oP2aS1",
+        "https://h.example/x?token=[redacted] V7qW6rE5tY4uI3oP2aS1",
+      ],
+      ["https://p.scdn.co/mp3-preview/Zz9Yy8Xx7Ww6Basic x", "[preview link] x"],
+      [
+        "https://u:Qq1Rr2Ss3Tt4@h.example/x?api_key=Zz9Yy8Xx7Ww6basic rest",
+        "https://[redacted]@h.example/x?api_key=[redacted] rest",
+      ],
+      [
+        "https://h.example/x?token=a&b=xBearer V7qW6rE5tY4uI3oP2aS1",
+        "https://h.example/x?token=[redacted]&b=xBearer [redacted]",
+      ],
+      [
+        "https://p.scdn.co/mp3-preview/abcBasic V7qW6rE5tY4uI3oP2aS1",
+        "[preview link]Basic [redacted]",
+      ],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+    }
+  });
+
+  it("does not replace a value it replaced before", () => {
+    for (const text of ["password&#61;[redacted]", "&quot;token&quot;:&quot;[redacted]&quot;"]) {
+      expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("finds the new shapes' credentials in scrubbedSpans, and cuts before them", () => {
+    const text = `x authorization: 'Token ${TOKEN}' and ‘token’: ‘${TOKEN}’ y`;
+    // The scheme word is the pair rule's (`authorization: 'Token`), as before.
+    expect(scrubbedSpans(text).map(([start, end]) => text.slice(start, end))).toEqual([
+      "Token",
+      TOKEN,
+      TOKEN,
+    ]);
+    for (const shape of [
+      `authorization: 'Basic\n${CRED}'`,
+      `authorization: 'Bearer, ${TOKEN}'`,
+      `password&#61;${TOKEN}`,
+    ]) {
+      const long = `${"w ".repeat(40)}${shape} tail`;
+      const start = long.length - shape.length - 5;
+      for (let at = start; at < long.length - 5; at++) {
+        expect(shows(scrub(long.slice(0, logCut(long, at)))), `${shape} cut at ${at}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps hidden what the value, pair and Authorization rules at 908cc14 hid (generated texts)", () => {
+    // main's rules (908cc14), frozen: what they hid in a text, scrub hides too.
+    const N =
+      "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
+    const S = "(?:Bearer|Basic|Discogs)";
+    const Q = "[`\"']";
+    const V = String.raw`[^\s"'&,;}\]]`;
+    const NEXT = String.raw`(?:["']?${V}*?\b(?:${S}\s|(?:${N})(?:["'\s]\s*[:=]|[:=](?!${V})))|["']?${V}*&)`;
+    const MAIN_SECRET_PAIR = new RegExp(
+      String.raw`\b(${N})(["']?\s*[:=]\s*(?!\s))(?!\s*(?:${Q}${S}[ \t]+|${S}\s+)?["']?\[redacted\])` +
+        String.raw`((?:${Q}${S}[ \t]+(?:${S}[ \t]+)*(?!${NEXT})|${S}\s+(?:(?:${S}\s+)+(?!${NEXT}))?))?` +
+        // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
+        String.raw`["']?${V}+["']?`,
+      "gi",
+    );
+    const MAIN_AUTH_SCHEME =
+      /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+    const main = (text: string) =>
+      text
+        .split(SALT)
+        .join("[redacted]")
+        .replace(MAIN_SECRET_PAIR, "$1$2[redacted]")
+        .replace(
+          MAIN_AUTH_SCHEME,
+          (_m, scheme?: string, basic?: string) => `${scheme ?? basic}[redacted]`,
+        );
+    const SALT = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: SALT });
+    const markers = /M\d{3}x|S\dx/g;
+    const shown = (out: string) => new Set(out.match(markers) ?? []);
+    const parts = [
+      "authorization: ",
+      "token=",
+      "password&#61;",
+      "&quot;token&quot;:&quot;",
+      "&quot;",
+      "&#x3d;",
+      "&amp;",
+      "‘",
+      "’",
+      "“",
+      "”",
+      "'",
+      '"',
+      "`",
+      "Bearer ",
+      "Bearer, ",
+      "Basic ",
+      "Basic\n",
+      "Token ",
+      "Digest ",
+      "response=",
+      "Discogs token=",
+      "\n",
+      "  ",
+      ",",
+      "&",
+      "[redacted]",
+      "x",
+      SALT,
+      "M001x",
+      "M002xQWxhZGRp",
+      "M003x",
+    ];
+    const texts = randomStrings(parts, 30_000, 10, 2372);
+    const missed = texts.filter((text) => {
+      const hidden = shown(main(text));
+      return [...shown(scrub(text))].some((marker) => !hidden.has(marker));
+    });
+    expect(missed.slice(0, 5)).toEqual([]);
+    // The texts hold what main hid often enough for the comparison to mean something.
+    expect(
+      texts.filter((text) => shown(main(text)).size < shown(text).size).length,
+    ).toBeGreaterThan(5_000);
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  it.each([
+    ["a run of schemes", filled("Bearer ", "authorization: '", "x")],
+    ["a run of schemes and commas", filled("Bearer, ", "authorization: '")],
+    ["quoted schemes and line breaks", filled("'Basic\n")],
+    ["quoted Token schemes", filled("authorization: 'Token ")],
+    ["Digest parameters", filled('a="1", ', "authorization: Digest ")],
+    ["Digest parameters without an end", filled("a=", "authorization: Digest ")],
+    ["an open parameter quote", filled("x", 'authorization: Digest a="')],
+    ["a long credential", filled("x&", "authorization: 'Bearer ")],
+    ["schemes glued to quotes", filled("'Bearer'")],
+    ["entities", filled("&quot;")],
+    ["entities for =", filled("password&#61;")],
+    ["entity starts", filled("&#1")],
+    ["curly quotes", filled("‘")],
+    ["curly-quoted pairs", filled("“token”: “Bearer ")],
+    ["glued runs, then long gaps", filled(`${"x".repeat(64)}Bearer${" ".repeat(64)}`)],
+    ["quote-only values", filled("'", "authorization: Bearer ")],
+    ["many links", filled("://", "Bearer ")],
+    ["pairs whose value is a pair", filled("token: authorization: ")],
+    ["pairs glued as values", filled("token:authorization:")],
+    ["Discogs words", filled("Discogs ")],
+    ["quoted schemes, commas and words", filled("'Bearer, please' ")],
+    ["tokens with = and &", filled("=&x", "authorization: 'Bearer ")],
+    ["links glued to schemes", filled("https://h.example/xBearer ")],
+  ])("reads the new shapes in linear time, up to 1 MB: %s", (_name, make) => {
+    // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+    // from each place about 64 times, or takes seconds on 1 MB.
+    const call = (text: string) =>
+      scrub(text).length + scrubbedSpans(text).length + logText(text).length;
+    const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+    expect(ratio).toBeLessThan(20);
+  });
+
+  it.each([
+    ["white space after a name", (size: number) => `password=token${" ".repeat(size)}`],
+    ["line breaks after a scheme", (size: number) => `authorization: Bearer${"\n".repeat(size)}`],
+    ["white space after a quoted name", (size: number) => `x 'token' =${" ".repeat(size)},`],
+    ["pairs whose value is a name", filled("password=token&")],
+    ["pairs with a % between", filled("password=token%")],
+    ["a link's names as values", filled("sig=token&", "https://h.example/x?")],
+    ["a link's names as values, then a %", filled("sig=token&", "https://h.example/x?", "%")],
+    ["names glued in a run", filled("tokenpassword", "Bearer ")],
+  ])(
+    "takes the credential after a name on in linear time, up to 1 MB: %s",
+    (_name, make) => {
+      // hideScrubbed reads the token after each span that ends on a name: once per place.
+      const name = (text: string): Array<[number, number]> => [[0, Math.min(text.length, 8)]];
+      const call = (text: string) =>
+        hideScrubbed(text).length + hideScrubbed(text, [], [name]).length;
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
 });
 
 describe("configured values escaped, folded, overlapping or in a token (#237)", () => {

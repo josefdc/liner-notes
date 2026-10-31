@@ -75,7 +75,7 @@ import {
   type LlmMessage,
   normaliseMessages,
   readCassette,
-  scrubSecrets,
+  scrubSecretsSteps,
   writeCassette,
 } from "./cassette.js";
 import { isLlmError, isTransient, LlmError, type LlmErrorDetails } from "./errors.js";
@@ -96,7 +96,7 @@ import {
   UNSOURCED_PRICE_MULTIPLIER,
 } from "./prices.js";
 import { type LlmUsageRow, recordToOpenDatabase } from "./usage.js";
-import { hideKnownValues, logger } from "../logger.js";
+import { hideScrubbed, logger } from "../logger.js";
 
 const log = logger("llm");
 
@@ -471,10 +471,14 @@ export function classifyError(error: unknown, state: ErrorState): LlmError {
     headers?: HeaderSource;
     error?: { code?: unknown; type?: unknown };
   };
-  // The values are hidden before the message is cut below: one written escaped or folded, cut,
-  // is a part that no longer matches when the logger reads it.
+  // What the logger's rules hide, the values, and what scrubSecrets' steps and then the logger
+  // would hide in turn, are all found in the message as it came and hidden before it is cut
+  // below: a value written escaped or folded, or a credential after a scheme, cut, is a part that
+  // no rule reads when the logger gets it; one set of rules run on the other's output can lose a
+  // scheme word or a pair's name that the other took, and leave the credential after it; and
+  // one read alone can miss what the other's output lets it read.
   const text = typeof e.message === "string" ? e.message : String(error);
-  const detail = scrubSecrets(hideKnownValues(text, secrets), secrets);
+  const detail = hideScrubbed(text, secrets, scrubSecretsSteps(secrets));
   const message = `${state.callSite}: ${detail}`.slice(0, 500);
   const code = errorCode(error);
   const cause: LlmErrorDetails["cause"] = {

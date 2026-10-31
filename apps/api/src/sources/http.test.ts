@@ -12,7 +12,15 @@ import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { logText } from "../http/middleware/errors.js";
-import { captureLogsForTests, configureLogger, MAX_LOGGED_TEXT, scrub } from "../logger.js";
+import { scrubSecretsSteps } from "../llm/cassette.js";
+import {
+  captureLogsForTests,
+  configureLogger,
+  hideScrubbed,
+  logCut,
+  MAX_LOGGED_TEXT,
+  scrub,
+} from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -32,6 +40,7 @@ import {
   SourceError,
   scrubPayload,
   scrubReadPayload,
+  scrubReadText,
   scrubText,
   setCassetteLockWaitForTests,
   withoutEmails,
@@ -1789,6 +1798,259 @@ describe("a credential found escaped at the start of a token (#237)", () => {
   });
 });
 
+describe("pair and scheme shapes, user info and cuts (#237)", () => {
+  const TOKEN = "V7qW6rE5tY4uI3oP2aS1";
+  /** Whether `out` shows any 4 characters of `secret`. */
+  const showsOf = (secret: string) => (out: string | undefined) =>
+    Array.from({ length: secret.length - 3 }, (_, i) => secret.slice(i, i + 4)).some((part) =>
+      (out ?? "").includes(part),
+    );
+  const shows = showsOf(TOKEN);
+  /** Each text a client or a log line is shown of `text`. */
+  const shown = (text: string) => [
+    plainReason(text),
+    plainMessage(text),
+    describeError(new Error(text)),
+    new SourceError("spotify", "http", text).message,
+    redactText(text),
+    scrubText(text),
+    scrub(new SourceError("spotify", "http", text).message),
+  ];
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    configureLogger({ LOG_LEVEL: "silent" });
+  });
+
+  it.each([
+    ["a header after other text", `the request sent X-Api-Key: ${TOKEN} and failed`],
+    ["another header after other text", `sent X-Auth-Token: ${TOKEN} then`],
+    ["a header named for its service", `sent Private-Token: ${TOKEN} then`],
+    ["a password after other text", `login failed: password: ${TOKEN}`],
+    ["a password glued to a word", `login failed for wpassword: ${TOKEN}`],
+    ["a name with a prefix", `db_password=${TOKEN} rejected`],
+    ["a curly-quoted pair", `“password”: “${TOKEN}”`],
+    ["a pair in curly single quotes", `‘token’: ‘${TOKEN}’`],
+    ["a pair written with entities", `login failed: password&#61;${TOKEN} for user`],
+    ["a token glued to the quote after a scheme", `authorization: 'Bearer'${TOKEN}`],
+    ["a quoted token with & after two schemes", `authorization: Bearer Bearer 'abc&${TOKEN}'`],
+    ["a Discogs token with & after two schemes", `'Discogs Discogs token=abc&${TOKEN}'`],
+    ["a token with & after a scheme glued to a word", `xauthorization: Bearer abc&${TOKEN}`],
+    ["a Basic credential glued to a word", `call failedBasic QWxh${TOKEN}== end`],
+    ["a pair whose value is another pair", `token: authorization: "${TOKEN}"`],
+    ["an Authorization pair as a password's value", `password=authorization: "${TOKEN}"`],
+    ["a token with = and & in it", `authorization: 'Bearer ${TOKEN}=&x'`],
+    ["a pair in backticks as a pair's value", `x token: \`password: ${TOKEN}\``],
+    ["a pair in backticks after =", `x token=\`password: ${TOKEN}\``],
+    ["a pair in curly quotes as a pair's value", `x token: \u2018password: ${TOKEN}\u2019`],
+    ["a pair in curly quotes after =", `x token=\u201cpassword: ${TOKEN}\u201d`],
+  ])("hides the value in every text a client or a log line is shown: %s", (_label, text) => {
+    expect(shown(text).filter(shows)).toEqual([]);
+  });
+
+  it("hides what follows an empty secret parameter where it hid it before", () => {
+    // The logger writes "[redacted]" for `?password=` and reads on after it; the source paths
+    // also read on with the empty value left out, which takes the next run as its value.
+    for (const text of [
+      `"token": https://h.example/x?a=1&password= \n${TOKEN} more`,
+      `Authorization=http://;accesstoken=\\n${TOKEN}==, x'`,
+    ]) {
+      const texts = [describeError(new Error(text)), redactText(text), scrubText(text)];
+      expect(texts.filter(shows)).toEqual([]);
+    }
+  });
+
+  it("keeps readable text readable", () => {
+    for (const text of [
+      "Password: must be 8 characters",
+      "X-Api-Key: missing",
+      "token: expired",
+      "the X-Api-Key: required here",
+      "Invalid Bearer token",
+      "Bearer token expired",
+      "Quota resets at 10:30:00 UTC",
+      "VisualBasic Programming is fun",
+      "the max_tokens: 4096 limit was reached",
+      "Discogs not asked: no key is configured for it",
+      "discogs asked to slow down; retrying once in 3 s",
+      "discogs answered HTTP 502 with a body that is not JSON",
+      "Discogs release 249504 lists no credits for the track",
+      "MusicBrainz links no Discogs release to an original release of the recording",
+      "Sources asked: MusicBrainz, Discogs, WhoSampled",
+      "no match for ‘Basic Instinct’ here",
+      "the work “Bearer of Bad News” could not be read: no answer within 10000 ms",
+      '{"error":{"message":"Bearer, please"},"code":401}',
+      "VisualBasic ProgrammingInVB6",
+      "mypassword=must-be-set-here",
+      "db_password: must be set",
+    ]) {
+      expect(plainReason(text), text).toBe(text);
+      expect(redactText(text), text).toBe(text);
+      expect(scrubText(text), text).toBe(text);
+    }
+  });
+
+  it("hides a link's user info whole, with characters outside ASCII, in every text", () => {
+    const password = "Pä55wörd-S3cr3t";
+    const text = `fetch https://usér:${password}@h.example/x failed`;
+    for (const out of [
+      scrubText(text),
+      redactText(text),
+      scrubReadText(text),
+      describeError(new Error(text)),
+    ]) {
+      expect(out).not.toContain("Pä");
+      expect(out).not.toContain("S3cr3t");
+      // The e-mail rule can take the host with the password; the mask then holds both.
+      expect(out).toMatch(/https:\/\/\[redacted\](?:@h\.example)?\/x failed/);
+    }
+    expect(scrubReadText(`see https://user:${TOKEN}@h.example/x`)).toBe(
+      "see https://[redacted]@h.example/x",
+    );
+  });
+
+  it("shows no part of a link's secrets in cassette text, wherever its cut falls", () => {
+    const secrets = ["S3cr3tPw77", "Pä55wörd77", "T0k3nV4lue99", "K3yV4lue99"];
+    const leaks = (out: string) => secrets.some((secret) => showsOf(secret)(out));
+    const fill = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    for (const link of [
+      "https://user:S3cr3tPw77@h.example/p?token=T0k3nV4lue99&api_key=K3yV4lue99 tail",
+      "see https://usér:Pä55wörd77@h.example/p?q=1 tail",
+      "xhttps://u:S3cr3tPw77@h.example/p tail",
+      '{"url":"https://u:S3cr3tPw77@h.example/p?token=T0k3nV4lue99"}',
+    ]) {
+      for (let n = 4000 - link.length - 12; n <= 4004; n++) {
+        const out = scrubReadText(fill(n) + link);
+        expect(out.length, link).toBeLessThanOrEqual(4000);
+        expect(leaks(out), `${link} at ${n}`).toBe(false);
+      }
+    }
+  });
+
+  it("shows no more of a cassette text than its cut did, with a long user info hidden", () => {
+    // The mask is shorter than the user info: the cut still ends where the text's own cut ended.
+    const info = `user:${"P4ssw0rd".repeat(6)}`;
+    const fill = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    for (let n = 3900; n <= 4000; n++) {
+      const text = `${fill(n)}https://${info}@h.example/p LATER`;
+      const out = scrubReadText(text);
+      expect(out, `at ${n}`).not.toContain("P4ss");
+      // With the user info written back in place of its mask, a part of the text cut to 4,000.
+      expect(text.slice(0, 4000).startsWith(out.replace("[redacted]", info)), `at ${n}`).toBe(true);
+    }
+  });
+
+  it("shows no part of a credential at any offset across each cut", { timeout: 120_000 }, () => {
+    // The cuts of 120 (plainReason), 200 (a SourceError's message, logText), 500 (scrubText) and
+    // 15,360 characters (describeError), a credential written across each, after a configured value
+    // glued before it or none.
+    const SALT = "S1xS2xS3xS4xS5xS6x";
+    const ENDPOINT = "sb://N1xN2x.servicebus.example.net/";
+    vi.stubEnv("LOG_IP_SALT", SALT);
+    vi.stubEnv("BUS_ENDPOINT", ENDPOINT);
+    configureLogger({ LOG_IP_SALT: SALT, BUS_ENDPOINT: ENDPOINT, LOG_LEVEL: "silent" });
+    const CRED = "QWxhZGRpbjpvcGVuIHNlc2FtZQ";
+    const leaks = (out: string | undefined) => showsOf(TOKEN)(out) || showsOf(CRED)(out);
+    const fill = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const heads = ["", SALT, `${SALT} `, ENDPOINT];
+    const tails = [
+      `password: ${TOKEN}`,
+      `Basic ${CRED}==`,
+      `token=Basic ${CRED}==`,
+      `access_token : Basic ${CRED}==`,
+      `authorization: 'Token ${TOKEN}'`,
+      `authorization: 'Basic\n${CRED}=='`,
+      `authorization: Bearer abc&${TOKEN}`,
+      `authorization: 'Bearer, ${TOKEN}'`,
+      `sent X-Api-Key: ${TOKEN} then`,
+      `Bearer Bearer ${TOKEN}==&x`,
+      `authorization: 'Bearer ${TOKEN}=&x'`,
+      `token: authorization: "${TOKEN}"`,
+      `password=authorization: "${TOKEN}"`,
+      `https://h.example/xBearer ${TOKEN}`,
+    ];
+    const paths: Array<[number, (text: string) => string | undefined]> = [
+      [120, (text) => plainReason(text)],
+      [120, (text) => scrub(plainReason(text) ?? "")],
+      [200, (text) => new SourceError("spotify", "http", text).message],
+      [200, (text) => scrub(logText(text))],
+      [500, (text) => scrubText(text)],
+    ];
+    const missed: string[] = [];
+    for (const [cut, path] of paths)
+      for (const head of heads)
+        for (const tail of tails) {
+          const length = head.length + tail.length;
+          for (let n = Math.max(0, cut - length - 12); n <= cut + 4; n++) {
+            const text = `${fill(n)}${head}${tail}`;
+            if (leaks(path(text))) missed.push(`${cut} ${JSON.stringify(text.slice(-80))}`);
+          }
+        }
+    expect(missed.slice(0, 5)).toEqual([]);
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  const NEW_SHAPES: Array<[string, (size: number) => string]> = [
+    ["Discogs words", filled("Discogs ")],
+    ["Discogs tokens", filled("Discogs token=")],
+    ["quoted schemes and commas", filled("'Bearer, ")],
+    ["curly-quoted Basic titles", filled("‘Basic Instinct’ ")],
+    ["pairs whose value is a pair", filled("token: authorization: ")],
+    ["pairs glued as values", filled("token:authorization:")],
+    ["glued pair names", filled("xpassword=")],
+    ["Digest parameters", filled('a="1", ', "authorization: Digest ")],
+    ["tokens with = and &", filled("=&x", "authorization: 'Bearer ")],
+    ["links glued to schemes", filled("https://h.example/xBearer ")],
+    ["pair names in a run before a quote", filled("password=x/", "", '"')],
+    ["header names in a run before a quote", filled("x-api-key=ab/", "", "'")],
+    ["glued names in a run before a quote", filled("userpassword=/", "", '"')],
+  ];
+  const PATHS: Array<[string, (text: string) => unknown]> = [
+    ["plainReason", (text) => plainReason(text)],
+    ["describeError", (text) => describeError(new Error(text))],
+    ["scrubText", (text) => scrubText(text)],
+    ["scrubReadText", (text) => scrubReadText(text)],
+    [
+      "hideScrubbed",
+      (text) =>
+        hideScrubbed(text, ["K7jK8jK9jKajKbjKcj"], scrubSecretsSteps(["K7jK8jK9jKajKbjKcj"])),
+    ],
+  ];
+  it.each(
+    PATHS.flatMap(([path, call]) =>
+      NEW_SHAPES.map(([shape, make]) => [path, shape, call, make] as const),
+    ),
+  )(
+    "reads the new shapes in linear time, up to 1 MB: %s, %s",
+    (_path, _shape, call, make) => {
+      // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+      // from each place about 64 times.
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: MAX_MS });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
+
+  it("places the HTTP log's cut by reading only the text near it (logCut)", () => {
+    // From 128 kB to 1 MB: logCut reads a window after the cut, so its time hardly grows; one that
+    // read the whole text would grow about 8 times.
+    const hosts = (size: number) => "contoso-prod.openai.azure.com ".repeat(Math.ceil(size / 30));
+    const mixed = (size: number) => "\nX-Api-Key: k\ntoken: a b".repeat(Math.ceil(size / 24));
+    for (const make of [hosts, mixed]) {
+      const { ratio } = growth(make, (text) => logCut(text, 200), {
+        size: 1 << 17,
+        factor: 8,
+        maxMs: MAX_MS,
+      });
+      expect(ratio).toBeLessThan(3);
+    }
+  });
+});
+
 describe("text patterns in linear time", { timeout: 30_000 }, () => {
   // The expressions before #194, each quadratic on a long run of the characters it reads.
   const STACK_TRACE =
@@ -2881,9 +3143,17 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
   // once its string escapes are decoded (`token=\\"v` is `token=\"v` there).
   const quotedKeyOrEscapedSlash =
     /\\\/|(?:key|token|secret|password|authorization)\\*["']|=\\*["']/i;
+  // Since #237, a scheme or a secret key glued to the word before it (`failedBearer v`,
+  // `xtoken=v`), a scheme a pair's value ends in (`token=x=Bearer v`) and a pair for a secret
+  // after other text on its line (`… password= v`) are read too: text with one of them redacts
+  // more.
+  const readSince237 =
+    /[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
-    const plain = corpus.filter((text) => !quotedKeyOrEscapedSlash.test(text));
+    const plain = corpus.filter(
+      (text) => !quotedKeyOrEscapedSlash.test(text) && !readSince237.test(text),
+    );
     expect(plain.length).toBeGreaterThan(20_000);
     expect(disagreements(plain, scrubText, scrubTextBefore)).toEqual([]);
   });
@@ -2906,7 +3176,9 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
       .map((input) => ({ input, now: scrubText(input), old: scrubTextBefore(input) }));
     expect(other).toEqual([]);
     expect(changed.length).toBeGreaterThan(1_000);
-    expect(changed.every((text) => quotedKeyOrEscapedSlash.test(text))).toBe(true);
+    expect(
+      changed.every((text) => quotedKeyOrEscapedSlash.test(text) || readSince237.test(text)),
+    ).toBe(true);
   });
 
   it("differs from before on keys without quotes, elements and header lines only by masks", () => {

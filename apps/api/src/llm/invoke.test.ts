@@ -15,7 +15,8 @@ import {
 } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
-import { captureLogsForTests, configureLogger, logger } from "../logger.js";
+import { captureLogsForTests, configureLogger, hideKnownValues, logger, scrub } from "../logger.js";
+import { scrubSecrets } from "./cassette.js";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
 import {
@@ -38,6 +39,7 @@ import {
   untilSentOrSettled,
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
+import { growth } from "../sources/testing/strings.js";
 
 // Each call reserves and settles its cost in the spend log, flushing each line to disk
 // (budget.ts): from 0.1 ms to 9 ms a flush here, but a flush waits for the disk, and other
@@ -426,6 +428,271 @@ describe("retries", () => {
     }
     expect(shown).toEqual([]);
   });
+
+  it("never shows part of a credential in a pair or scheme shape (#237), cut at any offset", () => {
+    const salt = "S1xS2xS3xS4xS5xS6x";
+    configureLogger({ LOG_IP_SALT: salt, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const basic = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+    const words = (n: number) => "w ".repeat(Math.ceil(n / 2)).slice(0, n);
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const shown: string[] = [];
+    for (const head of ["", salt]) {
+      for (const tail of [
+        `authorization: 'Token ${token}'`,
+        `authorization: \u2018Bearer ${token}\u2019`,
+        `authorization: 'Bearer, ${token}'`,
+        `authorization: 'Basic\n${basic}'`,
+        `authorization: Bearer abc&${token}`,
+        `&quot;token&quot;:&quot;${token}&quot;`,
+        `password&#61;${token}`,
+        `call failedBasic ${basic}`,
+      ]) {
+        for (let n = 140; n < 510; n += 3) {
+          const error = Object.assign(new Error(`${words(n)}${head}${tail}`), { status: 400 });
+          const llm = classifyError(error, state);
+          for (const out of [llm.message, String((llm.cause as Error).message)]) {
+            if (/QWx|T9z/.test(out)) shown.push(`${n}: ${JSON.stringify(out.slice(-60))}`);
+          }
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("hides what the logger's rules and its own hide, all read in the message as it came", () => {
+    // Fake values only. Run on the other's output, one set of rules loses a scheme word or a
+    // pair's name the other took, and leaves the credential after it.
+    const key = "K7jK8jK9jKajKbjKcj";
+    const endpoint = "https://contoso-prod.openai.azure.com";
+    const settings = { AZURE_OPENAI_API_KEY: key, AZURE_OPENAI_ENDPOINT: endpoint };
+    configureLogger({ ...settings, LOG_LEVEL: "info" });
+    const logs = captureLogsForTests();
+    onTestFinished(() => {
+      logs.restore();
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "V7qW6rE5tY4uI3oP2aS1";
+    const parts = Array.from({ length: token.length - 3 }, (_, i) => token.slice(i, i + 4));
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [key, endpoint] };
+    const shown: string[] = [];
+    for (const tail of [
+      `Bearer Bearer ${token}==&x`,
+      `authorization: 'Bearer ${token}=&x'`,
+      `token: authorization: "${token}"`,
+      `${endpoint}/xBearer ${token}`,
+      `${endpoint}Bearer ${token}`,
+      `password=authorization: "${token}"`,
+      `token: authorization: 'Bearer Basic\n${token} more'`,
+      `api_key=Discogs token=\n${token}`,
+      `https://h.example/x?token=\`password: ${token}`,
+      `GET https://h.example/v1?access_token=\`bearer \f${token}, realm="x"`,
+      `https://h.example/x?a=1&password=\`Basic\n \n${token}`,
+    ]) {
+      for (const n of [0, ...Array.from({ length: 124 }, (_, i) => 140 + i * 3)]) {
+        const text = `${"w ".repeat(Math.ceil(n / 2)).slice(0, n)}${tail}`;
+        const llm = classifyError(Object.assign(new Error(text), { status: 400 }), state);
+        logs.clear();
+        logger("llm").warn("model call failed", { err: llm });
+        for (const out of [
+          llm.message,
+          String((llm.cause as Error).message),
+          logs.lines().join(""),
+        ]) {
+          if (parts.some((part) => out.includes(part))) shown.push(`${n}: ${out.slice(-70)}`);
+        }
+      }
+    }
+    expect(shown).toEqual([]);
+    const llm = classifyError(
+      Object.assign(new Error(`token: authorization: "${token}"`), { status: 400 }),
+      state,
+    );
+    expect(llm.message).toBe('scout: token: [redacted] "[redacted]"');
+    // A credential the logger's rules find only in the text the values and scrubSecrets wrote.
+    for (const [text, expected] of [
+      [
+        `authorization: Discogs token=\n${token}token: y`,
+        "scout: authorization: [redacted] [redacted]\n[redacted] y",
+      ],
+      [
+        "secret: apiKey: Bearer Basic\r\nQWxhZGRpbjpvcGVuIHNlc2FtZQ==&ytoken: x",
+        "scout: secret: [redacted] [redacted] Basic\r\n[redacted]&ytoken: x",
+      ],
+    ]) {
+      const message = classifyError(Object.assign(new Error(text), { status: 400 }), state).message;
+      expect(message).toBe(expected);
+    }
+    // A key only scrubSecrets' own patterns read.
+    const own = classifyError(
+      Object.assign(new Error("invalid key sk-proj1234567890abcdefXYZ given"), { status: 401 }),
+      state,
+    );
+    expect(own.message).toBe("scout: invalid key sk-[redacted] given");
+  });
+
+  it("hides a credential after a name another rule hid: glued, long, or in curly quotes", () => {
+    // Fake values only. The name ends what another rule hid; the credential after it goes with it.
+    const token = "V7qW6rE5tY4uI3oP2aS1";
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [] };
+    for (const [text, expected] of [
+      [`x password=apiToken ${token} y`, "scout: x password=[redacted] y"],
+      [`x password=S3Token ${token} y`, "scout: x password=[redacted] y"],
+      [`x password=APIToken ${token} y`, "scout: x password=[redacted] y"],
+      // A word glued in one case is no name.
+      [`x password=robot ${token} y`, `scout: x password=[redacted] ${token} y`],
+      [`x password=HMAC ${token} y`, `scout: x password=[redacted] ${token} y`],
+      // A "%" past the characters read before a token is known to be one: taken whole.
+      [`x token: password ${"a".repeat(256)}%2F${token} y`, "scout: x token: [redacted] y"],
+      [
+        `x token: \u2018password: ${token}\u2019 y`,
+        "scout: x token: [redacted] [redacted]\u2019 y",
+      ],
+      [`x token=\u201cpassword: ${token}\u201d y`, "scout: x token=[redacted] [redacted]\u201d y"],
+    ]) {
+      expect(classifyError(Object.assign(new Error(text), { status: 400 }), state).message).toBe(
+        expected,
+      );
+    }
+  });
+
+  it("hides on the log line what the values, scrubSecrets and then the logger would hide", () => {
+    // Fake values only. Pair names, schemes, separators, quotes, credentials and tails composed
+    // at random (seeded): what the log line of the model error shows of a credential, the
+    // logger's line of the message the values and scrubSecrets wrote does not hide either.
+    const key = "K7jK8jK9jKajKbjKcj";
+    configureLogger({ AZURE_OPENAI_API_KEY: key, LOG_LEVEL: "silent" });
+    onTestFinished(() => {
+      configureLogger({ LOG_LEVEL: "silent" });
+    });
+    const token = "T9zB8yC7xD6wE5vF4uG3";
+    const basic = "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+    const sk = "sk-proj1234567890abcdefXYZ";
+    const fours = (value: string) =>
+      Array.from({ length: value.length - 3 }, (_, i) => value.slice(i, i + 4));
+    const parts = [...new Set([token, basic.slice(0, 26), sk.slice(3), key].flatMap(fours))];
+    const names = [
+      "",
+      "",
+      "token: ",
+      "password: ",
+      "api_key=",
+      "authorization: ",
+      "Authorization=",
+      "secret: ",
+      "x-api-key: ",
+      '"token": ',
+      "access_token=",
+      "apiKey: ",
+      // Links whose secret parameter is empty: the logger writes "[redacted]" for it.
+      "https://h.example/x?token=",
+      "GET https://h.example/v1?access_token=",
+      "http://;accesstoken=",
+      "https://h.example/x?a=1&password=",
+    ];
+    const quotes = ["", "", "'", '"', "`", "\u2018", "\u201c"];
+    const schemes = [
+      "",
+      "Bearer ",
+      "Basic ",
+      "Bearer Basic",
+      "Basic Bearer",
+      "Bearer Bearer",
+      "Token ",
+      "Discogs token=",
+      "Bearer, ",
+      "Bearer",
+      "Basic",
+      "failedBearer",
+    ];
+    const separators = [" ", "\n", "\r\n", "\t", " \n", "", ",", "\n\n", "\f", "\v"];
+    const credentials = [
+      token,
+      basic,
+      sk,
+      key,
+      `abc&${token}`,
+      `${token}=&x`,
+      `x${key}`,
+      `${key}${token}`,
+    ];
+    const tails = ["", "'", '"', "\u2019", ", x'", " more'", ", x", " more", "&y", ";", "\n"];
+    const state = { timedOut: false, aborted: false, callSite: "scout", secrets: [key] };
+    const shown: string[] = [];
+    for (const seed of [11, 12, 13]) {
+      let x = seed;
+      const random = () => {
+        x ^= x << 13;
+        x >>>= 0;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        x >>>= 0;
+        return x / 4294967296;
+      };
+      const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;
+      for (let i = 0; i < 1500; i++) {
+        let text = "";
+        for (let k = 1 + Math.floor(random() * 3); k > 0; k--) {
+          text += pick(names) + pick(names) + pick(quotes) + pick(schemes) + pick(separators);
+          text += pick(credentials) + pick(tails) + (random() < 0.3 ? " w " : "");
+        }
+        // Short of both cuts, which can fall elsewhere once a part is hidden.
+        if (text.length > 280) continue;
+        const llm = classifyError(Object.assign(new Error(text), { status: 400 }), state);
+        const line = scrub(`${llm.message} ${(llm.cause as Error).message}`);
+        const written = scrubSecrets(hideKnownValues(text, state.secrets), state.secrets);
+        const before = scrub(`scout: ${written} ${written}`);
+        if (parts.some((part) => line.includes(part) && !before.includes(part)))
+          shown.push(JSON.stringify(text));
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("writes what the logger writes in place of a part, not a bare mask", () => {
+    const state = { timedOut: false, aborted: false, callSite: "scout" };
+    const error = Object.assign(
+      new Error("connect to other-res.openai.azure.com failed: Bearer T9zB8yC7xD6wE5vF4uG3"),
+      { status: 400 },
+    );
+    const llm = classifyError(error, state);
+    expect(llm.message).toBe("scout: connect to [provider endpoint] failed: Bearer [redacted]");
+  });
+
+  it.each([
+    ["white space after a name", (size: number) => `password=token${" ".repeat(size)}`],
+    ["line breaks after a scheme", (size: number) => `authorization: Bearer${"\n".repeat(size)}`],
+    ["pairs whose value is a name", (size: number) => "password=token&".repeat(size / 15)],
+    ["pairs with a % between", (size: number) => "password=token%".repeat(size / 15)],
+    [
+      "a link's names as values",
+      (size: number) => `https://h.example/x?${"sig=token&".repeat(size / 10)}`,
+    ],
+    [
+      "a link's names as values, then a %",
+      (size: number) => `https://h.example/x?${"sig=token&".repeat(size / 10)}%`,
+    ],
+  ])(
+    "reads a model error in linear time, up to 1 MB: %s",
+    (_name, make) => {
+      // The CPU time from 128 kB to 1 MB: a text read once grows about 8 times, one read again
+      // from each place about 64 times, or takes seconds on 1 MB.
+      const state = {
+        timedOut: false,
+        aborted: false,
+        callSite: "x",
+        secrets: ["K7jK8jK9jKajKbjKcj"],
+      };
+      const call = (text: string) =>
+        classifyError(Object.assign(new Error(text), { status: 400 }), state).message.length;
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 3_000 });
+      expect(ratio).toBeLessThan(20);
+    },
+    30_000,
+  );
 });
 
 describe("timeout", () => {

@@ -25,7 +25,9 @@
     "check:contrast": "node scripts/contrast.mjs apps/web/src/styles/tokens.css",
     "test:e2e": "playwright test",
     "test:replay": "node scripts/replay-e2e.mjs && REPLAY_INTERRUPT_TEST=1 vitest run --project scripts replay-interrupt",
-    "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs"
+    "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs",
+    "eval": "node evals/agent/eval.mjs",
+    "eval:table": "node evals/agent/report.mjs"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,

@@ -1,0 +1,1280 @@
+[
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBDUW0000053",
+    "isrc": "GBDUW0000053",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBDUW0000053",
+        "text": "\"One More Time\" is by Daft Punk.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBDUW0000053-0",
+        "text": "Synthetic claim 0 about \"One More Time\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBAAA9700049",
+    "isrc": "GBAAA9700049",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBAAA9700049",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAAA9700049",
+        "text": "\"Bitter Sweet Symphony\" is by The Verve.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBAAA9700049-0",
+        "text": "Synthetic claim 1 about \"Bitter Sweet Symphony\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USUM70741299",
+    "isrc": "USUM70741299",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USUM70741299",
+      "mbid": "8009d470-912b-42fa-8261-b88c488eb935"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USUM70741299",
+        "text": "\"Stronger\" is by Kanye West.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USUM70741299-0",
+        "text": "Synthetic claim 2 about \"Stronger\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USSB29000129",
+    "isrc": "USSB29000129",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USSB29000129",
+      "mbid": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USSB29000129",
+        "text": "\"Ice Ice Baby\" is by Vanilla Ice.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USSB29000129-0",
+        "text": "Synthetic claim 3 about \"Ice Ice Baby\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USCA29000294",
+    "isrc": "USCA29000294",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USCA29000294",
+      "mbid": "edbdeaf2-51e4-4b51-bcb6-174a160b8899"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USCA29000294",
+        "text": "\"U Can't Touch This\" is by MC Hammer.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USCA29000294-0",
+        "text": "Synthetic claim 0 about \"U Can't Touch This\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USTB10250016",
+    "isrc": "USTB10250016",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USTB10250016",
+      "mbid": "2f7a6735-2e09-4ce2-81e4-b148e6c39a55"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "interpolation",
+        "origin": "model",
+        "target": {
+          "title": "Pastime Paradise",
+          "artist": "Stevie Wonder"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USTB10250016",
+        "text": "\"Gangsta's Paradise\" is by Coolio feat. L.V..",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USTB10250016-0",
+        "text": "Synthetic claim 1 about \"Gangsta's Paradise\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USBB40000359",
+    "isrc": "USBB40000359",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USBB40000359",
+      "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Juicy Fruit",
+          "artist": "Mtume"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Rappin' Duke (vocal)",
+          "artist": "The Rappin' Duke"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USBB40000359",
+        "text": "\"Juicy\" is by The Notorious B.I.G..",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USBB40000359-0",
+        "text": "Synthetic claim 2 about \"Juicy\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USBB40580685",
+    "isrc": "USBB40580685",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USBB40580685",
+      "mbid": "a2385545-186d-411a-8395-bb5f0f1c186f"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Every Breath You Take",
+          "artist": "The Police"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USBB40580685",
+        "text": "\"I'll Be Missing You\" is by Puff Daddy & Faith Evans feat. 112.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USBB40580685-0",
+        "text": "Synthetic claim 3 about \"I'll Be Missing You\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USWB10504319",
+    "isrc": "USWB10504319",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB10504319",
+      "mbid": "d63f9a2c-aea5-4b77-875e-eee7ce1fd734"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+          "artist": "ABBA"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB10504319",
+        "text": "\"Hung Up\" is by Madonna.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USWB10504319-0",
+        "text": "Synthetic claim 0 about \"Hung Up\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USIR10001280",
+    "isrc": "USIR10001280",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USIR10001280",
+      "mbid": "60d2246d-2761-4e1f-b30b-2784f00565b1"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Thank You",
+          "artist": "Dido"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USIR10001280",
+        "text": "\"Stan\" is by Eminem feat. Dido.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USIR10001280-0",
+        "text": "Synthetic claim 1 about \"Stan\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBBMQ9800092",
+    "isrc": "GBBMQ9800092",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBBMQ9800092",
+      "mbid": "66197b08-aa26-4f44-91da-49a8c89168ae"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Take Yo' Praise",
+          "artist": "Camille Yarbrough"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBBMQ9800092",
+        "text": "\"Praise You\" is by Fatboy Slim.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBBMQ9800092-0",
+        "text": "Synthetic claim 2 about \"Praise You\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBAJH9900041",
+    "isrc": "GBAJH9900041",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBAJH9900041",
+      "mbid": "b2d6930a-63aa-449a-b3a8-d1c54a54f4ae"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAJH9900041",
+        "text": "\"Natural Blues\" is by Moby.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBAJH9900041-0",
+        "text": "Synthetic claim 3 about \"Natural Blues\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-SEUM71100961",
+    "isrc": "SEUM71100961",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "SEUM71100961",
+      "mbid": "21b6345e-cadb-4dcb-9019-28128545a933"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-SEUM71100961",
+        "text": "\"Levels\" is by Avicii.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-SEUM71100961-0",
+        "text": "Synthetic claim 0 about \"Levels\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USWB19900178",
+    "isrc": "USWB19900178",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB19900178",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB19900178",
+        "text": "\"Dreams\" is by Fleetwood Mac.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USWB19900178-0",
+        "text": "Synthetic claim 1 about \"Dreams\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USSM18200463",
+    "isrc": "USSM18200463",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USSM18200463",
+      "mbid": "55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USSM18200463",
+        "text": "\"Africa\" is by Toto.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USSM18200463-0",
+        "text": "Synthetic claim 2 about \"Africa\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBCNR8500002",
+    "isrc": "GBCNR8500002",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBCNR8500002",
+      "mbid": "6029d549-5858-4936-9156-b90770d2ae92"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBCNR8500002",
+        "text": "\"Running Up That Hill (A Deal With God)\" is by Kate Bush.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBCNR8500002-0",
+        "text": "Synthetic claim 3 about \"Running Up That Hill (A Deal With God)\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-AUUM71500303",
+    "isrc": "AUUM71500303",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "AUUM71500303",
+      "mbid": "78be434c-0908-458f-9693-f16cdebb68ef"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-AUUM71500303",
+        "text": "\"The Less I Know the Better\" is by Tame Impala.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-AUUM71500303-0",
+        "text": "Synthetic claim 0 about \"The Less I Know the Better\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USWB19901214",
+    "isrc": "USWB19901214",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB19901214",
+      "mbid": "12f65dca-de8f-43fe-a65d-f12a02aaadf3"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB19901214",
+        "text": "\"Take On Me\" is by a-ha.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USWB19901214-0",
+        "text": "Synthetic claim 1 about \"Take On Me\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USDJ20200650",
+    "isrc": "USDJ20200650",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USDJ20200650",
+        "text": "\"Hurt\" is by Johnny Cash.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USDJ20200650-0",
+        "text": "Synthetic claim 2 about \"Hurt\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-GBAHT0600202",
+    "isrc": "GBAHT0600202",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USAAA0000001",
+      "mbid": "synthetic-other"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Last Men Standing",
+          "artist": "Gian Piero Reverberi & Gian Franco Reverberi"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAHT0600202",
+        "text": "\"Crazy\" is by Gnarls Barkley.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-GBAHT0600202-0",
+        "text": "Synthetic claim 3 about \"Crazy\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-JPP301900716",
+    "isrc": "JPP301900716",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "JPP301900716",
+      "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-JPP301900716",
+        "text": "\"夜に駆ける\" is by YOASOBI.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-JPP301900716-0",
+        "text": "Synthetic claim 0 about \"夜に駆ける\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-USUM71210283",
+    "isrc": "USUM71210283",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USUM71210283",
+      "mbid": "882ce25d-51b9-4fe5-bbdf-16e661df0822"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USUM71210283",
+        "text": "\"Gangnam Style (강남스타일)\" is by PSY.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-USUM71210283-0",
+        "text": "Synthetic claim 1 about \"Gangnam Style (강남스타일)\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-FR10F1200080",
+    "isrc": "FR10F1200080",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "FR10F1200080",
+      "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-FR10F1200080",
+        "text": "\"More Spell on You\" is by Eddie Johns.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-FR10F1200080-0",
+        "text": "Synthetic claim 2 about \"More Spell on You\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-a-0-QM4TX1779716",
+    "isrc": "QM4TX1779716",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "QM4TX1779716",
+      "mbid": "61ef31c0-d65b-4d76-b9bb-80eec6e107de"
+    },
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-QM4TX1779716",
+        "text": "\"Amen, Brother\" is by The Winstons.",
+        "origin": "model",
+        "verdict": null
+      },
+      {
+        "id": "c2-QM4TX1779716-0",
+        "text": "Synthetic claim 3 about \"Amen, Brother\".",
+        "origin": "model",
+        "verdict": null
+      }
+    ],
+    "schemaValid": null,
+    "fallback": null,
+    "latencyMs": null,
+    "usage": null
+  }
+]

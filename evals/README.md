@@ -8,6 +8,10 @@ that could not be sourced is left `null`.
 ```
 evals/
   golden.jsonl                  one JSON object per line (the set)
+  perturb.jsonl                 the verifier's perturbation set, generated from the
+                                recorded runs (agent/make-perturb.mjs)
+  agent/                        agent evals: scorer, report and its checker, perturbation
+                                checks (Node; no network, no model); see agent/README.md
   scripts/summary.mjs           prints the counts that describe the set
   scripts/coverage.mjs          Deezer preview coverage check (Node >= 20, no dependencies)
   scripts/coverage.test.mjs     tests for the coverage matcher and input checks

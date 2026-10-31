@@ -1,0 +1,487 @@
+[
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-GBDUW0000053",
+    "isrc": "GBDUW0000053",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBDUW0000053",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk."
+      },
+      {
+        "id": "ev-wp-GBDUW0000053",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "One More Time is a song by Daft Punk."
+      },
+      {
+        "id": "ev-edge-GBDUW0000053-0",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns"
+        },
+        "evidenceIds": [
+          "ev-edge-GBDUW0000053-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBDUW0000053",
+        "text": "\"One More Time\" is by Daft Punk.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBDUW0000053-1",
+        "text": "Synthetic claim 0 about \"One More Time\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 48275,
+    "usage": {
+      "inputTokens": 15962,
+      "outputTokens": 2842,
+      "usd": 0.013781
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-GBAAA9700049",
+    "isrc": "GBAAA9700049",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBAAA9700049",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBAAA9700049",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz recording \"Bitter Sweet Symphony\" by The Verve."
+      },
+      {
+        "id": "ev-edge-GBAAA9700049-0",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Andrew Oldham Orchestra."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra"
+        },
+        "evidenceIds": [
+          "ev-edge-GBAAA9700049-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAAA9700049",
+        "text": "\"Bitter Sweet Symphony\" is by The Verve.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBAAA9700049-1",
+        "text": "Synthetic claim 1 about \"Bitter Sweet Symphony\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 58177,
+    "usage": {
+      "inputTokens": 15114,
+      "outputTokens": 3251,
+      "usd": 0.010921
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-USBB40000359",
+    "isrc": "USBB40000359",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USBB40000359",
+      "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USBB40000359",
+        "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+        "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G.."
+      },
+      {
+        "id": "ev-wp-USBB40000359",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Juicy is a song by The Notorious B.I.G.."
+      },
+      {
+        "id": "ev-edge-USBB40000359-0",
+        "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+        "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Juicy Fruit",
+          "artist": "Mtume"
+        },
+        "evidenceIds": [
+          "ev-edge-USBB40000359-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USBB40000359",
+        "text": "\"Juicy\" is by The Notorious B.I.G..",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USBB40000359-1",
+        "text": "Synthetic claim 2 about \"Juicy\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 56093,
+    "usage": {
+      "inputTokens": 15053,
+      "outputTokens": 3352,
+      "usd": 0.014804
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-USWB19900178",
+    "isrc": "USWB19900178",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB19900178",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USWB19900178",
+        "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "excerpt": "MusicBrainz recording \"Dreams\" by Fleetwood Mac."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB19900178",
+        "text": "\"Dreams\" is by Fleetwood Mac.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USWB19900178-1",
+        "text": "Synthetic claim 1 about \"Dreams\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 51262,
+    "usage": {
+      "inputTokens": 15695,
+      "outputTokens": 3299,
+      "usd": 0.010183
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-USDJ20200650",
+    "isrc": "USDJ20200650",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USDJ20200650",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz recording \"Hurt\" by Johnny Cash."
+      },
+      {
+        "id": "ev-wp-USDJ20200650",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Hurt is a song by Johnny Cash."
+      },
+      {
+        "id": "ev-edge-USDJ20200650-0",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash is a cover of \"Hurt\" by Nine Inch Nails."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "code",
+        "target": {
+          "title": "Hurt",
+          "artist": "Nine Inch Nails"
+        },
+        "evidenceIds": [
+          "ev-edge-USDJ20200650-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USDJ20200650",
+        "text": "\"Hurt\" is by Johnny Cash.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USDJ20200650-1",
+        "text": "Synthetic claim 2 about \"Hurt\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 41167,
+    "usage": {
+      "inputTokens": 17995,
+      "outputTokens": 2754,
+      "usd": 0.012782
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-1-JPP301900716",
+    "isrc": "JPP301900716",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "JPP301900716",
+      "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": false
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-JPP301900716",
+        "url": "https://musicbrainz.org/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+        "excerpt": "MusicBrainz recording \"夜に駆ける\" by YOASOBI."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-JPP301900716",
+        "text": "\"夜に駆ける\" is by YOASOBI.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-JPP301900716-1",
+        "text": "Synthetic claim 0 about \"夜に駆ける\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 40404,
+    "usage": {
+      "inputTokens": 16541,
+      "outputTokens": 2693,
+      "usd": 0.009331
+    }
+  }
+]

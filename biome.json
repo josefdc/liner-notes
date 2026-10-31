@@ -11,6 +11,7 @@
       "!**/dist",
       "!**/node_modules",
       "!evals/reports",
+      "!evals/agent/testdata/**/*.json",
       "!services/audio/**/*.py",
       "!scripts/fixtures"
     ]

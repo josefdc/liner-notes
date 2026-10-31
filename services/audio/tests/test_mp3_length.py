@@ -370,8 +370,9 @@ def test_a_second_decode_that_cannot_start_is_refused_with_that_reason(monkeypat
         raise sf.LibsndfileError(1)
 
     monkeypatch.setattr(main, "_decode_through_pipe", fail)
-    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$"):
+    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$") as refused:
         main.decode(str(VBR))
+    assert refused.value.code == "decode_incomplete"
 
 
 def test_a_stream_that_turns_mono_is_refused_through_the_real_pipe(tmp_path):

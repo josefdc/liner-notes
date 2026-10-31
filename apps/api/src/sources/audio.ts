@@ -14,7 +14,8 @@
  * Calls the Python audio analysis service for the measurement. When there is no preview or
  * the service cannot measure it, the result has source "unavailable", no block and a reason;
  * nothing is estimated. A preview the service refuses for what the file is (a format it does not
- * decode, an MP3 that does not decode in full) has its own reason, never `analysis_failed`.
+ * decode, an MP3 that does not decode in full) has its own reason when the service sends its
+ * code; an older service's failed-read sentence alone stays `analysis_failed`.
  *
  * Preview URLs are signed and expire within minutes: they are returned for the run's player,
  * never logged.

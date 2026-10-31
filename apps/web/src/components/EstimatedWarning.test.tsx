@@ -90,6 +90,40 @@ describe('ResultNotices', () => {
     },
   );
 
+  it.each([
+    ['unsupported_format', 'The preview is in a format the service does not measure.'],
+    [
+      'decode_incomplete',
+      'The preview does not decode to its full length, so it was not measured.',
+    ],
+  ] as const)('says the preview itself kept the audio from being measured (%s)', (reason, text) => {
+    const unmeasured = {
+      ...base,
+      bpm: null,
+      key: null,
+      energy: null,
+      valence: null,
+      danceability: null,
+      acousticness: null,
+      audioSource: 'unavailable',
+      audioUnavailableReason: reason,
+    } as TrackData;
+    render(
+      <>
+        <ResultNotices track={unmeasured} />
+        <AudioStats track={unmeasured} />
+      </>,
+    );
+    const notice = screen.getByRole('region', { name: 'Missing data' });
+    expect(notice.textContent).toContain('Audio not analyzed');
+    expect(notice.textContent).toContain(text);
+    // Never called a failure of the analysis.
+    expect(document.body.textContent).not.toMatch(/analysis failed/i);
+    const stats = screen.getByRole('list', { name: 'Audio values' }).textContent;
+    expect(stats).toContain('BPM not measured');
+    expect(stats).toContain('Key not measured');
+  });
+
   it('lists only the values that are missing when the audio was partly measured', () => {
     render(
       <ResultNotices

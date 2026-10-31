@@ -320,6 +320,89 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
   });
 });
 
+describe("a preview the service refuses for what the file is", () => {
+  const SERVICE = "http://audio.test:3002";
+  const CLIP = "https://p.scdn.co/mp3-preview/own";
+  const TRACK = { title: "Ice Ice Baby", artist: "Vanilla Ice", previewUrl: CLIP };
+  const PREFIX = "The preview is not analysable audio: ";
+  const M4A = `${PREFIX}it is an MP4 (M4A) or AAC file, a format the service does not decode`;
+  const TRUNCATED = `${PREFIX}the MP3 decodes to less audio than its MPEG audio frames hold`;
+  const READ_FAILED = `${PREFIX}the MP3 could not be decoded to the end of its MPEG audio frames`;
+
+  /** The service answers /analyze with `body` and `status` for Spotify's own clip. */
+  function refusing(body: unknown, status: number) {
+    return stubFetch((call) => {
+      if (call.url.startsWith("https://api.deezer.com/")) {
+        return json({ error: { code: 800, message: "no data" } });
+      }
+      if (call.url === `${SERVICE}/health`) return json({ status: "ok" });
+      if (call.url === `${SERVICE}/analyze`) return json(body, { status });
+      return undefined;
+    });
+  }
+
+  beforeEach(() => {
+    process.env.AUDIO_ANALYSIS_URL = SERVICE;
+    for (const method of ["log", "warn", "error"] as const) {
+      vi.spyOn(console, method).mockImplementation(() => {});
+    }
+  });
+  afterEach(() => {
+    delete process.env.AUDIO_ANALYSIS_URL;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["its code", { detail: M4A, code: "unsupported_format" }],
+    ["the sentence alone (a service older than the code)", { detail: M4A }],
+  ])("reports an MP4 (M4A) or AAC preview as unsupported_format, by %s", async (_by, body) => {
+    refusing(body, 422);
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+    expect(data).toMatchObject({
+      source: "unavailable",
+      reason: "unsupported_format",
+      audio: null,
+      error: M4A,
+    });
+  });
+
+  it.each([
+    ["its code", TRUNCATED, { code: "decode_incomplete" }],
+    ["its code", READ_FAILED, { code: "decode_incomplete" }],
+    ["the sentence alone", TRUNCATED, {}],
+    ["the sentence alone", READ_FAILED, {}],
+  ])(
+    "reports an MP3 that does not decode to its frames as decode_incomplete, by %s (%s)",
+    async (_by, detail, code) => {
+      refusing({ detail, ...code }, 422);
+      const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+      expect(data).toMatchObject({
+        source: "unavailable",
+        reason: "decode_incomplete",
+        audio: null,
+        error: detail,
+      });
+    },
+  );
+
+  it.each([
+    ["a 500", { detail: "Audio analysis failed" }, 500],
+    ["the service's timeout", { detail: "Audio analysis timed out" }, 504],
+    ["a failed download", { detail: "Could not download the preview" }, 502],
+    ["a busy service", { detail: "The analysis service is busy; try again" }, 503],
+    ["another 422", { detail: `${PREFIX}the file could not be decoded as audio` }, 422],
+    ["a code this client does not know", { detail: `${PREFIX}newer`, code: "a_newer_code" }, 422],
+    // The refusal's words or code with another status are not the refusal.
+    ["the sentence with a 500", { detail: M4A }, 500],
+    ["the code with a 500", { detail: "Audio analysis failed", code: "unsupported_format" }, 500],
+  ])("keeps %s as analysis_failed", async (_label, body, status) => {
+    refusing(body, status);
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+    expect(data).toMatchObject({ source: "unavailable", reason: "analysis_failed", audio: null });
+  });
+});
+
 describe("the chosen track's preview clip", () => {
   const SERVICE = "http://audio.test:3002";
   const ISRC_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/isrc.mp3?hdnea=exp=1~hmac=a";

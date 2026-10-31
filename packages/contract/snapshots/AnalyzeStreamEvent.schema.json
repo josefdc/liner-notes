@@ -177,7 +177,9 @@
                   "not_detected",
                   "not_run",
                   "low_confidence",
-                  "preview_lookup_incomplete"
+                  "preview_lookup_incomplete",
+                  "unsupported_format",
+                  "decode_incomplete"
                 ]
               },
               { "type": "null" }
@@ -440,7 +442,9 @@
                   "not_detected",
                   "not_run",
                   "low_confidence",
-                  "preview_lookup_incomplete"
+                  "preview_lookup_incomplete",
+                  "unsupported_format",
+                  "decode_incomplete"
                 ]
               },
               { "type": "null" }

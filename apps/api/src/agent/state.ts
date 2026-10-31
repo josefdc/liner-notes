@@ -138,7 +138,8 @@ export interface KeyMoment {
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed, or its answer carried no
- *   v2 block the contract reads (an older service that sends only the v1 fields)
+ *   v2 block the contract reads (an older service that sends only the v1 fields). A refusal
+ *   for what the preview file is has its own reason (unsupported_format, decode_incomplete)
  * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio), or its
  *   gate measured nothing (silence, noise, too short: the block says which)
  * - not_run: audio analysis did not run for this track
@@ -146,6 +147,11 @@ export interface KeyMoment {
  *   not be finished: a request was not sent (its pace had no slot in time, sources/pacing.ts) or
  *   Deezer could not be read. Whether a clip exists is unknown, so this is never "no_preview"
  *   (every request answered, no clip), and the result is not stored
+ * - unsupported_format: the service refused the preview as a format it does not decode (an MP4
+ *   (M4A) or AAC file). The file stays what it is, so the result is stored like any other
+ * - decode_incomplete: the service refused the preview, an MP3, because it does not decode to
+ *   the audio its MPEG frames hold (it ends early, or fails before the end). Also the file's
+ *   own property, so the result is stored
  */
 export type AudioUnavailableReason =
   | "no_preview"
@@ -154,7 +160,9 @@ export type AudioUnavailableReason =
   | "analysis_failed"
   | "not_detected"
   | "not_run"
-  | "preview_lookup_incomplete";
+  | "preview_lookup_incomplete"
+  | "unsupported_format"
+  | "decode_incomplete";
 
 /**
  * What the engineer leaves for the composer: the audio service's measurement of the preview

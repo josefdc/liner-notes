@@ -185,6 +185,9 @@ export const GenreProfileItem = z.object({
  * the UI requires to show a value. `preview_lookup_incomplete`: the preview clip lookup could not
  * be finished (a request was not sent in time, or the source could not be read), so whether a
  * clip exists is unknown; `no_preview` says only that every request was answered without one.
+ * `unsupported_format`: the preview is in a format the audio service does not decode (an MP4
+ * (M4A) or AAC file). `decode_incomplete`: the preview (an MP3) does not decode to the audio its
+ * frames hold. Both are what the file is, not a failure of the analysis (`analysis_failed`).
  */
 export const AudioUnavailableReason = z.enum([
   "no_preview",
@@ -195,6 +198,8 @@ export const AudioUnavailableReason = z.enum([
   "not_run",
   "low_confidence",
   "preview_lookup_incomplete",
+  "unsupported_format",
+  "decode_incomplete",
 ]);
 export type AudioUnavailableReason = z.infer<typeof AudioUnavailableReason>;
 

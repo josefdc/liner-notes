@@ -13,7 +13,8 @@
  * matches it. Never another recording's clip: with no such preview nothing is measured.
  * Calls the Python audio analysis service for the measurement. When there is no preview or
  * the service cannot measure it, the result has source "unavailable", no block and a reason;
- * nothing is estimated.
+ * nothing is estimated. A preview the service refuses for what the file is (a format it does not
+ * decode, an MP3 that does not decode in full) has its own reason, never `analysis_failed`.
  *
  * Preview URLs are signed and expire within minutes: they are returned for the run's player,
  * never logged.
@@ -395,6 +396,54 @@ function audioRunContext(config: unknown): AudioRunContext {
 }
 
 /**
+ * Why the service refused a preview for what the file is (a 422), by the code it sends with
+ * the refusal: a format it does not decode, or an MP3 that does not decode to the audio its
+ * frames hold (services/audio/main.py). Not a failure of the analysis: the same file is refused
+ * again, so the result is stored like any other.
+ */
+const REFUSAL_CODES: Readonly<Record<string, AudioUnavailableReason>> = {
+  unsupported_format: "unsupported_format",
+  decode_incomplete: "decode_incomplete",
+};
+
+/** The same refusals by their words alone, as a service older than the codes sends them. */
+const REFUSAL_PREFIX = "The preview is not analysable audio: ";
+const REFUSAL_DETAILS: Readonly<Record<string, AudioUnavailableReason>> = {
+  [`${REFUSAL_PREFIX}it is an MP4 (M4A) or AAC file, a format the service does not decode`]:
+    "unsupported_format",
+  [`${REFUSAL_PREFIX}the MP3 decodes to less audio than its MPEG audio frames hold`]:
+    "decode_incomplete",
+  [`${REFUSAL_PREFIX}the MP3 could not be decoded to the end of its MPEG audio frames`]:
+    "decode_incomplete",
+};
+
+/**
+ * The reason for a refusal of the preview file (REFUSAL_CODES, else REFUSAL_DETAILS), or null:
+ * only a 422 is one, and a code or words this client does not know are none.
+ */
+function refusalReason(error: unknown): AudioUnavailableReason | null {
+  if (!isSourceError(error, "http") || error.status !== 422) return null;
+  const body = error.body as { detail?: unknown; code?: unknown } | null | undefined;
+  const code = typeof body === "object" ? body?.code : undefined;
+  if (typeof code === "string" && Object.hasOwn(REFUSAL_CODES, code)) return REFUSAL_CODES[code];
+  const detail = typeof body === "object" ? body?.detail : undefined;
+  if (typeof detail === "string" && Object.hasOwn(REFUSAL_DETAILS, detail)) {
+    return REFUSAL_DETAILS[detail];
+  }
+  return null;
+}
+
+/** The service refused the preview for what the file is (refusalReason). */
+class PreviewRefusedError extends Error {
+  constructor(
+    readonly reason: AudioUnavailableReason,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
  * Call the audio analysis service
  */
 async function analyzeWithService(
@@ -421,6 +470,8 @@ async function analyzeWithService(
       ? (error.body as { detail?: unknown } | undefined)?.detail
       : undefined;
     const reason = plainReason(detail);
+    const refused = refusalReason(error);
+    if (refused) throw new PreviewRefusedError(refused, reason ?? describeError(error));
     if (reason) throw new Error(reason);
     throw error;
   }
@@ -532,6 +583,11 @@ export const analyzeAudioPreview = tool(
       // A cancelled run rejects: no "analysis failed" is reported for it.
       if (signal?.aborted) throw error;
       const message = error instanceof Error ? error.message : String(error);
+      // A preview refused for what the file is has its own reason: the analysis did not fail.
+      if (error instanceof PreviewRefusedError) {
+        log.warn(`Preview not measured: ${message}`);
+        return withPreview(unavailable(error.reason, message));
+      }
       log.error(`Analysis failed: ${message}`);
       return withPreview(unavailable("analysis_failed", message));
     }

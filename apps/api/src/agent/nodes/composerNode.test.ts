@@ -877,7 +877,13 @@ describe("composerNode", () => {
       expect(store.put).not.toHaveBeenCalled();
     });
 
-    it.each(["no_preview", "preview_rejected", "not_detected"] as const)(
+    it.each([
+      "no_preview",
+      "preview_rejected",
+      "not_detected",
+      "unsupported_format",
+      "decode_incomplete",
+    ] as const)(
       "stores a result whose audio is missing for a stable reason (%s)",
       async (reason) => {
         await analyse(testRuntime(succeeding()))(stateWith(unavailable(reason)), config());

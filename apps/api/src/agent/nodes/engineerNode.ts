@@ -101,6 +101,8 @@ const UNMEASURED_TEXT: Record<ResultUnavailableReason, string> = {
   low_confidence: "the estimate was not confident enough",
   preview_lookup_incomplete:
     "the preview lookup on Deezer could not be finished; a later analysis tries again",
+  unsupported_format: "the preview is in a format the service does not measure",
+  decode_incomplete: "the preview does not decode to its full length",
 };
 
 /** What the service's gate means, for a block that carries no reason of its own. */

@@ -40,16 +40,31 @@ describe("LLM_RUN_PURPOSE at startup", () => {
     expect(readRunPurpose({ LLM_RUN_PURPOSE: " " })).toEqual({ purpose: "dev", error: null });
   });
 
-  it("is refused when NODE_ENV=production", () => {
-    const production = { NODE_ENV: "production", ...KEYS, ...PRODUCTION_SECRETS };
+  it.each([
+    ["production", { NODE_ENV: "production" }],
+    ["staging", { NODE_ENV: "staging" }],
+    ["prod", { NODE_ENV: "prod" }],
+    ["unset, outside the dev script", {}],
+  ])("is refused in a deployment: NODE_ENV %s", (_label, nodeEnv) => {
+    const deployment = { ...nodeEnv, ...KEYS, ...PRODUCTION_SECRETS };
     // The same settings start without it.
-    expect(startupErrors(production)).toBe("");
-    const refused = { ...production, LLM_RUN_PURPOSE: "eval:golden" };
+    expect(startupErrors(deployment)).toBe("");
+    const refused = { ...deployment, LLM_RUN_PURPOSE: "eval:golden" };
     expect(startupErrors(refused)).toBe(
-      "LLM_RUN_PURPOSE is not allowed when NODE_ENV=production: it is for evaluation runs",
+      "LLM_RUN_PURPOSE is not allowed unless NODE_ENV is development or test (or unset under " +
+        "the dev script): it is for evaluation runs",
     );
     // Its calls would not be tagged with it either.
     expect(readRunPurpose(refused).purpose).toBe("dev");
+  });
+
+  it("is accepted with NODE_ENV development, or unset under the dev script", () => {
+    for (const env of [{ NODE_ENV: "development" }, { npm_lifecycle_event: "dev" }]) {
+      expect(readRunPurpose({ ...env, LLM_RUN_PURPOSE: "eval:golden" })).toEqual({
+        purpose: "eval:golden",
+        error: null,
+      });
+    }
   });
 
   it("is refused with REPLAY_MODE=only", () => {
@@ -62,7 +77,7 @@ describe("LLM_RUN_PURPOSE at startup", () => {
     expect(readRunPurpose(refused).purpose).toBe("dev");
   });
 
-  it.each(["eval", "dev", "showcase", "eval:gold", "EVAL:GOLDEN", "U-39 S5"])(
+  it.each(["eval", "dev", "showcase", "eval:gold", "EVAL:GOLDEN", "nightly"])(
     "refuses %s",
     (value) => {
       const env = { NODE_ENV: "test", ...KEYS, LLM_RUN_PURPOSE: value };

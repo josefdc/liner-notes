@@ -118,6 +118,48 @@ export const LLM_PURPOSES = ["dev", "eval", "showcase", ...Object.keys(EVAL_SUB_
 ];
 export type LlmPurpose = "dev" | "eval" | "showcase" | EvalSubPurpose;
 
+/** The purposes LLM_RUN_PURPOSE may name: the evaluation sub-purposes. */
+export const RUN_PURPOSES = Object.keys(EVAL_SUB_CAPS) as EvalSubPurpose[];
+
+/** The purpose of the process's model calls when LLM_RUN_PURPOSE is unset. */
+export const DEFAULT_RUN_PURPOSE: LlmPurpose = "dev";
+
+/**
+ * LLM_RUN_PURPOSE: the purpose every model call of this process is tagged with (the spend
+ * log's `unit`, and the cap it counts against), for an evaluation harness that drives the API.
+ * Unset or empty: `dev`. Otherwise one of RUN_PURPOSES, and refused when NODE_ENV=production
+ * (a deployment spends as `dev`, never from the evaluation floor) or with REPLAY_MODE=only
+ * (which makes no model call to tag). On a refusal or an unknown value the purpose is `dev`
+ * and `error` says why; the API does not start with an error (readSettings), and the model
+ * layer refuses every call (readLlmSettings).
+ */
+export function readRunPurpose(env: NodeJS.ProcessEnv): {
+  purpose: LlmPurpose;
+  error: string | null;
+} {
+  const raw = env.LLM_RUN_PURPOSE?.trim() ?? "";
+  if (raw === "") return { purpose: DEFAULT_RUN_PURPOSE, error: null };
+  const purpose = RUN_PURPOSES.find((candidate) => candidate === raw);
+  const refused = (error: string): { purpose: LlmPurpose; error: string } => ({
+    purpose: DEFAULT_RUN_PURPOSE,
+    error,
+  });
+  if (!purpose) {
+    return refused(`LLM_RUN_PURPOSE: expected one of ${RUN_PURPOSES.join(", ")}, or unset`);
+  }
+  if (nodeEnv(env) === "production") {
+    return refused(
+      "LLM_RUN_PURPOSE is not allowed when NODE_ENV=production: it is for evaluation runs",
+    );
+  }
+  if (parseReplayMode(env.REPLAY_MODE) === "only") {
+    return refused(
+      "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=only: a replay makes no model call",
+    );
+  }
+  return { purpose, error: null };
+}
+
 export interface BudgetSettings {
   /** Hard stop for all spending recorded in the spend log, in USD. */
   totalUsd: number;
@@ -333,6 +375,10 @@ export function readLlmSettings(env: NodeJS.ProcessEnv): {
 
   const azureBaseUrl = readAzureBaseUrl(env, errors);
   const deployments = readDeployments(env, errors);
+
+  // A purpose that is refused refuses every call, rather than tagging it with another purpose.
+  const runPurposeError = readRunPurpose(env).error;
+  if (runPurposeError) errors.push(runPurposeError);
 
   const cassetteRaw = env.LLM_CASSETTE?.trim() || "off";
   const cassette = (["off", "record", "replay"] as const).find((mode) => mode === cassetteRaw);

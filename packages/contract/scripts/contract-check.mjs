@@ -10,9 +10,18 @@
 //
 // The comparison itself is code in this change. When that code (ENGINE_FILES), the CI step
 // that runs it or the zod version the contract resolves (package-lock.json) differs from the
-// base, the change must also add a line `engine changed: <reason>`, so loosening the check is
-// never silent. zod builds the JSON Schemas and holds the internals readerFacts reads: a zod
-// release that hid a refinement or an unknown-key policy would otherwise pass as additive.
+// base, the change must also add a line `engine changed: <reason>`. zod builds the JSON
+// Schemas and holds the internals readerFacts reads: a zod release that hid a refinement or an
+// unknown-key policy would otherwise pass as additive.
+//
+// The CI step is the one named CI_STEP in CI_FILE. What is compared is that step's own block,
+// the key of the job that holds it and that job's other settings (if, continue-on-error,
+// strategy, defaults, needs, runs-on, env and the rest; not its other steps). A ci.yml in
+// which no such step can be read fails on every run, and no acknowledgement excuses that. The
+// rest of the workflow is not compared, so some ways to weaken the check still pass unnoticed:
+// workflow-level `on:` filters, earlier steps that change what the check reads (a shim on PATH,
+// a write to BREAKING-CHANGES, older sources checked out), the root package.json script the
+// step runs, and YAML aliases or merge keys whose anchor sits outside the compared lines.
 //
 // Exit codes: 0 compatible, 1 breaking or unacknowledged, 2 the base cannot be read.
 //
@@ -67,18 +76,23 @@ const ENGINE_FILES = [
 const CI_FILE = ".github/workflows/ci.yml";
 const CI_STEP = "Contract compatibility";
 
-// The lines of every step named CI_STEP in a workflow (null when there is none): from the `-`
-// that starts the step to the last line before the next line indented no deeper than that `-`
-// (the next step, the end of the job), less trailing blank lines. Comments at that depth belong
-// to what follows. There is no YAML library here, so this reads block-style YAML by indentation:
-// the name may come first or after other keys, plain or quoted, and lines inside block scalars
-// (`run: |`) are content, never steps, even when they start with "-". Flow-style steps
-// (`- { name: ... }`) and multi-line names are not read.
+// What the check compares in a workflow (null when it has no step named CI_STEP): for each such
+// step under jobs.<job>.steps, the job's key and settings (its lines outside `steps:`), then
+// the step's block, from the `-` that starts it to the next line that carries structure and is
+// indented no deeper than that `-`. Comment lines never end a block, at any column; trailing
+// blank lines and trailing comments no deeper than the block's own depth are dropped, so the
+// comment above the next step is not part of this one. There is no YAML library here, so this
+// reads block-style YAML by indentation: the name may come first or after other keys, plain or
+// quoted, and lines inside block scalars (`run: |`) are content, never structure, even when
+// they start with "-" or "#". A step written in flow style (`- { name: ... }`), with a
+// multi-line or escaped name, or anywhere but under jobs.<job>.steps is not read.
 function ciStep(text) {
   if (text === null) return null;
-  const lines = text.split(/\r?\n/);
+  // A lone CR is a line break in YAML too.
+  const lines = text.split(/\r\n?|\n/);
   const indent = (line) => line.length - line.trimStart().length;
   const blank = (line) => line.trim() === "";
+  const comment = (line) => /^\s*#/.test(line);
   // Lines inside a block scalar: those after a `key: |` or `- |` line (any indicators, then an
   // optional comment) that are blank or deeper than the key, or than that dash.
   const content = new Set();
@@ -94,6 +108,42 @@ function ciStep(text) {
       content.add(j);
     }
   }
+  // Lines that carry structure: not blank, not a comment, not inside a block scalar.
+  const structural = (i) => !content.has(i) && !blank(lines[i]) && !comment(lines[i]);
+  const item = (i) => (structural(i) ? /^( *)-(?: +(.*))?$/.exec(lines[i]) : null);
+  // The end of the node that starts at line `start`, `depth` deep: the next structural line no
+  // deeper (a "-" item at that depth continues an indentless sequence when `items`), less
+  // trailing blank lines and comments no deeper than `depth` when `trim`.
+  const endOf = (start, depth, { items = false, trim = true } = {}) => {
+    let end = start + 1;
+    while (
+      end < lines.length &&
+      (!structural(end) ||
+        indent(lines[end]) > depth ||
+        (items && indent(lines[end]) === depth && item(end)))
+    ) {
+      end++;
+    }
+    while (
+      trim &&
+      end > start + 1 &&
+      (blank(lines[end - 1]) || (comment(lines[end - 1]) && indent(lines[end - 1]) <= depth))
+    ) {
+      end--;
+    }
+    return end;
+  };
+  // The key line that holds line `at`: the nearest structural line above it that is less deep,
+  // or as deep and not an item when `at` is an item (an indentless sequence).
+  const parentOf = (at) => {
+    for (let i = at - 1; i >= 0; i--) {
+      if (!structural(i)) continue;
+      if (indent(lines[i]) < indent(lines[at])) return i;
+      if (indent(lines[i]) === indent(lines[at]) && item(at) && !item(i)) return i;
+    }
+    return -1;
+  };
+  const key = (at, name) => at >= 0 && new RegExp(`^ *${name}:[ \\t]*(?:#.*)?$`).test(lines[at]);
   const unquote = (raw) => {
     const value = raw.trim();
     const double = /^"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/.exec(value);
@@ -104,25 +154,36 @@ function ciStep(text) {
   };
   const blocks = [];
   for (let start = 0; start < lines.length; start++) {
-    const item = content.has(start) ? null : /^( *)-(?: +(.*))?$/.exec(lines[start]);
-    if (!item) continue;
-    const dash = item[1].length;
-    let end = start + 1;
-    while (end < lines.length && (blank(lines[end]) || indent(lines[end]) > dash)) end++;
-    while (end > start + 1 && blank(lines[end - 1])) end--;
+    const step = item(start);
+    if (!step) continue;
+    const dash = step[1].length;
+    const end = endOf(start, dash);
     // The step's own keys sit where the text after its dash starts, or, when the dash is alone
-    // on its line, at the depth of the next line.
-    const first = item[2] && !item[2].startsWith("#");
-    const nextLine = lines.slice(start + 1, end).find((line) => !blank(line));
-    const keys = first ? lines[start].length - item[2].length : indent(nextLine ?? "");
-    const named = [first ? item[2] : null, ...lines.slice(start + 1, end)].some((line, offset) => {
-      if (line === null || (offset > 0 && (content.has(start + offset) || indent(line) !== keys))) {
-        return false;
-      }
+    // on its line, at the depth of its next structural line.
+    const first = step[2] && !step[2].startsWith("#");
+    let next = start + 1;
+    while (next < end && !structural(next)) next++;
+    const keys = first ? lines[start].length - step[2].length : indent(lines[next] ?? "");
+    const own = [];
+    if (first) own.push(step[2]);
+    for (let i = start + 1; i < end; i++) {
+      if (structural(i) && indent(lines[i]) === keys) own.push(lines[i]);
+    }
+    const named = own.some((line) => {
       const name = /^\s*name:[ \t]+(.*)$/.exec(line);
       return name !== null && unquote(name[1]) === CI_STEP;
     });
-    if (named) blocks.push(lines.slice(start, end).join("\n"));
+    if (!named) continue;
+    // Only a step: an item of jobs.<job>.steps.
+    const steps = parentOf(start);
+    const job = key(steps, "steps") ? parentOf(steps) : -1;
+    if (job < 0 || !key(parentOf(job), "jobs") || indent(lines[parentOf(job)]) !== 0) continue;
+    const jobEnd = endOf(job, indent(lines[job]));
+    const stepsEnd = endOf(steps, indent(lines[steps]), { items: true, trim: false });
+    const settings = lines
+      .slice(job, jobEnd)
+      .filter((_, i) => job + i < steps || job + i >= stepsEnd);
+    blocks.push([...settings, ...lines.slice(start, end)].join("\n"));
   }
   return blocks.length === 0 ? null : blocks.join("\n\n");
 }
@@ -202,6 +263,10 @@ if (stepAtBase !== stepNow) {
   const how = stepAtBase === null ? ", added" : stepNow === null ? ", removed" : "";
   changedEngine.push(`${CI_FILE} (the "${CI_STEP}" step${how})`);
 }
+// A ci.yml whose step cannot be read would compare equal with a base that had the same problem,
+// on every later change: fail instead, whatever BREAKING-CHANGES says. Without a ci.yml (as in
+// a repository that does not run the check in CI) there is nothing to compare.
+const stepUnreadable = stepNow === null && readNow(CI_FILE) !== null;
 // The zod the contract package resolves: its own copy if it has one, else the hoisted one.
 const LOCK_FILE = "package-lock.json";
 const zodVersion = (lockText) => {
@@ -240,8 +305,15 @@ if (changedEngine.length > 0) {
     console.error(`[contract] add a line "${ENGINE_ACK_PREFIX} <reason>" to ${ackFile}`);
   }
 }
+if (stepUnreadable) {
+  console.error(
+    `[contract] ${CI_FILE}: no step named "${CI_STEP}" could be found under jobs.<job>.steps, ` +
+      `so the step that runs this check cannot be compared; write it in block style with exactly ` +
+      `that name (an "${ENGINE_ACK_PREFIX}" line does not excuse this)`,
+  );
+}
 console.log(
   `[contract] ${Object.keys(after).length} schemas against ${base} (${snapshotFileName("*")}): ` +
     `${unacknowledged.length} breaking, ${acknowledged} acknowledged, ${additive} additive`,
 );
-process.exit(unacknowledged.length === 0 && !engineUnacknowledged ? 0 : 1);
+process.exit(unacknowledged.length === 0 && !engineUnacknowledged && !stepUnreadable ? 0 : 1);

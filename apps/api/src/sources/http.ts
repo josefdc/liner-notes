@@ -2665,9 +2665,10 @@ export interface SourceRequest {
   cassette?: boolean;
   /**
    * The request's cassette entry, in place of the key made from its method, URL and body: for a
-   * request whose URL or body changes from run to run for the same answer (the audio service's
-   * /analyze takes a signed preview URL that expires; sources/audio.ts keys it by the track and
-   * the analyzer). It must hold no credential or media URL: it is written to the cassette as is.
+   * request whose URL or body changes from run to run for the same answer, or for an entry
+   * written with recordJson (sources/audio.ts keys a track's audio step by the track and the
+   * analyzer, never by its signed preview URL). It must hold no credential or media URL: it is
+   * written to the cassette as is.
    */
   cassetteKey?: string;
 }
@@ -3227,6 +3228,27 @@ function forCassette(req: SourceRequest, answer: Recorded): Recorded {
     entry.text = answer.text ?? "";
   }
   return entry;
+}
+
+/**
+ * Under SOURCE_CASSETTE=record, writes `json` as a 2xx JSON answer to `req` under its
+ * `cassetteKey`, as fetchJson records an answer (forCassette: picked by `scrub`, scrubbed,
+ * capped); in any other mode, nothing. For an outcome a source works out over several requests
+ * rather than reads from one answer (sources/audio.ts), replayed with fetchJson and the same
+ * key. A write that fails is logged and counted like any lost recording.
+ */
+export async function recordJson(
+  req: SourceRequest & { cassetteKey: string },
+  json: unknown,
+): Promise<void> {
+  if (req.cassette === false || cassetteMode() !== "record") return;
+  try {
+    const answer: Recorded = { status: 200, contentType: "application/json", json };
+    await queueWrite(req.source, req.cassetteKey, forCassette(req, answer));
+  } catch (error) {
+    log.error(`${describeError(error)}`);
+    recordingLost();
+  }
 }
 
 /**

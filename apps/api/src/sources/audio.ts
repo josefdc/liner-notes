@@ -20,14 +20,19 @@
  * Preview URLs are signed and expire within minutes: they are returned for the run's player,
  * never logged.
  *
- * Under SOURCE_CASSETTE (sources/http.ts) the service's answers are recorded and replayed by what
- * they are about, never by the clip: /health under one entry, and each /analyze answer (the v2
- * block, or a refusal with its code and words) under the track (its ISRC, else its Spotify id),
- * the analyzer version /health named and the window measured (audioCassetteKey), with how the
- * clip was matched. Nothing of the clip's URL is kept. A replay asks neither Deezer for a clip
- * nor the service, and serves the recorded answer exactly as the live run read it; an entry of
- * another analyzer version is a miss (as is a block naming another version than its key), never
- * a stale measurement. A miss fails the analysis as any cassette miss does (`analysis_failed`).
+ * Under SOURCE_CASSETTE (sources/http.ts) the audio step is recorded and replayed by what it is
+ * about, never by the clip. /health is one entry (its analyzer version only: one per cassette
+ * directory, so re-record the whole set after an analyzer change). Each track's outcome is one
+ * entry, keyed by the track (its ISRC, else its Spotify id), the analyzer version /health named
+ * (`none` when it named none or did not answer) and the window (audioCassetteKey): the block the
+ * API read, or the reason nothing was measured (no clip, an unfinished lookup, a rejected host,
+ * the service unavailable, a refusal with its code, a failure), with how the clip was matched,
+ * the preview lookup's error and whether the clip was sent. Nothing of the clip's URL is kept,
+ * and recorded text loses anything that looks like a link. A replay asks neither Deezer nor the
+ * service and serves the recorded outcome, with no clip for the player. A measurement is served
+ * only from an entry of the recorded /health's version whose block names that version and the
+ * window: anything else is a miss, never a stale measurement, and fails the analysis
+ * (`analysis_failed`) as any cassette miss does.
  *
  * @requires Audio analysis service running on AUDIO_ANALYSIS_URL
  */
@@ -55,6 +60,7 @@ import {
   fetchJson,
   isSourceError,
   plainReason,
+  recordJson,
   SourceError,
 } from "./http.js";
 import type { SourceErrorCode } from "./toolResult.js";
@@ -116,6 +122,11 @@ export interface AudioAnalysisResult {
   previewMatch?: PreviewSourceMatch | null;
   /** Set when Deezer could not be read while the clip was looked up. */
   previewSourceError?: PreviewLookupError;
+  /**
+   * Under SOURCE_CASSETTE=replay only: the recorded run sent the clip to the service (and said it
+   * was measuring).
+   */
+  sentToService?: boolean;
 }
 
 // =============================================================================
@@ -460,13 +471,52 @@ function refusalReason(error: unknown): AudioUnavailableReason | null {
   return null;
 }
 
-/** The service refused the preview for what the file is (refusalReason). */
+/** The service refused the preview for what the file is (refusalReason), with its code. */
 class PreviewRefusedError extends Error {
   constructor(
     readonly reason: AudioUnavailableReason,
     message: string,
+    readonly code: string | null,
   ) {
     super(message);
+  }
+}
+
+/**
+ * Call the audio analysis service. Never recorded or replayed itself: the audio cassette keeps
+ * the outcome of the whole step (recordAudioStep), never the clip it was sent.
+ */
+async function analyzeWithService(
+  previewUrl: string,
+  signal: AbortSignal | undefined,
+): Promise<unknown> {
+  try {
+    return await fetchJson<unknown>({
+      source: "audio",
+      url: `${audioServiceUrl()}/analyze`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(audioServiceToken() ? { "X-Audio-Token": audioServiceToken() } : {}),
+      },
+      body: JSON.stringify({ preview_url: previewUrl }),
+      timeoutMs: SERVICE_TIMEOUT,
+      cassette: false,
+      signal,
+    });
+  } catch (error) {
+    // The service explains a failed analysis in `detail` (FastAPI).
+    const body = isSourceError(error, "http")
+      ? (error.body as { detail?: unknown; code?: unknown } | undefined)
+      : undefined;
+    const reason = plainReason(body?.detail);
+    const refused = refusalReason(error);
+    if (refused) {
+      const code = typeof body?.code === "string" ? body.code : null;
+      throw new PreviewRefusedError(refused, reason ?? describeError(error), code);
+    }
+    if (reason) throw new Error(reason);
+    throw error;
   }
 }
 
@@ -476,6 +526,9 @@ class PreviewRefusedError extends Error {
 
 /** The window the service measures, as its block names it: part of the cassette key. */
 export const AUDIO_WINDOW: AudioFeatures["window"]["kind"] = "preview-30s";
+
+/** The version part of a key when the service named no analyzer version, or did not answer. */
+const NO_VERSION = "none";
 
 /**
  * The track an audio cassette entry is about: `isrc:<ISRC>` (upper case), else
@@ -491,26 +544,143 @@ export function audioTrackIdentity(
   return /^[A-Za-z0-9]{1,64}$/.test(id) ? `spotify:${id}` : null;
 }
 
+/** An analyzer version to key by: a short printable name, else null. */
+const keyVersion = (version: string | null | undefined): string | null =>
+  typeof version === "string" && /^[!-~]{1,128}$/.test(version) && version !== NO_VERSION
+    ? version
+    : null;
+
 /**
- * The cassette entry of an /analyze answer: the track (audioTrackIdentity), the analyzer version
- * /health named and the window. Null when the version is not one to key by (none, or not a
- * short printable name).
+ * The cassette entry of a track's audio step: the track (audioTrackIdentity), the analyzer
+ * version /health named (`none` when it named none or did not answer) and the window.
  */
-export function audioCassetteKey(track: string, analyzerVersion: string | null): string | null {
-  if (analyzerVersion === null || !/^[!-~]{1,128}$/.test(analyzerVersion)) return null;
-  return `POST /analyze ${track} analyzer:${analyzerVersion} window:${AUDIO_WINDOW}`;
+export function audioCassetteKey(track: string, analyzerVersion: string | null): string {
+  return `audio ${track} analyzer:${keyVersion(analyzerVersion) ?? NO_VERSION} window:${AUDIO_WINDOW}`;
 }
 
-/** What an /analyze answer is recorded as: its v2 block, and how the clip was matched. */
-const RECORDED_ANSWER = { v2: true, match: true } as const;
+/**
+ * Text that holds a link or a piece of a signed one: a scheme (`://`), a link without one
+ * (`host.tld/path`), percent-encoded slashes or colons, or a signing parameter (`hdnea=`,
+ * `exp=`, `hmac=`, `acl=`, `token=`, `sig=`, `signature=`).
+ */
+const URL_LIKE =
+  /:\/\/|%(?:2f|3a)|(?:^|[^a-z0-9])(?:hdnea|exp|hmac|acl|token|sig|signature)=|(?:^|[^a-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\//i;
+
+/** `text` with each run of characters that looks like a link (URL_LIKE) shown as "[url]". */
+export function withoutUrlLike(text: string): string {
+  return text.replace(/[^\s"'<>()[\]{}]+/g, (word) => (URL_LIKE.test(word) ? "[url]" : word));
+}
+
+/** True when a key or a string anywhere in `value` looks like a link (URL_LIKE). */
+function holdsUrlLike(value: unknown): boolean {
+  if (typeof value === "string") return URL_LIKE.test(value);
+  if (Array.isArray(value)) return value.some(holdsUrlLike);
+  if (value === null || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, inner]) => URL_LIKE.test(key) || holdsUrlLike(inner));
+}
 
 /**
- * How the clip of a replayed answer was matched, as it was recorded; null when the entry holds
+ * A track's audio step as the cassette keeps it: what the live run's analysis gave, never the
+ * clip. Exactly one of `audio` (the block the API read from the service, ranges checked, with
+ * the mood heads it dropped in `outOfRange`) and `unavailable` (the reason nothing was measured,
+ * its `detail`, and for a refusal the service's `code`). `sent`: the clip was sent to the service
+ * (the run said it was measuring). `match` and `sourceError` are the preview lookup's.
+ */
+interface RecordedAudioStep {
+  audio?: AudioFeatures;
+  outOfRange?: string[];
+  unavailable?: AudioUnavailableReason;
+  detail?: string;
+  code?: string;
+  sent: boolean;
+  match: PreviewSourceMatch | null;
+  sourceError?: PreviewLookupError;
+}
+
+/** The fields of a recorded step, for the cassette's scrub (sources/http.ts `pick`). */
+const RECORDED_STEP = {
+  audio: true,
+  outOfRange: true,
+  unavailable: true,
+  detail: true,
+  code: true,
+  sent: true,
+  match: true,
+  sourceError: { source: true, code: true, message: true },
+} as const;
+
+/** A request for the step's cassette entry (the URL is the service's; nothing is sent). */
+const stepRequest = (key: string) => ({
+  source: "audio" as const,
+  url: `${audioServiceUrl()}/analyze`,
+  cassetteKey: key,
+  scrub: RECORDED_STEP,
+});
+
+/**
+ * Under SOURCE_CASSETTE=record, writes the outcome of a track's audio step under its key
+ * (audioCassetteKey), through the cassette's scrub. Text is kept without anything that looks
+ * like a link (withoutUrlLike). Not recorded, with a warning: a step with no track identity; a
+ * measurement whose analyzer version is unknown; a block that holds anything like a link, which
+ * the scrub would change.
+ */
+async function recordAudioStep(
+  track: string | null,
+  version: string | null,
+  result: AudioAnalysisResult,
+  step: { sent: boolean; code?: string | null },
+): Promise<void> {
+  if (cassetteMode() !== "record") return;
+  const measured = result.source === "analyzed" && result.audio !== null;
+  const notRecorded = (why: string) => log.warn(`Audio step not recorded: ${why}`);
+  if (track === null) return notRecorded("the track has no ISRC or id to file it under");
+  if (measured && keyVersion(version) === null) {
+    return notRecorded("the audio service named no analyzer version for the measurement");
+  }
+  if (measured && holdsUrlLike(result.audio)) {
+    return notRecorded("the measurement holds text that looks like a link");
+  }
+  const entry: RecordedAudioStep = {
+    ...(measured
+      ? {
+          audio: result.audio as AudioFeatures,
+          ...(result.outOfRange ? { outOfRange: result.outOfRange } : {}),
+        }
+      : {
+          unavailable: result.reason ?? "analysis_failed",
+          ...(result.error ? { detail: withoutUrlLike(result.error) } : {}),
+          ...(step.code ? { code: withoutUrlLike(step.code) } : {}),
+        }),
+    sent: step.sent,
+    match: result.previewMatch ?? null,
+    ...(result.previewSourceError
+      ? {
+          sourceError: {
+            ...result.previewSourceError,
+            message: withoutUrlLike(result.previewSourceError.message),
+          },
+        }
+      : {}),
+  };
+  await recordJson(stepRequest(audioCassetteKey(track, version)), entry);
+}
+
+/** What the live run could have given as the reason nothing was measured. */
+const STEP_REASONS: ReadonlySet<string> = new Set<AudioUnavailableReason>([
+  "no_preview",
+  "preview_lookup_incomplete",
+  "preview_rejected",
+  "service_unavailable",
+  "analysis_failed",
+  "unsupported_format",
+  "decode_incomplete",
+]);
+
+/**
+ * How the clip of a replayed step was matched, as it was recorded; null when the entry holds
  * none, or not one of the shapes resolvePreview gives.
  */
-function recordedMatch(answer: unknown): PreviewSourceMatch | null {
-  const match =
-    answer !== null && typeof answer === "object" ? (answer as { match?: unknown }).match : null;
+function recordedMatch(match: unknown): PreviewSourceMatch | null {
   if (match === null || typeof match !== "object") return null;
   const { provider, method, deezerId, score } = match as Record<string, unknown>;
   if (provider === "spotify" && method === "id" && score === null) {
@@ -529,57 +699,112 @@ function recordedMatch(answer: unknown): PreviewSourceMatch | null {
   return null;
 }
 
-/** Where an /analyze answer is recorded and replayed: its entry, and the clip's match. */
-interface AnalysisCassette {
-  key: string;
-  match: PreviewSourceMatch | null;
+/** The preview lookup's error of a replayed step, as it was recorded; undefined when none. */
+function recordedSourceError(error: unknown): PreviewLookupError | undefined {
+  if (error === null || typeof error !== "object") return undefined;
+  const { source, code, message } = error as Record<string, unknown>;
+  return source === "deezer" && typeof code === "string" && typeof message === "string"
+    ? { source, code: code as SourceErrorCode, message }
+    : undefined;
 }
 
+const miss = (message: string) => new SourceError("audio", "cassette_miss", message);
+
 /**
- * Call the audio analysis service. With `cassette`, the answer is recorded under its key (and
- * replayed from it, where `previewUrl` is null: nothing is sent); without, never recorded.
+ * The analyzer version of the recorded /health (SOURCE_CASSETTE=replay): its version, null when
+ * it named none or did not answer, `undefined` when no /health was recorded.
  */
-async function analyzeWithService(
-  previewUrl: string | null,
-  signal: AbortSignal | undefined,
-  cassette: AnalysisCassette | null,
-): Promise<unknown> {
+async function recordedAnalyzer(): Promise<string | null | undefined> {
   try {
-    return await fetchJson<unknown>({
+    const health = await fetchJson<unknown>({
       source: "audio",
-      url: `${audioServiceUrl()}/analyze`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(audioServiceToken() ? { "X-Audio-Token": audioServiceToken() } : {}),
-      },
-      ...(previewUrl === null ? {} : { body: JSON.stringify({ preview_url: previewUrl }) }),
-      timeoutMs: SERVICE_TIMEOUT,
-      ...(cassette
-        ? {
-            cassetteKey: cassette.key,
-            // The block as the service sent it and the clip's match; never the clip.
-            recordAs: (json: unknown) => ({
-              ...(json !== null && typeof json === "object" && "v2" in json
-                ? { v2: (json as { v2: unknown }).v2 }
-                : {}),
-              ...(cassette.match ? { match: cassette.match } : {}),
-            }),
-            scrub: RECORDED_ANSWER,
-          }
-        : { cassette: false }),
-      signal,
+      url: `${audioServiceUrl()}/health`,
+      cassetteKey: HEALTH_CASSETTE_KEY,
     });
+    const version =
+      health !== null && typeof health === "object"
+        ? (health as { analyzer_version?: unknown }).analyzer_version
+        : null;
+    return keyVersion(typeof version === "string" ? version : null);
   } catch (error) {
-    // The service explains a failed analysis in `detail` (FastAPI).
-    const detail = isSourceError(error, "http")
-      ? (error.body as { detail?: unknown } | undefined)?.detail
-      : undefined;
-    const reason = plainReason(detail);
-    const refused = refusalReason(error);
-    if (refused) throw new PreviewRefusedError(refused, reason ?? describeError(error));
-    if (reason) throw new Error(reason);
-    throw error;
+    return isSourceError(error, "cassette_miss") ? undefined : null;
+  }
+}
+
+/** The result of a replayed step, and whether its run sent the clip to the service. */
+type ReplayedStep = AudioAnalysisResult & { sentToService: boolean };
+
+/**
+ * The recorded audio step of `track` (SOURCE_CASSETTE=replay): the result the live run gave,
+ * with no clip. Nothing is sent. Looked up by the analyzer version of the recorded /health, then
+ * under `none` (a step that measured nothing while the service named no version or did not
+ * answer). A measurement is served only from an entry of that version whose block names it and
+ * the window; anything else is a miss, which fails the analysis (`analysis_failed`) as any
+ * cassette miss does: no other measurement is served in its place.
+ */
+async function replayedAudioStep(
+  track: string | null,
+  signal: AbortSignal | undefined,
+): Promise<ReplayedStep> {
+  try {
+    if (track === null) throw miss("no recorded analysis: the track has no ISRC or id");
+    const version = await recordedAnalyzer();
+    const keys = [
+      ...(version ? [audioCassetteKey(track, version)] : []),
+      audioCassetteKey(track, null),
+    ];
+    let found: { key: string; entry: unknown } | null = null;
+    for (const key of keys) {
+      try {
+        found = { key, entry: await fetchJson<unknown>(stepRequest(key)) };
+        break;
+      } catch (error) {
+        if (!isSourceError(error, "cassette_miss")) throw error;
+      }
+    }
+    if (found === null) {
+      throw miss(
+        version === undefined
+          ? `no recorded analysis for ${track}: no /health was recorded`
+          : version === null
+            ? `no recorded analysis for ${track}: the recorded /health names no analyzer version`
+            : `no cassette entry for ${keys[0]}`,
+      );
+    }
+    const { key, entry } = found;
+    const step = (entry ?? {}) as Partial<Record<keyof RecordedAudioStep, unknown>>;
+    const replayed = {
+      sentToService: step.sent === true,
+      previewMatch: recordedMatch(step.match),
+      ...(recordedSourceError(step.sourceError)
+        ? { previewSourceError: recordedSourceError(step.sourceError) }
+        : {}),
+    };
+    if (step.audio !== undefined) {
+      const measured = readServiceMeasurement({ v2: step.audio });
+      if (measured.audio === null) throw miss(`the entry ${key} holds no readable block`);
+      if (!version || key !== audioCassetteKey(track, version)) {
+        throw miss(`the entry ${key} holds a measurement of no named analyzer`);
+      }
+      if (measured.audio.analyzerVersion !== version) {
+        throw miss(`the entry ${key} holds a block of analyzer ${measured.audio.analyzerVersion}`);
+      }
+      if (measured.audio.window.kind !== AUDIO_WINDOW) {
+        throw miss(`the entry ${key} holds a block of window ${measured.audio.window.kind}`);
+      }
+      const outOfRange = Array.isArray(step.outOfRange)
+        ? step.outOfRange.filter((head): head is string => typeof head === "string")
+        : [];
+      return { ...analysisOf({ audio: measured.audio, outOfRange }), ...replayed };
+    }
+    if (typeof step.unavailable === "string" && STEP_REASONS.has(step.unavailable)) {
+      const detail = typeof step.detail === "string" ? step.detail : undefined;
+      log.info(`Replayed audio step: ${step.unavailable}`);
+      return { ...unavailable(step.unavailable as AudioUnavailableReason, detail), ...replayed };
+    }
+    throw miss(`the entry ${key} holds no recorded outcome`);
+  } catch (error) {
+    return { ...failedAnalysis(error, signal), sentToService: false, previewMatch: null };
   }
 }
 
@@ -621,47 +846,11 @@ function failedAnalysis(error: unknown, signal: AbortSignal | undefined): AudioA
 }
 
 /**
- * The recorded /analyze answer for `track` by analyzer `version` (SOURCE_CASSETTE=replay): the
- * result the live run read from it, and how its clip was matched. Nothing is sent. A miss, an
- * unknown track or version, and a block that names another analyzer than its entry fail as the
- * analysis would (failedAnalysis): no other measurement is served in their place.
- */
-async function replayedAnalysis(
-  track: string | null,
-  version: string | null,
-  signal: AbortSignal | undefined,
-): Promise<{ result: AudioAnalysisResult; match: PreviewSourceMatch | null }> {
-  try {
-    const key = track === null ? null : audioCassetteKey(track, version);
-    if (key === null) {
-      throw new SourceError(
-        "audio",
-        "cassette_miss",
-        track === null
-          ? "no recorded analysis: the track has no ISRC or id to look it up by"
-          : "no recorded analysis: the recorded /health names no analyzer version",
-      );
-    }
-    const answer = await analyzeWithService(null, signal, { key, match: null });
-    const measured = readServiceMeasurement(answer);
-    if (measured.audio && measured.audio.analyzerVersion !== version) {
-      throw new SourceError(
-        "audio",
-        "cassette_miss",
-        `the entry ${key} holds a block of analyzer ${measured.audio.analyzerVersion}`,
-      );
-    }
-    return { result: analysisOf(measured), match: measured.audio ? recordedMatch(answer) : null };
-  } catch (error) {
-    return { result: failedAnalysis(error, signal), match: null };
-  }
-}
-
-/**
  * Measures the chosen track from its preview clip (see resolvePreview). The result carries the
  * clip and how it was matched, for the run's player; without a clip of the chosen recording
- * nothing is measured. Under SOURCE_CASSETTE=replay the recorded answer for the track is served
- * instead, with no clip (replayedAnalysis).
+ * nothing is measured. Under SOURCE_CASSETTE=record each outcome is recorded (recordAudioStep);
+ * under replay the recorded outcome for the track is served instead, with no clip, and neither
+ * Deezer nor the service is asked (replayedAudioStep).
  */
 export const analyzeAudioPreview = tool(
   async ({ previewUrl, title, artist, artistNames, album, isrc, durationMs }, config) => {
@@ -672,18 +861,8 @@ export const analyzeAudioPreview = tool(
     const track = audioTrackIdentity(isrc, known.trackId);
 
     if (cassetteMode() === "replay") {
-      // No clip is looked up or given to the player: a recorded clip URL would have expired.
-      const version =
-        known.analyzerVersion !== undefined
-          ? known.analyzerVersion
-          : ((await audioServiceHealth(signal))?.analyzerVersion ?? null);
-      const { result, match } = await replayedAnalysis(track, version, signal);
-      return JSON.stringify({
-        ...result,
-        previewUrl: null,
-        previewMatch: match,
-        ...(known.preview?.sourceError ? { previewSourceError: known.preview.sourceError } : {}),
-      });
+      // No clip is given to the player: a recorded clip URL would have expired.
+      return JSON.stringify({ ...(await replayedAudioStep(track, signal)), previewUrl: null });
     }
 
     // The preview the run resolved already, or looked up here.
@@ -702,44 +881,59 @@ export const analyzeAudioPreview = tool(
         signal,
       ));
     const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
+    let { serviceAvailable, analyzerVersion = null } = known;
+    /** The result as the tool returns it, recorded first (SOURCE_CASSETTE=record). */
+    const finish = async (
+      result: AudioAnalysisResult,
+      step: { sent: boolean; code?: string | null },
+    ): Promise<string> => {
+      await recordAudioStep(track, analyzerVersion, result, step);
+      return JSON.stringify(result);
+    };
+
     if (preview.previewUrl === null) {
       log.info("No preview of the chosen recording; audio not measured");
       // A lookup that could not be finished is no missing clip: whether there is one is unknown.
-      return JSON.stringify({
-        ...unavailable(
-          preview.incomplete ? "preview_lookup_incomplete" : "no_preview",
-          preview.detail,
-        ),
-        previewUrl: null,
-        previewMatch: null,
-        ...lookupError,
-      });
+      return finish(
+        {
+          ...unavailable(
+            preview.incomplete ? "preview_lookup_incomplete" : "no_preview",
+            preview.detail,
+          ),
+          previewUrl: null,
+          previewMatch: null,
+          ...lookupError,
+        },
+        { sent: false },
+      );
     }
     const effectivePreviewUrl = preview.previewUrl;
     // Every result below carries the clip and how it was matched, for the run's player.
-    const withPreview = (result: AudioAnalysisResult): string =>
-      JSON.stringify({
-        ...result,
-        previewUrl: effectivePreviewUrl,
-        previewMatch: preview.match,
-        ...lookupError,
-      });
+    const withPreview = (result: AudioAnalysisResult): AudioAnalysisResult => ({
+      ...result,
+      previewUrl: effectivePreviewUrl,
+      previewMatch: preview.match,
+      ...lookupError,
+    });
 
     if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
       log.info("Preview URL host not allowed; audio not measured");
       // Neither analysed nor given to the player.
-      return JSON.stringify({
-        ...unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
-        previewUrl: null,
-        previewMatch: null,
-        ...lookupError,
-      });
+      return finish(
+        {
+          ...unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
+          previewUrl: null,
+          previewMatch: null,
+          ...lookupError,
+        },
+        { sent: false },
+      );
     }
 
     // Try the audio analysis service with the resolved preview URL
+    let sent = false;
     try {
       // The run's health answer when it has one; else one probe.
-      let { serviceAvailable, analyzerVersion = null } = known;
       if (serviceAvailable === undefined) {
         const health = await audioServiceHealth(signal);
         serviceAvailable = health !== null;
@@ -748,23 +942,20 @@ export const analyzeAudioPreview = tool(
 
       if (!serviceAvailable) {
         log.warn("Analysis service unavailable; audio not measured");
-        return withPreview(
-          unavailable("service_unavailable", "Audio analysis service did not respond"),
+        return finish(
+          withPreview(unavailable("service_unavailable", "Audio analysis service did not respond")),
+          { sent: false },
         );
       }
 
       log.info("Calling analysis service...");
       signal?.throwIfAborted();
-      // Recorded (SOURCE_CASSETTE=record) by track and analyzer, never by the clip.
-      const key = track === null ? null : audioCassetteKey(track, analyzerVersion);
-      const answer = await analyzeWithService(
-        effectivePreviewUrl,
-        signal,
-        key === null ? null : { key, match: preview.match },
-      );
-      return withPreview(analysisOf(readServiceMeasurement(answer)));
+      sent = true;
+      const answer = await analyzeWithService(effectivePreviewUrl, signal);
+      return finish(withPreview(analysisOf(readServiceMeasurement(answer))), { sent });
     } catch (error) {
-      return withPreview(failedAnalysis(error, signal));
+      const code = error instanceof PreviewRefusedError ? error.code : null;
+      return finish(withPreview(failedAnalysis(error, signal)), { sent, code });
     }
   },
   {

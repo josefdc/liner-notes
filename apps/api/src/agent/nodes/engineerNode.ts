@@ -27,6 +27,11 @@
  * error, or a request had no slot of its pace in time and was not sent), nothing is measured,
  * the reason is `preview_lookup_incomplete`, and the result is not stored (composerNode.ts). A
  * cached measurement, or one of Spotify's own clip, is still served when the lookup is unfinished.
+ *
+ * Under SOURCE_CASSETTE the audio cache is not read: a recording measures, so the service's
+ * answer is recorded, and a replay serves only the recorded audio step (sources/audio.ts). A
+ * replay probes no health and looks up no clip; it says it is measuring where the recorded run
+ * did, and caches nothing.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -64,6 +69,13 @@ import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.
 import { logger } from "../../logger.js";
 
 const log = logger("Engineer");
+
+/** The preview of a replayed run: not looked up, since the recorded audio step answers. */
+const NOT_LOOKED_UP: PreviewResolution = {
+  previewUrl: null,
+  match: null,
+  detail: "Not looked up: the audio step is replayed",
+};
 
 function unavailableMeasurement(reason: AudioUnavailableReason, detail?: string): AudioMeasurement {
   return {
@@ -346,12 +358,20 @@ export async function engineerNode(
   const track = state.spotifyData;
   const request = previewRequest(state);
 
+  // Under SOURCE_CASSETTE the audio cache is neither read nor (on replay) written: a recording
+  // must measure to record what the service answered, and a replay serves only what was recorded.
+  const cassette = cassetteMode();
+  const replaying = cassette === "replay";
+
   // What the run asks once: the service's health (its analyzer version) and the chosen track's
-  // preview. Both are passed on to the analysis, so neither is asked twice.
-  const [health, fresh] = await Promise.all([
-    audioServiceHealth(config.signal),
-    resolvePreview(request, config.signal),
-  ]);
+  // preview. Both are passed on to the analysis, so neither is asked twice. A replay asks
+  // neither: the recorded audio step holds what the live run found (sources/audio.ts).
+  const [health, fresh] = replaying
+    ? [null, NOT_LOOKED_UP]
+    : await Promise.all([
+        audioServiceHealth(config.signal),
+        resolvePreview(request, config.signal),
+      ]);
 
   let cache: SonicCache | null = null;
   try {
@@ -359,7 +379,10 @@ export async function engineerNode(
   } catch {
     // Cache not available — proceed with fresh analysis
   }
-  const hit = cache ? cachedMeasurement(cache, track.id, request.isrc, health, fresh) : null;
+  const hit =
+    cache && cassette === "off"
+      ? cachedMeasurement(cache, track.id, request.isrc, health, fresh)
+      : null;
   if (hit) {
     // When the service cannot say its version, the newest measurement is served, and the run
     // says which analyzer made it and when.
@@ -426,6 +449,16 @@ export async function engineerNode(
     log.error(`Error: ${message}`);
     measurement = unavailableMeasurement("analysis_failed", message);
   }
+  // A replayed step says it was measuring where its recorded run did.
+  if (replaying && analysis?.sentToService) {
+    writer?.({
+      type: "status",
+      code: "AUDIO-INIT",
+      message: MEASURING_LINE,
+      node: "engineer",
+      timestamp: timestampOf(runtime),
+    });
+  }
   // The clip for the player, and how it was matched when the service measured it.
   const previewOut = {
     preview: measurement.audio ? previewProvenance(measurement.previewMatch) : null,
@@ -458,7 +491,7 @@ export async function engineerNode(
   // nor a measurement replayed from the audio cassette: the cache dates what it holds as
   // measured when it was written.
   config.signal?.throwIfAborted();
-  if (cache && measurement.previewMatch && cassetteMode() !== "replay") {
+  if (cache && measurement.previewMatch && !replaying) {
     try {
       for (const key of audioTrackKeys(measurement.previewMatch, track.id, request.isrc)) {
         cache.putAudio(key, track.id, measurement);

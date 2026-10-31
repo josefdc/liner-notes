@@ -1,17 +1,19 @@
 /**
- * The audio cassette: under SOURCE_CASSETTE=record the audio service's answers are recorded by
- * track, analyzer version and window, never by the preview clip; under replay a run with no
- * network and no clip (a recorded clip URL would have expired) carries the recorded answer, exactly
- * as the live run read it. An entry of another analyzer version is a miss, never served.
+ * The audio cassette: under SOURCE_CASSETTE=record each track's audio step is recorded by track,
+ * analyzer version and window, never by the preview clip; under replay a run with no network,
+ * no preview lookup and no clip (a recorded clip URL would have expired) gives what the live run
+ * gave, exactly. An entry of another analyzer version is a miss, never served, and the audio
+ * cache answers in neither mode.
  *
  * Each test runs the engineer node live (Deezer and the audio service stubbed) while recording,
- * then again replaying with every request refused.
+ * then again replaying with every request refused, and compares the two.
  */
 
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AudioMeasurement } from "../agent/state.js";
 import {
   ANALYZER_VERSION,
   audioV2,
@@ -20,56 +22,108 @@ import {
   serviceAnswer,
 } from "../agent/testing/measuredAudio.js";
 
-// An empty audio cache: every measurement comes from the service or the cassette, and the test
-// sees what is written to it.
-const cache = vi.hoisted(() => ({
-  getAudio: () => null,
-  getNewestAudio: () => null,
-  putAudio: vi.fn(),
-}));
+/**
+ * An audio cache that keeps what it is given, by key and analyzer version, as the real one does
+ * (store/cache.ts); `rows` is cleared before each test.
+ */
+const cache = vi.hoisted(() => {
+  const rows = new Map<string, { measurement: unknown; measuredAt: Date }>();
+  const version = (measurement: unknown) =>
+    (measurement as { audio: { analyzerVersion: string } }).audio.analyzerVersion;
+  return {
+    rows,
+    getAudio: (key: string, analyzer: string) =>
+      rows.get(`${key}|${analyzer}`)?.measurement ?? null,
+    getNewestAudio: (key: string) =>
+      [...rows.entries()]
+        .filter(([row]) => row.startsWith(`${key}|`))
+        .map(([, row]) => row)
+        .sort((a, b) => b.measuredAt.getTime() - a.measuredAt.getTime())[0] ?? null,
+    putAudio: vi.fn((key: string, _spotifyId: string, measurement: unknown) => {
+      rows.set(`${key}|${version(measurement)}`, { measurement, measuredAt: new Date() });
+    }),
+  };
+});
 vi.mock("../store/cache.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../store/cache.js")>()),
   getCache: () => cache,
 }));
+// The engineer's own preview lookup and health probe, watched: a replay makes neither.
+vi.mock("./audio.js", async (importOriginal) => {
+  const audio = await importOriginal<typeof import("./audio.js")>();
+  return {
+    ...audio,
+    resolvePreview: vi.fn(audio.resolvePreview),
+    audioServiceHealth: vi.fn(audio.audioServiceHealth),
+  };
+});
 
 import { engineerNode } from "../agent/nodes/engineerNode.js";
 import type { SonicAgentStateType } from "../agent/state.js";
-import { AUDIO_WINDOW, audioCassetteKey, HEALTH_CASSETTE_KEY } from "./audio.js";
+import {
+  AUDIO_WINDOW,
+  audioCassetteKey,
+  audioServiceHealth,
+  HEALTH_CASSETTE_KEY,
+  resolvePreview,
+  withoutUrlLike,
+} from "./audio.js";
 import { type FetchRoute, json, stubFetch } from "./testing/fetchStub.js";
 
 const AUDIO_URL = "http://audio.test";
 const ISRC = "USSB29000129";
+const SPOTIFY_ID = "SPOTIFY0001";
+const HMAC = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const SIGNED = `hdnea=exp=1761900000~acl=/api/1/1/a/b/c/clip.mp3*~hmac=${HMAC}`;
 /** A signed Deezer clip, as Deezer sends it: it must never reach a cassette. */
-const PREVIEW =
-  "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?hdnea=exp=1761900000~acl=/api/1/1/a/b/c/clip.mp3*~hmac=0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const PREVIEW = `https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?${SIGNED}`;
+/** Pieces of the clip that must not reach a cassette, in any form. */
+const CLIP_PIECES = ["dzcdn", "hdnea", "hmac", HMAC, "clip.mp3", "preview_url", "%2F", "%3A"];
 
-/** Deezer's entry for the ISRC: id 3366332 with the signed clip. */
-const deezerEntry = {
+/** Deezer's entry for an ISRC: id 3366332 with the signed clip. */
+const deezerEntry = (isrc: string, preview = PREVIEW) => ({
   id: ISRC_MATCH.provider === "deezer" ? ISRC_MATCH.deezerId : 0,
   title: "Ice Ice Baby",
-  preview: PREVIEW,
+  preview,
   readable: true,
   duration: 270,
-  isrc: ISRC,
+  isrc,
   artist: { id: 1, name: "Vanilla Ice" },
   album: { id: 1, title: "To the Extreme", cover_medium: "" },
-};
+});
+
+interface Network {
+  /** The /analyze answer; null: the request fails. */
+  analyze?: (() => Response) | null;
+  /** The /health answer; null: the service does not answer. */
+  health?: (() => Response) | null;
+  /** Deezer's answer to the ISRC lookup; null: Deezer cannot be reached. */
+  deezer?: ((isrc: string) => Response) | null;
+  search?: () => Response;
+}
 
 /** The live network: Deezer, and the audio service's /health and /analyze. */
-function liveNetwork(analyze: () => Response, version = ANALYZER_VERSION): FetchRoute {
+function liveNetwork({
+  analyze = () => json(serviceAnswer(audioV2())),
+  health = () => json({ status: "ok", analyzer_version: ANALYZER_VERSION, models: true }),
+  deezer = (isrc) => json(deezerEntry(isrc)),
+  search = () => json({ total: 1, data: [deezerEntry(ISRC)] }),
+}: Network = {}): FetchRoute {
   return (call) => {
-    // The entry for the ISRC asked for, and the same entry as the one search result.
     const isrc = call.url.match(/\/track\/isrc:([A-Z0-9]+)/)?.[1];
-    if (isrc) return json({ ...deezerEntry, isrc });
-    if (call.url.startsWith("https://api.deezer.com/search/track")) {
-      return json({ total: 1, data: [deezerEntry] });
+    if (call.url.startsWith("https://api.deezer.com/") && deezer === null) {
+      throw new TypeError("fetch failed");
     }
+    if (isrc && deezer) return deezer(isrc);
+    if (call.url.startsWith("https://api.deezer.com/search/track")) return search();
     if (call.url === `${AUDIO_URL}/health`) {
-      return json({ status: "ok", analyzer_version: version, models: true });
+      if (health === null) throw new TypeError("fetch failed");
+      return health();
     }
     if (call.url === `${AUDIO_URL}/analyze`) {
       // The service gets the clip; nothing it is asked is recorded.
       expect(JSON.parse(call.body ?? "{}")).toEqual({ preview_url: PREVIEW });
+      if (analyze === null) throw new TypeError("fetch failed");
       return analyze();
     }
     return undefined;
@@ -106,7 +160,8 @@ beforeEach(() => {
   process.env.SOURCE_CASSETTE_DIR = dir;
   process.env.AUDIO_ANALYSIS_URL = AUDIO_URL;
   process.env.NODE_ENV = "test";
-  cache.putAudio.mockReset();
+  cache.rows.clear();
+  cache.putAudio.mockClear();
   for (const method of ["log", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation(() => {});
   }
@@ -121,13 +176,27 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** The engineer's output for the track, recorded from the live network. */
-async function record(route: FetchRoute, id = "SPOTIFY0001", isrc: string | null = ISRC) {
-  process.env.SOURCE_CASSETTE = "record";
-  stubFetch(route);
-  const out = await engineerNode(stateFor(id, isrc), {} as never);
+/** The engineer's output for the track and the status events it wrote (code and text). */
+async function runEngineer(id: string, isrc: string | null) {
+  const events: string[] = [];
+  const writer = (event: { code?: string; message?: string }) =>
+    events.push(`${event.code}: ${event.message}`);
+  const out = await engineerNode(stateFor(id, isrc), { writer } as never);
+  return { out, events };
+}
+
+/** The engineer's run for the track on the live network, in `mode` (default: recording). */
+async function live(
+  network: Network = {},
+  id = SPOTIFY_ID,
+  isrc: string | null = ISRC,
+  mode = "record",
+) {
+  process.env.SOURCE_CASSETTE = mode;
+  stubFetch(liveNetwork(network));
+  const run = await runEngineer(id, isrc);
   vi.unstubAllGlobals();
-  return out;
+  return run;
 }
 
 /** The requests of every replay of the test (each one refused); checked after each test. */
@@ -138,13 +207,32 @@ afterEach(() => {
   expect(requests, "requests during a replay").toEqual([]);
 });
 
-/** The engineer's output for the track, replayed with every request refused. */
-async function replay(id = "SPOTIFY0001", isrc: string | null = ISRC) {
+/** The engineer's run for the track, replayed with every request refused. */
+async function replay(id = SPOTIFY_ID, isrc: string | null = ISRC) {
   process.env.SOURCE_CASSETTE = "replay";
   const net = stubFetch(() => undefined);
-  const out = await engineerNode(stateFor(id, isrc), {} as never);
+  vi.mocked(resolvePreview).mockClear();
+  vi.mocked(audioServiceHealth).mockClear();
+  const run = await runEngineer(id, isrc);
   replayRequests.push(...net.calls.map((call) => `${call.method} ${call.url}`));
-  return out;
+  // Not even from the cassettes: the recorded step holds what the lookup found.
+  expect(resolvePreview, "preview lookups during a replay").not.toHaveBeenCalled();
+  expect(audioServiceHealth, "health probes during a replay").not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
+  return run;
+}
+
+type Run = Awaited<ReturnType<typeof runEngineer>>;
+
+/**
+ * A replay gives what the live run gave: its whole output (the measurement, how its clip was
+ * matched, the source errors the prompts read, the status lines) and its events, with no clip for
+ * the player.
+ */
+function expectSameRun(recorded: Run, replayed: Run) {
+  const { previewUrl: _clip, ...rest } = recorded.out;
+  expect(replayed.out).toEqual({ ...rest, previewUrl: null });
+  expect(replayed.events).toEqual(recorded.events);
 }
 
 /** Every cassette file written, as text. */
@@ -156,82 +244,200 @@ function cassetteTexts(): Record<string, string> {
   );
 }
 
-const audioEntries = () =>
-  JSON.parse(readFileSync(join(dir, "audio.json"), "utf8")).entries as Record<string, unknown>;
+type Entries = Record<string, { json?: Record<string, unknown> }>;
+const audioPath = () => join(dir, "audio.json");
+const audioEntries = () => JSON.parse(readFileSync(audioPath(), "utf8")).entries as Entries;
+/** Rewrites the audio cassette's entries. */
+function editAudioEntries(edit: (entries: Entries) => void) {
+  const entries = audioEntries();
+  edit(entries);
+  writeFileSync(audioPath(), JSON.stringify({ version: 1, entries }));
+}
+
+const keyOf = (track = `isrc:${ISRC}`, version: string | null = ANALYZER_VERSION) =>
+  audioCassetteKey(track, version);
+
+/** No cassette holds any piece of the clip. */
+function expectClean() {
+  const texts = cassetteTexts();
+  expect(Object.keys(texts)).toContain("audio.json");
+  for (const [file, text] of Object.entries(texts)) {
+    for (const piece of CLIP_PIECES) expect(text, `${file} holds ${piece}`).not.toContain(piece);
+  }
+}
 
 describe("the audio cassette", () => {
-  it("replays the measured block with no network and no preview URL", async () => {
-    const block = audioV2();
-    const live = await record(liveNetwork(() => json(serviceAnswer(block))));
-    expect(live.audioFeatures).toEqual({ audio: block, previewMatch: ISRC_MATCH });
-    expect(live.previewUrl).toBe(PREVIEW);
+  it("replays the measured block with no network, no preview lookup and no preview URL", async () => {
+    const recorded = await live();
+    expect(recorded.out.audioFeatures).toEqual({ audio: audioV2(), previewMatch: ISRC_MATCH });
+    expect(recorded.out.previewUrl).toBe(PREVIEW);
+    expect(recorded.events.map((event) => event.split(":")[0])).toEqual([
+      "AUDIO-INIT",
+      "AUDIO-COMPLETE",
+    ]);
     // The live measurement is cached; a replayed one never is (the cache dates it as measured now).
     expect(cache.putAudio).toHaveBeenCalled();
+    cache.rows.clear();
     cache.putAudio.mockClear();
 
-    const replayed = await replay();
+    // The same output, events and source errors (none: the replay looks nothing up on Deezer).
+    expectSameRun(recorded, await replay());
     expect(cache.putAudio).not.toHaveBeenCalled();
-    // The recorded measurement, unchanged, with how its clip was matched; no clip for the player.
-    expect(replayed.audioFeatures).toEqual(live.audioFeatures);
-    expect(replayed.preview).toEqual(live.preview);
-    expect(replayed.previewUrl).toBeNull();
-    expect(replayed.statusMessages).toEqual(live.statusMessages);
   });
 
   it("keys the entry by the track's ISRC, the analyzer version and the window", async () => {
-    await record(liveNetwork(() => json(serviceAnswer(audioV2()))));
-    const key = `POST /analyze isrc:${ISRC} analyzer:${ANALYZER_VERSION} window:preview-30s`;
+    await live();
+    const key = `audio isrc:${ISRC} analyzer:${ANALYZER_VERSION} window:preview-30s`;
     expect(AUDIO_WINDOW).toBe("preview-30s");
-    expect(audioCassetteKey(`isrc:${ISRC}`, ANALYZER_VERSION)).toBe(key);
+    expect(keyOf()).toBe(key);
     expect(Object.keys(audioEntries()).sort()).toEqual([HEALTH_CASSETTE_KEY, key].sort());
+    expect(audioEntries()[key]).toEqual({
+      status: 200,
+      contentType: "application/json",
+      json: { audio: audioV2(), sent: true, match: ISRC_MATCH },
+    });
     // A track with no ISRC is filed under its Spotify id.
-    await record(
-      liveNetwork(() => json(serviceAnswer(audioV2()))),
-      "NOISRC0001",
-      null,
-    );
+    const recorded = await live({}, "NOISRC0001", null);
     expect(Object.keys(audioEntries())).toContain(
-      `POST /analyze spotify:NOISRC0001 analyzer:${ANALYZER_VERSION} window:preview-30s`,
+      `audio spotify:NOISRC0001 analyzer:${ANALYZER_VERSION} window:preview-30s`,
     );
-    expect((await replay("NOISRC0001", null)).audioFeatures).toMatchObject({ audio: audioV2() });
+    expectSameRun(recorded, await replay("NOISRC0001", null));
+  });
+
+  it("records the measurement with a warm audio cache, and replays it on a cold one", async () => {
+    // An earlier live run left the measurement in the cache.
+    await live({}, SPOTIFY_ID, ISRC, "off");
+    expect(cache.rows.size).toBeGreaterThan(0);
+    expect(existsSync(audioPath())).toBe(false);
+
+    const recorded = await live();
+    cache.rows.clear();
+    const replayed = await replay();
+    expect(replayed.out.audioFeatures).toEqual({ audio: audioV2(), previewMatch: ISRC_MATCH });
+    expectSameRun(recorded, replayed);
+  });
+
+  it("misses a step that was not recorded, whatever the audio cache holds", async () => {
+    await live();
+    // The cache holds the measurement (the recording's own live run wrote it).
+    expect(cache.rows.size).toBeGreaterThan(0);
+    editAudioEntries((entries) => {
+      for (const key of Object.keys(entries)) if (key !== HEALTH_CASSETTE_KEY) delete entries[key];
+    });
+    expect((await replay()).out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: no cassette entry for ${keyOf()}`,
+    });
+  });
+
+  it("misses with no recorded /health, and never serves an older cached measurement", async () => {
+    await live();
+    editAudioEntries((entries) => {
+      delete entries[HEALTH_CASSETTE_KEY];
+    });
+    // A measurement of an older analyzer in the cache.
+    cache.rows.clear();
+    cache.putAudio(`spotify:${SPOTIFY_ID}`, SPOTIFY_ID, {
+      audio: audioV2({ analyzerVersion: "2.0.0+essentia" }),
+      previewMatch: ISRC_MATCH,
+    });
+    expect((await replay()).out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: no /health was recorded`,
+    });
+  });
+
+  it("says when the recorded /health named no analyzer version", async () => {
+    const recorded = await live({ health: () => json({ status: "ok" }) });
+    // Measured live, but not recorded: no version to file the measurement under.
+    expect(recorded.out.audioFeatures).toMatchObject({ audio: audioV2() });
+    expect(Object.keys(audioEntries())).toEqual([HEALTH_CASSETTE_KEY]);
+    expect((await replay()).out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: the recorded /health names no analyzer version`,
+    });
   });
 
   it("writes no preview URL to any cassette, and nothing outside record mode", async () => {
-    delete process.env.SOURCE_CASSETTE;
-    stubFetch(liveNetwork(() => json(serviceAnswer(audioV2()))));
-    await engineerNode(stateFor("SPOTIFY0001", ISRC), {} as never);
-    vi.unstubAllGlobals();
-    expect(existsSync(join(dir, "audio.json"))).toBe(false);
+    await live({}, SPOTIFY_ID, ISRC, "off");
+    expect(existsSync(audioPath())).toBe(false);
 
-    // A service that echoes the clip in its answer, and a refusal that names it.
-    await record(
-      liveNetwork(() => json(serviceAnswer(audioV2(), { preview_url: PREVIEW, source: PREVIEW }))),
-    );
-    await record(
-      liveNetwork(() =>
+    // A service that echoes the clip around its block and inside it, in every form.
+    const echoed = {
+      preview_url: PREVIEW,
+      source: PREVIEW,
+      encoded: encodeURIComponent(PREVIEW),
+      bare: PREVIEW.replace("https://", ""),
+      signed: SIGNED,
+      [SIGNED]: true,
+      hdnea: "exp=1761900000",
+    };
+    const recorded = await live({
+      analyze: () => json({ ...echoed, v2: { ...audioV2(), ...echoed } }),
+    });
+    expect(recorded.out.audioFeatures).toMatchObject({ audio: audioV2() });
+    expectClean();
+    expect(audioEntries()[keyOf()]?.json).toEqual({
+      audio: audioV2(),
+      sent: true,
+      match: ISRC_MATCH,
+    });
+    expectSameRun(recorded, await replay());
+  });
+
+  it("does not record a block whose text looks like a link, and replays a miss", async () => {
+    const block = audioV2({
+      keyMoments: [
+        {
+          time: 3.2,
+          type: "onset",
+          intensity: 0.8,
+          description: `cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?${SIGNED}`,
+        },
+      ],
+    });
+    const recorded = await live({ analyze: () => json(serviceAnswer(block)) });
+    expect(recorded.out.audioFeatures).toMatchObject({ audio: block });
+    expect(Object.keys(audioEntries())).toEqual([HEALTH_CASSETTE_KEY]);
+    expectClean();
+    expect((await replay()).out.audioFeatures).toMatchObject({
+      audio: null,
+      unavailableReason: "analysis_failed",
+    });
+  });
+
+  it("keeps only the code and the words of a refusal, without anything like a link", async () => {
+    const detail =
+      "The preview is not analysable audio: it is an MP4 (M4A) or AAC file, a format the service does not decode";
+    const echo = `${encodeURIComponent(PREVIEW)} ${PREVIEW.replace("https://", "")} ${SIGNED}`;
+    const recorded = await live({
+      analyze: () =>
         json(
-          { detail: `could not read ${PREVIEW}`, code: "unsupported_format", preview_url: PREVIEW },
+          {
+            detail: `${detail} (${echo})`,
+            code: "unsupported_format",
+            preview_url: PREVIEW,
+            input: { url: PREVIEW },
+          },
           { status: 422 },
         ),
-      ),
-      "SPOTIFY0002",
-      "GBAYE0000002",
-    );
-    const texts = cassetteTexts();
-    expect(Object.keys(texts)).toContain("audio.json");
-    for (const [file, text] of Object.entries(texts)) {
-      expect(text, file).not.toContain("dzcdn");
-      expect(text, file).not.toContain("hdnea");
-      expect(text, file).not.toContain("clip.mp3");
-      expect(text, file).not.toContain("preview_url");
-    }
-    // The measured entry holds the block and the clip's match, nothing else.
-    const [measured] = Object.entries(audioEntries()).filter(([key]) => key.includes(ISRC));
-    expect(measured[1]).toEqual({
-      status: 200,
-      contentType: "application/json",
-      json: { v2: audioV2(), match: ISRC_MATCH },
     });
+    expect(recorded.out.audioFeatures).toMatchObject({
+      audio: null,
+      unavailableReason: "unsupported_format",
+    });
+    expectClean();
+    const entry = audioEntries()[keyOf()]?.json ?? {};
+    expect(Object.keys(entry).sort()).toEqual(["code", "detail", "match", "sent", "unavailable"]);
+    expect(entry).toMatchObject({
+      unavailable: "unsupported_format",
+      code: "unsupported_format",
+      detail: (recorded.out.audioFeatures as AudioMeasurement).unavailableDetail,
+    });
+    expectSameRun(recorded, await replay());
   });
 
   it("replays a recorded refusal as the same refusal", async () => {
@@ -240,69 +446,118 @@ describe("the audio cassette", () => {
         "The preview is not analysable audio: it is an MP4 (M4A) or AAC file, a format the service does not decode",
       code: "unsupported_format",
     };
-    const live = await record(liveNetwork(() => json(refusal, { status: 422 })));
-    expect(live.audioFeatures).toMatchObject({
+    const recorded = await live({ analyze: () => json(refusal, { status: 422 }) });
+    expect(recorded.out.audioFeatures).toMatchObject({
       audio: null,
       unavailableReason: "unsupported_format",
     });
-    const replayed = await replay();
-    expect(replayed.audioFeatures).toEqual(live.audioFeatures);
-    expect(replayed.statusMessages).toEqual(live.statusMessages);
+    expectSameRun(recorded, await replay());
   });
 
   it("replays a block with withheld values as recorded", async () => {
     const block = keyWithheldV2();
-    const live = await record(liveNetwork(() => json(serviceAnswer(block)), block.analyzerVersion));
+    const recorded = await live({
+      analyze: () => json(serviceAnswer(block)),
+      health: () => json({ status: "ok", analyzer_version: block.analyzerVersion }),
+    });
     const replayed = await replay();
-    expect(replayed.audioFeatures).toEqual(live.audioFeatures);
-    expect(replayed.audioFeatures?.audio).toEqual(block);
+    expectSameRun(recorded, replayed);
+    expect((replayed.out.audioFeatures as AudioMeasurement).audio).toEqual(block);
+  });
+
+  const outcomes: Array<[string, Network]> = [
+    [
+      "no_preview",
+      {
+        deezer: () => json({ error: { type: "DataException", message: "no data", code: 800 } }),
+        search: () => json({ total: 0, data: [] }),
+      },
+    ],
+    ["preview_lookup_incomplete", { deezer: null }],
+    [
+      "preview_rejected",
+      { deezer: (isrc) => json(deezerEntry(isrc, "https://evil.example/clip.mp3")) },
+    ],
+    ["service_unavailable", { health: null }],
+    ["analysis_failed", { analyze: () => json({ detail: "decode error" }, { status: 500 }) }],
+  ];
+  it.each(outcomes)("records and replays %s as the live run gave it", async (reason, network) => {
+    const recorded = await live(network);
+    expect(recorded.out.audioFeatures).toMatchObject({ audio: null, unavailableReason: reason });
+    // The same reason, detail, source errors (the lookup's, as recorded) and events.
+    expectSameRun(recorded, await replay());
+    expect(cassetteTexts()["audio.json"]).not.toContain("evil.example");
   });
 
   it("misses an entry of another analyzer version, and serves nothing in its place", async () => {
-    await record(liveNetwork(() => json(serviceAnswer(audioV2()))));
+    await live();
     // The service is upgraded, and another track is recorded by the new analyzer.
     const newer = "2.4.0+essentia.models-5c5c0c7f";
-    await record(
-      liveNetwork(() => json(serviceAnswer(audioV2({ analyzerVersion: newer }))), newer),
+    const other = await live(
+      {
+        analyze: () => json(serviceAnswer(audioV2({ analyzerVersion: newer }))),
+        health: () => json({ status: "ok", analyzer_version: newer }),
+      },
       "SPOTIFY0002",
       "GBAYE0000002",
     );
-    expect((await replay("SPOTIFY0002", "GBAYE0000002")).audioFeatures).toMatchObject({
-      audio: audioV2({ analyzerVersion: newer }),
-    });
+    expectSameRun(other, await replay("SPOTIFY0002", "GBAYE0000002"));
 
     // The first track's entry is of the older analyzer: a miss, not a stale measurement.
     const replayed = await replay();
-    expect(replayed.audioFeatures).toEqual({
+    expect(replayed.out.audioFeatures).toEqual({
       audio: null,
       unavailableReason: "analysis_failed",
-      unavailableDetail: `audio: no cassette entry for POST /analyze isrc:${ISRC} analyzer:${newer} window:preview-30s`,
+      unavailableDetail: `audio: no cassette entry for ${keyOf(`isrc:${ISRC}`, newer)}`,
     });
-    expect(replayed.preview).toBeNull();
+    expect(replayed.out.preview).toBeNull();
   });
 
-  it("misses an entry whose block names another analyzer than its key", async () => {
-    await record(liveNetwork(() => json(serviceAnswer(audioV2()))));
-    const path = join(dir, "audio.json");
-    const cassette = JSON.parse(readFileSync(path, "utf8"));
-    const key = audioCassetteKey(`isrc:${ISRC}`, ANALYZER_VERSION) as string;
-    cassette.entries[key].json.v2.analyzerVersion = "2.0.0+essentia";
-    writeFileSync(path, JSON.stringify(cassette));
-
+  it.each([
+    ["another analyzer", { analyzerVersion: "2.0.0+essentia" }, "holds a block of analyzer"],
+    ["another window", { window: { kind: "full-track", durationSeconds: 240 } }, "holds no"],
+  ])("misses an entry whose block names %s than its key", async (_label, change, named) => {
+    await live();
+    editAudioEntries((entries) => {
+      Object.assign((entries[keyOf()].json as { audio: object }).audio, change);
+    });
     const replayed = await replay();
-    expect(replayed.audioFeatures).toEqual({
+    expect(replayed.out.audioFeatures).toMatchObject({
       audio: null,
       unavailableReason: "analysis_failed",
-      unavailableDetail: `audio: the entry ${key} holds a block of analyzer 2.0.0+essentia`,
+    });
+    expect((replayed.out.audioFeatures as AudioMeasurement).unavailableDetail).toContain(named);
+  });
+
+  it("misses a measurement filed under no analyzer version", async () => {
+    await live();
+    editAudioEntries((entries) => {
+      entries[keyOf(`isrc:${ISRC}`, null)] = entries[keyOf()];
+      delete entries[keyOf()];
+    });
+    expect((await replay()).out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: the entry ${keyOf(`isrc:${ISRC}`, null)} holds a measurement of no named analyzer`,
     });
   });
 
   it("misses a track that was never recorded", async () => {
-    await record(liveNetwork(() => json(serviceAnswer(audioV2()))));
-    const replayed = await replay("SPOTIFY0003", "GBAYE0000003");
-    expect(replayed.audioFeatures).toMatchObject({
+    await live();
+    expect((await replay("SPOTIFY0003", "GBAYE0000003")).out.audioFeatures).toEqual({
       audio: null,
       unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: no cassette entry for ${keyOf("isrc:GBAYE0000003")}`,
     });
+  });
+
+  it("masks text that looks like a link", () => {
+    expect(withoutUrlLike(`see ${PREVIEW} or ${encodeURIComponent(PREVIEW)}`)).toBe(
+      "see [url] or [url]",
+    );
+    expect(withoutUrlLike("cdnt-preview.dzcdn.net/api/1/x.mp3 failed")).toBe("[url] failed");
+    expect(withoutUrlLike(`token ${SIGNED} exp=1 hmac=2`)).toBe("token [url] [url] [url]");
+    const words = "The MP3 decodes to less audio than its MPEG audio frames hold";
+    expect(withoutUrlLike(words)).toBe(words);
   });
 });

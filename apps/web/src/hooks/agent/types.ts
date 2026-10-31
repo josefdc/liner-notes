@@ -102,8 +102,10 @@ export interface MoreFacts {
    * The angles of `nextRound` to ask again, by index (a fact's or an error's `index`): the ones
    * the last answer for that round left (anglesLeft), when it left the round to ask again. Only
    * those are asked (the request's `failedIndexes`), so the angles it wrote are not asked for
-   * again. Empty when the whole round is to be asked: a new round, or a round none of whose
-   * answers wrote or named a fact.
+   * again. Empty when the whole round is to be asked: a new round (a round that moved on, another
+   * result), after a recorded answer, after an answer refused as `invalid_input`, and when the
+   * angles left are every angle of the round (an answer that wrote none of them). An answer
+   * refused before `connected` leaves it as it was.
    */
   failedIndexes: number[];
   /**

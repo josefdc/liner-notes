@@ -6,9 +6,11 @@
  * that could not be written is kept in `moreFacts.failed` by its index; the other facts of the
  * answer are kept.
  *
- * The round moves on only once an answer has ended (withAnswer): an answer whose every fact
- * failed, or that the API could not write now (a paused budget, an error for the whole answer),
- * leaves the round to ask again, and so does a stream that broke or was left before its end.
+ * The round moves on once an answer has ended (withAnswer), or once one that stopped before its
+ * end (a stream that broke, stopped responding or was left: withStoppedAnswer) had written every
+ * angle it asked. An answer of a whole round whose every fact failed, one the API could not write
+ * now (a paused budget, an error for the whole answer), one refused before `connected`, and a
+ * stream that stopped before its angles were written leave the round to ask again.
  * The API asks the round sent, as it is. When the last answer for the round wrote some of its
  * angles, only the others are asked again (`failedIndexes`, anglesLeft): the angles it asked
  * less the ones whose fact it sent (each live fact names its angle, `index`), or, once it ended,
@@ -22,7 +24,7 @@
  * stopped responding, sets `moreFacts.answerFailed`, so the Player can say so.
  */
 
-import type { Factoid, TrackData } from '../../types';
+import type { Factoid, FactoidUnavailableCode, TrackData } from '../../types';
 import { type RunToken, RunTokenError } from './apiClient';
 import { newRunEvents, parseFactoidEvent, streamGuard } from './events';
 import type { WaitKeeper } from './failure';
@@ -37,6 +39,13 @@ import {
 import { isUsable, newRunToken, type TokenKeeper } from './runToken';
 import { abortError, eitherSignal, inactivityWatchdog, readersReady } from './streams';
 import type { MoreFacts, MoreFactsOptions } from './types';
+
+/** A code that says the API cannot write facts now (a refusal), not that a fact failed. */
+const isRefusal = (code: string): code is FactoidUnavailableCode =>
+  code === 'rate_limited' ||
+  code === 'budget_exhausted' ||
+  code === 'live_disabled' ||
+  code === 'not_found';
 
 export interface FactoidStreamContext {
   /** The current run's signal: a new analysis or a reset ends the stream. */
@@ -84,13 +93,15 @@ export function streamMoreFacts(
       const added: Factoid[] = [];
       // What the answer says and does until `done` (withAnswer).
       const answer: Omit<MoreFactsAnswer, 'runId'> = {
+        connected: false,
         facts: 0,
         refused: false,
         asked: askedAngles(before),
         written: [],
         unplaced: 0,
         failedAt: [],
-        wholeError: false,
+        refusedAt: [],
+        wholeError: null,
       };
       // The answer stopped before its end: the angles it did not write are asked again.
       const stopped = () =>
@@ -131,6 +142,7 @@ export function streamMoreFacts(
 
         switch (data.type) {
           case 'connected':
+            answer.connected = true;
             answer.nextRound = data.nextRound;
             answer.roundsLeft = data.roundsLeft;
             break;
@@ -156,7 +168,7 @@ export function streamMoreFacts(
             resolve(added);
             break;
 
-          case 'error':
+          case 'error': {
             // One fact that failed (an index) is kept as failed; the stream goes on, and
             // the other facts are kept. The rate limit, a paused budget, live calls switched
             // off and a recording no longer served are also reported to the caller, which
@@ -165,24 +177,21 @@ export function streamMoreFacts(
             // A fact that failed with `failed` beside facts written does not: that code is
             // what is left once the provider layer has retried what is worth retrying, and
             // includes failures the same prompt meets again (a content filter, a refusal).
+            const refusal = isRefusal(data.code);
             if (data.index !== undefined) {
               answer.failedAt.push(data.index);
+              if (refusal) answer.refusedAt.push(data.index);
               change({
                 type: 'factFailed',
                 result,
                 failure: { index: data.index, code: data.code },
               });
-            } else answer.wholeError = true;
+            } else answer.wholeError ??= data.code;
             // A refusal that says how long to wait: nothing is sent before then.
             if (data.retryAfterMs !== undefined && data.retryAfterMs > 0) {
               waits.holdOff(data.retryAfterMs, data.error, data.code);
             }
-            if (
-              data.code === 'rate_limited' ||
-              data.code === 'budget_exhausted' ||
-              data.code === 'live_disabled' ||
-              data.code === 'not_found'
-            ) {
+            if (isRefusal(data.code)) {
               answer.refused = true;
               onUnavailable?.(data.code);
             } else if (data.index === undefined) {
@@ -193,6 +202,7 @@ export function streamMoreFacts(
               console.warn('[useAgent] Factoid stream error:', data.error);
             }
             break;
+          }
         }
       };
 

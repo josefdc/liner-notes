@@ -1486,6 +1486,131 @@ describe('useAgent factoid stream', () => {
       await third;
     });
 
+    it.each(['budget_exhausted', 'live_disabled', 'rate_limited', 'auth_expired'])(
+      'keeps the angles to ask after a refusal sent before connected (%s)',
+      async (code) => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const { result: hook } = renderHook(() => useAgent());
+        await partlyFailed(hook);
+        const [second] = await ask(hook, result());
+        expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+        // Refused before the API asked anything: an error, then done, and no connected.
+        lastStream().send({ type: 'error', code, error: 'Not now.' });
+        lastStream().send({ type: 'done' });
+        await second;
+
+        const [third] = await ask(hook, result());
+        expect(query(lastStream()).get('round')).toBe('0');
+        expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+        answer(lastStream(), 1);
+        await third;
+      },
+    );
+
+    it('asks the round whole after a request refused as invalid input', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result: hook } = renderHook(() => useAgent());
+      await partlyFailed(hook);
+      const [second] = await ask(hook, result());
+      lastStream().send({ type: 'error', code: 'invalid_input', error: 'Not valid.' });
+      lastStream().send({ type: 'done' });
+      await second;
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).has('failedIndexes')).toBe(false);
+      answer(lastStream(), 1);
+      await third;
+    });
+
+    it('moves the round on when the angle asked again fails with `failed`', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      const [first] = await ask(hook, result());
+      answer(lastStream(), 1, factAt('fc-a', 0), busy(1), factAt('fc-c', 2));
+      await first;
+
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('failedIndexes')).toBe('1');
+      answer(lastStream(), 1, { type: 'error', code: 'failed', error: 'Not written.', index: 1 });
+      await second;
+      // It is shown as failed, and the next click asks the next round.
+      expect(hook.current.moreFacts?.failed).toEqual([{ index: 1, code: 'failed' }]);
+      expect(hook.current.moreFacts).toMatchObject({ nextRound: 1, failedIndexes: [] });
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('1');
+      expect(query(lastStream()).has('failedIndexes')).toBe(false);
+      answer(lastStream(), 2);
+      await third;
+    });
+
+    it('keeps the angle asked again while it is rate-limited again', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      const [first] = await ask(hook, result());
+      answer(lastStream(), 1, factAt('fc-a', 0), busy(1), factAt('fc-c', 2));
+      await first;
+      for (let click = 0; click < 2; click++) {
+        const [again] = await ask(hook, result());
+        expect(query(lastStream()).get('round')).toBe('0');
+        expect(query(lastStream()).get('failedIndexes')).toBe('1');
+        answer(lastStream(), 1, busy(1));
+        await again;
+      }
+      expect(hook.current.moreFacts).toMatchObject({ nextRound: 0, failedIndexes: [1] });
+    });
+
+    it('leaves out an angle whose fact came before the stream stopped responding', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      await partlyFailed(hook);
+      vi.useFakeTimers();
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      lastStream().send({ type: 'connected', nextRound: 1 });
+      lastStream().sendNamed('heartbeat');
+      lastStream().send(factAt('fc-b', 1));
+      act(() => {
+        vi.advanceTimersByTime(STREAM_INACTIVITY_TIMEOUT_MS + 1);
+      });
+      await expect(second).rejects.toThrow('stopped responding');
+      expect(hook.current.moreFacts?.answerFailed).toBe(true);
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('2');
+      answer(lastStream(), 1, factAt('fc-c', 2));
+      await third;
+    });
+
+    it('moves on, and says nothing failed, when the stream stops after every fact it asked for', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      vi.useFakeTimers();
+      const [first] = await ask(hook, result());
+      lastStream().send({ type: 'connected', nextRound: 1 });
+      lastStream().sendNamed('heartbeat');
+      for (const [id, index] of [
+        ['fc-a', 0],
+        ['fc-b', 1],
+        ['fc-c', 2],
+      ] as const) {
+        lastStream().send(factAt(id, index));
+      }
+      act(() => {
+        vi.advanceTimersByTime(STREAM_INACTIVITY_TIMEOUT_MS + 1);
+      });
+      await expect(first).rejects.toThrow('stopped responding');
+      expect(hook.current.moreFacts).toMatchObject({
+        nextRound: 1,
+        failedIndexes: [],
+        answerFailed: false,
+        failed: [],
+      });
+      expect(hook.current.moreFacts?.factoids.map((fact) => fact.id)).toEqual([
+        'fc-a',
+        'fc-b',
+        'fc-c',
+      ]);
+    });
+
     it('names none for another result', async () => {
       const { result: hook } = renderHook(() => useAgent());
       await partlyFailed(hook);

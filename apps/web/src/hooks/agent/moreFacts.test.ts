@@ -25,6 +25,7 @@ const kept = (change: Partial<MoreFacts> = {}): MoreFacts => ({
 });
 /** An answer to a whole round that wrote angle 0 and named nothing else. */
 const answer: MoreFactsAnswer = {
+  connected: true,
   facts: 1,
   refused: false,
   runId: 'run-1',
@@ -32,7 +33,8 @@ const answer: MoreFactsAnswer = {
   written: [0],
   unplaced: 0,
   failedAt: [],
-  wholeError: false,
+  refusedAt: [],
+  wholeError: null,
 };
 const busy = (...indexes: number[]) =>
   indexes.map((index) => ({ index, code: 'rate_limited' as const }));
@@ -82,7 +84,14 @@ describe('moreFactsReducer', () => {
       {
         type: 'answerEnded',
         result,
-        answer: { ...answer, facts: 0, written: [], refused: true, wholeError: true, nextRound: 1 },
+        answer: {
+          ...answer,
+          facts: 0,
+          written: [],
+          refused: true,
+          wholeError: 'failed',
+          nextRound: 1,
+        },
       },
       kept({ runId: 'run-1' }),
     ],
@@ -92,7 +101,7 @@ describe('moreFactsReducer', () => {
       {
         type: 'answerEnded',
         result,
-        answer: { ...answer, failedAt: [2, 1], refused: true, nextRound: 1 },
+        answer: { ...answer, failedAt: [2, 1], refusedAt: [2, 1], refused: true, nextRound: 1 },
       },
       kept({ factoids: [fact('a')], failed: busy(2, 1), failedIndexes: [1, 2], runId: 'run-1' }),
     ],
@@ -118,7 +127,7 @@ describe('moreFactsReducer', () => {
           facts: 0,
           written: [],
           refused: true,
-          wholeError: true,
+          wholeError: 'failed',
           nextRound: 1,
         },
       },
@@ -140,7 +149,14 @@ describe('moreFactsReducer', () => {
       {
         type: 'answerEnded',
         result,
-        answer: { ...answer, failedAt: [1], refused: true, wholeError: true, nextRound: 1 },
+        answer: {
+          ...answer,
+          failedAt: [1],
+          refusedAt: [1],
+          refused: true,
+          wholeError: 'failed',
+          nextRound: 1,
+        },
       },
       kept({ failed: busy(1), failedIndexes: [1, 2], runId: 'run-1' }),
     ],
@@ -157,6 +173,7 @@ describe('moreFactsReducer', () => {
           written: [],
           unplaced: 2,
           failedAt: [1],
+          refusedAt: [1],
           refused: true,
           nextRound: 1,
         },
@@ -176,6 +193,7 @@ describe('moreFactsReducer', () => {
           written: [],
           unplaced: 2,
           failedAt: [0],
+          refusedAt: [0],
           refused: true,
           nextRound: 1,
           roundsLeft: true,
@@ -230,6 +248,89 @@ describe('moreFactsReducer', () => {
         answer: { ...answer, asked: [1, 2], written: [], unplaced: 1, nextRound: 1 },
       },
       kept({ failedIndexes: [1, 2] }),
+    ],
+    [
+      'a round asked again and refused before connected: the same angles are left',
+      kept({ failedIndexes: [1, 2] }),
+      {
+        type: 'answerEnded',
+        result,
+        answer: {
+          ...answer,
+          connected: false,
+          asked: [1, 2],
+          facts: 0,
+          written: [],
+          refused: true,
+          wholeError: 'budget_exhausted',
+        },
+      },
+      kept({ failedIndexes: [1, 2], runId: 'run-1' }),
+    ],
+    [
+      'a round asked again and refused as invalid input: the round is asked whole',
+      kept({ failedIndexes: [1, 2] }),
+      {
+        type: 'answerEnded',
+        result,
+        answer: {
+          ...answer,
+          connected: false,
+          asked: [1, 2],
+          facts: 0,
+          written: [],
+          refused: true,
+          wholeError: 'invalid_input',
+        },
+      },
+      kept({ runId: 'run-1' }),
+    ],
+    [
+      'a round asked again whose every angle failed with `failed`: the round moves on',
+      kept({ failedIndexes: [1, 2] }),
+      {
+        type: 'answerEnded',
+        result,
+        answer: {
+          ...answer,
+          asked: [1, 2],
+          facts: 0,
+          written: [],
+          failedAt: [1, 2],
+          nextRound: 1,
+          roundsLeft: true,
+        },
+      },
+      kept({ nextRound: 1, runId: 'run-1' }),
+    ],
+    [
+      'a round asked again with one refusal and one `failed`: only the refusal is left',
+      kept({ failedIndexes: [1, 2] }),
+      {
+        type: 'answerEnded',
+        result,
+        answer: {
+          ...answer,
+          asked: [1, 2],
+          facts: 0,
+          written: [],
+          failedAt: [1, 2],
+          refusedAt: [1],
+          refused: true,
+          nextRound: 1,
+        },
+      },
+      kept({ failedIndexes: [1], runId: 'run-1' }),
+    ],
+    [
+      'a stream that stopped after every angle asked was written: the answer is not failed',
+      kept({ failedIndexes: [1, 2], answerFailed: true }),
+      {
+        type: 'answerStopped',
+        result,
+        answer: { ...answer, asked: [1, 2], written: [1, 2], nextRound: 1, roundsLeft: true },
+      },
+      kept({ nextRound: 1, runId: 'run-1' }),
     ],
     [
       'an answer that failed as a whole',

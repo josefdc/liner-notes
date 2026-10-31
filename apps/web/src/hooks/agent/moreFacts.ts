@@ -94,6 +94,12 @@ export function withFailure(moreFacts: MoreFacts, failure: FailedFact): MoreFact
 
 /** What one answer said and did, as the stream showed it until `done`. */
 export interface MoreFactsAnswer {
+  /**
+   * Its `connected` event came: the API took the request, and asks only after it. An answer
+   * refused before it (the request limit, an expired run token, a paused budget, live calls
+   * switched off, invalid input…) asked nothing.
+   */
+  connected: boolean;
   /** The round to ask for next (`connected`); absent when the answer names none. */
   nextRound?: number;
   /** Whether asking for that round can bring new facts (`connected`), when the API says. */
@@ -115,8 +121,14 @@ export interface MoreFactsAnswer {
   unplaced: number;
   /** The angles it could not write (errors with an index), in the order they came. */
   failedAt: number[];
-  /** It sent an error with no index: one for the whole answer. */
-  wholeError: boolean;
+  /**
+   * Of those, the ones refused for now (a code that says live calls are unavailable: the rate
+   * limit, a paused budget…), not failed (`failed`, what is left once the provider layer has
+   * retried what is worth retrying).
+   */
+  refusedAt: number[];
+  /** The code of its error with no index (one for the whole answer), or null. */
+  wholeError: string | null;
 }
 
 /** Every angle of a round, by index. */
@@ -137,15 +149,21 @@ export function askedAngles(moreFacts: MoreFacts): number[] {
  * - An answer that stopped before its end (a stream that broke or was left), or that sent an
  *   error for the whole answer, may not have said: every angle it asked and did not write is left.
  *   When it sent facts with no index (an older API), which angles they answer is not known: the
- *   ones named as failed are left, or every angle asked when none was.
+ *   ones named as failed are left. So an older API's stream that broke after such a fact and one
+ *   failure leaves only that failure, and an angle it never answered is not named: harmless while
+ *   that API asks every angle anyway, and a lost angle only if it is upgraded between two clicks.
+ * - In a round asked again for some of its angles, an angle that failed with a code that is not
+ *   a refusal (`failed`) is not left: it had its second try, and `failed` can be what the same
+ *   prompt meets every time (a content filter, a refusal). A refusal (refusedAt) is left.
  */
 export function anglesLeft(answer: MoreFactsAnswer, ended: boolean): number[] {
   const { asked, written, failedAt } = answer;
-  if ((ended && !answer.wholeError) || (answer.unplaced > 0 && failedAt.length > 0)) {
-    return asked.filter((index) => failedAt.includes(index));
-  }
-  if (answer.unplaced > 0) return asked;
-  return asked.filter((index) => !written.includes(index));
+  const left =
+    (ended && answer.wholeError === null) || (answer.unplaced > 0 && failedAt.length > 0)
+      ? asked.filter((index) => failedAt.includes(index))
+      : asked.filter((index) => !written.includes(index));
+  if (asked.length === EVERY_ANGLE.length) return left;
+  return left.filter((index) => !failedAt.includes(index) || answer.refusedAt.includes(index));
 }
 
 /** The request's `failedIndexes` for these angles: none when they are the whole round. */
@@ -167,16 +185,26 @@ function movedOn(moreFacts: MoreFacts, answer: MoreFactsAnswer & { nextRound: nu
  * Once an answer has ended. The API names the next round before it writes anything, so the round
  * it named comes next only when the answer was not refused and did not fail every fact it tried:
  * an answer with nothing new and no failure (nothing documented, or only repeats) moves on; one
- * that could not write its facts leaves the round to ask again. An answer that names no round
- * (recorded facts) leaves it too. Whether rounds are left is the API's word when it says
- * (`roundsLeft`), else the contract's count. `runId` is the run the facts were checked against.
+ * that could not write its facts leaves the round to ask again. That hold on an answer whose
+ * every fact failed is kept, as before, for an ask of the whole round; in a round asked again for
+ * some of its angles, the ones that failed with `failed` are dropped (anglesLeft), so one angle
+ * that always fails does not hold its round for good. Whether rounds are left is the API's word
+ * when it says (`roundsLeft`), else the contract's count. `runId` is the run the facts were
+ * checked against.
  *
  * A round left to ask again is asked again only for the angles the answer left (anglesLeft,
- * `failedIndexes`); when it left none, every angle it asked was written, and the round moves on.
- * A round that moves on is asked whole, and so is the round of a recorded answer.
+ * `failedIndexes`); when it left none, the round moves on, and is asked whole. An answer refused
+ * before `connected` asked nothing: the angles left to ask are the ones they were, except after
+ * `invalid_input`, which the same request would meet again, so the round is then asked whole. A
+ * recorded answer (`connected` with no round) names no angle either: its round is asked whole.
  */
 export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
   const { nextRound, runId } = answer;
+  if (!answer.connected) {
+    return answer.wholeError === 'invalid_input'
+      ? { ...moreFacts, failedIndexes: [], runId }
+      : { ...moreFacts, runId };
+  }
   if (nextRound === undefined) return { ...moreFacts, failedIndexes: [], runId };
   const unwritten = answer.refused || (answer.facts === 0 && answer.failedAt.length > 0);
   const left = anglesLeft(answer, true);
@@ -188,12 +216,15 @@ export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreF
  * Once an answer stopped before its end (a stream that broke, stopped responding or was left):
  * its round is asked again for the angles it left (anglesLeft), so a fact it sent is not asked
  * for again. When it left none (every angle it asked was written before it stopped), the round
- * it named moves on.
+ * it named moves on, and the answer is not said to have failed: every fact it asked for is shown.
  */
 export function withStoppedAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
   const left = anglesLeft(answer, false);
   if (left.length === 0 && answer.nextRound !== undefined) {
-    return movedOn(moreFacts, { ...answer, nextRound: answer.nextRound });
+    return {
+      ...movedOn(moreFacts, { ...answer, nextRound: answer.nextRound }),
+      answerFailed: false,
+    };
   }
   return { ...moreFacts, failedIndexes: toAskAgain(left) };
 }

@@ -38,7 +38,11 @@ import { createTestApp, withRunToken } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
 import { captureLogsForTests } from "../../logger.js";
 import { replayedAnalysis } from "../../replay/player.js";
-import { PINNED_DIR, readRecording } from "../../replay/testing/recordings.js";
+import {
+  PINNED_DIR,
+  PREVIOUS_SHOWCASES_DIR,
+  previousShowcase,
+} from "../../replay/testing/recordings.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -736,11 +740,13 @@ describe("each fact's claim", () => {
 
   it("of a showcase recording is its recorded claim, and a showcase whose cards all restate serves none", async () => {
     vi.stubEnv("REPLAY_MODE", "only");
+    // The showcases served before the golden run's, whose cards these are.
+    vi.stubEnv("REPLAY_DIR", PREVIOUS_SHOWCASES_DIR);
     onTestFinished(() => {
       vi.unstubAllEnvs();
     });
     // Bitter Sweet Symphony's sample card says more than its record: it is served.
-    const bss = readRecording("bitter-sweet-symphony-the-verve");
+    const bss = previousShowcase("bitter-sweet-symphony-the-verve");
     const served = replayedAnalysis(bss, "run-served");
     expect(served.factoids).toHaveLength(1);
     const track = {
@@ -762,7 +768,9 @@ describe("each fact's claim", () => {
       ),
     );
     // One More Time's own card only restates its record: none is served, and nothing is asked.
-    expect(replayedAnalysis(readRecording(), "run-served").factoids).toEqual([]);
+    expect(
+      replayedAnalysis(previousShowcase("one-more-time-daft-punk"), "run-served").factoids,
+    ).toEqual([]);
     const demo = await request(app())
       .post(withRunToken("/api/factoids/more"))
       .send({ ...DEMO_TRACK, existingFactoidIds: [] })

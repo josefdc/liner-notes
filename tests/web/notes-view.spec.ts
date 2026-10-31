@@ -2,8 +2,10 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   collectProblems,
+  DEMO_SLUG,
   loadFixture,
   openPlayer,
+  PREVIOUS_SHOWCASES,
   replayedRecording,
   showcaseRecordings,
   useMockApi,
@@ -17,7 +19,8 @@ import { offline } from "./offline";
 // hedged ("Possible sample") unless a source supports it; each claim cites its sources beside it.
 // A section with nothing to list says so in a sentence: nothing is made up to fill it.
 //
-// Two showcases: the recorded run (fixtures/replays/one-more-time-daft-punk.json) for samples,
+// Two showcases: the recorded run as recorded before the golden run
+// (fixtures/pinned/9971adea845d/one-more-time-daft-punk.json, whose exact text this pins) for samples,
 // covers, connections and the recording label. It has no history claims and no credit: its one
 // "credit" was the album the track appears on, a release fact the model filed as a credit, and
 // the replay leaves it out with the other model claims that restate a code-built claim. So the
@@ -56,8 +59,13 @@ function listed(page: Page, section: string) {
     );
 }
 
-async function openRecording(page: Page, slug?: string, query = "One More Time Daft Punk") {
-  const { events } = replayedRecording(slug);
+async function openRecording(
+  page: Page,
+  slug?: string,
+  query = "One More Time Daft Punk",
+  dir?: string,
+) {
+  const { events } = replayedRecording(slug, undefined, dir);
   await useMockApi(page, {
     suggestions: [],
     eventGapMs: 0,
@@ -93,7 +101,8 @@ test("the recorded run's notes: sections in order, its samples and covers with t
 }) => {
   const problems = collectProblems(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openRecording(page);
+  // One More Time as recorded before the golden run, whose exact claims and cards this pins.
+  await openRecording(page, DEMO_SLUG, undefined, PREVIOUS_SHOWCASES);
 
   // The h1 is the track; the notes' sections are h2s, in the liner notes' order.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("One More Time");
@@ -200,30 +209,36 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   expect(problems).toEqual([]);
 });
 
-// Each showcase recording: every relation its records document is listed once in the notes, by
-// its record, and never named "Possible" there or on a card. The model's claims and cards that
-// only restated records are left out (Juicy's lists of the tracks that sample it, its two sample
-// cards, the Coldplay cover of Bitter Sweet Symphony stated as a claim and as a card); a card
-// that says more than its record stays, named as the record names the relation. Each fact is
-// found by its other track's artist: the map's second hop lists other tracks that sample the
-// same records, by title alone.
-const DOCUMENTED: Record<string, { facts: RegExp[]; cards: RegExp[] }> = {
-  "bitter-sweet-symphony-the-verve": {
-    facts: [/Andrew Oldham/, /Coldplay (feat\.|featuring) Richard Ashcroft/],
-    // Its second sentence adds detail "around that sample": named "Sample", not "Possible sample".
-    cards: [/^SAMPLE: .*The Last Time.*around that sample/i],
-  },
+// Each showcase recording (fixtures/replays: the golden run's, one entry here for every slug):
+// every relation its records document is listed once in the notes, by its record, and never named
+// "Possible" there or on a card. A card that states a record's relation is named as the record
+// names it (Hung Up's ABBA sample, One More Time's Eddie Johns sample); the others are named by
+// their own subject. Each fact is found by its other track's artist or title: the map's second hop
+// lists other tracks that sample the same records, by title alone. `alsoIn` names a model claim
+// the notes list beside the record that restates it in another subject, which one claim per fact
+// does not read as the record (Hung Up's history claim "MusicBrainz lists three remixes of this
+// recording: …", supported by the three records it cites): each is pinned here, listed once, and
+// never named "Possible".
+const DOCUMENTED: Record<string, { facts: RegExp[]; cards: RegExp[]; alsoIn?: RegExp[] }> = {
   "hung-up-madonna": {
     facts: [/ABBA/, /SDP extended vocal/],
-    // It names the remixers inside the records' titles: it is not read as the records, and stays.
-    cards: [/^PRODUCTION: .*remixes, including versions by Chus & Ceballos/i],
+    cards: [/^SAMPLE: .*ABBA/i, /^TRIVIA: .*Chus & Ceballos/i],
+    alsoIn: [/^HistoryMusicBrainz lists three remixes of this recording/],
   },
-  "juicy-the-notorious-big": {
-    facts: [/Jay.Z/, /RBX/, /Talib Kweli/, /Apathy/, /Mtume/, /The Rappin. Duke/],
-    cards: [],
+  "natural-blues-moby": {
+    facts: [/Vera Hall/, /Paolo Nutini/, /Little Hurricane/],
+    cards: [/^TRIVIA: .*remixes/i],
   },
   "one-more-time-daft-punk": {
-    facts: [/More Spell on You/, /Circo Loco/, /London Elektricity/],
+    facts: [/More Spell on You/, /Circo Loco/, /Get It Get It/],
+    cards: [/^SAMPLE: .*More Spell on You/i, /^CREDITS: .*Discovery/i],
+  },
+  "praise-you-fatboy-slim": {
+    facts: [/Camille Yarbrough/, /Fedde Le Grand/, /Super Mash Bros/],
+    cards: [/^PRODUCTION: .*Balance & Rehearsal/i],
+  },
+  "the-verve-bitter-sweet-symphony": {
+    facts: [/Andrew Oldham/, /Once Again/, /James Lavelle/],
     cards: [],
   },
 };
@@ -247,8 +262,17 @@ for (const { slug, query } of showcaseRecordings()) {
     });
     const everyClaim = await everyClaimListed(page);
     for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
+    const alsoIn = expected.alsoIn ?? [];
+    for (const restating of alsoIn) {
+      expect(
+        everyClaim.filter((claim) => restating.test(claim)),
+        String(restating),
+      ).toHaveLength(1);
+    }
     for (const fact of expected.facts) {
-      const listed = everyClaim.filter((claim) => fact.test(claim));
+      const listed = everyClaim.filter(
+        (claim) => fact.test(claim) && !alsoIn.some((restating) => restating.test(claim)),
+      );
       expect(listed, String(fact)).toHaveLength(1);
       expect(listed[0], String(fact)).toMatch(/^(Sample|Remix|Cover)[^ ]/);
       // Shown with the facts above only by a card that says more, as expected above.

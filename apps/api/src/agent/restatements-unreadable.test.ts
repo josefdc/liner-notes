@@ -6,7 +6,7 @@
 
 import type { Claim } from "@liner-notes/contract";
 import { describe, expect, it, vi } from "vitest";
-import { readRecording } from "../replay/testing/recordings.js";
+import { previousShowcase } from "../replay/testing/recordings.js";
 import { oneClaimPerFact } from "./restatements.js";
 
 /** A word only the claim the reader fails on holds. */
@@ -29,7 +29,7 @@ vi.mock("./relationText.js", async (importOriginal) => {
 
 describe("a claim the relation templates cannot read", () => {
   it("is kept, unmarked, and the others are read as ever", () => {
-    const { analysis } = readRecording("bitter-sweet-symphony-the-verve");
+    const { analysis } = previousShowcase("bitter-sweet-symphony-the-verve");
     const sample = (analysis.claims ?? []).find((claim) => claim.id.startsWith("71a2da2e"));
     if (!sample) throw new Error("no sample claim");
     const unreadable: Claim = {

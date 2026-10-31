@@ -3,11 +3,11 @@
   "slug": "hung-up-madonna",
   "request": {
     "query": "Hung Up Madonna",
-    "selectedTrackId": null
+    "selectedTrackId": "3850dYVgOFIXJh5U4BFEWH"
   },
-  "recordedAt": "2026-10-29T07:01:14.590Z",
-  "commit": "0fdfdccc509c",
-  "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+  "recordedAt": "2026-10-31T20:25:29.600Z",
+  "commit": "5fd193fa7a64",
+  "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
   "events": [
     {
       "atMs": 0,
@@ -17,1135 +17,1122 @@
         "seq": 0,
         "elapsedMs": 0,
         "threadId": "recorded-hung-up-madonna",
-        "timestamp": "2026-10-29T07:00:46.390Z"
+        "timestamp": "2026-10-31T20:24:58.602Z"
       }
     },
     {
-      "atMs": 6,
+      "atMs": 21,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 1,
-        "elapsedMs": 6,
-        "message": "Reading the track from Spotify",
+        "elapsedMs": 22,
+        "message": "Searching Spotify",
         "code": "NET-100",
         "node": "scout",
-        "timestamp": "2026-10-29T07:00:46.394Z"
+        "timestamp": "2026-10-31T20:24:58.618Z"
       }
     },
     {
-      "atMs": 68,
+      "atMs": 171,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 2,
-        "elapsedMs": 67,
-        "message": "Found the track on Spotify: Hung Up by Madonna",
-        "code": "SPOTIFY-FOUND",
-        "node": "scout",
-        "timestamp": "2026-10-29T07:00:46.457Z"
+        "elapsedMs": 525,
+        "message": "Starting the research: Last.fm, MusicBrainz, SecondHandSongs, Genius and a web search",
+        "code": "RESEARCH-START",
+        "node": "historian",
+        "timestamp": "2026-10-31T20:24:59.129Z"
       }
     },
     {
-      "atMs": 75,
+      "atMs": 505,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 3,
-        "elapsedMs": 75,
-        "message": "Starting the research: Last.fm, MusicBrainz, SecondHandSongs, Genius and a web search",
-        "code": "RESEARCH-START",
-        "node": "historian",
-        "timestamp": "2026-10-29T07:00:46.462Z"
+        "elapsedMs": 859,
+        "message": "Measuring tempo and key from the preview clip",
+        "code": "AUDIO-INIT",
+        "node": "engineer",
+        "timestamp": "2026-10-31T20:24:59.464Z"
       }
     },
     {
-      "atMs": 364,
+      "atMs": 1557,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 4,
-        "elapsedMs": 363,
-        "message": "Measuring tempo and key from the preview clip",
-        "code": "AUDIO-INIT",
-        "node": "engineer",
-        "timestamp": "2026-10-29T07:00:46.752Z"
+        "elapsedMs": 1911,
+        "message": "Starting the research steps",
+        "node": "research_manager",
+        "timestamp": "2026-10-31T20:25:00.518Z"
       }
     },
     {
-      "atMs": 1545,
+      "atMs": 1565,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 5,
-        "elapsedMs": 1544,
-        "message": "Starting the research steps",
-        "node": "research_manager",
-        "timestamp": "2026-10-29T07:00:47.934Z"
+        "elapsedMs": 1919,
+        "message": "Searching: sample history on the web",
+        "node": "research_tool",
+        "timestamp": "2026-10-31T20:25:00.521Z"
       }
     },
     {
-      "atMs": 1552,
+      "atMs": 1565,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 6,
-        "elapsedMs": 1551,
-        "message": "Searching: sample history on the web",
+        "elapsedMs": 1919,
+        "message": "Searching: production history on the web",
         "node": "research_tool",
-        "timestamp": "2026-10-29T07:00:47.937Z"
+        "timestamp": "2026-10-31T20:25:00.521Z"
       }
     },
     {
-      "atMs": 1552,
+      "atMs": 1565,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 7,
-        "elapsedMs": 1551,
-        "message": "Searching: production history on the web",
+        "elapsedMs": 1919,
+        "message": "Searching: ListenBrainz similar artists",
         "node": "research_tool",
-        "timestamp": "2026-10-29T07:00:47.937Z"
+        "timestamp": "2026-10-31T20:25:00.521Z"
       }
     },
     {
-      "atMs": 1552,
+      "atMs": 1565,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 8,
-        "elapsedMs": 1551,
-        "message": "Searching: ListenBrainz similar artists",
+        "elapsedMs": 1919,
+        "message": "Searching: MusicBrainz collaborators of the artist",
         "node": "research_tool",
-        "timestamp": "2026-10-29T07:00:47.937Z"
+        "timestamp": "2026-10-31T20:25:00.521Z"
       }
     },
     {
-      "atMs": 1552,
+      "atMs": 1652,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 9,
-        "elapsedMs": 1552,
-        "message": "Searching: MusicBrainz collaborators of the artist",
-        "node": "research_tool",
-        "timestamp": "2026-10-29T07:00:47.937Z"
+        "elapsedMs": 2006,
+        "message": "Measured 125 BPM; key not given: too little sustained pitch",
+        "code": "AUDIO-COMPLETE",
+        "node": "engineer",
+        "timestamp": "2026-10-31T20:25:00.612Z"
       }
     },
     {
-      "atMs": 2434,
+      "atMs": 11284,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 10,
-        "elapsedMs": 2433,
-        "message": "Measured 125 BPM; key not given: too little sustained pitch",
-        "code": "AUDIO-COMPLETE",
-        "node": "engineer",
-        "timestamp": "2026-10-29T07:00:48.823Z"
+        "elapsedMs": 11638,
+        "message": "Choosing follow-up step 1 of at most 2",
+        "node": "research_manager",
+        "timestamp": "2026-10-31T20:25:10.241Z"
       }
     },
     {
-      "atMs": 12334,
+      "atMs": 13304,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 11,
-        "elapsedMs": 12334,
-        "message": "Choosing follow-up step 1 of at most 2",
-        "node": "research_manager",
-        "timestamp": "2026-10-29T07:00:58.723Z"
+        "elapsedMs": 13658,
+        "message": "Searching: the planner's lead on the web",
+        "node": "research_tool",
+        "timestamp": "2026-10-31T20:25:12.263Z"
       }
     },
     {
-      "atMs": 14086,
+      "atMs": 15361,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 12,
-        "elapsedMs": 14086,
-        "message": "Searching: Last.fm similar artists",
-        "node": "research_tool",
-        "timestamp": "2026-10-29T07:01:00.474Z"
+        "elapsedMs": 15714,
+        "message": "Choosing follow-up step 2 of at most 2",
+        "node": "research_manager",
+        "timestamp": "2026-10-31T20:25:14.321Z"
       }
     },
     {
-      "atMs": 14156,
+      "atMs": 16886,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 13,
-        "elapsedMs": 14156,
-        "message": "Choosing follow-up step 2 of at most 2",
-        "node": "research_manager",
-        "timestamp": "2026-10-29T07:01:00.545Z"
-      }
-    },
-    {
-      "atMs": 15572,
-      "event": {
-        "type": "status",
-        "runId": "recorded-hung-up-madonna",
-        "seq": 14,
-        "elapsedMs": 15572,
+        "elapsedMs": 17240,
         "message": "Searching: Last.fm artist info",
         "node": "research_tool",
-        "timestamp": "2026-10-29T07:01:01.961Z"
+        "timestamp": "2026-10-31T20:25:15.845Z"
       }
     },
     {
-      "atMs": 15640,
+      "atMs": 16955,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 15,
-        "elapsedMs": 15640,
+        "seq": 14,
+        "elapsedMs": 17308,
         "evidence": {
           "id": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "title": "Hung Up — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz recording \"Hung Up\" by Madonna (5:37), ISRC USWB10504319, first released 2005-11-11.",
           "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734"
         }
       }
     },
     {
-      "atMs": 15641,
+      "atMs": 16955,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 16,
-        "elapsedMs": 15640,
+        "seq": 15,
+        "elapsedMs": 17309,
         "evidence": {
           "id": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "title": "Hung Up — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Chus & Ceballos remix)\" by Madonna.",
           "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108"
         }
       }
     },
     {
-      "atMs": 15641,
+      "atMs": 16956,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 17,
-        "elapsedMs": 15641,
+        "seq": 16,
+        "elapsedMs": 17309,
         "evidence": {
           "id": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "title": "Hung Up — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (SDP extended vocal)\" by Madonna.",
           "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f"
         }
       }
     },
     {
-      "atMs": 15642,
+      "atMs": 16957,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 18,
-        "elapsedMs": 15642,
+        "seq": 17,
+        "elapsedMs": 17311,
         "evidence": {
           "id": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "title": "Hung Up — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna.",
           "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
         }
       }
     },
     {
-      "atMs": 15645,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 19,
-        "elapsedMs": 15645,
+        "seq": 18,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
           "title": "Hung Up — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA.",
           "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 20,
-        "elapsedMs": 15645,
+        "seq": 19,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:release/5965531f-c922-42c7-9d7b-2852ff5ca8ef",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/release/5965531f-c922-42c7-9d7b-2852ff5ca8ef",
           "title": "Confessions On A Dance Floor — MusicBrainz release",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Hung Up\" by Madonna appears on the official album \"Confessions On A Dance Floor\" (2005-11-11).",
           "recordRef": "release/5965531f-c922-42c7-9d7b-2852ff5ca8ef"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 21,
-        "elapsedMs": 15645,
+        "seq": 20,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/7aacc864-a05c-4e26-999b-d1a99ebb0115",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Telenova.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/7aacc864-a05c-4e26-999b-d1a99ebb0115"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 22,
-        "elapsedMs": 15645,
+        "seq": 21,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8bef4b1a-1501-4ef9-a33a-710b96666674",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Kidz Bop.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8bef4b1a-1501-4ef9-a33a-710b96666674"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 23,
-        "elapsedMs": 15645,
+        "seq": 22,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/4f85e3c7-217f-458e-a011-5b171d9370f9",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Enemy.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/4f85e3c7-217f-458e-a011-5b171d9370f9"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16962,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 24,
-        "elapsedMs": 15646,
+        "seq": 23,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1dbdfa25-ce1d-40fa-aca5-469f994d6513",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Tyde.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1dbdfa25-ce1d-40fa-aca5-469f994d6513"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 25,
-        "elapsedMs": 15646,
+        "seq": 24,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3cb13c26-3580-47c5-9b2d-b020679d96dc",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by TDM and Factor6.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3cb13c26-3580-47c5-9b2d-b020679d96dc"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 26,
-        "elapsedMs": 15646,
+        "seq": 25,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/41df1ba4-d4c1-4a48-b6d1-468c92592875",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Tipsy & Tipsy.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/41df1ba4-d4c1-4a48-b6d1-468c92592875"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 27,
-        "elapsedMs": 15646,
+        "seq": 26,
+        "elapsedMs": 17316,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1f292376-716b-409b-a4c5-4c518f757335",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Groove da Praia.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1f292376-716b-409b-a4c5-4c518f757335"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 28,
-        "elapsedMs": 15646,
+        "seq": 27,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3c3fba59-1183-443b-8135-59677c5089b2",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Glee Cast.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3c3fba59-1183-443b-8135-59677c5089b2"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 29,
-        "elapsedMs": 15646,
+        "seq": 28,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9b7a5260-e386-41da-a1d4-5905f7b3a852",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Estudio Miami Ritmo.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9b7a5260-e386-41da-a1d4-5905f7b3a852"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 30,
-        "elapsedMs": 15646,
+        "seq": 29,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/926b0fc6-86ae-4a4d-b871-9d19a57a6d8b",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Rachel Wood.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/926b0fc6-86ae-4a4d-b871-9d19a57a6d8b"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 31,
-        "elapsedMs": 15646,
+        "seq": 30,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/04f972e7-705d-4bd8-8cd2-a6f638ac618f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by DJ Satomi.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/04f972e7-705d-4bd8-8cd2-a6f638ac618f"
         }
       }
     },
     {
-      "atMs": 15646,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 32,
-        "elapsedMs": 15646,
+        "seq": 31,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/0e5691ea-48f1-4272-8d59-bc1574c2f8d9",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Alex Conti.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/0e5691ea-48f1-4272-8d59-bc1574c2f8d9"
         }
       }
     },
     {
-      "atMs": 15647,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 33,
-        "elapsedMs": 15646,
+        "seq": 32,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/2629e177-e63b-4f07-9830-d2783477dc65",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Midnite String Quartet.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/2629e177-e63b-4f07-9830-d2783477dc65"
         }
       }
     },
     {
-      "atMs": 15647,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 34,
-        "elapsedMs": 15646,
+        "seq": 33,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/73b0c32d-b136-494c-90fc-135950b084f7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by John Dolmayan feat. Sirusho.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/73b0c32d-b136-494c-90fc-135950b084f7"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 35,
-        "elapsedMs": 15648,
+        "seq": 34,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/12843c90-31b5-4dd7-af6a-83e089b49cde",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Number One Popstar.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/12843c90-31b5-4dd7-af6a-83e089b49cde"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 36,
-        "elapsedMs": 15648,
+        "seq": 35,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/57b7ea09-cb35-465a-99e5-266fe36e97c7",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Les Cris de Paris, Geoffroy Jourdain.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/57b7ea09-cb35-465a-99e5-266fe36e97c7"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16963,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 37,
-        "elapsedMs": 15648,
+        "seq": 36,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/cdf056b0-118b-4e28-a219-97f5a67018a0",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Trixie Mattel.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/cdf056b0-118b-4e28-a219-97f5a67018a0"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 38,
-        "elapsedMs": 15648,
+        "seq": 37,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/50dbb87f-7194-4707-bffc-546f6a715c2b",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by EL MA.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/50dbb87f-7194-4707-bffc-546f6a715c2b"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 39,
-        "elapsedMs": 15648,
+        "seq": 38,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9cadd31e-f707-492b-a2f4-76e5f5d74b9b",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (a cappella)\" by Trixie Mattel.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9cadd31e-f707-492b-a2f4-76e5f5d74b9b"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 40,
-        "elapsedMs": 15648,
+        "seq": 39,
+        "elapsedMs": 17317,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8506c300-c5ca-4bb1-8c7f-e269408ffd50",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Banzai mix)\" by DJ Satomi.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8506c300-c5ca-4bb1-8c7f-e269408ffd50"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 41,
-        "elapsedMs": 15648,
+        "seq": 40,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "musicbrainz:work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/c18ed57b-061b-4e87-af3c-0271166c6b9e",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
           "title": "Hung Up — MusicBrainz work",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Bonzai mix)\" by DJ Satomi.",
           "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/c18ed57b-061b-4e87-af3c-0271166c6b9e"
         }
       }
     },
     {
-      "atMs": 15648,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 42,
-        "elapsedMs": 15648,
+        "seq": 41,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "tavily:https://en.wikipedia.org/wiki/Hung_Up",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://en.wikipedia.org/wiki/Hung_Up",
           "title": "Hung Up - Wikipedia",
-          "retrievedAt": "2026-10-29T07:00:49.538Z",
+          "retrievedAt": "2026-10-31T20:25:02.751Z",
           "excerpt": "\"Hung Up\" is a song by American singer Madonna from her tenth studio album Confessions on a Dance Floor (2005). Initially used in a number of television advertisements and serials, the song was released as the album's lead single on October 17, 2005. Written and produced by Madonna in collaboration with Stuart Price, \"Hung Up\" prominently features a sample \"Sampling (music)\") from an instrumental section of ABBA's \"Gimme! Gimme! Gimme! (A Man After Midnight) \"Gimme! Gimme! Gimme! (A Man After […",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
+      "event": {
+        "type": "evidence",
+        "runId": "recorded-hung-up-madonna",
+        "seq": 42,
+        "elapsedMs": 17318,
+        "evidence": {
+          "id": "tavily:https://www.whosampled.com/Madonna/Hung-Up-Medley",
+          "source": "tavily",
+          "sourceTier": "web",
+          "url": "https://www.whosampled.com/Madonna/Hung-Up-Medley",
+          "title": "Hung Up Medley by Madonna",
+          "retrievedAt": "2026-10-31T20:25:02.751Z",
+          "excerpt": "Which songs were sampled in \"Hung Up Medley\" by Madonna? \"Hung Up Medley\" contains samples of \"A New Level\" by Pantera and \"Hung Up\" by Madonna. Discussion.Read more",
+          "recordRef": null
+        }
+      }
+    },
+    {
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 43,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "tavily:https://www.whosampled.com/Madonna/Hung-Up",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.whosampled.com/Madonna/Hung-Up",
           "title": "Hung Up by Madonna - Samples, Covers and Remixes",
-          "retrievedAt": "2026-10-29T07:00:49.538Z",
+          "retrievedAt": "2026-10-31T20:25:02.751Z",
           "excerpt": "\"Hung Up\" contains samples of \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA and \"Love Song\" by Madonna feat. Prince.Read more",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 44,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "tavily:https://www.whosampled.com/Madonna",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://www.whosampled.com/Madonna",
           "title": "Madonna - Samples, Covers and Remixes",
-          "retrievedAt": "2026-10-29T07:00:49.538Z",
+          "retrievedAt": "2026-10-31T20:25:02.751Z",
           "excerpt": "Madonna's Hung Up · Hung Up (2005). sampled. Gimme! Gimme! Gimme! (A Man After Midnight) by ABBA (1979); Love Song by Madonna feat. Prince (1989). was sampled ...Read more",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 45,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "tavily:https://collider.com/madonna-hung-up-sampled-abba-gimme-gimme-gimme",
           "source": "tavily",
           "sourceTier": "web",
           "url": "https://collider.com/madonna-hung-up-sampled-abba-gimme-gimme-gimme",
           "title": "20 Years Later, Madonna’s ABBA-Sampled Hit Still Defines Pop Music",
-          "retrievedAt": "2026-10-29T07:00:49.538Z",
+          "retrievedAt": "2026-10-31T20:25:02.751Z",
           "excerpt": "“Hung Up” famously uses a sample of the insanely catchy “Gimme! Gimme! Gimme!” originally released by ABBA in 1979. When looking for some dance inspiration, Price thought of playing the ABBA hit and later recalled that in the session, “[Madonna] listened intently, then she just opened her mouth and sang: ‘Every little thing that you say or do, I’m hung up, I’m hung up on you…’ It really happened that quickly… The production took some work, but the whole thing about making Confessions On A Dance…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 46,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
-          "id": "tavily:https://www.youtube.com/watch?v=bNsVP1--RqU",
+          "id": "tavily:https://en.wikipedia.org/wiki/Madonna",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://www.youtube.com/watch?v=bNsVP1--RqU",
-          "title": "Sample Breakdown: Madonna - Hung Up",
-          "retrievedAt": "2026-10-29T07:00:49.538Z",
-          "excerpt": "# Sample Breakdown: Madonna - Hung Up ## Channel: ZWhoMusic 793 subscribers 60 likes ### Description 4,251 views Posted: 2023-09-13 #sample #samplebreakdown #madonna #abba Trying out the 'Sample Breakdown' format. I think I did a pretty good job for my first go 😅",
+          "url": "https://en.wikipedia.org/wiki/Madonna",
+          "title": "Madonna - Wikipedia",
+          "retrievedAt": "2026-10-31T20:25:02.833Z",
+          "excerpt": "On September 18, 2000, Madonna released her eighth studio album, Music \"Music (Madonna album)\"), to critical acclaim. She collaborated with French producer Mirwais Ahmadzaï, and expressed a preference for working with unconventional, lesser-known artists who \"are making music unlike anyone else out there\". The album reached number one in over twenty countries and sold four million copies within the first ten days of release. In the US, Music debuted atop the Billboard 200, becoming her first [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 47,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
-          "id": "tavily:https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
+          "id": "tavily:https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
-          "title": "Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'",
-          "retrievedAt": "2026-10-29T07:00:52.090Z",
-          "excerpt": "Title: Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder' ## Latest Stories. # Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'. The best-selling female artist of all time, **Madonna,** took fans into the creation of one of her most popular #1 songs, “Hung Up,” alongside co-writer **Stuart** **Price** during a recent episode of the *Song Exploder* podcast with host **Hrishikesh** **Hirway.**. **LISTEN** **NOW**: Madonna joins the *Song Exp…",
+          "url": "https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
+          "title": "\"We get so many requests from people wanting to use our tracks but we normally say no. This is only the second time we have given permission”: How Madonna created a dancefloor classic - with a sample that other artists could only dream of using | MusicRadar",
+          "retrievedAt": "2026-10-31T20:25:02.833Z",
+          "excerpt": "Madonna halted the sessions and started afresh, eventually turning to Stuart Price, an English electronic musician, DJ, songwriter and producer who had worked as musical director on Madonna’s previous two tours and who had co-written one song on American Life. Hung Up was one of the first songs written for the album and Madonna and Price began working on the track at the attic studio of his flat in Notting Hill, west London. [...] In an interview for the BBC Song Exploder Podcast in 2022, Madon…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 48,
-        "elapsedMs": 15648,
+        "elapsedMs": 17318,
         "evidence": {
-          "id": "tavily:https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
+          "id": "tavily:https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
-          "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-          "retrievedAt": "2026-10-29T07:00:52.090Z",
-          "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz The browser you’re using is unsupported, and the website may not work correctly for you. It’s recommended that you upgrade to a recent version of Firefox, Safari, Edge, or any Chrome-based browser. If that’s not possible, you can try enabling legacy browser mode. # Hung Up (live, 2006-08: Wembley Arena, London, England, UK). ## Appears on releases. | # | Title | Length | Track artist | Release title | Release artist | Release group type | Coun…",
+          "url": "https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
+          "title": "Madonna’s ‘Confessions on a Dance Floor’: 9 Things You Don't Know",
+          "retrievedAt": "2026-10-31T20:25:02.833Z",
+          "excerpt": "During the making of the album, Price was also performing DJ sets across the globe — from Ibiza to Australia. He secretly tested the tracks he and Madonna were creating by slipping instrumental dubs into his sets. From his booth, Price would film the crowd’s reaction and later send the footage to Madonna. Back in London, the two would review the clips together, discussing what worked and what didn’t. Imagine those unsuspecting club-goers dancing to “Hung Up,” “Jump” or” Sorry” months before the…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16964,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 49,
-        "elapsedMs": 15649,
+        "elapsedMs": 17318,
         "evidence": {
-          "id": "tavily:https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
+          "id": "tavily:https://www.imdb.com/title/tt6674070",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
-          "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-          "retrievedAt": "2026-10-29T07:00:52.090Z",
-          "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
+          "url": "https://www.imdb.com/title/tt6674070",
+          "title": "Madonna: Hung Up (Music Video 2005)",
+          "retrievedAt": "2026-10-31T20:25:02.833Z",
+          "excerpt": "Directed by Johan Renck, the clip starts with Madonna clad in a pink leotard dancing alone in a ballet studio and concludes at a gaming parlor where she dances",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 50,
-        "elapsedMs": 15649,
+        "elapsedMs": 17318,
         "evidence": {
-          "id": "tavily:https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+          "id": "tavily:https://www.youtube.com/watch?v=Sdz2oW0NMFk",
           "source": "tavily",
           "sourceTier": "web",
-          "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
-          "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-          "retrievedAt": "2026-10-29T07:00:52.090Z",
-          "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
+          "url": "https://www.youtube.com/watch?v=Sdz2oW0NMFk",
+          "title": "Madonna - Music (Official Video)",
+          "retrievedAt": "2026-10-31T20:25:02.833Z",
+          "excerpt": "The Madonna Channel is the official YouTube home for Madonna. As the best-selling female recording artist of all time, Madonna continues to leave an indelible mark on the world through her art, music, activism and humanitarian leadership. Madonna consistently pushes boundaries, spurs conversations and unites us all through her revolutionary work. Subscribe for the latest videos, music, news and updates. Enjoy Madonna’s groundbreaking music videos, live performances, humorous videos and more. [.…",
           "recordRef": null
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
         "seq": 51,
-        "elapsedMs": 15649,
-        "evidence": {
-          "id": "tavily:https://www.discogs.com/release/571694-Madonna-Hung-Up",
-          "source": "tavily",
-          "sourceTier": "web",
-          "url": "https://www.discogs.com/release/571694-Madonna-Hung-Up",
-          "title": "Madonna - Hung Up",
-          "retrievedAt": "2026-10-29T07:00:52.090Z",
-          "excerpt": "Title: Madonna - Hung Up # Madonna – Hung Up. Image 1: Hung Up More images. 1 Hung Up (Radio Version)3:25. 2 Hung Up (SDP Extended Vocal). Remix, Producer [Additional] – Stuart Price7:58. 3 Hung Up (Tracy Young's Get Up And Dance Groove Edit). 4 Hung Up (Bill Hamel Remix). Remix, Producer [Additional] – Barry Jamieson, Bill Hamel7:00. 5 Hung Up (Chus & Ceballos Remix). Remix, Producer [Additional] – DJ Chus, Pablo Ceballos10:25. 6 Hung Up (SDP Extended Dub). * Published By – Webo Girl Publishin…",
-          "recordRef": null
-        }
-      }
-    },
-    {
-      "atMs": 15649,
-      "event": {
-        "type": "evidence",
-        "runId": "recorded-hung-up-madonna",
-        "seq": 52,
-        "elapsedMs": 15649,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "musicbrainz:recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/0583339e-51ec-46bb-8b60-70939d8a1f26",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
           "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"Subnormix\" by El Reno Renardo.",
           "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 53,
-        "elapsedMs": 15649,
+        "seq": 52,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "musicbrainz:recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
           "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"冬天里的一把火\" by 张靓颖.",
           "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 54,
-        "elapsedMs": 15649,
+        "seq": 53,
+        "elapsedMs": 17318,
         "evidence": {
           "id": "musicbrainz:recording/746b556a-b951-4ae6-95ee-685380f93108",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/746b556a-b951-4ae6-95ee-685380f93108",
           "title": "Hung Up (Chus & Ceballos remix) — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:49.099Z",
+          "retrievedAt": "2026-10-31T20:25:01.816Z",
           "excerpt": "MusicBrainz recording \"Hung Up (Chus & Ceballos remix)\" by Madonna, first released 2015.",
           "recordRef": "recording/746b556a-b951-4ae6-95ee-685380f93108"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 55,
-        "elapsedMs": 15649,
+        "seq": 54,
+        "elapsedMs": 17319,
         "evidence": {
           "id": "musicbrainz:recording/01159eb5-7ded-46a3-96d1-49be1562763f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
           "title": "Hung Up (SDP extended vocal) — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:49.099Z",
+          "retrievedAt": "2026-10-31T20:25:01.816Z",
           "excerpt": "MusicBrainz recording \"Hung Up (SDP extended vocal)\" by Madonna, first released 2005-11-04.",
           "recordRef": "recording/01159eb5-7ded-46a3-96d1-49be1562763f"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 56,
-        "elapsedMs": 15649,
+        "seq": 55,
+        "elapsedMs": 17319,
         "evidence": {
           "id": "musicbrainz:recording/6a19425a-6e7e-4133-a744-cab2a144a287",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/6a19425a-6e7e-4133-a744-cab2a144a287",
           "title": "Hung Up (Tracy Young’s Get Up and Dance groove edit) — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:49.099Z",
+          "retrievedAt": "2026-10-31T20:25:01.816Z",
           "excerpt": "MusicBrainz recording \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna, first released 2005-10-17.",
           "recordRef": "recording/6a19425a-6e7e-4133-a744-cab2a144a287"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 57,
-        "elapsedMs": 15649,
+        "seq": 56,
+        "elapsedMs": 17319,
         "evidence": {
           "id": "musicbrainz:recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
           "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:49.099Z",
+          "retrievedAt": "2026-10-31T20:25:01.816Z",
           "excerpt": "MusicBrainz recording \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA, first released 1979-10-12.",
           "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 58,
-        "elapsedMs": 15649,
+        "seq": 57,
+        "elapsedMs": 17319,
         "evidence": {
           "id": "musicbrainz:recording/0583339e-51ec-46bb-8b60-70939d8a1f26",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/0583339e-51ec-46bb-8b60-70939d8a1f26",
           "title": "Subnormix — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz recording \"Subnormix\" by El Reno Renardo, first released 2010-12-09.",
           "recordRef": "recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
         }
       }
     },
     {
-      "atMs": 15649,
+      "atMs": 16965,
       "event": {
         "type": "evidence",
         "runId": "recorded-hung-up-madonna",
-        "seq": 59,
-        "elapsedMs": 15649,
+        "seq": 58,
+        "elapsedMs": 17319,
         "evidence": {
           "id": "musicbrainz:recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e",
           "source": "musicbrainz",
           "sourceTier": "primary-record",
           "url": "https://musicbrainz.org/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e",
           "title": "冬天里的一把火 — MusicBrainz recording",
-          "retrievedAt": "2026-10-29T07:00:55.549Z",
+          "retrievedAt": "2026-10-31T20:25:07.068Z",
           "excerpt": "MusicBrainz recording \"冬天里的一把火\" by 张靓颖, first released 2015-02-20.",
           "recordRef": "recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
         }
       }
     },
     {
-      "atMs": 15650,
+      "atMs": 16965,
+      "event": {
+        "type": "status",
+        "runId": "recorded-hung-up-madonna",
+        "seq": 59,
+        "elapsedMs": 17319,
+        "message": "Read 35 records from the primary sources (MusicBrainz 35)",
+        "code": "RESEARCH-FOUND",
+        "node": "historian",
+        "timestamp": "2026-10-31T20:25:15.914Z"
+      }
+    },
+    {
+      "atMs": 16965,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 60,
-        "elapsedMs": 15649,
-        "message": "Read 35 records from the primary sources (MusicBrainz 35)",
-        "code": "RESEARCH-FOUND",
+        "elapsedMs": 17319,
+        "message": "Discogs not asked: no key is configured for it",
+        "code": "SYS-WARN",
         "node": "historian",
-        "timestamp": "2026-10-29T07:01:02.029Z"
+        "timestamp": "2026-10-31T20:25:15.914Z"
       }
     },
     {
-      "atMs": 15650,
+      "atMs": 16965,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 61,
-        "elapsedMs": 15649,
-        "message": "Discogs not asked: no key is configured for it",
+        "elapsedMs": 17319,
+        "message": "SecondHandSongs could not be read: it gave no usable answer",
         "code": "SYS-WARN",
         "node": "historian",
-        "timestamp": "2026-10-29T07:01:02.029Z"
+        "timestamp": "2026-10-31T20:25:15.914Z"
       }
     },
     {
-      "atMs": 15650,
+      "atMs": 16965,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 62,
-        "elapsedMs": 15649,
-        "message": "SecondHandSongs could not be read: it gave no usable answer",
-        "code": "SYS-WARN",
+        "elapsedMs": 17319,
+        "message": "Research finished",
+        "code": "RESEARCH-FOUND",
         "node": "historian",
-        "timestamp": "2026-10-29T07:01:02.029Z"
+        "timestamp": "2026-10-31T20:25:15.914Z"
       }
     },
     {
-      "atMs": 15650,
+      "atMs": 16965,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 63,
-        "elapsedMs": 15649,
-        "message": "Research finished",
-        "code": "RESEARCH-FOUND",
-        "node": "historian",
-        "timestamp": "2026-10-29T07:01:02.030Z"
+        "elapsedMs": 17319,
+        "message": "Writing the liner notes",
+        "code": "LLM-CONNECT",
+        "node": "composer",
+        "timestamp": "2026-10-31T20:25:15.920Z"
       }
     },
     {
-      "atMs": 15650,
+      "atMs": 27177,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 64,
-        "elapsedMs": 15650,
-        "message": "Writing the liner notes",
+        "elapsedMs": 27531,
+        "message": "Checking the written notes against their sources",
         "code": "LLM-CONNECT",
-        "node": "composer",
-        "timestamp": "2026-10-29T07:01:02.034Z"
+        "node": "verifier",
+        "timestamp": "2026-10-31T20:25:26.133Z"
       }
     },
     {
-      "atMs": 23776,
+      "atMs": 27177,
       "event": {
         "type": "status",
         "runId": "recorded-hung-up-madonna",
         "seq": 65,
-        "elapsedMs": 23775,
-        "message": "Checking the written notes against their sources",
-        "code": "LLM-CONNECT",
-        "node": "verifier",
-        "timestamp": "2026-10-29T07:01:10.159Z"
-      }
-    },
-    {
-      "atMs": 23776,
-      "event": {
-        "type": "status",
-        "runId": "recorded-hung-up-madonna",
-        "seq": 66,
-        "elapsedMs": 23776,
+        "elapsedMs": 27531,
         "message": "Looking up cover art on Spotify for the genealogy",
         "code": "GRAPH-ENRICH",
         "node": "verifier",
-        "timestamp": "2026-10-29T07:01:10.159Z"
+        "timestamp": "2026-10-31T20:25:26.133Z"
       }
     },
     {
-      "atMs": 28200,
+      "atMs": 30639,
       "event": {
         "type": "complete",
         "runId": "recorded-hung-up-madonna",
-        "seq": 67,
-        "elapsedMs": 28198,
+        "seq": 66,
+        "elapsedMs": 30991,
         "data": {
           "id": "3850dYVgOFIXJh5U4BFEWH",
           "title": "Hung Up",
@@ -1305,31 +1292,52 @@
           "samples": [],
           "factoids": [
             {
-              "id": "acadc26a-3374-4ce3-9f2b-cbde04efc686",
-              "title": "A remix trail",
-              "content": "The track has several documented remixes, including versions by Chus & Ceballos, SDP and Tracy Young.",
-              "type": "production",
+              "id": "a83ac05f-2d70-4a2f-81ed-d4f1be1fe3ac",
+              "title": "An ABBA hook at its core",
+              "content": "The recording samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA, making the earlier disco recording part of its musical foundation.",
+              "type": "sample",
               "entities": [
                 {
-                  "id": "d739a035-4e27-4f28-a82a-446faad5597b",
+                  "id": "be4533ef-1386-47a4-ad51-6d42dc0457af",
+                  "text": "ABBA",
+                  "type": "artist",
+                  "searchQuery": "ABBA"
+                },
+                {
+                  "id": "1998a59e-e099-4b1e-8e5d-4399d343a61e",
+                  "text": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+                  "type": "sample",
+                  "searchQuery": "Gimme! Gimme! Gimme! (A Man After Midnight)"
+                }
+              ],
+              "claimId": "b78f5812-4ef1-4548-b7a3-b86d4878b4c9"
+            },
+            {
+              "id": "3a553ae5-2ebc-4995-8edf-c0dc15683047",
+              "title": "Three remix paths",
+              "content": "MusicBrainz links this recording to remixes by Chus & Ceballos, SDP, and Tracy Young.",
+              "type": "curiosity",
+              "entities": [
+                {
+                  "id": "71c20969-efd9-4171-bc4d-9394322edef3",
                   "text": "Chus & Ceballos",
                   "type": "artist",
                   "searchQuery": "Chus & Ceballos"
                 },
                 {
-                  "id": "40617e17-fc18-4589-87bd-b72e2789f05a",
+                  "id": "ef1af7c2-efe7-4728-a7b5-c8db3af849f0",
                   "text": "SDP",
                   "type": "artist",
                   "searchQuery": "SDP"
                 },
                 {
-                  "id": "4ef256ed-0c99-4f46-a0e6-e3a841f2000e",
+                  "id": "8eef4d5c-42b5-467c-b8b0-400a3f132af7",
                   "text": "Tracy Young",
                   "type": "artist",
                   "searchQuery": "Tracy Young"
                 }
               ],
-              "claimId": "e6b2b34e-9882-47b3-8f55-db5a29b11a36"
+              "claimId": "fd01ca4c-294e-413a-93eb-7d7001e15ad6"
             }
           ],
           "genealogy": {
@@ -1416,7 +1424,7 @@
                 "type": "sample",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "579c5910-aca6-4445-92ec-feaea0df13d6",
+                "claimId": "6bc08fe8-d807-49fa-88be-92000d40fc8e",
                 "evidenceIds": [
                   "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
                 ]
@@ -1428,7 +1436,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "0a3d3bf6-b530-4a4a-b12a-e3c5c4578970",
+                "claimId": "04b4e04a-3043-4380-a060-6468c337ba65",
                 "evidenceIds": [
                   "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108"
                 ]
@@ -1440,7 +1448,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "d10c38a7-21f8-4cb9-a5bf-ed26d2f6d510",
+                "claimId": "f48d348e-8750-4dc1-95dd-1a88e53586d0",
                 "evidenceIds": [
                   "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f"
                 ]
@@ -1452,7 +1460,7 @@
                 "type": "remix",
                 "kind": "sourced",
                 "origin": "code",
-                "claimId": "a4b5a75d-7d9a-49c9-8f67-a4ce5e4f720b",
+                "claimId": "7f0f9a98-adef-44c4-b0ce-31c738ee50d2",
                 "evidenceIds": [
                   "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
                 ]
@@ -1483,7 +1491,7 @@
           },
           "audio": {
             "version": 2,
-            "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+            "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
             "window": {
               "kind": "preview-30s",
               "durationSeconds": 29.986
@@ -2003,7 +2011,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
               "title": "Hung Up — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz recording \"Hung Up\" by Madonna (5:37), ISRC USWB10504319, first released 2005-11-11.",
               "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734"
             },
@@ -2013,7 +2021,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
               "title": "Hung Up — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Chus & Ceballos remix)\" by Madonna.",
               "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108"
             },
@@ -2023,7 +2031,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
               "title": "Hung Up — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (SDP extended vocal)\" by Madonna.",
               "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f"
             },
@@ -2033,7 +2041,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
               "title": "Hung Up — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna.",
               "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
             },
@@ -2043,7 +2051,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
               "title": "Hung Up — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA.",
               "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
             },
@@ -2053,7 +2061,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/release/5965531f-c922-42c7-9d7b-2852ff5ca8ef",
               "title": "Confessions On A Dance Floor — MusicBrainz release",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Hung Up\" by Madonna appears on the official album \"Confessions On A Dance Floor\" (2005-11-11).",
               "recordRef": "release/5965531f-c922-42c7-9d7b-2852ff5ca8ef"
             },
@@ -2063,7 +2071,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Telenova.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/7aacc864-a05c-4e26-999b-d1a99ebb0115"
             },
@@ -2073,7 +2081,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Kidz Bop.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8bef4b1a-1501-4ef9-a33a-710b96666674"
             },
@@ -2083,7 +2091,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Enemy.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/4f85e3c7-217f-458e-a011-5b171d9370f9"
             },
@@ -2093,7 +2101,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Tyde.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1dbdfa25-ce1d-40fa-aca5-469f994d6513"
             },
@@ -2103,7 +2111,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by TDM and Factor6.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3cb13c26-3580-47c5-9b2d-b020679d96dc"
             },
@@ -2113,7 +2121,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Tipsy & Tipsy.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/41df1ba4-d4c1-4a48-b6d1-468c92592875"
             },
@@ -2123,7 +2131,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Groove da Praia.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1f292376-716b-409b-a4c5-4c518f757335"
             },
@@ -2133,7 +2141,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Glee Cast.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3c3fba59-1183-443b-8135-59677c5089b2"
             },
@@ -2143,7 +2151,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Estudio Miami Ritmo.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9b7a5260-e386-41da-a1d4-5905f7b3a852"
             },
@@ -2153,7 +2161,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Rachel Wood.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/926b0fc6-86ae-4a4d-b871-9d19a57a6d8b"
             },
@@ -2163,7 +2171,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by DJ Satomi.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/04f972e7-705d-4bd8-8cd2-a6f638ac618f"
             },
@@ -2173,7 +2181,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Alex Conti.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/0e5691ea-48f1-4272-8d59-bc1574c2f8d9"
             },
@@ -2183,7 +2191,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Midnite String Quartet.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/2629e177-e63b-4f07-9830-d2783477dc65"
             },
@@ -2193,7 +2201,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by John Dolmayan feat. Sirusho.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/73b0c32d-b136-494c-90fc-135950b084f7"
             },
@@ -2203,7 +2211,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Number One Popstar.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/12843c90-31b5-4dd7-af6a-83e089b49cde"
             },
@@ -2213,7 +2221,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Les Cris de Paris, Geoffroy Jourdain.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/57b7ea09-cb35-465a-99e5-266fe36e97c7"
             },
@@ -2223,7 +2231,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Trixie Mattel.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/cdf056b0-118b-4e28-a219-97f5a67018a0"
             },
@@ -2233,7 +2241,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by EL MA.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/50dbb87f-7194-4707-bffc-546f6a715c2b"
             },
@@ -2243,7 +2251,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (a cappella)\" by Trixie Mattel.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9cadd31e-f707-492b-a2f4-76e5f5d74b9b"
             },
@@ -2253,7 +2261,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Banzai mix)\" by DJ Satomi.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8506c300-c5ca-4bb1-8c7f-e269408ffd50"
             },
@@ -2263,7 +2271,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
               "title": "Hung Up — MusicBrainz work",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Bonzai mix)\" by DJ Satomi.",
               "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/c18ed57b-061b-4e87-af3c-0271166c6b9e"
             },
@@ -2273,8 +2281,18 @@
               "sourceTier": "web",
               "url": "https://en.wikipedia.org/wiki/Hung_Up",
               "title": "Hung Up - Wikipedia",
-              "retrievedAt": "2026-10-29T07:00:49.538Z",
+              "retrievedAt": "2026-10-31T20:25:02.751Z",
               "excerpt": "\"Hung Up\" is a song by American singer Madonna from her tenth studio album Confessions on a Dance Floor (2005). Initially used in a number of television advertisements and serials, the song was released as the album's lead single on October 17, 2005. Written and produced by Madonna in collaboration with Stuart Price, \"Hung Up\" prominently features a sample \"Sampling (music)\") from an instrumental section of ABBA's \"Gimme! Gimme! Gimme! (A Man After Midnight) \"Gimme! Gimme! Gimme! (A Man After […",
+              "recordRef": null
+            },
+            {
+              "id": "tavily:https://www.whosampled.com/Madonna/Hung-Up-Medley",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://www.whosampled.com/Madonna/Hung-Up-Medley",
+              "title": "Hung Up Medley by Madonna",
+              "retrievedAt": "2026-10-31T20:25:02.751Z",
+              "excerpt": "Which songs were sampled in \"Hung Up Medley\" by Madonna? \"Hung Up Medley\" contains samples of \"A New Level\" by Pantera and \"Hung Up\" by Madonna. Discussion.Read more",
               "recordRef": null
             },
             {
@@ -2283,7 +2301,7 @@
               "sourceTier": "web",
               "url": "https://www.whosampled.com/Madonna/Hung-Up",
               "title": "Hung Up by Madonna - Samples, Covers and Remixes",
-              "retrievedAt": "2026-10-29T07:00:49.538Z",
+              "retrievedAt": "2026-10-31T20:25:02.751Z",
               "excerpt": "\"Hung Up\" contains samples of \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA and \"Love Song\" by Madonna feat. Prince.Read more",
               "recordRef": null
             },
@@ -2293,7 +2311,7 @@
               "sourceTier": "web",
               "url": "https://www.whosampled.com/Madonna",
               "title": "Madonna - Samples, Covers and Remixes",
-              "retrievedAt": "2026-10-29T07:00:49.538Z",
+              "retrievedAt": "2026-10-31T20:25:02.751Z",
               "excerpt": "Madonna's Hung Up · Hung Up (2005). sampled. Gimme! Gimme! Gimme! (A Man After Midnight) by ABBA (1979); Love Song by Madonna feat. Prince (1989). was sampled ...Read more",
               "recordRef": null
             },
@@ -2303,68 +2321,58 @@
               "sourceTier": "web",
               "url": "https://collider.com/madonna-hung-up-sampled-abba-gimme-gimme-gimme",
               "title": "20 Years Later, Madonna’s ABBA-Sampled Hit Still Defines Pop Music",
-              "retrievedAt": "2026-10-29T07:00:49.538Z",
+              "retrievedAt": "2026-10-31T20:25:02.751Z",
               "excerpt": "“Hung Up” famously uses a sample of the insanely catchy “Gimme! Gimme! Gimme!” originally released by ABBA in 1979. When looking for some dance inspiration, Price thought of playing the ABBA hit and later recalled that in the session, “[Madonna] listened intently, then she just opened her mouth and sang: ‘Every little thing that you say or do, I’m hung up, I’m hung up on you…’ It really happened that quickly… The production took some work, but the whole thing about making Confessions On A Dance…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://www.youtube.com/watch?v=bNsVP1--RqU",
+              "id": "tavily:https://en.wikipedia.org/wiki/Madonna",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://www.youtube.com/watch?v=bNsVP1--RqU",
-              "title": "Sample Breakdown: Madonna - Hung Up",
-              "retrievedAt": "2026-10-29T07:00:49.538Z",
-              "excerpt": "# Sample Breakdown: Madonna - Hung Up ## Channel: ZWhoMusic 793 subscribers 60 likes ### Description 4,251 views Posted: 2023-09-13 #sample #samplebreakdown #madonna #abba Trying out the 'Sample Breakdown' format. I think I did a pretty good job for my first go 😅",
+              "url": "https://en.wikipedia.org/wiki/Madonna",
+              "title": "Madonna - Wikipedia",
+              "retrievedAt": "2026-10-31T20:25:02.833Z",
+              "excerpt": "On September 18, 2000, Madonna released her eighth studio album, Music \"Music (Madonna album)\"), to critical acclaim. She collaborated with French producer Mirwais Ahmadzaï, and expressed a preference for working with unconventional, lesser-known artists who \"are making music unlike anyone else out there\". The album reached number one in over twenty countries and sold four million copies within the first ten days of release. In the US, Music debuted atop the Billboard 200, becoming her first [.…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
+              "id": "tavily:https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
-              "title": "Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'",
-              "retrievedAt": "2026-10-29T07:00:52.090Z",
-              "excerpt": "Title: Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder' ## Latest Stories. # Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'. The best-selling female artist of all time, **Madonna,** took fans into the creation of one of her most popular #1 songs, “Hung Up,” alongside co-writer **Stuart** **Price** during a recent episode of the *Song Exploder* podcast with host **Hrishikesh** **Hirway.**. **LISTEN** **NOW**: Madonna joins the *Song Exp…",
+              "url": "https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
+              "title": "\"We get so many requests from people wanting to use our tracks but we normally say no. This is only the second time we have given permission”: How Madonna created a dancefloor classic - with a sample that other artists could only dream of using | MusicRadar",
+              "retrievedAt": "2026-10-31T20:25:02.833Z",
+              "excerpt": "Madonna halted the sessions and started afresh, eventually turning to Stuart Price, an English electronic musician, DJ, songwriter and producer who had worked as musical director on Madonna’s previous two tours and who had co-written one song on American Life. Hung Up was one of the first songs written for the album and Madonna and Price began working on the track at the attic studio of his flat in Notting Hill, west London. [...] In an interview for the BBC Song Exploder Podcast in 2022, Madon…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
+              "id": "tavily:https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
-              "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-              "retrievedAt": "2026-10-29T07:00:52.090Z",
-              "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz The browser you’re using is unsupported, and the website may not work correctly for you. It’s recommended that you upgrade to a recent version of Firefox, Safari, Edge, or any Chrome-based browser. If that’s not possible, you can try enabling legacy browser mode. # Hung Up (live, 2006-08: Wembley Arena, London, England, UK). ## Appears on releases. | # | Title | Length | Track artist | Release title | Release artist | Release group type | Coun…",
+              "url": "https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
+              "title": "Madonna’s ‘Confessions on a Dance Floor’: 9 Things You Don't Know",
+              "retrievedAt": "2026-10-31T20:25:02.833Z",
+              "excerpt": "During the making of the album, Price was also performing DJ sets across the globe — from Ibiza to Australia. He secretly tested the tracks he and Madonna were creating by slipping instrumental dubs into his sets. From his booth, Price would film the crowd’s reaction and later send the footage to Madonna. Back in London, the two would review the clips together, discussing what worked and what didn’t. Imagine those unsuspecting club-goers dancing to “Hung Up,” “Jump” or” Sorry” months before the…",
               "recordRef": null
             },
             {
-              "id": "tavily:https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
+              "id": "tavily:https://www.imdb.com/title/tt6674070",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
-              "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-              "retrievedAt": "2026-10-29T07:00:52.090Z",
-              "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
+              "url": "https://www.imdb.com/title/tt6674070",
+              "title": "Madonna: Hung Up (Music Video 2005)",
+              "retrievedAt": "2026-10-31T20:25:02.833Z",
+              "excerpt": "Directed by Johan Renck, the clip starts with Madonna clad in a pink leotard dancing alone in a ballet studio and concludes at a gaming parlor where she dances",
               "recordRef": null
             },
             {
-              "id": "tavily:https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+              "id": "tavily:https://www.youtube.com/watch?v=Sdz2oW0NMFk",
               "source": "tavily",
               "sourceTier": "web",
-              "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
-              "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-              "retrievedAt": "2026-10-29T07:00:52.090Z",
-              "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
-              "recordRef": null
-            },
-            {
-              "id": "tavily:https://www.discogs.com/release/571694-Madonna-Hung-Up",
-              "source": "tavily",
-              "sourceTier": "web",
-              "url": "https://www.discogs.com/release/571694-Madonna-Hung-Up",
-              "title": "Madonna - Hung Up",
-              "retrievedAt": "2026-10-29T07:00:52.090Z",
-              "excerpt": "Title: Madonna - Hung Up # Madonna – Hung Up. Image 1: Hung Up More images. 1 Hung Up (Radio Version)3:25. 2 Hung Up (SDP Extended Vocal). Remix, Producer [Additional] – Stuart Price7:58. 3 Hung Up (Tracy Young's Get Up And Dance Groove Edit). 4 Hung Up (Bill Hamel Remix). Remix, Producer [Additional] – Barry Jamieson, Bill Hamel7:00. 5 Hung Up (Chus & Ceballos Remix). Remix, Producer [Additional] – DJ Chus, Pablo Ceballos10:25. 6 Hung Up (SDP Extended Dub). * Published By – Webo Girl Publishin…",
+              "url": "https://www.youtube.com/watch?v=Sdz2oW0NMFk",
+              "title": "Madonna - Music (Official Video)",
+              "retrievedAt": "2026-10-31T20:25:02.833Z",
+              "excerpt": "The Madonna Channel is the official YouTube home for Madonna. As the best-selling female recording artist of all time, Madonna continues to leave an indelible mark on the world through her art, music, activism and humanitarian leadership. Madonna consistently pushes boundaries, spurs conversations and unites us all through her revolutionary work. Subscribe for the latest videos, music, news and updates. Enjoy Madonna’s groundbreaking music videos, live performances, humorous videos and more. [.…",
               "recordRef": null
             },
             {
@@ -2373,7 +2381,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
               "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"Subnormix\" by El Reno Renardo.",
               "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
             },
@@ -2383,7 +2391,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
               "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"冬天里的一把火\" by 张靓颖.",
               "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
             },
@@ -2393,7 +2401,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/746b556a-b951-4ae6-95ee-685380f93108",
               "title": "Hung Up (Chus & Ceballos remix) — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:49.099Z",
+              "retrievedAt": "2026-10-31T20:25:01.816Z",
               "excerpt": "MusicBrainz recording \"Hung Up (Chus & Ceballos remix)\" by Madonna, first released 2015.",
               "recordRef": "recording/746b556a-b951-4ae6-95ee-685380f93108"
             },
@@ -2403,7 +2411,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
               "title": "Hung Up (SDP extended vocal) — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:49.099Z",
+              "retrievedAt": "2026-10-31T20:25:01.816Z",
               "excerpt": "MusicBrainz recording \"Hung Up (SDP extended vocal)\" by Madonna, first released 2005-11-04.",
               "recordRef": "recording/01159eb5-7ded-46a3-96d1-49be1562763f"
             },
@@ -2413,7 +2421,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/6a19425a-6e7e-4133-a744-cab2a144a287",
               "title": "Hung Up (Tracy Young’s Get Up and Dance groove edit) — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:49.099Z",
+              "retrievedAt": "2026-10-31T20:25:01.816Z",
               "excerpt": "MusicBrainz recording \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna, first released 2005-10-17.",
               "recordRef": "recording/6a19425a-6e7e-4133-a744-cab2a144a287"
             },
@@ -2423,7 +2431,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
               "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:49.099Z",
+              "retrievedAt": "2026-10-31T20:25:01.816Z",
               "excerpt": "MusicBrainz recording \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA, first released 1979-10-12.",
               "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
             },
@@ -2433,7 +2441,7 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/0583339e-51ec-46bb-8b60-70939d8a1f26",
               "title": "Subnormix — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz recording \"Subnormix\" by El Reno Renardo, first released 2010-12-09.",
               "recordRef": "recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
             },
@@ -2443,16 +2451,16 @@
               "sourceTier": "primary-record",
               "url": "https://musicbrainz.org/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e",
               "title": "冬天里的一把火 — MusicBrainz recording",
-              "retrievedAt": "2026-10-29T07:00:55.549Z",
+              "retrievedAt": "2026-10-31T20:25:07.068Z",
               "excerpt": "MusicBrainz recording \"冬天里的一把火\" by 张靓颖, first released 2015-02-20.",
               "recordRef": "recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
             }
           ],
           "claims": [
             {
-              "id": "e6b2b34e-9882-47b3-8f55-db5a29b11a36",
-              "text": "The track has several documented remixes, including versions by Chus & Ceballos, SDP and Tracy Young.",
-              "about": "production",
+              "id": "af73e208-538e-4f3c-887d-42fc1daeeb5f",
+              "text": "MusicBrainz lists three remixes of this recording: the Chus & Ceballos remix, the SDP extended vocal, and Tracy Young’s Get Up and Dance groove edit.",
+              "about": "history",
               "kind": "sourced",
               "origin": "model",
               "evidenceIds": [
@@ -2461,14 +2469,63 @@
                 "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
               ],
               "verdict": "supported",
-              "verdictReason": "The three MusicBrainz remix excerpts name the Chus & Ceballos, SDP and Tracy Young versions.",
+              "verdictReason": "The three MusicBrainz remix relationships name the Chus & Ceballos, SDP, and Tracy Young remixes.",
+              "numericCheck": "n/a",
+              "numericReason": null,
+              "numericComparison": null,
+              "scope": "recording"
+            },
+            {
+              "id": "b78f5812-4ef1-4548-b7a3-b86d4878b4c9",
+              "text": "The recording samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA, making the earlier disco recording part of its musical foundation.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [
+                "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
+              ],
+              "verdict": "partial",
+              "verdictReason": "The MusicBrainz sampling relationship confirms the sample, but does not call ABBA’s recording earlier or disco.",
               "numericCheck": "n/a",
               "numericReason": null,
               "numericComparison": null,
               "scope": "recording",
               "factoid": {
-                "title": "A remix trail",
-                "type": "production",
+                "title": "An ABBA hook at its core",
+                "type": "sample",
+                "entities": [
+                  {
+                    "text": "ABBA",
+                    "type": "artist"
+                  },
+                  {
+                    "text": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+                    "type": "sample"
+                  }
+                ]
+              },
+              "documentedBy": ["6bc08fe8-d807-49fa-88be-92000d40fc8e"]
+            },
+            {
+              "id": "fd01ca4c-294e-413a-93eb-7d7001e15ad6",
+              "text": "MusicBrainz links this recording to remixes by Chus & Ceballos, SDP, and Tracy Young.",
+              "about": "trivia",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": [
+                "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108",
+                "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
+                "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
+              ],
+              "verdict": "supported",
+              "verdictReason": "The three MusicBrainz remix relationships link this recording to remixes by the named artists.",
+              "numericCheck": "n/a",
+              "numericReason": null,
+              "numericComparison": null,
+              "scope": "recording",
+              "factoid": {
+                "title": "Three remix paths",
+                "type": "curiosity",
                 "entities": [
                   {
                     "text": "Chus & Ceballos",
@@ -2486,7 +2543,7 @@
               }
             },
             {
-              "id": "579c5910-aca6-4445-92ec-feaea0df13d6",
+              "id": "6bc08fe8-d807-49fa-88be-92000d40fc8e",
               "text": "\"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA.",
               "about": "sample",
               "kind": "sourced",
@@ -2500,7 +2557,7 @@
               "scope": "recording"
             },
             {
-              "id": "0a3d3bf6-b530-4a4a-b12a-e3c5c4578970",
+              "id": "04b4e04a-3043-4380-a060-6468c337ba65",
               "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (Chus & Ceballos remix)\" by Madonna.",
               "about": "sample",
               "kind": "sourced",
@@ -2514,7 +2571,7 @@
               "scope": "recording"
             },
             {
-              "id": "d10c38a7-21f8-4cb9-a5bf-ed26d2f6d510",
+              "id": "f48d348e-8750-4dc1-95dd-1a88e53586d0",
               "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (SDP extended vocal)\" by Madonna.",
               "about": "sample",
               "kind": "sourced",
@@ -2528,7 +2585,7 @@
               "scope": "recording"
             },
             {
-              "id": "a4b5a75d-7d9a-49c9-8f67-a4ce5e4f720b",
+              "id": "7f0f9a98-adef-44c4-b0ce-31c738ee50d2",
               "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna.",
               "about": "sample",
               "kind": "sourced",
@@ -2542,7 +2599,7 @@
               "scope": "recording"
             },
             {
-              "id": "1b57e24a-d7cb-4293-996e-5e245b2054f5",
+              "id": "75c0802d-2c81-4507-bc71-bf6cf1110ff8",
               "text": "The work \"Hung Up\" is covered by \"Hung Up\" by Telenova.",
               "about": "cover",
               "kind": "sourced",
@@ -2556,7 +2613,7 @@
               "scope": "work"
             },
             {
-              "id": "d8601067-e201-4802-ab67-7e9ae2e4d661",
+              "id": "0f597f7e-0438-4e40-94c4-00850ed49101",
               "text": "The work \"Hung Up\" is covered by \"Hung Up\" by Kidz Bop.",
               "about": "cover",
               "kind": "sourced",
@@ -2570,7 +2627,7 @@
               "scope": "work"
             },
             {
-              "id": "bd3f8660-d034-4fdb-94df-e73600c4d8d2",
+              "id": "dcf4c596-f9f7-4d9e-86a8-13620d7b4c2d",
               "text": "The work \"Hung Up\" is covered by \"Hung Up\" by The Enemy.",
               "about": "cover",
               "kind": "sourced",
@@ -2584,7 +2641,7 @@
               "scope": "work"
             },
             {
-              "id": "15741aec-640a-4763-b11f-581c9b4aecb6",
+              "id": "b2b6b597-87c7-41f0-87cc-e83905ac5201",
               "text": "The work \"Hung Up\" is covered by \"Hung Up\" by The Tyde.",
               "about": "cover",
               "kind": "sourced",
@@ -2598,7 +2655,7 @@
               "scope": "work"
             },
             {
-              "id": "0486f517-b925-4fc0-9c72-0315c120c473",
+              "id": "2ea221ae-b448-44d8-a8d8-fec2bc93fd23",
               "text": "\"Hung Up\" by Madonna appears on the official album \"Confessions On A Dance Floor\" (2005-11-11).",
               "about": "track",
               "kind": "sourced",
@@ -2613,22 +2670,22 @@
           "run": {
             "id": "recorded-hung-up-madonna",
             "mode": "replay",
-            "recordedAt": "2026-10-29T07:01:14.590Z",
-            "commit": "0fdfdccc509c",
-            "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+            "recordedAt": "2026-10-31T20:25:29.600Z",
+            "commit": "5fd193fa7a64",
+            "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
             "replayed": "run",
             "fallback": false,
             "usage": {
               "llmCalls": 4,
-              "inputTokens": 17055,
-              "outputTokens": 2539,
-              "reasoningTokens": 375,
-              "usd": 0.013447
+              "inputTokens": 16085,
+              "outputTokens": 2091,
+              "reasoningTokens": 249,
+              "usd": 0.009892
             },
             "verifier": {
-              "judged": 9,
+              "judged": 5,
               "unjudged": 0,
-              "restated": 8
+              "restated": 2
             },
             "sourceErrors": [
               {
@@ -2647,13 +2704,13 @@
       }
     },
     {
-      "atMs": 28219,
+      "atMs": 30647,
       "event": {
         "type": "done",
         "runId": "recorded-hung-up-madonna",
-        "seq": 68,
-        "elapsedMs": 28218,
-        "timestamp": "2026-10-29T07:01:14.609Z"
+        "seq": 67,
+        "elapsedMs": 31001,
+        "timestamp": "2026-10-31T20:25:29.608Z"
       }
     }
   ],
@@ -2816,31 +2873,52 @@
     "samples": [],
     "factoids": [
       {
-        "id": "acadc26a-3374-4ce3-9f2b-cbde04efc686",
-        "title": "A remix trail",
-        "content": "The track has several documented remixes, including versions by Chus & Ceballos, SDP and Tracy Young.",
-        "type": "production",
+        "id": "a83ac05f-2d70-4a2f-81ed-d4f1be1fe3ac",
+        "title": "An ABBA hook at its core",
+        "content": "The recording samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA, making the earlier disco recording part of its musical foundation.",
+        "type": "sample",
         "entities": [
           {
-            "id": "d739a035-4e27-4f28-a82a-446faad5597b",
+            "id": "be4533ef-1386-47a4-ad51-6d42dc0457af",
+            "text": "ABBA",
+            "type": "artist",
+            "searchQuery": "ABBA"
+          },
+          {
+            "id": "1998a59e-e099-4b1e-8e5d-4399d343a61e",
+            "text": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+            "type": "sample",
+            "searchQuery": "Gimme! Gimme! Gimme! (A Man After Midnight)"
+          }
+        ],
+        "claimId": "b78f5812-4ef1-4548-b7a3-b86d4878b4c9"
+      },
+      {
+        "id": "3a553ae5-2ebc-4995-8edf-c0dc15683047",
+        "title": "Three remix paths",
+        "content": "MusicBrainz links this recording to remixes by Chus & Ceballos, SDP, and Tracy Young.",
+        "type": "curiosity",
+        "entities": [
+          {
+            "id": "71c20969-efd9-4171-bc4d-9394322edef3",
             "text": "Chus & Ceballos",
             "type": "artist",
             "searchQuery": "Chus & Ceballos"
           },
           {
-            "id": "40617e17-fc18-4589-87bd-b72e2789f05a",
+            "id": "ef1af7c2-efe7-4728-a7b5-c8db3af849f0",
             "text": "SDP",
             "type": "artist",
             "searchQuery": "SDP"
           },
           {
-            "id": "4ef256ed-0c99-4f46-a0e6-e3a841f2000e",
+            "id": "8eef4d5c-42b5-467c-b8b0-400a3f132af7",
             "text": "Tracy Young",
             "type": "artist",
             "searchQuery": "Tracy Young"
           }
         ],
-        "claimId": "e6b2b34e-9882-47b3-8f55-db5a29b11a36"
+        "claimId": "fd01ca4c-294e-413a-93eb-7d7001e15ad6"
       }
     ],
     "genealogy": {
@@ -2927,7 +3005,7 @@
           "type": "sample",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "579c5910-aca6-4445-92ec-feaea0df13d6",
+          "claimId": "6bc08fe8-d807-49fa-88be-92000d40fc8e",
           "evidenceIds": [
             "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
           ]
@@ -2939,7 +3017,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "0a3d3bf6-b530-4a4a-b12a-e3c5c4578970",
+          "claimId": "04b4e04a-3043-4380-a060-6468c337ba65",
           "evidenceIds": [
             "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108"
           ]
@@ -2951,7 +3029,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "d10c38a7-21f8-4cb9-a5bf-ed26d2f6d510",
+          "claimId": "f48d348e-8750-4dc1-95dd-1a88e53586d0",
           "evidenceIds": [
             "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f"
           ]
@@ -2963,7 +3041,7 @@
           "type": "remix",
           "kind": "sourced",
           "origin": "code",
-          "claimId": "a4b5a75d-7d9a-49c9-8f67-a4ce5e4f720b",
+          "claimId": "7f0f9a98-adef-44c4-b0ce-31c738ee50d2",
           "evidenceIds": [
             "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
           ]
@@ -2994,7 +3072,7 @@
     },
     "audio": {
       "version": 2,
-      "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
       "window": {
         "kind": "preview-30s",
         "durationSeconds": 29.986
@@ -3509,7 +3587,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
         "title": "Hung Up — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz recording \"Hung Up\" by Madonna (5:37), ISRC USWB10504319, first released 2005-11-11.",
         "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734"
       },
@@ -3519,7 +3597,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
         "title": "Hung Up — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Chus & Ceballos remix)\" by Madonna.",
         "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108"
       },
@@ -3529,7 +3607,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
         "title": "Hung Up — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (SDP extended vocal)\" by Madonna.",
         "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f"
       },
@@ -3539,7 +3617,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
         "title": "Hung Up — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Hung Up\" by Madonna is remixed in \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna.",
         "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
       },
@@ -3549,7 +3627,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
         "title": "Hung Up — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA.",
         "recordRef": "track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
       },
@@ -3559,7 +3637,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/release/5965531f-c922-42c7-9d7b-2852ff5ca8ef",
         "title": "Confessions On A Dance Floor — MusicBrainz release",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Hung Up\" by Madonna appears on the official album \"Confessions On A Dance Floor\" (2005-11-11).",
         "recordRef": "release/5965531f-c922-42c7-9d7b-2852ff5ca8ef"
       },
@@ -3569,7 +3647,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Telenova.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/7aacc864-a05c-4e26-999b-d1a99ebb0115"
       },
@@ -3579,7 +3657,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Kidz Bop.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8bef4b1a-1501-4ef9-a33a-710b96666674"
       },
@@ -3589,7 +3667,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Enemy.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/4f85e3c7-217f-458e-a011-5b171d9370f9"
       },
@@ -3599,7 +3677,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by The Tyde.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1dbdfa25-ce1d-40fa-aca5-469f994d6513"
       },
@@ -3609,7 +3687,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by TDM and Factor6.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3cb13c26-3580-47c5-9b2d-b020679d96dc"
       },
@@ -3619,7 +3697,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Tipsy & Tipsy.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/41df1ba4-d4c1-4a48-b6d1-468c92592875"
       },
@@ -3629,7 +3707,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Groove da Praia.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/1f292376-716b-409b-a4c5-4c518f757335"
       },
@@ -3639,7 +3717,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Glee Cast.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/3c3fba59-1183-443b-8135-59677c5089b2"
       },
@@ -3649,7 +3727,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Estudio Miami Ritmo.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9b7a5260-e386-41da-a1d4-5905f7b3a852"
       },
@@ -3659,7 +3737,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Rachel Wood.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/926b0fc6-86ae-4a4d-b871-9d19a57a6d8b"
       },
@@ -3669,7 +3747,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by DJ Satomi.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/04f972e7-705d-4bd8-8cd2-a6f638ac618f"
       },
@@ -3679,7 +3757,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Alex Conti.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/0e5691ea-48f1-4272-8d59-bc1574c2f8d9"
       },
@@ -3689,7 +3767,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Midnite String Quartet.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/2629e177-e63b-4f07-9830-d2783477dc65"
       },
@@ -3699,7 +3777,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by John Dolmayan feat. Sirusho.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/73b0c32d-b136-494c-90fc-135950b084f7"
       },
@@ -3709,7 +3787,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Number One Popstar.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/12843c90-31b5-4dd7-af6a-83e089b49cde"
       },
@@ -3719,7 +3797,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Les Cris de Paris, Geoffroy Jourdain.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/57b7ea09-cb35-465a-99e5-266fe36e97c7"
       },
@@ -3729,7 +3807,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by Trixie Mattel.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/cdf056b0-118b-4e28-a219-97f5a67018a0"
       },
@@ -3739,7 +3817,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up\" by EL MA.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/50dbb87f-7194-4707-bffc-546f6a715c2b"
       },
@@ -3749,7 +3827,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (a cappella)\" by Trixie Mattel.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/9cadd31e-f707-492b-a2f4-76e5f5d74b9b"
       },
@@ -3759,7 +3837,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Banzai mix)\" by DJ Satomi.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/8506c300-c5ca-4bb1-8c7f-e269408ffd50"
       },
@@ -3769,7 +3847,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba",
         "title": "Hung Up — MusicBrainz work",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: the work \"Hung Up\" is covered by \"Hung Up (Everybody Bonzai mix)\" by DJ Satomi.",
         "recordRef": "work/6fcc319a-4618-3c8f-88f6-d6e6bb32d5ba/covered-by/recording/c18ed57b-061b-4e87-af3c-0271166c6b9e"
       },
@@ -3779,8 +3857,18 @@
         "sourceTier": "web",
         "url": "https://en.wikipedia.org/wiki/Hung_Up",
         "title": "Hung Up - Wikipedia",
-        "retrievedAt": "2026-10-29T07:00:49.538Z",
+        "retrievedAt": "2026-10-31T20:25:02.751Z",
         "excerpt": "\"Hung Up\" is a song by American singer Madonna from her tenth studio album Confessions on a Dance Floor (2005). Initially used in a number of television advertisements and serials, the song was released as the album's lead single on October 17, 2005. Written and produced by Madonna in collaboration with Stuart Price, \"Hung Up\" prominently features a sample \"Sampling (music)\") from an instrumental section of ABBA's \"Gimme! Gimme! Gimme! (A Man After Midnight) \"Gimme! Gimme! Gimme! (A Man After […",
+        "recordRef": null
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Madonna/Hung-Up-Medley",
+        "source": "tavily",
+        "sourceTier": "web",
+        "url": "https://www.whosampled.com/Madonna/Hung-Up-Medley",
+        "title": "Hung Up Medley by Madonna",
+        "retrievedAt": "2026-10-31T20:25:02.751Z",
+        "excerpt": "Which songs were sampled in \"Hung Up Medley\" by Madonna? \"Hung Up Medley\" contains samples of \"A New Level\" by Pantera and \"Hung Up\" by Madonna. Discussion.Read more",
         "recordRef": null
       },
       {
@@ -3789,7 +3877,7 @@
         "sourceTier": "web",
         "url": "https://www.whosampled.com/Madonna/Hung-Up",
         "title": "Hung Up by Madonna - Samples, Covers and Remixes",
-        "retrievedAt": "2026-10-29T07:00:49.538Z",
+        "retrievedAt": "2026-10-31T20:25:02.751Z",
         "excerpt": "\"Hung Up\" contains samples of \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA and \"Love Song\" by Madonna feat. Prince.Read more",
         "recordRef": null
       },
@@ -3799,7 +3887,7 @@
         "sourceTier": "web",
         "url": "https://www.whosampled.com/Madonna",
         "title": "Madonna - Samples, Covers and Remixes",
-        "retrievedAt": "2026-10-29T07:00:49.538Z",
+        "retrievedAt": "2026-10-31T20:25:02.751Z",
         "excerpt": "Madonna's Hung Up · Hung Up (2005). sampled. Gimme! Gimme! Gimme! (A Man After Midnight) by ABBA (1979); Love Song by Madonna feat. Prince (1989). was sampled ...Read more",
         "recordRef": null
       },
@@ -3809,68 +3897,58 @@
         "sourceTier": "web",
         "url": "https://collider.com/madonna-hung-up-sampled-abba-gimme-gimme-gimme",
         "title": "20 Years Later, Madonna’s ABBA-Sampled Hit Still Defines Pop Music",
-        "retrievedAt": "2026-10-29T07:00:49.538Z",
+        "retrievedAt": "2026-10-31T20:25:02.751Z",
         "excerpt": "“Hung Up” famously uses a sample of the insanely catchy “Gimme! Gimme! Gimme!” originally released by ABBA in 1979. When looking for some dance inspiration, Price thought of playing the ABBA hit and later recalled that in the session, “[Madonna] listened intently, then she just opened her mouth and sang: ‘Every little thing that you say or do, I’m hung up, I’m hung up on you…’ It really happened that quickly… The production took some work, but the whole thing about making Confessions On A Dance…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://www.youtube.com/watch?v=bNsVP1--RqU",
+        "id": "tavily:https://en.wikipedia.org/wiki/Madonna",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://www.youtube.com/watch?v=bNsVP1--RqU",
-        "title": "Sample Breakdown: Madonna - Hung Up",
-        "retrievedAt": "2026-10-29T07:00:49.538Z",
-        "excerpt": "# Sample Breakdown: Madonna - Hung Up ## Channel: ZWhoMusic 793 subscribers 60 likes ### Description 4,251 views Posted: 2023-09-13 #sample #samplebreakdown #madonna #abba Trying out the 'Sample Breakdown' format. I think I did a pretty good job for my first go 😅",
+        "url": "https://en.wikipedia.org/wiki/Madonna",
+        "title": "Madonna - Wikipedia",
+        "retrievedAt": "2026-10-31T20:25:02.833Z",
+        "excerpt": "On September 18, 2000, Madonna released her eighth studio album, Music \"Music (Madonna album)\"), to critical acclaim. She collaborated with French producer Mirwais Ahmadzaï, and expressed a preference for working with unconventional, lesser-known artists who \"are making music unlike anyone else out there\". The album reached number one in over twenty countries and sold four million copies within the first ten days of release. In the US, Music debuted atop the Billboard 200, becoming her first [.…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
+        "id": "tavily:https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://www.audacy.com/national/music/madonna-takes-us-inside-the-making-of-hung-up",
-        "title": "Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'",
-        "retrievedAt": "2026-10-29T07:00:52.090Z",
-        "excerpt": "Title: Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder' ## Latest Stories. # Madonna takes us inside the making of 'Hung Up' on the latest 'Song Exploder'. The best-selling female artist of all time, **Madonna,** took fans into the creation of one of her most popular #1 songs, “Hung Up,” alongside co-writer **Stuart** **Price** during a recent episode of the *Song Exploder* podcast with host **Hrishikesh** **Hirway.**. **LISTEN** **NOW**: Madonna joins the *Song Exp…",
+        "url": "https://www.musicradar.com/artists/hung-up-madonna-abba-fuelled-party-start",
+        "title": "\"We get so many requests from people wanting to use our tracks but we normally say no. This is only the second time we have given permission”: How Madonna created a dancefloor classic - with a sample that other artists could only dream of using | MusicRadar",
+        "retrievedAt": "2026-10-31T20:25:02.833Z",
+        "excerpt": "Madonna halted the sessions and started afresh, eventually turning to Stuart Price, an English electronic musician, DJ, songwriter and producer who had worked as musical director on Madonna’s previous two tours and who had co-written one song on American Life. Hung Up was one of the first songs written for the album and Madonna and Price began working on the track at the attic studio of his flat in Notting Hill, west London. [...] In an interview for the BBC Song Exploder Podcast in 2022, Madon…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
+        "id": "tavily:https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://musicbrainz.org/recording/8be8119e-c5c7-45dd-9747-223e7867ba77",
-        "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-        "retrievedAt": "2026-10-29T07:00:52.090Z",
-        "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz The browser you’re using is unsupported, and the website may not work correctly for you. It’s recommended that you upgrade to a recent version of Firefox, Safari, Edge, or any Chrome-based browser. If that’s not possible, you can try enabling legacy browser mode. # Hung Up (live, 2006-08: Wembley Arena, London, England, UK). ## Appears on releases. | # | Title | Length | Track artist | Release title | Release artist | Release group type | Coun…",
+        "url": "https://www.billboard.com/lists/madonna-confessions-on-a-dance-floor-album",
+        "title": "Madonna’s ‘Confessions on a Dance Floor’: 9 Things You Don't Know",
+        "retrievedAt": "2026-10-31T20:25:02.833Z",
+        "excerpt": "During the making of the album, Price was also performing DJ sets across the globe — from Ibiza to Australia. He secretly tested the tracks he and Madonna were creating by slipping instrumental dubs into his sets. From his booth, Price would film the crowd’s reaction and later send the footage to Madonna. Back in London, the two would review the clips together, discussing what worked and what didn’t. Imagine those unsuspecting club-goers dancing to “Hung Up,” “Jump” or” Sorry” months before the…",
         "recordRef": null
       },
       {
-        "id": "tavily:https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
+        "id": "tavily:https://www.imdb.com/title/tt6674070",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://musicbrainz.org/recording/f0675857-8a15-4d79-81dc-468860bfcfd6",
-        "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-        "retrievedAt": "2026-10-29T07:00:52.090Z",
-        "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
+        "url": "https://www.imdb.com/title/tt6674070",
+        "title": "Madonna: Hung Up (Music Video 2005)",
+        "retrievedAt": "2026-10-31T20:25:02.833Z",
+        "excerpt": "Directed by Johan Renck, the clip starts with Madonna clad in a pink leotard dancing alone in a ballet studio and concludes at a gaming parlor where she dances",
         "recordRef": null
       },
       {
-        "id": "tavily:https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+        "id": "tavily:https://www.youtube.com/watch?v=Sdz2oW0NMFk",
         "source": "tavily",
         "sourceTier": "web",
-        "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
-        "title": "Recording “Hung Up” by Madonna - MusicBrainz",
-        "retrievedAt": "2026-10-29T07:00:52.090Z",
-        "excerpt": "Title: Recording “Hung Up” by Madonna - MusicBrainz | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * AR2005-11-11 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * DE2005-11-11 * IE2005-11-11 * FR2005-11-14 * GB2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:38 | Madonna\") | Confessions on a Dance Floor | Madonna\") | Album | * XW2005-11-14 | Warner Bros. | 1.1 | Hung Up | 5:36 | Madonna\") | Confessions…",
-        "recordRef": null
-      },
-      {
-        "id": "tavily:https://www.discogs.com/release/571694-Madonna-Hung-Up",
-        "source": "tavily",
-        "sourceTier": "web",
-        "url": "https://www.discogs.com/release/571694-Madonna-Hung-Up",
-        "title": "Madonna - Hung Up",
-        "retrievedAt": "2026-10-29T07:00:52.090Z",
-        "excerpt": "Title: Madonna - Hung Up # Madonna – Hung Up. Image 1: Hung Up More images. 1 Hung Up (Radio Version)3:25. 2 Hung Up (SDP Extended Vocal). Remix, Producer [Additional] – Stuart Price7:58. 3 Hung Up (Tracy Young's Get Up And Dance Groove Edit). 4 Hung Up (Bill Hamel Remix). Remix, Producer [Additional] – Barry Jamieson, Bill Hamel7:00. 5 Hung Up (Chus & Ceballos Remix). Remix, Producer [Additional] – DJ Chus, Pablo Ceballos10:25. 6 Hung Up (SDP Extended Dub). * Published By – Webo Girl Publishin…",
+        "url": "https://www.youtube.com/watch?v=Sdz2oW0NMFk",
+        "title": "Madonna - Music (Official Video)",
+        "retrievedAt": "2026-10-31T20:25:02.833Z",
+        "excerpt": "The Madonna Channel is the official YouTube home for Madonna. As the best-selling female recording artist of all time, Madonna continues to leave an indelible mark on the world through her art, music, activism and humanitarian leadership. Madonna consistently pushes boundaries, spurs conversations and unites us all through her revolutionary work. Subscribe for the latest videos, music, news and updates. Enjoy Madonna’s groundbreaking music videos, live performances, humorous videos and more. [.…",
         "recordRef": null
       },
       {
@@ -3879,7 +3957,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
         "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"Subnormix\" by El Reno Renardo.",
         "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
       },
@@ -3889,7 +3967,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
         "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz relationships",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz: \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA is sampled in \"冬天里的一把火\" by 张靓颖.",
         "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f/sampled-by/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
       },
@@ -3899,7 +3977,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/746b556a-b951-4ae6-95ee-685380f93108",
         "title": "Hung Up (Chus & Ceballos remix) — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:49.099Z",
+        "retrievedAt": "2026-10-31T20:25:01.816Z",
         "excerpt": "MusicBrainz recording \"Hung Up (Chus & Ceballos remix)\" by Madonna, first released 2015.",
         "recordRef": "recording/746b556a-b951-4ae6-95ee-685380f93108"
       },
@@ -3909,7 +3987,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
         "title": "Hung Up (SDP extended vocal) — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:49.099Z",
+        "retrievedAt": "2026-10-31T20:25:01.816Z",
         "excerpt": "MusicBrainz recording \"Hung Up (SDP extended vocal)\" by Madonna, first released 2005-11-04.",
         "recordRef": "recording/01159eb5-7ded-46a3-96d1-49be1562763f"
       },
@@ -3919,7 +3997,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/6a19425a-6e7e-4133-a744-cab2a144a287",
         "title": "Hung Up (Tracy Young’s Get Up and Dance groove edit) — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:49.099Z",
+        "retrievedAt": "2026-10-31T20:25:01.816Z",
         "excerpt": "MusicBrainz recording \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna, first released 2005-10-17.",
         "recordRef": "recording/6a19425a-6e7e-4133-a744-cab2a144a287"
       },
@@ -3929,7 +4007,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f",
         "title": "Gimme! Gimme! Gimme! (A Man After Midnight) — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:49.099Z",
+        "retrievedAt": "2026-10-31T20:25:01.816Z",
         "excerpt": "MusicBrainz recording \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA, first released 1979-10-12.",
         "recordRef": "recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
       },
@@ -3939,7 +4017,7 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/0583339e-51ec-46bb-8b60-70939d8a1f26",
         "title": "Subnormix — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz recording \"Subnormix\" by El Reno Renardo, first released 2010-12-09.",
         "recordRef": "recording/0583339e-51ec-46bb-8b60-70939d8a1f26"
       },
@@ -3949,16 +4027,16 @@
         "sourceTier": "primary-record",
         "url": "https://musicbrainz.org/recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e",
         "title": "冬天里的一把火 — MusicBrainz recording",
-        "retrievedAt": "2026-10-29T07:00:55.549Z",
+        "retrievedAt": "2026-10-31T20:25:07.068Z",
         "excerpt": "MusicBrainz recording \"冬天里的一把火\" by 张靓颖, first released 2015-02-20.",
         "recordRef": "recording/aee4eb7d-ee44-4578-aa10-18986cfeea0e"
       }
     ],
     "claims": [
       {
-        "id": "e6b2b34e-9882-47b3-8f55-db5a29b11a36",
-        "text": "The track has several documented remixes, including versions by Chus & Ceballos, SDP and Tracy Young.",
-        "about": "production",
+        "id": "af73e208-538e-4f3c-887d-42fc1daeeb5f",
+        "text": "MusicBrainz lists three remixes of this recording: the Chus & Ceballos remix, the SDP extended vocal, and Tracy Young’s Get Up and Dance groove edit.",
+        "about": "history",
         "kind": "sourced",
         "origin": "model",
         "evidenceIds": [
@@ -3967,14 +4045,63 @@
           "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
         ],
         "verdict": "supported",
-        "verdictReason": "The three MusicBrainz remix excerpts name the Chus & Ceballos, SDP and Tracy Young versions.",
+        "verdictReason": "The three MusicBrainz remix relationships name the Chus & Ceballos, SDP, and Tracy Young remixes.",
+        "numericCheck": "n/a",
+        "numericReason": null,
+        "numericComparison": null,
+        "scope": "recording"
+      },
+      {
+        "id": "b78f5812-4ef1-4548-b7a3-b86d4878b4c9",
+        "text": "The recording samples “Gimme! Gimme! Gimme! (A Man After Midnight)” by ABBA, making the earlier disco recording part of its musical foundation.",
+        "about": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [
+          "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/samples/recording/e1b7b099-abe6-4b7f-b06e-2c7cba7ffe7f"
+        ],
+        "verdict": "partial",
+        "verdictReason": "The MusicBrainz sampling relationship confirms the sample, but does not call ABBA’s recording earlier or disco.",
         "numericCheck": "n/a",
         "numericReason": null,
         "numericComparison": null,
         "scope": "recording",
         "factoid": {
-          "title": "A remix trail",
-          "type": "production",
+          "title": "An ABBA hook at its core",
+          "type": "sample",
+          "entities": [
+            {
+              "text": "ABBA",
+              "type": "artist"
+            },
+            {
+              "text": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+              "type": "sample"
+            }
+          ]
+        },
+        "documentedBy": ["6bc08fe8-d807-49fa-88be-92000d40fc8e"]
+      },
+      {
+        "id": "fd01ca4c-294e-413a-93eb-7d7001e15ad6",
+        "text": "MusicBrainz links this recording to remixes by Chus & Ceballos, SDP, and Tracy Young.",
+        "about": "trivia",
+        "kind": "sourced",
+        "origin": "model",
+        "evidenceIds": [
+          "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/746b556a-b951-4ae6-95ee-685380f93108",
+          "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/01159eb5-7ded-46a3-96d1-49be1562763f",
+          "musicbrainz:track/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734/remixed-by/recording/6a19425a-6e7e-4133-a744-cab2a144a287"
+        ],
+        "verdict": "supported",
+        "verdictReason": "The three MusicBrainz remix relationships link this recording to remixes by the named artists.",
+        "numericCheck": "n/a",
+        "numericReason": null,
+        "numericComparison": null,
+        "scope": "recording",
+        "factoid": {
+          "title": "Three remix paths",
+          "type": "curiosity",
           "entities": [
             {
               "text": "Chus & Ceballos",
@@ -3992,7 +4119,7 @@
         }
       },
       {
-        "id": "579c5910-aca6-4445-92ec-feaea0df13d6",
+        "id": "6bc08fe8-d807-49fa-88be-92000d40fc8e",
         "text": "\"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA.",
         "about": "sample",
         "kind": "sourced",
@@ -4006,7 +4133,7 @@
         "scope": "recording"
       },
       {
-        "id": "0a3d3bf6-b530-4a4a-b12a-e3c5c4578970",
+        "id": "04b4e04a-3043-4380-a060-6468c337ba65",
         "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (Chus & Ceballos remix)\" by Madonna.",
         "about": "sample",
         "kind": "sourced",
@@ -4020,7 +4147,7 @@
         "scope": "recording"
       },
       {
-        "id": "d10c38a7-21f8-4cb9-a5bf-ed26d2f6d510",
+        "id": "f48d348e-8750-4dc1-95dd-1a88e53586d0",
         "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (SDP extended vocal)\" by Madonna.",
         "about": "sample",
         "kind": "sourced",
@@ -4034,7 +4161,7 @@
         "scope": "recording"
       },
       {
-        "id": "a4b5a75d-7d9a-49c9-8f67-a4ce5e4f720b",
+        "id": "7f0f9a98-adef-44c4-b0ce-31c738ee50d2",
         "text": "\"Hung Up\" by Madonna is remixed in \"Hung Up (Tracy Young’s Get Up and Dance groove edit)\" by Madonna.",
         "about": "sample",
         "kind": "sourced",
@@ -4048,7 +4175,7 @@
         "scope": "recording"
       },
       {
-        "id": "1b57e24a-d7cb-4293-996e-5e245b2054f5",
+        "id": "75c0802d-2c81-4507-bc71-bf6cf1110ff8",
         "text": "The work \"Hung Up\" is covered by \"Hung Up\" by Telenova.",
         "about": "cover",
         "kind": "sourced",
@@ -4062,7 +4189,7 @@
         "scope": "work"
       },
       {
-        "id": "d8601067-e201-4802-ab67-7e9ae2e4d661",
+        "id": "0f597f7e-0438-4e40-94c4-00850ed49101",
         "text": "The work \"Hung Up\" is covered by \"Hung Up\" by Kidz Bop.",
         "about": "cover",
         "kind": "sourced",
@@ -4076,7 +4203,7 @@
         "scope": "work"
       },
       {
-        "id": "bd3f8660-d034-4fdb-94df-e73600c4d8d2",
+        "id": "dcf4c596-f9f7-4d9e-86a8-13620d7b4c2d",
         "text": "The work \"Hung Up\" is covered by \"Hung Up\" by The Enemy.",
         "about": "cover",
         "kind": "sourced",
@@ -4090,7 +4217,7 @@
         "scope": "work"
       },
       {
-        "id": "15741aec-640a-4763-b11f-581c9b4aecb6",
+        "id": "b2b6b597-87c7-41f0-87cc-e83905ac5201",
         "text": "The work \"Hung Up\" is covered by \"Hung Up\" by The Tyde.",
         "about": "cover",
         "kind": "sourced",
@@ -4104,7 +4231,7 @@
         "scope": "work"
       },
       {
-        "id": "0486f517-b925-4fc0-9c72-0315c120c473",
+        "id": "2ea221ae-b448-44d8-a8d8-fec2bc93fd23",
         "text": "\"Hung Up\" by Madonna appears on the official album \"Confessions On A Dance Floor\" (2005-11-11).",
         "about": "track",
         "kind": "sourced",
@@ -4119,22 +4246,22 @@
     "run": {
       "id": "recorded-hung-up-madonna",
       "mode": "replay",
-      "recordedAt": "2026-10-29T07:01:14.590Z",
-      "commit": "0fdfdccc509c",
-      "analyzerVersion": "2.3.4+essentia.models-5c5c0c7f",
+      "recordedAt": "2026-10-31T20:25:29.600Z",
+      "commit": "5fd193fa7a64",
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
       "replayed": "run",
       "fallback": false,
       "usage": {
         "llmCalls": 4,
-        "inputTokens": 17055,
-        "outputTokens": 2539,
-        "reasoningTokens": 375,
-        "usd": 0.013447
+        "inputTokens": 16085,
+        "outputTokens": 2091,
+        "reasoningTokens": 249,
+        "usd": 0.009892
       },
       "verifier": {
-        "judged": 9,
+        "judged": 5,
         "unjudged": 0,
-        "restated": 8
+        "restated": 2
       },
       "sourceErrors": [
         {
@@ -4152,9 +4279,9 @@
   },
   "usage": {
     "llmCalls": 4,
-    "inputTokens": 17055,
-    "outputTokens": 2539,
-    "reasoningTokens": 375,
-    "usd": 0.013447
+    "inputTokens": 16085,
+    "outputTokens": 2091,
+    "reasoningTokens": 249,
+    "usd": 0.009892
   }
 }

@@ -1,4 +1,4 @@
-// What a committed cassette, run record or report must never hold: a credential in a service's
+// What a committed cassette, run record, report or showcase recording must never hold: a credential in a service's
 // own format (the shapes the replay recorder refuses, apps/api/src/replay/secretShapes.test.ts), a
 // credential sent as a header or a field, a preview link (they are signed and expire), or a
 // signed link's parameters. Preview hosts are matched with or without a scheme, so a link a
@@ -10,7 +10,13 @@ import { join, relative } from "node:path";
 import { REPO_ROOT } from "./golden.mjs";
 
 /** The committed directories the scan covers: every file in them, whatever its kind. */
-export const SCANNED_DIRS = ["fixtures/cassettes", "evals/agent/runs", "evals/reports"];
+export const SCANNED_DIRS = [
+  "fixtures/cassettes",
+  "evals/agent/runs",
+  "evals/reports",
+  "fixtures/replays",
+  "fixtures/pinned",
+];
 
 /** Each rule: what it finds, and the pattern. A redacted value ("[redacted]") passes. */
 export const RULES = [

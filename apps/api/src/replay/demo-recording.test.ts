@@ -8,13 +8,21 @@
  * Archive, source errors in words, web evidence without social pages, forum comment threads or
  * private handles, and the app's own messages without the prototype's copy or emoji. A recording
  * that falls short is re-recorded (npm run replay:record -w apps/api), never edited by hand.
+ *
+ * The showcase is the golden run's (evals/agent/runs/2026-10-31), chosen by
+ * evals/agent/showcase.mjs: each recording is one of that run's analyses, with the measured audio
+ * block its run record holds, and together they span at least MIN_TRACKS tracks and MIN_STYLES
+ * styles. A track's style is MusicBrainz's genre as evals/showcase-styles.json records it (with
+ * the lookup's URL), never model text and never the audio service's style classifier; two styles
+ * are one when their names are equal lower-cased.
  */
 
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { analysisIssues, type ReplayRecord } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
+import { API_ROOT } from "../config/apiPackage.js";
 import { reasonIssue } from "../sources/http.js";
 import { isSocialPage, webPageIssue, webTextIssue } from "../sources/search.js";
 import { ARCHIVE_FRONT, archiveCoverOf } from "./cover.js";
@@ -23,6 +31,46 @@ import { DEFAULT_REPLAY_DIR, loadReplays } from "./records.js";
 import { DEMO_SLUG, readRecording, recordingSlugs } from "./testing/recordings.js";
 
 const SLUGS = recordingSlugs();
+const REPO = resolve(API_ROOT, "..", "..");
+/** The golden run the showcase is recorded from: its committed run records. */
+const GOLDEN_RUN_DIR = join(REPO, "evals", "agent", "runs", "2026-10-31");
+/** Each golden row's MusicBrainz genre (evals/agent/fetch-styles.mjs). */
+const STYLES_PATH = join(REPO, "evals", "showcase-styles.json");
+const MIN_TRACKS = 5;
+const MIN_STYLES = 4;
+
+interface GoldenRun {
+  runId: string;
+  isrc: string;
+  repeat?: number;
+  commit: string;
+}
+interface StyleEntry {
+  isrc: string;
+  mbid: string;
+  style: string | null;
+  level: string | null;
+  votes: number | null;
+  url: string | null;
+}
+const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
+
+/**
+ * The golden run's analysis a recording was made from: the first run (row d, after the verifier)
+ * whose committed result is the recording's track, with the commit it ran at; null for none.
+ */
+function goldenRunOf(record: ReplayRecord): { run: GoldenRun; audio: unknown } | null {
+  const runs = readJson<GoldenRun[]>(join(GOLDEN_RUN_DIR, "d.json"));
+  for (const run of runs.filter((each) => (each.repeat ?? 0) === 0)) {
+    const result = readJson<{ id: string; audio?: unknown }>(
+      join(GOLDEN_RUN_DIR, "results", `${run.isrc}.json`),
+    );
+    if (result.id === record.analysis.id && run.commit === record.commit) {
+      return { run, audio: result.audio ?? null };
+    }
+  }
+  return null;
+}
 const demo = readRecording(DEMO_SLUG);
 /** The demo's track, as scripts/replay-e2e.mjs (TRACK_ID) and the web specs open it. */
 const DEMO_TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
@@ -74,13 +122,52 @@ function uncleanRecordings(dir: string): string[] {
 }
 
 describe("every committed recording", () => {
-  it("are the four showcases, no more and no fewer: a change to the set is made here", () => {
+  it("are the golden run's five showcases, no more and no fewer: a change to the set is made here", () => {
+    // As evals/agent/showcase.mjs chooses them.
     expect(SLUGS).toEqual([
-      "bitter-sweet-symphony-the-verve",
       "hung-up-madonna",
-      "juicy-the-notorious-big",
+      "natural-blues-moby",
       "one-more-time-daft-punk",
+      "praise-you-fatboy-slim",
+      "the-verve-bitter-sweet-symphony",
     ]);
+  });
+
+  it("are each one of the golden run's analyses, with the measured audio block its record holds", () => {
+    const unmatched = SLUGS.filter((slug) => goldenRunOf(readRecording(slug)) === null);
+    expect(unmatched, "recordings that are no analysis of the golden run").toEqual([]);
+    for (const slug of SLUGS) {
+      const record = readRecording(slug);
+      const golden = goldenRunOf(record);
+      // The measured block exactly as the run measured it: never edited, never re-measured.
+      expect(record.analysis.audio, slug).toEqual(golden?.audio);
+      expect(record.analysis.audio?.tempo?.basis, slug).toBe("signal");
+      expect(record.analysis.coverUrl, slug).toMatch(ARCHIVE_FRONT);
+    }
+  });
+
+  it(`span at least ${MIN_TRACKS} tracks and ${MIN_STYLES} styles, each MusicBrainz's genre with its lookup`, () => {
+    const styles = new Map(
+      readJson<{ rows: StyleEntry[] }>(STYLES_PATH).rows.map((row) => [row.isrc, row]),
+    );
+    const tracks = SLUGS.map((slug) => {
+      const golden = goldenRunOf(readRecording(slug));
+      const entry = golden ? styles.get(golden.run.isrc) : undefined;
+      return { slug, isrc: golden?.run.isrc ?? null, entry };
+    });
+    const unstyled = tracks.filter(({ entry }) => !entry?.style || !entry.url);
+    expect(
+      unstyled.map(({ slug }) => slug),
+      "showcases without a MusicBrainz genre",
+    ).toEqual([]);
+    for (const { slug, entry } of tracks) {
+      expect(entry?.url, slug).toMatch(/^https:\/\/musicbrainz\.org\/ws\/2\/[^?]+\?inc=genres/);
+      expect(["recording", "release-group", "artist"], slug).toContain(entry?.level);
+      expect(entry?.votes ?? 0, slug).toBeGreaterThan(0);
+    }
+    expect(new Set(tracks.map(({ isrc }) => isrc)).size).toBeGreaterThanOrEqual(MIN_TRACKS);
+    const distinct = new Set(tracks.map(({ entry }) => entry?.style?.trim().toLowerCase()));
+    expect(distinct.size, [...distinct].join(", ")).toBeGreaterThanOrEqual(MIN_STYLES);
   });
 
   it("loads, and names the clean commit that made it", () => {

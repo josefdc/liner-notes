@@ -10,7 +10,7 @@
 // repository.
 //
 //   node evals/agent/export-labels.mjs --key ~/labels-key.json                the claim cases of evals/perturb.jsonl
-//   node evals/agent/export-labels.mjs --from recordings --key <path>         the claims of fixtures/replays/*.json
+//   node evals/agent/export-labels.mjs --from recordings --key <path>         the claims of the recordings the set is made from
 //   ... --out labels.csv                                                      write a file instead of stdout
 //   ... --salt <hex>                                                          a given salt, to write the same CSV again
 

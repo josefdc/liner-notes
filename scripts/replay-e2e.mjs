@@ -53,10 +53,15 @@ const REPORT_ENTRY = "apps/api/src/scripts/report.ts";
 
 const TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
 const SHOWCASE_QUERY = "One More Time Daft Punk";
-// The showcase whose replay serves a fact card ("More facts"): its sample card says more than its
-// record, so it is kept. One More Time's own card only restated its record, and is left out.
+// The showcase whose replay serves fact cards ("More facts"): the demo's two recorded cards.
 const FACTS_TRACK = {
-  trackId: "57iDDD9N9tTWe75x6qhStw",
+  trackId: TRACK_ID,
+  trackTitle: "One More Time",
+  trackArtist: "Daft Punk",
+};
+// A showcase whose run wrote no fact card: its replay serves none, and asks nothing.
+const NO_FACTS_TRACK = {
+  trackId: "0Dmao2oWlAZzIBX2Q1B5AH",
   trackTitle: "Bitter Sweet Symphony - Remastered 2016",
   trackArtist: "The Verve",
 };
@@ -425,22 +430,17 @@ try {
   });
   console.log(`factoids: ${more.status} ${more.body.factoids?.length} recorded facts`);
   check(more.status === 200 && more.body.factoids?.length > 0, "factoids come from the recording");
-  const demoMore = await json("/api/factoids/more", {
+  const noMore = await json("/api/factoids/more", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      trackId: TRACK_ID,
-      trackTitle: "One More Time",
-      trackArtist: "Daft Punk",
-      existingFactoidIds: [],
-    }),
+    body: JSON.stringify({ ...NO_FACTS_TRACK, existingFactoidIds: [] }),
   });
-  console.log(`demo factoids: ${demoMore.status} ${demoMore.body.factoids?.length} recorded facts`);
+  console.log(`no-card factoids: ${noMore.status} ${noMore.body.factoids?.length} recorded facts`);
   check(
-    demoMore.status === 200 &&
-      Array.isArray(demoMore.body.factoids) &&
-      demoMore.body.factoids.length === 0,
-    "the demo's recorded cards all restate its records: none is served, and nothing is asked",
+    noMore.status === 200 &&
+      Array.isArray(noMore.body.factoids) &&
+      noMore.body.factoids.length === 0,
+    "a showcase whose run wrote no card serves none, and nothing is asked",
   );
   const other = await json("/api/factoids/more", {
     method: "POST",

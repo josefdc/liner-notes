@@ -164,9 +164,17 @@ const replayDir = join(mockDir, "..", "..", "fixtures", "replays");
 /** The first showcase, which the README, the demo and most specs open. */
 export const DEMO_SLUG = "one-more-time-daft-punk";
 
+/**
+ * The four showcases served before the golden run's (Bitter Sweet Symphony, Hung Up, Juicy, One
+ * More Time), byte for byte as fixtures/replays held them at 9971adea845d: a spec about the exact
+ * text one of them holds reads it from here (`replayedRecording(slug, runId, PREVIOUS_SHOWCASES)`).
+ * Never served by the app.
+ */
+export const PREVIOUS_SHOWCASES = join(mockDir, "..", "..", "fixtures", "pinned", "9971adea845d");
+
 /** A committed showcase recording, `fixtures/replays/<slug>.json`, checked by the contract. */
-export function recordingOf(slug: string = DEMO_SLUG) {
-  return ReplayRecord.parse(JSON.parse(readFileSync(join(replayDir, `${slug}.json`), "utf8")));
+export function recordingOf(slug: string = DEMO_SLUG, dir: string = replayDir) {
+  return ReplayRecord.parse(JSON.parse(readFileSync(join(dir, `${slug}.json`), "utf8")));
 }
 
 /** The day a source was read, as the app gives it ("28 Oct 2026", in UTC); null when unreadable. */
@@ -239,7 +247,8 @@ export function showcaseRecordings() {
 }
 
 /**
- * A recorded showcase run (by default the demo, fixtures/replays/one-more-time-daft-punk.json)
+ * A recorded showcase run (by default the demo, fixtures/replays/one-more-time-daft-punk.json;
+ * from `dir` when given, such as PREVIOUS_SHOWCASES)
  * as the API replays it (apps/api/src/replay/player.ts): its events without their run id and
  * `seq` and without the recorded `done`, each with its time since the run started (its own
  * `elapsedMs`, else its `atMs`), the replay notice right after `connected`, and the result the
@@ -247,8 +256,12 @@ export function showcaseRecordings() {
  * commit, each fact stated once. Returns the analysis stream's events, ending with `complete`
  * and `done`.
  */
-export function replayedRecording(slug: string = DEMO_SLUG, runId = "replay-run") {
-  const record = recordingOf(slug);
+export function replayedRecording(
+  slug: string = DEMO_SLUG,
+  runId = "replay-run",
+  dir: string = replayDir,
+) {
+  const record = recordingOf(slug, dir);
   const result = replayedAnalysis(record, runId);
   // The API's own notice, without its send time.
   const { timestamp: _sent, ...notice } = replayNotice(record) as Record<string, unknown>;

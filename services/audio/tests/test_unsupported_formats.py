@@ -544,7 +544,7 @@ def test_a_preview_without_a_content_type_is_never_measured(
     ],
 )
 def test_the_header_check_accepts_the_formats_the_service_decodes(content_type, suffix):
-    response = httpx.Response(200, headers={"content-type": content_type})
+    response = httpx.Response(200, headers={"content-type": content_type, "content-length": "4"})
     assert preview._check_headers(response, preview.MAX_PREVIEW_BYTES) == suffix
 
 

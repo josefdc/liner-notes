@@ -28,16 +28,52 @@ class _Handler(BaseHTTPRequestHandler):
         if body:
             self.wfile.write(body)
 
+    def _start_chunked(self):
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/mpeg")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+    def _write_chunked(self, body, last=True):
+        """``body`` in 16 KB chunks, then the last chunk unless ``last`` is false (a cut body)."""
+        for at in range(0, len(body), 16 * 1024):
+            part = body[at : at + 16 * 1024]
+            self.wfile.write(b"%x\r\n%s\r\n" % (len(part), part))
+        if last:
+            self.wfile.write(b"0\r\n\r\n")
+
     def do_GET(self):
         self.server.hits.append(self.path)
         path = self.path.split("?", 1)[0]
         if path in self.server.files:
             body = self.server.files[path]
             content_type = self.server.types.get(path, "audio/mpeg")
-            headers = {"Content-Length": str(len(body))}
-            if content_type is not None:
-                headers["Content-Type"] = content_type
-            self._send(200, headers, body)
+            framing = self.server.framing.get(path, "length")
+            # Bytes of the body sent before the connection closes; all of them by default.
+            sent = body[: self.server.cut.get(path, len(body))]
+            headers = {"Content-Type": content_type} if content_type is not None else {}
+            if framing == "length":
+                headers["Content-Length"] = str(len(body))
+            elif framing == "chunked":
+                self.protocol_version = "HTTP/1.1"
+                headers["Transfer-Encoding"] = "chunked"
+                headers["Connection"] = "close"
+            elif framing != "http/1.0":
+                # Neither a length nor chunking: the body runs to the connection's close. An
+                # HTTP/1.0 response says nothing more; an HTTP/1.1 one ("bare") may not either.
+                self.protocol_version = "HTTP/1.1"
+                if framing in ("close", "keep-alive"):
+                    headers["Connection"] = framing
+            self._send(200, headers)
+            if framing not in ("length", "chunked"):
+                # Whatever the Connection header says, the body ends when the connection closes.
+                self.close_connection = True
+            if framing == "chunked":
+                self._write_chunked(sent, last=len(sent) == len(body))
+            else:
+                self.wfile.write(sent)
         elif path == "/audio.mp3":
             self._send(
                 200,
@@ -60,29 +96,27 @@ class _Handler(BaseHTTPRequestHandler):
             # Declares 200 MB but never sends it.
             self._send(200, {"Content-Type": "audio/mpeg", "Content-Length": str(200 * MB)})
         elif path == "/endless.mp3":
-            # No Content-Length: streams up to 50 MB until the client hangs up.
-            self.send_response(200)
-            self.send_header("Content-Type", "audio/mpeg")
-            self.send_header("Connection", "close")
-            self.end_headers()
+            # Chunked, with no Content-Length: streams up to 50 MB until the client hangs up.
+            self._start_chunked()
             chunk = b"\x00" * (64 * 1024)
             try:
                 for _ in range(800):
-                    self.wfile.write(chunk)
+                    self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
                     self.server.sent += len(chunk)
+                # Reached only by a client without the cap: the body then ends cleanly.
+                self.wfile.write(b"0\r\n\r\n")
             except OSError:
                 pass
         elif path == "/slow.mp3":
-            # A byte every 0.2 s keeps each read under the read timeout.
-            self.send_response(200)
-            self.send_header("Content-Type", "audio/mpeg")
-            self.send_header("Connection", "close")
-            self.end_headers()
+            # Chunked; a byte every 0.2 s keeps each read under the read timeout.
+            self._start_chunked()
             try:
                 for _ in range(100):
-                    self.wfile.write(b"\x00")
+                    self.wfile.write(b"1\r\n\x00\r\n")
                     self.wfile.flush()
                     time.sleep(0.2)
+                # Reached only by a client without the deadline: the body then ends cleanly.
+                self.wfile.write(b"0\r\n\r\n")
             except OSError:
                 pass
         else:
@@ -108,12 +142,19 @@ def cdn():
     Yields (base_url, server). server.hits lists requested paths, server.sent counts bytes
     streamed by /endless.mp3, server.files maps extra paths to bodies, served as audio/mpeg
     unless server.types names another content type for the path (None: no Content-Type).
+    server.framing names how an extra path's body is framed: "length" (Content-Length, the
+    default), "chunked", or with neither: "http/1.0" (an HTTP/1.0 response with no Connection
+    header), "bare" (HTTP/1.1 with no Connection header), "close" or "keep-alive" (HTTP/1.1 with
+    that Connection header). Unframed bodies always end with the connection's close. server.cut
+    maps a path to the bytes sent before the connection closes.
     """
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.hits = []
     server.sent = 0
     server.files = {}
     server.types = {}
+    server.framing = {}
+    server.cut = {}
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

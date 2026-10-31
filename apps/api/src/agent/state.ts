@@ -138,8 +138,9 @@ export interface KeyMoment {
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed, or its answer carried no
- *   v2 block the contract reads (an older service that sends only the v1 fields). A refusal
- *   for what the preview file is has its own reason (unsupported_format, decode_incomplete)
+ *   v2 block the contract reads (an older service that sends only the v1 fields). A refusal of
+ *   an MP4 (M4A) or AAC preview, or of an MP3 that does not decode in full, has its own reason
+ *   (unsupported_format, decode_incomplete); the other refusals of the file stay here
  * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio), or its
  *   gate measured nothing (silence, noise, too short: the block says which)
  * - not_run: audio analysis did not run for this track

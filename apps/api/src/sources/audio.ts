@@ -406,14 +406,17 @@ const REFUSAL_CODES: Readonly<Record<string, AudioUnavailableReason>> = {
   decode_incomplete: "decode_incomplete",
 };
 
-/** The same refusals by their words alone, as a service older than the codes sends them. */
+/**
+ * The same refusals by their words alone, as a service older than the codes sends them. Not
+ * "the MP3 could not be decoded to the end of its MPEG audio frames": an older service also
+ * sent it when its own pipe or thread could not be set up (a fault, not the file), so from the
+ * words alone it stays analysis_failed, and is not stored.
+ */
 const REFUSAL_PREFIX = "The preview is not analysable audio: ";
 const REFUSAL_DETAILS: Readonly<Record<string, AudioUnavailableReason>> = {
   [`${REFUSAL_PREFIX}it is an MP4 (M4A) or AAC file, a format the service does not decode`]:
     "unsupported_format",
   [`${REFUSAL_PREFIX}the MP3 decodes to less audio than its MPEG audio frames hold`]:
-    "decode_incomplete",
-  [`${REFUSAL_PREFIX}the MP3 could not be decoded to the end of its MPEG audio frames`]:
     "decode_incomplete",
 };
 

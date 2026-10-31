@@ -356,6 +356,11 @@ describe("a preview the service refuses for what the file is", () => {
   it.each([
     ["its code", { detail: M4A, code: "unsupported_format" }],
     ["the sentence alone (a service older than the code)", { detail: M4A }],
+    // The code is read, not the words: a service may reword its detail.
+    [
+      "its code, the detail reworded",
+      { detail: `${PREFIX}an M4A file`, code: "unsupported_format" },
+    ],
   ])("reports an MP4 (M4A) or AAC preview as unsupported_format, by %s", async (_by, body) => {
     refusing(body, 422);
     const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
@@ -363,15 +368,17 @@ describe("a preview the service refuses for what the file is", () => {
       source: "unavailable",
       reason: "unsupported_format",
       audio: null,
-      error: M4A,
+      error: body.detail,
     });
   });
 
   it.each([
     ["its code", TRUNCATED, { code: "decode_incomplete" }],
     ["its code", READ_FAILED, { code: "decode_incomplete" }],
+    ["its code, the detail reworded", `${PREFIX}the MP3 ends early`, { code: "decode_incomplete" }],
+    // The code wins over words that name another refusal.
+    ["its code over the M4A words", M4A, { code: "decode_incomplete" }],
     ["the sentence alone", TRUNCATED, {}],
-    ["the sentence alone", READ_FAILED, {}],
   ])(
     "reports an MP3 that does not decode to its frames as decode_incomplete, by %s (%s)",
     async (_by, detail, code) => {
@@ -393,6 +400,8 @@ describe("a preview the service refuses for what the file is", () => {
     ["a busy service", { detail: "The analysis service is busy; try again" }, 503],
     ["another 422", { detail: `${PREFIX}the file could not be decoded as audio` }, 422],
     ["a code this client does not know", { detail: `${PREFIX}newer`, code: "a_newer_code" }, 422],
+    // An older service sent these words also when its own pipe or thread could not be set up.
+    ["the failed-read words without a code", { detail: READ_FAILED }, 422],
     // The refusal's words or code with another status are not the refusal.
     ["the sentence with a 500", { detail: M4A }, 500],
     ["the code with a 500", { detail: "Audio analysis failed", code: "unsupported_format" }, 500],

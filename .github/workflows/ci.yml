@@ -62,8 +62,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # The parent commit holds the base branch's guard baselines and contract snapshots.
-          fetch-depth: 2
+          # The whole history: the parent commit holds the base branch's guard baselines and
+          # contract snapshots, and the published agent eval report names the commit its runs
+          # were recorded at, which check-report must find (with evals/golden.jsonl as it was).
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
@@ -121,7 +123,8 @@ jobs:
           npm run test:replay
       # The agent eval's CI subset, replayed through the API from the committed cassettes with
       # every outbound connection refused and counted: each run must give its committed records
-      # (rows b, c and d), with 0 attempts and 0 spend lines.
+      # (rows b, c and d) and its whole normalised result (evals/agent/README.md says what is
+      # masked), with 0 attempts and 0 spend lines.
       - name: Agent eval replay (regression check)
         if: matrix.node == 24
         env:
@@ -129,6 +132,16 @@ jobs:
         run: |
           test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
           NODE_OPTIONS="--import $GITHUB_WORKSPACE/tests/deny-network.mjs" npm run eval -- --suite agent --mode replay --subset ci
+      # The published agent eval report, rendered again from its run records and compared byte for
+      # byte, and the verifier's judge replayed on the perturbation set from its cassettes: both
+      # with every outbound connection refused, and no spending.
+      - name: Agent eval report and judge replay
+        if: matrix.node == 24
+        run: |
+          test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
+          export NODE_OPTIONS="--import $GITHUB_WORKSPACE/tests/deny-network.mjs"
+          node evals/agent/check-report.mjs evals/reports/agent-latest.md
+          node evals/agent/perturb-check.mjs
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS

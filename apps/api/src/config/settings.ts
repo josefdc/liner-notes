@@ -118,6 +118,58 @@ export const LLM_PURPOSES = ["dev", "eval", "showcase", ...Object.keys(EVAL_SUB_
 ];
 export type LlmPurpose = "dev" | "eval" | "showcase" | EvalSubPurpose;
 
+/** The purposes LLM_RUN_PURPOSE may name: the evaluation sub-purposes. */
+export const RUN_PURPOSES = Object.keys(EVAL_SUB_CAPS) as EvalSubPurpose[];
+
+/** The purpose of the process's model calls when LLM_RUN_PURPOSE is unset. */
+export const DEFAULT_RUN_PURPOSE: LlmPurpose = "dev";
+
+/**
+ * LLM_RUN_PURPOSE: the purpose every model call of this process is tagged with (the spend
+ * log's `unit`, and the cap it counts against), for an evaluation harness that drives the API.
+ * Unset or empty: `dev`. Otherwise one of RUN_PURPOSES, and only where the API runs for
+ * development or tests (isDevelopment: NODE_ENV development or test, or unset under the dev
+ * script), so a deployment, whatever its NODE_ENV says, spends as `dev` and never from the
+ * evaluation floor; and only with REPLAY_MODE off (`only` makes no model call to tag, and under
+ * `fallback` a refused call may be answered by a stored replay an evaluation would score as
+ * live). On a refusal or an unknown value the purpose is `dev` and `error` says why; the API
+ * does not start with an error (readSettings), and the model layer refuses every call
+ * (readLlmSettings).
+ */
+export function readRunPurpose(env: NodeJS.ProcessEnv): {
+  purpose: LlmPurpose;
+  error: string | null;
+} {
+  const raw = env.LLM_RUN_PURPOSE?.trim() ?? "";
+  if (raw === "") return { purpose: DEFAULT_RUN_PURPOSE, error: null };
+  const purpose = RUN_PURPOSES.find((candidate) => candidate === raw);
+  const refused = (error: string): { purpose: LlmPurpose; error: string } => ({
+    purpose: DEFAULT_RUN_PURPOSE,
+    error,
+  });
+  if (!purpose) {
+    return refused(`LLM_RUN_PURPOSE: expected one of ${RUN_PURPOSES.join(", ")}, or unset`);
+  }
+  if (!isDevelopment(env)) {
+    return refused(
+      `LLM_RUN_PURPOSE is not allowed ${OUTSIDE_DEVELOPMENT}: it is for evaluation runs`,
+    );
+  }
+  const replayMode = parseReplayMode(env.REPLAY_MODE);
+  if (replayMode === "only") {
+    return refused(
+      "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=only: a replay makes no model call",
+    );
+  }
+  if (replayMode === "fallback") {
+    return refused(
+      "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=fallback: " +
+        "a refused model call would be answered by a stored replay",
+    );
+  }
+  return { purpose, error: null };
+}
+
 export interface BudgetSettings {
   /** Hard stop for all spending recorded in the spend log, in USD. */
   totalUsd: number;
@@ -333,6 +385,10 @@ export function readLlmSettings(env: NodeJS.ProcessEnv): {
 
   const azureBaseUrl = readAzureBaseUrl(env, errors);
   const deployments = readDeployments(env, errors);
+
+  // A purpose that is refused refuses every call, rather than tagging it with another purpose.
+  const runPurposeError = readRunPurpose(env).error;
+  if (runPurposeError) errors.push(runPurposeError);
 
   const cassetteRaw = env.LLM_CASSETTE?.trim() || "off";
   const cassette = (["off", "record", "replay"] as const).find((mode) => mode === cassetteRaw);

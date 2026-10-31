@@ -6,7 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type { LlmPurpose } from "../config/settings.js";
+import { type LlmPurpose, readRunPurpose } from "../config/settings.js";
 import { type Llm, llm } from "../llm/invoke.js";
 
 export interface AgentRuntime {
@@ -19,14 +19,23 @@ export interface AgentRuntime {
   purpose: LlmPurpose;
 }
 
+/**
+ * The runtime of the API's own runs. Its purpose is LLM_RUN_PURPOSE's (config/settings.ts
+ * readRunPurpose), read when a call asks for it, so an evaluation harness that starts the API
+ * with it set has every model call of the process tagged and capped as that purpose; `dev` when
+ * it is unset, and also when it is refused (the API does not start then, and the model layer
+ * refuses every call).
+ */
 export const defaultAgentRuntime: AgentRuntime = {
   llm,
   now: () => new Date(),
   newId: () => randomUUID(),
-  purpose: "dev",
+  get purpose(): LlmPurpose {
+    return readRunPurpose(process.env).purpose;
+  },
 };
 
-/** A runtime with the defaults for whatever `overrides` leaves out. */
+/** A runtime with the defaults for whatever `overrides` leaves out (the purpose read now). */
 export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
   return { ...defaultAgentRuntime, ...overrides };
 }

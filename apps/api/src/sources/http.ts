@@ -2663,6 +2663,14 @@ export interface SourceRequest {
   recordAs?: (json: unknown) => unknown;
   /** false: never recorded or replayed (local services). */
   cassette?: boolean;
+  /**
+   * The request's cassette entry, in place of the key made from its method, URL and body: for a
+   * request whose URL or body changes from run to run for the same answer, or for an entry
+   * written with recordJson (sources/audio.ts keys a track's audio step by the track and the
+   * analyzer, never by its signed preview URL). It must hold no credential or media URL: it is
+   * written to the cassette as is.
+   */
+  cassetteKey?: string;
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -3223,6 +3231,41 @@ function forCassette(req: SourceRequest, answer: Recorded): Recorded {
 }
 
 /**
+ * Under SOURCE_CASSETTE=record, writes `json` as a 2xx JSON answer to `req` under its
+ * `cassetteKey`, as fetchJson records an answer (forCassette: picked by `scrub`, scrubbed,
+ * capped); in any other mode, nothing. For an outcome a source works out over several requests
+ * rather than reads from one answer (sources/audio.ts), replayed with fetchJson and the same
+ * key. A write that fails is logged and counted like any lost recording.
+ */
+export async function recordJson(
+  req: SourceRequest & { cassetteKey: string },
+  json: unknown,
+): Promise<void> {
+  if (req.cassette === false || cassetteMode() !== "record") return;
+  try {
+    const answer: Recorded = { status: 200, contentType: "application/json", json };
+    await queueWrite(req.source, req.cassetteKey, forCassette(req, answer));
+  } catch (error) {
+    log.error(`${describeError(error)}`);
+    recordingLost();
+  }
+}
+
+/**
+ * What `source`'s cassette holds under `key`, in any mode: the recorded status and JSON body;
+ * undefined when nothing is. Throws a SourceError (`cassette_io`) for a cassette that cannot be
+ * read. For a source that checks what was recorded before it records again, or reads an entry
+ * whose status it explains itself (sources/audio.ts /health).
+ */
+export function recordedEntry(
+  source: SourceName,
+  key: string,
+): { status: number; json?: unknown } | undefined {
+  const entry = readCassette(source).entries[key];
+  return entry ? { status: entry.status, json: entry.json } : undefined;
+}
+
+/**
  * Requests JSON from a source. Resolves with the parsed body of a 2xx JSON answer; anything
  * else rejects with a SourceError.
  */
@@ -3230,7 +3273,7 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
   const url = String(req.url);
   const method = req.method ?? "GET";
   const mode = req.cassette === false ? "off" : cassetteMode();
-  const key = mode === "off" ? "" : cassetteKey(method, url, req.body);
+  const key = mode === "off" ? "" : (req.cassetteKey ?? cassetteKey(method, url, req.body));
 
   if (mode === "replay") {
     const entry = readCassette(req.source).entries[key];

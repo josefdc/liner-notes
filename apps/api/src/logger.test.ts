@@ -1090,7 +1090,8 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
 
   it("reads a scheme glued to a link's end only outside the link's secret values", () => {
     // Fake values only. In a secret parameter's value or the user info, the word is part of the
-    // value the link rule hides; before a word of prose, it is not a scheme.
+    // value the link rule hides; before a word of prose, it is not a scheme. A credential after
+    // the link is hidden all the same.
     for (const [text, expected] of [
       [
         "https://h.example/x?token=Zz9Yy8Xx7Ww6basic rest",
@@ -1106,7 +1107,7 @@ describe("pair and scheme shapes the two rules leave (#237)", () => {
       ],
       [
         "https://h.example/x?token=Zz9Yy8Xx7Ww6Basic V7qW6rE5tY4uI3oP2aS1",
-        "https://h.example/x?token=[redacted] V7qW6rE5tY4uI3oP2aS1",
+        "https://h.example/x?token=[redacted] [redacted]",
       ],
       ["https://p.scdn.co/mp3-preview/Zz9Yy8Xx7Ww6Basic x", "[preview link] x"],
       [
@@ -2084,6 +2085,351 @@ describe("configured values in what a client is shown, in a token and in any whi
     const text = `${"x".repeat(150)} ${escaped(mid)} end`;
     expect(logCut(text, 200)).toBe(151);
   });
+});
+
+describe("configured values written decoded, paths without a scheme, and the shapes #264 left (#237)", () => {
+  // Fake values only: a token, a password with markup characters, one with a space, one with a
+  // backslash before a letter, and a PEM key.
+  const TOKEN = "Zq9Wk3Xv7Tn5Rb";
+  const PASSWORD = 'p@ss"w0rd<&>x9Q';
+  const SPACED = "open sesame 42Zx";
+  const BACKSLASHED = 'C:\\temp"Zq81x';
+  const PEM =
+    "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----";
+  const CREDENTIAL = "T9zB8yC7xD6wE5vF4uG3";
+  const configure = () =>
+    configureLogger({
+      DISCOGS_TOKEN: TOKEN,
+      DB_PASSWORD: PASSWORD,
+      SPACED_SECRET: SPACED,
+      WINDOWS_PASSWORD: BACKSLASHED,
+      PEM_PRIVATE_KEY: PEM,
+    });
+  const log = logger("test");
+  const base64 = (text: string) => Buffer.from(text).toString("base64");
+  const decimal = (text: string) => [...text].map((c) => `&#${c.codePointAt(0)};`).join("");
+  const hexHalf = (text: string) =>
+    [...text].map((c, i) => (i % 2 ? `&#x${c.codePointAt(0)?.toString(16)};` : c)).join("");
+  const named = (text: string) =>
+    text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  /** What each path writes for `text`: scrub, a log line, a cut log text, a source's error, a reason. */
+  const written = (text: string): Record<string, string> => {
+    logs.clear();
+    log.error(text);
+    return {
+      scrub: scrub(text),
+      line: logs.lines().join("\n"),
+      message: String(logs.entries()[0]?.msg),
+      logText: scrub(logText(text)),
+      describe: describeError(new Error(text)),
+      source: new SourceError("discogs", "http", text).message,
+      reason: plainReason(text) ?? "",
+      scrubText: scrubText(text),
+      redactText: redactText(text),
+    };
+  };
+  /** The paths whose text holds 8 characters in a row of one of `forms`. */
+  const showing = (outs: Record<string, string>, forms: readonly string[]) =>
+    Object.entries(outs)
+      .filter(([, out]) =>
+        forms.some((form) =>
+          Array.from({ length: Math.max(1, form.length - 7) }, (_, i) => form.slice(i, i + 8)).some(
+            (part) => part.trim().length === 8 && out.includes(part),
+          ),
+        ),
+      )
+      .map(([path]) => path);
+
+  it.each([
+    ["HTML entities, decimal", `<p>bad key ${decimal(TOKEN)}</p>`, TOKEN],
+    ["HTML entities, hexadecimal, every other character", `bad key ${hexHalf(TOKEN)} here`, TOKEN],
+    ["named HTML entities", `<p>bad password ${named(PASSWORD)}</p>`, PASSWORD],
+    ["named HTML entities, escaped twice", `<p>${named(named(PASSWORD))}</p>`, PASSWORD],
+    ["entities in a JSON body", `{"message":"bad key ${decimal(TOKEN)}"}`, TOKEN],
+    ["base64", `got ${base64(TOKEN)} back`, TOKEN],
+    ["base64 after one byte", `{"auth":"${base64(`x${TOKEN}`)}"}`, TOKEN],
+    ["base64 after two bytes (user:secret)", `{"auth":"${base64(`u:${TOKEN}`)}"}`, TOKEN],
+    ["base64 without padding", `t=${base64(`${TOKEN}!`).replace(/=+$/, "")} end`, TOKEN],
+    // The password's base64 holds a "+", which base64url writes "-".
+    ["base64url", `t=${Buffer.from(PASSWORD).toString("base64url")} end`, PASSWORD],
+    ["util.inspect's pieces of a string", inspect({ note: `bad ${PEM}` }), PEM],
+    ["util.inspect's pieces, in a JSON string", JSON.stringify({ m: inspect({ k: PEM }) }), PEM],
+    ["percent escapes", `GET /x?q=${encodeURIComponent(PASSWORD)} 400`, PASSWORD],
+    [
+      "percent escapes in part",
+      `q=${PASSWORD.replace("@", "%40").replace("<", "%3C")} x`,
+      PASSWORD,
+    ],
+    [
+      "percent escapes, escaped twice",
+      `q=${encodeURIComponent(encodeURIComponent(PASSWORD))}`,
+      PASSWORD,
+    ],
+    ["a + for a space", `q=${encodeURIComponent(SPACED).replace(/%20/g, "+")} x`, SPACED],
+    ["only the quotes escaped", `{"m":"${BACKSLASHED.replace('"', '\\"')}"}`, BACKSLASHED],
+  ])("hides a configured value written as %s, on every path", (_name, text, value) => {
+    configure();
+    expect(showing(written(text), [value, text.slice(text.length / 4, -text.length / 4)])).toEqual(
+      [],
+    );
+  });
+
+  it("keeps a path written without a scheme around a value in it, as a link's", () => {
+    configure();
+    for (const [text, expected] of [
+      [
+        "GET /database/search/Zq9Wk3Xv7Tn5Rb/more failed",
+        "GET /database/search/[redacted]/more failed",
+      ],
+      [
+        "GET api.discogs.com/database/Zq9Wk3Xv7Tn5Rb/x?q=1 failed",
+        "GET api.discogs.com/database/[redacted]/x?q=1 failed",
+      ],
+      ["GET localhost:3001/v1/Zq9Wk3Xv7Tn5Rb/x", "GET localhost:3001/v1/[redacted]/x"],
+      ["GET /a/xxZq9Wk3Xv7Tn5Rbyy/b x", "GET /a/[redacted]/b x"],
+      ["GET ~/a/Zq9Wk3Xv7Tn5Rb.sig/b x", "GET ~/a/[redacted]/b x"],
+      // Not a path: no "/" or host first. The whole token, as before.
+      ["GET a/b/Zq9Wk3Xv7Tn5Rb/c x", "GET [redacted] x"],
+      // A value's base64 form takes its whole token, a "/" of base64 too.
+      [`see /abc/${base64(TOKEN).replace(/=+$/, "")}/def end`, "see [redacted] end"],
+    ]) {
+      expect(scrub(text)).toBe(expected);
+      expect(describeError(new Error(text))).toBe(expected);
+      expect(plainReason(text)).toBe(expected);
+    }
+  });
+
+  it.each([
+    ["a nested pair whose name is in backticks", `x token: \`password\`: ${CREDENTIAL} y`],
+    ["a nested pair whose name is in curly quotes", `x token: “password”: ${CREDENTIAL} y`],
+    [
+      "a credential after an empty secret parameter",
+      `GET https://h.example/x?password= \n${CREDENTIAL} failed`,
+    ],
+    [
+      "a credential after an empty secret parameter and a tab",
+      `GET https://h.example/x?token=\t${CREDENTIAL} failed`,
+    ],
+    [
+      "a credential after a scheme glued to a parameter's value",
+      `GET https://h.example/x?token=abcBearer ${CREDENTIAL} failed`,
+    ],
+    ["Bearer and a comma after an Authorization name", `x authorization: Bearer, ${CREDENTIAL} y`],
+  ])("hides %s, on every path to a log line or a client", (_name, text) => {
+    configure();
+    const outs = written(text);
+    delete outs.logText;
+    expect(showing(outs, [CREDENTIAL])).toEqual([]);
+  });
+
+  it("keeps readable text readable, and what main wrote for it", () => {
+    configure();
+    for (const [text, expected] of [
+      ["Bad request &amp; more &#169; 2024 (see /ws/2/recording?query=hurt%20me)", undefined],
+      ["GET /ws/2/release/5965531f-c922-42c7-9d7b-1a2b3c4d5e6f?inc=recordings 503", undefined],
+      ["QWxhZGRpbjpvcGVuIHNlc2FtZQ== is a base64 text with no configured value", undefined],
+      ["{\n  note: 'line one\\n' +\n    'line two'\n}", undefined],
+      ["x authorization: Bearer, please retry y", "x authorization: [redacted], please retry y"],
+      [
+        "GET /v1/items?api_key=x 2024-01-01T10:00:00Z",
+        "GET /v1/items?api_key=[redacted] 2024-01-01T10:00:00Z",
+      ],
+      [
+        "GET https://h.example/x?token= 404 Not Found",
+        "GET https://h.example/x?token=[redacted] 404 Not Found",
+      ],
+      ["x token: `password`: must be set", "x token: [redacted] must be set"],
+    ] as const) {
+      expect(scrub(text)).toBe(expected ?? text);
+    }
+  });
+
+  it("never cuts a value written decoded in two, at any cut", () => {
+    // Short values only: a value whose escaped form could run past the cut's window is looked
+    // up around the cut whatever its form, and would hide what the window misses.
+    configureLogger({ DISCOGS_TOKEN: TOKEN, DB_PASSWORD: PASSWORD });
+    const forms = [decimal(TOKEN), base64(`u:${TOKEN}`), encodeURIComponent(PASSWORD)];
+    const shown: string[] = [];
+    for (const form of forms) {
+      for (let pad = 80; pad < 240; pad++) {
+        const text = `${"a".repeat(pad)} ${form} end`;
+        for (const [path, out] of Object.entries({
+          logText: scrub(logText(text)),
+          reason: plainReason(text) ?? "",
+          source: new SourceError("discogs", "http", text).message,
+        })) {
+          const parts = Array.from({ length: form.length - 7 }, (_, i) => form.slice(i, i + 8));
+          if (parts.some((part) => out.includes(part))) shown.push(`${path} ${pad} ${form}`);
+        }
+      }
+      const long = `${"word ".repeat(Math.floor((MAX_LOGGED_TEXT - 40) / 5))}${form} end`;
+      for (let cut = 0; cut < 60; cut++) {
+        const out = scrub(long.slice(cut));
+        if (form.length > 8 && out.includes(form.slice(0, 8))) shown.push(`scrub ${cut} ${form}`);
+      }
+    }
+    expect(shown).toEqual([]);
+  });
+
+  it("keeps hidden what main's value, pair and Authorization rules hid, in paths too (generated texts)", () => {
+    // main's rules, frozen as a lower bound: the configured value replaced where it appears, a
+    // link's secret parameters, then a pair's value and an Authorization credential (908cc14's
+    // expressions, which main kept).
+    const N =
+      "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
+    const S = "(?:Bearer|Basic|Discogs)";
+    const Q = "[`\"']";
+    const V = String.raw`[^\s"'&,;}\]]`;
+    const NEXT = String.raw`(?:["']?${V}*?\b(?:${S}\s|(?:${N})(?:["'\s]\s*[:=]|[:=](?!${V})))|["']?${V}*&)`;
+    const MAIN_PAIR = new RegExp(
+      String.raw`\b(${N})(["']?\s*[:=]\s*(?!\s))(?!\s*(?:${Q}${S}[ \t]+|${S}\s+)?["']?\[redacted\])` +
+        String.raw`((?:${Q}${S}[ \t]+(?:${S}[ \t]+)*(?!${NEXT})|${S}\s+(?:(?:${S}\s+)+(?!${NEXT}))?))?` +
+        // biome-ignore lint/complexity/noUselessStringRaw: every piece of a pattern is written raw, so a backslash added later stays the pattern's
+        String.raw`["']?${V}+["']?`,
+      "gi",
+    );
+    const MAIN_AUTH =
+      /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+    const MAIN_PARAM =
+      /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
+    const main = (text: string) =>
+      text
+        .split(TOKEN)
+        .join("[redacted]")
+        .replace(/\bhttps?:\/\/[^\s"'<>\\`]+/gi, (link) => link.replace(MAIN_PARAM, "$1[redacted]"))
+        .replace(MAIN_PAIR, "$1$2[redacted]")
+        .replace(
+          MAIN_AUTH,
+          (_m, scheme?: string, basic?: string) => `${scheme ?? basic}[redacted]`,
+        );
+    configure();
+    const markers = /M\d{3}x|Zq9Wk3|Xv7Tn5Rb/g;
+    const shown = (out: string) => new Set(out.match(markers) ?? []);
+    const parts = [
+      "/",
+      "/a/",
+      "api.example.org/",
+      "localhost:3001/",
+      "~/",
+      "https://h.example/x",
+      "?token=",
+      "?password= ",
+      "&a=1",
+      "token=",
+      "password: ",
+      "authorization: ",
+      "Bearer ",
+      "Bearer, ",
+      "Basic ",
+      "`password`: ",
+      "“password”: ",
+      " ",
+      "\n",
+      "'",
+      '"',
+      ".",
+      "-",
+      "+",
+      "=",
+      TOKEN,
+      decimal(TOKEN),
+      base64(TOKEN),
+      "M001x",
+      "M002xQWxhZGRp",
+      "M003xT9zB8yC7xD6wE5v",
+    ];
+    const texts = randomStrings(parts, 20_000, 10, 2373);
+    const missed = texts.filter((text) => {
+      const hidden = shown(main(text));
+      return [...shown(scrub(text))].some((marker) => !hidden.has(marker));
+    });
+    expect(missed.slice(0, 5)).toEqual([]);
+    expect(
+      texts.filter((text) => shown(main(text)).size < shown(text).size).length,
+    ).toBeGreaterThan(4_000);
+  });
+
+  it("finds in scrubbedSpans what scrub hides of a value written decoded (generated texts)", () => {
+    configure();
+    const parts = [
+      decimal(TOKEN),
+      hexHalf(TOKEN),
+      named(PASSWORD),
+      base64(TOKEN),
+      base64(`u:${TOKEN}`),
+      encodeURIComponent(PASSWORD),
+      encodeURIComponent(SPACED).replace(/%20/g, "+"),
+      inspect({ k: PEM }),
+      BACKSLASHED.replace('"', '\\"'),
+      "/a/",
+      "api.example.org/",
+      "token: ",
+      "Bearer ",
+      "https://h.example/x?token=t1 ",
+      "&",
+      "%",
+      "+",
+      "' +\n  '",
+      "\\",
+      " ",
+      "x",
+    ];
+    // scrub replaces nothing outside the spans: every part of the text between them is written,
+    // in order, quotes and scheme words aside.
+    const bare = (text: string) => text.replace(/["']|(?:Bearer|Basic|Discogs)\s+/g, "");
+    for (const text of randomStrings(parts, 3_000, 8, 2374)) {
+      const out = bare(scrub(text));
+      let at = 0;
+      let kept = 0;
+      for (const [start, end] of [...scrubbedSpans(text), [text.length, text.length]]) {
+        const part = bare(text.slice(kept, start));
+        const found = out.indexOf(part, at);
+        expect(found, `${JSON.stringify(text)}: ${JSON.stringify(part)}`).not.toBe(-1);
+        at = found + part.length;
+        kept = end;
+      }
+    }
+  });
+
+  /** `piece` repeated to about `size` characters, between `head` and `tail`. */
+  const filled =
+    (piece: string, head = "", tail = "") =>
+    (size: number) =>
+      head + piece.repeat(Math.ceil(size / piece.length)) + tail;
+  it.each([
+    ["entities", filled("&#65;")],
+    ["entity starts", filled("&#1")],
+    ["named entities", filled("&amp;")],
+    ["names that are no entity", filled("&abcdefgh")],
+    ["percent escapes", filled("%41")],
+    ["UTF-8 starts", filled("%C3")],
+    ["plus signs", filled("+")],
+    ["util.inspect's joints", filled("'a\\n' +\n  ")],
+    ["quotes and blanks", filled("'      ")],
+    ["quotes, a plus and blanks", filled("' +     ")],
+    ["a long base64 run", filled("QWxhZGRpbjpvcGVuIHNlc2FtZQ")],
+    ["paths", filled("/a")],
+    ["hosts and paths", filled("h.example.org/a ")],
+    ["glued runs, then long gaps", filled(`${"x".repeat(64)}Bearer${" ".repeat(64)}`)],
+    ["quote-only values", filled("'", "authorization: Bearer ")],
+    ["many links", filled("://", "Bearer ")],
+    ["values in a path", filled("/Zq9Wk3Xv7Tn5Rb")],
+    ["values' base64 forms glued", filled("WnE5V2szWHY3VG41UmI")],
+    ["values written with entities", filled(decimal(TOKEN))],
+    ["empty secret parameters", filled("https://h.example/x?token= T9zB8yC7xD6wE5vF4uG3 ")],
+    ["nested names in backticks", filled("token: `password`: ")],
+    ["schemes and commas after a name", filled("authorization: Bearer, ")],
+  ])(
+    "reads the decoded forms and paths in linear time, up to 1 MB: %s",
+    (_name, make) => {
+      configure();
+      const call = (text: string) =>
+        scrub(text).length + scrubbedSpans(text).length + describeError(new Error(text)).length;
+      const { ratio } = growth(make, call, { size: 1 << 17, factor: 8, maxMs: 5_000 });
+      expect(ratio).toBeLessThan(20);
+    },
+    60_000,
+  );
 });
 
 describe("a configured secret that cannot be replaced safely", () => {

@@ -1138,12 +1138,13 @@ function inPath(text: string): (at: number) => boolean {
 
 /**
  * Whether the run of token characters at `start`, which starts like a path (inPath), is one by
- * what is written before it: an HTTP method (`GET /v1/…`, `method=GET /v1/…`); a name that ends
- * in a path's word, with its ":" or "=" (`path: /v1/…`, `"url":"/v1/…"`, `Location: /v1/…`) and
- * no secret's word in it (SECRET_WORD); or a host name or a port that starts its word
- * (`api.example.org/v1/…`, `localhost:3001/v1/…`), with no secret's word in the NAME_WINDOW
- * characters before that word, past the blanks and stops right before it. Never a credential's
- * value (credentialValueAt), nor a run whose own word holds a secret's word
+ * what is written before it: an HTTP method (`GET /v1/…`, `method=GET /v1/…`), a name that ends
+ * in a path's word with its ":" or "=" (`path: /v1/…`, `"url":"/v1/…"`, `Location: /v1/…`), or
+ * a host name or a port that starts its word (`api.example.org/v1/…`, `localhost:3001/v1/…`);
+ * and in each case no secret's word (SECRET_WORD) in the NAME_WINDOW characters before that
+ * word, past the blanks and stops right before it, the method's or the name's own words
+ * included (`Bearer GET /v1/…`, `token_url: /v1/…`). Never a credential's value
+ * (credentialValueAt), nor a run whose own word holds a secret's word
  * (`mysession=localhost:3001/…`). A value in any other run is the whole run's, whatever words
  * come before it (`token — /v1/…`, `[token] => /v1/…`, `Cookie: sid=localhost:3001/…`): a run
  * whose segments could be a credential's is never shown in part.
@@ -1156,24 +1157,23 @@ function pathEvidence(text: string, start: number, host: boolean): boolean {
   while (word > 0 && start - word < NAME_WINDOW && !endsLink(text.charCodeAt(word - 1))) word--;
   // A secret's word in the run's own word (`mysession=localhost:3001/…`).
   if (SECRET_WORD.test(text.slice(word, start))) return false;
-  const before = text.slice(Math.max(0, word - NAME_WINDOW), word);
-  if (METHOD_BEFORE.test(before)) return true;
-  const name = PATH_NAME_BEFORE.exec(before);
-  if (name && !SECRET_WORD.test(name[1] ?? "")) return true;
-  if (!host) return false;
-  // Back over blanks and stops first (`token:` and a long run of blanks), at most MAX_TOKEN.
+  // No secret's word before it either, the evidence's own words included (`Bearer GET /…`,
+  // `the token path: /…`): back over blanks and stops first (`token:` and a run of blanks), at
+  // most MAX_TOKEN, then NAME_WINDOW characters.
   let from = word;
   while (from > 0 && word - from < MAX_TOKEN && !ALPHANUMERIC.test(text.charAt(from - 1))) from--;
-  return !SECRET_WORD.test(text.slice(Math.max(0, from - NAME_WINDOW), word));
+  if (SECRET_WORD.test(text.slice(Math.max(0, from - NAME_WINDOW), word))) return false;
+  const before = text.slice(Math.max(0, word - NAME_WINDOW), word);
+  return host || METHOD_BEFORE.test(before) || PATH_NAME_BEFORE.test(before);
 }
 const ALPHANUMERIC = /[A-Za-z0-9]/;
 
 /** An HTTP method, then blanks, ending a text. */
 const METHOD_BEFORE =
   /(?<![A-Za-z0-9_])(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|TRACE|CONNECT)[ \t]+$/;
-/** A name that ends in a path's word (group 1), quotes or not, and its ":" or "=", ending a text. */
+/** A name that ends in a path's word, quotes or not, and its ":" or "=", ending a text. */
 const PATH_NAME_BEFORE =
-  /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*?(?:path|url|uri|href|file|route|endpoint|location))["'`]?[ \t]*[:=][ \t]*["'`]?$/i;
+  /(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]*?(?:path|url|uri|href|file|route|endpoint|location)["'`]?[ \t]*[:=][ \t]*["'`]?$/i;
 /**
  * A word a secret's name holds, anywhere in a word ("x-api-key", "sessionid", "passwd"), or one
  * of the shorter ones as a word of its own. It reads more words as secrets' than the rules do:

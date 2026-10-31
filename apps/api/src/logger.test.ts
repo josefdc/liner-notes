@@ -2583,6 +2583,12 @@ describe("configured values written decoded, paths without a scheme, and the sha
     ["sid", "sid="],
     ["a cookie", "Cookie: session="],
     ["a cookie set", "Set-Cookie: sid="],
+    // Evidence with a secret's word right beside it.
+    ["a secret's word before a path's name", "the token path: "],
+    ["a secret's word glued to a path's name", "token/path: "],
+    ["a path's name as a secret's value", "token: url: "],
+    ["a method after an Authorization name", "Authorization: GET "],
+    ["a method after a scheme", "Bearer GET "],
   ])("hides a path whole after words that do not say it is one: %s", (_, before) => {
     // Its segments could be a credential's, whatever the name before it: none is shown.
     vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);
@@ -2608,6 +2614,26 @@ describe("configured values written decoded, paths without a scheme, and the sha
     }
     expect(shown).toEqual([]);
   });
+
+  it.each(["you can get /a/", "Get /a/", "get ./"])(
+    "reads a method only in capitals: %s",
+    (before) => {
+      // Prose ("you can get …") says nothing of a path.
+      vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);
+      configureLogger({ AZURE_OPENAI_API_KEY: MODEL_KEY });
+      try {
+        const text = `${before}${MODEL_KEY}/${CREDENTIAL} x`;
+        const outs = {
+          ...written(text),
+          scrubReadText: scrubReadText(text),
+          scrubReadPayload: JSON.stringify(scrubReadPayload({ note: text })),
+        };
+        expect(showing(outs, [MODEL_KEY, CREDENTIAL])).toEqual([]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   it("keeps the segments around a value in a path the text says is one", () => {
     vi.stubEnv("AZURE_OPENAI_API_KEY", MODEL_KEY);

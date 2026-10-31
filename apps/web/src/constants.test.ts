@@ -186,6 +186,30 @@ describe('hasMeasuredAudioSource', () => {
     });
   });
 
+  it.each([
+    [
+      'unsupported_format',
+      'The preview is in a format the service does not measure.',
+      'the preview is in a format the service does not measure',
+    ],
+    [
+      'decode_incomplete',
+      'The preview does not decode to its full length, so it was not measured.',
+      'the preview does not decode in full',
+    ],
+  ] as const)(
+    'says what about the preview kept it from being measured (%s)',
+    (reason, text, short) => {
+      const track = copiesOnly({ audioSource: 'unavailable', audioUnavailableReason: reason });
+      expect(hasMeasuredAudioSource(track)).toBe(false);
+      expect(audioUnavailableText(reason)).toBe(text);
+      const signal = byField(audioReadings(track).signal);
+      expect(signal.bpm).toMatchObject({ state: 'missing', reason: short });
+      expect(signal.key).toMatchObject({ state: 'missing', reason: short });
+      expect(audioReadings(track).signal.every((r) => r.state === 'missing')).toBe(true);
+    },
+  );
+
   it.each(['service_unavailable', 'analysis_failed', 'not_run', undefined] as const)(
     'measures nothing for an "unavailable" result without a measurement (%s)',
     (reason) => {
@@ -478,6 +502,7 @@ describe('audioReadings', () => {
     expect(Object.keys(AUDIO_UNAVAILABLE_SHORT).sort()).toEqual(
       [
         'analysis_failed',
+        'decode_incomplete',
         'low_confidence',
         'no_preview',
         'not_detected',
@@ -485,6 +510,7 @@ describe('audioReadings', () => {
         'preview_lookup_incomplete',
         'preview_rejected',
         'service_unavailable',
+        'unsupported_format',
       ].sort(),
     );
   });

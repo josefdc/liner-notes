@@ -141,7 +141,7 @@ models are loaded and `degraded` when they are not. `analyzer_version` is the ve
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
 model set as semver build metadata, e.g. `2.3.6+essentia.models-5c5c0c7f`. Every successful
-(`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
+(`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`, with a `code` beside the detail for the `422` refusals of what the file is (see the error statuses below).
 
 ```bash
 curl http://localhost:3002/health
@@ -655,8 +655,15 @@ times full scale, is refused with `422`. So is an MP3 whose second read, describ
 it works" (step 2), still falls short of its frames by more than 0.1 s and 2 %, with its own
 reason: `the MP3 could not be decoded to the end of its MPEG audio frames` when that read
 failed, `the MP3 decodes to less audio than its MPEG audio frames hold` when it ended early.
-It is not measured, nor gated as too short, on the part that decoded. As with the MP4 and AAC
-refusal below, the API reports a failed analysis with this reason in its error detail.
+It is not measured, nor gated as too short, on the part that decoded. Either refusal carries
+the code `decode_incomplete`, which the API reports as its own reason, `decode_incomplete`,
+rather than as a failed analysis. When the service cannot set up that second read itself (no
+file descriptor for its pipe, or no thread to feed it), that is a fault of the service, not of
+the file: it answers `500` ("Audio analysis failed"), with no code, and the API reports a failed
+analysis, which a later run tries again. An API reading the detail alone (from a service older
+than the codes) takes only `the MP3 decodes to less audio than its MPEG audio frames hold` as
+`decode_incomplete`: an older service also sent `the MP3 could not be decoded to the end of its
+MPEG audio frames` for such a fault.
 
 The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
 refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
@@ -681,22 +688,26 @@ is never refused this way: WAV (`RIFF`, `RIFX`, `RF64`, W64), AIFF, CAF, FLAC, O
 NIST, PARIS, AVR, PVF, VOC and MATLAB 5. Any other file that cannot be decoded gets the generic
 reason.
 
-The API has no reason code for this refusal yet. The user still sees "the audio analysis
-failed", and the precise reason is only in the API's error detail.
+This refusal carries the code `unsupported_format`, which the API reports as its own reason,
+`unsupported_format`: the user sees that the preview is in a format the service does not
+measure, never that the analysis failed. The API also reads the refusal from its detail alone,
+as a service older than the codes sends it.
 
 Errors carry only a fixed `detail` (no measurements and no `analyzer_version`); the cause is
-only written to the service log.
+only written to the service log. A `422` refusal of what the file is also carries a fixed
+`code`: `{"detail": "...", "code": "unsupported_format"}` or `"decode_incomplete"`. The other
+refusals carry none.
 
 | Status | Meaning |
 |---|---|
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, an MP3 that decodes to less than its frames, non-finite or absurd samples) |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, an MP3 that decodes to less than its frames, non-finite or absurd samples). Only the MP4 (M4A) or AAC refusal (`code: "unsupported_format"`) and the two MP3 refusals (`code: "decode_incomplete"`) carry a `code` |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
-| `500` | Analysis failed |
+| `500` | Analysis failed, or the service could not set up the MP3's second read (no pipe or thread) |
 
 ## Which URLs are fetched
 

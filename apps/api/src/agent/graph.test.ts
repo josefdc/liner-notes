@@ -179,6 +179,7 @@ import { DEEZER_MAX_PER_WINDOW, deezerPreviewByIsrc } from "../sources/deezer.js
 import { SourceError } from "../sources/http.js";
 import { setUnpacedForTests } from "../sources/pacing.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
+import { json, stubFetch } from "../sources/testing/fetchStub.js";
 import { PreviewFreeSqliteSaver } from "../store/checkpointer.js";
 import { isWaitingAtInterrupt } from "../store/threads.js";
 import { ANALYZER_VERSION, audioV2, keyWithheldV2 } from "./testing/measuredAudio.js";
@@ -1056,6 +1057,127 @@ describe("the analysis graph's stored results", () => {
     expect(complete(second.events)?.data).not.toMatchObject({
       audioUnavailableReason: "preview_lookup_incomplete",
     });
+  });
+
+  it("stores a result whose preview the service refuses as a format it does not decode, and serves it without measuring again", async () => {
+    const store = new InMemoryStore();
+    const audio = hooks.audio;
+    if (!audio) throw new Error("the audio module was not loaded");
+    const SERVICE = "http://audio.test:3002";
+    const M4A =
+      "The preview is not analysable audio: it is an MP4 (M4A) or AAC file, a format the service does not decode";
+    process.env.AUDIO_ANALYSIS_URL = SERVICE;
+    onTestFinished(() => {
+      delete process.env.AUDIO_ANALYSIS_URL;
+      tools.analyzeAudioPreview.invoke.mockReset();
+    });
+    // The real analysis tool, given Spotify's own clip and a service that answered its health
+    // check; the service refuses the clip as it does an M4A, with the sentence only (an older
+    // service, without the code).
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) => {
+      const [input, config] = args as Parameters<typeof audio.analyzeAudioPreview.invoke>;
+      const audioRun = {
+        preview: {
+          previewUrl: "https://p.scdn.co/mp3-preview/own",
+          match: { provider: "spotify", method: "id", score: null },
+        },
+        serviceAvailable: true,
+      };
+      return String(
+        await audio.analyzeAudioPreview.invoke(input, { ...config, configurable: { audioRun } }),
+      );
+    });
+    stubFetch((call) =>
+      call.url === `${SERVICE}/analyze` ? json({ detail: M4A }, { status: 422 }) : undefined,
+    );
+
+    const first = await drive(stubModel(["done"]), { store });
+
+    const result = complete(first.events)?.data;
+    expect(result).toMatchObject({
+      id: TRACK_ID,
+      audioSource: "unavailable",
+      audioUnavailableReason: "unsupported_format",
+      bpm: null,
+      key: null,
+      energy: null,
+    });
+    expect(result).not.toHaveProperty("audio");
+    // Stored like any result: the format does not change on the next run.
+    const stored = await store.search(TRACKS_NAMESPACE);
+    expect(stored).toHaveLength(1);
+    const storedTrack = (stored[0].value as { trackData: TrackData }).trackData;
+    expect(storedTrack).toMatchObject({
+      audioUnavailableReason: "unsupported_format",
+      bpm: null,
+      key: null,
+      energy: null,
+      valence: null,
+      danceability: null,
+      acousticness: null,
+      keyMoments: [],
+    });
+    expect(storedTrack).not.toHaveProperty("audio");
+
+    // The next run that finds the track is served the stored result: same reason, nothing
+    // measured, the preview not sent to the service again.
+    const llm = stubModel(["done"]);
+    const second = await drive(llm, { store, query: "vanilla ice - ice ice baby" });
+    expect(second.threw).toBeNull();
+    expect(llm.calls).toEqual([]);
+    expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(1);
+    const served = complete(second.events)?.data;
+    expect(served).toMatchObject({
+      id: TRACK_ID,
+      audioSource: "unavailable",
+      audioUnavailableReason: "unsupported_format",
+      bpm: null,
+      key: null,
+    });
+    expect(served).not.toHaveProperty("audio");
+  });
+
+  it("does not store a result whose analysis failed on the service, so the next run measures again", async () => {
+    const store = new InMemoryStore();
+    const audio = hooks.audio;
+    if (!audio) throw new Error("the audio module was not loaded");
+    const SERVICE = "http://audio.test:3002";
+    process.env.AUDIO_ANALYSIS_URL = SERVICE;
+    onTestFinished(() => {
+      delete process.env.AUDIO_ANALYSIS_URL;
+      tools.analyzeAudioPreview.invoke.mockReset();
+    });
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) => {
+      const [input, config] = args as Parameters<typeof audio.analyzeAudioPreview.invoke>;
+      const audioRun = {
+        preview: {
+          previewUrl: "https://p.scdn.co/mp3-preview/own",
+          match: { provider: "spotify", method: "id", score: null },
+        },
+        serviceAvailable: true,
+      };
+      return String(
+        await audio.analyzeAudioPreview.invoke(input, { ...config, configurable: { audioRun } }),
+      );
+    });
+    stubFetch((call) =>
+      call.url === `${SERVICE}/analyze`
+        ? json({ detail: "Audio analysis failed" }, { status: 500 })
+        : undefined,
+    );
+
+    const first = await drive(stubModel(["done"]), { store });
+
+    expect(complete(first.events)?.data).toMatchObject({
+      id: TRACK_ID,
+      audioUnavailableReason: "analysis_failed",
+      bpm: null,
+    });
+    expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
+    const llm = stubModel(["done"]);
+    await drive(llm, { store, query: "vanilla ice - ice ice baby" });
+    expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+    expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(2);
   });
 
   it("does not serve a result stored for another track", async () => {

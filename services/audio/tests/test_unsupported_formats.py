@@ -461,7 +461,7 @@ def test_a_preview_declared_as_mp4_or_aac_is_refused_with_that_reason(
     url = _serve(cdn, monkeypatch, name, (FIXTURES / name).read_bytes(), content_type)
     response = client.post("/analyze", json={"preview_url": url})
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": DETAIL}
+    assert response.json() == {"detail": DETAIL, "code": "unsupported_format"}
     assert list(temp_dir.iterdir()) == []
 
 
@@ -474,7 +474,7 @@ def test_an_mp4_or_aac_preview_served_as_mp3_is_refused_with_that_reason(
     url = _serve(cdn, monkeypatch, "preview.mp3", REFUSED[form](), "audio/mpeg")
     response = client.post("/analyze", json={"preview_url": url})
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": DETAIL}
+    assert response.json() == {"detail": DETAIL, "code": "unsupported_format"}
     assert list(temp_dir.iterdir()) == []
 
 
@@ -516,7 +516,7 @@ def test_every_unsupported_type_is_refused_over_http_with_the_reason(
     url = _serve(cdn, monkeypatch, "tone.m4a", M4A.read_bytes(), content_type)
     response = client.post("/analyze", json={"preview_url": url})
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": DETAIL}
+    assert response.json() == {"detail": DETAIL, "code": "unsupported_format"}
     assert list(temp_dir.iterdir()) == []
 
 

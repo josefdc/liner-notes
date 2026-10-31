@@ -281,6 +281,14 @@ describe("tolerant readers: an unknown value never rejects a result", () => {
     expect(parsed.audio?.keyMoments).toEqual(audio.keyMoments);
   });
 
+  it.each(["unsupported_format", "decode_incomplete"])(
+    "reads the audio reason %s, a preview the service refuses for what the file is",
+    (reason) => {
+      const parsed = TrackAnalysis.parse({ ...analysis, audioUnavailableReason: reason });
+      expect(parsed.audioUnavailableReason).toBe(reason);
+    },
+  );
+
   it("reads a value or a measurement it cannot read as absent", () => {
     const parsed = TrackAnalysis.parse({
       ...analysis,

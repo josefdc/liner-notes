@@ -453,7 +453,8 @@ function maskedText(
 // Audio problems that may clear up on the next run. A result missing audio for one of these
 // reasons is not stored, so it is not served after the analysis service recovers, or after a
 // preview lookup that could not be finished (`preview_lookup_incomplete`: no clip is known
-// missing).
+// missing). A preview the service refuses for what the file is (`unsupported_format`,
+// `decode_incomplete`) is refused again by the next run, so that result is stored.
 const TRANSIENT_AUDIO_REASONS = new Set([
   "service_unavailable",
   "analysis_failed",

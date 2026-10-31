@@ -27,8 +27,12 @@ evals/agent/
 it reads is documented at the top of that file. In short:
 
 - **Run records** are checked on reading: an unknown ablation, edge direction (`uses`,
-  `usedBy`), relation (`sample`, `interpolation`, `cover`, `remix`) or origin (`code`, `model`)
-  is an error naming the file and field, never a silently dropped edge.
+  `usedBy`), relation (`sample`, `interpolation`, `cover`, `remix`) or origin (`code`, `model`),
+  a `synthetic` flag that is not a boolean, or a control character in a proposed title is an
+  error naming the file and field, never a silently dropped edge. So is a second record for the
+  same row, ablation and repeat (a pilot left beside the full run would count twice): the error
+  names both files. With `--subset`, every subset row needs a first run in row d and in every
+  other row that was run; the error names the rows that have none.
 - **Edges** are scored per distinct gold target, forward relations only. A target is found when
   a proposed edge names the same recording (ISRC, MusicBrainz id, or title and artist after the
   same normalisation as the coverage check) with the gold relation or one of its
@@ -41,19 +45,24 @@ it reads is documented at the top of that file. In short:
   - a proposal matching `otherDocumentedTargets` is left out;
   - on exhaustive rows every other proposal is a false positive; on rows that are not
     exhaustive, a proposal is left out ("unresolved") only when one sentence of the run's
-    evidence names its title and its artist as entities, with a relation. "Love" or "Time"
-    somewhere in an excerpt is not enough.
+    evidence states that the row's own track uses it by that relation, in one clause, naming
+    its title (quoted) and its artist. "Love" or "Time" somewhere in an excerpt is not enough,
+    and neither is a sentence about another song's relation.
   Unmatched proposals are listed in the report, with why each counts as it does.
-- **Held-out recall** is decided per run. A gold target counts as held-out in a run only when
-  the run's evidence cites none of the sites of its held-out sources
-  (`sourceQueriedByPipeline: false`). Sites are registrable domains (`en.wikipedia.org` and
-  `de.wikipedia.org` are both `wikipedia.org`); a Wayback Machine, archive.today or Google
-  cache copy counts as the page it copies; a page whose site cannot be placed (a link
-  shortener, a host without a dot, an unparseable URL) counts as citing every site. The rule
-  errs towards excluding. The report gives held-out n before and after the exclusion and the
-  sites that removed targets. Every documented-samples row has a held-out Wikipedia source, and
-  the four committed recordings each cite Wikipedia, so runs like them leave held-out n near
-  zero: the report says so instead of printing a rate.
+- **Held-out recall.** A gold target is held-out only when **none** of its sources is one the
+  pipeline queries (`sourceQueriedByPipeline: true`, MusicBrainz above all): a target that
+  MusicBrainz also documents can be found by echoing MusicBrainz, which is what held-out gold
+  exists to rule out. It then stops counting as held-out in a run whose evidence cites the site
+  of any of its sources. Sites are registrable domains (`en.wikipedia.org` and
+  `de.wikipedia.org` are both `wikipedia.org`); a Wayback Machine, archive.today, Google cache,
+  Google Translate or AMP copy counts as the page it carries, and a Wikipedia mirror (Wikiwand
+  and the like) as Wikipedia; a page whose site cannot be placed (a link shortener, a host
+  without a dot, an unparseable URL, any other URL that carries another URL) counts as citing
+  every site. The rule errs towards excluding. Of the 16 gold targets in the live subset, 15
+  also have a MusicBrainz source, so **one** target is held-out (Crazy's "Last Men Standing",
+  documented by Wikipedia only) and it is lost in any run that cites Wikipedia, as each of the
+  four committed recordings does. Held-out recall is therefore shown as counts, the report says
+  why, and it gives n before and after the exclusion and the sites that removed targets.
 - **Hallucinated-sample rate**: the share of no-sample controls with at least one forward sample,
   interpolation or cover edge, and the mean number of such edges per control.
 - **Identity** is scored at recording level: the row's MusicBrainz recording when both the row
@@ -87,16 +96,27 @@ rendered from records marked `"synthetic": true` says so at the top.
 `check-report.mjs` exits 1 and names each problem. It renders the report again from the run
 records and golden file its header names (with its date, commit and subset) and requires the
 Markdown and the results file (`agent-<date>.json`) to match byte for byte; the held-out
-exclusion is re-derived from the runs' evidence, never read from the results file. It also
-checks the structure on its own: a header with the dataset (its sha256 must still match), run
-records, date, commit and results file; Markdown tables at the start of the line (no HTML, no
-indent) with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson
-interval recomputed; statistics with a numeric interval, low before high; counts only below
-n = 10; "no data" only at n = 0; ablation rows a-d; the clarification rate; held-out numbers
-that add up; no "human-labelled", "annotators" or the like, in any case; the synthetic banner
-when the records are synthetic, and no synthetic report under `evals/reports`. The broken
-reports in `testdata/` exercise each of these, and the tests show which ones only re-rendering
-catches.
+exclusion is re-derived from the runs' evidence, never read from the results file. The header
+carries the sha256 of the run-record directory, so records that changed since the report are
+named as such (keep each golden run's records in a directory of its own). It also checks the
+structure on its own: a header with the dataset (its sha256 must still match), run records,
+date, commit and results file; Markdown tables at the start of the line (no HTML, no indent)
+with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson interval
+recomputed; statistics with a numeric interval, low before high (marked "all resamples equal"
+when it has no width); counts only below n = 10; "no data" only at n = 0; ablation rows a-d;
+the clarification rate; held-out numbers that add up; no "human-labelled", "annotators" or the
+like, in any case; the synthetic banner when the records are synthetic. A report under
+`evals/reports` must also score `evals/golden.jsonl` with the sha256 that file had at the
+report's commit, name a header commit and run commits that exist in git, and come from records
+that are neither synthetic nor under a `testdata` directory (`report.mjs` refuses to write
+those there). The broken reports in `testdata/` exercise each of these, and the tests show
+which ones only re-rendering catches.
+
+What `check-report.mjs` cannot tell: whether the run records came from real runs. It proves a
+report is what the named records and dataset give, and refuses what only test data or a
+substituted dataset would give; records edited together with their report still pass. Where
+the records come from is shown by the golden run's own trail (its cassettes and spend log), not
+by this check.
 
 `npm run eval -- --suite agent --mode replay --subset ci|all` scores the records in
 `evals/agent/runs` on the CI subset (six rows, `CI_SUBSET` in `lib/golden.mjs`) or the whole live
@@ -119,8 +139,14 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   cited excerpt holds all of it: every quoted title and name as a whole entity, every year as a
   standalone token (not inside an ISRC such as `USUM71920161`), every decade as a decade, and
   the same relation with each entity in the same role ("A samples B" and "B is sampled in A"
-  agree; "B samples A" does not). A negated sentence, or one that names nothing, states no year
-  and no relation, or names nothing after its relation, is not supported. Each positive gets
+  agree; "B samples A" does not). The words after a verb reach only to the next verb or clause
+  word (and, which, that…), a year must sit in a clause with an entity the claim gives it to,
+  and a month and day, when the claim gives them, must be the excerpt's. A negated or hedged
+  sentence (not, never, wrongly, supposedly, planned, going to…), or one that names nothing,
+  states no year and no relation, or names nothing after its relation, is not supported. The
+  check is a conservative heuristic over English sentences, not a reader: it refuses some
+  supported claims, and the golden run reads every model positive by hand before a report built
+  on the set is published. Each positive gets
   two mutations that its excerpts do not support (unsupported by the cited excerpts, which is
   not the same as false): another real title or artist (from a MusicBrainz excerpt or another
   recording's own title and artist), another year, the roles swapped, another relation (sample
@@ -152,7 +178,7 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   order. Each row's `label_id` is an HMAC-SHA256 of the case id under a salt (random unless
   `--salt` is given), so ids and order cannot be recomputed from the committed set. The salt
   and the map from label ids to cases go to the `--key` file, which must not sit next to the
-  CSV (the CLI refuses that); keep it away from whoever labels, and out of the repository.
+  CSV or anywhere in the repository (the CLI refuses both); keep it away from whoever labels.
 - The generator sorts by code point, so its output is the same bytes in every locale.
 
 ## Pending until the live golden run

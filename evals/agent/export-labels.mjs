@@ -6,8 +6,8 @@
 // hex digits. The rows are shuffled with a seed drawn from the same salt. The salt is random
 // unless given, so the ids and the order cannot be recomputed from the committed set without the
 // key: a JSON file with the salt and every label id's case id, written to `--key`. Keep the key
-// away from the people labelling (and out of the repository next to the CSV): the CLI refuses a
-// key in the CSV's directory.
+// away from the people labelling: the CLI refuses a key in the CSV's directory or anywhere in the
+// repository.
 //
 //   node evals/agent/export-labels.mjs --key ~/labels-key.json                the claim cases of evals/perturb.jsonl
 //   node evals/agent/export-labels.mjs --from recordings --key <path>         the claims of fixtures/replays/*.json
@@ -16,9 +16,10 @@
 
 import { createHmac, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { REPO_ROOT } from "./lib/golden.mjs";
 import { readRecordings } from "./make-perturb.mjs";
 import { readPerturb } from "./perturb-check.mjs";
 import { rng } from "./lib/stats.mjs";
@@ -113,6 +114,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const out = arg("--out");
     if (!keyPath) {
       throw new Error("--key <path> is needed: the key maps label ids back to cases");
+    }
+    if (!relative(REPO_ROOT, resolve(keyPath)).startsWith("..")) {
+      throw new Error("--key must be outside the repository, where it cannot be committed");
     }
     if (out && dirname(resolve(out)) === dirname(resolve(keyPath))) {
       throw new Error(

@@ -135,14 +135,44 @@ function wrapped(u, h) {
       .replace(/^cache:/, "");
     return q ? (/^https?:/i.test(q) ? q : `https://${q}`) : null;
   }
+  // Google Translate's proxy: en-m-wikipedia-org.translate.goog is en.m.wikipedia.org.
+  if (h.endsWith(".translate.goog")) return `https://${decodeLabel(h.split(".")[0])}${u.pathname}`;
+  if (/^translate\.google\.[a-z.]+$/.test(h) || h === "translate.googleusercontent.com") {
+    const inner = u.searchParams.get("u") ?? u.searchParams.get("url");
+    return inner ? (/^https?:/i.test(inner) ? inner : `https://${inner}`) : null;
+  }
+  // AMP caches: www-latimes-com.cdn.ampproject.org/c/s/www.latimes.com/x.
+  if (h.endsWith(".cdn.ampproject.org") || h.endsWith(".ampproject.net")) {
+    const path = u.pathname.match(/^\/(?:[cvi]\/)?(?:s\/)?([^/]+\.[^/]+)(\/.*)?$/);
+    return path
+      ? `https://${path[1]}${path[2] ?? "/"}`
+      : `https://${decodeLabel(h.split(".")[0])}/`;
+  }
   return undefined; // not a wrapper
 }
 
+/** A proxy's encoded host label ("www-latimes-com") as the host ("www.latimes.com"). */
+const decodeLabel = (label) => label.replace(/--/g, "\0").replace(/-/g, ".").replace(/\0/g, "-");
+
+// Mirrors that republish another site's pages under their own host.
+const MIRRORS = new Map([
+  ["wikiwand.com", "wikipedia.org"],
+  ["wikiwand.org", "wikipedia.org"],
+  ["wiki2.org", "wikipedia.org"],
+  ["wikizero.com", "wikipedia.org"],
+  ["everybodywiki.com", "wikipedia.org"],
+]);
+
+// A path or query that carries another URL: a proxy or wrapper the rule does not know.
+const EMBEDS_URL =
+  /(?:https?:\/\/|https?%3a%2f%2f|[=/](?:www\.|[a-z0-9-]+\.(?:com|org|net|co\.uk)\/))/i;
+
 /**
- * The site a cited page counts as, failing closed for the held-out rule: an archive or cache
- * copy counts as the page it copies; a URL that cannot be parsed, a host with no dot, a link
- * shortener, or a wrapper whose original cannot be read offline counts as citing every site
- * (ANY_SITE).
+ * The site a cited page counts as, failing closed for the held-out rule: an archive, cache,
+ * translation proxy or AMP copy counts as the page it copies, and a Wikipedia mirror (Wikiwand…)
+ * as Wikipedia; a URL that cannot be parsed, a host with no dot, a link shortener, a wrapper
+ * whose original cannot be read offline, or any other URL whose path or query carries another
+ * URL counts as citing every site (ANY_SITE).
  */
 export function citedSite(url) {
   let u;
@@ -160,7 +190,9 @@ export function citedSite(url) {
   const inner = wrapped(u, h);
   if (inner === null) return ANY_SITE;
   if (inner !== undefined) return citedSite(inner);
-  return siteOfHost(h);
+  if (EMBEDS_URL.test(`${u.pathname}${u.search}`)) return ANY_SITE;
+  const s = siteOfHost(h);
+  return MIRRORS.get(s) ?? s;
 }
 
 /** Do two record descriptions name the same recording (ISRC or MBID, else title and artist)? */

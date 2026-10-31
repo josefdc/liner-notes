@@ -1544,6 +1544,11 @@
         "id": "ev-mb-GBAHT0600202",
         "url": "https://musicbrainz.org/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf",
         "excerpt": "MusicBrainz recording \"Crazy\" by Gnarls Barkley."
+      },
+      {
+        "id": "ev-wp-GBAHT0600202",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Crazy is a song by Gnarls Barkley."
       }
     ],
     "edges": [

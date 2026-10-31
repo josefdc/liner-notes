@@ -112,8 +112,7 @@ Field rules:
 - **Several edges with the same target** are one gold relation backed by
   several sources (for example Wikipedia, a newspaper and MusicBrainz). Score
   per distinct target, not per edge; the extra edges record every source that
-  documents the target, and so every site whose citation takes its held-out
-  credit away (see below).
+  documents the target (see "Held-out gold" for what they mean there).
 - **edgesExhaustive / otherDocumentedTargets.** Gold edges are not always
   every relation the sources mention. `otherDocumentedTargets` lists
   relations the cited sources state that gold deliberately does not score
@@ -145,8 +144,9 @@ Field rules:
   positive**; it is left out of precision. On rows with `edgesExhaustive:
   true`, every other proposed edge is a false positive. On rows with
   `edgesExhaustive: false`, the sources may know relations gold does not list,
-  so a proposal is left out only when one sentence of the run's evidence names
-  its title and its artist with a relation; any other is a false positive.
+  so a proposal is left out only when one sentence of the run's evidence states
+  that the row's track uses it by that relation, naming its title and artist;
+  any other is a false positive.
 - On no-sample controls any proposed sample, interpolation or cover is a
   hallucinated relation.
 - The pre-verifier support rate is the share of the model's claims, before the
@@ -189,7 +189,7 @@ prints the current values):
 |---|---|---:|
 | edge recall | live rows with at least one gold edge | 15 |
 | edge precision | all live rows (controls included) | 24 |
-| held-out recall | live rows with at least one held-out edge | 15 |
+| held-out recall | live rows with a target no queried source documents (see "Held-out gold") | 1 |
 | hallucinated-sample rate | live no-sample controls | 5 |
 | identity accuracy | all live rows | 24 |
 
@@ -246,21 +246,24 @@ Edges from those sources are `true`. Everything else is `false`, i.e.
 held-out: Wikipedia articles, newspapers and magazines, broadcasters,
 interviews, label press releases, liner notes.
 
-Held-out status is decided **per run**, not once. Web search can surface any
-domain, so a gold target stops counting as held-out for a given run if that
-run's evidence cites the site of **any** of the target's held-out sources (for
-example, a run whose evidence includes an `en.wikipedia.org` page loses
-held-out credit for every target Wikipedia documents, even one a newspaper
-documents too: the run could have read it there). Sites are registrable
-domains (`de.wikipedia.org` is `wikipedia.org`); an archived or cached copy
-counts as the page it copies, and a cited page whose site cannot be placed (a
-link shortener, an unparseable URL) counts as citing every site. The flag in
-the file is the default; the scorer applies the per-run rule. Every
-documented-samples row has held-out edges from at least two different domains
-(Wikipedia and a newspaper, magazine or broadcaster; `summary.mjs` lists the
-domains), but under this rule a run that cites Wikipedia keeps held-out credit
-only for targets Wikipedia does not document. Runs that cite Wikipedia for
-most rows leave few held-out targets, and the report says so.
+A gold **target** is held-out only when none of its sources is one the
+pipeline queries: a target that MusicBrainz also documents can be found by
+echoing MusicBrainz, which held-out gold exists to rule out. Most targets in
+this version have a MusicBrainz source as well as held-out ones; in the live
+subset only one target (Crazy's "Last Men Standing", documented by Wikipedia
+only) is held-out, so held-out recall is reported as counts.
+
+Held-out status is also decided **per run**. Web search can surface any
+domain, so a held-out target stops counting as held-out for a given run if
+that run's evidence cites the site of any of its sources (for example, a run
+whose evidence includes an `en.wikipedia.org` page loses held-out credit for
+every target Wikipedia documents). Sites are registrable domains
+(`de.wikipedia.org` is `wikipedia.org`); an archived, cached, translated or
+AMP copy counts as the page it carries, a Wikipedia mirror counts as
+Wikipedia, and a cited page whose site cannot be placed (a link shortener, an
+unparseable URL, a URL that carries another URL) counts as citing every
+site. The flags in the file are the default; the scorer applies both rules.
+`summary.mjs` lists the held-out domains.
 
 ## Changing the set
 

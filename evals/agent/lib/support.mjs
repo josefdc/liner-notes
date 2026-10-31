@@ -1,20 +1,29 @@
 // The deterministic support check: does an excerpt a claim cites state what the claim says?
-// It never reads a judge's verdict, and it errs towards "not supported".
+// It never reads a judge's verdict, and it errs towards "not supported". It is a conservative
+// heuristic over English sentences, not a reader: it can refuse a supported claim, and a claim
+// it passes still needs a person's reading before a report built on it is published.
 //
 // Each sentence of the claim must:
 // - name at least one entity (a quoted title, or a name: a run of capitalised words outside
-//   quotes, without a leading article, sentence opener, month or source name), and state a
-//   year, a decade or a relation (sample, cover, remix, interpolation);
+//   quotes, without a leading article, sentence opener, month or source name; or a name in lower
+//   case after "by"), and state a year, a decade or a relation (sample, cover, remix,
+//   interpolation);
 // - with a relation, name an entity after its verb ("Juicy samples a drum break" names nothing
 //   it samples);
-// - carry no negation ("never", "not", "n't", "disputed"…).
-// Then one sentence of one cited excerpt, itself not negated, must hold all of it at once:
+// - carry no negation or hedge ("never", "not", "n't", "disputed", "wrongly", "planned",
+//   "going to"…).
+// Then one sentence of one cited excerpt, itself not negated or hedged, must hold all of it:
 // - every entity as a whole entity: it equals a quoted title or a name there ("Fruit" is not
 //   "Juicy Fruit");
-// - every year as a standalone token, not inside an ISRC or "AR2005-11"; a decade ("1960s")
-//   matches only a decade;
-// - the same relation, with every entity in the same role: "A samples B" and "B is sampled in
-//   A" agree, "B samples A" does not.
+// - every year as a standalone token (not inside an ISRC or "AR2005-11"), in a clause that names
+//   one of the entities the claim gives the year to ("'Juicy' is a 1994 song" does not date
+//   "Juicy Fruit"); a decade ("1960s") matches only a decade; a month and day, when the claim
+//   gives them, must be the excerpt's (in any of the usual spellings);
+// - every relation, with each entity in the same role towards that relation: what comes before
+//   a verb uses what comes after it, the other way for a passive ("A samples B" and "B is
+//   sampled in A" agree; "B samples A" does not). The words after a verb reach only to the next
+//   verb or clause word (and, which, that, who, while, but, ;), so "samples X and was covered by
+//   Y" does not make Y sampled.
 
 export function normText(s) {
   return String(s ?? "")
@@ -39,7 +48,57 @@ const QUOTED = /[“"]([^”"]+)[”"]/g;
 const YEAR = /(?<![\p{L}\p{N}])(1[89]\d{2}|20\d{2})(?![\p{L}\p{N}])/gu;
 const DECADE = /(?<![\p{L}\p{N}])((?:1[89]|20)\d0)s(?![\p{L}\p{N}])/gu;
 const NEGATION =
-  /\b(?:not|never|no|neither|nor|without|denied|denies|disputed|unconfirmed|unproven|allegedly|reportedly)\b|n['’]t\b/i;
+  /\b(?:not|never|no|neither|nor|without|denied|denies|deny|disputed|disputes|unconfirmed|unproven|allegedly|reportedly|wrongly|falsely|mistakenly|erroneously|incorrectly|misattributed|rumou?r(?:ed|s)?|myth|apocryphal|supposedly|claimed|planned|plans|planning|intended|intends|meant|considered|proposed|attempted|tried|wanted|hoped|would|could|might)\b|\b(?:going|was|were)\s+to\s+(?:sampl|cover|remix|interpolat)|n['’]t\b/i;
+const MONTH_NAMES =
+  "january february march april may june july august september october november december".split(
+    " ",
+  );
+const MONTH = `(${MONTH_NAMES.join("|")})`;
+const DATE_FORMS = [
+  // 1997-06-01, 1997-06
+  [
+    /(?<![\p{L}\p{N}])(1[89]\d{2}|20\d{2})-(\d{2})(?:-(\d{2}))?(?![\p{L}\p{N}])/gu,
+    (m) => [m[1], +m[2], m[3] ? +m[3] : null],
+  ],
+  // June 1, 1997 · June 1st 1997
+  [
+    new RegExp(
+      String.raw`\b${MONTH}\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(1[89]\d{2}|20\d{2})\b`,
+      "giu",
+    ),
+    (m) => [m[3], MONTH_NAMES.indexOf(m[1].toLowerCase()) + 1, +m[2]],
+  ],
+  // 1 June 1997
+  [
+    new RegExp(
+      String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+${MONTH},?\s+(1[89]\d{2}|20\d{2})\b`,
+      "giu",
+    ),
+    (m) => [m[3], MONTH_NAMES.indexOf(m[2].toLowerCase()) + 1, +m[1]],
+  ],
+  // June 1997
+  [
+    new RegExp(String.raw`\b${MONTH},?\s+(1[89]\d{2}|20\d{2})\b`, "giu"),
+    (m) => [m[2], MONTH_NAMES.indexOf(m[1].toLowerCase()) + 1, null],
+  ],
+];
+
+/** The dates a sentence states with at least a month: { year, month, day | null }. */
+export function datesIn(sentence) {
+  const out = [];
+  for (const [re, parse] of DATE_FORMS) {
+    for (const m of sentence.matchAll(re)) {
+      const [year, month, day] = parse(m);
+      if (month >= 1 && month <= 12) out.push({ year, month, day });
+    }
+  }
+  return out;
+}
+
+// Words that start a new clause: the words after a relation verb stop there.
+const CLAUSE =
+  /\s(?:and|which|that|who|whom|whose|while|whereas|but|although|though|before|after)\s|;/gi;
+
 // A relation: a verb, or "a/the <noun> of". A past participle followed by in, by or on is
 // passive ("is sampled in", "has been covered by", "a source sampled in").
 const RELATION =
@@ -145,59 +204,96 @@ export function entitiesIn(sentence) {
   return out;
 }
 
-/** What one sentence states: entities with their roles, years, decades, relation, negation. */
+/** What one sentence states: entities with their roles per relation, years, dates, negation. */
 export function analyse(sentence) {
-  const first = [...sentence.matchAll(RELATION)][0];
-  const relation = first ? relationOf(first) : null;
-  const side = (e) =>
-    !relation ? null : e.at < relation.at ? "before" : e.at >= relation.end ? "after" : null;
-  const entities = entitiesIn(sentence).map((e) => {
-    const s = side(e);
-    // Active: what comes before the verb uses what comes after it. Passive: the other way.
-    const role = s === null ? null : (s === "before") !== relation.passive ? "user" : "used";
-    return { ...e, side: s, role };
-  });
+  const unquoted = sentence.replace(QUOTED, (q) => ` ${",".repeat(q.length - 2)} `);
+  const relations = [...sentence.matchAll(RELATION)].map(relationOf);
+  const clauses = [...unquoted.matchAll(CLAUSE)].map((m) => m.index);
+  // Where each relation's object ends: the next verb or clause word.
+  for (const [i, r] of relations.entries()) {
+    const next = [relations[i + 1]?.at, ...clauses.filter((c) => c >= r.end)].filter(
+      (x) => x !== undefined,
+    );
+    r.stop = next.length ? Math.min(...next) : sentence.length;
+  }
+  // Segments, for binding a year to its clause: split at every verb and clause word.
+  const cuts = [...relations.map((r) => r.at), ...clauses].sort((x, y) => x - y);
+  const segmentOf = (at) => cuts.filter((c) => c <= at).length;
+  const entities = entitiesIn(sentence).map((e) => ({ ...e, segment: segmentOf(e.at) }));
+  const triples = [];
+  for (const [i, r] of relations.entries()) {
+    const earlierObjects = relations.slice(0, i).map((x) => [x.end, x.stop]);
+    for (const e of entities) {
+      let side = null;
+      if (e.at >= r.end && e.at < r.stop) side = "after";
+      else if (e.at < r.at && !earlierObjects.some(([from, to]) => e.at >= from && e.at < to)) {
+        side = "before";
+      }
+      if (!side) continue;
+      // Active: what comes before the verb uses what comes after it. Passive: the other way.
+      const role = (side === "before") !== r.passive ? "user" : "used";
+      triples.push({ relation: r.relation, key: e.key, role, side, text: e.text });
+    }
+  }
   return {
     sentence,
     entities,
-    years: [...sentence.matchAll(YEAR)].map((m) => m[1]),
+    relations,
+    triples,
+    years: [...sentence.matchAll(YEAR)].map((m) => ({ year: m[1], segment: segmentOf(m.index) })),
     decades: [...sentence.matchAll(DECADE)].map((m) => m[1]),
-    relation,
+    dates: datesIn(sentence),
     negated: NEGATION.test(sentence),
   };
 }
 
-const rolesOf = (analysed, key) =>
-  new Set(analysed.entities.filter((e) => e.key === key && e.role).map((e) => e.role));
+const hasTriple = (analysed, t) =>
+  analysed.triples.some((x) => x.relation === t.relation && x.key === t.key && x.role === t.role);
 
 /** Why one excerpt sentence does not back one claim sentence, or null when it does. */
 function mismatch(claim, excerpt) {
-  if (excerpt.negated) return "the excerpt sentence is negated";
+  if (excerpt.negated) return "the excerpt sentence is negated or hedged";
   const keys = new Set(excerpt.entities.map((e) => e.key));
   const missing = claim.entities.filter((e) => !keys.has(e.key)).map((e) => e.text);
   if (missing.length) return `entities ${missing.join(", ")}`;
-  for (const y of claim.years) if (!excerpt.years.includes(y)) return `year ${y}`;
+  for (const { year, segment } of claim.years) {
+    const own = claim.entities.filter((e) => e.segment === segment).map((e) => e.key);
+    const bound = new Set(own.length ? own : claim.entities.map((e) => e.key));
+    const ok = excerpt.years.some(
+      (y) =>
+        y.year === year &&
+        excerpt.entities.some((e) => e.segment === y.segment && bound.has(e.key)),
+    );
+    if (!ok) return `year ${year} with ${[...bound].join(", ")}`;
+  }
   for (const d of claim.decades) if (!excerpt.decades.includes(d)) return `decade ${d}s`;
-  if (claim.relation) {
-    if (excerpt.relation?.relation !== claim.relation.relation) {
-      return `relation ${claim.relation.relation}`;
+  for (const d of claim.dates) {
+    const ok = excerpt.dates.some(
+      (x) => x.year === d.year && x.month === d.month && (d.day === null || x.day === d.day),
+    );
+    if (!ok) return `date ${d.year}-${d.month}${d.day ? `-${d.day}` : ""}`;
+  }
+  for (const r of claim.relations) {
+    if (!excerpt.relations.some((x) => x.relation === r.relation)) {
+      return `relation ${r.relation}`;
     }
-    for (const e of claim.entities) {
-      if (e.role && !rolesOf(excerpt, e.key).has(e.role)) return `the role of ${e.text}`;
-    }
+  }
+  for (const t of claim.triples) {
+    if (!hasTriple(excerpt, t)) return `${t.text} as ${t.role} in ${t.relation}`;
   }
   return null;
 }
 
 /** Why a claim sentence cannot be checked at all, or null. */
 function uncheckable(claim) {
-  if (claim.negated) return "negated";
+  if (claim.negated) return "negated or hedged";
   if (claim.entities.length === 0) return "no entity";
-  if (!claim.relation && claim.years.length + claim.decades.length === 0) {
+  if (claim.relations.length === 0 && claim.years.length + claim.decades.length === 0) {
     return "no year or relation";
   }
-  if (claim.relation && !claim.entities.some((e) => e.side === "after")) {
-    return `nothing named after "${claim.relation.relation}"`;
+  for (const r of claim.relations) {
+    const named = claim.triples.some((t) => t.relation === r.relation && t.side === "after");
+    if (!named) return `nothing named after "${r.relation}"`;
   }
   return null;
 }

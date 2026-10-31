@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -171,6 +171,7 @@ test("numeric cases: every branch of the check, each with its exact expected res
     "key-fifth-up",
     "key-fourth-up-other-mode",
     "key-whole-tone",
+    "key-relative-interval-same-mode",
     "key-tritone",
     "key-whole-tone-unmarked",
     "key-whole-tone-weak",
@@ -188,6 +189,8 @@ test("numeric cases: every branch of the check, each with its exact expected res
       assert.equal(c.audio.key.basis, "synthetic", c.id);
     }
     if (c.synthetic.length === 0) assert.equal(c.audio.key, null, c.id);
+    // A tempo block whose confidence or method was set is not a signal measurement either.
+    if (c.synthetic.includes("tempo.method")) assert.equal(c.audio.tempo.basis, "synthetic", c.id);
   }
   // Restatements of the measured value are most of the equivalents, not a token few.
   const consistent = numeric.filter((c) => c.expect === "consistent").length;
@@ -280,6 +283,21 @@ test("export-labels needs a key path away from the CSV, and writes the key there
     ]);
     assert.equal(beside.status, 1);
     assert.match(beside.stderr, /must not be in the CSV's directory/);
+    const keyInRepo = join(ROOT, "evals", `.labels-key-test-${process.pid}.json`);
+    try {
+      const inRepo = node([
+        "evals/agent/export-labels.mjs",
+        "--out",
+        join(dir, "l.csv"),
+        "--key",
+        keyInRepo,
+      ]);
+      assert.equal(inRepo.status, 1);
+      assert.match(inRepo.stderr, /--key must be outside the repository/);
+      assert.equal(existsSync(keyInRepo), false);
+    } finally {
+      rmSync(keyInRepo, { force: true });
+    }
     const ok = node([
       "evals/agent/export-labels.mjs",
       "--out",

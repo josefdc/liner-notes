@@ -4,10 +4,11 @@
 // Run with: node --test 'evals/**/*.test.mjs'
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { ANY_SITE, citedSite, goldTargets, readGolden, site, subsetRows } from "./lib/golden.mjs";
 import {
@@ -79,6 +80,32 @@ test("a cited page's site fails closed: archives count as the original, unknowns
     citedSite("https://archive.ph/AbCdE"),
     ANY_SITE,
     "an archive id without its original",
+  );
+  // Mirrors, translation proxies and AMP caches count as the page they carry.
+  for (const [url, expected] of [
+    ["https://www.wikiwand.com/en/articles/Juicy_(The_Notorious_B.I.G._song)", "wikipedia.org"],
+    ["https://en-m-wikipedia-org.translate.goog/wiki/Juicy?_x_tr_sl=en", "wikipedia.org"],
+    ["https://www-latimes-com.cdn.ampproject.org/c/s/www.latimes.com/x", "latimes.com"],
+    [
+      "https://translate.google.com/translate?u=https://en.wikipedia.org/wiki/Juicy",
+      "wikipedia.org",
+    ],
+    ["https://news-bbc-co-uk.translate.goog/x", "bbc.co.uk"],
+  ]) {
+    assert.equal(citedSite(url), expected, url);
+  }
+  // Any other URL that carries another URL is a proxy the rule does not know: every site.
+  for (const url of [
+    "https://proxy.example.net/fetch?url=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FJuicy",
+    "https://reader.example.com/read/https://en.wikipedia.org/wiki/Juicy",
+    "https://translate.google.com/translate?sl=auto",
+  ]) {
+    assert.equal(citedSite(url), ANY_SITE, url);
+  }
+  // Ordinary pages, MusicBrainz API calls included, keep their own site.
+  assert.equal(
+    citedSite("https://musicbrainz.org/ws/2/recording/x?inc=recording-rels+url-rels&fmt=json"),
+    "musicbrainz.org",
   );
 });
 
@@ -175,6 +202,25 @@ test("when code and model spell one target differently, the code's edge is credi
   );
 });
 
+test("a wrong-relation copy of a credited target is a false positive, not a duplicate", () => {
+  const s = scoreRun(
+    OMT,
+    run(OMT, {
+      edges: [
+        uses("More Spell on You", "Eddie Johns"),
+        uses("More Spell on You", "Eddie Johns", "cover"),
+      ],
+    }),
+  );
+  assert.deepEqual(
+    s.edges.map((e) => [e.outcome, e.why ?? null]),
+    [
+      ["tp", null],
+      ["fp", "right target, wrong relation"],
+    ],
+  );
+});
+
 test("the track itself proposed as its own sample is a false positive", () => {
   const s = scoreRun(HUNG_UP, run(HUNG_UP, { edges: [uses("Hung Up", "Madonna")] }));
   assert.deepEqual(
@@ -189,7 +235,7 @@ test("precision on a row that is not exhaustive: other documented targets and ed
     HUNG_UP,
     run(HUNG_UP, {
       evidence: [
-        cite("https://musicbrainz.org/x", 'It samples "Named Elsewhere" by Somebody Real.'),
+        cite("https://musicbrainz.org/x", 'Hung Up samples "Named Elsewhere" by Somebody Real.'),
       ],
       edges: [
         uses(other.title, other.artist),
@@ -230,6 +276,38 @@ test("an unmatched edge leaves precision only when one evidence sentence names i
     }),
   );
   assert.equal(negated.edges[0].outcome, "fp");
+  // Title and artist named, but no relation, the other role, or another song's relation.
+  for (const sentence of [
+    'Hung Up and "Dancing Queen" by ABBA are both dance songs.',
+    '"Dancing Queen" by ABBA samples Hung Up.',
+    'Hung Up samples "Holiday" by Madonna, and "Dancing Queen" by ABBA is covered by Somebody.',
+    '"Another Song" by Somebody Else samples "Dancing Queen" by ABBA.',
+  ]) {
+    const s = scoreRun(
+      HUNG_UP,
+      run(HUNG_UP, {
+        evidence: [cite("https://x.example.org/a", sentence)],
+        edges: [uses("Dancing Queen", "ABBA")],
+      }),
+    );
+    assert.equal(s.edges[0].outcome, "fp", sentence);
+  }
+  // Bitter Sweet Symphony: a sentence about "The Last Time" covering "This May Be the Last Time"
+  // says nothing about what Bitter Sweet Symphony samples.
+  const bss = row("GBAAA9700049");
+  const lineage = scoreRun(
+    bss,
+    run(bss, {
+      evidence: [
+        cite(
+          "https://www.example-blog.com/x",
+          '"The Last Time" by The Rolling Stones is a cover of "This May Be the Last Time" by the Staple Singers.',
+        ),
+      ],
+      edges: [uses("This May Be the Last Time", "The Staple Singers")],
+    }),
+  );
+  assert.equal(lineage.edges[0].outcome, "fp");
 });
 
 test("held-out: a run citing the gold source's site loses held-out credit for that target", () => {
@@ -266,38 +344,72 @@ test("held-out: a run citing the gold source's site loses held-out credit for th
   assert.equal(mb.targets[0].heldOut, true);
 });
 
-test("held-out: citing the site of any held-out source of a target excludes it, even when another stays uncited", () => {
-  // One More Time is held out on Wikipedia and the LA Times: citing the exact gold Wikipedia page
-  // excludes it, although the LA Times is not cited.
-  const page = OMT.labels.edges.find((e) => e.sourceUrl.includes("wikipedia")).sourceUrl;
-  const omt = scoreRun(OMT, run(OMT, { evidence: [cite(page)] }));
-  assert.equal(omt.targets[0].heldOutDefault, true);
-  assert.equal(omt.targets[0].heldOut, false);
-  assert.deepEqual(omt.targets[0].excludedBy, ["wikipedia.org"]);
-  const latimes = scoreRun(OMT, run(OMT, { evidence: [cite("https://www.latimes.com/x")] }));
-  assert.equal(latimes.targets[0].heldOut, false);
-  // Juicy: citing Rolling Stone excludes Juicy Fruit; Rappin' Duke has no held-out source.
-  const juicy = scoreRun(JUICY, run(JUICY, { evidence: [cite("https://www.rollingstone.com/x")] }));
-  assert.deepEqual(
-    juicy.targets.map((t) => [t.heldOutDefault, t.heldOut]),
-    [
-      [true, false],
-      [false, false],
-    ],
-  );
+test("held-out: only a target that no queried source documents is held-out", () => {
+  // One More Time and Juicy's targets also have a MusicBrainz source, which the pipeline queries:
+  // a run that only echoes MusicBrainz must get no held-out credit for them.
+  for (const r of [OMT, JUICY, HUNG_UP, GANGSTA]) {
+    const s = scoreRun(r, run(r, { evidence: [cite("https://musicbrainz.org/recording/x")] }));
+    for (const t of s.targets) {
+      assert.equal(t.heldOutDefault, false, t.key);
+      assert.equal(t.heldOut, false, t.key);
+    }
+  }
+  // Crazy's target has only a Wikipedia source: held-out, until a run cites Wikipedia.
+  const page = CRAZY.labels.edges[0].sourceUrl;
+  assert.equal(scoreRun(CRAZY, run(CRAZY)).targets[0].heldOut, true);
+  const cited = scoreRun(CRAZY, run(CRAZY, { evidence: [cite(page)] }));
+  assert.equal(cited.targets[0].heldOut, false);
+  assert.deepEqual(cited.targets[0].excludedBy, ["wikipedia.org"]);
+  // The live set has one such target: held-out recall rests on it and is shown as counts.
+  const live = golden.rows.filter((r) => r.liveSubset);
+  const all = live.flatMap((r) => goldTargets(r));
+  assert.equal(all.filter((t) => t.sources.every((x) => x.heldOut)).length, 1);
 });
 
-test("held-out n is counted after the per-run exclusion, and the report uses it", () => {
+test("held-out n is counted after the per-run exclusion", () => {
+  const edges = [uses("Last Men Standing", "Gian Piero Reverberi & Gian Franco Reverberi")];
   const runs = [
     run(CRAZY, { evidence: [cite("https://en.wikipedia.org/wiki/Crazy")] }),
+    run(CRAZY, { edges }),
     run(OMT, { edges: [uses("More Spell on You", "Eddie Johns")] }),
   ];
   const scored = runs.map((r) => scoreRun(row(r.isrc), r));
   const m = edgeMetrics(scored);
-  assert.equal(m.heldOut.gold, 2);
-  assert.equal(m.heldOut.excluded, 1);
-  assert.equal(m.heldOut.n, 1);
-  assert.equal(m.heldOut.k, 1);
+  assert.deepEqual([m.heldOut.gold, m.heldOut.excluded, m.heldOut.n, m.heldOut.k], [2, 1, 1, 1]);
+});
+
+test("in the test data the deterministic row finds no held-out target", () => {
+  const runs = readRuns(join(dirname(fileURLToPath(import.meta.url)), "testdata", "runs"));
+  const result = scoreAll(golden, runs, { subset: "all" });
+  assert.equal(result.ablations.b.heldOut.k, 0);
+  assert.ok(result.ablations.b.heldOut.gold > 0);
+});
+
+test("two records for one row, ablation and repeat are refused, naming both files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "evals-runs-"));
+  try {
+    const d = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "testdata", "runs", "ablation-d.json"),
+    );
+    writeFileSync(join(dir, "ablation-d.json"), d);
+    writeFileSync(join(dir, "ablation-d-rerun.json"), d);
+    assert.throws(
+      () => scoreAll(golden, readRuns(dir)),
+      /two run records for \w+, ablation d, repeat 0: ablation-d-rerun\.json\[\d+\] and ablation-d\.json\[\d+\]/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("one synthetic record makes the whole result synthetic; the flag must be a boolean", () => {
+  const real = run(OMT, { commit: "abc1234" });
+  assert.equal(scoreAll(golden, [real]).synthetic, false);
+  assert.equal(scoreAll(golden, [real, run(CRAZY, { synthetic: true })]).synthetic, true);
+  assert.throws(
+    () => validateRun(run(OMT, { synthetic: "true" })),
+    /synthetic must be true or false/,
+  );
 });
 
 test("hallucinated-sample rate: any forward sample, interpolation or cover on a no-sample control", () => {
@@ -368,6 +480,10 @@ test("run records in an unknown shape are refused, naming the field", () => {
     /origin "llm"/,
   );
   assert.doesNotThrow(() => validateRun(run(OMT, { edges: [uses("A", "B", "remix")] })));
+  assert.throws(
+    () => validateRun(run(OMT, { edges: [uses("A\n## Injected", "B")] })),
+    /control character/,
+  );
   const dir = mkdtempSync(join(tmpdir(), "evals-runs-"));
   try {
     writeFileSync(

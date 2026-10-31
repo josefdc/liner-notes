@@ -54,6 +54,8 @@ export const EDGE_RELATIONS = [...RELATIONS, "remix"];
 export const DIRECTIONS = ["uses", "usedBy"];
 export const ORIGINS = ["code", "model"];
 
+const CONTROL = /\p{Cc}/u;
+
 /** Throws, naming the record and field, when a run record is not in the documented shape. */
 export function validateRun(run, where = "run record") {
   const fail = (why) => {
@@ -63,6 +65,12 @@ export function validateRun(run, where = "run record") {
   if (typeof run.isrc !== "string") fail("isrc missing");
   if (!ABLATIONS[run.ablation]) fail(`ablation "${run.ablation}" is not a, b, c or d`);
   if (![0, 1].includes(run.repeat ?? 0)) fail(`repeat ${run.repeat} is not 0 or 1`);
+  if (run.synthetic !== undefined && typeof run.synthetic !== "boolean") {
+    fail(`synthetic must be true or false, not ${JSON.stringify(run.synthetic)}`);
+  }
+  if (run.commit !== undefined && (typeof run.commit !== "string" || !run.commit)) {
+    fail("commit must be a non-empty string");
+  }
   for (const [i, e] of (run.edges ?? []).entries()) {
     if (!DIRECTIONS.includes(e?.direction)) fail(`edge ${i}: direction "${e?.direction}"`);
     if (!EDGE_RELATIONS.includes(e.relation)) fail(`edge ${i}: relation "${e.relation}"`);
@@ -71,6 +79,9 @@ export function validateRun(run, where = "run record") {
     }
     if (typeof e.target?.title !== "string" || typeof e.target?.artist !== "string") {
       fail(`edge ${i}: target needs a title and an artist`);
+    }
+    if (CONTROL.test(e.target.title) || CONTROL.test(e.target.artist)) {
+      fail(`edge ${i}: a control character in the target's title or artist`);
     }
   }
   for (const [i, c] of (run.claims ?? []).entries()) {
@@ -88,7 +99,7 @@ export function readRuns(dir) {
     if (!name.endsWith(".json")) continue;
     const data = JSON.parse(readFileSync(join(dir, name), "utf8"));
     for (const [i, run] of (Array.isArray(data) ? data : [data]).entries()) {
-      runs.push({ repeat: 0, ...validateRun(run, `${name}[${i}]`) });
+      runs.push({ repeat: 0, ...validateRun(run, `${name}[${i}]`), file: `${name}[${i}]` });
     }
   }
   return runs;
@@ -118,34 +129,46 @@ function distinctEdges(edges) {
 export const citedSites = (run) => new Set((run.evidence ?? []).map((ev) => citedSite(ev.url)));
 
 /**
- * Does one sentence of the run's evidence name this proposal as an entity: its title as a quoted
- * title, its artist as a name, and a relation? Only then may an unmatched proposal on a row
- * whose gold is not exhaustive be left out of precision.
+ * Does one sentence of the run's evidence state this proposal: the row's own title using the
+ * proposed title (a quoted title) by the same relation, in the same clause, with the proposed
+ * artist named, and nothing negated or hedged? Only then may an unmatched proposal on a row
+ * whose gold is not exhaustive be left out of precision. A sentence about another song's
+ * relation does not ("The Last Time" covering "This May Be the Last Time" says nothing about
+ * Bitter Sweet Symphony).
  */
-function evidenceNames(run, target) {
-  const title = normText(target.title);
-  const artist = nameKey(target.artist);
+function evidenceNames(run, row, edge) {
+  const title = normText(edge.target.title);
+  const artist = nameKey(edge.target.artist);
+  const own = new Set([normText(row.title), nameKey(row.title)]);
   if (!title || !artist) return false;
   return (run.evidence ?? []).some((ev) =>
     sentences(ev.excerpt ?? "").some((sentence) => {
       const a = analyse(sentence);
+      if (a.negated) return false;
       const titles = new Set(a.entities.filter((e) => e.kind === "title").map((e) => e.key));
       const names = new Set(a.entities.map((e) => e.key));
-      return a.relation !== null && !a.negated && titles.has(title) && names.has(artist);
+      const user = a.triples.some(
+        (t) => t.relation === edge.relation && own.has(t.key) && t.role === "user",
+      );
+      const used = a.triples.some(
+        (t) => t.relation === edge.relation && t.key === title && t.role === "used",
+      );
+      return titles.has(title) && names.has(artist) && user && used;
     }),
   );
 }
 
 /**
  * One run against its golden row.
- * - Held-out, per run: a gold target counts as held-out only when the run's evidence cites none
- *   of the sites of its held-out sources (a page that cannot be placed counts as citing all).
+ * - Held-out: a gold target is held-out only when none of its sources is one the pipeline
+ *   queries, and it stops counting as held-out in a run whose evidence cites the site of any of
+ *   its sources (a page that cannot be placed counts as citing every site).
  * - Precision, strict: one true positive per gold target; another spelling of a target already
  *   credited (an ISRC match, a remaster title) is a duplicate, left out; a gold target with a
  *   relation gold does not accept is a false positive ("right target, wrong relation"), and so is
  *   the track itself. Other proposals: an `otherDocumentedTargets` match is left out; on a row
  *   whose gold is exhaustive it is a false positive; otherwise it is left out ("unresolved") only
- *   when one evidence sentence names its title and artist with a relation.
+ *   when one evidence sentence states that the row's track uses it, by that relation.
  */
 export function scoreRun(row, run) {
   const proposed = distinctEdges(forwardEdges(run));
@@ -168,25 +191,25 @@ export function scoreRun(row, run) {
       return { edge: e, outcome: "other-documented" };
     }
     if (row.labels.edgesExhaustive) return { edge: e, outcome: "fp", why: "not in gold" };
-    if (evidenceNames(run, e.target)) return { edge: e, outcome: "unresolved" };
+    if (evidenceNames(run, row, e)) return { edge: e, outcome: "unresolved" };
     return { edge: e, outcome: "fp", why: "nothing in the run's evidence names it" };
   });
   const targets = golds.map((t) => {
-    const heldOutSources = t.sources.filter((s) => s.heldOut);
-    const heldOutSites = [...new Set(heldOutSources.map((s) => s.site))];
-    const citedHeldOut = cited.has(ANY_SITE)
-      ? heldOutSites
-      : heldOutSites.filter((s) => cited.has(s));
+    // Held-out only when no source of the target is one the pipeline queries: a target that
+    // MusicBrainz also documents can be found by echoing MusicBrainz.
+    const heldOutDefault = t.sources.length > 0 && t.sources.every((s) => s.heldOut);
+    const sites = [...new Set(t.sources.map((s) => s.site))];
+    const citedOwn = cited.has(ANY_SITE) ? sites : sites.filter((s) => cited.has(s));
     return {
       key: t.key,
       found: credited.has(t.key),
       foundByCode: edges.some(
         (x) => x.outcome === "tp" && x.target === t.key && x.edge.origin === "code",
       ),
-      heldOutDefault: heldOutSources.length > 0,
-      heldOut: heldOutSources.length > 0 && citedHeldOut.length === 0,
-      heldOutSites,
-      excludedBy: citedHeldOut,
+      heldOutDefault,
+      heldOut: heldOutDefault && citedOwn.length === 0,
+      heldOutSites: heldOutDefault ? sites : [],
+      excludedBy: heldOutDefault ? citedOwn : [],
     };
   });
   return {
@@ -405,6 +428,19 @@ export function scoreAll(golden, runs, { subset } = {}) {
     );
   }
   for (const [i, run] of runs.entries()) validateRun(run, `run ${i}`);
+  // One record per row, ablation and repeat: a second one (a pilot left beside the full run, a
+  // copied file) would count that track twice.
+  const seen = new Map();
+  for (const [i, run] of runs.entries()) {
+    const key = `${run.isrc}|${run.ablation}|${run.repeat ?? 0}`;
+    const where = run.file ?? `run ${i}`;
+    if (seen.has(key)) {
+      throw new Error(
+        `two run records for ${run.isrc}, ablation ${run.ablation}, repeat ${run.repeat ?? 0}: ${seen.get(key)} and ${where}`,
+      );
+    }
+    seen.set(key, where);
+  }
   const first = runs.filter((r) => (r.repeat ?? 0) === 0);
   const ablations = {};
   for (const id of Object.keys(ABLATIONS)) {

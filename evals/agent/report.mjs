@@ -11,7 +11,8 @@
 // No network and no model: it only reads the run records and the golden file.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,7 +55,28 @@ export function rateCells(r) {
 export function statCells(s, format) {
   if (s.n === 0) return ["no data", 0, "none (n = 0)"];
   if (s.n < MIN_N_FOR_RATE) return [`values ${s.values.map(format).join(", ")}`, s.n, COUNTS_ONLY];
-  return [format(s.value), s.n, `[${format(s.ci[0])}, ${format(s.ci[1])}]`];
+  const ci = `[${format(s.ci[0])}, ${format(s.ci[1])}]`;
+  // Every resample gave the same value (all tracks equal): say so rather than imply precision.
+  return [format(s.value), s.n, s.ci[0] === s.ci[1] ? `${ci} ${ALL_EQUAL}` : ci];
+}
+
+export const ALL_EQUAL = "(all resamples equal)";
+
+/** Markdown-escapes text a run record supplies (a proposed title or artist). */
+export const escapeMd = (text) => String(text).replace(/[\\`*_[\]<>#|~]/g, "\\$&");
+
+/** The sha256 of a run-record directory: every *.json file, by name, in code-point order. */
+export function runsSha256(dir) {
+  const hash = createHash("sha256");
+  for (const name of readdirSync(dir)
+    .filter((n) => n.endsWith(".json"))
+    .sort()) {
+    hash
+      .update(`${name}\0`)
+      .update(readFileSync(join(dir, name)))
+      .update("\0");
+  }
+  return hash.digest("hex");
 }
 
 export const COUNTS_ONLY = `counts only (n < ${MIN_N_FOR_RATE})`;
@@ -125,7 +147,7 @@ const sites = (counts) =>
 export function renderReport(
   golden,
   result,
-  { date, commit, goldenLabel, runsLabel, jsonName: name },
+  { date, commit, goldenLabel, runsLabel, runsSha, jsonName: name },
 ) {
   const jsonName = name ?? `agent-${date}.json`;
   const live = liveRows(golden);
@@ -136,7 +158,7 @@ export function renderReport(
   if (result.synthetic) lines.push(SYNTHETIC_BANNER, "");
   lines.push(
     `- **Dataset**: \`${goldenLabel}\`, sha256 \`${golden.sha256}\`; ${golden.rows.length} rows, ${live.length} in the live subset.`,
-    `- **Run records**: \`${runsLabel}\`; ${result.runs} records over ${result.tracks} tracks (subset: ${result.subset ?? "as recorded"}).`,
+    `- **Run records**: \`${runsLabel}\`, sha256 \`${runsSha}\`; ${result.runs} records over ${result.tracks} tracks (subset: ${result.subset ?? "as recorded"}).`,
     `- **Date**: ${date}`,
     `- **Commit**: \`${commit}\`${result.commits.length ? ` (runs recorded at ${result.commits.map((c) => `\`${c}\``).join(", ")})` : ""}`,
     `- **Results**: \`${jsonName}\``,
@@ -151,8 +173,8 @@ export function renderReport(
     "",
     `- **n** is printed next to every value. Proportions carry a 95 % Wilson score interval; means, medians and p95 carry a 95 % percentile bootstrap over tracks (${BOOTSTRAP_RESAMPLES.toLocaleString("en-US")} resamples, seed ${BOOTSTRAP_SEED}). Edges and claims of one track are not independent, so pooled intervals are narrower than they should be.`,
     `- Any row with n < ${MIN_N_FOR_RATE}, in any table, is shown as counts (or the values themselves), with no rate and no interval.`,
-    '- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). One gold target gives one true positive however many spellings propose it; a gold target with a relation gold does not accept is a false positive. A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, so is a proposal that one evidence sentence names by title and artist with a relation. **Model edge precision** covers only the edges the code did not also build.',
-    "- **Held-out recall** counts a gold target as held-out in a run only when the run's evidence cites none of the sites of its held-out sources; an archived copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.",
+    '- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). One gold target gives one true positive however many spellings propose it; a gold target with a relation gold does not accept is a false positive. A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, so is a proposal that one evidence sentence states this track uses, by that relation, naming its title and artist. **Model edge precision** covers only the edges the code did not also build.',
+    "- **Held-out recall**: a gold target is held-out only when none of its sources is one the pipeline queries (a target MusicBrainz also documents can be found by echoing MusicBrainz), and it stops counting in a run whose evidence cites the site of any of its sources; an archived, translated or mirrored copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.",
     "- **Pre-verifier support rate**: of the model's claims before the verifier (row c), the share the judge marked supported; a claim the judge did not reach counts as not supported.",
     "- **Clarification**: the harness answers the clarification step with the top-ranked candidate, never the gold ISRC; the clarification rate is how often the step fired.",
     `- **Ablations**: ${Object.entries(ABLATIONS)
@@ -167,7 +189,7 @@ export function renderReport(
     commit,
     synthetic: result.synthetic,
     golden: { path: goldenLabel, sha256: golden.sha256, rows: golden.rows.length },
-    runRecords: runsLabel,
+    runRecords: { path: runsLabel, sha256: runsSha },
     subset: result.subset,
     runs: result.runs,
     tracks: result.tracks,
@@ -224,6 +246,7 @@ export function renderReport(
   const ablationRows = [];
   const heldOutRows = [];
   const leftOut = [];
+  const countedFalse = [];
   const exclusions = [];
   for (const [id, what] of Object.entries(ABLATIONS)) {
     const a = result.ablations[id];
@@ -236,8 +259,9 @@ export function renderReport(
       [id, what, "edges per no-sample track (mean)", ...statCells(a.edgesPerControl, decimal)],
     );
     const pr = a.precision;
+    countedFalse.push(`(${id}) ${pr.wrongRelation}`);
     leftOut.push(
-      `(${id}) ${pr.wrongRelation} right target with the wrong relation (counted false); left out: ${pr.duplicates} duplicate, ${pr.otherDocumented} other documented, ${pr.unresolved} unresolved`,
+      `(${id}) ${pr.duplicates} duplicate, ${pr.otherDocumented} other documented, ${pr.unresolved} unresolved`,
     );
     heldOutRows.push([id, a.heldOut.gold, a.heldOut.excluded, ...rateCells(a.heldOut)]);
     if (a.heldOut.excluded > 0) exclusions.push(`(${id}) ${sites(a.excludedBySite)}`);
@@ -261,14 +285,14 @@ export function renderReport(
     };
   }
   const heldOutNote = Object.entries(result.ablations)
-    .filter(([, a]) => a.heldOut.gold > 0 && a.heldOut.n < MIN_N_FOR_RATE)
+    .filter(([, a]) => a.heldOut.n < MIN_N_FOR_RATE)
     .map(([id, a]) => `(${id}) ${a.heldOut.n} of ${a.heldOut.gold}`);
   lines.push(
     "## Ablations",
     "",
     table(["row", "what it runs", "metric", "value", "n", CI_HEADER], ablationRows),
     "",
-    `Proposals outside precision's counts: ${leftOut.join("; ")}.`,
+    `False positives with the right target and the wrong relation, included in precision: ${countedFalse.join("; ")}. Left out of precision: ${leftOut.join("; ")}.`,
     "",
     "## Held-out recall after the per-run domain exclusion",
     "",
@@ -276,7 +300,7 @@ export function renderReport(
       [
         "row",
         "held-out gold targets",
-        "excluded (run cites a held-out source's site)",
+        "excluded (run cites a site of its sources)",
         "recall (found/n)",
         "n after exclusion",
         CI_HEADER,
@@ -286,11 +310,11 @@ export function renderReport(
     "",
     exclusions.length
       ? `Targets excluded, by the cited site: ${exclusions.join("; ")}.`
-      : "No target was excluded: no run cites a held-out source's site.",
+      : "No target was excluded: no run cites a site of a held-out target's sources.",
     ...(heldOutNote.length
       ? [
           "",
-          `Few held-out targets remain after the exclusion (${heldOutNote.join("; ")}): the runs cite the sites gold's held-out sources are on, so held-out recall rests on the targets that are left.`,
+          `Few held-out targets (${heldOutNote.join("; ")}): only gold targets that no queried source documents are held-out, and runs that cite their sources' sites lose them, so held-out recall rests on these few and is shown as counts.`,
         ]
       : []),
     "",
@@ -359,9 +383,9 @@ export function renderReport(
       const why =
         m.outcome === "fp"
           ? `false positive (${m.why})`
-          : "left out (gold is not exhaustive and an evidence sentence names it)";
+          : "left out (gold is not exhaustive and an evidence sentence states it)";
       lines.push(
-        `- \`${m.isrc}\`: "${m.target.title}" by ${m.target.artist}, ${m.relation}${m.origin ? `, ${m.origin}` : ""}: ${why}`,
+        `- \`${m.isrc}\`: "${escapeMd(m.target.title)}" by ${escapeMd(m.target.artist)}, ${m.relation}${m.origin ? `, ${m.origin}` : ""}: ${why}`,
       );
     }
     lines.push("");
@@ -405,8 +429,24 @@ export async function buildReport(opts) {
   const runsPath = resolve(REPO_ROOT, opts.runs);
   let runs = readRuns(runsPath);
   if (opts.subset) {
-    const keep = new Set(subsetRows(golden, opts.subset).map((r) => r.isrc));
+    const rows = subsetRows(golden, opts.subset);
+    const keep = new Set(rows.map((r) => r.isrc));
     runs = runs.filter((r) => keep.has(r.isrc));
+    // Every subset row needs a first run in row d and in every other row that was run: a track
+    // that crashed must not leave the denominators unnoticed.
+    const ablations = new Set(["d", ...runs.map((r) => r.ablation)]);
+    const missing = [...ablations].sort().flatMap((id) => {
+      const have = new Set(
+        runs.filter((r) => r.ablation === id && (r.repeat ?? 0) === 0).map((r) => r.isrc),
+      );
+      const lacking = rows.filter((r) => !have.has(r.isrc));
+      return lacking.length
+        ? [`row ${id}: ${lacking.map((r) => `${r.isrc} (${r.title})`).join(", ")}`]
+        : [];
+    });
+    if (missing.length) {
+      throw new Error(`subset ${opts.subset} has rows with no run record: ${missing.join("; ")}`);
+    }
   }
   if (runs.length === 0) throw new Error(`no run records in ${opts.runs}`);
   const result = scoreAll(golden, runs, { subset: opts.subset });
@@ -419,10 +459,14 @@ export async function buildReport(opts) {
       commit: opts.commit ?? gitCommit(),
       goldenLabel: label(golden.path),
       runsLabel: label(runsPath),
+      runsSha: runsSha256(runsPath),
       jsonName: opts.jsonName,
     }),
   };
 }
+
+/** Is a path inside a directory named `testdata`? */
+export const inTestdata = (path) => resolve(path).split(/[\\/]/).includes("testdata");
 
 async function main() {
   let opts;
@@ -431,6 +475,16 @@ async function main() {
   } catch (error) {
     console.error(`report: ${error.message}`);
     process.exit(2);
+  }
+  if (opts.out) {
+    const reports = join(REPO_ROOT, "evals", "reports");
+    const published = !relative(reports, resolve(opts.out)).startsWith("..");
+    if (published && inTestdata(opts.runs)) {
+      console.error(
+        "report: run records under a testdata directory cannot be published in evals/reports",
+      );
+      process.exit(1);
+    }
   }
   const { date, md, json } = await buildReport(opts);
   if (!opts.out) {

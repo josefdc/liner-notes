@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { goldTargets } from "../agent/lib/golden.mjs";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const at = args.indexOf("--golden");
@@ -49,7 +51,11 @@ console.log(
 console.log("live n per metric:", {
   "edge recall (live rows with gold edges)": live.filter((r) => r.labels.edges.length).length,
   "edge precision (all live rows)": live.length,
-  "held-out recall (live rows with held-out edges)": live.filter(heldOut).length,
+  "live rows with held-out edges": live.filter(heldOut).length,
+  // A target is held-out only when no source of it is queried (evals/README.md, "Held-out gold").
+  "held-out recall (live rows with a target no queried source documents)": live.filter((r) =>
+    goldTargets(r).some((t) => t.sources.every((x) => x.heldOut)),
+  ).length,
   "hallucinated-sample rate (live no-sample controls)": live.filter(
     (r) => r.stratum === "no-sample-controls",
   ).length,

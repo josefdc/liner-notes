@@ -7,6 +7,7 @@
 //
 //   node evals/agent/testdata/make-testdata.mjs
 
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { CI_SUBSET, goldTargets, liveRows, readGolden } from "../lib/golden.mjs";
 import { scoreAll } from "../lib/score.mjs";
 import { rng, wilson } from "../lib/stats.mjs";
-import { renderReport } from "../report.mjs";
+import { rateCells, renderReport } from "../report.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const TESTDATA_DATE = "2026-10-31";
@@ -34,8 +35,10 @@ function makeRun(row, ablation, index, repeat, next) {
       url: mb(row),
       excerpt: `MusicBrainz recording "${row.title}" by ${row.artist}.`,
     });
-    // Every third row cites a Wikipedia page, so its Wikipedia-sourced edges lose held-out credit.
-    if (index % 3 === 0) {
+    // Every third row cites a Wikipedia page; so does row d for a row whose only gold sources are
+    // on Wikipedia, which takes its held-out credit away there.
+    const heldOutOnly = targets.some((t) => t.sources.every((s) => s.heldOut));
+    if (index % 3 === 0 || (ablation === "d" && heldOutOnly)) {
       evidence.push({
         id: `ev-wp-${row.isrc}`,
         url: "https://en.wikipedia.org/wiki/Synthetic_test_page",
@@ -47,7 +50,9 @@ function makeRun(row, ablation, index, repeat, next) {
     const relation = [...t.relations][0];
     const target = { title: t.target.title, artist: t.target.artist };
     const id = `ev-edge-${row.isrc}-${i}`;
-    if (ablation !== "a" && (index + i) % 4 !== 3) {
+    // The code builds an edge only from a source it queries (MusicBrainz in this data).
+    const queried = t.sources.some((s) => !s.heldOut);
+    if (ablation !== "a" && queried && (index + i) % 4 !== 3) {
       evidence.push({
         id,
         url: mb(row),
@@ -155,12 +160,9 @@ const replaceOnce = (text, from, to) => {
 const line = (prefix) =>
   new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^\n]*$`, "m");
 
-/** A table line's cells for k of n as the report shows them (with n >= 10). */
-const rateRow = (head, k, n) => {
-  const [lo, hi] = wilson(k, n);
-  const pct = (x) => `${(100 * x).toFixed(1)} %`;
-  return `${head} | ${pct(k / n)} (${k}/${n}) | ${n} | [${pct(lo)}, ${pct(hi)}] |`;
-};
+/** A table line's cells for k of n as the report shows them. */
+const rateRow = (head, k, n) =>
+  `${head} | ${rateCells({ k, n, value: n ? k / n : null, ci: wilson(k, n) }).join(" | ")} |`;
 
 /**
  * The broken reports: each gets one thing wrong that check-report must reject, and says which in
@@ -251,11 +253,10 @@ export function brokenReports(md, json) {
     h.nAfterExclusion = h.gold;
     h.found = found;
     h.excludedBySite = {};
-    const row = rateRow(`| ${id} | ${h.gold} | 0`, found, h.gold);
     heldOut = replaceOnce(
       heldOut,
       line(`| ${id} | ${h.gold} | `),
-      row.replace(/\| (\d+) \| \[/, "| $1 | ["),
+      rateRow(`| ${id} | ${h.gold} | 0`, found, h.gold),
     );
     heldOut = replaceOnce(
       heldOut,
@@ -298,6 +299,18 @@ export function brokenReports(md, json) {
   return out;
 }
 
+/** What runsSha256 gives for the runs/ files about to be written. */
+function runFilesSha256(files) {
+  const hash = createHash("sha256");
+  for (const path of Object.keys(files)
+    .filter((p) => p.startsWith("runs/") && p.endsWith(".json"))
+    .map((p) => p.slice("runs/".length))
+    .sort()) {
+    hash.update(`${path}\0`).update(files[`runs/${path}`]).update("\0");
+  }
+  return hash.digest("hex");
+}
+
 /** Every test-data file, by path relative to evals/agent/testdata. */
 export function testdataFiles() {
   const golden = readGolden();
@@ -312,6 +325,7 @@ export function testdataFiles() {
     commit: TESTDATA_COMMIT,
     goldenLabel: "evals/golden.jsonl",
     runsLabel: "evals/agent/testdata/runs",
+    runsSha: runFilesSha256(out),
     jsonName: "report-good.json",
   });
   out["report-good.md"] = md;

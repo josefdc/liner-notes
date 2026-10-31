@@ -4,16 +4,28 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { checkReport, MADE_BY_PEOPLE } from "./check-report.mjs";
+import { checkCells, checkReport, MADE_BY_PEOPLE } from "./check-report.mjs";
+import { escapeMd, statCells } from "./report.mjs";
 import { testdataFiles } from "./testdata/make-testdata.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..", "..");
 const TESTDATA = join(HERE, "testdata");
 const node = (args) =>
   spawnSync(process.execPath, args, { encoding: "utf8", cwd: join(HERE, "..", "..") });
@@ -52,7 +64,7 @@ const BROKEN = {
     false,
   ],
   "report-heldout-unexcluded.md": [
-    /held-out row d: the runs' evidence excludes 6 of 15 targets \(n after exclusion 9\); the report says 0 \(15\)/,
+    /held-out row d: the runs' evidence excludes 1 of 1 targets \(n after exclusion 0\); the report says 0 \(1\)/,
     false,
   ],
   "report-human-labelled.md": [/labels described as made by people \("Human-labelled"\)/, true],
@@ -113,9 +125,141 @@ test("check-report needs the results file, the run records and the same golden f
   }
 });
 
-test("a report of synthetic run records cannot be published in evals/reports", async () => {
-  const problems = await checkReport(join(TESTDATA, "report-good.md"), { reportsDir: TESTDATA });
-  assert.match(problems.join("\n"), /synthetic run records cannot be published/);
+test("a published report: no synthetic or testdata records, commits in git, the pinned dataset", async () => {
+  const problems = (
+    await checkReport(join(TESTDATA, "report-good.md"), { reportsDir: TESTDATA })
+  ).join("\n");
+  assert.match(problems, /synthetic run records cannot be published/);
+  assert.match(problems, /run records under a testdata directory cannot be published/);
+  assert.match(problems, /commit synthetic is not in this repository/);
+});
+
+test("a published report must score evals/golden.jsonl as it was at its commit", async () => {
+  const head = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+    encoding: "utf8",
+    cwd: ROOT,
+  }).stdout.trim();
+  const dir = mkdtempSync(join(tmpdir(), "agent-published-"));
+  try {
+    // Real-looking records: the test runs without the synthetic flag, at the current commit.
+    const runs = join(dir, "runs");
+    mkdirSync(runs);
+    for (const name of [
+      "ablation-a.json",
+      "ablation-b.json",
+      "ablation-c.json",
+      "ablation-d.json",
+    ]) {
+      const records = JSON.parse(readFileSync(join(TESTDATA, "runs", name), "utf8")).map(
+        ({ synthetic, ...r }) => ({ ...r, commit: head }),
+      );
+      writeFileSync(join(runs, name), JSON.stringify(records));
+    }
+    // A forged copy of the golden set, with the unmatched row d proposals added as gold.
+    const forged = join(dir, "golden-forged.jsonl");
+    writeFileSync(
+      forged,
+      readFileSync(join(ROOT, "evals/golden.jsonl"), "utf8").replace(/\n$/, "\n\n"),
+    );
+    const reports = join(dir, "reports");
+    for (const [golden, message] of [
+      [forged, /must score evals\/golden\.jsonl, not /],
+      [join(ROOT, "evals/golden.jsonl"), null],
+    ]) {
+      const out = node([
+        "evals/agent/report.mjs",
+        "--runs",
+        runs,
+        "--golden",
+        golden,
+        "--out",
+        reports,
+        "--date",
+        "2026-10-31",
+        "--commit",
+        head,
+      ]);
+      assert.equal(out.status, 0, out.stderr);
+      const problems = (
+        await checkReport(join(reports, "agent-latest.md"), { reportsDir: reports })
+      ).join("\n");
+      if (message) assert.match(problems, message);
+      else assert.equal(problems, "");
+    }
+    // The header's sha256 changed to the forged file's: not evals/golden.jsonl at that commit.
+    const path = join(reports, "agent-latest.md");
+    const md = readFileSync(path, "utf8");
+    const forgedSha = createHash("sha256").update(readFileSync(forged)).digest("hex");
+    writeFileSync(
+      path,
+      md.replace(/sha256 `[0-9a-f]{64}`; 45 rows/, `sha256 \`${forgedSha}\`; 45 rows`),
+    );
+    const problems = (await checkReport(path, { reportsDir: reports })).join("\n");
+    assert.match(
+      problems,
+      new RegExp(`the dataset's sha256 is not evals/golden.jsonl at commit ${head}`),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("report.mjs refuses to publish testdata records in evals/reports", () => {
+  // A directory of its own under evals/reports, removed afterwards, so a regression cannot
+  // overwrite a committed report.
+  const out = join(ROOT, "evals", "reports", `.refusal-test-${process.pid}`);
+  try {
+    const r = node(["evals/agent/report.mjs", "--runs", "evals/agent/testdata/runs", "--out", out]);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /testdata directory cannot be published in evals\/reports/);
+    assert.equal(existsSync(out), false);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
+test("a report whose run records changed since says so", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-report-"));
+  try {
+    const runs = join(dir, "runs");
+    mkdirSync(runs);
+    for (const name of readdirSync(join(TESTDATA, "runs"))) {
+      copyFileSync(join(TESTDATA, "runs", name), join(runs, name));
+    }
+    const out = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--out",
+      dir,
+      "--date",
+      "2026-10-31",
+      "--commit",
+      "synthetic",
+    ]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.deepEqual(await checkReport(join(dir, "agent-latest.md")), []);
+    const pilot = join(runs, "variance.json");
+    writeFileSync(pilot, readFileSync(pilot, "utf8").replace(/\n$/, " \n"));
+    assert.match(
+      (await checkReport(join(dir, "agent-latest.md"))).join("\n"),
+      /changed since the report \(sha256 now [0-9a-f]{64}\)/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a statistic whose resamples are all equal says so, and the checker accepts only that", () => {
+  const s = { n: 12, value: 1, ci: [1, 1], values: Array(12).fill(1) };
+  const [value, n, ci] = statCells(s, (x) => x.toFixed(2));
+  assert.equal(ci, "[1.00, 1.00] (all resamples equal)");
+  assert.deepEqual(checkCells("x", value, String(n), ci), []);
+  assert.match(checkCells("x", "1.00", "12", "[0.90, 1.00] (all resamples equal)").join(), /width/);
+});
+
+test("titles from run records are escaped in the report", () => {
+  assert.equal(escapeMd("A *b* [c](d) # e | f"), "A \\*b\\* \\[c\\](d) \\# e \\| f");
 });
 
 test("the people-made-labels check is case-insensitive and catches the usual phrasings", () => {
@@ -143,7 +287,10 @@ test("the people-made-labels check is case-insensitive and catches the usual phr
 test("the report states dataset, run records, n, CI, date, commit and the clarification rate", () => {
   const md = readFileSync(join(TESTDATA, "report-good.md"), "utf8");
   assert.match(md, /\*\*Dataset\*\*: `evals\/golden\.jsonl`, sha256 `[0-9a-f]{64}`/);
-  assert.match(md, /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`; 102 records/);
+  assert.match(
+    md,
+    /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`, sha256 `[0-9a-f]{64}`; 102 records/,
+  );
   assert.match(md, /\*\*Date\*\*: 2026-10-31/);
   assert.match(md, /\*\*Commit\*\*: `synthetic`/);
   assert.match(md, /\| clarification rate \| [\d.]+ % \(\d+\/24\) \| 24 \| \[/);
@@ -152,8 +299,17 @@ test("the report states dataset, run records, n, CI, date, commit and the clarif
   assert.match(md, /\*\*Gold\*\* is described by its sources[^\n]*wikipedia\.org/);
   assert.doesNotMatch(md, MADE_BY_PEOPLE);
   // The held-out exclusion is explained by site, and a small n after it is called out.
-  assert.match(md, /Targets excluded, by the cited site: \(b\) wikipedia\.org 6/);
-  assert.match(md, /Few held-out targets remain after the exclusion/);
+  assert.match(md, /Targets excluded, by the cited site: \(d\) wikipedia\.org 1\./);
+  assert.match(
+    md,
+    /Few held-out targets \(\(a\) 1 of 1;.*?\(d\) 0 of 1\): only gold targets that no queried source/,
+  );
+  // Inside precision's counts and outside them, said apart.
+  assert.match(
+    md,
+    /False positives with the right target and the wrong relation, included in precision: \(a\) 0/,
+  );
+  assert.match(md, /Left out of precision: \(a\) 0 duplicate/);
 });
 
 test("no rate and no interval below n = 10, in any table", () => {

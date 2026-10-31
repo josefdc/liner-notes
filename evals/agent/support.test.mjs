@@ -30,6 +30,60 @@ test("claims the excerpt does not state are refused", () => {
   }
 });
 
+test("an excerpt that does not state the claim as fact, or states something else, is refused", () => {
+  const claim = '"Juicy" samples "Juicy Fruit" by Mtume.';
+  const fact = '"Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume.';
+  assert.equal(supported(claim, fact), true, "control");
+  for (const excerpt of [
+    // Negated or hedged in the excerpt.
+    '"Juicy" does not sample "Juicy Fruit" by Mtume.',
+    'It is often wrongly claimed that "Juicy" samples "Juicy Fruit" by Mtume.',
+    '"Juicy" by The Notorious B.I.G. wrongly samples "Juicy Fruit" by Mtume.',
+    '"Juicy" was at first going to sample "Juicy Fruit" by Mtume.',
+    '"Juicy" planned to sample "Juicy Fruit" by Mtume.',
+    'Some say "Juicy" supposedly samples "Juicy Fruit" by Mtume.',
+  ]) {
+    assert.equal(supported(claim, excerpt), false, excerpt);
+  }
+});
+
+test("a year belongs to its clause: the year of one title does not date another", () => {
+  const ex = '"Juicy" is a 1994 song by The Notorious B.I.G. that samples "Juicy Fruit" by Mtume.';
+  assert.equal(supported('"Juicy Fruit" by Mtume was released in 1994.', ex), false);
+  assert.equal(supported('"Juicy" by The Notorious B.I.G. came out in 1994.', ex), true);
+});
+
+test("a claim that names nothing after its relation cannot be checked", () => {
+  const ex = '"Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume.';
+  assert.equal(supported('"Juicy" samples a drum break.', ex), false);
+  assert.equal(supported('"Juicy" samples "Juicy Fruit".', ex), true);
+});
+
+test("an entity after a second verb is not the object of the first", () => {
+  const ex =
+    '"Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume and was later covered by Puff Daddy.';
+  assert.equal(supported('"Juicy" samples Puff Daddy.', ex), false);
+  assert.equal(supported('"Juicy" samples "Juicy Fruit" by Mtume.', ex), true);
+  assert.equal(supported('"Juicy" is covered by Puff Daddy.', ex), true);
+});
+
+test("a month and day, when the claim gives them, must be the excerpt's", () => {
+  const ex =
+    'MusicBrainz recording "Bitter Sweet Symphony" by The Verve, first released 1997-06-01.';
+  const claim = (date) => `"Bitter Sweet Symphony" by The Verve was first released on ${date}.`;
+  assert.equal(supported(claim("June 1, 1997"), ex), true);
+  assert.equal(supported(claim("1 June 1997"), ex), true);
+  assert.equal(supported(claim("June 1997"), ex), true);
+  assert.equal(supported(claim("June 2, 1997"), ex), false);
+  assert.equal(supported(claim("July 1, 1997"), ex), false);
+  assert.equal(supported(claim("March 1997"), ex), false);
+  // A claim's full date against an excerpt that gives only the year: not enough.
+  assert.equal(
+    supported(claim("June 1, 1997"), '"Bitter Sweet Symphony" by The Verve, released 1997.'),
+    false,
+  );
+});
+
 test("what one excerpt sentence states passes", () => {
   assert.equal(supported('It samples "Juicy Fruit" by Mtume.', JUICY), true);
   assert.equal(supported('"Juicy" by The Notorious B.I.G. dates from 1994.', JUICY), true);

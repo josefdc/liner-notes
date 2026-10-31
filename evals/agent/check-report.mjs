@@ -24,6 +24,8 @@
 //
 //   node evals/agent/check-report.mjs evals/reports/agent-latest.md
 
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +33,14 @@ import { fileURLToPath } from "node:url";
 import { REPO_ROOT, readGolden } from "./lib/golden.mjs";
 import { readRuns, scoreAll } from "./lib/score.mjs";
 import { MIN_N_FOR_RATE, wilson } from "./lib/stats.mjs";
-import { buildReport, COUNTS_ONLY, SYNTHETIC_BANNER } from "./report.mjs";
+import {
+  ALL_EQUAL,
+  buildReport,
+  COUNTS_ONLY,
+  inTestdata,
+  runsSha256,
+  SYNTHETIC_BANNER,
+} from "./report.mjs";
 
 const CI = "95 % CI";
 const ABLATION_ROWS = ["a", "b", "c", "d"];
@@ -124,11 +133,13 @@ export function checkCells(label, value, nCell, ci) {
     return problems;
   }
   if (!STAT.test(value)) return [`${label}: "${value}" is not a count, a rate or a statistic`];
-  const interval = ci.match(/^\[(.+), (.+)\]$/);
+  const equal = ci.endsWith(` ${ALL_EQUAL}`);
+  const interval = (equal ? ci.slice(0, -ALL_EQUAL.length - 1) : ci).match(/^\[(.+), (.+)\]$/);
   if (!interval || !STAT.test(interval[1]) || !STAT.test(interval[2])) {
     return [`${label}: no numeric 95 % confidence interval ("${ci}")`];
   }
   const [lo, hi] = [interval[1], interval[2]].map((x) => Number(x.match(STAT)[1]));
+  if (equal && lo !== hi) return [`${label}: "${ALL_EQUAL}" on an interval of width ${hi - lo}`];
   return lo <= hi ? [] : [`${label}: interval ${ci} is reversed`];
 }
 
@@ -170,7 +181,9 @@ export function parseHeader(md) {
   const grab = (re) => top.match(re)?.slice(1) ?? null;
   return {
     dataset: grab(/^- \*\*Dataset\*\*: `([^`]+)`, sha256 `([0-9a-f]{64})`/m),
-    runs: grab(/^- \*\*Run records\*\*: `([^`]+)`;[^\n]*\(subset: ([^)]+)\)\.$/m),
+    runs: grab(
+      /^- \*\*Run records\*\*: `([^`]+)`, sha256 `([0-9a-f]{64})`;[^\n]*\(subset: ([^)]+)\)\.$/m,
+    ),
     date: grab(/^- \*\*Date\*\*: (\d{4}-\d{2}-\d{2})$/m)?.[0] ?? null,
     commit: grab(/^- \*\*Commit\*\*: `([^`]+)`/m)?.[0] ?? null,
     results: grab(/^- \*\*Results\*\*: `([^`/]+\.json)`$/m)?.[0] ?? null,
@@ -180,7 +193,7 @@ export function parseHeader(md) {
 
 function checkHeader(h, md, problems) {
   if (!h.dataset) problems.push("header: the dataset with the golden file's sha256");
-  if (!h.runs) problems.push("header: the run records and the subset");
+  if (!h.runs) problems.push("header: the run records with their sha256, and the subset");
   if (!h.date) problems.push("header: the date");
   if (!h.commit) problems.push("header: the commit");
   if (!h.results) problems.push("header: the results file");
@@ -269,12 +282,67 @@ function firstDifference(expected, actual) {
   return "no line differs";
 }
 
+const gitOk = (args) => {
+  try {
+    execFileSync("git", args, { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+};
+const commitExists = (c) =>
+  typeof c === "string" && /^[0-9a-f]{7,40}$/.test(c) && gitOk(["cat-file", "-e", `${c}^{commit}`]);
+
+/**
+ * What a report published in evals/reports must also satisfy. It cannot prove the run records
+ * came from real runs; it does refuse what only test data or a substituted dataset would give.
+ */
+function checkPublished({ h, runsPath, runs, result }, problems, reportsDir) {
+  const where = relative(REPO_ROOT, reportsDir);
+  if (result.synthetic) {
+    problems.push(`a report of synthetic run records cannot be published in ${where}`);
+  }
+  if (inTestdata(resolve(REPO_ROOT, runsPath))) {
+    problems.push(`run records under a testdata directory cannot be published in ${where}`);
+  }
+  for (const c of new Set([h.commit, ...runs.map((r) => r.commit)])) {
+    if (c === undefined) problems.push("a run record has no commit");
+    else if (!commitExists(c)) problems.push(`commit ${c} is not in this repository`);
+  }
+}
+
+/** A published report's dataset: evals/golden.jsonl, as it was at the report's commit. */
+function checkPinnedGolden(h, goldenPath, sha, problems, where) {
+  if (goldenPath !== "evals/golden.jsonl") {
+    problems.push(
+      `a report published in ${where} must score evals/golden.jsonl, not ${goldenPath}`,
+    );
+  } else if (commitExists(h.commit)) {
+    let pinned = null;
+    try {
+      pinned = execFileSync("git", ["show", `${h.commit}:evals/golden.jsonl`], {
+        cwd: REPO_ROOT,
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch {
+      problems.push(`evals/golden.jsonl does not exist at commit ${h.commit}`);
+    }
+    if (pinned && createHash("sha256").update(pinned).digest("hex") !== sha) {
+      problems.push(`the dataset's sha256 is not evals/golden.jsonl at commit ${h.commit}`);
+    }
+  }
+}
+
 /** Renders the report again from what its header names, and compares. */
 async function checkTruth(h, md, path, sections, problems, reportsDir) {
   if (!h.dataset || !h.runs || !h.date || !h.commit || !h.results) return;
   const [goldenPath, sha] = h.dataset;
-  const [runsPath, subsetCell] = h.runs;
+  const [runsPath, runsSha, subsetCell] = h.runs;
   const subset = subsetCell === "as recorded" ? undefined : subsetCell;
+  if (!relative(reportsDir, resolve(path)).startsWith("..")) {
+    checkPinnedGolden(h, goldenPath, sha, problems, relative(REPO_ROOT, reportsDir));
+  }
   let golden;
   try {
     golden = readGolden(resolve(REPO_ROOT, goldenPath));
@@ -290,6 +358,13 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   }
   if (!existsSync(resolve(REPO_ROOT, runsPath))) {
     problems.push(`run records ${runsPath} not found`);
+    return;
+  }
+  const nowSha = runsSha256(resolve(REPO_ROOT, runsPath));
+  if (nowSha !== runsSha) {
+    problems.push(
+      `run records ${runsPath} changed since the report (sha256 now ${nowSha}): render it again, or keep each run's records in a directory of its own`,
+    );
     return;
   }
   let runs;
@@ -320,15 +395,11 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
       );
     }
   }
-  if (result.synthetic) {
-    if (!md.includes(SYNTHETIC_BANNER)) {
-      problems.push("the synthetic-data banner: the run records are synthetic");
-    }
-    if (!relative(reportsDir, resolve(path)).startsWith("..")) {
-      problems.push(
-        `a report of synthetic run records cannot be published in ${relative(REPO_ROOT, reportsDir)}`,
-      );
-    }
+  if (result.synthetic && !md.includes(SYNTHETIC_BANNER)) {
+    problems.push("the synthetic-data banner: the run records are synthetic");
+  }
+  if (!relative(reportsDir, resolve(path)).startsWith("..")) {
+    checkPublished({ h, runsPath, runs, result }, problems, reportsDir);
   }
   if (rendered.md !== md) {
     problems.push(

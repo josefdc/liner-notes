@@ -4,7 +4,7 @@
 > (`evals/agent/testdata/make-testdata.mjs`). No number below measures the app.
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Run records**: `evals/agent/testdata/runs`; 102 records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/testdata/runs`, sha256 `b03b2f0bdb22445390902f322b7828162f6ee9bc6520671440fe2e29ce1741d9`; 102 records over 24 tracks (subset: all).
 - **Labels**: gold is labelled by the author.
 - **Date**: 2026-10-31
 - **Commit**: `synthetic` (runs recorded at `synthetic`)
@@ -15,8 +15,8 @@
 
 - **n** is printed next to every value. Proportions carry a 95 % Wilson score interval; means, medians and p95 carry a 95 % percentile bootstrap over tracks (10,000 resamples, seed 33). Edges and claims of one track are not independent, so pooled intervals are narrower than they should be.
 - Any row with n < 10, in any table, is shown as counts (or the values themselves), with no rate and no interval.
-- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). One gold target gives one true positive however many spellings propose it; a gold target with a relation gold does not accept is a false positive. A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, so is a proposal that one evidence sentence names by title and artist with a relation. **Model edge precision** covers only the edges the code did not also build.
-- **Held-out recall** counts a gold target as held-out in a run only when the run's evidence cites none of the sites of its held-out sources; an archived copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.
+- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). One gold target gives one true positive however many spellings propose it; a gold target with a relation gold does not accept is a false positive. A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, so is a proposal that one evidence sentence states this track uses, by that relation, naming its title and artist. **Model edge precision** covers only the edges the code did not also build.
+- **Held-out recall**: a gold target is held-out only when none of its sources is one the pipeline queries (a target MusicBrainz also documents can be found by echoing MusicBrainz), and it stops counting in a run whose evidence cites the site of any of its sources; an archived, translated or mirrored copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.
 - **Pre-verifier support rate**: of the model's claims before the verifier (row c), the share the judge marked supported; a claim the judge did not reach counts as not supported.
 - **Clarification**: the harness answers the clarification step with the top-ranked candidate, never the gold ISRC; the clarification rate is how often the step fired.
 - **Ablations**: (a) model only, no tools or evidence; (b) deterministic only, no model; (c) pipeline before the verifier; (d) pipeline after the verifier (what the UI shows).
@@ -44,39 +44,39 @@
 | --- | --- | --- | --- | --- | --- |
 | a | model only, no tools or evidence | edge recall | 62.5 % (10/16) | 16 | [38.6 %, 81.5 %] |
 | a | model only, no tools or evidence | edge precision (all proposed edges) | 66.7 % (10/15) | 15 | [41.7 %, 84.8 %] |
-| a | model only, no tools or evidence | held-out edge recall | 60.0 % (9/15) | 15 | [35.7 %, 80.2 %] |
+| a | model only, no tools or evidence | held-out edge recall | 1/1 | 1 | counts only (n < 10) |
 | a | model only, no tools or evidence | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
 | a | model only, no tools or evidence | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
 | b | deterministic only, no model | edge recall | 68.8 % (11/16) | 16 | [44.4 %, 85.8 %] |
 | b | deterministic only, no model | edge precision (all proposed edges) | 100.0 % (11/11) | 11 | [74.1 %, 100.0 %] |
-| b | deterministic only, no model | held-out edge recall | 6/9 | 9 | counts only (n < 10) |
+| b | deterministic only, no model | held-out edge recall | 0/1 | 1 | counts only (n < 10) |
 | b | deterministic only, no model | hallucinated-sample rate | 0/5 | 5 | counts only (n < 10) |
 | b | deterministic only, no model | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 0.00, 0.00 | 5 | counts only (n < 10) |
 | c | pipeline before the verifier | edge recall | 93.8 % (15/16) | 16 | [71.7 %, 98.9 %] |
 | c | pipeline before the verifier | edge precision (all proposed edges) | 75.0 % (15/20) | 20 | [53.1 %, 88.8 %] |
-| c | pipeline before the verifier | held-out edge recall | 9/9 | 9 | counts only (n < 10) |
+| c | pipeline before the verifier | held-out edge recall | 1/1 | 1 | counts only (n < 10) |
 | c | pipeline before the verifier | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
 | c | pipeline before the verifier | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
 | d | pipeline after the verifier (what the UI shows) | edge recall | 93.8 % (15/16) | 16 | [71.7 %, 98.9 %] |
 | d | pipeline after the verifier (what the UI shows) | edge precision (all proposed edges) | 88.2 % (15/17) | 17 | [65.7 %, 96.7 %] |
-| d | pipeline after the verifier (what the UI shows) | held-out edge recall | 9/9 | 9 | counts only (n < 10) |
+| d | pipeline after the verifier (what the UI shows) | held-out edge recall | no data | 0 | none (n = 0) |
 | d | pipeline after the verifier (what the UI shows) | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
 | d | pipeline after the verifier (what the UI shows) | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
 
-Proposals outside precision's counts: (a) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (b) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (c) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (d) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved.
+False positives with the right target and the wrong relation, included in precision: (a) 0; (b) 0; (c) 0; (d) 0. Left out of precision: (a) 0 duplicate, 0 other documented, 0 unresolved; (b) 0 duplicate, 0 other documented, 0 unresolved; (c) 0 duplicate, 0 other documented, 0 unresolved; (d) 0 duplicate, 0 other documented, 0 unresolved.
 
 ## Held-out recall after the per-run domain exclusion
 
-| row | held-out gold targets | excluded (run cites a held-out source's site) | recall (found/n) | n after exclusion | 95 % CI |
+| row | held-out gold targets | excluded (run cites a site of its sources) | recall (found/n) | n after exclusion | 95 % CI |
 | --- | --- | --- | --- | --- | --- |
-| a | 15 | 0 | 60.0 % (9/15) | 15 | [35.7 %, 80.2 %] |
-| b | 15 | 6 | 6/9 | 9 | counts only (n < 10) |
-| c | 15 | 6 | 9/9 | 9 | counts only (n < 10) |
-| d | 15 | 6 | 9/9 | 9 | counts only (n < 10) |
+| a | 1 | 0 | 1/1 | 1 | counts only (n < 10) |
+| b | 1 | 0 | 0/1 | 1 | counts only (n < 10) |
+| c | 1 | 0 | 1/1 | 1 | counts only (n < 10) |
+| d | 1 | 1 | no data | 0 | none (n = 0) |
 
-Targets excluded, by the cited site: (b) wikipedia.org 6; (c) wikipedia.org 6; (d) wikipedia.org 6.
+Targets excluded, by the cited site: (d) wikipedia.org 1.
 
-Few held-out targets remain after the exclusion ((b) 9 of 15; (c) 9 of 15; (d) 9 of 15): the runs cite the sites gold's held-out sources are on, so held-out recall rests on the targets that are left.
+Few held-out targets ((a) 1 of 1; (b) 1 of 1; (c) 1 of 1; (d) 0 of 1): only gold targets that no queried source documents are held-out, and runs that cite their sources' sites lose them, so held-out recall rests on these few and is shown as counts.
 
 ## Per stratum (row d)
 

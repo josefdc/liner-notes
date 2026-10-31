@@ -8,7 +8,10 @@
     "sha256": "8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442",
     "rows": 45
   },
-  "runRecords": "evals/agent/testdata/runs",
+  "runRecords": {
+    "path": "evals/agent/testdata/runs",
+    "sha256": "b03b2f0bdb22445390902f322b7828162f6ee9bc6520671440fe2e29ce1741d9"
+  },
   "subset": "all",
   "runs": 102,
   "tracks": 24,
@@ -342,12 +345,12 @@
         "otherDocumented": 0
       },
       "heldOutRecall": {
-        "k": 9,
-        "n": 15,
-        "value": 0.6,
+        "k": 1,
+        "n": 1,
+        "value": 1,
         "ci": [
-          0.357468301206246,
-          0.8017550385865841
+          0.20654931437723745,
+          1
         ]
       },
       "hallucination": {
@@ -408,12 +411,12 @@
         "otherDocumented": 0
       },
       "heldOutRecall": {
-        "k": 6,
-        "n": 9,
-        "value": 0.6666666666666666,
+        "k": 0,
+        "n": 1,
+        "value": 0,
         "ci": [
-          0.3542021355803963,
-          0.879416181613089
+          0,
+          0.7934506856227626
         ]
       },
       "hallucination": {
@@ -477,11 +480,11 @@
         "otherDocumented": 0
       },
       "heldOutRecall": {
-        "k": 9,
-        "n": 9,
+        "k": 1,
+        "n": 1,
         "value": 1,
         "ci": [
-          0.7008549515804559,
+          0.20654931437723745,
           1
         ]
       },
@@ -546,13 +549,10 @@
         "otherDocumented": 0
       },
       "heldOutRecall": {
-        "k": 9,
-        "n": 9,
-        "value": 1,
-        "ci": [
-          0.7008549515804559,
-          1
-        ]
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
       },
       "hallucination": {
         "k": 1,
@@ -579,232 +579,89 @@
   },
   "heldOut": {
     "a": {
-      "gold": 15,
+      "gold": 1,
       "excluded": 0,
-      "nAfterExclusion": 15,
-      "found": 9,
+      "nAfterExclusion": 1,
+      "found": 1,
       "excludedBySite": {},
       "perRun": [
         {
           "isrc": "GBDUW0000053",
           "runId": "synthetic-a-0-GBDUW0000053",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBDUW0000053→More Spell on You / Eddie Johns",
-              "heldOutSites": [
-                "wikipedia.org",
-                "latimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAAA9700049",
           "runId": "synthetic-a-0-GBAAA9700049",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAAA9700049→The Last Time / The Andrew Oldham Orchestra",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USUM70741299",
           "runId": "synthetic-a-0-USUM70741299",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USUM70741299→Harder, Better, Faster, Stronger / Daft Punk",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USSB29000129",
           "runId": "synthetic-a-0-USSB29000129",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USSB29000129→Under Pressure / Queen & David Bowie",
-              "heldOutSites": [
-                "wikipedia.org",
-                "loudwire.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USCA29000294",
           "runId": "synthetic-a-0-USCA29000294",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USCA29000294→Super Freak / Rick James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USTB10250016",
           "runId": "synthetic-a-0-USTB10250016",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USTB10250016→Pastime Paradise / Stevie Wonder",
-              "heldOutSites": [
-                "wikipedia.org",
-                "billboard.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40000359",
           "runId": "synthetic-a-0-USBB40000359",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40000359→Juicy Fruit / Mtume",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40580685",
           "runId": "synthetic-a-0-USBB40580685",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40580685→Every Breath You Take / The Police",
-              "heldOutSites": [
-                "wikipedia.org",
-                "ft.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB10504319",
           "runId": "synthetic-a-0-USWB10504319",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USWB10504319→Gimme! Gimme! Gimme! (A Man After Midnight) / ABBA",
-              "heldOutSites": [
-                "wikipedia.org",
-                "bbc.co.uk"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USIR10001280",
           "runId": "synthetic-a-0-USIR10001280",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USIR10001280→Thank You / Dido",
-              "heldOutSites": [
-                "wikipedia.org",
-                "seattletimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBBMQ9800092",
           "runId": "synthetic-a-0-GBBMQ9800092",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBBMQ9800092→Take Yo' Praise / Camille Yarbrough",
-              "heldOutSites": [
-                "wikipedia.org",
-                "npr.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAJH9900041",
           "runId": "synthetic-a-0-GBAJH9900041",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAJH9900041→Trouble So Hard / Vera Hall",
-              "heldOutSites": [
-                "wikipedia.org",
-                "kexp.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "SEUM71100961",
           "runId": "synthetic-a-0-SEUM71100961",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "SEUM71100961→Something's Got a Hold on Me / Etta James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB19900178",
@@ -840,17 +697,7 @@
           "isrc": "USDJ20200650",
           "runId": "synthetic-a-0-USDJ20200650",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USDJ20200650→Hurt / Nine Inch Nails",
-              "heldOutSites": [
-                "wikipedia.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAHT0600202",
@@ -895,232 +742,89 @@
       ]
     },
     "b": {
-      "gold": 15,
+      "gold": 1,
       "excluded": 0,
-      "nAfterExclusion": 15,
-      "found": 11,
+      "nAfterExclusion": 1,
+      "found": 0,
       "excludedBySite": {},
       "perRun": [
         {
           "isrc": "GBDUW0000053",
           "runId": "synthetic-b-0-GBDUW0000053",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBDUW0000053→More Spell on You / Eddie Johns",
-              "heldOutSites": [
-                "wikipedia.org",
-                "latimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAAA9700049",
           "runId": "synthetic-b-0-GBAAA9700049",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAAA9700049→The Last Time / The Andrew Oldham Orchestra",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USUM70741299",
           "runId": "synthetic-b-0-USUM70741299",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USUM70741299→Harder, Better, Faster, Stronger / Daft Punk",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USSB29000129",
           "runId": "synthetic-b-0-USSB29000129",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USSB29000129→Under Pressure / Queen & David Bowie",
-              "heldOutSites": [
-                "wikipedia.org",
-                "loudwire.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USCA29000294",
           "runId": "synthetic-b-0-USCA29000294",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USCA29000294→Super Freak / Rick James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USTB10250016",
           "runId": "synthetic-b-0-USTB10250016",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USTB10250016→Pastime Paradise / Stevie Wonder",
-              "heldOutSites": [
-                "wikipedia.org",
-                "billboard.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40000359",
           "runId": "synthetic-b-0-USBB40000359",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40000359→Juicy Fruit / Mtume",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40580685",
           "runId": "synthetic-b-0-USBB40580685",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40580685→Every Breath You Take / The Police",
-              "heldOutSites": [
-                "wikipedia.org",
-                "ft.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB10504319",
           "runId": "synthetic-b-0-USWB10504319",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USWB10504319→Gimme! Gimme! Gimme! (A Man After Midnight) / ABBA",
-              "heldOutSites": [
-                "wikipedia.org",
-                "bbc.co.uk"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USIR10001280",
           "runId": "synthetic-b-0-USIR10001280",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USIR10001280→Thank You / Dido",
-              "heldOutSites": [
-                "wikipedia.org",
-                "seattletimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBBMQ9800092",
           "runId": "synthetic-b-0-GBBMQ9800092",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBBMQ9800092→Take Yo' Praise / Camille Yarbrough",
-              "heldOutSites": [
-                "wikipedia.org",
-                "npr.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAJH9900041",
           "runId": "synthetic-b-0-GBAJH9900041",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAJH9900041→Trouble So Hard / Vera Hall",
-              "heldOutSites": [
-                "wikipedia.org",
-                "kexp.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "SEUM71100961",
           "runId": "synthetic-b-0-SEUM71100961",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "SEUM71100961→Something's Got a Hold on Me / Etta James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB19900178",
@@ -1156,17 +860,7 @@
           "isrc": "USDJ20200650",
           "runId": "synthetic-b-0-USDJ20200650",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USDJ20200650→Hurt / Nine Inch Nails",
-              "heldOutSites": [
-                "wikipedia.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAHT0600202",
@@ -1211,232 +905,89 @@
       ]
     },
     "c": {
-      "gold": 15,
+      "gold": 1,
       "excluded": 0,
-      "nAfterExclusion": 15,
-      "found": 14,
+      "nAfterExclusion": 1,
+      "found": 1,
       "excludedBySite": {},
       "perRun": [
         {
           "isrc": "GBDUW0000053",
           "runId": "synthetic-c-0-GBDUW0000053",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBDUW0000053→More Spell on You / Eddie Johns",
-              "heldOutSites": [
-                "wikipedia.org",
-                "latimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAAA9700049",
           "runId": "synthetic-c-0-GBAAA9700049",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAAA9700049→The Last Time / The Andrew Oldham Orchestra",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USUM70741299",
           "runId": "synthetic-c-0-USUM70741299",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USUM70741299→Harder, Better, Faster, Stronger / Daft Punk",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USSB29000129",
           "runId": "synthetic-c-0-USSB29000129",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USSB29000129→Under Pressure / Queen & David Bowie",
-              "heldOutSites": [
-                "wikipedia.org",
-                "loudwire.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USCA29000294",
           "runId": "synthetic-c-0-USCA29000294",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USCA29000294→Super Freak / Rick James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USTB10250016",
           "runId": "synthetic-c-0-USTB10250016",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USTB10250016→Pastime Paradise / Stevie Wonder",
-              "heldOutSites": [
-                "wikipedia.org",
-                "billboard.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40000359",
           "runId": "synthetic-c-0-USBB40000359",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40000359→Juicy Fruit / Mtume",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40580685",
           "runId": "synthetic-c-0-USBB40580685",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40580685→Every Breath You Take / The Police",
-              "heldOutSites": [
-                "wikipedia.org",
-                "ft.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB10504319",
           "runId": "synthetic-c-0-USWB10504319",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USWB10504319→Gimme! Gimme! Gimme! (A Man After Midnight) / ABBA",
-              "heldOutSites": [
-                "wikipedia.org",
-                "bbc.co.uk"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USIR10001280",
           "runId": "synthetic-c-0-USIR10001280",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USIR10001280→Thank You / Dido",
-              "heldOutSites": [
-                "wikipedia.org",
-                "seattletimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBBMQ9800092",
           "runId": "synthetic-c-0-GBBMQ9800092",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBBMQ9800092→Take Yo' Praise / Camille Yarbrough",
-              "heldOutSites": [
-                "wikipedia.org",
-                "npr.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAJH9900041",
           "runId": "synthetic-c-0-GBAJH9900041",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAJH9900041→Trouble So Hard / Vera Hall",
-              "heldOutSites": [
-                "wikipedia.org",
-                "kexp.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "SEUM71100961",
           "runId": "synthetic-c-0-SEUM71100961",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "SEUM71100961→Something's Got a Hold on Me / Etta James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB19900178",
@@ -1472,17 +1023,7 @@
           "isrc": "USDJ20200650",
           "runId": "synthetic-c-0-USDJ20200650",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USDJ20200650→Hurt / Nine Inch Nails",
-              "heldOutSites": [
-                "wikipedia.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAHT0600202",
@@ -1527,232 +1068,89 @@
       ]
     },
     "d": {
-      "gold": 15,
+      "gold": 1,
       "excluded": 0,
-      "nAfterExclusion": 15,
-      "found": 14,
+      "nAfterExclusion": 1,
+      "found": 1,
       "excludedBySite": {},
       "perRun": [
         {
           "isrc": "GBDUW0000053",
           "runId": "synthetic-d-0-GBDUW0000053",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBDUW0000053→More Spell on You / Eddie Johns",
-              "heldOutSites": [
-                "wikipedia.org",
-                "latimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAAA9700049",
           "runId": "synthetic-d-0-GBAAA9700049",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAAA9700049→The Last Time / The Andrew Oldham Orchestra",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USUM70741299",
           "runId": "synthetic-d-0-USUM70741299",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USUM70741299→Harder, Better, Faster, Stronger / Daft Punk",
-              "heldOutSites": [
-                "wikipedia.org",
-                "theguardian.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USSB29000129",
           "runId": "synthetic-d-0-USSB29000129",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USSB29000129→Under Pressure / Queen & David Bowie",
-              "heldOutSites": [
-                "wikipedia.org",
-                "loudwire.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": false
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USCA29000294",
           "runId": "synthetic-d-0-USCA29000294",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USCA29000294→Super Freak / Rick James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USTB10250016",
           "runId": "synthetic-d-0-USTB10250016",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USTB10250016→Pastime Paradise / Stevie Wonder",
-              "heldOutSites": [
-                "wikipedia.org",
-                "billboard.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40000359",
           "runId": "synthetic-d-0-USBB40000359",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40000359→Juicy Fruit / Mtume",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USBB40580685",
           "runId": "synthetic-d-0-USBB40580685",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USBB40580685→Every Breath You Take / The Police",
-              "heldOutSites": [
-                "wikipedia.org",
-                "ft.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB10504319",
           "runId": "synthetic-d-0-USWB10504319",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USWB10504319→Gimme! Gimme! Gimme! (A Man After Midnight) / ABBA",
-              "heldOutSites": [
-                "wikipedia.org",
-                "bbc.co.uk"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USIR10001280",
           "runId": "synthetic-d-0-USIR10001280",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USIR10001280→Thank You / Dido",
-              "heldOutSites": [
-                "wikipedia.org",
-                "seattletimes.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBBMQ9800092",
           "runId": "synthetic-d-0-GBBMQ9800092",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBBMQ9800092→Take Yo' Praise / Camille Yarbrough",
-              "heldOutSites": [
-                "wikipedia.org",
-                "npr.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAJH9900041",
           "runId": "synthetic-d-0-GBAJH9900041",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "GBAJH9900041→Trouble So Hard / Vera Hall",
-              "heldOutSites": [
-                "wikipedia.org",
-                "kexp.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "SEUM71100961",
           "runId": "synthetic-d-0-SEUM71100961",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "SEUM71100961→Something's Got a Hold on Me / Etta James",
-              "heldOutSites": [
-                "wikipedia.org",
-                "rollingstone.com"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "USWB19900178",
@@ -1788,17 +1186,7 @@
           "isrc": "USDJ20200650",
           "runId": "synthetic-d-0-USDJ20200650",
           "citedSites": [],
-          "targets": [
-            {
-              "key": "USDJ20200650→Hurt / Nine Inch Nails",
-              "heldOutSites": [
-                "wikipedia.org"
-              ],
-              "excludedBy": [],
-              "counted": true,
-              "found": true
-            }
-          ]
+          "targets": []
         },
         {
           "isrc": "GBAHT0600202",

@@ -31,9 +31,9 @@
 //   measurement is below its estimator's confidence floor.
 // Tempo cases use each recording's measured tempo block unchanged ("synthetic": []), except the
 // confidence-floor cases, which set its confidence and method ("synthetic": ["tempo.confidence",
-// "tempo.method"]). No committed recording has a measured key (the audio service withheld every
-// one), so every key case carries a synthetic key block ("synthetic": ["key"], with
-// "basis": "synthetic").
+// "tempo.method"], with "basis": "synthetic"). No committed recording has a measured key (the
+// audio service withheld every one), so every key case carries a synthetic key block
+// ("synthetic": ["key"], with "basis": "synthetic").
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -285,7 +285,7 @@ function numericCases(recording, next, first) {
       ["false-shown-both", "tempo-no-confidence", "conflict", audio.tempo.method, null],
     ];
     for (const [category, name, expect, method, confidence] of floor) {
-      const changed = block({ ...audio.tempo, method, confidence }, null);
+      const changed = block({ ...audio.tempo, method, confidence, basis: "synthetic" }, null);
       add(category, name, expect, bpm(m * 1.25), "tempo", changed, [
         "tempo.confidence",
         "tempo.method",
@@ -327,6 +327,13 @@ function numericCases(recording, next, first) {
   key("estimator-error", "key-fifth-up", "conflict", say(tonic + 7, mode));
   key("estimator-error", "key-fourth-up-other-mode", "conflict", say(tonic + 5, other(mode)));
   key("false-caught", "key-whole-tone", "contradicted", say(tonic + 2, mode));
+  // The relative key's interval in the same mode is not the relative key: a false key.
+  key(
+    "false-caught",
+    "key-relative-interval-same-mode",
+    "contradicted",
+    say(tonic + (mode === "major" ? 9 : 3), mode),
+  );
   key("false-caught", "key-tritone", "contradicted", say(tonic + 6, mode));
   key("false-shown-both", "key-whole-tone-unmarked", "conflict", say(tonic + 2, mode), null);
   key(

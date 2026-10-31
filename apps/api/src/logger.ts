@@ -132,11 +132,52 @@ const AFTER_LINK = /\s+([^\s"'`,;}\]\u2026]+)/y;
 /** Credentials written into a URL (`https://user:password@host`). */
 const USERINFO = /^(https?:\/\/)[^/?#@\s]+@/i;
 /** Query parameters that carry a key, a token or a signature (run tokens and Turnstile's too). */
-const SECRET_PARAM =
-  /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
+const SECRET_PARAM_NAMES =
+  "api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential|x-amz-security-token|hmac";
+const SECRET_PARAM = new RegExp(String.raw`([?&;~](?:${SECRET_PARAM_NAMES})=)[^&#\s"'<>\\]*`, "gi");
+/**
+ * A link's last secret parameter as the link rule writes it (REDACTED), then white space and a
+ * run of token characters (group 1) that ends where a credential does. Read only before a
+ * credential that looks like one (GLUED_CREDENTIAL, HEX_KEY), and only where the text as it came
+ * had no value there or a value that ends in a scheme (AFTER_EMPTY_PARAM): the value of a
+ * parameter with none written (`?password= <secret>`), which the redaction of source errors
+ * reads as the value too, or what a scheme glued to the end of the value names
+ * (`?token=<value>Basic <credential>`), which the link rule hides with the value. After a value
+ * of its own (`?token=abc <request id>`), what follows is the text's.
+ */
+const EMPTY_PARAM_BEFORE = new RegExp(
+  String.raw`[?&;~](?:${SECRET_PARAM_NAMES})=\[redacted\]\s+([A-Za-z0-9._~+/=-]+)(?![^\s"'\`,;}\]\u2026])`,
+  "gi",
+);
+/**
+ * In the text as it came, a run of token characters (group 1) after white space after an "=" (a
+ * parameter written empty) or after a scheme glued to a word (`abcBearer`): the credentials
+ * EMPTY_PARAM_BEFORE may read.
+ */
+const AFTER_EMPTY_PARAM = /(?:=|(?<=[A-Za-z0-9_])(?:Bearer|Basic))\s+([A-Za-z0-9._~+/=-]+)/gi;
+/** The credentials AFTER_EMPTY_PARAM finds in the text scrub or scrubbedSpans reads now. */
+let afterEmptyParams: ReadonlySet<string> = new Set();
+
+/** `run` with afterEmptyParams those of `text`, as they were after it. */
+function readingParams<T>(text: string, run: () => T): T {
+  const outer = afterEmptyParams;
+  const found = new Set<string>();
+  if (text.includes("=") || /bearer|basic/i.test(text)) {
+    for (const match of text.matchAll(AFTER_EMPTY_PARAM)) found.add(match[1] ?? "");
+  }
+  afterEmptyParams = found;
+  try {
+    return run();
+  } finally {
+    afterEmptyParams = outer;
+  }
+}
+
 /** Names whose value is secret, in `name: value` and `name=value` pairs (SECRET_PAIR). */
 const PAIR_NAMES =
   "(?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|run[-_]?token|turnstile[-_]?token|client[-_]?secret|password|secret|token";
+/** A pair's name and its ":" or "=", starting a text. */
+const PAIR_AT_START = new RegExp(String.raw`^(?:${PAIR_NAMES})["']?\s*[:=]`, "i");
 /** The Authorization schemes. */
 const SCHEMES = "(?:Bearer|Basic|Discogs)";
 /** A quote that can open a value: util.inspect writes backticks when a string holds both others. */
@@ -239,11 +280,16 @@ interface ValuePattern {
   text: string;
   /** For each prefix of `units`, the length of its longest proper prefix that is also a suffix. */
   next: Int32Array;
+  /** Whether it is a value's base64 form (base64Forms), not the value. */
+  encoded?: boolean;
 }
 
 /** Values as configuredSpans and knownValueSpans match them. */
 interface ValueSet {
+  /** The values, and their base64 forms (base64Forms) after them. */
   patterns: ValuePattern[];
+  /** Whether a value holds a run of folded characters: a "+" can stand for a space of it. */
+  spaced: boolean;
   /**
    * How long one of the values can be in a text, written escaped ESCAPE_DEPTH times with each of
    * its folded runs FOLD_REACH characters long: logCut and cappedValues look that far past a cut
@@ -259,7 +305,7 @@ interface ValueSet {
 
 /** The configured values, longest first: as they were replaced before (cappedValues). */
 let secretStrings: string[] = [];
-let configured: ValueSet = { patterns: [], reach: 0, recent: new Map() };
+let configured: ValueSet = { patterns: [], spaced: false, reach: 0, recent: new Map() };
 /** configured.reach, which logCut and cappedValues read. */
 let valueReach = 0;
 let secretHosts: string[] = [];
@@ -321,21 +367,6 @@ const FOLDED_RUN = 0;
  */
 const FOLD_REACH = 8;
 const BACKSLASH = 0x5c;
-/** The one-character escapes of JSON and JavaScript (util.inspect writes `\'` and `\v` too). */
-const SIMPLE_ESCAPES: ReadonlyMap<number, number> = new Map(
-  [
-    ['"', '"'],
-    ["\\", "\\"],
-    ["/", "/"],
-    ["'", "'"],
-    ["b", "\b"],
-    ["f", "\f"],
-    ["n", "\n"],
-    ["r", "\r"],
-    ["t", "\t"],
-    ["v", "\v"],
-  ].map(([written, char]) => [(written as string).charCodeAt(0), (char as string).charCodeAt(0)]),
-);
 
 /**
  * Whether a character is one that logText or plainReason (sources/http.ts) folds into a space:
@@ -363,16 +394,52 @@ function isFolded(c: number): boolean {
  */
 function valueSet(values: readonly string[]): ValueSet {
   const patterns: ValuePattern[] = [];
+  const encoded = new Map<string, ValuePattern>();
   let reach = 0;
+  let spaced = false;
   for (const value of values) {
     const pattern = valuePattern(value);
     if (!pattern) continue;
     patterns.push(pattern);
     let runs = 0;
     for (const unit of pattern.units) if (unit === FOLDED_RUN) runs++;
+    spaced ||= runs > 0;
+    // A base64 form is at most 4/3 as long as the value, and holds no run: within this reach.
     reach = Math.max(reach, ESCAPED_CHAR * (pattern.units.length + runs * (FOLD_REACH - 1)));
+    for (const form of base64Forms(value.trim())) {
+      if (!encoded.has(form))
+        encoded.set(form, { ...withTable(unitsOf(form).units), encoded: true });
+    }
   }
-  return { patterns, reach, recent: new Map() };
+  return { patterns: [...patterns, ...encoded.values()], spaced, reach, recent: new Map() };
+}
+
+/** The fewest characters of a value's base64 form that base64Forms looks for. */
+const MIN_BASE64_FORM = 10;
+/** How many base64 forms base64Forms gives a value at most: 3 byte alignments, 2 alphabets. */
+const BASE64_FORMS = 6;
+
+/**
+ * The parts of `value`'s base64 form (its UTF-8 bytes, base64 and base64url) that hold only its
+ * own bits, at each of the 3 places its first byte can take in a group of 3: written inside a
+ * longer base64 text (a Basic credential, `user:<value>`), with or without padding, it is found
+ * by one of them. Parts shorter than MIN_BASE64_FORM are left out (a short value's form could be
+ * part of any base64 text). At most BASE64_FORMS.
+ */
+function base64Forms(value: string): string[] {
+  const bytes = Buffer.from(value, "utf8");
+  const forms = new Set<string>();
+  for (let align = 0; align < 3; align++) {
+    const written = Buffer.concat([Buffer.alloc(align), bytes, Buffer.alloc(2)]).toString("base64");
+    // Character i stands for bits [6i, 6i + 6); the value's own are [8 align, 8 (align + n)).
+    const first = Math.ceil((8 * align) / 6);
+    const end = Math.floor((8 * (align + bytes.length)) / 6);
+    const form = written.slice(first, end);
+    if (form.length < MIN_BASE64_FORM) continue;
+    forms.add(form);
+    forms.add(form.replaceAll("+", "-").replaceAll("/", "_"));
+  }
+  return [...forms].slice(0, BASE64_FORMS);
 }
 
 /**
@@ -440,51 +507,263 @@ function fold(text: Units): Units {
   return { units: out, length: n, from, to };
 }
 
-/** The value of `count` hex digits at `at` of `text`, or -1. */
-function hexAt(text: Units, at: number, count: number): number {
-  if (at + count > text.length) return -1;
-  let value = 0;
-  for (let i = at; i < at + count; i++) {
-    const c = text.units[i] as number;
-    const letter = c | 0x20;
-    const digit =
-      c >= 0x30 && c <= 0x39 ? c - 0x30 : letter >= 0x61 && letter <= 0x66 ? letter - 0x57 : -1;
-    if (digit < 0) return -1;
-    value = value * 16 + digit;
-  }
-  return value;
+/**
+ * A reading of a text that configuredSpans matches the values in: its text, read from `parent`
+ * with each match of `pattern` (global) replaced by what `read` makes of it, and mapped back to
+ * the text as it came only when a value is in it (mapped).
+ */
+interface Reading {
+  text: string;
+  parent?: Reading;
+  pattern?: RegExp;
+  read?: ReadMatch;
+  mapped?: Rewritten;
 }
 
 /**
- * `text` with its escapes read, left to right, as a JSON or JavaScript string's are: `\"`, `\\`,
- * `\n` and the other one-character escapes, `\uXXXX` and `\xXX`. A backslash that starts none is
- * kept. Undefined when the text holds no escape.
+ * What a match stands for, given as String.prototype.replace gives it: the match, its groups,
+ * where it is and the whole text. It returns the match itself where it stands for no other text.
  */
-function unescaped(text: Units): Units | undefined {
-  const { units, length } = text;
-  const out = new Uint16Array(length);
-  const from = new Int32Array(length);
-  const to = new Int32Array(length);
-  let any = false;
-  let n = 0;
-  for (let i = 0; i < length; n++) {
-    let c = units[i] as number;
-    let width = 1;
-    if (c === BACKSLASH && i + 1 < length) {
-      const kind = units[i + 1] as number;
-      const simple = SIMPLE_ESCAPES.get(kind);
-      const code =
-        kind === 0x75 ? hexAt(text, i + 2, 4) : kind === 0x78 ? hexAt(text, i + 2, 2) : -1;
-      if (simple !== undefined) [c, width] = [simple, 2];
-      else if (code >= 0) [c, width] = [code, kind === 0x75 ? 6 : 4];
+type ReadMatch = (match: string, ...rest: Array<string | number | undefined>) => string;
+
+/** A reading's text with its positions in the text as it came. */
+function mapped(reading: Reading): Rewritten {
+  if (!reading.mapped) {
+    const { parent, pattern, read } = reading;
+    if (!parent || !pattern || !read) reading.mapped = { text: reading.text };
+    else {
+      const from = mapped(parent);
+      const parts: Rewrite[] = [];
+      pattern.lastIndex = 0;
+      for (let match = pattern.exec(from.text); match; match = pattern.exec(from.text)) {
+        const written = read(...(match as unknown as [string]), match.index, from.text);
+        const end = match.index + match[0].length;
+        if (written !== match[0]) parts.push([match.index, end, written, match.index, end]);
+      }
+      reading.mapped = rewrite(from, parts, []);
     }
-    any ||= width > 1;
-    out[n] = c;
-    from[n] = text.from ? (text.from[i] as number) : i;
-    to[n] = text.to ? (text.to[i + width - 1] as number) : i + width;
-    i += width;
   }
-  return any ? { units: out, length: n, from, to } : undefined;
+  return reading.mapped;
+}
+
+/** A reading as configuredSpans matches it: UTF-16 units, each with its place in the text. */
+function readingUnits(reading: Reading): Units {
+  const { text, from, to } = mapped(reading);
+  return { ...unitsOf(text), ...(from && to ? { from, to } : {}) };
+}
+
+/** `reading` read again (Reading); undefined when that changes nothing. */
+function readAgain(reading: Reading, pattern: RegExp, read: ReadMatch): Reading | undefined {
+  const text = reading.text.replace(pattern, read);
+  return text === reading.text ? undefined : { text, parent: reading, pattern, read };
+}
+
+/** The one-character escapes of JSON and JavaScript (util.inspect writes `\'` and `\v` too). */
+const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  "'": "'",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+};
+/**
+ * The most white space a joint of STRING_ESCAPE holds after its "+": util.inspect's indent at a
+ * depth of 30. util.inspect writes a joint only after a line break of the string, whose run gives
+ * a value FOLD_REACH characters of reach a level (valueSet), more than a joint's 75.
+ */
+const JOINT_SPACE = 64;
+/**
+ * A JSON or JavaScript string's escape (group 1 `\uXXXX`, 2 `\xXX`, 3 a one-character escape),
+ * or where util.inspect joins two pieces of a string it wrote over two lines (`' +\n    "`: a
+ * quote, group 4, " +", the line break and the next line's indent, or the spaces logText and
+ * plainReason write for them, and a quote). util.inspect quotes each piece by itself (one that
+ * holds a `'` in `"`, one that holds both in backticks), so the two quotes can differ. The white
+ * space is bounded (JOINT_SPACE), so a joint never carries a value past the reach a cut reads
+ * around it (logCut).
+ */
+const STRING_ESCAPE = new RegExp(
+  String.raw`\\(?:u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|(["\\/'bfnrtv]))|(['"\x60])[ \t]{0,8}\+\s{0,${JOINT_SPACE}}['"\x60]`,
+  "g",
+);
+/** The escape of a quote or a slash alone: `\"`, `\'`, `` \` `` and `\/`. */
+const QUOTE_ESCAPE = /\\(["'`/])/g;
+
+/**
+ * `reading` with its escapes read, left to right, as a JSON or JavaScript string's are: `\"`,
+ * `\\`, `\n` and the other one-character escapes, `\uXXXX` and `\xXX`. A backslash that starts
+ * none is kept. Where util.inspect writes a string in pieces, one per line (`'…\n' +` and `'…'`
+ * on the next line), the pieces are read as one. With `quotesOnly`, only a quote's or a slash's
+ * escape is read: a value whose quotes alone were escaped keeps its own backslashes (`C:\temp\"x`
+ * holds `C:\temp"x`). Undefined when the text holds no escape and no such piece.
+ */
+function unescaped(reading: Reading, quotesOnly = false): Reading | undefined {
+  if (!reading.text.includes("\\") && (quotesOnly || !reading.text.includes("+"))) return undefined;
+  return readAgain(
+    reading,
+    quotesOnly ? QUOTE_ESCAPE : STRING_ESCAPE,
+    quotesOnly ? quoteOf : escapeOf,
+  );
+}
+
+/** What a match of STRING_ESCAPE stands for: a character, or nothing for a joint. */
+const escapeOf: ReadMatch = (match, unicode, hex, simple, quote) =>
+  quote !== undefined
+    ? ""
+    : typeof unicode === "string" || typeof hex === "string"
+      ? String.fromCharCode(Number.parseInt((unicode ?? hex) as string, 16))
+      : (SIMPLE_ESCAPES[simple as string] ?? match);
+/** What a match of QUOTE_ESCAPE stands for: its quote or slash. */
+const quoteOf: ReadMatch = (match, quote) => (typeof quote === "string" ? quote : match);
+
+/**
+ * The HTML named character references (the WHATWG list, html.spec.whatwg.org/entities.json) of
+ * the characters a value can hold that are not letters or digits: ASCII punctuation, the tab, the
+ * line feed and the no-break space, each under every name the list gives it (`&quot;`, `&QUOT;`,
+ * `&lsqb;`, `&lbrack;`, `&NewLine;`). Names are read as written: the list is case-sensitive.
+ */
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  Tab: "\t",
+  NewLine: "\n",
+  excl: "!",
+  QUOT: '"',
+  quot: '"',
+  num: "#",
+  dollar: "$",
+  percnt: "%",
+  AMP: "&",
+  amp: "&",
+  apos: "'",
+  lpar: "(",
+  rpar: ")",
+  ast: "*",
+  midast: "*",
+  plus: "+",
+  comma: ",",
+  period: ".",
+  sol: "/",
+  colon: ":",
+  semi: ";",
+  LT: "<",
+  lt: "<",
+  equals: "=",
+  GT: ">",
+  gt: ">",
+  quest: "?",
+  commat: "@",
+  lbrack: "[",
+  lsqb: "[",
+  bsol: "\\",
+  rbrack: "]",
+  rsqb: "]",
+  Hat: "^",
+  UnderBar: "_",
+  lowbar: "_",
+  DiacriticalGrave: "`",
+  grave: "`",
+  lbrace: "{",
+  lcub: "{",
+  VerticalLine: "|",
+  verbar: "|",
+  vert: "|",
+  rbrace: "}",
+  rcub: "}",
+  NonBreakingSpace: "\u00a0",
+  nbsp: "\u00a0",
+};
+/** Those of NAMED_ENTITIES that HTML also reads without their ";" (`&amp`, `&AMP`, `&nbsp`). */
+const LEGACY_ENTITIES: ReadonlySet<string> = new Set([
+  "AMP",
+  "GT",
+  "LT",
+  "QUOT",
+  "amp",
+  "gt",
+  "lt",
+  "nbsp",
+  "quot",
+]);
+/**
+ * An HTML entity (group 1 hexadecimal, 2 decimal, at most 6 and 7 digits after any leading zeros,
+ * the ";" optional; 3 a name, 4 its ";"), or a percent escape (group 5 its byte, 6 the escapes of the bytes that can
+ * follow it in a UTF-8 character); with `+`, a "+" (group 7), as a form writes a space.
+ */
+const ENTITY_OR_PERCENT =
+  /&(?:#[xX]0*([0-9A-Fa-f]{1,6});?|#0*(\d{1,7});?|([A-Za-z0-9]{1,16})(;?))|%([0-9A-Fa-f]{2})((?:%[89ABab][0-9A-Fa-f]){0,3})/g;
+const ENTITY_PERCENT_OR_PLUS = new RegExp(`${ENTITY_OR_PERCENT.source}|(\\+)`, "g");
+
+/**
+ * What a match of ENTITY_OR_PERCENT (ENTITY_PERCENT_OR_PLUS with `plus`) stands for, or the match
+ * itself. A named entity is read with its ";"; a legacy one also without it, and before more
+ * letters or digits, as HTML text reads it. The bytes of one UTF-8 character are read as that
+ * character (`%C3%A9` is "é"); a byte of none, as the Latin-1 character it is (`%E9`).
+ */
+const decodedOf =
+  (plus: boolean): ReadMatch =>
+  (match, ...rest) => {
+    const [hex, decimal, name, semicolon, byte, more, sign] = rest as Array<string | undefined>;
+    if (plus && sign !== undefined) return " ";
+    if (byte !== undefined)
+      return more ? utf8Of(match) : String.fromCharCode(Number.parseInt(byte, 16));
+    const number = hex ?? decimal;
+    if (number !== undefined) {
+      const code = Number.parseInt(number, hex !== undefined ? 16 : 10);
+      return code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    }
+    if (name === undefined) return match;
+    // Own names only: `&valueOf;` is no entity.
+    if (semicolon && Object.hasOwn(NAMED_ENTITIES, name)) return NAMED_ENTITIES[name] as string;
+    // Without its ";", or before more letters or digits, a legacy name is read as HTML text reads
+    // it: the longest one that starts the name (`&quotw0rd` is `"w0rd`, `&ampx;` is `&x;`).
+    for (let length = Math.min(name.length, LONGEST_LEGACY); length >= 2; length--) {
+      const legacy = name.slice(0, length);
+      if (LEGACY_ENTITIES.has(legacy)) {
+        return `${NAMED_ENTITIES[legacy] as string}${name.slice(length)}${semicolon ?? ""}`;
+      }
+    }
+    return match;
+  };
+/** The length of the longest legacy name (LEGACY_ENTITIES). */
+const LONGEST_LEGACY = 4;
+const ENTITY_OR_PERCENT_OF = decodedOf(false);
+const ENTITY_PERCENT_OR_PLUS_OF = decodedOf(true);
+
+/** Percent escapes of bytes (`%C3%A9`), each UTF-8 character as itself, any other byte as Latin-1. */
+function utf8Of(escapes: string): string {
+  const bytes = escapes
+    .split("%")
+    .slice(1)
+    .map((byte) => Number.parseInt(byte, 16));
+  let out = "";
+  for (let i = 0; i < bytes.length; ) {
+    const byte = bytes[i] as number;
+    const more = byte >= 0xf0 && byte <= 0xf4 ? 3 : byte >= 0xe0 ? 2 : byte >= 0xc2 ? 1 : 0;
+    let code = byte & (0x3f >> more);
+    let valid = byte >= 0xc2 && byte <= 0xf4 && i + more < bytes.length;
+    for (let k = 1; valid && k <= more; k++) code = (code << 6) | ((bytes[i + k] as number) & 0x3f);
+    const least = [0, 0x80, 0x800, 0x10000][more] as number;
+    valid &&= code >= least && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff);
+    out += String.fromCodePoint(valid ? code : byte);
+    i += valid ? more + 1 : 1;
+  }
+  return out;
+}
+
+/**
+ * `reading` with its HTML entities and percent escapes read, left to right (decodedMatch): a
+ * value written so in full or in part (`p%40ss`, `&#112;ass`) is found. With `plus`, a "+" reads
+ * as a space, as a form writes one. Undefined when the text holds none of them.
+ */
+function decoded(reading: Reading, plus = false): Reading | undefined {
+  const { text } = reading;
+  if (plus ? !text.includes("+") : !text.includes("&") && !text.includes("%")) return undefined;
+  return plus
+    ? readAgain(reading, ENTITY_PERCENT_OR_PLUS, ENTITY_PERCENT_OR_PLUS_OF)
+    : readAgain(reading, ENTITY_OR_PERCENT, ENTITY_OR_PERCENT_OF);
 }
 
 /**
@@ -692,25 +971,48 @@ const RECENT_TEXTS = 8;
 
 /** spansOf, read. */
 function readSpans(text: string, set: ValueSet): Array<[number, number]> {
-  // Without a backslash the text is read only as it came: when no value is in it with every run
-  // of folded characters one FOLDED_RUN, none is in its folded reading either.
-  if (!text.includes("\\")) {
-    const quick = text.replace(FOLDED_RUNS, "\0");
-    if (!set.patterns.some((value) => quick.includes(value.text))) return [];
-  }
-  const found: Array<[number, number]> = [];
-  let reading: Units | undefined = unitsOf(text);
-  for (let depth = 0; reading && depth <= ESCAPE_DEPTH; depth++) {
-    const folded = fold(reading);
-    // Most texts hold none of the values: a value is matched only where includes finds it.
-    const seen = unitsText(folded.units, folded.length);
-    for (const value of set.patterns) {
-      if (seen.includes(value.text)) occurrencesIn(folded, value, found);
-    }
-    reading = depth < ESCAPE_DEPTH ? unescaped(reading) : undefined;
+  const found: Found[] = [];
+  for (const reading of readingsOf(text, set)) {
+    // Most texts hold none of the values: a reading is mapped back to the text and matched only
+    // where includes finds one in it, with every run of folded characters one FOLDED_RUN.
+    const seen = reading.text.replace(FOLDED_RUNS, "\0");
+    const held = set.patterns.filter((value) => seen.includes(value.text));
+    if (held.length === 0) continue;
+    const folded = fold(readingUnits(reading));
+    for (const value of held) occurrencesIn(folded, value, found);
   }
   found.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
   return withTokens(text, found);
+}
+
+/** A place a value matches (occurrencesIn), and whether it is a base64 form's. */
+type Found = [start: number, end: number, encoded?: boolean];
+
+/**
+ * The readings of `text` configuredSpans matches the values in: as it came, then each reading
+ * read again (ESCAPE_DEPTH times) with its JSON escapes and util.inspect's pieces read
+ * (unescaped), or its entities and percent escapes (decoded), in either order (`\u0026quot;`,
+ * `&#92;n`); and the text as it came with only its quotes' escapes read and, for a value that
+ * holds a space, with "+" read as one. Only readings that differ are kept: at most 1 + 4 + 4.
+ */
+function readingsOf(text: string, set: ValueSet): Reading[] {
+  const first: Reading = { text };
+  const readings: Reading[] = [first];
+  let level = [first];
+  for (let depth = 0; depth < ESCAPE_DEPTH; depth++) {
+    const next: Reading[] = [];
+    for (const reading of level) {
+      for (const read of [unescaped(reading), decoded(reading)]) if (read) next.push(read);
+    }
+    readings.push(...next);
+    if (depth === 0) {
+      for (const read of [unescaped(first, true), set.spaced ? decoded(first, true) : undefined]) {
+        if (read) readings.push(read);
+      }
+    }
+    level = next;
+  }
+  return readings;
 }
 
 /** A character of a token (a key, a Bearer or Basic credential, a base64 text): [A-Za-z0-9._~+/=-]. */
@@ -739,21 +1041,29 @@ const isTokenStart = (c: number) => c !== 0x3d && isTokenChar(c);
  * `found` (sorted by start) as spans that each take the token characters (isTokenChar) written
  * right before (up to an "=", and never a link's "//") and after them (up to the start of a rule,
  * beforeRule) as well: a value glued to more of a token (`<key>.<signature>`, a composite token)
- * hides the whole token. In a link (after a "://" with no break since, inLink), a "/" ends the
- * token too: the host and the rest of the path stay. Before a span, a character that ends an
- * escape (`\n`, `\u00e9`) is not taken: the escape stays whole. Spans that overlap after that as
- * one. Each character is read at most twice, and the gap after a run of token characters once
- * (closerAfter): linear time.
+ * hides the whole token. In a link (after a "://" with no break since, inLink), and in a path
+ * written without a scheme (inPath), a "/" ends the token too: the host and the rest of the path
+ * stay. In such a path, a value glued to more of its segment after it (`/a/<key>.<signature>/…`)
+ * takes the rest of the token: the signature can hold a "/" of its own. A value's base64 form is
+ * taken with the whole of its token, a path's too: a base64 text holds "/" of its own. Before a span, a character that ends an escape (`\n`, `\u00e9`) is not
+ * taken: the escape stays whole. Spans that overlap after that as one. Each character is read at
+ * most twice, and the gap after a run of token characters once (closerAfter): linear time.
  */
-function withTokens(text: string, found: ReadonlyArray<readonly [number, number]>) {
+function withTokens(text: string, found: ReadonlyArray<Found>) {
   const spans: Array<[number, number]> = [];
   const link = inLink(text);
+  const path = inPath(text);
   const closer = closerAfter(text);
   let scanned = 0;
-  for (const [from, to] of found) {
+  for (const [from, to, encoded] of found) {
     const last = spans.at(-1);
-    const inUrl = link(from);
+    const linked = link(from);
+    const bare = !linked && !encoded && path(from);
+    const inUrl = linked || bare;
     const takes = (c: number) => isTokenChar(c) && !(inUrl && c === SLASH);
+    // In a path without a scheme, a value glued to more of its segment takes the rest of it.
+    const glued = bare && to < text.length && takes(text.charCodeAt(to));
+    const takesOn = glued ? isTokenChar : takes;
     let start = from;
     while (
       start > (last?.[1] ?? 0) &&
@@ -767,7 +1077,7 @@ function withTokens(text: string, found: ReadonlyArray<readonly [number, number]
     // Inside the span before it, whose token characters are read already.
     if (last && to <= last[1]) continue;
     let end = Math.max(to, scanned);
-    while (end < text.length && takes(text.charCodeAt(end))) end++;
+    while (end < text.length && takesOn(text.charCodeAt(end))) end++;
     scanned = end;
     end = beforeRule(text, to, end, closer);
     if (last && start < last[1]) last[1] = Math.max(last[1], end);
@@ -794,6 +1104,105 @@ function inLink(text: string): (at: number) => boolean {
     return scheme > broken;
   };
 }
+
+/**
+ * Whether a place in `text` is in a path written without a scheme: in a run of token characters
+ * (isTokenChar) that starts with "/" (`/v1/<value>/x`, `//host/…`, also after "~" or "." or
+ * ".."), with a host name and a "/" (`api.example.org/v1/…`), or with a port and a "/" after a
+ * ":" (`localhost:3001/v1/…`), where the text says it is a path (pathEvidence); and only past
+ * that first "/": a value in the host name (`<key>.sig/<rest>`) is no path's. Any other run is
+ * taken whole, as a token. Asked for places in order, it reads each character once, and the
+ * start of each run once.
+ */
+function inPath(text: string): (at: number) => boolean {
+  let read = 0;
+  let start = 0;
+  let judged = -1;
+  let after = -1;
+  return (at) => {
+    for (; read < at; read++) if (!isTokenChar(text.charCodeAt(read))) start = read + 1;
+    if (judged !== start) {
+      judged = start;
+      after = stickyEnd(PATH_START, text, start);
+      // A host name starts with a letter or a digit; PATH_START's other forms, with "~", "." or "/".
+      let host = after !== -1 && !"~./".includes(text.charAt(start));
+      if (after === -1 && text.charCodeAt(start - 1) === COLON) {
+        after = stickyEnd(PORT_START, text, start);
+        host = true;
+      }
+      if (after !== -1 && !pathEvidence(text, start, host)) after = -1;
+    }
+    return after !== -1 && at >= after;
+  };
+}
+
+/**
+ * Whether the run of token characters at `start`, which starts like a path (inPath), is one by
+ * what is written before it: an HTTP method (`GET /v1/…`, `method=GET /v1/…`), a name that ends
+ * in a path's word with its ":" or "=" (`path: /v1/…`, `"url":"/v1/…"`, `Location: /v1/…`), or
+ * a host name or a port that starts its word (`api.example.org/v1/…`, `localhost:3001/v1/…`);
+ * and in each case no secret's word (SECRET_WORD) in the NAME_WINDOW characters before that
+ * word, past the blanks and stops right before it, the method's or the name's own words
+ * included (`Bearer GET /v1/…`, `token_url: /v1/…`). Never a credential's value
+ * (credentialValueAt), nor a run whose own word holds a secret's word
+ * (`mysession=localhost:3001/…`). A value in any other run is the whole run's, whatever words
+ * come before it (`token — /v1/…`, `[token] => /v1/…`, `Cookie: sid=localhost:3001/…`): a run
+ * whose segments could be a credential's is never shown in part.
+ */
+function pathEvidence(text: string, start: number, host: boolean): boolean {
+  // A path that is a credential's value (`Bearer /v1/<key>/<rest>`, `token: ./<key>/…`,
+  // `Basic localhost:3001/<key>/…`) is the credential's: taken whole, as any token.
+  if (credentialValueAt(text, start)) return false;
+  let word = start;
+  while (word > 0 && start - word < NAME_WINDOW && !endsLink(text.charCodeAt(word - 1))) word--;
+  // A secret's word in the run's own word (`mysession=localhost:3001/…`).
+  if (SECRET_WORD.test(text.slice(word, start))) return false;
+  // No secret's word before it either, the evidence's own words included (`Bearer GET /…`,
+  // `the token path: /…`): back over blanks and stops first (`token:` and a run of blanks), at
+  // most MAX_TOKEN, then NAME_WINDOW characters.
+  let from = word;
+  while (from > 0 && word - from < MAX_TOKEN && !ALPHANUMERIC.test(text.charAt(from - 1))) from--;
+  if (SECRET_WORD.test(text.slice(Math.max(0, from - NAME_WINDOW), word))) return false;
+  const before = text.slice(Math.max(0, word - NAME_WINDOW), word);
+  return host || METHOD_BEFORE.test(before) || PATH_NAME_BEFORE.test(before);
+}
+const ALPHANUMERIC = /[A-Za-z0-9]/;
+
+/** An HTTP method, then blanks, ending a text. */
+const METHOD_BEFORE =
+  /(?<![A-Za-z0-9_])(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|TRACE|CONNECT)[ \t]+$/;
+/** A name that ends in a path's word, quotes or not, and its ":" or "=", ending a text. */
+const PATH_NAME_BEFORE =
+  /(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]*?(?:path|url|uri|href|file|route|endpoint|location)["'`]?[ \t]*[:=][ \t]*["'`]?$/i;
+/**
+ * A word a secret's name holds, anywhere in a word ("x-api-key", "sessionid", "passwd"), or one
+ * of the shorter ones as a word of its own. It reads more words as secrets' than the rules do:
+ * a path next to one is taken whole, as a token.
+ */
+const SECRET_WORD =
+  /tok|secret|pass|pwd|key|auth|cred|sess|sid|cookie|sig|jwt|priv|cert|hmac|hdn|nonce|bearer|basic|digest|oauth|ssws|dpop|hawk|negotiate|ntlm|\b(?:sk|otp|mac|bot|pin)\b/i;
+
+/**
+ * Whether the run of token characters at `start` is a credential's value: a scheme word or a
+ * secret's name (CREDENTIAL_NAME_AT_END, glued to a word before it or not: `xpassword: /…`) ends
+ * the text before it, or before the word it is part of (a host and its port: `Basic
+ * localhost:3001/…`), up to white space or a quote; or a secret's name and its "=" or ":" are
+ * in that word (`xsecret=localhost:3001/…`). Such a path is hidden whole, as a token.
+ */
+function credentialValueAt(text: string, start: number): boolean {
+  const nameBefore = (at: number) =>
+    CREDENTIAL_NAME_AT_END.test(text.slice(Math.max(0, at - NAME_WINDOW), at));
+  if (nameBefore(start)) return true;
+  let word = start;
+  while (word > 0 && start - word < NAME_WINDOW && !endsLink(text.charCodeAt(word - 1))) word--;
+  return word < start && (nameBefore(word) || CREDENTIAL_NAME_IN.test(text.slice(word, start)));
+}
+
+/** The start of a path without a scheme: "/", "~/", "./", "../", or a host name and a "/". */
+const PATH_START =
+  /(?:~|\.{1,2})?\/|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.){1,8}[A-Za-z]{2,63}\//y;
+/** After a host's ":", a port and a "/". */
+const PORT_START = /\d{1,5}\//y;
 
 /**
  * A character that ends a link: a control character (C0, DEL and C1), whitespace (\s, with the
@@ -889,7 +1298,7 @@ function afterEscape(text: string, start: number, end: number): number {
 }
 
 /** Adds each place `value` matches in `text` (a folded text), overlapping ones too, to `found`. */
-function occurrencesIn(text: Units, value: ValuePattern, found: Array<[number, number]>): void {
+function occurrencesIn(text: Units, value: ValuePattern, found: Found[]): void {
   const { units, next } = value;
   const m = units.length;
   const from = text.from as Int32Array;
@@ -899,7 +1308,11 @@ function occurrencesIn(text: Units, value: ValuePattern, found: Array<[number, n
     while (k > 0 && units[k] !== c) k = next[k - 1] as number;
     if (units[k] === c) k++;
     if (k === m) {
-      found.push([from[i - m + 1] as number, to[i] as number]);
+      found.push(
+        value.encoded
+          ? [from[i - m + 1] as number, to[i] as number, true]
+          : [from[i - m + 1] as number, to[i] as number],
+      );
       k = next[k - 1] as number;
     }
   }
@@ -1125,11 +1538,20 @@ function asText(value: unknown): string {
  */
 export function scrub(input: unknown): string {
   try {
+    const text = asText(input);
+    return readingParams(text, () => scrubRead(text));
+  } catch {
+    return "[unreadable]";
+  }
+}
+
+/** scrub of `text`, with afterEmptyParams read (readingParams). */
+function scrubRead(text: string): string {
+  try {
     // The cap falls on the text as it came, never inside a link or a host (logCut), whose part
     // the rules below would no longer know, nor inside an Authorization credential, whose part
     // can be too short for its rule (a Basic one needs 8 characters). Replaced first, they would
     // shorten the text and let in more of it.
-    const text = asText(input);
     const marks = standIns(text);
     let out = cappedValues(text, marks);
     out = out.replace(URL_IN_TEXT, (link: string, at: number, whole: string) => {
@@ -1158,7 +1580,11 @@ export function scrub(input: unknown): string {
               AUTH_SCHEME,
               (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
             )
-    ).replaceAll(HIDDEN_VALUE, REDACTED);
+    )
+      .replaceAll(HIDDEN_VALUE, REDACTED)
+      // A rule that took a HIDDEN_VALUE up to its last character (a pair's value ends before it)
+      // leaves that character: the text's own are written back from stand-ins (standIns).
+      .replace(PRIVATE_MARKS, "");
     return writtenBack(out, marks);
   } catch {
     return "[unreadable]";
@@ -1281,10 +1707,12 @@ function valueRewrite(text: string, from: number, to: number): Rewrite {
  * which the rest is no longer read as user info.
  */
 export function scrubbedSpans(text: string, rules: SpanRules = {}): Array<[number, number]> {
-  const hidden: Array<[number, number]> = [];
-  const read = { text: asRead(text) };
-  const values = rules.values === false ? [] : valueSpans(text);
-  return spansAfterValues(rewrite(read, asRewrites(values), hidden), hidden, rules);
+  return readingParams(text, () => {
+    const hidden: Array<[number, number]> = [];
+    const read = { text: asRead(text) };
+    const values = rules.values === false ? [] : valueSpans(text);
+    return spansAfterValues(rewrite(read, asRewrites(values), hidden), hidden, rules);
+  });
 }
 
 /** Configured values' spans as Rewrites, each by HIDDEN_VALUE as scrub writes it for its rules. */
@@ -1671,9 +2099,14 @@ const NEXT_SCHEME = new RegExp(String.raw`(?:(${SCHEMES})|(?:${MORE_SCHEMES}))(?
 const DISCOGS_TOKEN = /[ \t]+token=[ \t]*/iy;
 /** Between a scheme and what follows it: spaces and tabs. */
 const SCHEME_SPACE = /[ \t]+/y;
-/** Inside quotes only: a comma, or one line break, between a scheme and its credential. */
-const SCHEME_COMMA = /[ \t]*,[ \t]*/y;
+/**
+ * Inside quotes, a comma or one line break between a scheme and its credential; after an
+ * Authorization name, a comma. A comma can have one line break after it.
+ */
+const SCHEME_COMMA = /[ \t]*,[ \t]*(?:(?:\r\n|[\r\n\v\f\u0085\u2028\u2029])[ \t]*)?/y;
 const SCHEME_BREAK = /[ \t]*(?:\r\n|[\r\n\v\f\u0085\u2028\u2029])[ \t]*/y;
+/** An Authorization name and its ":" or "=" (and a quote), ending a text. */
+const AUTHORIZATION_BEFORE = /\bauthorization["']?[ \t]{0,8}[:=]\s{0,8}$/i;
 /**
  * An Authorization value's parameter (`response="v"`): its value in double quotes or in none;
  * with `single`, in single quotes too (`response='v'`), read where no single quote opened before
@@ -1763,6 +2196,8 @@ function credentialAt(
   let last = scheme[0].toLowerCase();
   let p = at + scheme[0].length;
   let open = quote;
+  // After an Authorization name, a comma can follow the scheme outside quotes too.
+  const named = AUTHORIZATION_BEFORE.test(text.slice(Math.max(0, at - 40), at));
   let shape: "space" | "comma" | "break" | "glued" = "space";
   for (;;) {
     if (last === "discogs") {
@@ -1783,11 +2218,12 @@ function credentialAt(
     shape = "space";
     // A glued scheme's credential can start on the next line; it must look like one anyway.
     if (glued) end = Math.max(end, stickyEnd(GLUED_SPACE, text, p));
-    if (open) {
+    if (open || named) {
       for (const [pattern, kind] of [
         [SCHEME_COMMA, "comma"],
         [SCHEME_BREAK, "break"],
       ] as const) {
+        if (!open && kind === "break") continue;
         const other = stickyEnd(pattern, text, p);
         if (other > end) [end, shape] = [other, kind];
       }
@@ -1834,7 +2270,9 @@ function credentialAt(
   const closer = inner || open;
   if (glued && !GLUED_CREDENTIAL.test(credential)) return { spans: [], end };
   if (params <= p && STATUS_WORD.test(credential)) return { spans: [], end };
-  const quoted = shape === "comma" || shape === "break";
+  const quoted = shape === "break" || (shape === "comma" && open !== "");
+  // Unquoted, after an Authorization name: a credential that looks like one, to a space or a quote.
+  if (shape === "comma" && !open && !CREDENTIAL_LIKE.test(credential)) return { spans: [], end };
   // Taken before the closing quote, or where a cut ended the text (its end, or the "…" it
   // writes): a cut between the two leaves a credential still read as one. The quote is not part
   // of it.
@@ -1906,6 +2344,8 @@ const GLUED_USERINFO = /(?<=[A-Za-z0-9_])https?:\/\/([^/?#@\s"'<>\\`]+)@/gi;
  * - what the two rules and these hide in the text read with straight quotes for curly ones and
  *   the characters HTML entities stand for (`‘Bearer <token>’`, `&quot;token&quot;:&quot;v&quot;`,
  *   `password&#61;v`);
+ * - a credential that looks like one after a link's last secret parameter and white space
+ *   (`?password= <secret>`, `?token=<value>Basic <credential>`);
  * - with `glued`, what those rules leave where a word is glued before them: a pair's name
  *   (GLUED_PAIR), Bearer or Basic before a credential (GLUED_SCHEME) and a link with user info.
  * scrub hides them in what the two rules write; what they hid stays hidden. A scheme word alone
@@ -1919,6 +2359,14 @@ function moreSpans(text: string, glued = true): Array<[number, number]> {
     spans.push([end - (key[1] ?? "").length, end]);
   }
   if (NESTED_NAME.test(text)) nestedPairs(text, spans);
+  for (const param of text.matchAll(EMPTY_PARAM_BEFORE)) {
+    const credential = param[1] ?? "";
+    const end = param.index + param[0].length;
+    // A parameter with a value of its own, and a pair after the link, which the pair rule reads.
+    if (!afterEmptyParams.has(credential) || PAIR_AT_START.test(credential)) continue;
+    if (GLUED_CREDENTIAL.test(credential) || HEX_KEY.test(credential.replace(/\.$/, "")))
+      spans.push([end - credential.length, end]);
+  }
   if (glued) {
     if (GLUED_NAME.test(text)) gluedPairs({ text }, text, spans);
     for (const link of text.matchAll(GLUED_USERINFO)) {
@@ -1963,14 +2411,17 @@ function moreSpans(text: string, glued = true): Array<[number, number]> {
   return unionSpans(credentials, []);
 }
 
-/** A pair's name and its ":" or "=", then another's, for a quick look first. */
+/**
+ * A pair's name and its ":" or "=", then another's, for a quick look first. A name can be in one
+ * quote or two (Markdown's ``` ``password`` ```).
+ */
 const NESTED_NAME = new RegExp(
-  String.raw`(?:${PAIR_NAMES})["'\`\u2018-\u201f]?[ \t]*[:=][ \t]*["'\`\u2018-\u201f]?(?:${PAIR_NAMES})["'\`\u2018-\u201f]?[ \t]*[:=]`,
+  String.raw`(?:${PAIR_NAMES})["'\`\u2018-\u201f]{0,2}[ \t]*[:=][ \t]*["'\`\u2018-\u201f]{0,2}(?:${PAIR_NAMES})["'\`\u2018-\u201f]{0,2}[ \t]*[:=]`,
   "i",
 );
-/** A pair's name, in a quote or not, and its ":" or "=", where a value starts. */
+/** A pair's name, in one quote or two or none, and its ":" or "=", where a value starts. */
 const PAIR_START = new RegExp(
-  String.raw`["'\`\u2018-\u201f]?\b(?:${PAIR_NAMES})["'\`\u2018-\u201f]?\s*[:=]`,
+  String.raw`["'\`\u2018-\u201f]{0,2}\b(?:${PAIR_NAMES})["'\`\u2018-\u201f]{0,2}\s*[:=]`,
   "iy",
 );
 /** SECRET_PAIR, read only where it is placed. */
@@ -1982,7 +2433,8 @@ const NESTED_DEPTH = 4;
  * The values of the pairs whose name is the value of another pair (`token: authorization:
  * "<secret>"`) that look like a credential (CREDENTIAL_LIKE), added to `spans`: the pair rule
  * takes the second name as the first one's value, and the second pair is not read. A few levels
- * deep only.
+ * deep from each pair; a later pair of the chain starts one of its own. An inner name in backticks
+ * or curly quotes is read too.
  */
 function nestedPairs(text: string, spans: Array<[number, number]>): void {
   for (const pair of text.matchAll(SECRET_PAIR)) {
@@ -1992,7 +2444,15 @@ function nestedPairs(text: string, spans: Array<[number, number]>): void {
       const at = QUOTE_CHAR.test(text.charAt(from)) ? from + 1 : from;
       SECRET_PAIR_HERE.lastIndex = at;
       const inner = SECRET_PAIR_HERE.exec(text);
-      if (!inner) break;
+      if (!inner) {
+        // A name in backticks or curly quotes (``token: `password`: <secret>``), which SECRET_PAIR
+        // does not read: the token after its ":" or "=", when it looks like a credential.
+        INNER_VALUE.lastIndex = stickyEnd(PAIR_START, text, from);
+        const token = INNER_VALUE.exec(text);
+        const end = INNER_VALUE.lastIndex;
+        if (token?.[1] && CREDENTIAL_LIKE.test(token[1])) spans.push([end - token[1].length, end]);
+        break;
+      }
       const value = at + (inner[1] ?? "").length + (inner[2] ?? "").length;
       const part = valueRewrite(text, value, at + inner[0].length);
       const scheme = inner[3] ?? "";
@@ -2006,6 +2466,8 @@ function nestedPairs(text: string, spans: Array<[number, number]>): void {
   }
 }
 
+/** After a nested pair's ":" or "=": white space, a quote or two, then its value (group 1). */
+const INNER_VALUE = /\s*["'`\u2018-\u201f]{0,2}([^\s"'`,;}\]\u2018-\u201f\u2026]+)/y;
 /** A straight or curly quote. */
 const QUOTE_CHAR = /["'`\u2018-\u201f]/;
 /** A curly quote. */
@@ -2039,6 +2501,16 @@ const NAME_AT_END = new RegExp(
   `(?<![A-Za-z0-9])(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES})${AFTER_NAME}`,
   "i",
 );
+/**
+ * A scheme word, a pair's name or a secret parameter's, with its ":" or "=" and quotes,
+ * last, glued to a word before it or not (credentialValueAt).
+ */
+const CREDENTIAL_NAME_AT_END = new RegExp(
+  `(?:${SCHEMES}|${MORE_SCHEMES}|${PAIR_NAMES}|${SECRET_PARAM_NAMES})${AFTER_NAME}`,
+  "i",
+);
+/** A secret's name and its ":" or "=" in a word (`xsecret=localhost:3001/…`). */
+const CREDENTIAL_NAME_IN = new RegExp(`(?:${PAIR_NAMES}|${SECRET_PARAM_NAMES})["']?[:=]`, "i");
 /**
  * A pair's name glued to the letter or digit before it, whose case nameAtEnd checks. A scheme
  * word glued so ("VisualBasic") is read by the glued-scheme rule, not here.
@@ -2110,10 +2582,12 @@ const QUOTED_SCHEME_WORD = new RegExp(
  */
 export function pairShapeSpans(text: string): Array<[number, number]> {
   if (!SHAPE_HINT.test(text)) return [];
-  const added: Array<[number, number]> = [];
-  const values = valueSpans(text);
-  spansAfterValues(rewrite({ text: asRead(text) }, asRewrites(values), []), [], {}, added);
-  return unionSpans(added, []);
+  return readingParams(text, () => {
+    const added: Array<[number, number]> = [];
+    const values = valueSpans(text);
+    spansAfterValues(rewrite({ text: asRead(text) }, asRewrites(values), []), [], {}, added);
+    return unionSpans(added, []);
+  });
 }
 
 /** What a text holds when moreSpans can find anything in it. */

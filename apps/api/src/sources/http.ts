@@ -110,6 +110,15 @@ function withCredentials<T>(run: () => T): T {
 /** Names of a `name=value` pair whose value is a secret (a query parameter, an attribute). */
 const SECRET_PARAM_NAMES =
   "api_?key|key|token|access_token|refresh_token|client_secret|password|secret";
+/**
+ * Names of a signed link's parameters (Last.fm's `api_sig`, a CDN's `sig`, `hdnea` and `hdnts`,
+ * an `hmac`, S3's `X-Amz-` ones): their values are hidden after the other rules (signedHides), so
+ * a media link the rules for an error's text remove goes whole. Only text redacted for a log or
+ * an error reads them (maskedPieces); a link a source returns, and what a cassette records of it
+ * (scrubReadText), is kept as it came.
+ */
+const SIGNED_PARAM_NAMES =
+  "api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token";
 
 /**
  * A part of a text being redacted: its characters from `from` to `to`, kept, or a mask written in
@@ -292,7 +301,8 @@ const rawSecretSteps = (): HideStep[] =>
   );
 
 /**
- * The pieces of `text` once secretSteps and then `steps` have run (runSteps, from `start`). Where
+ * The pieces of `text` once secretSteps and then `steps` have run (runSteps, from `start`), and
+ * signedHides last when `signed` (text redacted for a log or an error). Where
  * a credential is in the text, they also run with the credentials found as they came, as they
  * were, and what that hid stays hidden, as does each credential found, whole: one found escaped
  * or folded can start a token or a value that a later rule (a `name: value` pair's) then leaves,
@@ -304,13 +314,15 @@ function secretPieces(
   steps: readonly HideStep[],
   start: Piece[] = wholeText(text),
   asBefore = false,
+  signed = false,
 ): Piece[] {
-  if (asBefore) return runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start);
-  const pieces = runSteps(text, [...secretSteps([secretHides]), ...steps], start);
+  const last = signed ? [...steps, signedHides] : steps;
+  if (asBefore) return runSteps(text, [...secretSteps(rawSecretSteps()), ...last], start);
+  const pieces = runSteps(text, [...secretSteps([secretHides]), ...last], start);
   const known = knownSecretSpans(text);
   if (known.length === 0) return pieces;
   const before: Span[] = [];
-  for (const piece of runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start)) {
+  for (const piece of runSteps(text, [...secretSteps(rawSecretSteps()), ...last], start)) {
     if (piece.mask !== undefined && piece.to > piece.from) before.push([piece.from, piece.to]);
   }
   return maskSource(pieces, mergeSpans(known, before));
@@ -320,6 +332,21 @@ function secretPieces(
 const BEARER = /\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g;
 // An unquoted value; a quoted one is read by quotedParamSpans.
 const SECRET_PARAM = new RegExp(`\\b(${SECRET_PARAM_NAMES})=([^&\\s"'<>]+)`, "gi");
+// A signed link's parameter, after the "?", "&", ";" or "~" a link writes before it, and its
+// value, a mask the rules before wrote in it too. Prose (`hmac=sha256 is used`) is no link's. The
+// value ends where a link does (a backtick, a curly quote, a "#" or a backslash) or where text
+// around a link resumes (")", "]", ",", ";", "}"), as in the logger's link rule: what follows (a
+// scheme word, a pair's name, a markdown link's end) is the logger's to read.
+const SIGNED_PARAM_VALUE = new RegExp(
+  `(?<=[?&;~])(${SIGNED_PARAM_NAMES})=([^&#\\s"'\`<>\\\\\u2018-\u201f)\\],;}]+)`,
+  "gi",
+);
+/** The value of each signed link's parameter (SIGNED_PARAM_VALUE). */
+const signedHides: HideStep = (text) =>
+  hidesOf(text, SIGNED_PARAM_VALUE, (m) => [
+    m.index + (m[1] ?? "").length + 1,
+    m.index + m[0].length,
+  ]);
 const TAVILY_KEY = /\btvly-[A-Za-z0-9_-]+/g;
 // Spotify access tokens (any other long mixed-case token-like run: tokenRunHides).
 const SPOTIFY_TOKEN = /\bBQ[A-Za-z0-9_-]{40,}/g;
@@ -725,8 +752,11 @@ function headerLineSpans(text: string): Span[] {
  * where no name character comes before it, so a long run is read from its start once.
  */
 const MID_LINE_NAME = /(?<![\w.-])([A-Za-z0-9_.-]{1,64})[ \t]*[:=][ \t]*/g;
-/** A value written mid-line: one token-shaped run, then a space, a "," a ";" a ")" or the end. */
-const MID_LINE_VALUE = /[A-Za-z0-9._~+/=-]{8,}(?=[\s,;)]|$)/y;
+/**
+ * A value written mid-line: one token-shaped run, then a space, a "," a ";" a ")", a quote that
+ * closes it (curly ones too: `“token: <value>”`) or the end.
+ */
+const MID_LINE_VALUE = /[A-Za-z0-9._~+/=-]{8,}(?=[\s,;)"'`\u2018-\u201f]|$)/y;
 /** A run of the characters MID_LINE_VALUE reads, of any length. */
 const MID_LINE_RUN = /[A-Za-z0-9._~+/=-]*/y;
 /**
@@ -1700,6 +1730,11 @@ function keyValuePieces(
   // the other rules hide in the text they leave, once and twice more, stays hidden too.
   const again = redactedAgain(text, other);
   let added = again.length > 0 ? maskableUnion(extra, again) : extra;
+  // With a credential in the text, also what the logger's rules hide in it as it came: masked
+  // first (found decoded, or glued to a pair's name), a credential can start an Authorization
+  // value or a pair's value, which those rules then refuse, leaving the rest of it; and a log
+  // line hides them again, so lostToLog does not count them, though a client sees this text.
+  if (known) added = maskableUnion(added, asCameSpans(text));
   let pieces = maskedPieces(text, steps, added, more);
   // With a credential in the text, also what a log line hid when only the credentials as they came
   // were masked (maskedPieces asBefore): one masked escaped or folded can start a token or a value
@@ -1718,6 +1753,24 @@ function keyValuePieces(
   }
   return pieces;
 }
+
+/**
+ * What the logger's rules hide in `text` as it came (scrubbedSpans), each without the word Basic
+ * that starts it: scrub writes that word again, and it holds no secret.
+ */
+function asCameSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  for (const [start, end] of scrubbedSpans(text)) {
+    BASIC_WORD.lastIndex = start;
+    const word = BASIC_WORD.exec(text);
+    const from = word && word.index === start ? start + word[0].length : start;
+    if (from < end) spans.push([from, end]);
+  }
+  return spans;
+}
+
+/** The word Basic and the white space after it, where a span starts. */
+const BASIC_WORD = /Basic\s+/iy;
 
 /** True when two lists of spans hold the same spans. */
 const sameSpans = (a: readonly Span[], b: readonly Span[]) =>
@@ -1793,7 +1846,7 @@ function maskedPieces(
   const first = header
     ? mergeSpans(quoted, mergeSpans(doubleQuotedSpans(text), doubleQuotedSpans(text, quoted)))
     : quoted;
-  const pieces = secretPieces(text, steps, hide(wholeText(text), spanHides(first)), asBefore);
+  const pieces = secretPieces(text, steps, hide(wholeText(text), spanHides(first)), asBefore, true);
   const unquoted = unquotedKeySpans(text);
   if (unquoted.length === 0 && more.length === 0 && extra.length === 0) return pieces;
   let values = header
@@ -1825,18 +1878,52 @@ const LOG_PREFIX_ROOM = 1024;
  * `text` redacted (redactText), for a log that cuts it to `max` characters, keeping `keep`. A
  * value moreSecretSpans masks can make the text shorter than the other rules leave it, so the
  * cut would fall further on: where they alone leave the text longer than `max`, it stops where
- * they would be cut, with "…", and the log never shows what that cut left out.
+ * they would be cut, with "…", and the log never shows what that cut left out. Only the start
+ * of a long text is read (readForLog): with no such value in it, it is cut to `plain`
+ * characters, with "…", or written whole, then the mask or "…" for the rest. A caller whose log
+ * keeps more than `max` of a text with no such value passes what it keeps.
  */
-function redactForLog(text: string, max: number, keep: number): string {
+function redactForLog(whole: string, max: number, keep: number, plain = max): string {
   return withCredentials(() => {
+    const [text, hidden] = readForLog(whole, keep);
+    const rest = text.length < whole.length ? `${hidden}…` : "";
     const more = moreSecretSpans(text);
     const pieces = keyValuePieces(text, [], [], more);
-    if (more.length === 0) return render(text, pieces);
-    const shown = safeCut(text, pieces, keyValuePieces(text, [], [], []), max, keep);
+    if (more.length === 0 && !rest) return render(text, pieces);
+    const other = more.length > 0 ? keyValuePieces(text, [], [], []) : pieces;
+    const [length, kept] = more.length > 0 ? [max, keep] : [plain, plain];
+    const shown = safeCut(text, pieces, other, length, kept);
     return shown < text.length
       ? `${render(text, piecesBefore(pieces, shown))}…`
-      : render(text, pieces);
+      : `${render(text, pieces)}${rest}`;
   });
+}
+
+/**
+ * How much more of a text than its redaction keeps the redaction for a log or an error reads
+ * (readForLog): as far as the logger reads past a cut (LOG_CUT_WINDOW).
+ */
+const READ_PAST_KEPT = 4096;
+
+/**
+ * The start of `text` that redactForLog and scrubText read when they keep `keep` characters: all
+ * of it, or, past READ_PAST_KEPT characters more, up to a cut there that never splits what the logger's rules or these rules hide in
+ * the text around it (logCut, which also looks a configured value's reach past the cut); and the
+ * mask to write after it: "[redacted]" when the cut moved back to the start of such a span, which
+ * the text left out then starts (an unterminated quoted value, a value across the cut). The
+ * rules run on a bounded text, whatever a source or a proxy sends; a log line or a reason keeps
+ * less than this, unless masks far shorter than what they hide fill the text.
+ */
+function readForLog(text: string, keep: number): [string, string] {
+  const at = keep + READ_PAST_KEPT;
+  if (text.length <= at) return [text, ""];
+  const window = text.slice(0, at + READ_PAST_KEPT);
+  const hidden: Span[] = [];
+  for (const piece of keyValuePieces(window, [], [], moreSecretSpans(window))) {
+    if (piece.mask !== undefined && piece.to > piece.from) hidden.push([piece.from, piece.to]);
+  }
+  const cut = logCut(text, at, hidden);
+  return [text.slice(0, cut), cut < at ? "[redacted]" : ""];
 }
 
 /**
@@ -2103,7 +2190,12 @@ function withoutUserInfo(text: string, max: number): string {
  */
 export function scrubText(text: string): string {
   if (ID_SHAPED.test(text)) return text;
-  return withCredentials(() => scrubbedText(text));
+  return withCredentials(() => {
+    const [read, hidden] = readForLog(text, MAX_ERROR_TEXT);
+    const out = scrubbedText(read);
+    // Past a cut the text was read to, the mask of what it left out, within the cap.
+    return hidden && out.length < MAX_ERROR_TEXT ? `${out}${hidden}`.slice(0, MAX_ERROR_TEXT) : out;
+  });
 }
 
 /** scrubText, past its check for an id. */
@@ -2194,12 +2286,15 @@ export function isSourceError(error: unknown, kind?: SourceErrorKind): error is 
  * One line for logs and tool results, with credentials redacted. A log line keeps
  * MAX_LOGGED_TEXT characters, its own words before the error included: past that, the line
  * stops where the other rules alone would leave it with LOG_PREFIX_ROOM to spare (redactForLog).
+ * A long text read in part with no value those rules mask keeps MAX_LOGGED_TEXT characters, all
+ * a line can show.
  */
 export function describeError(error: unknown): string {
   return redactForLog(
     error instanceof Error ? error.message : String(error),
     MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
     MAX_LOGGED_TEXT - LOG_PREFIX_ROOM,
+    MAX_LOGGED_TEXT,
   );
 }
 

@@ -9,10 +9,17 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { type Claim, FactoidsOutput, FactoidsResponse } from "@liner-notes/contract";
+import {
+  ApiError,
+  type Claim,
+  type Factoid,
+  FactoidsOutput,
+  FactoidsRequest,
+  FactoidsResponse,
+} from "@liner-notes/contract";
 import type { Router } from "express";
 import { FACTOIDS_SYSTEM_PROMPT } from "../../factoids/prompt.js";
-import { FACTOIDS_PER_REQUEST } from "../../factoids/service.js";
+import { FACTOIDS_PER_REQUEST, writeFactoids } from "../../factoids/service.js";
 import {
   card,
   DEMO_TRACK,
@@ -1024,6 +1031,93 @@ describe("a round asked again after some of its angles failed", () => {
     expect(post.status).toBe(200);
     expect(factCalls(fake).slice(6)).toEqual([0, 1, 2]);
   });
+
+  it("says on POST which angles failed, beside the facts written", async () => {
+    const { fake, router } = withCards([card(FIRST), busy(), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+
+    expect(res.status).toBe(200);
+    expect(FactoidsResponse.safeParse(res.body).success).toBe(true);
+    expect(res.body.factoids.map((f: { content: string }) => f.content)).toEqual([FIRST, THIRD]);
+    expect(res.body.failedIndexes).toEqual([1]);
+    expect(factCalls(fake)).toEqual([0, 1, 2]);
+
+    // Every angle written: no failedIndexes.
+    const whole = await request(createTestApp(withCards([card(FIRST), card(SECOND)]).router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+    expect(whole.status).toBe(200);
+    expect(whole.body).not.toHaveProperty("failedIndexes");
+  });
+
+  it("says on POST which angles failed when none could be written", async () => {
+    const { router } = withCards([null, busy(), busy()]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send({ ...DEMO_TRACK, round: 0 })
+      .timeout(5000);
+
+    expect(res.status).toBe(429);
+    expect(res.body).toMatchObject({ success: false, code: "rate_limited", failedIndexes: [1, 2] });
+    expect(ApiError.safeParse(res.body).success).toBe(true);
+  });
+
+  it("names on the stream the angle each live fact answers", async () => {
+    const { router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const again = await openStream(streamQuery({ round: "0", failedIndexes: "0,2" }), router);
+    await again.waitFor(ofType("done"));
+    expect(
+      again.messages.filter(ofType("factoid")).map((m) => [(m.data as Factoid).content, m.index]),
+    ).toEqual([
+      [FIRST, 0],
+      [THIRD, 2],
+    ]);
+  });
+
+  it.each([
+    ["three indexes", [0, 1, 2], true],
+    ["a repeated index within three", [2, 0, 2], true],
+    ["four entries, all the same index", [1, 1, 1, 1], false],
+    ["four entries", [0, 1, 2, 0], false],
+    ["an index past the round's angles", [3], false],
+    ["an empty list", [], false],
+  ])("takes %s as the contract does", async (_label, failedIndexes, valid) => {
+    const body = { ...DEMO_TRACK, round: 0, failedIndexes };
+    expect(FactoidsRequest.safeParse(body).success).toBe(valid);
+    const { router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);
+    const res = await request(createTestApp(router))
+      .post(withRunToken("/api/factoids/more"))
+      .send(body)
+      .timeout(5000);
+    expect(res.status).toBe(valid ? 200 : 400);
+  });
+
+  it.each([
+    ["an empty list", 0, []],
+    ["an index the round does not have", 0, [3]],
+    ["a round with no angle left", 2, [0]],
+  ])(
+    "is a caller's error in the factoid service: %s, never an empty answer",
+    async (_l, round, failedIndexes) => {
+      const fake = fakeModel({ cards: [card(FIRST), card(SECOND), card(THIRD)] });
+      await expect(
+        writeFactoids(
+          {
+            track: { title: DEMO_TRACK.trackTitle, artist: DEMO_TRACK.trackArtist },
+            existingIds: [],
+            round,
+            failedIndexes,
+          },
+          { llm: fake, purpose: "dev", signal: new AbortController().signal, loadRun: () => null },
+        ),
+      ).rejects.toThrow(RangeError);
+      expect(fake.calls).toEqual([]);
+    },
+  );
 
   it("asks each angle named once, in the round's order", async () => {
     const { fake, router } = withCards([card(FIRST), card(SECOND), card(THIRD)]);

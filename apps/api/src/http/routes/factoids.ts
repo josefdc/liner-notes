@@ -80,7 +80,8 @@ const ascendingOnce = (indexes: number[]) => [...new Set(indexes)].sort((a, b) =
 
 /**
  * `failedIndexes`: the angles of the round to ask again (the indexes of the facts the last answer
- * for this round could not write), at most FACTOIDS_PER_REQUEST of them, each once.
+ * for this round could not write). As the contract says (FactoidsRequest), at most
+ * FACTOIDS_PER_REQUEST entries as sent, a repeated index counted; each is then asked once.
  */
 const failedIndexes = z
   .array(z.int().min(0))
@@ -232,6 +233,17 @@ export function recordedClaim(record: ReplayRecord, card: { claimId?: string }):
   return (servedRecording(record).claims ?? []).find((claim) => claim.id === card.claimId);
 }
 
+/**
+ * `failedIndexes` of a POST answer: the indexes in the round of the facts whose call failed, in
+ * order, or nothing when none failed.
+ */
+function failedIndexesOf(result: FactoidsResult): { failedIndexes?: number[] } {
+  const indexes = result.outcomes.flatMap((outcome) =>
+    outcome.status === "failed" ? [outcome.index] : [],
+  );
+  return indexes.length > 0 ? { failedIndexes: indexes } : {};
+}
+
 /** The written facts and their claims, in focus order. */
 const writtenOf = (result: FactoidsResult) =>
   result.outcomes.flatMap((outcome) => (outcome.status === "written" ? [outcome] : []));
@@ -302,7 +314,7 @@ export function createFactoidsRouter({
    * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...",
    *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1,
    *         "failedIndexes": [1, 2] }
-   * Returns: { factoids: Factoid[], claims: Claim[], nextRound, roundsLeft } - up to 3 new facts
+   * Returns: { factoids: Factoid[], claims: Claim[], nextRound, roundsLeft, failedIndexes? } - up to 3 new facts
    * with entities, one per focus, in focus order (fewer when the model knows fewer, or when one
    * only repeats a fact the client or the run already has), each with its checked claim
    * (`claimId`).
@@ -314,10 +326,12 @@ export function createFactoidsRouter({
    * says whether asking for `nextRound` can bring new facts.
    * `failedIndexes`, optional, with `round`: the same round asked again after its last answer
    * could not write some of its facts, by their index in the round (0 to 2, each once). Only
-   * those angles are asked, so a fact the client holds from the round is not asked for again
-   * (and cannot come back reworded); each keeps its index. Without it every angle of the round is
-   * asked, as before. An index the round does not have, a list of more than three, an empty one,
-   * or one without a round is a 400 `invalid_input`.
+   * those angles are asked, so a fact the client holds from that round's written angles is not
+   * asked for again. Without it every angle of the round is asked, as before. An index the round
+   * does not have, more than three entries (a repeated index counts; it is asked once), an empty
+   * list, or one without a round is a 400 `invalid_input`.
+   * `failedIndexes` in the answer (absent when none failed) names the angles whose call failed,
+   * by index in the round, to send back with the same round; the 429/503/500 below carry it too.
    * A malformed body is a 400 `invalid_input`. When no fact could be written because every call
    * failed: the model's rate limit a 429 `rate_limited`; the budget or the call cap a 503
    * `budget_exhausted`; any other failure a 500 `failed`. A track with no recording while live
@@ -406,8 +420,10 @@ export function createFactoidsRouter({
 
       const written = writtenOf(result);
       const failed = result.outcomes.find((outcome) => outcome.status === "failed");
+      // The angles whose facts could not be written, to send back with the same round.
+      const failedIndexes = failedIndexesOf(result);
       if (written.length === 0 && failed) {
-        sendError(res, failureCode(failed.error));
+        sendError(res, failureCode(failed.error), failedIndexes);
         return;
       }
       res.json({
@@ -416,6 +432,7 @@ export function createFactoidsRouter({
         claims: written.map((outcome) => outcome.claim),
         nextRound: result.nextRound,
         roundsLeft: roundsLeftAt(result.nextRound),
+        ...failedIndexes,
         meta: {
           trackId: parsed.data.trackId,
           ...(result.model ? { model: result.model } : {}),
@@ -444,8 +461,9 @@ export function createFactoidsRouter({
    *   to ask for next (`round`, as on the POST route), and `roundsLeft` whether asking for it can
    *   bring new facts; once every angle has been asked, nothing follows but `done`, and no model
    *   is called
-   * - { type: "factoid", data: Factoid, claim?: Claim }: one per focus, in focus order, sent
-   *   once all of them have been written and checked; `data.claimId` is `claim.id`
+   * - { type: "factoid", data: Factoid, claim?: Claim, index? }: one per focus, in focus order,
+   *   sent once all of them have been written and checked; `data.claimId` is `claim.id`, and
+   *   `index` (live facts) is the angle of the round it answers, as an error's `index`
    * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
    *   (`failed`, `rate_limited`, or `budget_exhausted` when live calls are paused); a focus the
    *   model knows nothing documented about, or whose fact only repeats one the run already has,
@@ -458,8 +476,8 @@ export function createFactoidsRouter({
    * about another track (title and artist), every fact reads as inferred. A fact the client
    * already shows (by id) is not sent again, and a later click asks about other angles. Costs as
    * the POST route's. `failedIndexes` (optional, with `round`: whole numbers separated by
-   * commas) asks only those angles of the round again, as on the POST route; their facts and
-   * errors keep their index in the round, and an angle that fails again is an error again.
+   * commas) asks only those angles of the round again, as on the POST route; each fact and error
+   * carries its angle's index in the round, and an angle that fails again is an error again.
    *
    * Under REPLAY_MODE the recorded factoids are sent instead, each with its recorded claim, or
    * one error live_disabled (or budget_exhausted, see above). `mode` (optional: the run.mode of
@@ -571,7 +589,7 @@ export function createFactoidsRouter({
       for (const result of outcome.outcomes) {
         if (result.status === "written") {
           stream.send(
-            { type: "factoid", data: result.factoid, claim: result.claim },
+            { type: "factoid", data: result.factoid, claim: result.claim, index: result.index },
             { index: result.index },
           );
         } else if (result.status === "failed") {

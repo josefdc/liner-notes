@@ -12,10 +12,11 @@
  * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once: the three
  *    angles of FACTOID_FOCUSES for the request's round (roundFor, focusesFor), the next three on
  *    the next round. A round asked again after some of its angles failed asks only those
- *    (`failedIndexes`: the facts the client holds from it are not asked for again, so they cannot
- *    come back reworded), each under its index in the round. Once every angle has been asked
- *    there is nothing new to ask: the answer has no facts and no model is called. The provider layer runs at most LLM_CONCURRENCY calls at a
- *    time. The calls and the judge's share one request run id, so a request makes at most
+ *    (`failedIndexes`), each under its index in the round: an angle whose fact the client holds
+ *    is not asked again, so it cannot come back in other words. Another angle can still state
+ *    that fact in other words: the client's facts are known by id only (see 3). Once every angle
+ *    has been asked there is nothing new to ask: the answer has no facts and no model is called.
+ *    The provider layer runs at most LLM_CONCURRENCY calls at a time. The calls and the judge's share one request run id, so a request makes at most
  *    MAX_LLM_CALLS_PER_RUN calls, and each is held to the budget. A focus whose call fails is
  *    reported as failed; the others are kept.
  * 3. No repeats. A fact whose text, normalised (normalisedFact), the client already shows is
@@ -56,6 +57,7 @@ import {
   type ComposerFactoid,
   type Evidence,
   FACTOID_ROUNDS,
+  FACTOIDS_PER_ROUND,
   type Factoid,
   FactoidsOutput,
   FIRST_FACTOID_ROUND,
@@ -87,8 +89,8 @@ export const FACTOIDS_JUDGE_CALL_SITE = "factoids-judge";
 /** Output budget of a call, reasoning included (main tier: low effort). */
 export const FACTOIDS_MAX_OUTPUT_TOKENS = 2500;
 
-/** Facts one request asks for: one per focus. */
-export const FACTOIDS_PER_REQUEST = 3;
+/** Facts one request asks for: one per focus (the contract's angles per round). */
+export const FACTOIDS_PER_REQUEST = FACTOIDS_PER_ROUND;
 
 /** The angles a fact is asked from, FACTOIDS_PER_REQUEST of them per request (focusesFor). */
 export const FACTOID_FOCUSES = [
@@ -368,7 +370,8 @@ export interface FactoidRequest {
   /**
    * The angles of the round to ask again, by index (0 to FACTOIDS_PER_REQUEST - 1): the ones the
    * client's last answer for this round could not write. Absent, every angle of the round is
-   * asked. The routes check them against the round; one the round does not have is skipped.
+   * asked. The routes check them against the round: an empty list, or an index the round does
+   * not have, is a caller's error (writeFactoids throws a RangeError), never an empty answer.
    */
   failedIndexes?: readonly number[];
 }
@@ -469,7 +472,8 @@ function masked(factoid: Factoid, claim: Claim): { factoid: Factoid; claim: Clai
 /**
  * Writes one fact per focus (FACTOID_FOCUSES) about the request's track, checks them and hands
  * them back in focus order (see the module comment). Never throws for a model failure: a failed
- * focus is an outcome. Rethrows when the request's signal aborts.
+ * focus is an outcome. Rethrows when the request's signal aborts. Throws a RangeError for
+ * `failedIndexes` that name no angle of the round (the routes refuse them first).
  */
 export async function writeFactoids(
   request: FactoidRequest,
@@ -484,10 +488,15 @@ export async function writeFactoids(
   // The angles asked, by their index in the round: the ones named, else all of them. An angle
   // keeps its index, so the client shows it where it was.
   const asked = request.failedIndexes
-    ? [...new Set(request.failedIndexes)]
-        .filter((index) => Number.isInteger(index) && index >= 0 && index < focuses.length)
-        .sort((a, b) => a - b)
+    ? [...new Set(request.failedIndexes)].sort((a, b) => a - b)
     : focuses.map((_focus, index) => index);
+  if (
+    request.failedIndexes &&
+    (asked.length === 0 ||
+      asked.some((index) => !Number.isInteger(index) || index < 0 || index >= focuses.length))
+  ) {
+    throw new RangeError(`failedIndexes names no angle, or one round ${round} does not have`);
+  }
   const nextRound = nextRoundAfter(round);
   // Ids hash the run the request names, found or not, so a fact keeps its id from click to click.
   const idRun = request.runId ?? null;
@@ -514,8 +523,8 @@ export async function writeFactoids(
     ? { title: context.analysis.title, artist: context.analysis.artist }
     : request.track;
 
-  // Every angle has been asked (or none named is the round's): nothing to ask, no model call.
-  if (asked.length === 0) {
+  // Every angle has been asked: nothing new to ask, and no model is called.
+  if (focuses.length === 0) {
     log.info("Every angle of more facts has been asked; nothing new");
     return { runId: context.runId, model: null, outcomes: [], round, nextRound };
   }

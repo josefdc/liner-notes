@@ -77,7 +77,13 @@
             },
             "required": ["id", "title", "content", "type"]
           },
-          "claim": { "$ref": "Claim.schema.json" }
+          "claim": { "$ref": "Claim.schema.json" },
+          "index": {
+            "description": "Which angle of the round the fact answers, as an error's index; absent for recorded facts",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
         },
         "required": ["type", "runId", "seq", "data"]
       },
@@ -218,7 +224,13 @@
             "required": ["id", "title", "content", "type"],
             "additionalProperties": false
           },
-          "claim": { "$ref": "Claim.schema.json" }
+          "claim": { "$ref": "Claim.schema.json" },
+          "index": {
+            "description": "Which angle of the round the fact answers, as an error's index; absent for recorded facts",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
         },
         "required": ["type", "runId", "seq", "data"],
         "additionalProperties": false

@@ -1,0 +1,1852 @@
+[
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBDUW0000053",
+    "isrc": "GBDUW0000053",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBDUW0000053",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk."
+      },
+      {
+        "id": "ev-wp-GBDUW0000053",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "One More Time is a song by Daft Punk."
+      },
+      {
+        "id": "ev-edge-GBDUW0000053-0",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns"
+        },
+        "evidenceIds": [
+          "ev-edge-GBDUW0000053-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBDUW0000053",
+        "text": "\"One More Time\" is by Daft Punk.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBDUW0000053-0",
+        "text": "Synthetic claim 0 about \"One More Time\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 48275,
+    "usage": {
+      "inputTokens": 15962,
+      "outputTokens": 2842,
+      "usd": 0.013781
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBAAA9700049",
+    "isrc": "GBAAA9700049",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBAAA9700049",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBAAA9700049",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz recording \"Bitter Sweet Symphony\" by The Verve."
+      },
+      {
+        "id": "ev-edge-GBAAA9700049-0",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Andrew Oldham Orchestra."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra"
+        },
+        "evidenceIds": [
+          "ev-edge-GBAAA9700049-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAAA9700049",
+        "text": "\"Bitter Sweet Symphony\" is by The Verve.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBAAA9700049-0",
+        "text": "Synthetic claim 1 about \"Bitter Sweet Symphony\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 58177,
+    "usage": {
+      "inputTokens": 15114,
+      "outputTokens": 3251,
+      "usd": 0.010921
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USUM70741299",
+    "isrc": "USUM70741299",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USUM70741299",
+      "mbid": "8009d470-912b-42fa-8261-b88c488eb935"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USUM70741299",
+        "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+        "excerpt": "MusicBrainz recording \"Stronger\" by Kanye West."
+      },
+      {
+        "id": "ev-edge-USUM70741299-0",
+        "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+        "excerpt": "MusicBrainz: \"Stronger\" by Kanye West samples \"Harder, Better, Faster, Stronger\" by Daft Punk."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Harder, Better, Faster, Stronger",
+          "artist": "Daft Punk"
+        },
+        "evidenceIds": [
+          "ev-edge-USUM70741299-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USUM70741299",
+        "text": "\"Stronger\" is by Kanye West.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USUM70741299-0",
+        "text": "Synthetic claim 2 about \"Stronger\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 54983,
+    "usage": {
+      "inputTokens": 17479,
+      "outputTokens": 2221,
+      "usd": 0.014819
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USSB29000129",
+    "isrc": "USSB29000129",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USSB29000129",
+      "mbid": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USSB29000129",
+        "url": "https://musicbrainz.org/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+        "excerpt": "MusicBrainz recording \"Ice Ice Baby\" by Vanilla Ice."
+      },
+      {
+        "id": "ev-wp-USSB29000129",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Ice Ice Baby is a song by Vanilla Ice."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USSB29000129",
+        "text": "\"Ice Ice Baby\" is by Vanilla Ice.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USSB29000129-0",
+        "text": "Synthetic claim 3 about \"Ice Ice Baby\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 51262,
+    "usage": {
+      "inputTokens": 15695,
+      "outputTokens": 3299,
+      "usd": 0.010183
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USCA29000294",
+    "isrc": "USCA29000294",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USCA29000294",
+      "mbid": "edbdeaf2-51e4-4b51-bcb6-174a160b8899"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USCA29000294",
+        "url": "https://musicbrainz.org/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899",
+        "excerpt": "MusicBrainz recording \"U Can't Touch This\" by MC Hammer."
+      },
+      {
+        "id": "ev-edge-USCA29000294-0",
+        "url": "https://musicbrainz.org/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899",
+        "excerpt": "MusicBrainz: \"U Can't Touch This\" by MC Hammer samples \"Super Freak\" by Rick James."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Super Freak",
+          "artist": "Rick James"
+        },
+        "evidenceIds": [
+          "ev-edge-USCA29000294-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USCA29000294",
+        "text": "\"U Can't Touch This\" is by MC Hammer.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USCA29000294-0",
+        "text": "Synthetic claim 0 about \"U Can't Touch This\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 41167,
+    "usage": {
+      "inputTokens": 17995,
+      "outputTokens": 2754,
+      "usd": 0.012782
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USTB10250016",
+    "isrc": "USTB10250016",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USTB10250016",
+      "mbid": "2f7a6735-2e09-4ce2-81e4-b148e6c39a55"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USTB10250016",
+        "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+        "excerpt": "MusicBrainz recording \"Gangsta's Paradise\" by Coolio feat. L.V.."
+      },
+      {
+        "id": "ev-edge-USTB10250016-0",
+        "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+        "excerpt": "MusicBrainz: \"Gangsta's Paradise\" by Coolio feat. L.V. samples \"Pastime Paradise\" by Stevie Wonder."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "interpolation",
+        "origin": "code",
+        "target": {
+          "title": "Pastime Paradise",
+          "artist": "Stevie Wonder"
+        },
+        "evidenceIds": [
+          "ev-edge-USTB10250016-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "interpolation",
+        "origin": "model",
+        "target": {
+          "title": "Pastime Paradise",
+          "artist": "Stevie Wonder"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USTB10250016",
+        "text": "\"Gangsta's Paradise\" is by Coolio feat. L.V..",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USTB10250016-0",
+        "text": "Synthetic claim 1 about \"Gangsta's Paradise\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 49060,
+    "usage": {
+      "inputTokens": 16233,
+      "outputTokens": 1888,
+      "usd": 0.01472
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USBB40000359",
+    "isrc": "USBB40000359",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USBB40000359",
+      "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USBB40000359",
+        "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+        "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G.."
+      },
+      {
+        "id": "ev-wp-USBB40000359",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Juicy is a song by The Notorious B.I.G.."
+      },
+      {
+        "id": "ev-edge-USBB40000359-0",
+        "url": "https://musicbrainz.org/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+        "excerpt": "MusicBrainz: \"Juicy\" by The Notorious B.I.G. samples \"Juicy Fruit\" by Mtume."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Juicy Fruit",
+          "artist": "Mtume"
+        },
+        "evidenceIds": [
+          "ev-edge-USBB40000359-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Rappin' Duke (vocal)",
+          "artist": "The Rappin' Duke"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USBB40000359",
+        "text": "\"Juicy\" is by The Notorious B.I.G..",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USBB40000359-0",
+        "text": "Synthetic claim 2 about \"Juicy\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 57571,
+    "usage": {
+      "inputTokens": 17490,
+      "outputTokens": 2956,
+      "usd": 0.014408
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USBB40580685",
+    "isrc": "USBB40580685",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USBB40580685",
+      "mbid": "a2385545-186d-411a-8395-bb5f0f1c186f"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USBB40580685",
+        "url": "https://musicbrainz.org/recording/a2385545-186d-411a-8395-bb5f0f1c186f",
+        "excerpt": "MusicBrainz recording \"I'll Be Missing You\" by Puff Daddy & Faith Evans feat. 112."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Every Breath You Take",
+          "artist": "The Police"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USBB40580685",
+        "text": "\"I'll Be Missing You\" is by Puff Daddy & Faith Evans feat. 112.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USBB40580685-0",
+        "text": "Synthetic claim 3 about \"I'll Be Missing You\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 56772,
+    "usage": {
+      "inputTokens": 17812,
+      "outputTokens": 3046,
+      "usd": 0.013494
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USWB10504319",
+    "isrc": "USWB10504319",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB10504319",
+      "mbid": "d63f9a2c-aea5-4b77-875e-eee7ce1fd734"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USWB10504319",
+        "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+        "excerpt": "MusicBrainz recording \"Hung Up\" by Madonna."
+      },
+      {
+        "id": "ev-edge-USWB10504319-0",
+        "url": "https://musicbrainz.org/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+        "excerpt": "MusicBrainz: \"Hung Up\" by Madonna samples \"Gimme! Gimme! Gimme! (A Man After Midnight)\" by ABBA."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+          "artist": "ABBA"
+        },
+        "evidenceIds": [
+          "ev-edge-USWB10504319-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+          "artist": "ABBA"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB10504319",
+        "text": "\"Hung Up\" is by Madonna.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USWB10504319-0",
+        "text": "Synthetic claim 0 about \"Hung Up\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 54335,
+    "usage": {
+      "inputTokens": 14607,
+      "outputTokens": 2982,
+      "usd": 0.014321
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USIR10001280",
+    "isrc": "USIR10001280",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USIR10001280",
+      "mbid": "60d2246d-2761-4e1f-b30b-2784f00565b1"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USIR10001280",
+        "url": "https://musicbrainz.org/recording/60d2246d-2761-4e1f-b30b-2784f00565b1",
+        "excerpt": "MusicBrainz recording \"Stan\" by Eminem feat. Dido."
+      },
+      {
+        "id": "ev-wp-USIR10001280",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Stan is a song by Eminem feat. Dido."
+      },
+      {
+        "id": "ev-edge-USIR10001280-0",
+        "url": "https://musicbrainz.org/recording/60d2246d-2761-4e1f-b30b-2784f00565b1",
+        "excerpt": "MusicBrainz: \"Stan\" by Eminem feat. Dido samples \"Thank You\" by Dido."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Thank You",
+          "artist": "Dido"
+        },
+        "evidenceIds": [
+          "ev-edge-USIR10001280-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USIR10001280",
+        "text": "\"Stan\" is by Eminem feat. Dido.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USIR10001280-0",
+        "text": "Synthetic claim 1 about \"Stan\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 35546,
+    "usage": {
+      "inputTokens": 14275,
+      "outputTokens": 2810,
+      "usd": 0.012932
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBBMQ9800092",
+    "isrc": "GBBMQ9800092",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBBMQ9800092",
+      "mbid": "66197b08-aa26-4f44-91da-49a8c89168ae"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBBMQ9800092",
+        "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+        "excerpt": "MusicBrainz recording \"Praise You\" by Fatboy Slim."
+      },
+      {
+        "id": "ev-edge-GBBMQ9800092-0",
+        "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+        "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim samples \"Take Yo' Praise\" by Camille Yarbrough."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Take Yo' Praise",
+          "artist": "Camille Yarbrough"
+        },
+        "evidenceIds": [
+          "ev-edge-GBBMQ9800092-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Take Yo' Praise",
+          "artist": "Camille Yarbrough"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBBMQ9800092",
+        "text": "\"Praise You\" is by Fatboy Slim.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBBMQ9800092-0",
+        "text": "Synthetic claim 2 about \"Praise You\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 48610,
+    "usage": {
+      "inputTokens": 16711,
+      "outputTokens": 3147,
+      "usd": 0.012956
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBAJH9900041",
+    "isrc": "GBAJH9900041",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBAJH9900041",
+      "mbid": "b2d6930a-63aa-449a-b3a8-d1c54a54f4ae"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBAJH9900041",
+        "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+        "excerpt": "MusicBrainz recording \"Natural Blues\" by Moby."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Trouble So Hard",
+          "artist": "Vera Hall"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAJH9900041",
+        "text": "\"Natural Blues\" is by Moby.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBAJH9900041-0",
+        "text": "Synthetic claim 3 about \"Natural Blues\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": false,
+    "fallback": true,
+    "latencyMs": 51337,
+    "usage": {
+      "inputTokens": 15799,
+      "outputTokens": 2427,
+      "usd": 0.014945
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-SEUM71100961",
+    "isrc": "SEUM71100961",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "SEUM71100961",
+      "mbid": "21b6345e-cadb-4dcb-9019-28128545a933"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-SEUM71100961",
+        "url": "https://musicbrainz.org/recording/21b6345e-cadb-4dcb-9019-28128545a933",
+        "excerpt": "MusicBrainz recording \"Levels\" by Avicii."
+      },
+      {
+        "id": "ev-wp-SEUM71100961",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Levels is a song by Avicii."
+      },
+      {
+        "id": "ev-edge-SEUM71100961-0",
+        "url": "https://musicbrainz.org/recording/21b6345e-cadb-4dcb-9019-28128545a933",
+        "excerpt": "MusicBrainz: \"Levels\" by Avicii samples \"Something's Got a Hold on Me\" by Etta James."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Something's Got a Hold on Me",
+          "artist": "Etta James"
+        },
+        "evidenceIds": [
+          "ev-edge-SEUM71100961-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Something's Got a Hold on Me",
+          "artist": "Etta James"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-SEUM71100961",
+        "text": "\"Levels\" is by Avicii.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-SEUM71100961-0",
+        "text": "Synthetic claim 0 about \"Levels\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 49730,
+    "usage": {
+      "inputTokens": 16967,
+      "outputTokens": 2658,
+      "usd": 0.012779
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USWB19900178",
+    "isrc": "USWB19900178",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB19900178",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USWB19900178",
+        "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "excerpt": "MusicBrainz recording \"Dreams\" by Fleetwood Mac."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB19900178",
+        "text": "\"Dreams\" is by Fleetwood Mac.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USWB19900178-0",
+        "text": "Synthetic claim 1 about \"Dreams\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 33304,
+    "usage": {
+      "inputTokens": 15677,
+      "outputTokens": 3300,
+      "usd": 0.009028
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USSM18200463",
+    "isrc": "USSM18200463",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USSM18200463",
+      "mbid": "55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USSM18200463",
+        "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+        "excerpt": "MusicBrainz recording \"Africa\" by Toto."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USSM18200463",
+        "text": "\"Africa\" is by Toto.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USSM18200463-0",
+        "text": "Synthetic claim 2 about \"Africa\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 56641,
+    "usage": {
+      "inputTokens": 15666,
+      "outputTokens": 3211,
+      "usd": 0.013797
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBCNR8500002",
+    "isrc": "GBCNR8500002",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "GBCNR8500002",
+      "mbid": "6029d549-5858-4936-9156-b90770d2ae92"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBCNR8500002",
+        "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+        "excerpt": "MusicBrainz recording \"Running Up That Hill (A Deal With God)\" by Kate Bush."
+      },
+      {
+        "id": "ev-wp-GBCNR8500002",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Running Up That Hill (A Deal With God) is a song by Kate Bush."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBCNR8500002",
+        "text": "\"Running Up That Hill (A Deal With God)\" is by Kate Bush.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBCNR8500002-0",
+        "text": "Synthetic claim 3 about \"Running Up That Hill (A Deal With God)\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 44404,
+    "usage": {
+      "inputTokens": 17096,
+      "outputTokens": 3394,
+      "usd": 0.013908
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-AUUM71500303",
+    "isrc": "AUUM71500303",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "AUUM71500303",
+      "mbid": "78be434c-0908-458f-9693-f16cdebb68ef"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-AUUM71500303",
+        "url": "https://musicbrainz.org/recording/78be434c-0908-458f-9693-f16cdebb68ef",
+        "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Tame Impala."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Invented Break",
+          "artist": "Nobody In Particular"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-AUUM71500303",
+        "text": "\"The Less I Know the Better\" is by Tame Impala.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-AUUM71500303-0",
+        "text": "Synthetic claim 0 about \"The Less I Know the Better\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 41005,
+    "usage": {
+      "inputTokens": 17504,
+      "outputTokens": 2008,
+      "usd": 0.013057
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USWB19901214",
+    "isrc": "USWB19901214",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USWB19901214",
+      "mbid": "12f65dca-de8f-43fe-a65d-f12a02aaadf3"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USWB19901214",
+        "url": "https://musicbrainz.org/recording/12f65dca-de8f-43fe-a65d-f12a02aaadf3",
+        "excerpt": "MusicBrainz recording \"Take On Me\" by a-ha."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USWB19901214",
+        "text": "\"Take On Me\" is by a-ha.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USWB19901214-0",
+        "text": "Synthetic claim 1 about \"Take On Me\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 47623,
+    "usage": {
+      "inputTokens": 17720,
+      "outputTokens": 2358,
+      "usd": 0.010091
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USDJ20200650",
+    "isrc": "USDJ20200650",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USDJ20200650",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz recording \"Hurt\" by Johnny Cash."
+      },
+      {
+        "id": "ev-wp-USDJ20200650",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Hurt is a song by Johnny Cash."
+      },
+      {
+        "id": "ev-edge-USDJ20200650-0",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash is a cover of \"Hurt\" by Nine Inch Nails."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "code",
+        "target": {
+          "title": "Hurt",
+          "artist": "Nine Inch Nails"
+        },
+        "evidenceIds": [
+          "ev-edge-USDJ20200650-0"
+        ]
+      },
+      {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "model",
+        "target": {
+          "title": "Hurt",
+          "artist": "Nine Inch Nails"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USDJ20200650",
+        "text": "\"Hurt\" is by Johnny Cash.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USDJ20200650-0",
+        "text": "Synthetic claim 2 about \"Hurt\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 58405,
+    "usage": {
+      "inputTokens": 14068,
+      "outputTokens": 2485,
+      "usd": 0.011997
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-GBAHT0600202",
+    "isrc": "GBAHT0600202",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USAAA0000001",
+      "mbid": "synthetic-other"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-GBAHT0600202",
+        "url": "https://musicbrainz.org/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf",
+        "excerpt": "MusicBrainz recording \"Crazy\" by Gnarls Barkley."
+      },
+      {
+        "id": "ev-wp-GBAHT0600202",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Crazy is a song by Gnarls Barkley."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "target": {
+          "title": "Last Men Standing",
+          "artist": "Gian Piero Reverberi & Gian Franco Reverberi"
+        },
+        "evidenceIds": []
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-GBAHT0600202",
+        "text": "\"Crazy\" is by Gnarls Barkley.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-GBAHT0600202-0",
+        "text": "Synthetic claim 3 about \"Crazy\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 32030,
+    "usage": {
+      "inputTokens": 16458,
+      "outputTokens": 1803,
+      "usd": 0.009736
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-JPP301900716",
+    "isrc": "JPP301900716",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "JPP301900716",
+      "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": false
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-JPP301900716",
+        "url": "https://musicbrainz.org/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+        "excerpt": "MusicBrainz recording \"夜に駆ける\" by YOASOBI."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-JPP301900716",
+        "text": "\"夜に駆ける\" is by YOASOBI.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-JPP301900716-0",
+        "text": "Synthetic claim 0 about \"夜に駆ける\".",
+        "origin": "model",
+        "verdict": "unsupported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 49805,
+    "usage": {
+      "inputTokens": 16609,
+      "outputTokens": 1894,
+      "usd": 0.012592
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-USUM71210283",
+    "isrc": "USUM71210283",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USUM71210283",
+      "mbid": "882ce25d-51b9-4fe5-bbdf-16e661df0822"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USUM71210283",
+        "url": "https://musicbrainz.org/recording/882ce25d-51b9-4fe5-bbdf-16e661df0822",
+        "excerpt": "MusicBrainz recording \"Gangnam Style (강남스타일)\" by PSY."
+      },
+      {
+        "id": "ev-wp-USUM71210283",
+        "url": "https://en.wikipedia.org/wiki/Synthetic_test_page",
+        "excerpt": "Gangnam Style (강남스타일) is a song by PSY."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USUM71210283",
+        "text": "\"Gangnam Style (강남스타일)\" is by PSY.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USUM71210283-0",
+        "text": "Synthetic claim 1 about \"Gangnam Style (강남스타일)\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 50656,
+    "usage": {
+      "inputTokens": 14908,
+      "outputTokens": 3331,
+      "usd": 0.01401
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-FR10F1200080",
+    "isrc": "FR10F1200080",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "FR10F1200080",
+      "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-FR10F1200080",
+        "url": "https://musicbrainz.org/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "excerpt": "MusicBrainz recording \"More Spell on You\" by Eddie Johns."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-FR10F1200080",
+        "text": "\"More Spell on You\" is by Eddie Johns.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-FR10F1200080-0",
+        "text": "Synthetic claim 2 about \"More Spell on You\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 41638,
+    "usage": {
+      "inputTokens": 16088,
+      "outputTokens": 3247,
+      "usd": 0.013358
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
+    "runId": "synthetic-d-0-QM4TX1779716",
+    "isrc": "QM4TX1779716",
+    "ablation": "d",
+    "repeat": 0,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "QM4TX1779716",
+      "mbid": "61ef31c0-d65b-4d76-b9bb-80eec6e107de"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-QM4TX1779716",
+        "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+        "excerpt": "MusicBrainz recording \"Amen, Brother\" by The Winstons."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-QM4TX1779716",
+        "text": "\"Amen, Brother\" is by The Winstons.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-QM4TX1779716-0",
+        "text": "Synthetic claim 3 about \"Amen, Brother\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 42018,
+    "usage": {
+      "inputTokens": 17700,
+      "outputTokens": 2700,
+      "usd": 0.014981
+    }
+  }
+]

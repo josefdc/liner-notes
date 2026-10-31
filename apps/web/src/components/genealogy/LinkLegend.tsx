@@ -65,7 +65,12 @@ export const LinkLegend: React.FC<{ types: readonly LinkType[]; grey?: GreyLines
       role="group"
       aria-label="Link legend"
     >
-      <ul className="flex flex-col gap-0.5" aria-label="How a link is known">
+      {/* The two kinds on one line in a short window from md up (a phone held sideways), where
+          every line taken from the map shows */}
+      <ul
+        className="flex flex-col gap-0.5 landscape-short:flex-row landscape-short:flex-wrap landscape-short:gap-x-4"
+        aria-label="How a link is known"
+      >
         {(['sourced', 'inferred'] as const).map((kind) => (
           <li key={kind} className="flex items-center gap-2" data-link-kind={kind}>
             <Swatch color={colors.gray[300]} kind={kind} />

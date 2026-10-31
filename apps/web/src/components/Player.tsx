@@ -604,7 +604,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
 
   return (
-    <div ref={rootRef} className="h-full w-full flex flex-col bg-void relative overflow-hidden">
+    // On a phone held sideways (md up, 32rem tall or less) the nav and the track's header make one
+    // short band (the header's own box gives way to its parts): the buttons with the audio line
+    // and the way to the connections beside them, then the title on a line of its own, then the
+    // artist and the recording label. The panels get the height.
+    <div
+      ref={rootRef}
+      className="h-full w-full flex flex-col bg-void relative overflow-hidden landscape-short:grid landscape-short:grid-cols-[1fr_minmax(0,max-content)] landscape-short:grid-rows-[auto_auto_minmax(0,1fr)]"
+    >
       {/* Background Atmosphere */}
       {cover.src && (
         <img
@@ -620,14 +627,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
       {/* Each label stays on one line, its letters set closer on phones so both buttons fit a
           320 px row; a row still too narrow puts the second button under the first rather than
           past the window's edge. */}
-      <div className="z-20 px-4 sm:px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm">
+      <div className="z-20 px-4 sm:px-6 pt-4 pb-2 max-md:pb-4 max-md:border-b max-md:border-white/5 flex items-center bg-void/50 backdrop-blur-sm landscape-short:pt-1 landscape-short:pb-0">
         <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-2 min-w-0">
           <Button
             variant="ghost"
             size="sm"
             leftIcon={<ArrowLeft size={14} />}
             onClick={onBack}
-            className="whitespace-nowrap max-sm:tracking-normal"
+            className="whitespace-nowrap max-sm:tracking-normal landscape-short:py-1"
           >
             Back to summary
             <span className="hidden lg:inline text-text-muted text-chrome ml-1">Esc</span>
@@ -638,7 +645,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               size="sm"
               leftIcon={<Search size={12} />}
               onClick={onNewSearch}
-              className="whitespace-nowrap max-sm:tracking-normal"
+              className="whitespace-nowrap max-sm:tracking-normal landscape-short:py-1"
             >
               New search
             </Button>
@@ -651,37 +658,45 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           the columns, so it is kept short: a long title is cut at two lines and a long artist at
           one, each read whole by screen readers and shown whole on hover (title). On phones it
           is kept for screen readers only, and the Player tab shows the title and artist where
-          they scroll with it: no fixed band takes the phone's height. A div, not a page banner. */}
+          they scroll with it: no fixed band takes the phone's height. On a phone held sideways
+          its parts join the nav's band: the title has a line of the band's whole width (cut at
+          one line, shown whole in the Player column), and the label wraps beside the artist
+          rather than take the title's room. A div, not a page banner. */}
       <div
         id="player-header"
-        className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only"
+        className="z-20 px-6 pb-3 flex flex-col md:flex-row md:items-end md:justify-between gap-x-6 gap-y-1 border-b border-white/5 bg-void/50 backdrop-blur-sm max-md:sr-only landscape-short:contents"
       >
-        <div className="min-w-0">
+        <div className="min-w-0 landscape-short:col-span-2 landscape-short:grid landscape-short:grid-cols-[minmax(6rem,1fr)_minmax(0,max-content)] landscape-short:items-center landscape-short:gap-x-4 landscape-short:px-6 landscape-short:pt-0.5 landscape-short:pb-1 landscape-short:bg-void/50 landscape-short:backdrop-blur-sm">
           <h1
             ref={headingRef}
             tabIndex={-1}
             title={track.title}
-            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark focus-visible:outline-hidden break-words md:line-clamp-2"
+            className="text-2xl md:text-3xl font-light leading-tight text-white tracking-tight text-shadow-dark focus-visible:outline-hidden break-words md:line-clamp-2 landscape-short:col-span-2 landscape-short:text-lg landscape-short:line-clamp-1"
           >
             {track.title}
           </h1>
           <p
             title={track.artist}
-            className="text-sm md:text-base text-text-tertiary font-mono break-words md:line-clamp-1"
+            className="text-sm md:text-base text-text-tertiary font-mono break-words md:line-clamp-1 landscape-short:text-sm"
           >
             {track.artist}
           </p>
           {/* From md up a replayed result says so right under its title and artist, before any
-              column (phones show it below, above the tabs' panels) */}
+              column (phones show it below, above the tabs' panels). On a phone held sideways it
+              is a line of text beside the artist, without its box. */}
           {recorded && (
-            <div className="hidden md:block mt-2">
-              <RecordedRunNotice track={track} compact />
+            <div className="hidden md:block mt-2 landscape-short:mt-0 landscape-short:min-w-0">
+              <RecordedRunNotice
+                track={track}
+                compact
+                className="landscape-short:border-0 landscape-short:bg-transparent landscape-short:p-0 landscape-short:gap-2"
+              />
             </div>
           )}
         </div>
         {/* Measured values in the measured hue; what was not measured, and the separators, in
             a neutral one */}
-        <div className="hidden md:flex shrink-0 flex-col items-end gap-1">
+        <div className="hidden md:flex shrink-0 flex-col items-end gap-1 landscape-short:row-start-1 landscape-short:col-start-2 landscape-short:min-w-0 landscape-short:flex-row landscape-short:flex-wrap landscape-short:items-center landscape-short:justify-end landscape-short:gap-x-4 landscape-short:gap-y-0 landscape-short:pt-1 landscape-short:pr-6 landscape-short:bg-void/50 landscape-short:backdrop-blur-sm">
           <p
             data-testid="player-audio-line"
             className="whitespace-nowrap text-xs font-mono text-text-tertiary"
@@ -740,7 +755,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           (a timeline tooltip at rest past the window's edge must not let it scroll sideways). */}
       <div
         data-player-columns
-        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain"
+        className="flex-1 min-h-0 relative z-10 flex flex-col overflow-hidden md:grid md:grid-cols-2 md:overflow-x-hidden md:overflow-y-auto md:overscroll-contain landscape-short:col-span-2 landscape-short:border-t landscape-short:border-white/5"
       >
         {/* Panel A: the notes (md up: the left column; phones: the Analysis tab) */}
         <div
@@ -949,11 +964,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-(--duration-dramatic)"></div>
           </AlbumCover>
 
-          {/* Meta. The title and artist are the page's header from md up; on phones they are
-              shown here, where they scroll with the tab (the header's h1 is read instead). A
+          {/* Meta. The title and artist are the page's header from md up; on phones, and on a
+              phone held sideways (where the band cuts a long title at one line, and a touch
+              screen has no hover to show it whole), they are shown here too, where they scroll
+              with the panel (the header's h1 is read instead). A
               word longer than the column breaks anywhere, so it never widens the column. */}
           <div className="text-center mb-6">
-            <div aria-hidden="true" className="md:hidden">
+            <div aria-hidden="true" className="md:hidden landscape-short:block">
               <p className="text-3xl font-light leading-tight text-white tracking-tight mb-2 text-shadow-dark wrap-anywhere">
                 {track.title}
               </p>
@@ -1028,11 +1045,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
 
         {/* Panel C: the connections (md up: a full-width row below the columns, 14rem shorter
-            than the window (the nav, the header and the footer take
-            about 12rem), so a strip of the scrolling area always shows beside it to grab, even
-            on a landscape phone, or as tall as its content when the connections are a compact
-            row; phones: the Connections tab, covering the panels' area, absolute, so it has
-            that area's height for the graph) */}
+            than the window (the nav, the header and the footer take about 12rem), so a strip of
+            the scrolling area always shows beside it to grab; on a phone held sideways, where
+            the nav and the header share a band of about 5rem, 8rem shorter (its legend is
+            compact there); or as tall as its
+            content when the connections are a compact row; phones: the Connections tab,
+            covering the panels' area, absolute, so it has that area's height for the graph) */}
         <div
           id="panel-genealogy"
           {...panelRole('genealogy')}
@@ -1040,7 +1058,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           // and its ring shows it.
           tabIndex={-1}
           className={`
-            min-w-0 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)]'}
+            min-w-0 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber/70 border-white/5 bg-black/25 backdrop-blur-sm md:relative md:col-span-2 md:border-t ${sparseGenealogy ? 'md:h-auto' : 'md:h-[clamp(10rem,calc(100dvh_-_14rem),40rem)] landscape-short:h-[clamp(10rem,calc(100dvh_-_8rem),40rem)]'}
             ${activeTab === 'genealogy' ? 'flex flex-col max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:flex md:flex-col'}
         `}
         >

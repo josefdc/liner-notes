@@ -21,8 +21,9 @@
  * never logged.
  *
  * Under SOURCE_CASSETTE (sources/http.ts) the audio step is recorded and replayed by what it is
- * about, never by the clip. /health is one entry (its analyzer version only: one per cassette
- * directory, so re-record the whole set after an analyzer change). Each track's outcome is one
+ * about, never by the clip. /health is one entry (its analyzer version only, recorded only from
+ * an answer that names one: one per cassette directory, so re-record the whole set after an
+ * analyzer change; the recording warns when it changes). Each track's outcome is one
  * entry, keyed by the track (its ISRC, else its Spotify id), the analyzer version /health named
  * (`none` when it named none or did not answer) and the window (audioCassetteKey): the block the
  * API read, or the reason nothing was measured (no clip, an unfinished lookup, a rejected host,
@@ -60,6 +61,7 @@ import {
   fetchJson,
   isSourceError,
   plainReason,
+  recordedEntry,
   recordJson,
   SourceError,
 } from "./http.js";
@@ -366,25 +368,69 @@ export async function resolvePreview(
 /** The audio cassette's entry for /health: one, the analyzer of the latest recording. */
 export const HEALTH_CASSETTE_KEY = "GET /health";
 
+/** The `analyzer_version` a /health answer names, or null. */
+const versionOf = (health: unknown): unknown =>
+  health !== null && typeof health === "object"
+    ? (health as { analyzer_version?: unknown }).analyzer_version
+    : null;
+
 /**
- * /health, as the service answers it; null when it did not answer. Recorded (its analyzer
- * version only) and replayed under HEALTH_CASSETTE_KEY: a replay keys the recorded analyses by
- * the version it gives.
+ * /health, as the service answers it; null when it did not answer. Replayed from
+ * HEALTH_CASSETTE_KEY; under SOURCE_CASSETTE=record an answer is recorded there only when it
+ * names an analyzer version (recordHealth), so an error never replaces a good entry.
  */
 async function readHealth(signal: AbortSignal | undefined): Promise<unknown> {
+  const replaying = cassetteMode() === "replay";
+  let health: unknown;
   try {
-    return await fetchJson<unknown>({
+    health = await fetchJson<unknown>({
       source: "audio",
       url: `${audioServiceUrl()}/health`,
       timeoutMs: 5000,
-      cassetteKey: HEALTH_CASSETTE_KEY,
-      scrub: { analyzer_version: true },
+      ...(replaying ? { cassetteKey: HEALTH_CASSETTE_KEY } : { cassette: false }),
       signal,
     });
   } catch (error) {
     if (signal?.aborted) throw error;
     return null;
   }
+  await recordHealth(health);
+  return health;
+}
+
+/** The request /health is recorded and read with (its analyzer version only). */
+const healthRequest = () => ({
+  source: "audio" as const,
+  url: `${audioServiceUrl()}/health`,
+  cassetteKey: HEALTH_CASSETTE_KEY,
+  scrub: { analyzer_version: true } as const,
+});
+
+/**
+ * Under SOURCE_CASSETTE=record, records a 2xx /health answer (its analyzer version only) when
+ * it names a version; with none it is not recorded, and a run keeps the entry it found. The
+ * directory's entry is the analyzer of its latest recording: a version other than the one
+ * recorded is written with a warning, since the steps recorded under the earlier one then miss
+ * on replay.
+ */
+async function recordHealth(health: unknown): Promise<void> {
+  if (cassetteMode() !== "record") return;
+  const named = versionOf(health);
+  const version = keyVersion(typeof named === "string" ? named : null);
+  if (version === null) {
+    log.warn("/health not recorded: the audio service named no analyzer version");
+    return;
+  }
+  const before = recordedAnalyzer();
+  if (before.version === version) return;
+  if (before.version !== null) {
+    log.warn(
+      `The recorded /health changes from analyzer ${before.version} to ${version}: the steps ` +
+        `recorded under ${before.version} miss on replay. Re-record the whole set into a fresh ` +
+        "SOURCE_CASSETTE_DIR.",
+    );
+  }
+  await recordJson(healthRequest(), { analyzer_version: version });
 }
 
 /** What the audio service said on /health: it answered, and the analyzer version it names. */
@@ -711,24 +757,28 @@ function recordedSourceError(error: unknown): PreviewLookupError | undefined {
 const miss = (message: string) => new SourceError("audio", "cassette_miss", message);
 
 /**
- * The analyzer version of the recorded /health (SOURCE_CASSETTE=replay): its version, null when
- * it named none or did not answer, `undefined` when no /health was recorded.
+ * The analyzer version of the recorded /health, or why there is none: nothing recorded, an
+ * error recorded (by an older recording), an entry that names no version, or a cassette that
+ * cannot be read.
  */
-async function recordedAnalyzer(): Promise<string | null | undefined> {
+function recordedAnalyzer(): { version: string } | { version: null; why: string } {
+  let entry: ReturnType<typeof recordedEntry>;
   try {
-    const health = await fetchJson<unknown>({
-      source: "audio",
-      url: `${audioServiceUrl()}/health`,
-      cassetteKey: HEALTH_CASSETTE_KEY,
-    });
-    const version =
-      health !== null && typeof health === "object"
-        ? (health as { analyzer_version?: unknown }).analyzer_version
-        : null;
-    return keyVersion(typeof version === "string" ? version : null);
+    entry = recordedEntry("audio", HEALTH_CASSETTE_KEY);
   } catch (error) {
-    return isSourceError(error, "cassette_miss") ? undefined : null;
+    return { version: null, why: `the audio cassette cannot be read (${describeError(error)})` };
   }
+  if (entry === undefined) {
+    return { version: null, why: "no /health with an analyzer version was recorded" };
+  }
+  if (entry.status < 200 || entry.status > 299) {
+    return { version: null, why: `the recorded /health is an error (HTTP ${entry.status})` };
+  }
+  const named = versionOf(entry.json);
+  const version = keyVersion(typeof named === "string" ? named : null);
+  return version
+    ? { version }
+    : { version: null, why: "the recorded /health names no analyzer version" };
 }
 
 /** The result of a replayed step, and whether its run sent the clip to the service. */
@@ -748,7 +798,8 @@ async function replayedAudioStep(
 ): Promise<ReplayedStep> {
   try {
     if (track === null) throw miss("no recorded analysis: the track has no ISRC or id");
-    const version = await recordedAnalyzer();
+    const analyzer = recordedAnalyzer();
+    const { version } = analyzer;
     const keys = [
       ...(version ? [audioCassetteKey(track, version)] : []),
       audioCassetteKey(track, null),
@@ -764,11 +815,9 @@ async function replayedAudioStep(
     }
     if (found === null) {
       throw miss(
-        version === undefined
-          ? `no recorded analysis for ${track}: no /health was recorded`
-          : version === null
-            ? `no recorded analysis for ${track}: the recorded /health names no analyzer version`
-            : `no cassette entry for ${keys[0]}`,
+        "why" in analyzer
+          ? `no recorded analysis for ${track}: ${analyzer.why}`
+          : `no cassette entry for ${keys[0]}`,
       );
     }
     const { key, entry } = found;

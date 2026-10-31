@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AudioMeasurement } from "../agent/state.js";
+import { captureLogsForTests } from "../logger.js";
 import {
   ANALYZER_VERSION,
   audioV2,
@@ -345,20 +346,105 @@ describe("the audio cassette", () => {
     expect((await replay()).out.audioFeatures).toEqual({
       audio: null,
       unavailableReason: "analysis_failed",
-      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: no /health was recorded`,
+      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: no /health with an analyzer version was recorded`,
     });
   });
 
-  it("says when the recorded /health named no analyzer version", async () => {
+  it("records neither /health nor the measurement when /health names no analyzer version", async () => {
     const recorded = await live({ health: () => json({ status: "ok" }) });
     // Measured live, but not recorded: no version to file the measurement under.
     expect(recorded.out.audioFeatures).toMatchObject({ audio: audioV2() });
-    expect(Object.keys(audioEntries())).toEqual([HEALTH_CASSETTE_KEY]);
+    expect(existsSync(audioPath())).toBe(false);
     expect((await replay()).out.audioFeatures).toEqual({
       audio: null,
       unavailableReason: "analysis_failed",
-      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: the recorded /health names no analyzer version`,
+      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: no /health with an analyzer version was recorded`,
     });
+  });
+
+  it("keeps the recorded /health when a later probe fails, so earlier steps still replay", async () => {
+    const first = await live();
+    // A second track is recorded while /health answers an error: the service is unavailable.
+    const second = await live(
+      { health: () => json({ detail: "Service Unavailable" }, { status: 503 }) },
+      "SPOTIFY0002",
+      "USSB29000130",
+    );
+    expect(second.out.audioFeatures).toMatchObject({ unavailableReason: "service_unavailable" });
+    expect(audioEntries()[HEALTH_CASSETTE_KEY]?.json).toEqual({
+      analyzer_version: ANALYZER_VERSION,
+    });
+    expectSameRun(first, await replay());
+    expectSameRun(second, await replay("SPOTIFY0002", "USSB29000130"));
+  });
+
+  it.each([
+    [
+      "an error",
+      { status: 503, contentType: "application/json", json: { detail: "Service Unavailable" } },
+      "the recorded /health is an error (HTTP 503)",
+    ],
+    [
+      "no analyzer version",
+      { status: 200, contentType: "application/json", json: { status: "ok" } },
+      "the recorded /health names no analyzer version",
+    ],
+  ])("says why it misses when the recorded /health is %s", async (_label, health, why) => {
+    await live();
+    editAudioEntries((entries) => {
+      entries[HEALTH_CASSETTE_KEY] = health;
+    });
+    expect((await replay()).out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: no recorded analysis for isrc:${ISRC}: ${why}`,
+    });
+  });
+
+  it("replays the mood heads the API dropped as out of range", async () => {
+    const block = audioV2();
+    const moods = block.fingerprint!.moods!;
+    const answer = serviceAnswer({
+      ...block,
+      fingerprint: {
+        ...block.fingerprint!,
+        moods: { ...moods, danceability: { ...moods.danceability!, value: 1.3 } },
+      },
+    });
+    const recorded = await live({ analyze: () => json(answer) });
+    expect(recorded.out.audioFeatures).toMatchObject({ outOfRange: ["danceability"] });
+    expect(audioEntries()[keyOf()]?.json).toMatchObject({ outOfRange: ["danceability"] });
+    expectSameRun(recorded, await replay());
+  });
+
+  it("records the preview lookup's error without anything like a link", async () => {
+    const link = "cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3";
+    const recorded = await live({
+      // A form the source layer's own scrub keeps: a link without a scheme.
+      deezer: () => json({ detail: `see ${link}` }, { status: 500 }),
+      search: () => json({ detail: `see ${link}` }, { status: 500 }),
+    });
+    const lookup = (recorded.out.sourceErrors ?? []) as Array<{ message: string }>;
+    expect(lookup.map((error) => error.message).join(" ")).toContain(link);
+    // The audio step's entry holds the error with the link masked.
+    const text = cassetteTexts()["audio.json"];
+    expect(text).toContain("[url]");
+    for (const piece of CLIP_PIECES) expect(text, `audio.json holds ${piece}`).not.toContain(piece);
+    const replayed = await replay();
+    // The same run, with the words of the error and the detail kept and any link masked.
+    const { previewUrl: _clip, ...rest } = recorded.out;
+    const measured = recorded.out.audioFeatures as AudioMeasurement;
+    expect(replayed.out).toEqual({
+      ...rest,
+      audioFeatures: {
+        ...measured,
+        unavailableDetail: withoutUrlLike(measured.unavailableDetail ?? ""),
+      },
+      previewUrl: null,
+      sourceErrors: lookup.map((error) => ({ ...error, message: withoutUrlLike(error.message) })),
+    });
+    expect(JSON.stringify(replayed.out)).not.toContain(link);
+    expect(replayed.events).toEqual(recorded.events);
   });
 
   it("writes no preview URL to any cassette, and nothing outside record mode", async () => {
@@ -491,6 +577,7 @@ describe("the audio cassette", () => {
 
   it("misses an entry of another analyzer version, and serves nothing in its place", async () => {
     await live();
+    const logs = captureLogsForTests({ level: "warn" });
     // The service is upgraded, and another track is recorded by the new analyzer.
     const newer = "2.4.0+essentia.models-5c5c0c7f";
     const other = await live(
@@ -502,6 +589,11 @@ describe("the audio cassette", () => {
       "GBAYE0000002",
     );
     expectSameRun(other, await replay("SPOTIFY0002", "GBAYE0000002"));
+    // The recording said the directory's earlier steps now miss.
+    logs.restore();
+    expect(logs.messages().join("\n")).toContain(
+      `The recorded /health changes from analyzer ${ANALYZER_VERSION} to ${newer}`,
+    );
 
     // The first track's entry is of the older analyzer: a miss, not a stale measurement.
     const replayed = await replay();

@@ -1,7 +1,7 @@
 /**
  * LLM_RUN_PURPOSE: the purpose an evaluation harness starts the API with. Every model call of
  * the process is tagged with it (the spend log's `unit`), it is refused in production and with
- * REPLAY_MODE=only, and any value but an evaluation sub-purpose is refused.
+ * REPLAY_MODE only or fallback, and any value but an evaluation sub-purpose is refused.
  */
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -67,14 +67,22 @@ describe("LLM_RUN_PURPOSE at startup", () => {
     }
   });
 
-  it("is refused with REPLAY_MODE=only", () => {
-    const replay = { NODE_ENV: "test", REPLAY_MODE: "only" };
+  it.each([
+    ["only", "a replay makes no model call"],
+    ["fallback", "a refused model call would be answered by a stored replay"],
+  ])("is refused with REPLAY_MODE=%s", (mode, why) => {
+    const replay = { NODE_ENV: "test", REPLAY_MODE: mode };
     expect(startupErrors(replay)).toBe("");
     const refused = { ...replay, LLM_RUN_PURPOSE: "eval:golden" };
     expect(startupErrors(refused)).toBe(
-      "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=only: a replay makes no model call",
+      `LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=${mode}: ${why}`,
     );
     expect(readRunPurpose(refused).purpose).toBe("dev");
+    // REPLAY_MODE off (or unset) is what an evaluation runs with.
+    expect(readRunPurpose({ ...refused, REPLAY_MODE: "off" })).toEqual({
+      purpose: "eval:golden",
+      error: null,
+    });
   });
 
   it.each(["eval", "dev", "showcase", "eval:gold", "EVAL:GOLDEN", "nightly"])(

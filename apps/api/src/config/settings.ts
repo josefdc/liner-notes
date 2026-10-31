@@ -130,9 +130,11 @@ export const DEFAULT_RUN_PURPOSE: LlmPurpose = "dev";
  * Unset or empty: `dev`. Otherwise one of RUN_PURPOSES, and only where the API runs for
  * development or tests (isDevelopment: NODE_ENV development or test, or unset under the dev
  * script), so a deployment, whatever its NODE_ENV says, spends as `dev` and never from the
- * evaluation floor; also refused with REPLAY_MODE=only (which makes no model call to tag). On a refusal or an unknown value the purpose is `dev`
- * and `error` says why; the API does not start with an error (readSettings), and the model
- * layer refuses every call (readLlmSettings).
+ * evaluation floor; and only with REPLAY_MODE off (`only` makes no model call to tag, and under
+ * `fallback` a refused call may be answered by a stored replay an evaluation would score as
+ * live). On a refusal or an unknown value the purpose is `dev` and `error` says why; the API
+ * does not start with an error (readSettings), and the model layer refuses every call
+ * (readLlmSettings).
  */
 export function readRunPurpose(env: NodeJS.ProcessEnv): {
   purpose: LlmPurpose;
@@ -153,9 +155,16 @@ export function readRunPurpose(env: NodeJS.ProcessEnv): {
       `LLM_RUN_PURPOSE is not allowed ${OUTSIDE_DEVELOPMENT}: it is for evaluation runs`,
     );
   }
-  if (parseReplayMode(env.REPLAY_MODE) === "only") {
+  const replayMode = parseReplayMode(env.REPLAY_MODE);
+  if (replayMode === "only") {
     return refused(
       "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=only: a replay makes no model call",
+    );
+  }
+  if (replayMode === "fallback") {
+    return refused(
+      "LLM_RUN_PURPOSE is not allowed with REPLAY_MODE=fallback: " +
+        "a refused model call would be answered by a stored replay",
     );
   }
   return { purpose, error: null };

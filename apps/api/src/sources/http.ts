@@ -3252,6 +3252,20 @@ export async function recordJson(
 }
 
 /**
+ * What `source`'s cassette holds under `key`, in any mode: the recorded status and JSON body;
+ * undefined when nothing is. Throws a SourceError (`cassette_io`) for a cassette that cannot be
+ * read. For a source that checks what was recorded before it records again, or reads an entry
+ * whose status it explains itself (sources/audio.ts /health).
+ */
+export function recordedEntry(
+  source: SourceName,
+  key: string,
+): { status: number; json?: unknown } | undefined {
+  const entry = readCassette(source).entries[key];
+  return entry ? { status: entry.status, json: entry.json } : undefined;
+}
+
+/**
  * Requests JSON from a source. Resolves with the parsed body of a 2xx JSON answer; anything
  * else rejects with a SourceError.
  */

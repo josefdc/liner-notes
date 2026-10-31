@@ -153,6 +153,10 @@ const STEP = [
 function ciWith(step: string[], e2e: string[] = []): string {
   return [
     "name: ci",
+    "on:",
+    "  pull_request:",
+    "  push:",
+    "    branches: [main]",
     "jobs:",
     "  node:",
     "    runs-on: ubuntu-latest",
@@ -348,6 +352,12 @@ describe("contract-check", { timeout: 120_000 }, () => {
       edit("# The contract is additive-only", "# The contract check is additive-only");
       // A blank line and a comment at column 0 between the step and the next one.
       edit("      - run: npm run typecheck", "\n# Typecheck after the contract.\n$&");
+      // A blank line right after the step's block scalar.
+      edit('--base "$base"\n', "$&\n");
+      // Comments, which carry no meaning, inside the workflow, the job and the step.
+      edit("jobs:\n", "# The contract check runs in node.\n$&");
+      edit("  node:\n", "$&    # Runs the contract check.\n");
+      edit("        if: matrix.node == 24\n", "$&        # The contract is checked once.\n");
       expect(check(base)).toMatchObject({ status: 0 });
     });
 
@@ -390,6 +400,97 @@ describe("contract-check", { timeout: 120_000 }, () => {
       const result = check(base);
       expect(result.out).toContain(STEP_CHANGED);
       expect(result.status).toBe(1);
+    });
+
+    it("compares the lines of multi-line scalars that start with #", () => {
+      const base = ciBase(
+        ciWith([
+          ...STEP.slice(0, 3),
+          "          cat > check.sh <<'EOF'",
+          "          #!/bin/sh -e",
+          "          EOF",
+          ...STEP.slice(3),
+        ]).replace("jobs:\n", 'env:\n  NOTE: "checked\n    # by the contract"\n$&'),
+      );
+      edit("#!/bin/sh -e", "#!/bin/true");
+      expect(check(base)).toMatchObject({ status: 1 });
+      edit("#!/bin/true", "#!/bin/sh -e");
+      edit("# by the contract", "# by nothing");
+      expect(check(base)).toMatchObject({ status: 1 });
+    });
+
+    it("reads a job whose steps are an indentless sequence", () => {
+      const indentless = (ci: string) => {
+        const [head, rest] = ci.split("    steps:\n");
+        const [steps, tail] = rest.split("  e2e:\n");
+        return `${head}    steps:\n${steps.replace(/^ {2}/gm, "")}  e2e:\n${tail}`;
+      };
+      const ci = indentless(ciWith(STEP));
+      expect(ci).toContain("    - name: Contract compatibility\n      if:");
+      const base = ciBase(ci);
+      const run = 'npm run contract:check -- --base "$base"\n';
+      writeFileSync(ciFile(), ci.replace(run, `${run}      continue-on-error: true\n`));
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.out).not.toContain(STEP_UNREADABLE);
+      expect(result.status).toBe(1);
+    });
+
+    // The workflow's own settings apply to every job.
+    it.each([
+      [
+        "a default shell that swallows errors",
+        'defaults:\n  run:\n    shell: bash -c "bash {0}; exit 0"\n',
+      ],
+      ["npm scripts run by /bin/true", "env:\n  npm_config_script_shell: /bin/true\n"],
+    ])("fails when the workflow gets %s", (_, settings) => {
+      const base = ciBase(ciWith(STEP));
+      edit("jobs:\n", `${settings}$&`);
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("fails when the workflow no longer runs on pull requests", () => {
+      const base = ciBase(ciWith(STEP));
+      edit("  pull_request:\n", "");
+      const result = check(base);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    // YAML 1.1 parsers break lines there, so a "comment" could hold a key: fail, always.
+    it.each([
+      ["U+0085", "step", "\u0085"],
+      ["U+2028", "step", "\u2028"],
+      ["U+2029", "step", "\u2029"],
+      ["U+0085", "job", "\u0085"],
+      ["U+2028", "job", "\u2028"],
+      ["U+2029", "job", "\u2029"],
+    ])("fails on every run when ci.yml holds %s, at the %s's level", (code, level, character) => {
+      const base = ciBase(ciWith(STEP));
+      const line =
+        level === "step"
+          ? `      # Advisory for now.${character}        continue-on-error: true\n`
+          : `    # Advisory for now.${character}    continue-on-error: true\n`;
+      edit(level === "step" ? "      - run: npm run typecheck\n" : "  e2e:\n", `${line}$&`);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: advisory\n");
+      const result = check(base);
+      expect(result.out).toContain(`contains ${code}`);
+      expect(result.status).toBe(1);
+    });
+
+    it("fails on every run when ci.yml is renamed in .github/workflows", () => {
+      const base = ciBase(ciWith(STEP));
+      const renamed = join(dirname(ciFile()), "checks.yml");
+      git("mv", ciFile(), renamed);
+      writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: rename\n");
+      const moved = check(base);
+      expect(moved.status).toBe(1);
+      expect(moved.out).toContain(".github/workflows exists but .github/workflows/ci.yml does not");
+      const next = commit("ci.yml renamed");
+      writeFileSync(renamed, ciWith([...STEP, "        continue-on-error: true"]));
+      expect(check(next)).toMatchObject({ status: 1 });
     });
 
     // The job decides whether the step runs, and whether its failure fails the run.

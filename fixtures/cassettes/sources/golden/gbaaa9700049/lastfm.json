@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=The+Verve&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=Bitter+Sweet+Symphony+-+Remastered+2016": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [],
+          "@attr": {
+            "artist": "The Verve",
+            "track": "Bitter Sweet Symphony - Remastered 2016"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=The+Verve&autocorrect=1&format=json&method=track.getTopTags&track=Bitter+Sweet+Symphony+-+Remastered+2016": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "chamber pop",
+              "count": 100
+            },
+            {
+              "name": "britpop",
+              "count": 100
+            },
+            {
+              "name": "post-Britpop",
+              "count": 42
+            },
+            {
+              "name": "Neo-Psychedelia",
+              "count": 42
+            },
+            {
+              "name": "dream pop",
+              "count": 5
+            },
+            {
+              "name": "Symphonic Rock",
+              "count": 5
+            },
+            {
+              "name": "trip hop",
+              "count": 5
+            },
+            {
+              "name": "baggy",
+              "count": 2
+            },
+            {
+              "name": "importado_do_spotify",
+              "count": 2
+            },
+            {
+              "name": "orchestral",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "The Verve",
+            "track": "Bitter Sweet Symphony - Remastered 2016"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=d4d17620-fd97-4574-92a8-a2cb7e72ce42&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "Richard Ashcroft",
+              "match": "1",
+              "mbid": "2d1d8985-47bc-4244-8cc3-577584e411f6"
+            },
+            {
+              "name": "Oasis",
+              "match": "0.741268",
+              "mbid": "39ab1aed-75e0-4140-bd47-540276886b60"
+            },
+            {
+              "name": "Liam Gallagher",
+              "match": "0.591368",
+              "mbid": "15a44b9b-6d5e-4ad7-b6ed-3c45fdf79ba0"
+            },
+            {
+              "name": "Noel Gallagher's High Flying Birds",
+              "match": "0.585768"
+            },
+            {
+              "name": "The Stone Roses",
+              "match": "0.563663",
+              "mbid": "b5fa29f1-6c22-4321-a488-b5f363b06b06"
+            }
+          ],
+          "@attr": {
+            "artist": "The Verve"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=d4d17620-fd97-4574-92a8-a2cb7e72ce42&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "britpop",
+              "count": 100
+            },
+            {
+              "name": "rock",
+              "count": 67
+            },
+            {
+              "name": "alternative",
+              "count": 42
+            },
+            {
+              "name": "british",
+              "count": 41
+            },
+            {
+              "name": "indie",
+              "count": 20
+            },
+            {
+              "name": "alternative rock",
+              "count": 8
+            },
+            {
+              "name": "shoegaze",
+              "count": 4
+            },
+            {
+              "name": "indie rock",
+              "count": 1
+            },
+            {
+              "name": "90s",
+              "count": 1
+            },
+            {
+              "name": "space rock",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "The Verve"
+          }
+        }
+      }
+    }
+  }
+}

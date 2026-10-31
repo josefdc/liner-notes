@@ -8,16 +8,24 @@
 //   measured tempo blocks and the synthetic ones (the key blocks, the confidence-floor cases):
 //   equivalents and estimator errors rejected (must be 0), false values caught, and false values
 //   shown next to the measurement instead (by the check's design: unmarked, or below the floor).
-// - Judge part: the judge's answers on the claim cases come from a judge recording. Until one is
-//   committed, it prints "pending: no judge recording", which is not a failure.
+// - Judge part: the claim cases go through the app's judge again, answered from its recording
+//   (fixtures/cassettes/llm/perturb; no network, no spending), and the verdicts must be the ones
+//   in the judge record of the newest run-record directory (evals/agent/runs/<date>/perturb/
+//   judge.json). It prints the false-positive rate (positives rejected) and the catch rate
+//   (mutations rejected), overall, per positive source and per mutation. With no judge record
+//   it prints "pending: no judge recording", which is not a failure.
 //
 //   node evals/agent/perturb-check.mjs [--perturb <path>]
 //
-// Exits 1 when any numeric case gives another result than it expects. Needs the contract
-// package built (npm run build -w packages/contract), as the API does.
+// Exits 1 when any numeric case gives another result than it expects, or when the replayed
+// verdicts differ from the record, a replayed call would spend, or the record was made on
+// another perturbation set. Needs the contract package built (npm run build -w
+// packages/contract), as the API does.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { EVALS_DIR, REPO_ROOT } from "./lib/golden.mjs";
@@ -84,11 +92,6 @@ const interval = (k, n) => {
   return ci ? `[${pct(ci[0])}, ${pct(ci[1])}]` : "none (n = 0)";
 };
 
-function judgeRecordings() {
-  if (!existsSync(JUDGE_RECORDINGS)) return [];
-  return readdirSync(JUDGE_RECORDINGS).filter((n) => n.endsWith(".json"));
-}
-
 const rateText = (k, n) =>
   n >= MIN_N_FOR_RATE
     ? `${k}/${n} = ${pct(k / n)} (95 % CI ${interval(k, n)})`
@@ -137,14 +140,8 @@ async function main() {
       `  UNEXPECTED ${r.id} (${r.category}, ${r.case}): ${r.claim.text} gave ${r.result}, expected ${r.expect}`,
     );
   }
-  const recordings = judgeRecordings();
   console.log("judge (claim cases):");
-  if (recordings.length === 0) console.log("  pending: no judge recording");
-  else {
-    console.log(
-      `  pending: ${recordings.length} judge recording(s) found, but reading them comes with the golden run`,
-    );
-  }
+  const judgeProblems = await judgePart(at > 0 ? resolve(process.argv[at + 1]) : PERTURB_PATH);
   const missing = CATEGORIES.filter((c) => s[c].n === 0);
   if (missing.length) {
     console.error(`perturb-check: no numeric case in ${missing.join(", ")}`);
@@ -153,6 +150,88 @@ async function main() {
   if (wrong.length) {
     console.error(`perturb-check: ${wrong.length} numeric case(s) not as expected`);
     process.exit(1);
+  }
+  if (judgeProblems.length) {
+    for (const p of judgeProblems) console.error(`perturb-check: ${p}`);
+    process.exit(1);
+  }
+}
+
+const PERTURB_PATH = join(EVALS_DIR, "perturb.jsonl");
+
+/**
+ * The judge on the claim cases, replayed from its recording and compared with the committed
+ * judge record; prints the rates and returns the problems found.
+ */
+async function judgePart(perturbPath) {
+  const { newestRuns } = await import("./run.mjs");
+  const { classifier, readPerturbRecords } = await import("./lib/extras.mjs");
+  const runs = newestRuns();
+  const { judge } = runs ? readPerturbRecords(runs) : { judge: null };
+  if (!judge) {
+    console.log("  pending: no judge recording");
+    return [];
+  }
+  const where = relative(REPO_ROOT, runs);
+  const sha = createHash("sha256").update(readFileSync(perturbPath)).digest("hex");
+  if (judge.perturb.sha256 !== sha) {
+    return [
+      `the judge record in ${where} was made on another perturbation set (sha256 ${judge.perturb.sha256}, now ${sha}): record the judge again`,
+    ];
+  }
+  if (!existsSync(JUDGE_RECORDINGS))
+    return [`no judge recording in ${relative(REPO_ROOT, JUDGE_RECORDINGS)}`];
+  const scratch = mkdtempSync(join(tmpdir(), "perturb-check-"));
+  const spendLog = join(scratch, "spend.jsonl");
+  writeFileSync(spendLog, "");
+  try {
+    const { judgeAll } = await import("./perturb-judge.mjs");
+    const log = console.log;
+    console.log = () => {};
+    let cases;
+    try {
+      ({ cases } = await judgeAll({
+        mode: "replay",
+        cassetteDir: JUDGE_RECORDINGS,
+        spendLog,
+        perturbPath,
+      }));
+    } finally {
+      console.log = log;
+    }
+    const problems = [];
+    const recorded = new Map(judge.cases.map((c) => [c.id, c.verdict]));
+    const differ = cases.filter((c) => recorded.get(c.id) !== c.verdict);
+    if (differ.length || cases.length !== judge.cases.length) {
+      problems.push(
+        `${differ.length} replayed verdict(s) differ from ${where}/perturb/judge.json (${cases.length} cases replayed, ${judge.cases.length} recorded)`,
+      );
+    }
+    const spent = readFileSync(spendLog, "utf8")
+      .split("\n")
+      .filter((l) => l.trim()).length;
+    if (spent) problems.push(`${spent} spend line(s) from a replay`);
+    const c = classifier({ ...judge, cases });
+    console.log(
+      `  the app's judge (${c.judge.deployments.join(", ")}), replayed from ${relative(REPO_ROOT, JUDGE_RECORDINGS)}: ${cases.length} cases, ${c.unjudged} not judged; verdicts as in ${where}/perturb/judge.json: ${differ.length ? "no" : "yes"}; spend lines ${spent}`,
+    );
+    const both = (label, b) => {
+      console.log(`  ${label}`);
+      console.log(
+        `    false-positive rate (positives rejected): ${rateText(b.falsePositive.k, b.falsePositive.n)}`,
+      );
+      console.log(`    catch rate (mutations rejected): ${rateText(b.catch.k, b.catch.n)}`);
+    };
+    both("all claim cases", c.overall);
+    for (const b of c.bySource) both(`${b.source} positives and their mutations`, b);
+    for (const m of c.byMutation)
+      console.log(`  mutation ${m.mutation} rejected: ${rateText(m.k, m.n)}`);
+    console.log(
+      `  model-positive pool: ${c.pool.modelClaimsCitingEvidence} model claims cite evidence, ${c.pool.passedSupportCheck} pass the support check`,
+    );
+    return problems;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 

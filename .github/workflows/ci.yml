@@ -119,6 +119,16 @@ jobs:
         run: |
           test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
           npm run test:replay
+      # The agent eval's CI subset, replayed through the API from the committed cassettes with
+      # every outbound connection refused and counted: each run must give its committed records
+      # (rows b, c and d), with 0 attempts and 0 spend lines.
+      - name: Agent eval replay (regression check)
+        if: matrix.node == 24
+        env:
+          npm_config_update_notifier: "false"
+        run: |
+          test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
+          NODE_OPTIONS="--import $GITHUB_WORKSPACE/tests/deny-network.mjs" npm run eval -- --suite agent --mode replay --subset ci
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS

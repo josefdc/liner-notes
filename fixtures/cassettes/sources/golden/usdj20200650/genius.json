@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.genius.com/search?q=Hurt+Johnny+Cash": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "meta": {
+          "status": 200
+        },
+        "response": {
+          "hits": [
+            {
+              "type": "song",
+              "result": {
+                "id": 85072,
+                "title": "Hurt",
+                "url": "https://genius.com/Johnny-cash-hurt-lyrics",
+                "artist_names": "Johnny Cash",
+                "primary_artist": {
+                  "id": 1167,
+                  "name": "Johnny Cash"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 181783,
+                "title": "10 Greatest Covers",
+                "url": "https://genius.com/Entertainment-weekly-10-greatest-covers-annotated",
+                "artist_names": "Entertainment Weekly",
+                "primary_artist": {
+                  "id": 58238,
+                  "name": "Entertainment Weekly"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 4494872,
+                "title": "Pete",
+                "url": "https://genius.com/Beautiful-snake-pete-lyrics",
+                "artist_names": "Beautiful Snake",
+                "primary_artist": {
+                  "id": 1799475,
+                  "name": "Beautiful Snake"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 12115753,
+                "title": "power",
+                "url": "https://genius.com/Aiden-everett-power-lyrics",
+                "artist_names": "Aiden Everett",
+                "primary_artist": {
+                  "id": 3051672,
+                  "name": "Aiden Everett"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 4967792,
+                "title": "Under the Influence ft. Kaija",
+                "url": "https://genius.com/Heaven-under-the-influence-ft-kaija-lyrics",
+                "artist_names": "Heaven",
+                "primary_artist": {
+                  "id": 3794,
+                  "name": "Heaven"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 325622,
+                "title": "I Don’t Hurt Anymore",
+                "url": "https://genius.com/Johnny-cash-i-dont-hurt-anymore-lyrics",
+                "artist_names": "Johnny Cash",
+                "primary_artist": {
+                  "id": 1167,
+                  "name": "Johnny Cash"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 3042430,
+                "title": "Songs of Eulogy and Bereavement",
+                "url": "https://genius.com/Genius-lists-songs-of-eulogy-and-bereavement-annotated",
+                "artist_names": "Genius Lists",
+                "primary_artist": {
+                  "id": 614215,
+                  "name": "Genius Lists"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 3325562,
+                "title": "A Arte de Não Se Importar",
+                "url": "https://genius.com/Letodie-a-arte-de-nao-se-importar-lyrics",
+                "artist_names": "LetoDie",
+                "primary_artist": {
+                  "id": 269733,
+                  "name": "LetoDie"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 8634360,
+                "title": "DePRESJA",
+                "url": "https://genius.com/Nullizmatyk-and-tyran-pol-depresja-lyrics",
+                "artist_names": "Nullizmatyk & Tyran (POL)",
+                "primary_artist": {
+                  "id": 59241,
+                  "name": "Nullizmatyk"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 8634362,
+                "title": "Lecę balonem",
+                "url": "https://genius.com/Nullizmatyk-and-tyran-pol-lece-balonem-lyrics",
+                "artist_names": "Nullizmatyk & Tyran (POL)",
+                "primary_artist": {
+                  "id": 59241,
+                  "name": "Nullizmatyk"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:USBB40706422": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 3616616,
+        "title": "Juicy",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USBB40706422",
+        "duration": 285,
+        "artist": {
+          "id": 2519,
+          "name": "The Notorious B.I.G."
+        },
+        "album": {
+          "id": 341059,
+          "title": "Greatest Hits"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:USSM18300593": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 13197416,
+        "title": "Juicy Fruit",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USSM18300593",
+        "duration": 352,
+        "artist": {
+          "id": 2362,
+          "name": "Mtume"
+        },
+        "album": {
+          "id": 1210383,
+          "title": "Juicy Fruit"
+        }
+      }
+    }
+  }
+}

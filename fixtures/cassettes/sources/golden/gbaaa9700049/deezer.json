@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:GBBBA6672510": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 110956746,
+        "title": "The Last Time",
+        "title_version": "",
+        "readable": true,
+        "isrc": "GBBBA6672510",
+        "duration": 223,
+        "artist": {
+          "id": 152119,
+          "name": "Andrew Oldham Orchestra"
+        },
+        "album": {
+          "id": 11539634,
+          "title": "The Rolling Stones Songbook"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:GBUM71601816": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 398568192,
+        "title": "Bitter Sweet Symphony (Remastered 2016)",
+        "title_version": "(Remastered 2016)",
+        "readable": true,
+        "isrc": "GBUM71601816",
+        "duration": 357,
+        "artist": {
+          "id": 869,
+          "name": "The Verve"
+        },
+        "album": {
+          "id": 46871272,
+          "title": "Urban Hymns (Deluxe / Remastered 2016)"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:USTC60835100": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 22075911,
+        "title": "Once Again",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USTC60835100",
+        "duration": 161,
+        "artist": {
+          "id": 5780,
+          "name": "Girl Talk"
+        },
+        "album": {
+          "id": 2119791,
+          "title": "Night Ripper"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,2301 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://musicbrainz.org/ws/2/artist/df6c619f-4334-43e2-8b6a-4a32af1e4f85?fmt=json&inc=artist-rels+recording-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+        "name": "YOASOBI",
+        "type": "Group",
+        "country": "JP",
+        "relations": [
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "72aa5228-b90f-429b-b945-f14d93616c1c",
+              "name": "森光奏太"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "fed6cc91-38c1-430f-a959-47672bbd0302",
+              "name": "長﨑祥子"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "c8790d20-d4d8-41d3-891b-a566190ec0db",
+              "name": "大井一彌"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "20dcca9c-bc93-435d-b3a9-5d29cd7787b0",
+              "name": "鈴木栄奈"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "7745e987-3236-4edb-806d-1b1de9c9b8c0",
+              "name": "Hiroki Oono"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "40b1c9f0-8820-445c-a7e1-fe0203db21b8",
+              "name": "仄雲"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "feb11060-4db8-475e-b1e3-229329698b74",
+              "name": "ミソハギザクロ"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "ecebc2fa-0d95-4854-8dd7-d8a3b6b3abe1",
+              "name": "やまもとひかる"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "1c8172a0-c97b-402d-89bc-3e30df0fa171",
+              "name": "ASH"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "87f23fb3-122e-415a-847e-b7309e377e8a",
+              "name": "Tatsuya Amano"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "48f6bfb3-9b6a-4e63-a8bb-fd69cae8a588",
+              "name": "田口悟"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "4173073b-ae68-476a-a715-e22f1f43046d",
+              "name": "Ayase"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "2ed1b2ca-7a1a-48ac-9307-00dfac9a4780",
+              "name": "ikura"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "55e42264-ef27-49d8-93fd-29f930dc96e4",
+              "name": "幾田りら"
+            }
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "bandsintown"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "image"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "official homepage"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "vgmdb"
+          },
+          {
+            "type": "wikidata"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/isrc/JPP301900716?fmt=json&inc=artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "isrc": "JPP301900716",
+        "recordings": [
+          {
+            "id": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+            "title": "夜に駆ける",
+            "first-release-date": "2019-12-14",
+            "length": 258839,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YOASOBI",
+                "joinphrase": "",
+                "artist": {
+                  "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                  "name": "YOASOBI"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording?fmt=json&inc=artist-credits&limit=100&offset=0&work=8865dd9a-050a-4669-bfa9-4db1ae86a0f4": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "recording-count": 31,
+        "recordings": [
+          {
+            "id": "03d8a920-88d2-4018-bc6f-fbfc13eee622",
+            "title": "夜に駆ける (初音ミク Ver.)",
+            "first-release-date": "2021-01-06",
+            "length": 259568,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "Ayase",
+                "joinphrase": "",
+                "artist": {
+                  "id": "4173073b-ae68-476a-a715-e22f1f43046d",
+                  "name": "Ayase"
+                }
+              }
+            ]
+          },
+          {
+            "id": "03e434a1-55f9-4ea9-bac2-4ea2bfd0cf37",
+            "title": "夜に駆ける (instrumental) - From THE FIRST TAKE",
+            "length": 249000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YOASOBI",
+                "joinphrase": "",
+                "artist": {
+                  "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                  "name": "YOASOBI"
+                }
+              }
+            ]
+          },
+          {
+            "id": "05add9fc-94b5-4737-be35-72a7b75a0266",
+            "title": "夜に駆ける (instrumental)",
+            "first-release-date": "2020-05-18",
+            "length": 262000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YOASOBI",
+                "joinphrase": "",
+                "artist": {
+                  "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                  "name": "YOASOBI"
+                }
+              }
+            ]
+          },
+          {
+            "id": "177e54cd-c773-4608-88e5-38dcc73f5a96",
+            "title": "夜に駆ける",
+            "length": 266000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "紫咲シオン",
+                "joinphrase": "",
+                "artist": {
+                  "id": "30dd043c-b250-480e-bac2-0198844cd5af",
+                  "name": "紫咲シオン"
+                }
+              }
+            ]
+          },
+          {
+            "id": "26481eab-8481-4885-9809-2ecf66f307d5",
+            "title": "夜に駆ける",
+            "first-release-date": "2022-07-20",
+            "length": 264056,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YuNi",
+                "joinphrase": "",
+                "artist": {
+                  "id": "e119d77d-b820-4676-b7c0-60ade4973c10",
+                  "name": "YuNi"
+                }
+              }
+            ]
+          },
+          {
+            "id": "2ab0046c-2796-4000-8222-24c3ce131b36",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-03-01",
+            "length": 220000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "Ayasa",
+                "joinphrase": "",
+                "artist": {
+                  "id": "81244c5a-fa61-4664-a44c-389c9e3a2c5c",
+                  "name": "Ayasa"
+                }
+              }
+            ]
+          },
+          {
+            "id": "2dd7bd0d-3f26-4ce1-ad2b-c9e0f0448238",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-06-19",
+            "length": 260967,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "日野森雫",
+                "joinphrase": "",
+                "artist": {
+                  "id": "e6ed1f4b-92d0-4d0c-9760-25288e4952a2",
+                  "name": "日野森雫"
+                }
+              }
+            ]
+          },
+          {
+            "id": "313d217d-92c7-43d4-9e4c-fa27027df6af",
+            "title": "夜に駆ける",
+            "length": 260000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "長瀬麻奈",
+                "joinphrase": "(CV:",
+                "artist": {
+                  "id": "dd7a5a37-9926-4e22-ae3a-d59930d85384",
+                  "name": "長瀬麻奈"
+                }
+              },
+              {
+                "name": "神田沙也加",
+                "joinphrase": ")",
+                "artist": {
+                  "id": "fabd81f5-3be8-4890-9932-05852d933ccf",
+                  "name": "神田沙也加"
+                }
+              }
+            ]
+          },
+          {
+            "id": "3898da73-5a88-4df9-830d-56547cb4aec1",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-12-25",
+            "length": 262000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "HuxP",
+                "joinphrase": "",
+                "artist": {
+                  "id": "b45001ea-6e7a-4009-856a-f948371493dc",
+                  "name": "WubbzP"
+                }
+              }
+            ]
+          },
+          {
+            "id": "38c3e96b-b316-4a05-a10b-b8af0a5a25f3",
+            "title": "夜に駆ける",
+            "first-release-date": "2025-02-04",
+            "length": 259385,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "J‐POP CHANNEL PROJECT",
+                "joinphrase": "",
+                "artist": {
+                  "id": "e0a68a8f-948e-4dd2-8329-45fbe5a58feb",
+                  "name": "J‐POP CHANNEL PROJECT"
+                }
+              }
+            ]
+          },
+          {
+            "id": "3a0f17d4-e741-4488-b969-92f29da8e568",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-11-10",
+            "length": 263000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "Pastel＊Palettes",
+                "joinphrase": "",
+                "artist": {
+                  "id": "88ad1c3e-53f2-4279-9b75-f0b5bad6a4f6",
+                  "name": "Pastel＊Palettes"
+                }
+              }
+            ]
+          },
+          {
+            "id": "3e4d33c4-24fa-4e68-adf8-f850d6136e9e",
+            "title": "夜に駆ける (Pastel＊Palettes version)",
+            "first-release-date": "2024-12-27",
+            "length": 263000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "HuxP",
+                "joinphrase": "",
+                "artist": {
+                  "id": "b45001ea-6e7a-4009-856a-f948371493dc",
+                  "name": "WubbzP"
+                }
+              }
+            ]
+          },
+          {
+            "id": "4e154918-f57f-47d7-b123-9ab9d74f1497",
+            "title": "夜に駆ける",
+            "first-release-date": "2022-10-10",
+            "length": 291000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "花たん",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d53eb473-7906-47a4-b2cd-33d18b06a0ac",
+                  "name": "YURiCa/花たん"
+                }
+              }
+            ]
+          },
+          {
+            "id": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+            "title": "夜に駆ける",
+            "first-release-date": "2019-12-14",
+            "length": 258839,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YOASOBI",
+                "joinphrase": "",
+                "artist": {
+                  "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                  "name": "YOASOBI"
+                }
+              }
+            ]
+          },
+          {
+            "id": "5aad51e6-e0a7-4776-86e4-fcf4c2d0d7fc",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-11-10",
+            "length": 260000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "柾花音",
+                "joinphrase": "",
+                "artist": {
+                  "id": "66d009cf-6083-4b91-93c3-55c05c1895cf",
+                  "name": "柾花音"
+                }
+              }
+            ]
+          },
+          {
+            "id": "5efa7768-cef1-4554-a4e1-ad9cd79808c4",
+            "title": "夜に駆ける",
+            "length": 264000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "花鋏キョウ",
+                "joinphrase": "",
+                "artist": {
+                  "id": "61bcd9e8-939f-4af2-9edf-4e606b8524de",
+                  "name": "花鋏キョウ"
+                }
+              }
+            ]
+          },
+          {
+            "id": "67a806d8-6e4f-4f00-8e6c-0b9058006585",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-01-27",
+            "length": 267720,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "オルゴールサウンド J‐POP",
+                "joinphrase": "",
+                "artist": {
+                  "id": "4d6e9b5f-6ba3-41f6-ac94-c634ae971304",
+                  "name": "オルゴールサウンド J‐POP"
+                }
+              }
+            ]
+          },
+          {
+            "id": "6a220863-ba6d-4b99-bc50-88771916cbef",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-07-03",
+            "length": 261560,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "星乃一歌",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d2ab250d-58de-45d9-8829-e4db15104483",
+                  "name": "星乃一歌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "7826f518-1885-4815-9e53-8b14d98a60af",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-03-27",
+            "length": 263627,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "kobasolo",
+                "joinphrase": " feat.",
+                "artist": {
+                  "id": "4981caf4-856a-4a2f-bdf1-3cfd65c6a532",
+                  "name": "コバソロ"
+                }
+              },
+              {
+                "name": "こぴ",
+                "joinphrase": "",
+                "artist": {
+                  "id": "ac99810d-d166-4d0b-beee-587ab4619bf8",
+                  "name": "こぴ"
+                }
+              }
+            ]
+          },
+          {
+            "id": "7e396cfe-2d2d-473c-8c05-b2463bc03b50",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-11-24",
+            "length": 289000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "りぶ",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d5d53aa3-161e-4c6d-b136-5936677865d5",
+                  "name": "りぶ"
+                }
+              }
+            ]
+          },
+          {
+            "id": "8366cc9e-6556-4e69-9423-8cd733e0fd5e",
+            "title": "夜に駆ける",
+            "length": 261000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "大代真白",
+                "joinphrase": "",
+                "artist": {
+                  "id": "97887370-d482-48f5-972d-98c27ef29689",
+                  "name": "大代真白"
+                }
+              }
+            ]
+          },
+          {
+            "id": "8aa1b14d-3913-4e9c-a437-3038a3f76de2",
+            "title": "夜に駆ける",
+            "first-release-date": "2023-06-15",
+            "length": 295000,
+            "disambiguation": "live, 2021-07-03",
+            "artist-credit": [
+              {
+                "name": "HaNaMiNa",
+                "joinphrase": "",
+                "artist": {
+                  "id": "8c69e35c-c80a-4987-acae-ecb111eeb9e5",
+                  "name": "HaNaMiNa"
+                }
+              }
+            ]
+          },
+          {
+            "id": "8c69215b-4dae-4ae6-b67b-1993728fbcf7",
+            "title": "夜に駆ける (初音ミク ver.)",
+            "first-release-date": "2019-11-17",
+            "length": 263000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "Ayase",
+                "joinphrase": "",
+                "artist": {
+                  "id": "4173073b-ae68-476a-a715-e22f1f43046d",
+                  "name": "Ayase"
+                }
+              }
+            ]
+          },
+          {
+            "id": "931f9305-e644-4dac-a312-e5570d6aaad2",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-05-08",
+            "length": 260700,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "宵崎奏",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d4763579-3869-4a66-bc44-108824d7e40e",
+                  "name": "宵崎奏"
+                }
+              }
+            ]
+          },
+          {
+            "id": "ab143668-7cfd-4a73-9d16-db1672335003",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-06-05",
+            "length": 261733,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "小豆沢こはね",
+                "joinphrase": "",
+                "artist": {
+                  "id": "8a89c550-5776-4de2-83d0-649e6233ac6d",
+                  "name": "小豆沢こはね"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b0c03662-7aa4-429f-9d1a-7f19defe9156",
+            "title": "夜に駆ける",
+            "first-release-date": "2022-04-06",
+            "length": 260000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "25時、ナイトコードで。",
+                "joinphrase": " feat. ",
+                "artist": {
+                  "id": "2d5bd5f2-d0fa-4dd8-ba72-c1fea94a0ae0",
+                  "name": "25時、ナイトコードで。"
+                }
+              },
+              {
+                "name": "宵崎奏",
+                "joinphrase": "&",
+                "artist": {
+                  "id": "d4763579-3869-4a66-bc44-108824d7e40e",
+                  "name": "宵崎奏"
+                }
+              },
+              {
+                "name": "初音ミク",
+                "joinphrase": "",
+                "artist": {
+                  "id": "130d679a-9a92-4373-8348-0800b6b93a30",
+                  "name": "初音ミク"
+                }
+              }
+            ]
+          },
+          {
+            "id": "c8918fd8-4b0b-40b6-9597-f97a4420968b",
+            "title": "夜に駆ける",
+            "first-release-date": "2024-05-22",
+            "length": 260706,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "草薙寧々",
+                "joinphrase": "",
+                "artist": {
+                  "id": "94a6e047-f622-4aeb-8127-35fb8cdd58b7",
+                  "name": "草薙寧々"
+                }
+              }
+            ]
+          },
+          {
+            "id": "cc499fc7-58af-469c-aea1-ca596b3aa359",
+            "title": "夜に駆ける - From THE FIRST TAKE",
+            "first-release-date": "2023-09-21",
+            "length": 248523,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "YOASOBI",
+                "joinphrase": "",
+                "artist": {
+                  "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                  "name": "YOASOBI"
+                }
+              }
+            ]
+          },
+          {
+            "id": "cc9f6642-ada8-4019-ab14-9aa7074eec9e",
+            "title": "夜に駆ける",
+            "first-release-date": "2020-06-06",
+            "length": 260000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "富士葵",
+                "joinphrase": "",
+                "artist": {
+                  "id": "03b96523-db37-4e85-ac9d-b7ceb6926e9b",
+                  "name": "富士葵"
+                }
+              }
+            ]
+          },
+          {
+            "id": "cd256e0a-ca8b-4126-8086-0c0994cf149e",
+            "title": "夜に駆ける",
+            "first-release-date": "2020-11-08",
+            "length": 266000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "小雀とと",
+                "joinphrase": "",
+                "artist": {
+                  "id": "c0ccd5c0-1586-4f12-9d5c-eee66e92f230",
+                  "name": "小雀とと"
+                }
+              }
+            ]
+          },
+          {
+            "id": "e1e51c7b-3df4-49e8-9860-abc02f3ecd5a",
+            "title": "夜に駆ける",
+            "first-release-date": "2021-01-18",
+            "length": 261000,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "森内寛樹",
+                "joinphrase": "",
+                "artist": {
+                  "id": "c97d1e24-e58a-4224-9bec-ea1e29fff27f",
+                  "name": "森内寛樹"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording?fmt=json&limit=1&query=rid%3A%280eb3d08b-b56d-416e-b7ba-1986b704c405%29": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "count": 1,
+        "recordings": [
+          {
+            "id": "0eb3d08b-b56d-416e-b7ba-1986b704c405",
+            "first-release-date": "2025-09-26"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957?fmt=json&inc=artist-credits+recording-rels+work-rels+work-level-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+        "title": "夜に駆ける",
+        "first-release-date": "2019-12-14",
+        "length": 258839,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "YOASOBI",
+            "joinphrase": "",
+            "artist": {
+              "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+              "name": "YOASOBI"
+            }
+          }
+        ],
+        "relations": [
+          {
+            "type": "karaoke",
+            "direction": "forward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "05add9fc-94b5-4737-be35-72a7b75a0266",
+              "title": "夜に駆ける (instrumental)",
+              "length": 262000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "0eb3d08b-b56d-416e-b7ba-1986b704c405",
+              "title": "the NOISE",
+              "length": 224280,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "LE SSERAFIM",
+                  "joinphrase": " with ",
+                  "artist": {
+                    "id": "1ee37742-1e3d-4e61-84d2-bc85f4c1459a",
+                    "name": "LE SSERAFIM"
+                  }
+                },
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.spotify.com/track/6MCjmGYlw6mQVWRFVgBRvB"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://soundcloud.com/yoasobimusic/into-the-night"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.deezer.com/track/1155879632"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/jp/song/1542182776"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.qobuz.com/track/106749578"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/jp/song/1542182776"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.qobuz.com/track/106749578"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://tidal.com/track/163718326"
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "forward",
+            "target-type": "work",
+            "attributes": [],
+            "work": {
+              "id": "8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+              "title": "夜に駆ける",
+              "relations": [
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://genius.com/Yoasobi-yoru-ni-kakeru-lyrics"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://j-lyric.net/artist/a061652/l050f8a.html"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://kashinavi.com/lyrics/126035/"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://petitlyrics.com/lyrics/2830733"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://utaten.com/lyric/rq20031716/"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.joysound.com/web/search/song/817479"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.musixmatch.com/lyrics/YOASOBI/%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.uta-net.com/song/284748/"
+                  }
+                },
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.uta-net.com/song/316963/"
+                  }
+                },
+                {
+                  "type": "wikidata",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.wikidata.org/wiki/Q96955416"
+                  }
+                },
+                {
+                  "type": "based on",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/release?fmt=json&inc=url-rels+release-groups&limit=100&offset=0&recording=57a6dff3-daee-4e63-bc82-6bd6f5df2957&status=official&type=album%7Csingle%7Cep": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "release-count": 8,
+        "release-offset": 0,
+        "releases": [
+          {
+            "id": "00ad9ca0-651e-49c9-a6bb-7af7860d94ed",
+            "title": "THE BOOK",
+            "date": "2024-10-23",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/32108862"
+                }
+              },
+              {
+                "type": "purchase for mail-order",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.sonymusicshop.jp/m/item/itemShw.php?site=S&ima=0618&cd=XSJL000000003"
+                }
+              }
+            ]
+          },
+          {
+            "id": "01a36168-8076-4892-96e6-650d95f5d9f7",
+            "title": "夜に駆ける",
+            "date": "2020-06-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://mora.jp/package/43000011/4538182892299_HD/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "1489b651-808d-465b-b92e-15fee371a158",
+            "title": "THE BOOK",
+            "date": "2021-01-06",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/1xhO0GSoezdPJcSuNe1ySv"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/189054902"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/jp/album/1542182291"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://ototoy.jp/_/default/p/712110"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.qobuz.com/jp-ja/album/the-book-yoasobi/dslwccxo58ehc"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.amazon.com/albums/B08P688B62"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/jp/album/1542182291"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.youtube.com/playlist?list=OLAK5uy_k4cmWyB5cAixdkEkidgnSKbtGX2PGt2Nc"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://tidal.com/album/163718318"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.qobuz.com/jp-ja/album/the-book-yoasobi/dslwccxo58ehc"
+                }
+              }
+            ]
+          },
+          {
+            "id": "3402db82-7e97-4568-acb5-417555a16dbc",
+            "title": "THE BOOK",
+            "date": "2024-07-29",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/31368772"
+                }
+              },
+              {
+                "type": "purchase for mail-order",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://blackscreenrecords.com/collections/yoasobi/products/the-book?variant=45454785282314"
+                }
+              }
+            ]
+          },
+          {
+            "id": "450414d2-94f7-411d-bad5-e0b89055024b",
+            "title": "THE BOOK",
+            "date": "2021-01-06",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.e-onkyo.com/music/album/bud4538182931066/"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://mora.jp/package/43000011/4538182931066/"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://ototoy.jp/_/default/p/652701"
+                }
+              }
+            ]
+          },
+          {
+            "id": "9e3992c7-06d1-4314-8e5c-504992660c8b",
+            "title": "夜に駆ける",
+            "date": "2019-12-14",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/3GzwPyPZCyrqUTaurTaS23"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/jp/album/1490256978"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://ototoy.jp/_/default/p/491255"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://ototoy.jp/_/default/p/491257"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://recochoku.jp/song/S1008851084/"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://recochoku.jp/song/S1009497008/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b369422a-f73b-451f-b0a6-696621cf591f",
+            "title": "THE BOOK",
+            "date": "2021-01-06",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://mora.jp/package/43000011/4538182931059/"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://ototoy.jp/_/default/p/652698"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d04e089c-c90a-41b5-ba70-f86b340b05b4",
+            "title": "THE BOOK",
+            "date": "2021-01-06",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B08KH3S8ZY"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4?fmt=json&inc=recording-rels+artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+        "title": "夜に駆ける",
+        "relations": [
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+              "title": "夜に駆ける",
+              "length": 258839,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "e1e51c7b-3df4-49e8-9860-abc02f3ecd5a",
+              "title": "夜に駆ける",
+              "length": 261000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "森内寛樹",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "c97d1e24-e58a-4224-9bec-ea1e29fff27f",
+                    "name": "森内寛樹"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "313d217d-92c7-43d4-9e4c-fa27027df6af",
+              "title": "夜に駆ける",
+              "length": 260000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "長瀬麻奈",
+                  "joinphrase": "(CV:",
+                  "artist": {
+                    "id": "dd7a5a37-9926-4e22-ae3a-d59930d85384",
+                    "name": "長瀬麻奈"
+                  }
+                },
+                {
+                  "name": "神田沙也加",
+                  "joinphrase": ")",
+                  "artist": {
+                    "id": "fabd81f5-3be8-4890-9932-05852d933ccf",
+                    "name": "神田沙也加"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "2ab0046c-2796-4000-8222-24c3ce131b36",
+              "title": "夜に駆ける",
+              "length": 220000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Ayasa",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "81244c5a-fa61-4664-a44c-389c9e3a2c5c",
+                    "name": "Ayasa"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "5aad51e6-e0a7-4776-86e4-fcf4c2d0d7fc",
+              "title": "夜に駆ける",
+              "length": 260000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "柾花音",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "66d009cf-6083-4b91-93c3-55c05c1895cf",
+                    "name": "柾花音"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "3a0f17d4-e741-4488-b969-92f29da8e568",
+              "title": "夜に駆ける",
+              "length": 263000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Pastel＊Palettes",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "88ad1c3e-53f2-4279-9b75-f0b5bad6a4f6",
+                    "name": "Pastel＊Palettes"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "b0c03662-7aa4-429f-9d1a-7f19defe9156",
+              "title": "夜に駆ける",
+              "length": 260000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "25時、ナイトコードで。",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "2d5bd5f2-d0fa-4dd8-ba72-c1fea94a0ae0",
+                    "name": "25時、ナイトコードで。"
+                  }
+                },
+                {
+                  "name": "宵崎奏",
+                  "joinphrase": "&",
+                  "artist": {
+                    "id": "d4763579-3869-4a66-bc44-108824d7e40e",
+                    "name": "宵崎奏"
+                  }
+                },
+                {
+                  "name": "初音ミク",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "130d679a-9a92-4373-8348-0800b6b93a30",
+                    "name": "初音ミク"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "4e154918-f57f-47d7-b123-9ab9d74f1497",
+              "title": "夜に駆ける",
+              "length": 291000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "花たん",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d53eb473-7906-47a4-b2cd-33d18b06a0ac",
+                    "name": "YURiCa/花たん"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "26481eab-8481-4885-9809-2ecf66f307d5",
+              "title": "夜に駆ける",
+              "length": 264056,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YuNi",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e119d77d-b820-4676-b7c0-60ade4973c10",
+                    "name": "YuNi"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "live"
+            ],
+            "recording": {
+              "id": "8aa1b14d-3913-4e9c-a437-3038a3f76de2",
+              "title": "夜に駆ける",
+              "length": 295000,
+              "disambiguation": "live, 2021-07-03",
+              "artist-credit": [
+                {
+                  "name": "HaNaMiNa",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "8c69e35c-c80a-4987-acae-ecb111eeb9e5",
+                    "name": "HaNaMiNa"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "cc9f6642-ada8-4019-ab14-9aa7074eec9e",
+              "title": "夜に駆ける",
+              "length": 260000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "富士葵",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "03b96523-db37-4e85-ac9d-b7ceb6926e9b",
+                    "name": "富士葵"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "7826f518-1885-4815-9e53-8b14d98a60af",
+              "title": "夜に駆ける",
+              "length": 263627,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "kobasolo",
+                  "joinphrase": " feat.",
+                  "artist": {
+                    "id": "4981caf4-856a-4a2f-bdf1-3cfd65c6a532",
+                    "name": "コバソロ"
+                  }
+                },
+                {
+                  "name": "こぴ",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "ac99810d-d166-4d0b-beee-587ab4619bf8",
+                    "name": "こぴ"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "67a806d8-6e4f-4f00-8e6c-0b9058006585",
+              "title": "夜に駆ける",
+              "length": 267720,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "オルゴールサウンド J‐POP",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "4d6e9b5f-6ba3-41f6-ac94-c634ae971304",
+                    "name": "オルゴールサウンド J‐POP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "931f9305-e644-4dac-a312-e5570d6aaad2",
+              "title": "夜に駆ける",
+              "length": 260700,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "宵崎奏",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d4763579-3869-4a66-bc44-108824d7e40e",
+                    "name": "宵崎奏"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "c8918fd8-4b0b-40b6-9597-f97a4420968b",
+              "title": "夜に駆ける",
+              "length": 260706,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "草薙寧々",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "94a6e047-f622-4aeb-8127-35fb8cdd58b7",
+                    "name": "草薙寧々"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "ab143668-7cfd-4a73-9d16-db1672335003",
+              "title": "夜に駆ける",
+              "length": 261733,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "小豆沢こはね",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "8a89c550-5776-4de2-83d0-649e6233ac6d",
+                    "name": "小豆沢こはね"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "2dd7bd0d-3f26-4ce1-ad2b-c9e0f0448238",
+              "title": "夜に駆ける",
+              "length": 260967,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "日野森雫",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e6ed1f4b-92d0-4d0c-9760-25288e4952a2",
+                    "name": "日野森雫"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "6a220863-ba6d-4b99-bc50-88771916cbef",
+              "title": "夜に駆ける",
+              "length": 261560,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "星乃一歌",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d2ab250d-58de-45d9-8829-e4db15104483",
+                    "name": "星乃一歌"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "7e396cfe-2d2d-473c-8c05-b2463bc03b50",
+              "title": "夜に駆ける",
+              "length": 289000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "りぶ",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d53aa3-161e-4c6d-b136-5936677865d5",
+                    "name": "りぶ"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "3898da73-5a88-4df9-830d-56547cb4aec1",
+              "title": "夜に駆ける",
+              "length": 262000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "HuxP",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "b45001ea-6e7a-4009-856a-f948371493dc",
+                    "name": "WubbzP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "38c3e96b-b316-4a05-a10b-b8af0a5a25f3",
+              "title": "夜に駆ける",
+              "length": 259385,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "J‐POP CHANNEL PROJECT",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e0a68a8f-948e-4dd2-8329-45fbe5a58feb",
+                    "name": "J‐POP CHANNEL PROJECT"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "8366cc9e-6556-4e69-9423-8cd733e0fd5e",
+              "title": "夜に駆ける",
+              "length": 261000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "大代真白",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "97887370-d482-48f5-972d-98c27ef29689",
+                    "name": "大代真白"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "5efa7768-cef1-4554-a4e1-ad9cd79808c4",
+              "title": "夜に駆ける",
+              "length": 264000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "花鋏キョウ",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "61bcd9e8-939f-4af2-9edf-4e606b8524de",
+                    "name": "花鋏キョウ"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "177e54cd-c773-4608-88e5-38dcc73f5a96",
+              "title": "夜に駆ける",
+              "length": 266000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "紫咲シオン",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "30dd043c-b250-480e-bac2-0198844cd5af",
+                    "name": "紫咲シオン"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "cd256e0a-ca8b-4126-8086-0c0994cf149e",
+              "title": "夜に駆ける",
+              "length": 266000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "小雀とと",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "c0ccd5c0-1586-4f12-9d5c-eee66e92f230",
+                    "name": "小雀とと"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "cc499fc7-58af-469c-aea1-ca596b3aa359",
+              "title": "夜に駆ける - From THE FIRST TAKE",
+              "length": 248523,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "karaoke"
+            ],
+            "recording": {
+              "id": "05add9fc-94b5-4737-be35-72a7b75a0266",
+              "title": "夜に駆ける (instrumental)",
+              "length": 262000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "karaoke"
+            ],
+            "recording": {
+              "id": "03e434a1-55f9-4ea9-bac2-4ea2bfd0cf37",
+              "title": "夜に駆ける (instrumental) - From THE FIRST TAKE",
+              "length": 249000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YOASOBI",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+                    "name": "YOASOBI"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "3e4d33c4-24fa-4e68-adf8-f850d6136e9e",
+              "title": "夜に駆ける (Pastel＊Palettes version)",
+              "length": 263000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "HuxP",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "b45001ea-6e7a-4009-856a-f948371493dc",
+                    "name": "WubbzP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "8c69215b-4dae-4ae6-b67b-1993728fbcf7",
+              "title": "夜に駆ける (初音ミク ver.)",
+              "length": 263000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Ayase",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "4173073b-ae68-476a-a715-e22f1f43046d",
+                    "name": "Ayase"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "03d8a920-88d2-4018-bc6f-fbfc13eee622",
+              "title": "夜に駆ける (初音ミク Ver.)",
+              "length": 259568,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Ayase",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "4173073b-ae68-476a-a715-e22f1f43046d",
+                    "name": "Ayase"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

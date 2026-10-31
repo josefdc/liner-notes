@@ -1,5 +1,7 @@
-// The `npm run eval` entry point: live runs are refused with no outbound connection, replay
-// needs recorded runs. Run with: node --test 'evals/**/*.test.mjs'
+// The `npm run eval` entry point, offline: a live run without its options runs nothing, replay
+// needs recorded runs, and --score-only scores records without replaying them. The replay itself
+// starts the API once per row and runs in CI as its own step. Run with:
+// node --test 'evals/**/*.test.mjs'
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -31,10 +33,10 @@ function evalCli(args) {
   }
 }
 
-test("--mode live is refused, non-zero, with no outbound attempt", () => {
+test("--mode live without its options runs nothing, non-zero, with no outbound attempt", () => {
   const out = evalCli(["--suite", "agent", "--mode", "live", "--subset", "ci"]);
   assert.notEqual(out.status, 0);
-  assert.match(out.stderr, /live runs come in a later change/);
+  assert.match(out.stderr, /--mode live needs --out/);
   assert.deepEqual(out.attempts, [0]);
 });
 
@@ -68,7 +70,17 @@ test("--mode replay names the subset rows that have no run record and exits 1", 
     );
     const kept = d.filter((r) => ["GBDUW0000053", "USBB40000359"].includes(r.isrc));
     writeFileSync(join(dir, "d.json"), JSON.stringify(kept));
-    const out = evalCli(["--suite", "agent", "--mode", "replay", "--subset", "ci", "--runs", dir]);
+    const out = evalCli([
+      "--suite",
+      "agent",
+      "--mode",
+      "replay",
+      "--score-only",
+      "--subset",
+      "ci",
+      "--runs",
+      dir,
+    ]);
     assert.equal(out.status, 1);
     assert.match(
       out.stderr,
@@ -82,12 +94,13 @@ test("--mode replay names the subset rows that have no run record and exits 1", 
   }
 });
 
-test("--mode replay scores recorded runs on the subset, offline", () => {
+test("--mode replay --score-only scores recorded runs on the subset, offline", () => {
   const out = evalCli([
     "--suite",
     "agent",
     "--mode",
     "replay",
+    "--score-only",
     "--subset",
     "ci",
     "--runs",
@@ -103,6 +116,9 @@ test("bad arguments exit 2", () => {
     [],
     ["--suite", "web", "--mode", "replay"],
     ["--suite", "agent", "--mode", "x"],
+    ["--suite", "agent", "--mode", "replay", "--out", "x"],
+    ["--suite", "agent", "--mode", "live", "--score-only"],
+    ["--suite", "agent", "--mode", "live", "--runs", "x"],
   ]) {
     const out = evalCli(args);
     assert.equal(out.status, 2, args.join(" "));

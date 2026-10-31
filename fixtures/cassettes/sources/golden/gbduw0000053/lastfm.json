@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Daft+Punk&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=One+More+Time": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [
+            {
+              "name": "Aerodynamic",
+              "match": 1,
+              "artist": {
+                "name": "Daft Punk",
+                "mbid": "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+              }
+            },
+            {
+              "name": "Digital Love",
+              "match": 0.938513,
+              "artist": {
+                "name": "Daft Punk",
+                "mbid": "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+              }
+            },
+            {
+              "name": "Music Sounds Better With You",
+              "match": 0.351264,
+              "artist": {
+                "name": "Stardust",
+                "mbid": "7b75e88a-f211-4886-8c3d-dd9d7171eee5"
+              }
+            },
+            {
+              "name": "Lady (Hear Me Tonight)",
+              "match": 0.338122,
+              "artist": {
+                "name": "Modjo",
+                "mbid": "04bac789-bf59-4383-8ad7-799d20d969f7"
+              }
+            },
+            {
+              "name": "Genesis",
+              "match": 0.240962,
+              "artist": {
+                "name": "Justice",
+                "mbid": "860b2707-6153-4e3a-aa57-74d2b42c55b5"
+              }
+            }
+          ],
+          "@attr": {
+            "artist": "Daft Punk",
+            "track": "One More Time"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Daft+Punk&autocorrect=1&format=json&method=track.getTopTags&track=One+More+Time": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "electronic",
+              "count": 100
+            },
+            {
+              "name": "dance",
+              "count": 82
+            },
+            {
+              "name": "House",
+              "count": 47
+            },
+            {
+              "name": "electronica",
+              "count": 24
+            },
+            {
+              "name": "techno",
+              "count": 11
+            },
+            {
+              "name": "Daft Punk",
+              "count": 6
+            },
+            {
+              "name": "party",
+              "count": 5
+            },
+            {
+              "name": "french",
+              "count": 2
+            },
+            {
+              "name": "french house",
+              "count": 1
+            },
+            {
+              "name": "00s",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Daft Punk",
+            "track": "One More Time"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=056e4f3e-d505-4dad-8ec1-d04f521cbb56&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "Justice",
+              "match": "1",
+              "mbid": "860b2707-6153-4e3a-aa57-74d2b42c55b5"
+            },
+            {
+              "name": "Modjo",
+              "match": "0.678702",
+              "mbid": "04bac789-bf59-4383-8ad7-799d20d969f7"
+            },
+            {
+              "name": "Stardust",
+              "match": "0.537985",
+              "mbid": "7b75e88a-f211-4886-8c3d-dd9d7171eee5"
+            },
+            {
+              "name": "Thomas Bangalter",
+              "match": "0.480992",
+              "mbid": "122a2714-24f8-4046-a532-64064b5076d2"
+            },
+            {
+              "name": "Kavinsky",
+              "match": "0.415415",
+              "mbid": "eb6de5f6-98f8-4b5a-bfdc-f87fa4936baa"
+            }
+          ],
+          "@attr": {
+            "artist": "Daft Punk"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=056e4f3e-d505-4dad-8ec1-d04f521cbb56&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "artist": {
+          "name": "Daft Punk",
+          "mbid": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+          "stats": {
+            "listeners": "6489336",
+            "playcount": "421486239"
+          },
+          "bio": {
+            "summary": "Daft Punk was a French electronic music duo formed in 1993 in Paris by Thomas Bangalter and Guy-Manuel de Homem-Christo. They became widely known in the late 1990s as part of the French house movement, incorporating elements of house, funk, disco, techno, rock, and synth-pop. The duo has been cited as influential in electronic dance music.\n\nBangalter and de Homem-Christo formed Daft Punk after their previous group, the indie rock band Darlin', disbanded. <a href=\"https://www.last.fm/music/Daft+Punk\">Read more on Last.fm</a>"
+          },
+          "tags": {
+            "tag": [
+              {
+                "name": "electronic"
+              },
+              {
+                "name": "House"
+              },
+              {
+                "name": "dance"
+              },
+              {
+                "name": "techno"
+              },
+              {
+                "name": "electronica"
+              }
+            ]
+          },
+          "similar": {
+            "artist": [
+              {
+                "name": "Justice"
+              },
+              {
+                "name": "Modjo"
+              },
+              {
+                "name": "Stardust"
+              },
+              {
+                "name": "Thomas Bangalter"
+              },
+              {
+                "name": "Kavinsky"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=056e4f3e-d505-4dad-8ec1-d04f521cbb56&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "electronic",
+              "count": 100
+            },
+            {
+              "name": "House",
+              "count": 63
+            },
+            {
+              "name": "dance",
+              "count": 36
+            },
+            {
+              "name": "techno",
+              "count": 26
+            },
+            {
+              "name": "electronica",
+              "count": 11
+            },
+            {
+              "name": "french",
+              "count": 6
+            },
+            {
+              "name": "electro",
+              "count": 2
+            },
+            {
+              "name": "french house",
+              "count": 1
+            },
+            {
+              "name": "Daft Punk",
+              "count": 1
+            },
+            {
+              "name": "Disco",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Daft Punk"
+          }
+        }
+      }
+    }
+  }
+}

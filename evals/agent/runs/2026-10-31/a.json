@@ -1,0 +1,1820 @@
+[
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbduw0000053",
+    "isrc": "GBDUW0000053",
+    "title": "One More Time",
+    "artist": "Daft Punk",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:34:26.308Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-gbduw0000053-claim-1",
+        "text": "Romanthony provides the vocals on Daft Punk’s “One More Time.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbduw0000053-claim-2",
+        "text": "“One More Time” samples Eddie Johns’s “More Spell on You.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbduw0000053-claim-3",
+        "text": "“One More Time” appears on Daft Punk’s 2001 album Discovery.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1971,
+      "outputTokens": 839,
+      "reasoningTokens": 494,
+      "usd": 0.013566
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1971,
+        "outputTokens": 839,
+        "usd": 0.013566,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbaaa9700049",
+    "isrc": "GBAAA9700049",
+    "title": "Bitter Sweet Symphony",
+    "artist": "The Verve",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:34:34.866Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-gbaaa9700049-claim-1",
+        "text": "The recording uses a loop from the Andrew Oldham Orchestra's orchestral rendition of “The Last Time.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbaaa9700049-claim-2",
+        "text": "“Bitter Sweet Symphony” appears on The Verve's 1997 album Urban Hymns.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbaaa9700049-claim-3",
+        "text": "In 2019, Mick Jagger and Keith Richards gave Richard Ashcroft their share of the song's royalties.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1972,
+      "outputTokens": 1012,
+      "reasoningTokens": 485,
+      "usd": 0.015471
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1972,
+        "outputTokens": 1012,
+        "usd": 0.015471,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usum70741299",
+    "isrc": "USUM70741299",
+    "title": "Stronger",
+    "artist": "Kanye West",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:34:45.122Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-usum70741299-claim-1",
+        "text": "Kanye West's recording of “Stronger” samples Daft Punk's “Harder, Better, Faster, Stronger.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usum70741299-claim-2",
+        "text": "“Stronger” appears on Kanye West's 2007 album Graduation.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1970,
+      "outputTokens": 924,
+      "reasoningTokens": 643,
+      "usd": 0.014498
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1970,
+        "outputTokens": 924,
+        "usd": 0.014498,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-ussb29000129",
+    "isrc": "USSB29000129",
+    "title": "Ice Ice Baby",
+    "artist": "Vanilla Ice",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:34:55.434Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Under Pressure",
+          "artist": "Queen and David Bowie"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-ussb29000129-claim-1",
+        "text": "Vanilla Ice’s recording of “Ice Ice Baby” uses the bass line from Queen and David Bowie’s “Under Pressure.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1971,
+      "outputTokens": 595,
+      "reasoningTokens": 353,
+      "usd": 0.010882
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1971,
+        "outputTokens": 595,
+        "usd": 0.010882,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usca29000294",
+    "isrc": "USCA29000294",
+    "title": "U Can't Touch This",
+    "artist": "MC Hammer",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:04.150Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Super Freak",
+          "artist": "Rick James"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-usca29000294-claim-1",
+        "text": "This recording samples Rick James’s “Super Freak.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usca29000294-claim-2",
+        "text": "“U Can't Touch This” appears on MC Hammer’s 1990 album Please Hammer Don’t Hurt ’Em.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1971,
+      "outputTokens": 657,
+      "reasoningTokens": 291,
+      "usd": 0.011564
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1971,
+        "outputTokens": 657,
+        "usd": 0.011564,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-ustb10250016",
+    "isrc": "USTB10250016",
+    "title": "Gangsta's Paradise",
+    "artist": "Coolio feat. L.V.",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:11.578Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "interpolation",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Pastime Paradise",
+          "artist": "Stevie Wonder"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-ustb10250016-claim-1",
+        "text": "Coolio’s recording of “Gangsta’s Paradise” features vocals by L.V.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-ustb10250016-claim-2",
+        "text": "“Gangsta’s Paradise” draws on Stevie Wonder’s “Pastime Paradise.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-ustb10250016-claim-3",
+        "text": "Doug Rasheed produced “Gangsta’s Paradise.”",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-ustb10250016-claim-4",
+        "text": "“Gangsta’s Paradise” appeared on the 1995 soundtrack to Dangerous Minds.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1975,
+      "outputTokens": 1019,
+      "reasoningTokens": 516,
+      "usd": 0.015554
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1975,
+        "outputTokens": 1019,
+        "usd": 0.015554,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usbb40000359",
+    "isrc": "USBB40000359",
+    "title": "Juicy",
+    "artist": "The Notorious B.I.G.",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:22.130Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Juicy Fruit",
+          "artist": "Mtume"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-usbb40000359-claim-1",
+        "text": "“Juicy” samples “Juicy Fruit” by Mtume.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usbb40000359-claim-2",
+        "text": "“Juicy” was produced by Poke of Trackmasters and Sean “Puffy” Combs.",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usbb40000359-claim-3",
+        "text": "“Juicy” appears on The Notorious B.I.G.’s 1994 debut album, Ready to Die.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1973,
+      "outputTokens": 1119,
+      "reasoningTokens": 516,
+      "usd": 0.01665
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1973,
+        "outputTokens": 1119,
+        "usd": 0.01665,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usbb40580685",
+    "isrc": "USBB40580685",
+    "title": "I'll Be Missing You",
+    "artist": "Puff Daddy & Faith Evans feat. 112",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:33.534Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Every Breath You Take",
+          "artist": "The Police"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-usbb40580685-claim-1",
+        "text": "“I'll Be Missing You” is a tribute to The Notorious B.I.G., who died in 1997.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usbb40580685-claim-2",
+        "text": "The recording samples The Police's “Every Breath You Take.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usbb40580685-claim-3",
+        "text": "The track appears on Puff Daddy's 1997 album No Way Out.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1979,
+      "outputTokens": 884,
+      "reasoningTokens": 449,
+      "usd": 0.014078
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1979,
+        "outputTokens": 884,
+        "usd": 0.014078,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-uswb10504319",
+    "isrc": "USWB10504319",
+    "title": "Hung Up",
+    "artist": "Madonna",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:41.588Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Gimme! Gimme! Gimme! (A Man After Midnight)",
+          "artist": "ABBA"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-uswb10504319-claim-1",
+        "text": "Madonna’s “Hung Up” samples ABBA’s “Gimme! Gimme! Gimme! (A Man After Midnight).”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-uswb10504319-claim-2",
+        "text": "Madonna and Stuart Price produced “Hung Up.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-uswb10504319-claim-3",
+        "text": "“Hung Up” appears on Madonna’s 2005 album Confessions on a Dance Floor.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1969,
+      "outputTokens": 1112,
+      "reasoningTokens": 344,
+      "usd": 0.016564
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1969,
+        "outputTokens": 1112,
+        "usd": 0.016564,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usir10001280",
+    "isrc": "USIR10001280",
+    "title": "Stan",
+    "artist": "Eminem feat. Dido",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:50.944Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Thank You",
+          "artist": "Dido"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-usir10001280-claim-1",
+        "text": "“Stan” samples Dido’s recording of “Thank You,” using her voice as its recurring refrain.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usir10001280-claim-2",
+        "text": "The 45 King and Eminem produced this recording of “Stan.”",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usir10001280-claim-3",
+        "text": "“Stan” appears on Eminem’s 2000 album The Marshall Mathers LP.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usir10001280-claim-4",
+        "text": "The song tells the story of an increasingly obsessive fan through messages addressed to Eminem.",
+        "about": "trivia",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1973,
+      "outputTokens": 766,
+      "reasoningTokens": 330,
+      "usd": 0.012767
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1973,
+        "outputTokens": 766,
+        "usd": 0.012767,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbbmq9800092",
+    "isrc": "GBBMQ9800092",
+    "title": "Praise You",
+    "artist": "Fatboy Slim",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:35:58.179Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Take Yo’ Praise",
+          "artist": "Camille Yarbrough"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-gbbmq9800092-claim-1",
+        "text": "Fatboy Slim’s recording of “Praise You” samples Camille Yarbrough’s “Take Yo’ Praise.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbbmq9800092-claim-2",
+        "text": "“Praise You” appears on Fatboy Slim’s 1998 album You’ve Come a Long Way, Baby.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1970,
+      "outputTokens": 923,
+      "reasoningTokens": 376,
+      "usd": 0.014487
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1970,
+        "outputTokens": 923,
+        "usd": 0.014487,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbajh9900041",
+    "isrc": "GBAJH9900041",
+    "title": "Natural Blues",
+    "artist": "Moby",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:05.763Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Trouble So Hard",
+          "artist": "Vera Hall"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-gbajh9900041-claim-1",
+        "text": "Moby's recording of “Natural Blues” samples Vera Hall's recording of “Trouble So Hard.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbajh9900041-claim-2",
+        "text": "“Natural Blues” appears on Moby's 1999 album Play.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1969,
+      "outputTokens": 902,
+      "reasoningTokens": 382,
+      "usd": 0.014254
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1969,
+        "outputTokens": 902,
+        "usd": 0.014254,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-seum71100961",
+    "isrc": "SEUM71100961",
+    "title": "Levels",
+    "artist": "Avicii",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:13.122Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Something's Got a Hold on Me",
+          "artist": "Etta James"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-seum71100961-claim-1",
+        "text": "Avicii’s “Levels” samples Etta James’s recording of “Something’s Got a Hold on Me.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-seum71100961-claim-2",
+        "text": "Avicii released “Levels” in 2011.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1968,
+      "outputTokens": 789,
+      "reasoningTokens": 516,
+      "usd": 0.013009
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1968,
+        "outputTokens": 789,
+        "usd": 0.013009,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-uswb19900178",
+    "isrc": "USWB19900178",
+    "title": "Dreams",
+    "artist": "Fleetwood Mac",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:20.170Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-uswb19900178-claim-1",
+        "text": "Stevie Nicks wrote “Dreams.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-uswb19900178-claim-2",
+        "text": "Stevie Nicks sings lead on Fleetwood Mac’s recording of “Dreams.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-uswb19900178-claim-3",
+        "text": "“Dreams” appears on Fleetwood Mac’s 1977 album Rumours.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1970,
+      "outputTokens": 600,
+      "reasoningTokens": 308,
+      "usd": 0.010934
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1970,
+        "outputTokens": 600,
+        "usd": 0.010934,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-ussm18200463",
+    "isrc": "USSM18200463",
+    "title": "Africa",
+    "artist": "Toto",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:26.492Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Africa",
+          "artist": "Weezer"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-ussm18200463-claim-1",
+        "text": "“Africa” was written by David Paich and Jeff Porcaro.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-ussm18200463-claim-2",
+        "text": "“Africa” appears on Toto’s 1982 album Toto IV.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-ussm18200463-claim-3",
+        "text": "Weezer released a cover of “Africa” in 2018.",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1968,
+      "outputTokens": 629,
+      "reasoningTokens": 283,
+      "usd": 0.011249
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1968,
+        "outputTokens": 629,
+        "usd": 0.011249,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbcnr8500002",
+    "isrc": "GBCNR8500002",
+    "title": "Running Up That Hill (A Deal With God)",
+    "artist": "Kate Bush",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:33.499Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Running Up That Hill",
+          "artist": "Placebo"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-gbcnr8500002-claim-1",
+        "text": "Kate Bush wrote “Running Up That Hill (A Deal With God).”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbcnr8500002-claim-2",
+        "text": "Kate Bush produced her recording of the song.",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbcnr8500002-claim-3",
+        "text": "The song appears on Kate Bush’s 1985 album Hounds of Love.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbcnr8500002-claim-4",
+        "text": "Placebo released a cover of the song in 2003.",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbcnr8500002-claim-5",
+        "text": "Bush’s recording featured prominently in the fourth season of Stranger Things in 2022.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1977,
+      "outputTokens": 1149,
+      "reasoningTokens": 613,
+      "usd": 0.016989
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1977,
+        "outputTokens": 1149,
+        "usd": 0.016989,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-auum71500303",
+    "isrc": "AUUM71500303",
+    "title": "The Less I Know the Better",
+    "artist": "Tame Impala",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:45.666Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-auum71500303-claim-1",
+        "text": "Kevin Parker wrote the song.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-auum71500303-claim-2",
+        "text": "Kevin Parker produced Tame Impala’s recording.",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-auum71500303-claim-3",
+        "text": "The track appears on Tame Impala’s 2015 album Currents.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-auum71500303-claim-4",
+        "text": "A prominent bass riff drives the recording.",
+        "about": "sound",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1975,
+      "outputTokens": 503,
+      "reasoningTokens": 197,
+      "usd": 0.009878
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1975,
+        "outputTokens": 503,
+        "usd": 0.009878,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-uswb19901214",
+    "isrc": "USWB19901214",
+    "title": "Take On Me",
+    "artist": "a-ha",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:36:57.856Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-uswb19901214-claim-1",
+        "text": "“Take On Me” was written by a-ha members Magne Furuholmen, Pål Waaktaar and Morten Harket.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-uswb19901214-claim-2",
+        "text": "The song’s 1985 music video was directed by Steve Barron and combines live action with pencil-sketch animation.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1970,
+      "outputTokens": 849,
+      "reasoningTokens": 516,
+      "usd": 0.013673
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1970,
+        "outputTokens": 849,
+        "usd": 0.013673,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usdj20200650",
+    "isrc": "USDJ20200650",
+    "title": "Hurt",
+    "artist": "Johnny Cash",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:09.937Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Hurt",
+          "artist": "Nine Inch Nails"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-usdj20200650-claim-1",
+        "text": "Johnny Cash's “Hurt” is a cover of a song written by Trent Reznor and first recorded by Nine Inch Nails.",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usdj20200650-claim-2",
+        "text": "Nine Inch Nails' recording appeared on the 1994 album The Downward Spiral.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usdj20200650-claim-3",
+        "text": "Cash's recording appeared on the 2002 album American IV: The Man Comes Around.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usdj20200650-claim-4",
+        "text": "Mark Romanek directed the music video for Cash's recording.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1969,
+      "outputTokens": 1090,
+      "reasoningTokens": 417,
+      "usd": 0.016322
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1969,
+        "outputTokens": 1090,
+        "usd": 0.016322,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-gbaht0600202",
+    "isrc": "GBAHT0600202",
+    "title": "Crazy",
+    "artist": "Gnarls Barkley",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:19.318Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "Last Men Standing",
+          "artist": "Gianfranco Reverberi & Gian Piero Reverberi"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-gbaht0600202-claim-1",
+        "text": "Danger Mouse produced Gnarls Barkley’s recording of “Crazy.”",
+        "about": "production",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbaht0600202-claim-2",
+        "text": "CeeLo Green sings the lead vocal on the recording.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbaht0600202-claim-3",
+        "text": "The recording samples “Last Men Standing” by Gianfranco Reverberi and Gian Piero Reverberi.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-gbaht0600202-claim-4",
+        "text": "“Crazy” appears on Gnarls Barkley’s 2006 album St. Elsewhere.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1971,
+      "outputTokens": 1290,
+      "reasoningTokens": 566,
+      "usd": 0.018527
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1971,
+        "outputTokens": 1290,
+        "usd": 0.018527,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-jpp301900716",
+    "isrc": "JPP301900716",
+    "title": "夜に駆ける",
+    "artist": "YOASOBI",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:28.203Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-jpp301900716-claim-1",
+        "text": "Ayase wrote and composed “夜に駆ける.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-jpp301900716-claim-2",
+        "text": "The song is based on Mayo Hoshino’s short story “Thanatos no Yūwaku.”",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-jpp301900716-claim-3",
+        "text": "Ikura sings the lead vocal on YOASOBI’s recording.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1975,
+      "outputTokens": 633,
+      "reasoningTokens": 315,
+      "usd": 0.011308
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1975,
+        "outputTokens": 633,
+        "usd": 0.011308,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-usum71210283",
+    "isrc": "USUM71210283",
+    "title": "Gangnam Style (강남스타일)",
+    "artist": "PSY",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:34.458Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-usum71210283-claim-1",
+        "text": "PSY released “Gangnam Style” in 2012.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usum71210283-claim-2",
+        "text": "PSY and Yoo Gun-hyung wrote “Gangnam Style.”",
+        "about": "credit",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usum71210283-claim-3",
+        "text": "The song appears on PSY’s 2012 release Psy 6 (Six Rules), Part 1.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-usum71210283-claim-4",
+        "text": "Its music video became the first YouTube video to reach one billion views.",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1976,
+      "outputTokens": 905,
+      "reasoningTokens": 318,
+      "usd": 0.014303
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1976,
+        "outputTokens": 905,
+        "usd": 0.014303,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-fr10f1200080",
+    "isrc": "FR10F1200080",
+    "title": "More Spell on You",
+    "artist": "Eddie Johns",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:44.620Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "target": {
+          "title": "One More Time",
+          "artist": "Daft Punk"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "eval-baseline-fr10f1200080-claim-1",
+        "text": "Daft Punk sampled Eddie Johns’ recording of “More Spell on You” in “One More Time.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1972,
+      "outputTokens": 484,
+      "reasoningTokens": 220,
+      "usd": 0.009663
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1972,
+        "outputTokens": 484,
+        "usd": 0.009663,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "eval-baseline-qm4tx1779716",
+    "isrc": "QM4TX1779716",
+    "title": "Amen, Brother",
+    "artist": "The Winstons",
+    "ablation": "a",
+    "repeat": 0,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:37:48.998Z",
+    "outcome": "complete",
+    "identity": null,
+    "clarification": null,
+    "preview": null,
+    "evidence": [],
+    "edges": [],
+    "claims": [
+      {
+        "id": "eval-baseline-qm4tx1779716-claim-1",
+        "text": "The Winstons released “Amen, Brother” as the B-side of their 1969 single “Color Him Father.”",
+        "about": "history",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-qm4tx1779716-claim-2",
+        "text": "G. C. Coleman’s drum solo in this recording became known as the Amen break.",
+        "about": "sound",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "eval-baseline-qm4tx1779716-claim-3",
+        "text": "The Amen break has been sampled extensively in hip-hop, jungle and drum and bass.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 1,
+      "deployment": "gpt-6-sol",
+      "inputTokens": 1972,
+      "outputTokens": 885,
+      "reasoningTokens": 398,
+      "usd": 0.014074
+    },
+    "calls": [
+      {
+        "callSite": "eval-baseline",
+        "tier": "research",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1972,
+        "outputTokens": 885,
+        "usd": 0.014074,
+        "status": "ok",
+        "purpose": "eval:baseline"
+      }
+    ]
+  }
+]

@@ -2,12 +2,19 @@
 
 How the agent itself is measured: whether it finds the samples gold documents, how often it
 invents them, and whether the verifier catches false statements. This directory holds the
-offline half: the scorer, the report and its checker, the perturbation set and its checks. None
-of it makes a model call or a network request.
+scorer, the report and its checker, the perturbation set and its checks, which make no model
+call and no network request, and the harnesses that record the golden run through the app
+(`run.mjs`, `baseline.mjs`, `perturb-judge.mjs`), which do, and replay it from cassettes, which
+do not.
 
 ```
 evals/agent/
   eval.mjs            npm run eval -- --suite agent --mode replay|live --subset ci|all
+  run.mjs             the pipeline through the API: live (record), replay, rebuild records
+  baseline.mjs        ablation (a): the composer's prompt alone, live or replayed
+  perturb-judge.mjs   the app's judge on the claim cases of evals/perturb.jsonl
+  assemble.mjs        gathers a live run's per-track files into one run-record directory
+  spend.mjs           the spend log by purpose, against the caps, and what the records name
   report.mjs          npm run eval:table -- --runs <dir>: the report from run records
   check-report.mjs    renders a report again from its run records and checks it
   make-perturb.mjs    writes evals/perturb.jsonl from fixtures/replays at a fixed seed
@@ -17,6 +24,12 @@ evals/agent/
   lib/score.mjs       edge matching, held-out exclusion, hallucination, pipeline metrics
   lib/support.mjs     the deterministic support check (claim text against cited excerpts)
   lib/stats.mjs       Wilson intervals, seeded bootstrap, Jaccard
+  lib/extras.mjs      models, cost per tier, source errors, sourced claims, the verifier as a classifier
+  lib/record.mjs      run records from the API's event stream (rows b, c and d of one run)
+  lib/api.mjs         starts the API with pinned settings and runs one analysis
+  lib/app.mjs         loads the app's TypeScript modules (tsx), one namespace
+  lib/inproc.mjs      the app's model layer in this process (baseline, judge)
+  runs/<date>/        the committed run records of a golden run (a-d, d-repeat, perturb/)
   testdata/           synthetic runs and reports for the tests (make-testdata.mjs writes them)
   *.test.mjs          node --test 'evals/**/*.test.mjs'
 ```
@@ -89,7 +102,12 @@ node evals/agent/check-report.mjs evals/reports/agent-latest.md
 
 The report states the dataset and the golden file's sha256, the run records it was rendered
 from, the date, the commit, n and a 95 % interval for every value, the clarification rate,
-ablation rows a-d, and held-out n after the exclusion. Gold is described by its sources and
+ablation rows a-d, and held-out n after the exclusion. From records of the live harness (they
+carry their spend lines) it also states the models that wrote and judged and that no second
+judge exists, the cost per model tier, the source-error rate and each source's errors, the
+claims each row shows as sourced (row a: 0 by construction), and, from the judge record in
+`<runs>/perturb/`, the verifier as a classifier: false-positive and catch rates overall, per
+positive source and per mutation, the model-positive pool and the audit of the model positives. Gold is described by its sources and
 their retrieval dates; no label is described as made by people, because none was. A report
 rendered from records marked `"synthetic": true` says so at the top.
 
@@ -122,9 +140,51 @@ with its `synthetic` flag removed and a real commit set. Where
 the records come from is shown by the golden run's own trail (its cassettes and spend log), not
 by this check.
 
-`npm run eval -- --suite agent --mode replay --subset ci|all` scores the records in
-`evals/agent/runs` on the CI subset (six rows, `CI_SUBSET` in `lib/golden.mjs`) or the whole live
-subset; `--runs <dir>` scores another directory. `--mode live` is refused.
+`npm run eval -- --suite agent --mode replay --subset ci|all` replays the subset (six rows,
+`CI_SUBSET` in `lib/golden.mjs`, or the whole live subset) through the API: one API process per
+row, with dummy keys, the recorded answers of `fixtures/cassettes/llm/golden/<isrc>` and
+`fixtures/cassettes/sources/golden/<isrc>` (the audio block is `audio.json` there), and
+`tests/deny-network.mjs` loaded in each. Rows b, c and d of every replayed run must equal the
+committed records of the newest directory under `evals/agent/runs`, with 0 outbound attempts
+and 0 spend lines; then it prints the report of those records. A difference exits 1 and says
+how to record again (a change to a prompt, a schema, a tier or an output cap makes the recorded
+answers misses). A source the recorded run had no credential for is replayed as not configured
+(the cassette directory's `credentials.json`). Only the CI subset's cassettes are committed, so
+`--subset all` fails on the other rows, naming each. `--runs <dir>` uses
+another directory; `--score-only` scores the records with no replay (the synthetic test data has
+no cassettes). CI runs the CI subset with the network denied.
+
+## Recording the golden run
+
+Live runs call the model and the sources, so they spend: each call is a line of the spend log,
+under its purpose, within the app's caps (`BUDGET_*`). Run them from a clean commit (the
+harnesses refuse uncommitted changes; the records carry the commit) with the audio service up,
+and write outside the checkout:
+
+```sh
+node evals/agent/run.mjs --mode live --suite golden --subset all \
+  --out <dir> --cassettes <dir> --db <file> --spend-log <file>          # eval:golden
+node evals/agent/run.mjs --mode live --suite variance --subset ci \
+  --out <dir> --cassettes <dir> --db <file> --spend-log <file>          # eval:variance, repeat 1
+node evals/agent/baseline.mjs --mode live --subset all \
+  --out <dir> --cassettes <dir> --spend-log <file>                      # eval:baseline, row a
+node evals/agent/perturb-judge.mjs --mode live \
+  --cassettes <dir> --spend-log <file> --out <file>                     # eval:perturb
+node evals/agent/assemble.mjs --golden <out>/golden --variance <out>/variance \
+  --baseline <out>/baseline --to evals/agent/runs/<date>
+node evals/agent/spend.mjs --log <file>                                  # spend by purpose
+```
+
+Then copy the judge record to `evals/agent/runs/<date>/perturb/judge.json` with the audit of
+its model positives beside it (`audit.json`), the cassettes of the CI subset to
+`fixtures/cassettes/{llm,sources}/golden/<isrc>`, the baseline's to
+`fixtures/cassettes/llm/baseline` and the judge's to `fixtures/cassettes/llm/perturb`, and
+render the report. Each run answers the clarification step with the top-ranked candidate. A run
+with source errors is kept and counted (the report gives the source-error rate); a run is
+repeated only after an infrastructure failure of the harness, at most once, and the repeat is
+logged. `--mode rebuild` re-derives a directory's records from the event streams the live run
+kept, with no call. The baseline is never judged: its model is the judge's. `docs/failures.md`
+describes the unmatched edges of the committed run.
 
 ## The perturbation set
 
@@ -132,7 +192,7 @@ subset; `--runs <dir>` scores another directory. `--mode live` is refused.
 
 ```sh
 node evals/agent/make-perturb.mjs        # rewrite it (same bytes every time)
-node evals/agent/perturb-check.mjs       # numeric part through checkNumbers; judge part pending
+node evals/agent/perturb-check.mjs       # numeric part through checkNumbers; the judge replayed
 node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
                                          # blind labelling sheet; the key kept apart
 ```
@@ -149,8 +209,9 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   sentence (not, never, wrongly, supposedly, planned, going to…), or one that names nothing,
   states no year and no relation, or names nothing after its relation, is not supported. The
   check is a conservative heuristic over English sentences, not a reader: it refuses some
-  supported claims, and the golden run reads every model positive by hand before a report built
-  on the set is published. Each positive gets
+  supported claims. Every model claim that cites evidence was read against its excerpts before
+  the judge ran on the set (`runs/<date>/perturb/audit.json`, in the report), the refused ones
+  included. Each positive gets
   two mutations that its excerpts do not support (unsupported by the cited excerpts, which is
   not the same as false): another real title or artist (from a MusicBrainz excerpt or another
   recording's own title and artist), another year, the roles swapped, another relation (sample
@@ -178,6 +239,11 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   exits 1 when any case gives another result than it expects. It prints, separately for the
   measured tempo blocks and the synthetic ones, how many equivalents and estimator errors were
   rejected (0), how many false values were rejected, and how many were shown both by design.
+  It then replays the app's judge on the claim cases from `fixtures/cassettes/llm/perturb` and
+  exits 1 unless every verdict is the committed record's, no spend line is written and the
+  record was made on this perturbation set; it prints the false-positive rate (positives
+  rejected) and the catch rate (mutations rejected) overall, per positive source and per
+  mutation. A case is rejected when its verdict would not show it as sourced, by the app's rule.
 - The CSV from `export-labels.mjs` has no verdict, label or mutation column and a shuffled
   order. Each row's `label_id` is an HMAC-SHA256 of the case id under a salt (random unless
   `--salt` is given), so ids and order cannot be recomputed from the committed set. The salt
@@ -185,12 +251,8 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   CSV or anywhere in the repository (the CLI refuses both); keep it away from whoever labels.
 - The generator sorts by code point, so its output is the same bytes in every locale.
 
-## Pending until the live golden run
+## Pending
 
-- Recorded run records (`evals/agent/runs/`) and the cassettes `--mode replay` re-runs the
-  pipeline from; until then replay exits 1 with "no recorded runs".
-- `--mode live`, the model-only baseline (a) and the variance re-runs.
-- The judge's part of `perturb-check.mjs` (a judge recording of the claim cases), and the
-  verifier-as-classifier table with false-positive rates per positive source.
 - The agreement table: no labels from people exist yet.
-- A committed `evals/reports/agent-*.md`; only test data is committed today.
+- A second judge from another model family: the app's Gemini provider refuses every call, so
+  every verdict comes from one judge model.

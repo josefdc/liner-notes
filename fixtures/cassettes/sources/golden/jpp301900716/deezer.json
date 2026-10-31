@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:JPP301900716": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 824731152,
+        "title": "夜に駆ける",
+        "title_version": "",
+        "readable": true,
+        "isrc": "JPP301900716",
+        "duration": 261,
+        "artist": {
+          "id": 108153772,
+          "name": "YOASOBI"
+        },
+        "album": {
+          "id": 121611042,
+          "title": "夜に駆ける"
+        }
+      }
+    }
+  }
+}

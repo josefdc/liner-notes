@@ -1,0 +1,448 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.spotify.com/v1/search?limit=1&q=Bitter+Sweet+Symphony+%28James+Lavelle+remix%29+-+The+Verve&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "3WJda8UikeLgJgEbm2tIF7",
+              "name": "Bitter Sweet Symphony - James Lavelle Remix",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                },
+                {
+                  "id": "3QvyLNQBqeJXW4ujagJVjZ",
+                  "name": "James Lavelle"
+                }
+              ],
+              "album": {
+                "name": "Urban Hymns (Super Deluxe / Remastered 2016)",
+                "release_date": "1997-09-29"
+              },
+              "duration_ms": 351573,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3WJda8UikeLgJgEbm2tIF7"
+              },
+              "external_ids": {
+                "isrc": "GBAAA9710586"
+              }
+            }
+          ],
+          "total": 294
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=Bittersweet+Genesis+%28Problemaddicts+vs+The+Verve%29+-+DJ+Nerd42&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "1WYEDcS7WGjv0rG7rmMX3o",
+              "name": "Bitter Sweet Symphony",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "This Is Music: The Singles 92-98",
+                "release_date": "2004-01-01"
+              },
+              "duration_ms": 359546,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1WYEDcS7WGjv0rG7rmMX3o"
+              },
+              "external_ids": {
+                "isrc": "GBAAA0400535"
+              }
+            }
+          ],
+          "total": 292
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=Juicy+Cuts+7+-+Juicy+Cuts&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "1X1Yq0AheXeavki64AsbDU",
+              "name": "7A",
+              "artists": [
+                {
+                  "id": "23yktNQlmwET2Wjn6VHmd7",
+                  "name": "Juicy Cuts"
+                }
+              ],
+              "album": {
+                "name": "Complete Anthology",
+                "release_date": "2023-01-05"
+              },
+              "duration_ms": 339330,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1X1Yq0AheXeavki64AsbDU"
+              },
+              "external_ids": {
+                "isrc": "UKT6B2200613"
+              }
+            }
+          ],
+          "total": 409
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=Once+Again+-+Girl+Talk&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "70PTpJAzYS18OxdNVoO5hs",
+              "name": "Once Again",
+              "artists": [
+                {
+                  "id": "6awzBEyEEwWHOjLox1DkLr",
+                  "name": "Girl Talk"
+                }
+              ],
+              "album": {
+                "name": "Night Ripper",
+                "release_date": "2006-05-09"
+              },
+              "duration_ms": 160106,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/70PTpJAzYS18OxdNVoO5hs"
+              },
+              "external_ids": {
+                "isrc": "USTC60835100"
+              }
+            }
+          ],
+          "total": 1000
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=The+Last+Time+-+The+Andrew+Oldham+Orchestra&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "7wLtyMDljwAziOVC9d3FOh",
+              "name": "The Last Time",
+              "artists": [
+                {
+                  "id": "3bT1LHMk4k4U4vGpVB17fQ",
+                  "name": "Andrew Oldham Orchestra"
+                }
+              ],
+              "album": {
+                "name": "The Rolling Stones Songbook",
+                "release_date": "1966-01-01"
+              },
+              "duration_ms": 226586,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/7wLtyMDljwAziOVC9d3FOh"
+              },
+              "external_ids": {
+                "isrc": "GBBBA6672510"
+              }
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=10&q=Bitter+Sweet+Symphony+The+Verve&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "57iDDD9N9tTWe75x6qhStw",
+              "name": "Bitter Sweet Symphony - Remastered 2016",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "Urban Hymns (Remastered 2016)",
+                "release_date": "1997-09-29"
+              },
+              "duration_ms": 357266,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/57iDDD9N9tTWe75x6qhStw"
+              },
+              "external_ids": {
+                "isrc": "GBUM71601816"
+              }
+            },
+            {
+              "id": "1WYEDcS7WGjv0rG7rmMX3o",
+              "name": "Bitter Sweet Symphony",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "This Is Music: The Singles 92-98",
+                "release_date": "2004-01-01"
+              },
+              "duration_ms": 359546,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1WYEDcS7WGjv0rG7rmMX3o"
+              },
+              "external_ids": {
+                "isrc": "GBAAA0400535"
+              }
+            },
+            {
+              "id": "1KkP6yoIZ6bKfPCwP4KqFW",
+              "name": "Bitter Sweet Symphony - Extended Version",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "Urban Hymns (Super Deluxe / Remastered 2016)",
+                "release_date": "1997-09-29"
+              },
+              "duration_ms": 469733,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1KkP6yoIZ6bKfPCwP4KqFW"
+              },
+              "external_ids": {
+                "isrc": "GBAAA9710584"
+              }
+            },
+            {
+              "id": "1ab6cdcthC2BQtIQfwHryp",
+              "name": "Bitter Sweet Symphony - Radio Edit",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "¡Finally Summertime! (90's)",
+                "release_date": "2023-07-14"
+              },
+              "duration_ms": 275093,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1ab6cdcthC2BQtIQfwHryp"
+              },
+              "external_ids": {
+                "isrc": "GBAAA9710468"
+              }
+            },
+            {
+              "id": "611VQHSh437pAxT4GCinNA",
+              "name": "Bitter Sweet Symphony",
+              "artists": [
+                {
+                  "id": "6Wpf8eQr1u72GJuiNN7BhR",
+                  "name": "EZ X"
+                }
+              ],
+              "album": {
+                "name": "Bitter Sweet Symphony",
+                "release_date": "2024-10-30"
+              },
+              "duration_ms": 153290,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/611VQHSh437pAxT4GCinNA"
+              },
+              "external_ids": {
+                "isrc": "CAGOO2459487"
+              }
+            },
+            {
+              "id": "0Dmao2oWlAZzIBX2Q1B5AH",
+              "name": "Bitter Sweet Symphony - Remastered 2016",
+              "artists": [
+                {
+                  "id": "2cGwlqi3k18jFpUyTrsR84",
+                  "name": "The Verve"
+                }
+              ],
+              "album": {
+                "name": "Urban Hymns (Super Deluxe / Remastered 2016)",
+                "release_date": "1997-09-29"
+              },
+              "duration_ms": 357266,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0Dmao2oWlAZzIBX2Q1B5AH"
+              },
+              "external_ids": {
+                "isrc": "GBUM71601816"
+              }
+            },
+            {
+              "id": "0Gp23ds4JDUwan98IfNNL5",
+              "name": "Bittersweet Symphony",
+              "artists": [
+                {
+                  "id": "6HQ6vf4AloXyVNdyJhrX1J",
+                  "name": "GAMPER & DADONI"
+                },
+                {
+                  "id": "3RBqLTttwN1orqQozYfmJo",
+                  "name": "Emily Roberts"
+                }
+              ],
+              "album": {
+                "name": "REVIVE",
+                "release_date": "2024-11-22"
+              },
+              "duration_ms": 194618,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0Gp23ds4JDUwan98IfNNL5"
+              },
+              "external_ids": {
+                "isrc": "NLQ8X1700046"
+              }
+            },
+            {
+              "id": "0LwUWpHBnNfuOVbMsv7EDR",
+              "name": "Strung Out",
+              "artists": [
+                {
+                  "id": "2jAzx88tHo3KNYauXANisl",
+                  "name": "Yellow House"
+                }
+              ],
+              "album": {
+                "name": "Sermon on Desire",
+                "release_date": "2018-05-18"
+              },
+              "duration_ms": 186750,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0LwUWpHBnNfuOVbMsv7EDR"
+              },
+              "external_ids": {
+                "isrc": "TCADQ1802933"
+              }
+            },
+            {
+              "id": "4y3g40TWe7fCWCayJZuGvw",
+              "name": "Good In Goodbye",
+              "artists": [
+                {
+                  "id": "2kRfqPViCqYdSGhYSM9R0Q",
+                  "name": "Madison Beer"
+                }
+              ],
+              "album": {
+                "name": "Life Support",
+                "release_date": "2021-02-26"
+              },
+              "duration_ms": 142571,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/4y3g40TWe7fCWCayJZuGvw"
+              },
+              "external_ids": {
+                "isrc": "USSM11905845"
+              }
+            },
+            {
+              "id": "42XU1hv5S3q6yGu9R3xwIw",
+              "name": "The Sweetest Symphony - Naava Remix",
+              "artists": [
+                {
+                  "id": "72pJ6h8ZR3sS8S1vzv1SQE",
+                  "name": "Amfree"
+                },
+                {
+                  "id": "6VRcxtpUpUvELmzBz1UANe",
+                  "name": "Naava"
+                }
+              ],
+              "album": {
+                "name": "The Sweetest Symphony",
+                "release_date": "2015-10-02"
+              },
+              "duration_ms": 261031,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/42XU1hv5S3q6yGu9R3xwIw"
+              },
+              "external_ids": {
+                "isrc": "DEN061501433"
+              }
+            }
+          ],
+          "total": 18
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/tracks/0Dmao2oWlAZzIBX2Q1B5AH": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "0Dmao2oWlAZzIBX2Q1B5AH",
+        "name": "Bitter Sweet Symphony - Remastered 2016",
+        "artists": [
+          {
+            "id": "2cGwlqi3k18jFpUyTrsR84",
+            "name": "The Verve"
+          }
+        ],
+        "album": {
+          "name": "Urban Hymns (Super Deluxe / Remastered 2016)",
+          "release_date": "1997-09-29"
+        },
+        "duration_ms": 357266,
+        "explicit": false,
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/0Dmao2oWlAZzIBX2Q1B5AH"
+        },
+        "external_ids": {
+          "isrc": "GBUM71601816"
+        }
+      }
+    },
+    "POST https://accounts.spotify.com/api/token #c349b29ae2fc682a": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "access_token": "[redacted]",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  }
+}

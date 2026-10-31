@@ -11,11 +11,12 @@ evals/
   perturb.jsonl                 the verifier's perturbation set, generated from the
                                 recorded runs (agent/make-perturb.mjs)
   agent/                        agent evals: scorer, report and its checker, perturbation
-                                checks (Node; no network, no model); see agent/README.md
+                                checks, the live harnesses and their replay (Node); see
+                                agent/README.md
   scripts/summary.mjs           prints the counts that describe the set
   scripts/coverage.mjs          Deezer preview coverage check (Node >= 20, no dependencies)
   scripts/coverage.test.mjs     tests for the coverage matcher and input checks
-  reports/                      dated reports: preview coverage, audio accuracy
+  reports/                      dated reports: preview coverage, audio accuracy, agent evals
   audio/                        audio accuracy harness (Python, uv): tempo and key
                                 on annotated datasets, the estimator bake-off, and
                                 agreement and style hit@k on this set's Deezer

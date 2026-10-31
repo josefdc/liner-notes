@@ -70,8 +70,10 @@ export const SOURCE_CREDENTIALS = {
 };
 
 export const RE_RECORD =
-  "re-record: `npm run eval -- --suite agent --mode live --subset ci`, purpose eval:golden " +
-  "(a change to a prompt, a schema, a tier or an output cap makes the recorded answers misses)";
+  "re-record: `npm run eval -- --suite agent --mode live --subset ci --out <dir> --cassettes <dir> " +
+  "--db <file> --spend-log <file>`, purpose eval:golden, then gather the records with " +
+  'evals/agent/assemble.mjs and copy the cassettes (evals/agent/README.md, "Recording the golden ' +
+  'run"); a change to a prompt, a schema, a tier or an output cap makes the recorded answers misses';
 
 function parseArgs(argv) {
   const opts = { subset: "all", suite: "golden", force: false };

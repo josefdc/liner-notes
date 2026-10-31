@@ -20,7 +20,13 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { checkCells, checkReport, MADE_BY_PEOPLE } from "./check-report.mjs";
+import {
+  checkCells,
+  checkPublishedStatements,
+  checkReport,
+  MADE_BY_PEOPLE,
+  parseReport,
+} from "./check-report.mjs";
 import { escapeMd, statCells } from "./report.mjs";
 import { testdataFiles } from "./testdata/make-testdata.mjs";
 
@@ -141,9 +147,11 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
   }).stdout.trim();
   const dir = mkdtempSync(join(tmpdir(), "agent-published-"));
   try {
-    // Real-looking records: the test runs without the synthetic flag, at the current commit.
+    // Real-looking records: the test runs without the synthetic flag, at the current commit,
+    // with a spend line and the source errors as the live harness records them.
     const runs = join(dir, "runs");
     mkdirSync(runs);
+    const call = { tier: "main", deployment: "test", usd: 0, inputTokens: 0, outputTokens: 0 };
     for (const name of [
       "ablation-a.json",
       "ablation-b.json",
@@ -151,7 +159,7 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
       "ablation-d.json",
     ]) {
       const records = JSON.parse(readFileSync(join(TESTDATA, "runs", name), "utf8")).map(
-        ({ synthetic, ...r }) => ({ ...r, commit: head }),
+        ({ synthetic, ...r }) => ({ ...r, commit: head, calls: [call], sourceErrors: [] }),
       );
       writeFileSync(join(runs, name), JSON.stringify(records));
     }
@@ -435,4 +443,32 @@ test("eval:table renders the test runs; --out writes the dated report, its JSON 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("the published report passes, and names its models, source errors and classifier", async () => {
+  const path = join(ROOT, "evals", "reports", "agent-latest.md");
+  assert.deepEqual(await checkReport(path), []);
+  const md = readFileSync(path, "utf8");
+  const statements = (text) => {
+    const problems = [];
+    checkPublishedStatements(text, parseReport(text), problems);
+    return problems;
+  };
+  assert.deepEqual(statements(md), []);
+  const cut = (pattern) => md.replace(pattern, "");
+  assert.deepEqual(statements(cut(/^- \*\*Second judge\*\*: .*\n/m)), [
+    "header: the second judge, or that there is none",
+  ]);
+  assert.deepEqual(statements(cut(/^\| runs with at least one source error.*\n/m)), [
+    "the source-error rate",
+  ]);
+  assert.deepEqual(statements(cut(/^\| mutations of code positives rejected.*\n/m)), [
+    "the verifier's catch rate for code positives",
+  ]);
+  assert.deepEqual(statements(cut(/^Model-positive pool: .*\n/m)), [
+    "the model-positive pool size",
+  ]);
+  assert.deepEqual(statements(cut(/^### Audit of the model positives\n/m)), [
+    "the audit of the model positives, or that it is pending",
+  ]);
 });

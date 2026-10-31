@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:USDJ20200650": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 3063200,
+        "title": "Hurt",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USDJ20200650",
+        "duration": 216,
+        "artist": {
+          "id": 405,
+          "name": "Johnny Cash"
+        },
+        "album": {
+          "id": 294538,
+          "title": "Unearthed"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:USIR19400538": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 1173969,
+        "title": "Hurt",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USIR19400538",
+        "duration": 375,
+        "artist": {
+          "id": 407,
+          "name": "Nine Inch Nails"
+        },
+        "album": {
+          "id": 125584,
+          "title": "The Downward Spiral"
+        }
+      }
+    }
+  }
+}

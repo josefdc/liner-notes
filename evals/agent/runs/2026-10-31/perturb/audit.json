@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "perturb": "evals/perturb.jsonl",
+  "method": "Each model claim of the recordings that cites evidence was read against the excerpts it cites, before the judge was run on the set. 'stated' means every part of the claim is in a cited excerpt; nothing else was consulted.",
+  "positives": [
+    { "id": "bitter-sweet-symphony-the-verve:179574d5", "stated": true, "note": "\"June 1, 1997\" is the excerpt's first release date 1997-06-01." },
+    { "id": "bitter-sweet-symphony-the-verve:f67d7102", "stated": true, "note": "The excerpt says the work is covered by Coldplay feat. Richard Ashcroft." },
+    { "id": "juicy-the-notorious-big:1901e816", "stated": true, "note": "\"September 13, 1994\" is the excerpt's first release date 1994-09-13." },
+    { "id": "juicy-the-notorious-big:49a56b45", "stated": true, "note": "The excerpt says Juicy samples \"Rappin' Duke (vocal)\" by The Rappin' Duke." },
+    { "id": "juicy-the-notorious-big:f3a2ae6f", "stated": true, "note": "The excerpt says Juicy samples \"Juicy Fruit\" by Mtume." },
+    { "id": "one-more-time-daft-punk:3cbb3e61", "stated": true, "note": "The excerpt gives the first release as 2000." },
+    { "id": "one-more-time-daft-punk:78acfe08", "stated": true, "note": "The excerpt says One More Time samples \"More Spell on You\" by Eddie Johns." }
+  ],
+  "refused": [
+    { "id": "bitter-sweet-symphony-the-verve:71a2da2e", "stated": false, "note": "The first sentence is in the excerpt; the second (the arrangement \"described in the source material\") is not in any cited excerpt." },
+    { "id": "bitter-sweet-symphony-the-verve:824ae39c", "stated": true, "note": "The excerpt says the work is covered by Coldplay feat. Richard Ashcroft; the claim says so as \"a version of the song … as a cover\" and names no quoted title, which the check needs." },
+    { "id": "hung-up-madonna:e6b2b34e", "stated": true, "note": "Each remixer is named in a cited remix title; the check reads a name inside a quoted title as part of the title, and one sentence spans three excerpts." },
+    { "id": "juicy-the-notorious-big:117ba937", "stated": true, "note": "Each of the four recordings is in a cited excerpt; one sentence lists them across four excerpts, in a possessive form (\"Jay-Z's 'A Dream'\")." },
+    { "id": "juicy-the-notorious-big:5ed3b846", "stated": true, "note": "Each of the three recordings is in a cited excerpt; one sentence lists them across three excerpts, in a possessive form." }
+  ]
+}

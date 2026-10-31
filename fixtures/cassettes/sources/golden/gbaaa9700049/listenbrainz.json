@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://labs.api.listenbrainz.org/similar-artists/json?algorithm=session_based_days_7500_session_300_contribution_5_threshold_10_limit_100_filter_True_skip_30&artist_mbids=d4d17620-fd97-4574-92a8-a2cb7e72ce42": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": [
+        {
+          "artist_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "name": "Radiohead",
+          "score": 5515
+        },
+        {
+          "artist_mbid": "39ab1aed-75e0-4140-bd47-540276886b60",
+          "name": "Oasis",
+          "score": 4776
+        },
+        {
+          "artist_mbid": "ba853904-ae25-4ebb-89d6-c44cfbd71bd2",
+          "name": "Blur",
+          "score": 4053
+        },
+        {
+          "artist_mbid": "cc197bad-dc9c-440d-a5b5-d52ba2e14234",
+          "name": "Coldplay",
+          "score": 4019
+        },
+        {
+          "artist_mbid": "8bfac288-ccc5-448d-9573-c33ea2aa5c30",
+          "name": "Red Hot Chili Peppers",
+          "score": 3946
+        },
+        {
+          "artist_mbid": "ea4dfa26-f633-4da6-a52a-f49ea4897b58",
+          "name": "R.E.M.",
+          "score": 3700
+        },
+        {
+          "artist_mbid": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+          "name": "Nirvana",
+          "score": 3654
+        },
+        {
+          "artist_mbid": "ba0d6274-db14-4ef5-b28d-657ebde1a396",
+          "name": "The Smashing Pumpkins",
+          "score": 3514
+        },
+        {
+          "artist_mbid": "9c9f1380-2516-4fc9-a3e6-f9f61941d090",
+          "name": "Muse",
+          "score": 3339
+        },
+        {
+          "artist_mbid": "67f66c07-6e61-4026-ade5-7e782fad3a5d",
+          "name": "Foo Fighters",
+          "score": 3323
+        },
+        {
+          "artist_mbid": "a3cb23fc-acd3-4ce0-8f36-1e5aa6a18432",
+          "name": "U2",
+          "score": 3293
+        },
+        {
+          "artist_mbid": "95e1ead9-4d31-4808-a7ac-32c3614c116b",
+          "name": "The Killers",
+          "score": 3098
+        },
+        {
+          "artist_mbid": "69ee3720-a7cb-4402-b48d-a02c366f2bcf",
+          "name": "The Cure",
+          "score": 2795
+        },
+        {
+          "artist_mbid": "83b9cbe7-9857-49e2-ab8e-b57b01038103",
+          "name": "Pearl Jam",
+          "score": 2783
+        },
+        {
+          "artist_mbid": "6fe07aa5-fec0-4eca-a456-f29bff451b04",
+          "name": "Weezer",
+          "score": 2715
+        },
+        {
+          "artist_mbid": "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
+          "name": "The Beatles",
+          "score": 2704
+        },
+        {
+          "artist_mbid": "ada7a83c-e3e1-40f1-93f9-3e73dbc9298a",
+          "name": "Arctic Monkeys",
+          "score": 2674
+        },
+        {
+          "artist_mbid": "309c62ba-7a22-4277-9f67-4a162526d18a",
+          "name": "Beck",
+          "score": 2634
+        },
+        {
+          "artist_mbid": "f181961b-20f7-459e-89de-920ef03c7ed0",
+          "name": "The Strokes",
+          "score": 2569
+        },
+        {
+          "artist_mbid": "c98d40fd-f6cf-4b26-883e-eaa515ee2851",
+          "name": "The Cranberries",
+          "score": 2536
+        },
+        {
+          "artist_mbid": "11ae9fbb-f3d7-4a47-936f-4c0a04d3b3b5",
+          "name": "The White Stripes",
+          "score": 2529
+        },
+        {
+          "artist_mbid": "b6b2bb8d-54a9-491f-9607-7b546023b433",
+          "name": "Pixies",
+          "score": 2467
+        },
+        {
+          "artist_mbid": "b071f9fa-14b0-4217-8e97-eb41da73f598",
+          "name": "The Rolling Stones",
+          "score": 2280
+        },
+        {
+          "artist_mbid": "847e8284-8582-4b0e-9c26-b042a4f49e57",
+          "name": "Placebo",
+          "score": 2280
+        },
+        {
+          "artist_mbid": "aa7a2827-f74b-473c-bd79-03d065835cf7",
+          "name": "Franz Ferdinand",
+          "score": 2254
+        },
+        {
+          "artist_mbid": "6ffb8ea9-2370-44d8-b678-e9237bbd347b",
+          "name": "Kings of Leon",
+          "score": 2238
+        },
+        {
+          "artist_mbid": "a66999a7-ae5c-460e-ba94-1a01143ae847",
+          "name": "Snow Patrol",
+          "score": 2118
+        },
+        {
+          "artist_mbid": "83d91898-7763-47d7-b03b-b92132375c47",
+          "name": "Pink Floyd",
+          "score": 2107
+        },
+        {
+          "artist_mbid": "e21857d5-3256-4547-afb3-4b6ded592596",
+          "name": "Gorillaz",
+          "score": 2097
+        },
+        {
+          "artist_mbid": "8538e728-ca0b-4321-b7e5-cff6565dd4c0",
+          "name": "Depeche Mode",
+          "score": 2080
+        },
+        {
+          "artist_mbid": "22a40b75-affc-4e69-8884-266d087e4751",
+          "name": "Travis",
+          "score": 2055
+        },
+        {
+          "artist_mbid": "52074ba6-e495-4ef3-9bb4-0703888a9f68",
+          "name": "Arcade Fire",
+          "score": 2054
+        },
+        {
+          "artist_mbid": "40f5d9e4-2de7-4f2d-ad41-e31a9a9fea27",
+          "name": "The Smiths",
+          "score": 2040
+        },
+        {
+          "artist_mbid": "76b2e842-5e85-4c97-ab62-d5bc315595b5",
+          "name": "Pulp",
+          "score": 1977
+        },
+        {
+          "artist_mbid": "c7020c6d-cae9-4db3-92a7-e5c561cbad50",
+          "name": "Keane",
+          "score": 1947
+        },
+        {
+          "artist_mbid": "6386ddff-0d13-4685-9f0a-a82bf022fb1c",
+          "name": "Supergrass",
+          "score": 1889
+        },
+        {
+          "artist_mbid": "153c9281-268f-4cf3-8938-f5a4593e5df4",
+          "name": "Soundgarden",
+          "score": 1880
+        },
+        {
+          "artist_mbid": "eeb1195b-f213-4ce1-b28c-8565211f8e43",
+          "name": "Guns N’ Roses",
+          "score": 1869
+        },
+        {
+          "artist_mbid": "69b39eab-6577-46a4-a9f5-817839092033",
+          "name": "Kasabian",
+          "score": 1863
+        },
+        {
+          "artist_mbid": "0bfba3d3-6a04-4779-bb0a-df07df5b0558",
+          "name": "Stereophonics",
+          "score": 1777
+        },
+        {
+          "artist_mbid": "7dc8f5bd-9d0b-4087-9f73-dc164950bbd8",
+          "name": "Queens of the Stone Age",
+          "score": 1750
+        },
+        {
+          "artist_mbid": "90218af4-4d58-4821-8d41-2ee295ebbe21",
+          "name": "Kaiser Chiefs",
+          "score": 1729
+        },
+        {
+          "artist_mbid": "32efea44-6cb5-4b4f-bdaa-c8b8f6cef981",
+          "name": "Manic Street Preachers",
+          "score": 1726
+        },
+        {
+          "artist_mbid": "b5fa29f1-6c22-4321-a488-b5f363b06b06",
+          "name": "The Stone Roses",
+          "score": 1722
+        },
+        {
+          "artist_mbid": "8970d868-0723-483b-a75b-51088913d3d4",
+          "name": "Moby",
+          "score": 1714
+        },
+        {
+          "artist_mbid": "fbd2a255-1d57-4d31-ac11-65b671c19958",
+          "name": "No Doubt",
+          "score": 1690
+        },
+        {
+          "artist_mbid": "e3e0abcd-7671-4482-a9d8-462f5acc9be5",
+          "name": "Incubus",
+          "score": 1673
+        },
+        {
+          "artist_mbid": "f59c5520-5f46-4d2c-b2c4-822eabf53419",
+          "name": "Linkin Park",
+          "score": 1672
+        },
+        {
+          "artist_mbid": "b7ffd2af-418f-4be2-bdd1-22f8b48613da",
+          "name": "Nine Inch Nails",
+          "score": 1672
+        },
+        {
+          "artist_mbid": "c485632c-b784-4ee9-8ea1-c5fb365681fc",
+          "name": "MGMT",
+          "score": 1640
+        },
+        {
+          "artist_mbid": "b23e8a63-8f47-4882-b55b-df2c92ef400e",
+          "name": "Interpol",
+          "score": 1635
+        },
+        {
+          "artist_mbid": "a0327dc2-dc76-44d5-aec6-47cd2dff1469",
+          "name": "Counting Crows",
+          "score": 1622
+        },
+        {
+          "artist_mbid": "e2c00c56-8365-4160-9f40-a64682917633",
+          "name": "Goo Goo Dolls",
+          "score": 1609
+        },
+        {
+          "artist_mbid": "8c538f11-c141-4588-8ecb-931083524186",
+          "name": "Bloc Party",
+          "score": 1592
+        },
+        {
+          "artist_mbid": "8f92558c-2baa-4758-8c38-615519e9deda",
+          "name": "The Clash",
+          "score": 1587
+        },
+        {
+          "artist_mbid": "3e55d51d-687f-4a9d-af96-2fabccf802e5",
+          "name": "The Cardigans",
+          "score": 1581
+        },
+        {
+          "artist_mbid": "9fdaa16b-a6c4-4831-b87c-bc9ca8ce7eaa",
+          "name": "The Who",
+          "score": 1572
+        },
+        {
+          "artist_mbid": "9e0e2b01-41db-4008-bd8b-988977d6019a",
+          "name": "The Police",
+          "score": 1551
+        },
+        {
+          "artist_mbid": "8c32bb01-58a3-453b-8050-8c0620edb0e5",
+          "name": "Stone Temple Pilots",
+          "score": 1501
+        },
+        {
+          "artist_mbid": "4bdcee62-4902-4773-8cd1-e252e2e31225",
+          "name": "Alanis Morissette",
+          "score": 1489
+        },
+        {
+          "artist_mbid": "d15721d8-56b4-453d-b506-fc915b14cba2",
+          "name": "The Black Keys",
+          "score": 1489
+        },
+        {
+          "artist_mbid": "9a58fda3-f4ed-4080-a3a5-f457aac9fcdd",
+          "name": "Joy Division",
+          "score": 1479
+        },
+        {
+          "artist_mbid": "f82f3a3e-29c2-42ca-b589-bc5dc210fa9e",
+          "name": "The Kooks",
+          "score": 1477
+        },
+        {
+          "artist_mbid": "a96ac800-bfcb-412a-8a63-0a98df600700",
+          "name": "Modest Mouse",
+          "score": 1468
+        },
+        {
+          "artist_mbid": "f9ef7a22-4262-4596-a2a8-1d19345b8e50",
+          "name": "Garbage",
+          "score": 1467
+        },
+        {
+          "artist_mbid": "f1106b17-dcbb-45f6-b938-199ccfab50cc",
+          "name": "New Order",
+          "score": 1446
+        },
+        {
+          "artist_mbid": "9beb62b2-88db-4cea-801e-162cd344ee53",
+          "name": "Beastie Boys",
+          "score": 1434
+        },
+        {
+          "artist_mbid": "cc0b7089-c08d-4c10-b6b0-873582c17fd6",
+          "name": "System of a Down",
+          "score": 1419
+        },
+        {
+          "artist_mbid": "8f6bd1e4-fbe1-4f50-aa9b-94c450ec0f11",
+          "name": "Portishead",
+          "score": 1401
+        },
+        {
+          "artist_mbid": "9efff43b-3b29-4082-824e-bc82f646f93d",
+          "name": "The Doors",
+          "score": 1400
+        },
+        {
+          "artist_mbid": "bd13909f-1c29-4c27-a874-d4aaf27c5b1a",
+          "name": "Fleetwood Mac",
+          "score": 1366
+        },
+        {
+          "artist_mbid": "a2accb58-6099-4cb5-a3c8-f6332f364db5",
+          "name": "James",
+          "score": 1359
+        },
+        {
+          "artist_mbid": "92a42e82-b36f-4308-82c1-68bad2e03c89",
+          "name": "Third Eye Blind",
+          "score": 1349
+        },
+        {
+          "artist_mbid": "a55c2f1b-3f3f-4d6a-aa30-5e186dbadce6",
+          "name": "Suede",
+          "score": 1337
+        },
+        {
+          "artist_mbid": "b83bc61f-8451-4a5d-8b8e-7e9ed295e822",
+          "name": "Elton John",
+          "score": 1326
+        },
+        {
+          "artist_mbid": "0ef3f425-9bd2-4216-9dd2-219d2fe90f1f",
+          "name": "Lenny Kravitz",
+          "score": 1326
+        },
+        {
+          "artist_mbid": "87c5dedd-371d-4a53-9f7f-80522fb7f3cb",
+          "name": "Björk",
+          "score": 1321
+        },
+        {
+          "artist_mbid": "14387b0f-765c-4852-852f-135335790466",
+          "name": "EELS",
+          "score": 1293
+        },
+        {
+          "artist_mbid": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+          "name": "Johnny Cash",
+          "score": 1291
+        },
+        {
+          "artist_mbid": "f27ec8db-af05-4f36-916e-3d57f91ecf5e",
+          "name": "Michael Jackson",
+          "score": 1246
+        },
+        {
+          "artist_mbid": "55704c38-224f-4b75-b29f-d43653f8bc9a",
+          "name": "Primal Scream",
+          "score": 1215
+        },
+        {
+          "artist_mbid": "fa7b9055-3703-473a-8a09-adf2fe031a24",
+          "name": "CAKE",
+          "score": 1206
+        },
+        {
+          "artist_mbid": "9de8f66e-3cd1-4f11-8328-38200f0612b0",
+          "name": "Doves",
+          "score": 1204
+        },
+        {
+          "artist_mbid": "af37c51c-0790-4a29-b995-456f98a6b8c9",
+          "name": "Vampire Weekend",
+          "score": 1188
+        },
+        {
+          "artist_mbid": "0efe858c-89e5-4e47-906a-356fa953fd6e",
+          "name": "Editors",
+          "score": 1186
+        },
+        {
+          "artist_mbid": "e6e879c0-3d56-4f12-b3c5-3ce459661a8e",
+          "name": "Jeff Buckley",
+          "score": 1170
+        },
+        {
+          "artist_mbid": "a94a7155-c79d-4409-9fcf-220cb0e4dc3a",
+          "name": "Talking Heads",
+          "score": 1156
+        },
+        {
+          "artist_mbid": "cb67438a-7f50-4f2b-a6f1-2bb2729fd538",
+          "name": "Air",
+          "score": 1133
+        },
+        {
+          "artist_mbid": "38c5cdab-5d6d-43d1-85b0-dac41bde186e",
+          "name": "Blind Melon",
+          "score": 1126
+        },
+        {
+          "artist_mbid": "013fa897-86db-41d3-8e9f-386c8a34f4e6",
+          "name": "Morrissey",
+          "score": 1122
+        },
+        {
+          "artist_mbid": "5f572b31-8fd9-45ae-9beb-358c98d839df",
+          "name": "The Dandy Warhols",
+          "score": 1121
+        },
+        {
+          "artist_mbid": "95f5b748-d370-47fe-85bd-0af2dc450bc0",
+          "name": "Sublime",
+          "score": 1102
+        },
+        {
+          "artist_mbid": "ebfc1398-8d96-47e3-82c3-f782abcdb13d",
+          "name": "The Beach Boys",
+          "score": 1101
+        },
+        {
+          "artist_mbid": "f6f2326f-6b25-4170-b89d-e235b25508e8",
+          "name": "Sigur Rós",
+          "score": 1088
+        },
+        {
+          "artist_mbid": "93ccd76c-3790-4435-a8bf-02bc26294b93",
+          "name": "Bush",
+          "score": 1086
+        },
+        {
+          "artist_mbid": "3cb3928a-526c-4a3d-93c5-53315fa9bde0",
+          "name": "Elbow",
+          "score": 1079
+        },
+        {
+          "artist_mbid": "c5c2ea1c-4bde-4f4d-bd0b-47b200bf99d6",
+          "name": "The xx",
+          "score": 1069
+        },
+        {
+          "artist_mbid": "e0e1a584-dd0a-4bd1-88d1-c4c62895039d",
+          "name": "Foster the People",
+          "score": 1055
+        },
+        {
+          "artist_mbid": "7c7f9c94-dee8-4903-892b-6cf44652e2de",
+          "name": "Tears for Fears",
+          "score": 1052
+        },
+        {
+          "artist_mbid": "8d455809-96b3-4bb6-8829-ea4beb580d35",
+          "name": "Phoenix",
+          "score": 1045
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:FR10F1200080": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 33973441,
+        "title": "More Spell On You",
+        "title_version": "",
+        "readable": true,
+        "isrc": "FR10F1200080",
+        "duration": 311,
+        "artist": {
+          "id": 2549361,
+          "name": "Eddie Johns"
+        },
+        "album": {
+          "id": 3283501,
+          "title": "More Spell On You"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:GBDUW0000053": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 3135553,
+        "title": "One More Time",
+        "title_version": "",
+        "readable": true,
+        "isrc": "GBDUW0000053",
+        "duration": 320,
+        "artist": {
+          "id": 27,
+          "name": "Daft Punk"
+        },
+        "album": {
+          "id": 302127,
+          "title": "Discovery"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:USUG12208606": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 1999525147,
+        "title": "Circo Loco",
+        "title_version": "",
+        "readable": true,
+        "isrc": "USUG12208606",
+        "duration": 237,
+        "artist": {
+          "id": 246791,
+          "name": "Drake"
+        },
+        "album": {
+          "id": 372625207,
+          "title": "Her Loss"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,2559 @@
+{
+  "version": 1,
+  "date": "2026-10-31",
+  "commit": "5fd193fa7a64",
+  "synthetic": false,
+  "golden": {
+    "path": "evals/golden.jsonl",
+    "sha256": "8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442",
+    "rows": 45
+  },
+  "runRecords": {
+    "path": "evals/agent/runs/2026-10-31",
+    "sha256": "6abd4c278c2a1049277bdb9aa841f1a834d6b4977b4135652ce49a57d202250a"
+  },
+  "subset": "all",
+  "runs": 102,
+  "tracks": 24,
+  "goldSources": [
+    {
+      "site": "musicbrainz.org",
+      "refs": 20,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "wikipedia.org",
+      "refs": 20,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "rollingstone.com",
+      "refs": 3,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "theguardian.com",
+      "refs": 2,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "bbc.co.uk",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "billboard.com",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "ft.com",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "kexp.org",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "latimes.com",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "loudwire.com",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "npr.org",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    },
+    {
+      "site": "seattletimes.com",
+      "refs": 1,
+      "first": "2026-10-16",
+      "last": "2026-10-16"
+    }
+  ],
+  "pipeline": {
+    "tracks": 24,
+    "preview": {
+      "k": 23,
+      "n": 24,
+      "value": 0.9583333333333334,
+      "ci": [
+        0.7975819352134406,
+        0.9926065438344942
+      ]
+    },
+    "identity": {
+      "k": 17,
+      "n": 24,
+      "value": 0.7083333333333334,
+      "ci": [
+        0.5083230633550337,
+        0.8508535180303913
+      ]
+    },
+    "clarification": {
+      "k": 14,
+      "n": 24,
+      "value": 0.5833333333333334,
+      "ci": [
+        0.3883466586522876,
+        0.7553239739018824
+      ]
+    },
+    "codeCoverage": {
+      "k": 7,
+      "n": 16,
+      "value": 0.4375,
+      "ci": [
+        0.23098652405492354,
+        0.6682144360118811
+      ]
+    },
+    "schemaValid": {
+      "k": 24,
+      "n": 24,
+      "value": 1,
+      "ci": [
+        0.8620237953250198,
+        1
+      ]
+    },
+    "fallback": {
+      "k": 0,
+      "n": 24,
+      "value": 0,
+      "ci": [
+        1.3877787807814457e-17,
+        0.13797620467498017
+      ]
+    },
+    "modelPrecision": {
+      "k": 1,
+      "n": 2,
+      "value": 0.5,
+      "ci": [
+        0.09453120573423074,
+        0.9054687942657693
+      ],
+      "wrongRelation": 0,
+      "duplicates": 0,
+      "unresolved": 0,
+      "otherDocumented": 0
+    },
+    "support": {
+      "k": 58,
+      "n": 112,
+      "value": 0.5178571428571429,
+      "ci": [
+        0.42626984959636616,
+        0.6082601022941003
+      ],
+      "unjudged": 14
+    },
+    "latencyP50": {
+      "n": 24,
+      "value": 23382,
+      "ci": [
+        21366.175,
+        25039
+      ],
+      "values": [
+        23289,
+        25649,
+        21265,
+        28246,
+        21486,
+        24189,
+        21334,
+        19870,
+        30991,
+        17488,
+        27496,
+        26443,
+        28518,
+        26396,
+        21739,
+        25039,
+        23691,
+        23475,
+        15045,
+        14802,
+        24942,
+        21469,
+        13410,
+        19769
+      ]
+    },
+    "latencyP95": {
+      "n": 24,
+      "value": 28477.2,
+      "ci": [
+        26323.899999999998,
+        30991
+      ],
+      "values": [
+        23289,
+        25649,
+        21265,
+        28246,
+        21486,
+        24189,
+        21334,
+        19870,
+        30991,
+        17488,
+        27496,
+        26443,
+        28518,
+        26396,
+        21739,
+        25039,
+        23691,
+        23475,
+        15045,
+        14802,
+        24942,
+        21469,
+        13410,
+        19769
+      ]
+    },
+    "tokens": {
+      "n": 24,
+      "value": 15420.625,
+      "ci": [
+        13960.411458333332,
+        16792.462499999998
+      ],
+      "values": [
+        16847,
+        17498,
+        14198,
+        20236,
+        14867,
+        16681,
+        14003,
+        12697,
+        18176,
+        8449,
+        17520,
+        16175,
+        9963,
+        18702,
+        19271,
+        19946,
+        16000,
+        15574,
+        12587,
+        8447,
+        19212,
+        17643,
+        8202,
+        17201
+      ]
+    },
+    "usd": {
+      "n": 24,
+      "value": 0.010213083333333336,
+      "ci": [
+        0.009179146875,
+        0.011328864583333334
+      ],
+      "values": [
+        0.009675,
+        0.00995,
+        0.007761,
+        0.016889,
+        0.008953,
+        0.008612,
+        0.010602,
+        0.012261,
+        0.009892,
+        0.007407,
+        0.009007,
+        0.010219,
+        0.012385,
+        0.01339,
+        0.007997,
+        0.013742,
+        0.007443,
+        0.015138,
+        0.009097,
+        0.006751,
+        0.01412,
+        0.009250999999999999,
+        0.007003,
+        0.007568999999999999
+      ]
+    }
+  },
+  "ablations": {
+    "a": {
+      "what": "model only, no tools or evidence",
+      "tracks": 24,
+      "recall": {
+        "k": 11,
+        "n": 16,
+        "value": 0.6875,
+        "ci": [
+          0.44404355834740666,
+          0.8583535614521796
+        ]
+      },
+      "precision": {
+        "k": 11,
+        "n": 12,
+        "value": 0.9166666666666666,
+        "ci": [
+          0.646120088858883,
+          0.9851349055950829
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "modelPrecision": {
+        "k": 11,
+        "n": 12,
+        "value": 0.9166666666666666,
+        "ci": [
+          0.646120088858883,
+          0.9851349055950829
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "heldOutRecall": {
+        "k": 0,
+        "n": 1,
+        "value": 0,
+        "ci": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 5,
+        "value": 0,
+        "ci": [
+          0,
+          0.43448246478317476
+        ]
+      },
+      "edgesPerControl": {
+        "n": 5,
+        "value": 0,
+        "ci": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "b": {
+      "what": "deterministic only, no model",
+      "tracks": 24,
+      "recall": {
+        "k": 7,
+        "n": 16,
+        "value": 0.4375,
+        "ci": [
+          0.23098652405492354,
+          0.6682144360118811
+        ]
+      },
+      "precision": {
+        "k": 7,
+        "n": 8,
+        "value": 0.875,
+        "ci": [
+          0.5291118177871464,
+          0.9775825085499433
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "modelPrecision": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null,
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "heldOutRecall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 5,
+        "value": 0,
+        "ci": [
+          0,
+          0.43448246478317476
+        ]
+      },
+      "edgesPerControl": {
+        "n": 5,
+        "value": 0,
+        "ci": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "c": {
+      "what": "pipeline before the verifier",
+      "tracks": 24,
+      "recall": {
+        "k": 14,
+        "n": 16,
+        "value": 0.875,
+        "ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "precision": {
+        "k": 14,
+        "n": 20,
+        "value": 0.7,
+        "ci": [
+          0.4810271816464765,
+          0.8545227551323956
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "modelPrecision": {
+        "k": 7,
+        "n": 12,
+        "value": 0.5833333333333334,
+        "ci": [
+          0.31951131254954973,
+          0.8067396863412435
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "heldOutRecall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 5,
+        "value": 0,
+        "ci": [
+          0,
+          0.43448246478317476
+        ]
+      },
+      "edgesPerControl": {
+        "n": 5,
+        "value": 0,
+        "ci": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "d": {
+      "what": "pipeline after the verifier (what the UI shows)",
+      "tracks": 24,
+      "recall": {
+        "k": 8,
+        "n": 16,
+        "value": 0.5,
+        "ci": [
+          0.27999563610326017,
+          0.7200043638967398
+        ]
+      },
+      "precision": {
+        "k": 8,
+        "n": 10,
+        "value": 0.8,
+        "ci": [
+          0.49016247153664183,
+          0.9433178485456247
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "modelPrecision": {
+        "k": 1,
+        "n": 2,
+        "value": 0.5,
+        "ci": [
+          0.09453120573423074,
+          0.9054687942657693
+        ],
+        "wrongRelation": 0,
+        "duplicates": 0,
+        "unresolved": 0,
+        "otherDocumented": 0
+      },
+      "heldOutRecall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 5,
+        "value": 0,
+        "ci": [
+          0,
+          0.43448246478317476
+        ]
+      },
+      "edgesPerControl": {
+        "n": 5,
+        "value": 0,
+        "ci": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "heldOut": {
+    "a": {
+      "gold": 1,
+      "excluded": 0,
+      "nAfterExclusion": 1,
+      "found": 0,
+      "excludedBySite": {},
+      "perRun": [
+        {
+          "isrc": "GBDUW0000053",
+          "runId": "eval-baseline-gbduw0000053",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "GBAAA9700049",
+          "runId": "eval-baseline-gbaaa9700049",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USUM70741299",
+          "runId": "eval-baseline-usum70741299",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USSB29000129",
+          "runId": "eval-baseline-ussb29000129",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USCA29000294",
+          "runId": "eval-baseline-usca29000294",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USTB10250016",
+          "runId": "eval-baseline-ustb10250016",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40000359",
+          "runId": "eval-baseline-usbb40000359",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40580685",
+          "runId": "eval-baseline-usbb40580685",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USWB10504319",
+          "runId": "eval-baseline-uswb10504319",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USIR10001280",
+          "runId": "eval-baseline-usir10001280",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "GBBMQ9800092",
+          "runId": "eval-baseline-gbbmq9800092",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "GBAJH9900041",
+          "runId": "eval-baseline-gbajh9900041",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "SEUM71100961",
+          "runId": "eval-baseline-seum71100961",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19900178",
+          "runId": "eval-baseline-uswb19900178",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USSM18200463",
+          "runId": "eval-baseline-ussm18200463",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "GBCNR8500002",
+          "runId": "eval-baseline-gbcnr8500002",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "AUUM71500303",
+          "runId": "eval-baseline-auum71500303",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19901214",
+          "runId": "eval-baseline-uswb19901214",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USDJ20200650",
+          "runId": "eval-baseline-usdj20200650",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "GBAHT0600202",
+          "runId": "eval-baseline-gbaht0600202",
+          "citedSites": [],
+          "targets": [
+            {
+              "key": "GBAHT0600202→Last Men Standing / Gian Piero Reverberi & Gian Franco Reverberi",
+              "heldOutSites": [
+                "wikipedia.org"
+              ],
+              "excludedBy": [],
+              "counted": true,
+              "found": false
+            }
+          ]
+        },
+        {
+          "isrc": "JPP301900716",
+          "runId": "eval-baseline-jpp301900716",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "USUM71210283",
+          "runId": "eval-baseline-usum71210283",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "FR10F1200080",
+          "runId": "eval-baseline-fr10f1200080",
+          "citedSites": [],
+          "targets": []
+        },
+        {
+          "isrc": "QM4TX1779716",
+          "runId": "eval-baseline-qm4tx1779716",
+          "citedSites": [],
+          "targets": []
+        }
+      ]
+    },
+    "b": {
+      "gold": 1,
+      "excluded": 1,
+      "nAfterExclusion": 0,
+      "found": 0,
+      "excludedBySite": {
+        "wikipedia.org": 1
+      },
+      "perRun": [
+        {
+          "isrc": "GBDUW0000053",
+          "runId": "3aa7f55a-c891-477c-9364-0dd5108b0049",
+          "citedSites": [
+            "fandom.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "neocities.org",
+            "warpedfactor.com",
+            "watchmojo.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAAA9700049",
+          "runId": "468148f2-91e3-4182-9b2a-bb2bc10356e7",
+          "citedSites": [
+            "genius.com",
+            "musicbrainz.org",
+            "songmakers.com.au",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM70741299",
+          "runId": "cb872e85-86e3-411c-9f79-995dd2b06acb",
+          "citedSites": [
+            "musicbrainz.org",
+            "the-dowsers.com",
+            "wbssmedia.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSB29000129",
+          "runId": "b4ecefc9-cbf3-4317-a478-e88b83e0f4c3",
+          "citedSites": [
+            "blogspot.com",
+            "genius.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "tigerstrypes.com",
+            "tvtropes.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USCA29000294",
+          "runId": "6d51f92e-332c-43b4-8d1f-6f4d3bda866b",
+          "citedSites": [
+            "manifoldapp.org",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "udiscovermusic.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USTB10250016",
+          "runId": "a32745b9-8255-4fd1-a8c8-61bc9cf606ab",
+          "citedSites": [
+            "abc.net.au",
+            "apple.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "thecurrent.org",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40000359",
+          "runId": "004f2e2b-f4b5-4b43-b557-2e8cd93d15c9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40580685",
+          "runId": "471d8d50-f62b-4420-9bb1-73cdb4b30211",
+          "citedSites": [
+            "encyclopedia.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "vibe.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB10504319",
+          "runId": "52d51270-8091-44b5-b489-a34f124f2b79",
+          "citedSites": [
+            "billboard.com",
+            "collider.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USIR10001280",
+          "runId": "bb2d423a-d38d-449f-8a7e-11f23e458512",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBBMQ9800092",
+          "runId": "8e47aabe-d960-4971-8ffd-bd6fc27b10b3",
+          "citedSites": [
+            "musicbrainz.org",
+            "noiseaddicts.com",
+            "roland.com",
+            "songfacts.com",
+            "soundonsound.com",
+            "weraveyou.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAJH9900041",
+          "runId": "e41d25c2-52c7-4228-aca5-b5f670be5fb2",
+          "citedSites": [
+            "aaregistry.org",
+            "classicpopmag.com",
+            "enculturation.net",
+            "kexp.org",
+            "musicbrainz.org",
+            "musicradar.com",
+            "thenation.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "SEUM71100961",
+          "runId": "189635fa-9856-4031-b32e-f2133539844f",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19900178",
+          "runId": "e5551c40-1b09-4811-80e4-b96ab233ebe7",
+          "citedSites": [
+            "americansongwriter.com",
+            "asktherightquestion.org",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "sc.edu",
+            "somuchgreatmusic.com",
+            "thisdayinmusic.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSM18200463",
+          "runId": "5100d165-e4a5-4ed5-90aa-3f52388b2a36",
+          "citedSites": [
+            "ft.com",
+            "genius.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBCNR8500002",
+          "runId": "a466c8d1-9b53-4383-a6ca-bbb3e45083f9",
+          "citedSites": [
+            "bbc.co.uk",
+            "elpee.jp",
+            "grammy.com",
+            "musicbrainz.org",
+            "musicmusingsandsuch.com",
+            "stevepafford.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "AUUM71500303",
+          "runId": "f399acaa-50c8-4443-8d22-9295f339db35",
+          "citedSites": [
+            "abc.net.au",
+            "fandom.com",
+            "genius.com",
+            "issuu.com",
+            "mpr.org",
+            "musicbrainz.org",
+            "snapchat.com",
+            "tunefind.com",
+            "tvtropes.org",
+            "what-song.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19901214",
+          "runId": "1618dc02-fcb8-42c2-b978-dbbe10a0731d",
+          "citedSites": [
+            "google.com",
+            "musicbrainz.org",
+            "parade.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USDJ20200650",
+          "runId": "ca16e7dd-9793-411d-b481-227070e0c6a9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "savingcountrymusic.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAHT0600202",
+          "runId": "4b0fb41e-1b4a-461d-8708-405dc9b39ee6",
+          "citedSites": [
+            "trinitonian.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": [
+            {
+              "key": "GBAHT0600202→Last Men Standing / Gian Piero Reverberi & Gian Franco Reverberi",
+              "heldOutSites": [
+                "wikipedia.org"
+              ],
+              "excludedBy": [
+                "wikipedia.org"
+              ],
+              "counted": false,
+              "found": false
+            }
+          ]
+        },
+        {
+          "isrc": "JPP301900716",
+          "runId": "cd11f87b-eef8-4e00-a7a5-a45c49228f32",
+          "citedSites": [
+            "atwoodmagazine.com",
+            "musicbrainz.org",
+            "spotify.com",
+            "teenvogue.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM71210283",
+          "runId": "c8443a26-42ad-46c4-880e-5c4f20aaeee7",
+          "citedSites": [
+            "fandom.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "FR10F1200080",
+          "runId": "4640c23f-c213-4065-abeb-ad61ad448183",
+          "citedSites": [
+            "routenote.com",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "QM4TX1779716",
+          "runId": "7abc1ac8-fee7-4804-ac67-f4207d4b903e",
+          "citedSites": [
+            "alijamieson.co.uk",
+            "bbc.com",
+            "beatportal.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        }
+      ]
+    },
+    "c": {
+      "gold": 1,
+      "excluded": 1,
+      "nAfterExclusion": 0,
+      "found": 0,
+      "excludedBySite": {
+        "wikipedia.org": 1
+      },
+      "perRun": [
+        {
+          "isrc": "GBDUW0000053",
+          "runId": "3aa7f55a-c891-477c-9364-0dd5108b0049",
+          "citedSites": [
+            "fandom.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "neocities.org",
+            "warpedfactor.com",
+            "watchmojo.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAAA9700049",
+          "runId": "468148f2-91e3-4182-9b2a-bb2bc10356e7",
+          "citedSites": [
+            "genius.com",
+            "musicbrainz.org",
+            "songmakers.com.au",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM70741299",
+          "runId": "cb872e85-86e3-411c-9f79-995dd2b06acb",
+          "citedSites": [
+            "musicbrainz.org",
+            "the-dowsers.com",
+            "wbssmedia.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSB29000129",
+          "runId": "b4ecefc9-cbf3-4317-a478-e88b83e0f4c3",
+          "citedSites": [
+            "blogspot.com",
+            "genius.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "tigerstrypes.com",
+            "tvtropes.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USCA29000294",
+          "runId": "6d51f92e-332c-43b4-8d1f-6f4d3bda866b",
+          "citedSites": [
+            "manifoldapp.org",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "udiscovermusic.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USTB10250016",
+          "runId": "a32745b9-8255-4fd1-a8c8-61bc9cf606ab",
+          "citedSites": [
+            "abc.net.au",
+            "apple.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "thecurrent.org",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40000359",
+          "runId": "004f2e2b-f4b5-4b43-b557-2e8cd93d15c9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40580685",
+          "runId": "471d8d50-f62b-4420-9bb1-73cdb4b30211",
+          "citedSites": [
+            "encyclopedia.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "vibe.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB10504319",
+          "runId": "52d51270-8091-44b5-b489-a34f124f2b79",
+          "citedSites": [
+            "billboard.com",
+            "collider.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USIR10001280",
+          "runId": "bb2d423a-d38d-449f-8a7e-11f23e458512",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBBMQ9800092",
+          "runId": "8e47aabe-d960-4971-8ffd-bd6fc27b10b3",
+          "citedSites": [
+            "musicbrainz.org",
+            "noiseaddicts.com",
+            "roland.com",
+            "songfacts.com",
+            "soundonsound.com",
+            "weraveyou.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAJH9900041",
+          "runId": "e41d25c2-52c7-4228-aca5-b5f670be5fb2",
+          "citedSites": [
+            "aaregistry.org",
+            "classicpopmag.com",
+            "enculturation.net",
+            "kexp.org",
+            "musicbrainz.org",
+            "musicradar.com",
+            "thenation.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "SEUM71100961",
+          "runId": "189635fa-9856-4031-b32e-f2133539844f",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19900178",
+          "runId": "e5551c40-1b09-4811-80e4-b96ab233ebe7",
+          "citedSites": [
+            "americansongwriter.com",
+            "asktherightquestion.org",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "sc.edu",
+            "somuchgreatmusic.com",
+            "thisdayinmusic.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSM18200463",
+          "runId": "5100d165-e4a5-4ed5-90aa-3f52388b2a36",
+          "citedSites": [
+            "ft.com",
+            "genius.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBCNR8500002",
+          "runId": "a466c8d1-9b53-4383-a6ca-bbb3e45083f9",
+          "citedSites": [
+            "bbc.co.uk",
+            "elpee.jp",
+            "grammy.com",
+            "musicbrainz.org",
+            "musicmusingsandsuch.com",
+            "stevepafford.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "AUUM71500303",
+          "runId": "f399acaa-50c8-4443-8d22-9295f339db35",
+          "citedSites": [
+            "abc.net.au",
+            "fandom.com",
+            "genius.com",
+            "issuu.com",
+            "mpr.org",
+            "musicbrainz.org",
+            "snapchat.com",
+            "tunefind.com",
+            "tvtropes.org",
+            "what-song.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19901214",
+          "runId": "1618dc02-fcb8-42c2-b978-dbbe10a0731d",
+          "citedSites": [
+            "google.com",
+            "musicbrainz.org",
+            "parade.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USDJ20200650",
+          "runId": "ca16e7dd-9793-411d-b481-227070e0c6a9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "savingcountrymusic.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAHT0600202",
+          "runId": "4b0fb41e-1b4a-461d-8708-405dc9b39ee6",
+          "citedSites": [
+            "trinitonian.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": [
+            {
+              "key": "GBAHT0600202→Last Men Standing / Gian Piero Reverberi & Gian Franco Reverberi",
+              "heldOutSites": [
+                "wikipedia.org"
+              ],
+              "excludedBy": [
+                "wikipedia.org"
+              ],
+              "counted": false,
+              "found": false
+            }
+          ]
+        },
+        {
+          "isrc": "JPP301900716",
+          "runId": "cd11f87b-eef8-4e00-a7a5-a45c49228f32",
+          "citedSites": [
+            "atwoodmagazine.com",
+            "musicbrainz.org",
+            "spotify.com",
+            "teenvogue.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM71210283",
+          "runId": "c8443a26-42ad-46c4-880e-5c4f20aaeee7",
+          "citedSites": [
+            "fandom.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "FR10F1200080",
+          "runId": "4640c23f-c213-4065-abeb-ad61ad448183",
+          "citedSites": [
+            "routenote.com",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "QM4TX1779716",
+          "runId": "7abc1ac8-fee7-4804-ac67-f4207d4b903e",
+          "citedSites": [
+            "alijamieson.co.uk",
+            "bbc.com",
+            "beatportal.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        }
+      ]
+    },
+    "d": {
+      "gold": 1,
+      "excluded": 1,
+      "nAfterExclusion": 0,
+      "found": 0,
+      "excludedBySite": {
+        "wikipedia.org": 1
+      },
+      "perRun": [
+        {
+          "isrc": "GBDUW0000053",
+          "runId": "3aa7f55a-c891-477c-9364-0dd5108b0049",
+          "citedSites": [
+            "fandom.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "neocities.org",
+            "warpedfactor.com",
+            "watchmojo.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAAA9700049",
+          "runId": "468148f2-91e3-4182-9b2a-bb2bc10356e7",
+          "citedSites": [
+            "genius.com",
+            "musicbrainz.org",
+            "songmakers.com.au",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM70741299",
+          "runId": "cb872e85-86e3-411c-9f79-995dd2b06acb",
+          "citedSites": [
+            "musicbrainz.org",
+            "the-dowsers.com",
+            "wbssmedia.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSB29000129",
+          "runId": "b4ecefc9-cbf3-4317-a478-e88b83e0f4c3",
+          "citedSites": [
+            "blogspot.com",
+            "genius.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "tigerstrypes.com",
+            "tvtropes.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USCA29000294",
+          "runId": "6d51f92e-332c-43b4-8d1f-6f4d3bda866b",
+          "citedSites": [
+            "manifoldapp.org",
+            "musicbrainz.org",
+            "songfacts.com",
+            "spotify.com",
+            "udiscovermusic.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USTB10250016",
+          "runId": "a32745b9-8255-4fd1-a8c8-61bc9cf606ab",
+          "citedSites": [
+            "abc.net.au",
+            "apple.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "thecurrent.org",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40000359",
+          "runId": "004f2e2b-f4b5-4b43-b557-2e8cd93d15c9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USBB40580685",
+          "runId": "471d8d50-f62b-4420-9bb1-73cdb4b30211",
+          "citedSites": [
+            "encyclopedia.com",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "songfacts.com",
+            "vibe.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB10504319",
+          "runId": "52d51270-8091-44b5-b489-a34f124f2b79",
+          "citedSites": [
+            "billboard.com",
+            "collider.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "musicradar.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USIR10001280",
+          "runId": "bb2d423a-d38d-449f-8a7e-11f23e458512",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBBMQ9800092",
+          "runId": "8e47aabe-d960-4971-8ffd-bd6fc27b10b3",
+          "citedSites": [
+            "musicbrainz.org",
+            "noiseaddicts.com",
+            "roland.com",
+            "songfacts.com",
+            "soundonsound.com",
+            "weraveyou.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAJH9900041",
+          "runId": "e41d25c2-52c7-4228-aca5-b5f670be5fb2",
+          "citedSites": [
+            "aaregistry.org",
+            "classicpopmag.com",
+            "enculturation.net",
+            "kexp.org",
+            "musicbrainz.org",
+            "musicradar.com",
+            "thenation.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "SEUM71100961",
+          "runId": "189635fa-9856-4031-b32e-f2133539844f",
+          "citedSites": [
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19900178",
+          "runId": "e5551c40-1b09-4811-80e4-b96ab233ebe7",
+          "citedSites": [
+            "americansongwriter.com",
+            "asktherightquestion.org",
+            "musicbrainz.org",
+            "rollingstone.com",
+            "sc.edu",
+            "somuchgreatmusic.com",
+            "thisdayinmusic.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USSM18200463",
+          "runId": "5100d165-e4a5-4ed5-90aa-3f52388b2a36",
+          "citedSites": [
+            "ft.com",
+            "genius.com",
+            "musicbrainz.org",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBCNR8500002",
+          "runId": "a466c8d1-9b53-4383-a6ca-bbb3e45083f9",
+          "citedSites": [
+            "bbc.co.uk",
+            "elpee.jp",
+            "grammy.com",
+            "musicbrainz.org",
+            "musicmusingsandsuch.com",
+            "stevepafford.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "AUUM71500303",
+          "runId": "f399acaa-50c8-4443-8d22-9295f339db35",
+          "citedSites": [
+            "abc.net.au",
+            "fandom.com",
+            "genius.com",
+            "issuu.com",
+            "mpr.org",
+            "musicbrainz.org",
+            "snapchat.com",
+            "tunefind.com",
+            "tvtropes.org",
+            "what-song.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USWB19901214",
+          "runId": "1618dc02-fcb8-42c2-b978-dbbe10a0731d",
+          "citedSites": [
+            "google.com",
+            "musicbrainz.org",
+            "parade.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USDJ20200650",
+          "runId": "ca16e7dd-9793-411d-b481-227070e0c6a9",
+          "citedSites": [
+            "imdb.com",
+            "musicbrainz.org",
+            "savingcountrymusic.com",
+            "songfacts.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "GBAHT0600202",
+          "runId": "4b0fb41e-1b4a-461d-8708-405dc9b39ee6",
+          "citedSites": [
+            "trinitonian.com",
+            "whosampled.com",
+            "wikipedia.org"
+          ],
+          "targets": [
+            {
+              "key": "GBAHT0600202→Last Men Standing / Gian Piero Reverberi & Gian Franco Reverberi",
+              "heldOutSites": [
+                "wikipedia.org"
+              ],
+              "excludedBy": [
+                "wikipedia.org"
+              ],
+              "counted": false,
+              "found": false
+            }
+          ]
+        },
+        {
+          "isrc": "JPP301900716",
+          "runId": "cd11f87b-eef8-4e00-a7a5-a45c49228f32",
+          "citedSites": [
+            "atwoodmagazine.com",
+            "musicbrainz.org",
+            "spotify.com",
+            "teenvogue.com",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "USUM71210283",
+          "runId": "c8443a26-42ad-46c4-880e-5c4f20aaeee7",
+          "citedSites": [
+            "fandom.com",
+            "imdb.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "FR10F1200080",
+          "runId": "4640c23f-c213-4065-abeb-ad61ad448183",
+          "citedSites": [
+            "routenote.com",
+            "whosampled.com",
+            "youtube.com"
+          ],
+          "targets": []
+        },
+        {
+          "isrc": "QM4TX1779716",
+          "runId": "7abc1ac8-fee7-4804-ac67-f4207d4b903e",
+          "citedSites": [
+            "alijamieson.co.uk",
+            "bbc.com",
+            "beatportal.com",
+            "musicbrainz.org",
+            "whosampled.com",
+            "wikipedia.org",
+            "youtube.com"
+          ],
+          "targets": []
+        }
+      ]
+    }
+  },
+  "strata": [
+    {
+      "stratum": "documented-samples",
+      "identity": {
+        "k": 8,
+        "n": 13,
+        "value": 0.6153846153846154,
+        "ci": [
+          0.355228915126657,
+          0.8229029220223743
+        ]
+      },
+      "recall": {
+        "k": 7,
+        "n": 14,
+        "value": 0.5,
+        "ci": [
+          0.26799202452413634,
+          0.7320079754758637
+        ]
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      }
+    },
+    {
+      "stratum": "no-sample-controls",
+      "identity": {
+        "k": 4,
+        "n": 5,
+        "value": 0.8,
+        "ci": [
+          0.37553462976252533,
+          0.9637758913675698
+        ]
+      },
+      "recall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 5,
+        "value": 0,
+        "ci": [
+          0,
+          0.43448246478317476
+        ]
+      }
+    },
+    {
+      "stratum": "ambiguous-titles",
+      "identity": {
+        "k": 1,
+        "n": 2,
+        "value": 0.5,
+        "ci": [
+          0.09453120573423074,
+          0.9054687942657693
+        ]
+      },
+      "recall": {
+        "k": 1,
+        "n": 2,
+        "value": 0.5,
+        "ci": [
+          0.09453120573423074,
+          0.9054687942657693
+        ]
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      }
+    },
+    {
+      "stratum": "non-english",
+      "identity": {
+        "k": 2,
+        "n": 2,
+        "value": 1,
+        "ci": [
+          0.34238022750665303,
+          1
+        ]
+      },
+      "recall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      }
+    },
+    {
+      "stratum": "obscure",
+      "identity": {
+        "k": 2,
+        "n": 2,
+        "value": 1,
+        "ci": [
+          0.34238022750665303,
+          1
+        ]
+      },
+      "recall": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      },
+      "hallucination": {
+        "k": 0,
+        "n": 0,
+        "value": null,
+        "ci": null
+      }
+    }
+  ],
+  "variance": {
+    "pairs": 6,
+    "claims": {
+      "n": 6,
+      "value": 0.45783475783475786,
+      "ci": null,
+      "values": [
+        0.7,
+        0.7692307692307693,
+        0.3333333333333333,
+        0.5,
+        0.4444444444444444,
+        0
+      ]
+    },
+    "edges": {
+      "n": 6,
+      "value": 0.9166666666666666,
+      "ci": null,
+      "values": [
+        1,
+        1,
+        1,
+        1,
+        0.5,
+        1
+      ]
+    }
+  },
+  "unmatched": [
+    {
+      "isrc": "USDJ20200650",
+      "target": {
+        "title": "Hurt (the song)",
+        "artist": ""
+      },
+      "relation": "cover",
+      "origin": "code",
+      "outcome": "fp",
+      "why": "not in gold"
+    },
+    {
+      "isrc": "GBAHT0600202",
+      "target": {
+        "title": "Stop and Check Yourself",
+        "artist": "Garnet Mimms"
+      },
+      "relation": "sample",
+      "origin": "model",
+      "outcome": "fp",
+      "why": "not in gold"
+    }
+  ],
+  "pending": [
+    "human-agreement"
+  ],
+  "perTier": [
+    {
+      "tier": "fast",
+      "deployments": [
+        "gpt-6-luna"
+      ],
+      "calls": {
+        "n": 24,
+        "value": 2,
+        "ci": [
+          2,
+          2
+        ],
+        "values": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      "tokens": {
+        "n": 24,
+        "value": 3723.375,
+        "ci": [
+          3557.579166666667,
+          3878.6729166666664
+        ],
+        "values": [
+          3886,
+          3409,
+          3861,
+          3988,
+          3814,
+          3562,
+          4165,
+          4044,
+          3934,
+          2879,
+          3872,
+          3929,
+          3099,
+          3741,
+          4265,
+          4035,
+          3801,
+          3698,
+          3889,
+          2842,
+          4227,
+          3830,
+          2856,
+          3735
+        ]
+      },
+      "usd": {
+        "n": 24,
+        "value": 0.0005382500000000001,
+        "ci": [
+          0.0005121250000000001,
+          0.0005635427083333334
+        ],
+        "values": [
+          0.000519,
+          0.000507,
+          0.00053,
+          0.000602,
+          0.000536,
+          0.000514,
+          0.000596,
+          0.000643,
+          0.000572,
+          0.000413,
+          0.000606,
+          0.000594,
+          0.000453,
+          0.000542,
+          0.000613,
+          0.000544,
+          0.000562,
+          0.000528,
+          0.000531,
+          0.000388,
+          0.000614,
+          0.000547,
+          0.000417,
+          0.000547
+        ]
+      }
+    },
+    {
+      "tier": "judge",
+      "deployments": [
+        "gpt-6-sol"
+      ],
+      "calls": {
+        "n": 24,
+        "value": 1,
+        "ci": [
+          1,
+          1
+        ],
+        "values": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "tokens": {
+        "n": 24,
+        "value": 2012.25,
+        "ci": [
+          1822.2864583333335,
+          2226.758333333333
+        ],
+        "values": [
+          1861,
+          2088,
+          1646,
+          2721,
+          1783,
+          1569,
+          2510,
+          1926,
+          2183,
+          1421,
+          1755,
+          2171,
+          1916,
+          2713,
+          1830,
+          3488,
+          1595,
+          2365,
+          1924,
+          1446,
+          2685,
+          1853,
+          1383,
+          1462
+        ]
+      },
+      "usd": {
+        "n": 24,
+        "value": 0.008133583333333335,
+        "ci": [
+          0.007167317708333334,
+          0.0091998375
+        ],
+        "values": [
+          0.007588,
+          0.007604,
+          0.005918,
+          0.014399,
+          0.006853,
+          0.006303,
+          0.00869,
+          0.010653,
+          0.007337,
+          0.006207,
+          0.006449,
+          0.008033,
+          0.01078,
+          0.0108,
+          0.005426,
+          0.010904,
+          0.005278,
+          0.013194,
+          0.007401,
+          0.005575,
+          0.01146,
+          0.006999,
+          0.005965,
+          0.00539
+        ]
+      }
+    },
+    {
+      "tier": "main",
+      "deployments": [
+        "gpt-6-luna"
+      ],
+      "calls": {
+        "n": 24,
+        "value": 1,
+        "ci": [
+          1,
+          1
+        ],
+        "values": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "tokens": {
+        "n": 24,
+        "value": 9685,
+        "ci": [
+          8440.745833333332,
+          10838.641666666666
+        ],
+        "values": [
+          11100,
+          12001,
+          8691,
+          13527,
+          9270,
+          11550,
+          7328,
+          6727,
+          12059,
+          4149,
+          11893,
+          10075,
+          4948,
+          12248,
+          13176,
+          12423,
+          10604,
+          9511,
+          6774,
+          4159,
+          12300,
+          11960,
+          3963,
+          12004
+        ]
+      },
+      "usd": {
+        "n": 24,
+        "value": 0.00154125,
+        "ci": [
+          0.0013653697916666669,
+          0.0017124593749999997
+        ],
+        "values": [
+          0.001568,
+          0.001839,
+          0.001313,
+          0.001888,
+          0.001564,
+          0.001795,
+          0.001316,
+          0.000965,
+          0.001983,
+          0.000787,
+          0.001952,
+          0.001592,
+          0.001152,
+          0.002048,
+          0.001958,
+          0.002294,
+          0.001603,
+          0.001416,
+          0.001165,
+          0.000788,
+          0.002046,
+          0.001705,
+          0.000621,
+          0.001632
+        ]
+      }
+    }
+  ],
+  "sources": {
+    "any": {
+      "k": 14,
+      "n": 24,
+      "value": 0.5833333333333334,
+      "ci": [
+        0.3883466586522876,
+        0.7553239739018824
+      ]
+    },
+    "bySource": [
+      {
+        "key": "genius: unavailable",
+        "k": 2,
+        "n": 24,
+        "value": 0.08333333333333333,
+        "ci": [
+          0.023158815297043306,
+          0.25848802193210685
+        ]
+      },
+      {
+        "key": "listenbrainz: unavailable",
+        "k": 1,
+        "n": 24,
+        "value": 0.041666666666666664,
+        "ci": [
+          0.0073934561655057685,
+          0.20241806478655938
+        ]
+      },
+      {
+        "key": "musicbrainz: unavailable",
+        "k": 2,
+        "n": 24,
+        "value": 0.08333333333333333,
+        "ci": [
+          0.023158815297043306,
+          0.25848802193210685
+        ]
+      },
+      {
+        "key": "secondhandsongs: unavailable",
+        "k": 14,
+        "n": 24,
+        "value": 0.5833333333333334,
+        "ci": [
+          0.3883466586522876,
+          0.7553239739018824
+        ]
+      }
+    ],
+    "notConfigured": [
+      "discogs"
+    ],
+    "failed": []
+  },
+  "models": {
+    "generators": [
+      "gpt-6-luna"
+    ],
+    "generatorTiers": [
+      "fast gpt-6-luna",
+      "main gpt-6-luna"
+    ],
+    "judges": [
+      "gpt-6-sol"
+    ],
+    "baseline": [
+      "gpt-6-sol"
+    ],
+    "judgeIsGenerator": false
+  },
+  "sourcedClaims": {
+    "a": {
+      "k": 0,
+      "n": 70,
+      "value": 0,
+      "ci": [
+        0,
+        0.05202306241026692
+      ]
+    },
+    "b": {
+      "k": 164,
+      "n": 164,
+      "value": 1,
+      "ci": [
+        0.9771125748805723,
+        0.9999999999999999
+      ]
+    },
+    "d": {
+      "k": 232,
+      "n": 276,
+      "value": 0.8405797101449275,
+      "ci": [
+        0.7927606900576518,
+        0.8790482720320549
+      ]
+    }
+  },
+  "classifier": {
+    "judgeFile": "evals/agent/runs/2026-10-31/perturb/judge.json",
+    "cases": 81,
+    "unjudged": 0,
+    "verdicts": {
+      "contradicted": 29,
+      "partial": 9,
+      "supported": 27,
+      "unsupported": 16
+    },
+    "overall": {
+      "falsePositive": {
+        "k": 0,
+        "n": 27,
+        "value": 0,
+        "ci": [
+          0,
+          0.12455502974186705
+        ]
+      },
+      "catch": {
+        "k": 53,
+        "n": 54,
+        "value": 0.9814814814814815,
+        "ci": [
+          0.9022856251121808,
+          0.9967235122817709
+        ]
+      }
+    },
+    "bySource": [
+      {
+        "source": "code",
+        "falsePositive": {
+          "k": 0,
+          "n": 20,
+          "value": 0,
+          "ci": [
+            0,
+            0.16112515805281938
+          ]
+        },
+        "catch": {
+          "k": 39,
+          "n": 40,
+          "value": 0.975,
+          "ci": [
+            0.8711863103652591,
+            0.9955731684973186
+          ]
+        }
+      },
+      {
+        "source": "model-support-check",
+        "falsePositive": {
+          "k": 0,
+          "n": 7,
+          "value": 0,
+          "ci": [
+            5.551115123125783e-17,
+            0.35433043506668743
+          ]
+        },
+        "catch": {
+          "k": 14,
+          "n": 14,
+          "value": 1,
+          "ci": [
+            0.7846891972623643,
+            1
+          ]
+        }
+      }
+    ],
+    "byMutation": [
+      {
+        "mutation": "artist-or-title",
+        "k": 12,
+        "n": 13,
+        "value": 0.9230769230769231,
+        "ci": [
+          0.6668604907890041,
+          0.9862895787574435
+        ]
+      },
+      {
+        "mutation": "irrelevant-excerpt",
+        "k": 15,
+        "n": 15,
+        "value": 1,
+        "ci": [
+          0.7961166989641515,
+          1
+        ]
+      },
+      {
+        "mutation": "relation",
+        "k": 12,
+        "n": 12,
+        "value": 1,
+        "ci": [
+          0.7575059933447592,
+          1
+        ]
+      },
+      {
+        "mutation": "role",
+        "k": 9,
+        "n": 9,
+        "value": 1,
+        "ci": [
+          0.7008549515804559,
+          1
+        ]
+      },
+      {
+        "mutation": "year",
+        "k": 5,
+        "n": 5,
+        "value": 1,
+        "ci": [
+          0.5655175352168251,
+          1
+        ]
+      }
+    ],
+    "pool": {
+      "modelClaimsCitingEvidence": 12,
+      "passedSupportCheck": 7
+    }
+  },
+  "audit": {
+    "positives": 7,
+    "positivesStated": 7,
+    "refused": 5,
+    "refusedStated": 4
+  }
+}

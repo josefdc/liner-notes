@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "entries": {
+    "POST https://api.tavily.com/search #2971803fd94ef661": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Trivia - Johnny Cash: Hurt (Music Video 2003)",
+            "url": "https://www.imdb.com/title/tt6149452/trivia",
+            "content": "Rick Rubin now sees the video as a historical document of Johnny Cash. who was 71 years of age at the time of filming in February 2003, He died seven months"
+          },
+          {
+            "title": "Hurt by Johnny Cash",
+            "url": "https://www.songfacts.com/facts/johnny-cash/hurt",
+            "content": "Rubin became Cash's producer and label boss in 1994 after they came to a working agreement: They would record songs of Cash's choosing in Rubin's home studio ...Read more"
+          },
+          {
+            "title": "Hurt (Nine Inch Nails song) - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+            "content": "| Single \"Single (music)\") by Johnny Cash | | from the album American IV: The Man Comes Around | | B-side | \"Personal Jesus\" \"Wichita Lineman\" | | Released | March 2003 | | Recorded | 2002 | | Genre | Country acoustic rock gothic country | | Length | 3:38 | | Label | American \"American Recordings (record label)\") Lost Highway | | Songwriter | Trent Reznor | | Producer | Rick Rubin | | Johnny Cash singles chronology | [...] 26. ↑ \"Video Vault 104: Johnny Cash, 'Hurt'\", 333sound, 24 June 2016. Retrieved 18 November 2020. 27. ↑ Davidson, A., (2018) \"Performing \"Hurt\": Aging, disability, and popular music as mediated product and lived-experience in Johnny Cash's final recordings\", University of South Florida scholar commons: Graduate theses and dissertations. Retrieved 18 November 2020. 28. ↑"
+          },
+          {
+            "title": "Rick Rubin on Producing Johnny Cash’s Masterpiece",
+            "url": "https://www.youtube.com/watch?v=Vli0mAXp-Oo",
+            "content": "[6:57] yeah and the popularity of these records did that surprise him it completely blew [7:04] his mind he couldn't believe it he loved it he loved the acceptance of young [7:12] people on the first album we put out it really changed everything and then when hurt happened and it was [7:21] really a big hit which again was not expected he was ecstatic it was really a beautiful um [...] [3:17] it together with the band and everything and I remember the buildup at the end of the song We I had all these different instruments in my studio and we Benmont [3:25] was the keyboard player in each spot where it keeps developing we would try every keyboard in the room just see what sounds good try that one the con organ [3:35] no that's not it let's try this one try the base key the best pedals what"
+          },
+          {
+            "title": "20 Years Ago Today: Johnny Cash Films the Video for “Hurt”",
+            "url": "https://savingcountrymusic.com/20-years-ago-today-johnny-cash-films-the-video-for-hurt",
+            "content": "Oct 18, 2022 — It was specifically due to the song “Hurt”—a cover of a Nine Inch Nails song written by Trent Reznor. And even more specifically, it had to do ...Read more"
+          }
+        ]
+      }
+    },
+    "POST https://api.tavily.com/search #48c8c8ad6c21e0e2": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Johnny Cash - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Johnny-Cash",
+            "content": "Johnny Cash's Hurt Hurt (2002) is a cover of Hurt by Nine Inch Nails (1994) was sampled in Relicário by Menestrel (2017) Mindennek ára Van by Kontroll feat."
+          },
+          {
+            "title": "Hurt by Il Turco - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Il-Turco/Hurt",
+            "content": "Which songs were sampled in \"Hurt\" by Il Turco? \"Hurt\" contains samples of \"Hurt\" by Johnny Cash and \"The Silence of a Candle\" by Paul Winter Consort.Read more"
+          },
+          {
+            "title": "Hurt by Johnny Cash - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Johnny-Cash/Hurt",
+            "content": "Hurt by Johnny Cash - discover this song's samples, covers and remixes on WhoSampled. ... Sampled in 11 songs. Menestrel's Relicário, Relicário · Menestrel, 2017 ...Read more"
+          },
+          {
+            "title": "Hurt by Nine Inch Nails - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Nine-Inch-Nails/Hurt",
+            "content": "Sampled in 9 songs Westside Connection's The Gangsta, the Killa and the Dope Dealer … 54 songs Johnny Cash's Hurt. David Bowie and Nine Inch Nails's \"Hurt\" was"
+          },
+          {
+            "title": "Hurt (Nine Inch Nails song) - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+            "content": "In 2002, American country singer Johnny Cash covered the song for his final album during his lifetime, American IV: The Man Comes Around. Its accompanying video, featuring images from Cash's life and directed by Mark Romanek, was named the best video of the year by the Grammy Awards and CMA Awards, and the best video of all time by NME in July 2011. The single contains a cover of Depeche Mode's \"Personal Jesus\" as a B-side. [...] \"Orange Blossom Special \"Orange Blossom Special (song)\")\" \"The One on the Right Is on the Left\" \"Personal Jesus\" \"Ragged Old Flag \"Ragged Old Flag (song)\")\" \"Remember the Alamo \"Remember the Alamo (song)\")\" \"(Ghost) Riders in the Sky_Riders_in_the_Sky:_A_Cowboy_Legend \"(Ghost) Riders in the Sky: A Cowboy Legend\")\" \"Ring of Fire \"Ring of Fire (song)\")\" \"Rock Island"
+          }
+        ]
+      }
+    }
+  }
+}

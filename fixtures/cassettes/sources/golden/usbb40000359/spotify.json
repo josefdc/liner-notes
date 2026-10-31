@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.spotify.com/v1/search?limit=1&q=Juicy+Fruit+-+Mtume+%281983%29&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "223kK8LVBwzkk3Ck7Ua0Sk",
+              "name": "Juicy Fruit",
+              "artists": [
+                {
+                  "id": "5bHSSREflcAADAyCMlmxmh",
+                  "name": "Mtume"
+                }
+              ],
+              "album": {
+                "name": "Juicy Fruit",
+                "release_date": "1983"
+              },
+              "duration_ms": 352533,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/223kK8LVBwzkk3Ck7Ua0Sk"
+              },
+              "external_ids": {
+                "isrc": "USSM18300593"
+              }
+            }
+          ],
+          "total": 300
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=Rappin%27+Duke+-+Rappin%27+Duke+%281985%29&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "4XttXWYv9W9QmbvfH5rB8S",
+              "name": "Rappin' Duke",
+              "artists": [
+                {
+                  "id": "7ucBNyVIGvQaCY2oKZew7I",
+                  "name": "Rappin' Duke"
+                },
+                {
+                  "id": "6LezSLTlOkiARiTaTX2a2A",
+                  "name": "H.B. Barnum"
+                }
+              ],
+              "album": {
+                "name": "¿Qué Pasa?",
+                "release_date": "1985-11-25"
+              },
+              "duration_ms": 364425,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/4XttXWYv9W9QmbvfH5rB8S"
+              },
+              "external_ids": {
+                "isrc": "USA2P2236912"
+              }
+            }
+          ],
+          "total": 355
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=10&q=Juicy+The+Notorious+B.I.G.&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "2AP7m2dBb8ULTx4Gc1rdMc",
+              "name": "Juicy",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                }
+              ],
+              "album": {
+                "name": "Greatest Hits",
+                "release_date": "2007-03-02"
+              },
+              "duration_ms": 285760,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2AP7m2dBb8ULTx4Gc1rdMc"
+              },
+              "external_ids": {
+                "isrc": "USBB40706422"
+              }
+            },
+            {
+              "id": "5ByAIlEEnxYdvpnezg7HTX",
+              "name": "Juicy - 2005 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                }
+              ],
+              "album": {
+                "name": "Ready to Die (The Remaster)",
+                "release_date": "1994-09-13"
+              },
+              "duration_ms": 302760,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5ByAIlEEnxYdvpnezg7HTX"
+              },
+              "external_ids": {
+                "isrc": "USBB40580814"
+              }
+            },
+            {
+              "id": "2b7FqlHc3JrzlYtGEkzq22",
+              "name": "Juicy - 2007 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                }
+              ],
+              "album": {
+                "name": "Greatest Hits",
+                "release_date": "2007-03-02"
+              },
+              "duration_ms": 301466,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2b7FqlHc3JrzlYtGEkzq22"
+              },
+              "external_ids": {
+                "isrc": "USBB40706421"
+              }
+            },
+            {
+              "id": "355RUwXtdecClzxv1zU98n",
+              "name": "Juicy - 2005 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                }
+              ],
+              "album": {
+                "name": "Ready to Die (The Remaster)",
+                "release_date": "1994-09-13"
+              },
+              "duration_ms": 286000,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/355RUwXtdecClzxv1zU98n"
+              },
+              "external_ids": {
+                "isrc": "USBB40580846"
+              }
+            },
+            {
+              "id": "0xdYzkbBBfTevSyOJqWUSX",
+              "name": "Sky's the Limit (feat. 112) - 2014 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                },
+                {
+                  "id": "7urq0VfqxEYEEiZUkebXT4",
+                  "name": "112"
+                }
+              ],
+              "album": {
+                "name": "Life After Death (2014 Remastered Edition)",
+                "release_date": "1997-03-04"
+              },
+              "duration_ms": 329426,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0xdYzkbBBfTevSyOJqWUSX"
+              },
+              "external_ids": {
+                "isrc": "USAT21402742"
+              }
+            },
+            {
+              "id": "4GIsskMpViPkt0uzPJTJSp",
+              "name": "Nasty Girl (feat. Diddy, Nelly, Jagged Edge & Avery Storm) - 2005 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                },
+                {
+                  "id": "79OSA519ScnPY0MVDpu8ZV",
+                  "name": "Avery Storm"
+                },
+                {
+                  "id": "59wfkuBoNyhDMQGCljbUbA",
+                  "name": "Diddy"
+                },
+                {
+                  "id": "7Aq8lpLMSt1Zxu56pe9bmp",
+                  "name": "Jagged Edge"
+                },
+                {
+                  "id": "2gBjLmx6zQnFGQJCAQpRgw",
+                  "name": "Nelly"
+                }
+              ],
+              "album": {
+                "name": "Duets: The Final Chapter",
+                "release_date": "2005-11-18"
+              },
+              "duration_ms": 286186,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/4GIsskMpViPkt0uzPJTJSp"
+              },
+              "external_ids": {
+                "isrc": "USBB10500008"
+              }
+            },
+            {
+              "id": "2h8bFoXH8Du1JEWNQkGqwB",
+              "name": "Nasty Girl (feat. Diddy, Nelly, Jagged Edge & Avery Storm) - 2005 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                },
+                {
+                  "id": "79OSA519ScnPY0MVDpu8ZV",
+                  "name": "Avery Storm"
+                },
+                {
+                  "id": "59wfkuBoNyhDMQGCljbUbA",
+                  "name": "Diddy"
+                },
+                {
+                  "id": "7Aq8lpLMSt1Zxu56pe9bmp",
+                  "name": "Jagged Edge"
+                },
+                {
+                  "id": "2gBjLmx6zQnFGQJCAQpRgw",
+                  "name": "Nelly"
+                }
+              ],
+              "album": {
+                "name": "Duets: The Final Chapter (20th Anniversary Deluxe)",
+                "release_date": "2005-01-01"
+              },
+              "duration_ms": 286186,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2h8bFoXH8Du1JEWNQkGqwB"
+              },
+              "external_ids": {
+                "isrc": "USBB10500008"
+              }
+            },
+            {
+              "id": "0iIZ1fqdUIfcE8CIndhlDD",
+              "name": "Last Day (feat. The Lox) - 2014 Remaster",
+              "artists": [
+                {
+                  "id": "5me0Irg2ANcsgc93uaYrpb",
+                  "name": "The Notorious B.I.G."
+                },
+                {
+                  "id": "0A7g2YbCA9FlyZvAG6VmKP",
+                  "name": "The LOX"
+                }
+              ],
+              "album": {
+                "name": "Life After Death (2014 Remastered Edition)",
+                "release_date": "1997-03-04"
+              },
+              "duration_ms": 259666,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0iIZ1fqdUIfcE8CIndhlDD"
+              },
+              "external_ids": {
+                "isrc": "USAT21402728"
+              }
+            },
+            {
+              "id": "0u9IH9TN04IJ71T79zasnk",
+              "name": "Notorious",
+              "artists": [
+                {
+                  "id": "3MFpHeyqVwW0n7mZbJPNyE",
+                  "name": "Collect 200"
+                }
+              ],
+              "album": {
+                "name": "Everything Will Be Alright",
+                "release_date": "2026-04-30"
+              },
+              "duration_ms": 175748,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0u9IH9TN04IJ71T79zasnk"
+              },
+              "external_ids": {
+                "isrc": "CBEFB2500604"
+              }
+            },
+            {
+              "id": "6U6Cr0sQTmuvPqEs8iLgPn",
+              "name": "This Time Around",
+              "artists": [
+                {
+                  "id": "3fMbdgg4jU18AjLCKBhRSm",
+                  "name": "Michael Jackson"
+                }
+              ],
+              "album": {
+                "name": "HIStory - PAST, PRESENT AND FUTURE - BOOK I",
+                "release_date": "1995-06-16"
+              },
+              "duration_ms": 261130,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/6U6Cr0sQTmuvPqEs8iLgPn"
+              },
+              "external_ids": {
+                "isrc": "USSM19500009"
+              }
+            }
+          ],
+          "total": 20
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/tracks/2AP7m2dBb8ULTx4Gc1rdMc": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "2AP7m2dBb8ULTx4Gc1rdMc",
+        "name": "Juicy",
+        "artists": [
+          {
+            "id": "5me0Irg2ANcsgc93uaYrpb",
+            "name": "The Notorious B.I.G."
+          }
+        ],
+        "album": {
+          "name": "Greatest Hits",
+          "release_date": "2007-03-02"
+        },
+        "duration_ms": 285760,
+        "explicit": false,
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/2AP7m2dBb8ULTx4Gc1rdMc"
+        },
+        "external_ids": {
+          "isrc": "USBB40706422"
+        }
+      }
+    },
+    "POST https://accounts.spotify.com/api/token #c349b29ae2fc682a": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "access_token": "[redacted]",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  }
+}

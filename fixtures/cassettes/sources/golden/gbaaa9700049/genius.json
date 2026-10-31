@@ -1,0 +1,1005 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.genius.com/search?q=Bitter+Sweet+Symphony+The+Verve": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "meta": {
+          "status": 200
+        },
+        "response": {
+          "hits": [
+            {
+              "type": "song",
+              "result": {
+                "id": 50429,
+                "title": "Bitter Sweet Symphony",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 8802945,
+                "title": "Bittersweet Symphony (The Verve Retake)",
+                "url": "https://genius.com/Ren-bittersweet-symphony-the-verve-retake-lyrics",
+                "artist_names": "Ren",
+                "primary_artist": {
+                  "id": 27062,
+                  "name": "Ren"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 2202379,
+                "title": "Bitter Sweet Symphony (The Verve)",
+                "url": "https://genius.com/Marston-smith-bitter-sweet-symphony-the-verve-lyrics",
+                "artist_names": "Marston Smith",
+                "primary_artist": {
+                  "id": 1714744,
+                  "name": "Marston Smith"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 7310324,
+                "title": "Alternative MTV",
+                "url": "https://genius.com/Ducktails-alternative-mtv-lyrics",
+                "artist_names": "Ducktails",
+                "primary_artist": {
+                  "id": 76510,
+                  "name": "Ducktails"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 6828014,
+                "title": "Bitter Sweet Symphony (Extended Version)",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-extended-version-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 1852676,
+                "title": "Bitter Sweet Symphony (Radio Edit)",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-radio-edit-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 6828012,
+                "title": "Bitter Sweet Symphony (MSG Version)",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-msg-version-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 9560686,
+                "title": "Bitter Sweet Symphony (Luude Remix)",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-luude-remix-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 6136585,
+                "title": "Bitter Sweet Symphony (8-Bit The Verve Emulation)",
+                "url": "https://genius.com/8-bit-arcade-bitter-sweet-symphony-8-bit-the-verve-emulation-lyrics",
+                "artist_names": "8-Bit Arcade",
+                "primary_artist": {
+                  "id": 2425612,
+                  "name": "8-Bit Arcade"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 6828010,
+                "title": "Bitter Sweet Symphony (James Lavelle Remix)",
+                "url": "https://genius.com/The-verve-bitter-sweet-symphony-james-lavelle-remix-lyrics",
+                "artist_names": "The Verve",
+                "primary_artist": {
+                  "id": 11800,
+                  "name": "The Verve"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "GET https://api.genius.com/songs/50429": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "meta": {
+          "status": 200
+        },
+        "response": {
+          "song": {
+            "id": 50429,
+            "title": "Bitter Sweet Symphony",
+            "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+            "artist_names": "The Verve",
+            "primary_artist": {
+              "id": 11800,
+              "name": "The Verve"
+            },
+            "song_relationships": [
+              {
+                "relationship_type": "samples",
+                "songs": [
+                  {
+                    "id": 2248838,
+                    "title": "The Last Time",
+                    "url": "https://genius.com/The-andrew-oldham-orchestra-the-last-time-lyrics",
+                    "artist_names": "The Andrew Oldham Orchestra",
+                    "primary_artist": {
+                      "id": 352573,
+                      "name": "The Andrew Oldham Orchestra"
+                    }
+                  },
+                  {
+                    "id": 310435,
+                    "title": "The Last Time",
+                    "url": "https://genius.com/The-rolling-stones-the-last-time-lyrics",
+                    "artist_names": "The Rolling Stones",
+                    "primary_artist": {
+                      "id": 774,
+                      "name": "The Rolling Stones"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "sampled_in",
+                "songs": [
+                  {
+                    "id": 4436574,
+                    "title": "Ruby Song",
+                    "url": "https://genius.com/Insane-clown-posse-ruby-song-lyrics",
+                    "artist_names": "Insane Clown Posse",
+                    "primary_artist": {
+                      "id": 311,
+                      "name": "Insane Clown Posse"
+                    }
+                  },
+                  {
+                    "id": 8040010,
+                    "title": "Prince of Persia",
+                    "url": "https://genius.com/Kdm-shey-and-bobby-san-prince-of-persia-lyrics",
+                    "artist_names": "KDM Shey & BOBBY SAN",
+                    "primary_artist": {
+                      "id": 665076,
+                      "name": "KDM Shey"
+                    }
+                  },
+                  {
+                    "id": 56931,
+                    "title": "New York Bittersweet Symphony",
+                    "url": "https://genius.com/A-ap-rocky-new-york-bittersweet-symphony-lyrics",
+                    "artist_names": "A$AP Rocky",
+                    "primary_artist": {
+                      "id": 12417,
+                      "name": "A$AP Rocky"
+                    }
+                  },
+                  {
+                    "id": 7996705,
+                    "title": "Back To The Roots",
+                    "url": "https://genius.com/Makebo-and-amonita-producer-back-to-the-roots-lyrics",
+                    "artist_names": "Makebo & Amonita (producer)",
+                    "primary_artist": {
+                      "id": 3162769,
+                      "name": "Makebo"
+                    }
+                  },
+                  {
+                    "id": 7074459,
+                    "title": "Liike on lääke",
+                    "url": "https://genius.com/Jvg-liike-on-laake-lyrics",
+                    "artist_names": "JVG",
+                    "primary_artist": {
+                      "id": 381383,
+                      "name": "JVG"
+                    }
+                  },
+                  {
+                    "id": 202132,
+                    "title": "Time Will Only Tell",
+                    "url": "https://genius.com/Eddy-b-and-tim-gunter-time-will-only-tell-lyrics",
+                    "artist_names": "Eddy B & Tim Gunter",
+                    "primary_artist": {
+                      "id": 14391,
+                      "name": "Eddy B & Tim Gunter"
+                    }
+                  },
+                  {
+                    "id": 6210844,
+                    "title": "Admix",
+                    "url": "https://genius.com/Galactic-hole-admix-lyrics",
+                    "artist_names": "Galactic Hole",
+                    "primary_artist": {
+                      "id": 1135691,
+                      "name": "Galactic Hole"
+                    }
+                  },
+                  {
+                    "id": 5926253,
+                    "title": "Wonderwall But Liam Keeps Singing the Wrong Song",
+                    "url": "https://genius.com/William-maranci-wonderwall-but-liam-keeps-singing-the-wrong-song-lyrics",
+                    "artist_names": "William Maranci",
+                    "primary_artist": {
+                      "id": 2382495,
+                      "name": "William Maranci"
+                    }
+                  },
+                  {
+                    "id": 5361264,
+                    "title": "変化するセー (Henka suru se)",
+                    "url": "https://genius.com/Tiger-tape-collections-henka-suru-se-annotated",
+                    "artist_names": "Tiger Tape Collections",
+                    "primary_artist": {
+                      "id": 2151834,
+                      "name": "Tiger Tape Collections"
+                    }
+                  },
+                  {
+                    "id": 5042706,
+                    "title": "Magnolia",
+                    "url": "https://genius.com/Young-thug-magnolia-lyrics",
+                    "artist_names": "Young Thug",
+                    "primary_artist": {
+                      "id": 20503,
+                      "name": "Young Thug"
+                    }
+                  },
+                  {
+                    "id": 5039892,
+                    "title": "Hold It Down",
+                    "url": "https://genius.com/Stanknasty-hold-it-down-lyrics",
+                    "artist_names": "StankNasty (Ft. Mikey B)",
+                    "primary_artist": {
+                      "id": 2015305,
+                      "name": "StankNasty"
+                    }
+                  },
+                  {
+                    "id": 4832822,
+                    "title": "Brush Your Bitter Sweet Shoulders Off",
+                    "url": "https://genius.com/Al-b3-brush-your-bitter-sweet-shoulders-off-lyrics",
+                    "artist_names": "AL-B3",
+                    "primary_artist": {
+                      "id": 1936125,
+                      "name": "AL-B3"
+                    }
+                  },
+                  {
+                    "id": 3268695,
+                    "title": "Soldaten 2.0",
+                    "url": "https://genius.com/Kontra-k-soldaten-20-lyrics",
+                    "artist_names": "Kontra K",
+                    "primary_artist": {
+                      "id": 31792,
+                      "name": "Kontra K"
+                    }
+                  },
+                  {
+                    "id": 3087084,
+                    "title": "Sellin’ Yayo",
+                    "url": "https://genius.com/Koopsta-knicca-sellin-yayo-lyrics",
+                    "artist_names": "Koopsta Knicca",
+                    "primary_artist": {
+                      "id": 6971,
+                      "name": "Koopsta Knicca"
+                    }
+                  },
+                  {
+                    "id": 2418633,
+                    "title": "Bitter Sweet",
+                    "url": "https://genius.com/Lil-yachty-bitter-sweet-lyrics",
+                    "artist_names": "Lil Yachty",
+                    "primary_artist": {
+                      "id": 610968,
+                      "name": "Lil Yachty"
+                    }
+                  },
+                  {
+                    "id": 1430574,
+                    "title": "Once Again",
+                    "url": "https://genius.com/Girl-talk-once-again-lyrics",
+                    "artist_names": "Girl Talk",
+                    "primary_artist": {
+                      "id": 928,
+                      "name": "Girl Talk"
+                    }
+                  },
+                  {
+                    "id": 44714,
+                    "title": "Triple Six Club House",
+                    "url": "https://genius.com/[redacted]",
+                    "artist_names": "Lord Infamous, Tear Da Club Up Thugs & Three 6 Mafia",
+                    "primary_artist": {
+                      "id": 5342,
+                      "name": "Lord Infamous"
+                    }
+                  },
+                  {
+                    "id": 9284142,
+                    "title": "Bittersweet Goodbye",
+                    "url": "https://genius.com/Issey-cross-bittersweet-goodbye-lyrics",
+                    "artist_names": "Issey Cross",
+                    "primary_artist": {
+                      "id": 2561892,
+                      "name": "Issey Cross"
+                    }
+                  },
+                  {
+                    "id": 9161186,
+                    "title": "Adrenaline Rush",
+                    "url": "https://genius.com/Sigma-adrenaline-rush-lyrics",
+                    "artist_names": "Sigma (Ft. MORGAN (UK))",
+                    "primary_artist": {
+                      "id": 57092,
+                      "name": "Sigma"
+                    }
+                  },
+                  {
+                    "id": 8114049,
+                    "title": "wa7da mn million - واحدة من مليون",
+                    "url": "https://genius.com/Marwan-moussa-wa7da-mn-million-lyrics",
+                    "artist_names": "Marwan Moussa - مروان موسى",
+                    "primary_artist": {
+                      "id": 1205075,
+                      "name": "Marwan Moussa - مروان موسى"
+                    }
+                  },
+                  {
+                    "id": 5313246,
+                    "title": "Congratulations",
+                    "url": "https://genius.com/Chris-brown-congratulations-lyrics",
+                    "artist_names": "Chris Brown (Ft. Chanel West Coast)",
+                    "primary_artist": {
+                      "id": 438,
+                      "name": "Chris Brown"
+                    }
+                  },
+                  {
+                    "id": 8802945,
+                    "title": "Bittersweet Symphony (The Verve Retake)",
+                    "url": "https://genius.com/Ren-bittersweet-symphony-the-verve-retake-lyrics",
+                    "artist_names": "Ren",
+                    "primary_artist": {
+                      "id": 27062,
+                      "name": "Ren"
+                    }
+                  },
+                  {
+                    "id": 9264277,
+                    "title": "Memories",
+                    "url": "https://genius.com/Tothemoon-and-kelvyn-colt-memories-lyrics",
+                    "artist_names": "ToTheMoon & Kelvyn Colt",
+                    "primary_artist": {
+                      "id": 2173116,
+                      "name": "ToTheMoon"
+                    }
+                  },
+                  {
+                    "id": 9837048,
+                    "title": "YOU TOOK MY LIFE",
+                    "url": "https://genius.com/Xxylvii-you-took-my-life-lyrics",
+                    "artist_names": "xxylvii",
+                    "primary_artist": {
+                      "id": 2372552,
+                      "name": "xxylvii"
+                    }
+                  },
+                  {
+                    "id": 9803411,
+                    "title": "Time of Our Lives: Songs from EVERY YEAR (1970-2020)",
+                    "url": "https://genius.com/[redacted]",
+                    "artist_names": "DJ Earworm",
+                    "primary_artist": {
+                      "id": 190620,
+                      "name": "DJ Earworm"
+                    }
+                  },
+                  {
+                    "id": 9739401,
+                    "title": "Decade Of Pop - The 1990s (100 Song Mashup)",
+                    "url": "https://genius.com/Dj-earworm-decade-of-pop-the-1990s-100-song-mashup-lyrics",
+                    "artist_names": "DJ Earworm",
+                    "primary_artist": {
+                      "id": 190620,
+                      "name": "DJ Earworm"
+                    }
+                  },
+                  {
+                    "id": 7230102,
+                    "title": "Meadow",
+                    "url": "https://genius.com/David-shawty-and-uglyfriend-meadow-lyrics",
+                    "artist_names": "David Shawty & UglyFriend",
+                    "primary_artist": {
+                      "id": 1017463,
+                      "name": "David Shawty"
+                    }
+                  },
+                  {
+                    "id": 9627950,
+                    "title": "BASSLINESPOR",
+                    "url": "https://genius.com/Dennis-dies-das-and-robbensohn-basslinespor-lyrics",
+                    "artist_names": "Dennis Dies Das & Robbensohn (Ft. Sascha Urlaub)",
+                    "primary_artist": {
+                      "id": 1300330,
+                      "name": "Dennis Dies Das"
+                    }
+                  },
+                  {
+                    "id": 14139377,
+                    "title": "Only Monika.",
+                    "url": "https://genius.com/Polinerios-only-monika-lyrics",
+                    "artist_names": "Polinerios",
+                    "primary_artist": {
+                      "id": 5010295,
+                      "name": "Polinerios"
+                    }
+                  },
+                  {
+                    "id": 14035340,
+                    "title": "Falem De Mim",
+                    "url": "https://genius.com/Kilereme-falem-de-mim-lyrics",
+                    "artist_names": "Kilereme",
+                    "primary_artist": {
+                      "id": 1891320,
+                      "name": "Kilereme"
+                    }
+                  },
+                  {
+                    "id": 10630753,
+                    "title": "Just Wanna Tell You",
+                    "url": "https://genius.com/Negaren-just-wanna-tell-you-lyrics",
+                    "artist_names": "NegaRen",
+                    "primary_artist": {
+                      "id": 362586,
+                      "name": "NegaRen"
+                    }
+                  },
+                  {
+                    "id": 13775733,
+                    "title": "The Verve",
+                    "url": "https://genius.com/Kettama-the-verve-lyrics",
+                    "artist_names": "KETTAMA",
+                    "primary_artist": {
+                      "id": 1907219,
+                      "name": "KETTAMA"
+                    }
+                  },
+                  {
+                    "id": 13581317,
+                    "title": "Treat Infamy",
+                    "url": "https://genius.com/Rest-assured-treat-infamy-lyrics",
+                    "artist_names": "Rest Assured",
+                    "primary_artist": {
+                      "id": 3572195,
+                      "name": "Rest Assured"
+                    }
+                  },
+                  {
+                    "id": 13356635,
+                    "title": "♥ (Cacola @ Mechafest 3.29.21)",
+                    "url": "https://genius.com/Cacola-cacola-at-mechafest-32921-lyrics",
+                    "artist_names": "Cacola",
+                    "primary_artist": {
+                      "id": 1631423,
+                      "name": "Cacola"
+                    }
+                  },
+                  {
+                    "id": 13272959,
+                    "title": "Komt Goed",
+                    "url": "https://genius.com/Isabel-usher-komt-goed-lyrics",
+                    "artist_names": "Isabèl Usher",
+                    "primary_artist": {
+                      "id": 1252181,
+                      "name": "Isabèl Usher"
+                    }
+                  },
+                  {
+                    "id": 12014533,
+                    "title": "I’ve Had it With This Name",
+                    "url": "https://genius.com/Psycosis-ive-had-it-with-this-name-lyrics",
+                    "artist_names": "Psycosis",
+                    "primary_artist": {
+                      "id": 2082248,
+                      "name": "Psycosis"
+                    }
+                  },
+                  {
+                    "id": 11471170,
+                    "title": "Bitter Sweet Symphony Freestyle",
+                    "url": "https://genius.com/Kanye-west-bitter-sweet-symphony-freestyle-lyrics",
+                    "artist_names": "Kanye West",
+                    "primary_artist": {
+                      "id": 72,
+                      "name": "Kanye West"
+                    }
+                  },
+                  {
+                    "id": 8041178,
+                    "title": "Miss Thang",
+                    "url": "https://genius.com/Marc-e-bassy-miss-thang-lyrics",
+                    "artist_names": "Marc E. Bassy",
+                    "primary_artist": {
+                      "id": 148908,
+                      "name": "Marc E. Bassy"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "interpolates",
+                "songs": []
+              },
+              {
+                "relationship_type": "interpolated_by",
+                "songs": [
+                  {
+                    "id": 8041178,
+                    "title": "Miss Thang",
+                    "url": "https://genius.com/Marc-e-bassy-miss-thang-lyrics",
+                    "artist_names": "Marc E. Bassy",
+                    "primary_artist": {
+                      "id": 148908,
+                      "name": "Marc E. Bassy"
+                    }
+                  },
+                  {
+                    "id": 10318406,
+                    "title": "Happily Ever After",
+                    "url": "https://genius.com/Alexis-saucedo-happily-ever-after-lyrics",
+                    "artist_names": "Alexis Saucedo",
+                    "primary_artist": {
+                      "id": 3343237,
+                      "name": "Alexis Saucedo"
+                    }
+                  },
+                  {
+                    "id": 12650911,
+                    "title": "Pigs",
+                    "url": "https://genius.com/Yahweh-aus-pigs-lyrics",
+                    "artist_names": "Yahweh (AUS)",
+                    "primary_artist": {
+                      "id": 4714140,
+                      "name": "Yahweh (AUS)"
+                    }
+                  },
+                  {
+                    "id": 12456625,
+                    "title": "I Hope You Hear This Song",
+                    "url": "https://genius.com/Allie-x-i-hope-you-hear-this-song-lyrics",
+                    "artist_names": "Allie X",
+                    "primary_artist": {
+                      "id": 155219,
+                      "name": "Allie X"
+                    }
+                  },
+                  {
+                    "id": 56931,
+                    "title": "New York Bittersweet Symphony",
+                    "url": "https://genius.com/A-ap-rocky-new-york-bittersweet-symphony-lyrics",
+                    "artist_names": "A$AP Rocky",
+                    "primary_artist": {
+                      "id": 12417,
+                      "name": "A$AP Rocky"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "cover_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "covered_by",
+                "songs": [
+                  {
+                    "id": 7249671,
+                    "title": "Bittersweet Symphony (Acoustic)",
+                    "url": "https://genius.com/Richard-ashcroft-bittersweet-symphony-acoustic-lyrics",
+                    "artist_names": "Richard Ashcroft",
+                    "primary_artist": {
+                      "id": 124784,
+                      "name": "Richard Ashcroft"
+                    }
+                  },
+                  {
+                    "id": 7177527,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Four-year-strong-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Four Year Strong",
+                    "primary_artist": {
+                      "id": 209134,
+                      "name": "Four Year Strong"
+                    }
+                  },
+                  {
+                    "id": 2181799,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Vitamin-string-quartet-bittersweet-symphony-lyrics",
+                    "artist_names": "Vitamin String Quartet",
+                    "primary_artist": {
+                      "id": 454633,
+                      "name": "Vitamin String Quartet"
+                    }
+                  },
+                  {
+                    "id": 6608280,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/The-knocks-and-foster-the-people-bittersweet-symphony-lyrics",
+                    "artist_names": "The Knocks & Foster the People",
+                    "primary_artist": {
+                      "id": 84077,
+                      "name": "The Knocks"
+                    }
+                  },
+                  {
+                    "id": 6063279,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Annett-louisan-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Annett Louisan",
+                    "primary_artist": {
+                      "id": 167276,
+                      "name": "Annett Louisan"
+                    }
+                  },
+                  {
+                    "id": 2126577,
+                    "title": "Bittersweet Symphony (SMASH Cast Version)",
+                    "url": "https://genius.com/Smash-cast-bittersweet-symphony-smash-cast-version-lyrics",
+                    "artist_names": "SMASH Cast (Ft. Megan Hilty)",
+                    "primary_artist": {
+                      "id": 373641,
+                      "name": "SMASH Cast"
+                    }
+                  },
+                  {
+                    "id": 523005,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Ace-enders-and-a-million-different-people-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Ace Enders and a Million Different People (Ft. Aaron Marsh, Alex Gaskarth, Craig Owens, Duane Okun, Kenny Vasoli, Mark Hoppus, Matthew Thiessen & The Rocket Summer)",
+                    "primary_artist": {
+                      "id": 230540,
+                      "name": "Ace Enders and a Million Different People"
+                    }
+                  },
+                  {
+                    "id": 3490564,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Riverdale-cast-bittersweet-symphony-lyrics",
+                    "artist_names": "Riverdale Cast (Ft. Ashleigh Murray & Camila Mendes)",
+                    "primary_artist": {
+                      "id": 1104920,
+                      "name": "Riverdale Cast"
+                    }
+                  },
+                  {
+                    "id": 3221588,
+                    "title": "Bittersweet Haj",
+                    "url": "https://genius.com/Umphreys-mcgee-bittersweet-haj-lyrics",
+                    "artist_names": "Umphrey's McGee",
+                    "primary_artist": {
+                      "id": 61586,
+                      "name": "Umphrey’s McGee"
+                    }
+                  },
+                  {
+                    "id": 3185802,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Mondo-cozmo-bittersweet-symphony-lyrics",
+                    "artist_names": "Mondo Cozmo",
+                    "primary_artist": {
+                      "id": 1003700,
+                      "name": "Mondo Cozmo"
+                    }
+                  },
+                  {
+                    "id": 3033836,
+                    "title": "Bitter Sweet Symphony (Live at Maida Vale)",
+                    "url": "https://genius.com/London-grammar-bitter-sweet-symphony-live-at-maida-vale-lyrics",
+                    "artist_names": "London Grammar",
+                    "primary_artist": {
+                      "id": 53533,
+                      "name": "London Grammar"
+                    }
+                  },
+                  {
+                    "id": 1808352,
+                    "title": "Home Sweet Home/Bittersweet Symphony",
+                    "url": "https://genius.com/Limp-bizkit-home-sweet-home-bittersweet-symphony-lyrics",
+                    "artist_names": "Limp Bizkit",
+                    "primary_artist": {
+                      "id": 8346,
+                      "name": "Limp Bizkit"
+                    }
+                  },
+                  {
+                    "id": 1830482,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Coldplay-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Coldplay (Ft. Richard Ashcroft)",
+                    "primary_artist": {
+                      "id": 8351,
+                      "name": "Coldplay"
+                    }
+                  },
+                  {
+                    "id": 8608352,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Aubrie-sellers-bittersweet-symphony-lyrics",
+                    "artist_names": "Aubrie Sellers",
+                    "primary_artist": {
+                      "id": 632842,
+                      "name": "Aubrie Sellers"
+                    }
+                  },
+                  {
+                    "id": 8482735,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/First-to-eleven-bitter-sweet-symphony-lyrics",
+                    "artist_names": "First to Eleven",
+                    "primary_artist": {
+                      "id": 670219,
+                      "name": "First to Eleven"
+                    }
+                  },
+                  {
+                    "id": 10809304,
+                    "title": "Bittersweet Symphony (Live)",
+                    "url": "https://genius.com/Ren-bittersweet-symphony-live-lyrics",
+                    "artist_names": "Ren",
+                    "primary_artist": {
+                      "id": 27062,
+                      "name": "Ren"
+                    }
+                  },
+                  {
+                    "id": 4711516,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Gamper-and-dadoni-bittersweet-symphony-lyrics",
+                    "artist_names": "GAMPER & DADONI (Ft. Emily Roberts (Singer))",
+                    "primary_artist": {
+                      "id": 814296,
+                      "name": "GAMPER & DADONI"
+                    }
+                  },
+                  {
+                    "id": 2198091,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Al-hy-bittersweet-symphony-lyrics",
+                    "artist_names": "Al. Hy",
+                    "primary_artist": {
+                      "id": 453360,
+                      "name": "Al. Hy"
+                    }
+                  },
+                  {
+                    "id": 9811145,
+                    "title": "Bittersweet Symphony",
+                    "url": "https://genius.com/Puppet-bittersweet-symphony-lyrics",
+                    "artist_names": "Puppet",
+                    "primary_artist": {
+                      "id": 322585,
+                      "name": "Puppet"
+                    }
+                  },
+                  {
+                    "id": 11552647,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Deco-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Deco",
+                    "primary_artist": {
+                      "id": 98274,
+                      "name": "Deco"
+                    }
+                  },
+                  {
+                    "id": 6136585,
+                    "title": "Bitter Sweet Symphony (8-Bit The Verve Emulation)",
+                    "url": "https://genius.com/8-bit-arcade-bitter-sweet-symphony-8-bit-the-verve-emulation-lyrics",
+                    "artist_names": "8-Bit Arcade",
+                    "primary_artist": {
+                      "id": 2425612,
+                      "name": "8-Bit Arcade"
+                    }
+                  },
+                  {
+                    "id": 12372965,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Roxeanne-hazes-and-jaap-reesema-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Roxeanne Hazes & Jaap Reesema",
+                    "primary_artist": {
+                      "id": 1047040,
+                      "name": "Roxeanne Hazes"
+                    }
+                  },
+                  {
+                    "id": 11746712,
+                    "title": "Bitter Sweet Symphony",
+                    "url": "https://genius.com/Dan-avidan-and-super-guitar-bros-bitter-sweet-symphony-lyrics",
+                    "artist_names": "Dan Avidan & Super Guitar Bros",
+                    "primary_artist": {
+                      "id": 988043,
+                      "name": "Dan Avidan"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "remix_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "remixed_by",
+                "songs": [
+                  {
+                    "id": 6828012,
+                    "title": "Bitter Sweet Symphony (MSG Version)",
+                    "url": "https://genius.com/The-verve-bitter-sweet-symphony-msg-version-lyrics",
+                    "artist_names": "The Verve",
+                    "primary_artist": {
+                      "id": 11800,
+                      "name": "The Verve"
+                    }
+                  },
+                  {
+                    "id": 6828010,
+                    "title": "Bitter Sweet Symphony (James Lavelle Remix)",
+                    "url": "https://genius.com/The-verve-bitter-sweet-symphony-james-lavelle-remix-lyrics",
+                    "artist_names": "The Verve",
+                    "primary_artist": {
+                      "id": 11800,
+                      "name": "The Verve"
+                    }
+                  },
+                  {
+                    "id": 6828014,
+                    "title": "Bitter Sweet Symphony (Extended Version)",
+                    "url": "https://genius.com/The-verve-bitter-sweet-symphony-extended-version-lyrics",
+                    "artist_names": "The Verve",
+                    "primary_artist": {
+                      "id": 11800,
+                      "name": "The Verve"
+                    }
+                  },
+                  {
+                    "id": 1784310,
+                    "title": "Sinfonia agridoce",
+                    "url": "https://genius.com/Dealema-sinfonia-agridoce-lyrics",
+                    "artist_names": "Dealema",
+                    "primary_artist": {
+                      "id": 44012,
+                      "name": "Dealema"
+                    }
+                  },
+                  {
+                    "id": 9560686,
+                    "title": "Bitter Sweet Symphony (Luude Remix)",
+                    "url": "https://genius.com/The-verve-bitter-sweet-symphony-luude-remix-lyrics",
+                    "artist_names": "The Verve",
+                    "primary_artist": {
+                      "id": 11800,
+                      "name": "The Verve"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "live_version_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "performed_live_as",
+                "songs": []
+              },
+              {
+                "relationship_type": "translation_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "translations",
+                "songs": [
+                  {
+                    "id": 10346510,
+                    "title": "The Verve - Bitter Sweet Symphony (polskie tłumaczenie)",
+                    "url": "https://genius.com/Polskie-tumaczenia-genius-the-verve-bitter-sweet-symphony-polskie-tumaczenie-lyrics",
+                    "artist_names": "Polskie tłumaczenia Genius",
+                    "primary_artist": {
+                      "id": 161407,
+                      "name": "Polskie tłumaczenia Genius"
+                    }
+                  },
+                  {
+                    "id": 13657848,
+                    "title": "The Verve - Bitter Sweet Symphony (Türkçe Çeviri)",
+                    "url": "https://genius.com/Genius-turkce-ceviriler-the-verve-bitter-sweet-symphony-turkce-ceviri-lyrics",
+                    "artist_names": "Genius Türkçe Çeviriler",
+                    "primary_artist": {
+                      "id": 569121,
+                      "name": "Genius Türkçe Çeviriler"
+                    }
+                  },
+                  {
+                    "id": 12918662,
+                    "title": "The Verve - Bitter Sweet Symphony (Deutsche Übersetzung)",
+                    "url": "https://genius.com/Genius-deutsche-ubersetzungen-the-verve-bitter-sweet-symphony-deutsche-ubersetzung-lyrics",
+                    "artist_names": "Genius Deutsche Übersetzungen",
+                    "primary_artist": {
+                      "id": 1799569,
+                      "name": "Genius Deutsche Übersetzungen"
+                    }
+                  },
+                  {
+                    "id": 12638148,
+                    "title": "The Verve - Bitter Sweet Symphony (Traduzione Italiana)",
+                    "url": "https://genius.com/Genius-traduzioni-italiane-the-verve-bitter-sweet-symphony-traduzione-italiana-lyrics",
+                    "artist_names": "Genius Traduzioni Italiane",
+                    "primary_artist": {
+                      "id": 1562857,
+                      "name": "Genius Traduzioni Italiane"
+                    }
+                  },
+                  {
+                    "id": 11407947,
+                    "title": "The Verve - Bitter Sweet Symphony (Český překlad)",
+                    "url": "https://genius.com/Genius-ceske-preklady-the-verve-bitter-sweet-symphony-cesky-preklad-lyrics",
+                    "artist_names": "Genius České překlady",
+                    "primary_artist": {
+                      "id": 1827252,
+                      "name": "Genius České překlady"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

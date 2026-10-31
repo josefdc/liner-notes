@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=YOASOBI&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [],
+          "@attr": {
+            "artist": "YOASOBI",
+            "track": "夜に駆ける"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=YOASOBI&autocorrect=1&format=json&method=track.getTopTags&track=%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "j-pop",
+              "count": 100
+            },
+            {
+              "name": "pop",
+              "count": 44
+            },
+            {
+              "name": "yakousei",
+              "count": 29
+            },
+            {
+              "name": "rock",
+              "count": 7
+            },
+            {
+              "name": "japanese",
+              "count": 4
+            },
+            {
+              "name": "alternative rock",
+              "count": 4
+            },
+            {
+              "name": "dance",
+              "count": 4
+            },
+            {
+              "name": "alternative dance",
+              "count": 1
+            },
+            {
+              "name": "J-rock",
+              "count": 1
+            },
+            {
+              "name": "pop rock",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "YOASOBI",
+            "track": "夜に駆ける"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=df6c619f-4334-43e2-8b6a-4a32af1e4f85&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "ayase",
+              "match": "1",
+              "mbid": "3f49ae70-dd0d-4674-a10f-6b562ff52fdd"
+            },
+            {
+              "name": "Yama",
+              "match": "0.951021",
+              "mbid": "108a5d87-929c-4357-93b5-0c825e64b8d6"
+            },
+            {
+              "name": "Ryokuoushoku Shakai",
+              "match": "0.927364"
+            },
+            {
+              "name": "Ado",
+              "match": "0.837833",
+              "mbid": "ca195d97-30d9-4870-8a52-7fd3c2e175c3"
+            },
+            {
+              "name": "tuki.",
+              "match": "0.833581",
+              "mbid": "1359dfb8-8220-4ebe-aeb9-b759ed737c41"
+            }
+          ],
+          "@attr": {
+            "artist": "YOASOBI"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=df6c619f-4334-43e2-8b6a-4a32af1e4f85&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "artist": {
+          "name": "YOASOBI",
+          "mbid": "df6c619f-4334-43e2-8b6a-4a32af1e4f85",
+          "stats": {
+            "listeners": "958890",
+            "playcount": "57892612"
+          },
+          "bio": {
+            "summary": "YOASOBI (stylized in all caps) is a Japanese music duo composed of vocaloid music producer Ayase and vocalist Ikura (幾田りら/Lilas Ikuta). The group has released four music videos, all of which are based on short stories posted on Monogatary, a website operated by Sony Music Japan, later also from various novels and book tie-ups.\n\nThe name \"YOASOBI\" originates from the Japanese word 夜遊び, meaning \"nightlife\". Ayase, who is a producer of <a href=\"https://www.last.fm/music/YOASOBI\">Read more on Last.fm</a>"
+          },
+          "tags": {
+            "tag": [
+              {
+                "name": "j-pop"
+              },
+              {
+                "name": "japanese"
+              },
+              {
+                "name": "japan"
+              },
+              {
+                "name": "pop"
+              },
+              {
+                "name": "anime"
+              }
+            ]
+          },
+          "similar": {
+            "artist": [
+              {
+                "name": "ayase"
+              },
+              {
+                "name": "Yama"
+              },
+              {
+                "name": "Ryokuoushoku Shakai"
+              },
+              {
+                "name": "Ado"
+              },
+              {
+                "name": "tuki."
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=df6c619f-4334-43e2-8b6a-4a32af1e4f85&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "j-pop",
+              "count": 100
+            },
+            {
+              "name": "japanese",
+              "count": 50
+            },
+            {
+              "name": "japan",
+              "count": 5
+            },
+            {
+              "name": "pop",
+              "count": 5
+            },
+            {
+              "name": "anime",
+              "count": 1
+            },
+            {
+              "name": "electropop",
+              "count": 1
+            },
+            {
+              "name": "JPop",
+              "count": 1
+            },
+            {
+              "name": "pop rock",
+              "count": 1
+            },
+            {
+              "name": "yakousei",
+              "count": 1
+            },
+            {
+              "name": "female vocalists",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "YOASOBI"
+          }
+        }
+      }
+    }
+  }
+}

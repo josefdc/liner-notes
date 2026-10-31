@@ -20,7 +20,11 @@
 //      lo <= hi; "no data" only where n = 0;
 //    - the ablation table has rows a, b, c and d; the clarification rate is reported;
 //    - the held-out table gives n before and after the exclusion, they add up, and the ablation
-//      table's held-out n is the one after it.
+//      table's held-out n is the one after it;
+//    - a report published in evals/reports also names the models (and that there is no second
+//      judge), gives the source-error rate, and has the verifier-as-classifier section with the
+//      false-positive and catch rates per positive source, the model-positive pool and the
+//      audit of the model positives (or says each is pending).
 //
 //   node evals/agent/check-report.mjs evals/reports/agent-latest.md
 
@@ -311,6 +315,38 @@ function checkPublished({ h, runsPath, runs, result }, problems, reportsDir) {
   }
 }
 
+/** What a published report must state beyond the tables every report has. */
+export function checkPublishedStatements(md, sections, problems) {
+  const top = md.split("\n## ")[0];
+  if (!/^- \*\*Models\*\*: /m.test(top)) problems.push("header: the models that write and judge");
+  if (!/^- \*\*Second judge\*\*: /m.test(top))
+    problems.push("header: the second judge, or that there is none");
+  const rows = sections.flatMap((s) => s.tables.flatMap((t) => t.rows));
+  if (!rows.some((r) => r[0].includes("(source-error rate)")))
+    problems.push("the source-error rate");
+  const classifier = sections.find((s) => s.heading === "Verifier as a classifier");
+  const text = classifier ? md.split("\n## Verifier as a classifier\n")[1].split("\n## ")[0] : "";
+  if (!classifier) problems.push('section "Verifier as a classifier"');
+  else if (!/^Pending: /m.test(text)) {
+    const labels = classifier.tables.flatMap((t) => t.rows.map((r) => r[0]));
+    const sources = labels
+      .map((l) => l.match(/^(\S+) positives rejected \(false-positive rate\)$/)?.[1])
+      .filter((x) => x && x !== "all");
+    if (!sources.length) problems.push("the verifier's false-positive rate per positive source");
+    for (const src of sources) {
+      if (!labels.includes(`mutations of ${src} positives rejected (catch rate)`)) {
+        problems.push(`the verifier's catch rate for ${src} positives`);
+      }
+    }
+    if (!/^Model-positive pool: \d+ /m.test(text)) problems.push("the model-positive pool size");
+    if (
+      !/^### Audit of the model positives$|^Audit of the model positives: pending\.$/m.test(text)
+    ) {
+      problems.push("the audit of the model positives, or that it is pending");
+    }
+  }
+}
+
 /** A published report's dataset: evals/golden.jsonl, as it was at the report's commit. */
 function checkPinnedGolden(h, goldenPath, sha, problems, where) {
   if (goldenPath !== "evals/golden.jsonl") {
@@ -406,6 +442,7 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   }
   if (!relative(reportsDir, resolve(path)).startsWith("..")) {
     checkPublished({ h, runsPath, runs, result }, problems, reportsDir);
+    checkPublishedStatements(md, sections, problems);
   }
   if (rendered.md !== md) {
     problems.push(

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "entries": {
+    "POST https://api.tavily.com/search #466ffdc41f4206d8": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": []
+      }
+    },
+    "POST https://api.tavily.com/search #79ef4bede6c1a95d": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": []
+      }
+    },
+    "POST https://api.tavily.com/search #c76b373d8889cbce": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Bitter Sweet Symphony - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony",
+            "content": "The Verve developed \"Bitter Sweet Symphony\" from a sample \"Sampling (music)\") from a 1965 version of the Rolling Stones song \"The Last Time \"The Last Time (Rolling Stones song)\")\" by the Andrew Oldham Orchestra, adding vocals, strings, guitar and percussion. After a lawsuit by the Rolling Stones' former manager, Allen Klein, the Verve relinquished all royalties to the Rolling Stones members Mick Jagger and Keith Richards, who were also added to the songwriting credits. In 2019, ten years after [...] The Verve songwriter, Richard Ashcroft, heard the Andrew Oldham Orchestra version of \"The Last Time\" and thought it could be \"turned into something outrageous\". The Verve sampled and looped \"Loop (music)\") four bars, then added dozens more tracks, including strings, guitar, percussion and layer"
+          },
+          {
+            "title": "Urban Hymns - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Urban_Hymns",
+            "content": "5. ↑ As early as the Verve's debut single, \"All in the Mind \"All in the Mind (song)\")\" (1992), Ashcroft was fascinated by the idea of sampling. He said there were some elements in compositions that were unable to be ignored, particular song forms and noises that, to him, were timeless. In the context of hip-hop, samples were employed as the song's hook \"Hook (music)\"). For \"Bitter Sweet Symphony\", the song's string refrain – the most memorable section of it – was written by the Verve. McCabe [...] the Verve. McCabe said the sample itself played a minor role in the song and that people were mistaking Malone's score as the sample. Egan proposed that with the track's laborious and complex recording process, the band might have forgotten where Oldham's song had fit into its creation, saying th"
+          },
+          {
+            "title": "Sampling - SongMakers",
+            "url": "https://songmakers.com.au/vet/copyright/sampling",
+            "content": "### The fallout Mick Jagger and Keith Richards (from the Rolling Stones) sued The Verve for copyright infringement – The Verve lost. In 1999, Andrew Oldham (who arranged the orchestra part) also sued – The Verve lost again! As a result, Mick Jagger & Keith Richards (from The Rolling Stones), and Andrew Oldham collected 100% of the royalties for Bitter Sweet Symphony for over 20 years—even though The Verve wrote the lyrics and most of the song. ### A Happy Ending (Sort Of) [...] In 2018, after 20 years collecting royalties, Jagger and Richards gave the rights back to The Verve’s frontman, Richard Ashcroft. He finally got credit —but only after years of legal battles and lost earnings. ## Understanding Copyright Clearance & Sampling ### The Bitter Sweet Breakdown #### In small groups Discuss"
+          }
+        ]
+      }
+    }
+  }
+}

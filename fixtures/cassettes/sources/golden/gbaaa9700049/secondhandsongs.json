@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://secondhandsongs.com/work/10471": {
+      "status": 403,
+      "contentType": "text/html; charset=UTF-8",
+      "text": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"content-security-policy\" content=\"default-src &#39;none&#39;; script-src &#39;nonce-gTduCbjckZXvGcNIcyPP3p&#39; &#39;unsafe-eval&#39; https://challenges.cloudflare.com; script-s"
+    }
+  }
+}

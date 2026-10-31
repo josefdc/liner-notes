@@ -1,0 +1,408 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.genius.com/search?q=%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B+YOASOBI": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "meta": {
+          "status": 200
+        },
+        "response": {
+          "hits": [
+            {
+              "type": "song",
+              "result": {
+                "id": 10903022,
+                "title": "DIOが「夜に駆ける/YOASOBI」を歌ってみた【ジョジョに敗ける】",
+                "url": "https://genius.com/Sharin-joestar-dio-yoasobi-lyrics",
+                "artist_names": "しゃりんジョースター (Sharin Joestar)",
+                "primary_artist": {
+                  "id": 4086425,
+                  "name": "しゃりんジョースター (Sharin Joestar)"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 5638888,
+                "title": "夜に駆ける (Yoru Ni Kakeru)",
+                "url": "https://genius.com/Yoasobi-yoru-ni-kakeru-lyrics",
+                "artist_names": "YOASOBI",
+                "primary_artist": {
+                  "id": 2270044,
+                  "name": "YOASOBI"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 5628265,
+                "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (Romanized)",
+                "url": "https://genius.com/Genius-romanizations-yoasobi-yoru-ni-kakeru-racing-into-the-night-romanized-lyrics",
+                "artist_names": "Genius Romanizations",
+                "primary_artist": {
+                  "id": 1507735,
+                  "name": "Genius Romanizations"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 5739522,
+                "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (English Translation)",
+                "url": "https://genius.com/Genius-english-translations-yoasobi-yoru-ni-kakeru-racing-into-the-night-english-translation-lyrics",
+                "artist_names": "Genius English Translations",
+                "primary_artist": {
+                  "id": 196943,
+                  "name": "Genius English Translations"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 10042976,
+                "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (Spanish Translation)",
+                "url": "https://genius.com/Genius-traducciones-al-espanol-yoasobi-yoru-ni-kakeru-racing-into-the-night-spanish-translation-lyrics",
+                "artist_names": "Genius Traducciones al Español",
+                "primary_artist": {
+                  "id": 1376254,
+                  "name": "Genius Traducciones al Español"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 8937498,
+                "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru / Racing Into The Night) (الترجمة العربية)",
+                "url": "https://genius.com/Genius-arabic-translations-yoasobi-yoru-ni-kakeru-racing-into-the-night-lyrics",
+                "artist_names": "Genius Arabic Translations (الترجمات العربية)",
+                "primary_artist": {
+                  "id": 211029,
+                  "name": "Genius Arabic Translations (الترجمات العربية)"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 6597727,
+                "title": "夜に駆ける × 長く短い祭 (Mashup)",
+                "url": "https://genius.com/Yoasobi-and-sheena-ringo-mashup-lyrics",
+                "artist_names": "YOASOBI & 椎名林檎 (Sheena Ringo)",
+                "primary_artist": {
+                  "id": 2270044,
+                  "name": "YOASOBI"
+                }
+              }
+            },
+            {
+              "type": "song",
+              "result": {
+                "id": 14301321,
+                "title": "YOASOBI - 夜に駆ける (Yoru ni Kakeru) (Terjemahan Indonesia)",
+                "url": "https://genius.com/Genius-terjemahan-indonesia-yoasobi-yoru-ni-kakeru-terjemahan-indonesia-lyrics",
+                "artist_names": "Genius Terjemahan Indonesia",
+                "primary_artist": {
+                  "id": 2016225,
+                  "name": "Genius Terjemahan Indonesia"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "GET https://api.genius.com/songs/5638888": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "meta": {
+          "status": 200
+        },
+        "response": {
+          "song": {
+            "id": 5638888,
+            "title": "夜に駆ける (Yoru Ni Kakeru)",
+            "url": "https://genius.com/Yoasobi-yoru-ni-kakeru-lyrics",
+            "artist_names": "YOASOBI",
+            "primary_artist": {
+              "id": 2270044,
+              "name": "YOASOBI"
+            },
+            "song_relationships": [
+              {
+                "relationship_type": "samples",
+                "songs": []
+              },
+              {
+                "relationship_type": "sampled_in",
+                "songs": [
+                  {
+                    "id": 12450395,
+                    "title": "the NOISE",
+                    "url": "https://genius.com/Le-sserafim-and-yoasobi-the-noise-lyrics",
+                    "artist_names": "LE SSERAFIM & YOASOBI",
+                    "primary_artist": {
+                      "id": 3109717,
+                      "name": "LE SSERAFIM"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "interpolates",
+                "songs": []
+              },
+              {
+                "relationship_type": "interpolated_by",
+                "songs": [
+                  {
+                    "id": 6960878,
+                    "title": "Into The Night (English Version)",
+                    "url": "https://genius.com/Yoasobi-into-the-night-english-version-lyrics",
+                    "artist_names": "YOASOBI",
+                    "primary_artist": {
+                      "id": 2270044,
+                      "name": "YOASOBI"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "cover_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "covered_by",
+                "songs": [
+                  {
+                    "id": 8288799,
+                    "title": "夜に駆ける (Yoru Ni Kakeru)",
+                    "url": "https://genius.com/Raon-yoru-ni-kakeru-lyrics",
+                    "artist_names": "Raon (라온)",
+                    "primary_artist": {
+                      "id": 1205375,
+                      "name": "Raon (라온)"
+                    }
+                  },
+                  {
+                    "id": 7681189,
+                    "title": "夜に駆ける (Into the Night)",
+                    "url": "https://genius.com/25nightcord-at-25-00-into-the-night-lyrics",
+                    "artist_names": "25時、ナイトコードで。(Nightcord at 25:00) (Ft. 初音ミク (Hatsune Miku))",
+                    "primary_artist": {
+                      "id": 2990173,
+                      "name": "25時、ナイトコードで。(Nightcord at 25:00)"
+                    }
+                  },
+                  {
+                    "id": 7823451,
+                    "title": "夜に駆ける (Yoru Ni Kakeru)",
+                    "url": "https://genius.com/H-el-ical-yoru-ni-kakeru-lyrics",
+                    "artist_names": "H-el-ical//",
+                    "primary_artist": {
+                      "id": 3094792,
+                      "name": "H-el-ical//"
+                    }
+                  },
+                  {
+                    "id": 14545993,
+                    "title": "夜に駆ける (Yoru Ni Kakeru) (Cover)",
+                    "url": "https://genius.com/Yuju-yoru-ni-kakeru-cover-lyrics",
+                    "artist_names": "YUJU (유주)",
+                    "primary_artist": {
+                      "id": 1573538,
+                      "name": "YUJU (유주)"
+                    }
+                  },
+                  {
+                    "id": 14419203,
+                    "title": "夜に駆ける (Into the Night)",
+                    "url": "https://genius.com/Wubbzp-into-the-night-lyrics",
+                    "artist_names": "WubbzP (Ft. 式大元 (Shiki Taigen))",
+                    "primary_artist": {
+                      "id": 4282732,
+                      "name": "WubbzP"
+                    }
+                  },
+                  {
+                    "id": 12321178,
+                    "title": "夜に駆ける (Yoru Ni Kakeru/Racing Into The Night)",
+                    "url": "https://genius.com/Double-face-jpn-and-alkaloid-jpn-yoru-ni-kakeru-racing-into-the-night-lyrics",
+                    "artist_names": "Double Face (JPN) & ALKALOID (JPN)",
+                    "primary_artist": {
+                      "id": 3223170,
+                      "name": "Double Face (JPN)"
+                    }
+                  },
+                  {
+                    "id": 10903022,
+                    "title": "DIOが「夜に駆ける/YOASOBI」を歌ってみた【ジョジョに敗ける】",
+                    "url": "https://genius.com/Sharin-joestar-dio-yoasobi-lyrics",
+                    "artist_names": "しゃりんジョースター (Sharin Joestar)",
+                    "primary_artist": {
+                      "id": 4086425,
+                      "name": "しゃりんジョースター (Sharin Joestar)"
+                    }
+                  },
+                  {
+                    "id": 9600508,
+                    "title": "Racing into the Night",
+                    "url": "https://genius.com/Rachie-racing-into-the-night-lyrics",
+                    "artist_names": "Rachie",
+                    "primary_artist": {
+                      "id": 632716,
+                      "name": "Rachie"
+                    }
+                  },
+                  {
+                    "id": 9423300,
+                    "title": "Racing Into The Night (English Cover)",
+                    "url": "https://genius.com/Will-stetson-racing-into-the-night-english-cover-lyrics",
+                    "artist_names": "Will Stetson",
+                    "primary_artist": {
+                      "id": 1546109,
+                      "name": "Will Stetson"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "remix_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "remixed_by",
+                "songs": [
+                  {
+                    "id": 7120531,
+                    "title": "夜に駆ける (racing into the night) (miko flip)",
+                    "url": "https://genius.com/Mikocore-racing-into-the-night-miko-flip-lyrics",
+                    "artist_names": "mikocore",
+                    "primary_artist": {
+                      "id": 3442245,
+                      "name": "mikocore"
+                    }
+                  },
+                  {
+                    "id": 6597727,
+                    "title": "夜に駆ける × 長く短い祭 (Mashup)",
+                    "url": "https://genius.com/Yoasobi-and-sheena-ringo-mashup-lyrics",
+                    "artist_names": "YOASOBI & 椎名林檎 (Sheena Ringo)",
+                    "primary_artist": {
+                      "id": 2270044,
+                      "name": "YOASOBI"
+                    }
+                  },
+                  {
+                    "id": 13490277,
+                    "title": "##run@ night ://",
+                    "url": "https://genius.com/Minion-run-night-lyrics",
+                    "artist_names": "minion",
+                    "primary_artist": {
+                      "id": 377653,
+                      "name": "minion"
+                    }
+                  },
+                  {
+                    "id": 11612021,
+                    "title": "夜のピエロ × 夜に駆ける × ビビデバ (Yoru No Pierrot x Racing Into The Night x BIBBIDIBA) (Tirori Mix 2025)",
+                    "url": "https://genius.com/[redacted]",
+                    "artist_names": "Ado, YOASOBI & 星街すいせい (Hoshimachi Suisei)",
+                    "primary_artist": {
+                      "id": 25452,
+                      "name": "Ado"
+                    }
+                  }
+                ]
+              },
+              {
+                "relationship_type": "live_version_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "performed_live_as",
+                "songs": []
+              },
+              {
+                "relationship_type": "translation_of",
+                "songs": []
+              },
+              {
+                "relationship_type": "translations",
+                "songs": [
+                  {
+                    "id": 5628265,
+                    "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (Romanized)",
+                    "url": "https://genius.com/Genius-romanizations-yoasobi-yoru-ni-kakeru-racing-into-the-night-romanized-lyrics",
+                    "artist_names": "Genius Romanizations",
+                    "primary_artist": {
+                      "id": 1507735,
+                      "name": "Genius Romanizations"
+                    }
+                  },
+                  {
+                    "id": 5739522,
+                    "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (English Translation)",
+                    "url": "https://genius.com/Genius-english-translations-yoasobi-yoru-ni-kakeru-racing-into-the-night-english-translation-lyrics",
+                    "artist_names": "Genius English Translations",
+                    "primary_artist": {
+                      "id": 196943,
+                      "name": "Genius English Translations"
+                    }
+                  },
+                  {
+                    "id": 6967820,
+                    "title": "YOASOBI - 向夜晚奔去 (Racing Into The Night) (中文翻譯 - Traditional)",
+                    "url": "https://genius.com/Genius-chinese-translations-yoasobi-racing-into-the-night-traditional-lyrics",
+                    "artist_names": "Genius Chinese Translations (中文翻譯/中文翻译)",
+                    "primary_artist": {
+                      "id": 2738802,
+                      "name": "Genius Chinese Translations (中文翻譯/中文翻译)"
+                    }
+                  },
+                  {
+                    "id": 12510289,
+                    "title": "YOASOBI - Into The Night (Русский перевод)",
+                    "url": "https://genius.com/Genius-russian-translations-yoasobi-into-the-night-lyrics",
+                    "artist_names": "Genius Russian Translations (Русский перевод)",
+                    "primary_artist": {
+                      "id": 498402,
+                      "name": "Genius Russian Translations (Русский перевод)"
+                    }
+                  },
+                  {
+                    "id": 8937498,
+                    "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru / Racing Into The Night) (الترجمة العربية)",
+                    "url": "https://genius.com/Genius-arabic-translations-yoasobi-yoru-ni-kakeru-racing-into-the-night-lyrics",
+                    "artist_names": "Genius Arabic Translations (الترجمات العربية)",
+                    "primary_artist": {
+                      "id": 211029,
+                      "name": "Genius Arabic Translations (الترجمات العربية)"
+                    }
+                  },
+                  {
+                    "id": 10042976,
+                    "title": "YOASOBI - 夜に駆ける (Yoru Ni Kakeru/Racing Into The Night) (Spanish Translation)",
+                    "url": "https://genius.com/Genius-traducciones-al-espanol-yoasobi-yoru-ni-kakeru-racing-into-the-night-spanish-translation-lyrics",
+                    "artist_names": "Genius Traducciones al Español",
+                    "primary_artist": {
+                      "id": 1376254,
+                      "name": "Genius Traducciones al Español"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

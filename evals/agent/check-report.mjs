@@ -341,7 +341,13 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   const [runsPath, runsSha, subsetCell] = h.runs;
   const subset = subsetCell === "as recorded" ? undefined : subsetCell;
   if (!relative(reportsDir, resolve(path)).startsWith("..")) {
-    checkPinnedGolden(h, goldenPath, sha, problems, relative(REPO_ROOT, reportsDir));
+    const where = relative(REPO_ROOT, reportsDir);
+    checkPinnedGolden(h, goldenPath, sha, problems, where);
+    if (subset === undefined) {
+      problems.push(
+        `a report published in ${where} must be rendered with --subset ci or all, not "as recorded", so no row with no run record is left out`,
+      );
+    }
   }
   let golden;
   try {

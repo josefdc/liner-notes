@@ -308,6 +308,20 @@ test("an unmatched edge leaves precision only when one evidence sentence names i
     }),
   );
   assert.equal(lineage.edges[0].outcome, "fp");
+  // The same lineage in a relative clause: "which" starts a clause whose subject is not the track.
+  const relative = scoreRun(
+    bss,
+    run(bss, {
+      evidence: [
+        cite(
+          "https://www.example-blog.com/x",
+          '"Bitter Sweet Symphony" is based on an orchestral version of "The Last Time", which itself was a cover of "This May Be the Last Time" by the Staple Singers.',
+        ),
+      ],
+      edges: [uses("This May Be the Last Time", "The Staple Singers", "cover")],
+    }),
+  );
+  assert.equal(relative.edges[0].outcome, "fp");
 });
 
 test("held-out: a run citing the gold source's site loses held-out credit for that target", () => {

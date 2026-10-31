@@ -2,8 +2,9 @@
 // Renders the agent eval report from run records (see lib/score.mjs for their shape).
 //
 //   node evals/agent/report.mjs --runs <dir>                      print the report (Markdown)
-//   node evals/agent/report.mjs --runs <dir> --out evals/reports  write agent-<date>.md, .json
-//                                                                 and agent-latest.md there
+//   node evals/agent/report.mjs --runs <dir> --subset all --out evals/reports
+//                                   write agent-<date>.md, .json and agent-latest.md there
+//                                   (--subset is required there: a row with no record fails)
 // Options: --golden <path> (default evals/golden.jsonl), --subset ci|all (score only those
 // rows), --date YYYY-MM-DD (default: today, UTC), --commit <sha> (default: git HEAD).
 // `npm run eval:table -- --runs <dir>` is the same as the first form.
@@ -56,8 +57,10 @@ export function statCells(s, format) {
   if (s.n === 0) return ["no data", 0, "none (n = 0)"];
   if (s.n < MIN_N_FOR_RATE) return [`values ${s.values.map(format).join(", ")}`, s.n, COUNTS_ONLY];
   const ci = `[${format(s.ci[0])}, ${format(s.ci[1])}]`;
-  // Every resample gave the same value (all tracks equal): say so rather than imply precision.
-  return [format(s.value), s.n, s.ci[0] === s.ci[1] ? `${ci} ${ALL_EQUAL}` : ci];
+  // Every track has the same value, so every resample does: say so rather than imply precision.
+  // A zero-width interval over values that differ (ties at a cap) carries no mark.
+  const allEqual = s.values?.length > 0 && s.values.every((v) => v === s.values[0]);
+  return [format(s.value), s.n, allEqual ? `${ci} ${ALL_EQUAL}` : ci];
 }
 
 export const ALL_EQUAL = "(all resamples equal)";
@@ -479,6 +482,12 @@ async function main() {
   if (opts.out) {
     const reports = join(REPO_ROOT, "evals", "reports");
     const published = !relative(reports, resolve(opts.out)).startsWith("..");
+    if (published && !opts.subset) {
+      console.error(
+        "report: a report published in evals/reports needs --subset ci or all, so rows with no run record are named, not left out",
+      );
+      process.exit(1);
+    }
     if (published && inTestdata(opts.runs)) {
       console.error(
         "report: run records under a testdata directory cannot be published in evals/reports",

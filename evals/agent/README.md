@@ -82,7 +82,7 @@ it reads is documented at the top of that file. In short:
 
 ```sh
 npm run eval:table -- --runs <dir>                      # print the report
-node evals/agent/report.mjs --runs <dir> --out evals/reports
+node evals/agent/report.mjs --runs <dir> --subset all --out evals/reports
                                                         # agent-<date>.md, agent-<date>.json, agent-latest.md
 node evals/agent/check-report.mjs evals/reports/agent-latest.md
 ```
@@ -103,18 +103,22 @@ structure on its own: a header with the dataset (its sha256 must still match), r
 date, commit and results file; Markdown tables at the start of the line (no HTML, no indent)
 with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson interval
 recomputed; statistics with a numeric interval, low before high (marked "all resamples equal"
-when it has no width); counts only below n = 10; "no data" only at n = 0; ablation rows a-d;
+only when every track's value is equal, and only on an interval with no width); counts only below n = 10; "no data" only at n = 0; ablation rows a-d;
 the clarification rate; held-out numbers that add up; no "human-labelled", "annotators" or the
 like, in any case; the synthetic banner when the records are synthetic. A report under
 `evals/reports` must also score `evals/golden.jsonl` with the sha256 that file had at the
-report's commit, name a header commit and run commits that exist in git, and come from records
-that are neither synthetic nor under a `testdata` directory (`report.mjs` refuses to write
-those there). The broken reports in `testdata/` exercise each of these, and the tests show
+report's commit, name a header commit and run commits that exist in git, be rendered with
+`--subset ci` or `--subset all` (so a track whose run crashed is named, never left out), and come
+from records that are neither synthetic nor under a `testdata` directory (`report.mjs` refuses
+to write those there). The broken reports in `testdata/` exercise each of these, and the tests show
 which ones only re-rendering catches.
 
 What `check-report.mjs` cannot tell: whether the run records came from real runs. It proves a
-report is what the named records and dataset give, and refuses what only test data or a
-substituted dataset would give; records edited together with their report still pass. Where
+report is what the named records and dataset give. For a published report it refuses records
+marked synthetic, records under a `testdata` path, commits that are not in the repository and a
+dataset other than `evals/golden.jsonl` at the report's commit; nothing more. Records edited
+together with their report still pass, and so does the test data copied out of `testdata/`
+with its `synthetic` flag removed and a real commit set. Where
 the records come from is shown by the golden run's own trail (its cassettes and spend log), not
 by this check.
 

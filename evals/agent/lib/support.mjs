@@ -23,7 +23,8 @@
 //   a verb uses what comes after it, the other way for a passive ("A samples B" and "B is
 //   sampled in A" agree; "B samples A" does not). The words after a verb reach only to the next
 //   verb or clause word (and, which, that, who, while, but, ;), so "samples X and was covered by
-//   Y" does not make Y sampled.
+//   Y" does not make Y sampled; the words before it start after the last relative-clause word
+//   (which, that, who, ;), so "X samples Y, which was covered by Z" does not make X covered.
 
 export function normText(s) {
   return String(s ?? "")
@@ -98,6 +99,10 @@ export function datesIn(sentence) {
 // Words that start a new clause: the words after a relation verb stop there.
 const CLAUSE =
   /\s(?:and|which|that|who|whom|whose|while|whereas|but|although|though|before|after)\s|;/gi;
+
+// Words that start a relative clause: the words before a relation verb stop there, so the verb
+// of "X samples Y, which was covered by Z" is not credited to X.
+const RELATIVE = /\s(?:which|that|who|whom|whose)\s|;/gi;
 
 // A relation: a verb, or "a/the <noun> of". A past participle followed by in, by or on is
 // passive ("is sampled in", "has been covered by", "a source sampled in").
@@ -209,6 +214,7 @@ export function analyse(sentence) {
   const unquoted = sentence.replace(QUOTED, (q) => ` ${",".repeat(q.length - 2)} `);
   const relations = [...sentence.matchAll(RELATION)].map(relationOf);
   const clauses = [...unquoted.matchAll(CLAUSE)].map((m) => m.index);
+  const relatives = [...unquoted.matchAll(RELATIVE)].map((m) => m.index);
   // Where each relation's object ends: the next verb or clause word.
   for (const [i, r] of relations.entries()) {
     const next = [relations[i + 1]?.at, ...clauses.filter((c) => c >= r.end)].filter(
@@ -223,10 +229,16 @@ export function analyse(sentence) {
   const triples = [];
   for (const [i, r] of relations.entries()) {
     const earlierObjects = relations.slice(0, i).map((x) => [x.end, x.stop]);
+    // Where the verb's subject can start: after the last relative-clause word before it.
+    const start = Math.max(-1, ...relatives.filter((c) => c < r.at));
     for (const e of entities) {
       let side = null;
       if (e.at >= r.end && e.at < r.stop) side = "after";
-      else if (e.at < r.at && !earlierObjects.some(([from, to]) => e.at >= from && e.at < to)) {
+      else if (
+        e.at > start &&
+        e.at < r.at &&
+        !earlierObjects.some(([from, to]) => e.at >= from && e.at < to)
+      ) {
         side = "before";
       }
       if (!side) continue;

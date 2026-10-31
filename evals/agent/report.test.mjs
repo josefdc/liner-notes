@@ -172,6 +172,8 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
         runs,
         "--golden",
         golden,
+        "--subset",
+        "all",
         "--out",
         reports,
         "--date",
@@ -199,6 +201,22 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
       problems,
       new RegExp(`the dataset's sha256 is not evals/golden.jsonl at commit ${head}`),
     );
+    // Rendered "as recorded", a published report could leave out tracks whose runs crashed.
+    const loose = join(dir, "loose");
+    const asRecorded = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--out",
+      loose,
+      "--commit",
+      head,
+    ]);
+    assert.equal(asRecorded.status, 0, asRecorded.stderr);
+    assert.match(
+      (await checkReport(join(loose, "agent-latest.md"), { reportsDir: loose })).join("\n"),
+      /must be rendered with --subset ci or all, not "as recorded"/,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -209,11 +227,47 @@ test("report.mjs refuses to publish testdata records in evals/reports", () => {
   // overwrite a committed report.
   const out = join(ROOT, "evals", "reports", `.refusal-test-${process.pid}`);
   try {
-    const r = node(["evals/agent/report.mjs", "--runs", "evals/agent/testdata/runs", "--out", out]);
+    const r = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      "evals/agent/testdata/runs",
+      "--subset",
+      "all",
+      "--out",
+      out,
+    ]);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /testdata directory cannot be published in evals\/reports/);
     assert.equal(existsSync(out), false);
   } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
+test("a published report needs --subset, and names the rows whose runs are missing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-crashed-"));
+  // Under evals/reports, in a directory of its own, removed afterwards.
+  const out = join(ROOT, "evals", "reports", `.subset-test-${process.pid}`);
+  try {
+    // Three tracks crashed: no record in any ablation.
+    const dropped = ["GBAAA9700049", "USWB19900178", "JPP301900716"];
+    for (const name of readdirSync(join(TESTDATA, "runs"))) {
+      const records = JSON.parse(readFileSync(join(TESTDATA, "runs", name), "utf8"));
+      writeFileSync(
+        join(dir, name),
+        JSON.stringify(records.filter((r) => !dropped.includes(r.isrc))),
+      );
+    }
+    const loose = node(["evals/agent/report.mjs", "--runs", dir, "--out", out]);
+    assert.equal(loose.status, 1);
+    assert.match(loose.stderr, /needs --subset ci or all/);
+    const all = node(["evals/agent/report.mjs", "--runs", dir, "--subset", "all", "--out", out]);
+    assert.equal(all.status, 1);
+    assert.match(all.stderr, /subset all has rows with no run record: row a: .*; row d: /);
+    for (const isrc of dropped) assert.match(all.stderr, new RegExp(isrc));
+    assert.equal(existsSync(out), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
     rmSync(out, { recursive: true, force: true });
   }
 });
@@ -255,6 +309,16 @@ test("a statistic whose resamples are all equal says so, and the checker accepts
   const [value, n, ci] = statCells(s, (x) => x.toFixed(2));
   assert.equal(ci, "[1.00, 1.00] (all resamples equal)");
   assert.deepEqual(checkCells("x", value, String(n), ci), []);
+  // Ties at a cap can give a zero-width interval although some resamples differ: no mark.
+  const tied = {
+    n: 24,
+    value: 120,
+    ci: [120, 120],
+    values: [...Array(8).fill(120), ...Array(16).fill(50)],
+  };
+  const [tv, tn, tci] = statCells(tied, (x) => x.toFixed(1));
+  assert.equal(tci, "[120.0, 120.0]");
+  assert.deepEqual(checkCells("x", tv, String(tn), tci), []);
   assert.match(checkCells("x", "1.00", "12", "[0.90, 1.00] (all resamples equal)").join(), /width/);
 });
 

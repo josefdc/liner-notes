@@ -59,6 +59,19 @@ test("a claim that names nothing after its relation cannot be checked", () => {
   assert.equal(supported('"Juicy" samples "Juicy Fruit".', ex), true);
 });
 
+test("the verb of a relative clause is not credited to the sentence's subject", () => {
+  assert.equal(
+    supported(
+      '"Bitter Sweet Symphony" is a cover of "This May Be the Last Time" by the Staple Singers.',
+      '"Bitter Sweet Symphony" is based on an orchestral version of "The Last Time", which itself was a cover of "This May Be the Last Time" by the Staple Singers.',
+    ),
+    false,
+  );
+  const ex = '"Juicy" samples "Juicy Fruit" by Mtume, which was covered by Lil\' Kim.';
+  assert.equal(supported('"Juicy" is covered by Lil\' Kim.', ex), false);
+  assert.equal(supported('"Juicy" samples "Juicy Fruit" by Mtume.', ex), true);
+});
+
 test("an entity after a second verb is not the object of the first", () => {
   const ex =
     '"Juicy" by The Notorious B.I.G. samples "Juicy Fruit" by Mtume and was later covered by Puff Daddy.';

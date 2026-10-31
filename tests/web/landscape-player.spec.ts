@@ -319,3 +319,35 @@ for (const [width, height] of [[768, 400], ...SIZES] as const) {
     expect(order).toBe(true);
   });
 }
+
+// A translated label longer than the row (Chrome's page translation, into Greek): the label's
+// column takes no more than the row leaves, so the label wraps, stays in the window and leaves
+// the artist room, rather than running past the window's edge.
+const GREEK_LABEL =
+  "Οι απαντήσεις του μοντέλου αναπαράχθηκαν · η ημερομηνία εγγραφής δεν αποθηκεύτηκε";
+
+for (const [width, height] of [
+  [768, 400],
+  [844, 390],
+] as const) {
+  test(`at ${width}×${height} a translated label longer than the row wraps and leaves the artist room`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await useMockApi(page, patched(MODEL_ANSWERS, "measured-v2"));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openPlayer(page);
+    const label = page
+      .getByRole("region", { name: "Replayed model answers" })
+      .filter({ visible: true });
+    await expect(label).toHaveCount(1);
+    await label.locator("p.uppercase").evaluate((element, text) => {
+      element.textContent = text;
+    }, GREEK_LABEL);
+    await expect(label).toContainText(GREEK_LABEL);
+    expect(await inView(label)).toBe(true);
+    expect(await clippedLines(page)).toEqual([]);
+    const artist = page.locator("#player-header h1 + p");
+    expect((await artist.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(96);
+  });
+}

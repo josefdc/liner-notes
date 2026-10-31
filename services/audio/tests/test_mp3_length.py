@@ -18,6 +18,7 @@ tone-vbr.mp3 has no Xing header: libsndfile 1.2.2 reads 8700 of its 46080 sample
 ID3v2 tag.
 """
 
+import errno
 import io
 import os
 import struct
@@ -261,20 +262,53 @@ def _open_fds() -> int:
 
 
 @pytest.mark.parametrize("failure", ["thread start", "no descriptors"])
-def test_a_second_read_that_cannot_be_set_up_is_refused_and_leaks_nothing(monkeypatch, failure):
+def test_a_second_read_that_cannot_be_set_up_is_a_fault_and_leaks_nothing(monkeypatch, failure):
+    # No descriptor or no thread for the pipe is the service's fault, never the file's: not a
+    # refusal of the preview (InvalidAudioError).
     def fail(*args, **kwargs):
         if failure == "thread start":
             raise RuntimeError("can't start new thread")
-        raise OSError(24, "Too many open files")
+        raise OSError(errno.EMFILE, "Too many open files")
 
     if failure == "thread start":
         monkeypatch.setattr(threading.Thread, "start", fail)
     else:
         monkeypatch.setattr(os, "pipe", fail)
     before = _open_fds()
-    with pytest.raises(main.InvalidAudioError, match=f"^{READ_FAILED}$"):
+    with pytest.raises(main.PipeSetupError):
         main.decode(str(VBR))
     assert _open_fds() == before
+
+
+@pytest.mark.parametrize("failure", ["thread start", "no descriptors"])
+def test_a_second_read_that_cannot_be_set_up_is_a_500_without_a_code(
+    client, cdn, monkeypatch, temp_dir, failure
+):
+    base, server = cdn
+    server.files["/api/1/1/a/b/0/preview.mp3"] = VBR.read_bytes()
+    monkeypatch.setattr(preview, "validate_preview_url", lambda url: None)
+    if failure == "thread start":
+        start = threading.Thread.start
+
+        def start_unless_feeding(self):
+            # Only the thread that feeds the second read; the test client's threads start.
+            if getattr(self, "_target", None) is main._feed:
+                raise RuntimeError("can't start new thread")
+            start(self)
+
+        monkeypatch.setattr(threading.Thread, "start", start_unless_feeding)
+    else:
+
+        def no_descriptors():
+            raise OSError(errno.EMFILE, "Too many open files")
+
+        monkeypatch.setattr(main.os, "pipe", no_descriptors)
+    response = client.post("/analyze", json={"preview_url": f"{base}/api/1/1/a/b/0/preview.mp3"})
+    # A fault of the service, as any other: never decode_incomplete, which a client stores.
+    assert response.status_code == 500, response.text
+    assert response.json() == {"detail": "Audio analysis failed"}
+    assert "code" not in response.json()
+    assert list(temp_dir.iterdir()) == []
 
 
 def test_a_stale_xing_frame_count_is_trusted_a_known_limit(tmp_path):

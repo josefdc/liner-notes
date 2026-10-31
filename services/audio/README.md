@@ -657,7 +657,13 @@ reason: `the MP3 could not be decoded to the end of its MPEG audio frames` when 
 failed, `the MP3 decodes to less audio than its MPEG audio frames hold` when it ended early.
 It is not measured, nor gated as too short, on the part that decoded. Either refusal carries
 the code `decode_incomplete`, which the API reports as its own reason, `decode_incomplete`,
-never as a failed analysis.
+rather than as a failed analysis. When the service cannot set up that second read itself (no
+file descriptor for its pipe, or no thread to feed it), that is a fault of the service, not of
+the file: it answers `500` ("Audio analysis failed"), with no code, and the API reports a failed
+analysis, which a later run tries again. An API reading the detail alone (from a service older
+than the codes) takes only `the MP3 decodes to less audio than its MPEG audio frames hold` as
+`decode_incomplete`: an older service also sent `the MP3 could not be decoded to the end of its
+MPEG audio frames` for such a fault.
 
 The service decodes only through `libsndfile`, which reads no MP4 (M4A) or AAC. A preview is
 refused with `422` and its own reason, `it is an MP4 (M4A) or AAC file, a format the service
@@ -697,11 +703,11 @@ refusals carry none.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, an MP3 that decodes to less than its frames, non-finite or absurd samples) |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (MP4 (M4A) or AAC, not decodable, an MP3 that decodes to less than its frames, non-finite or absurd samples). Only the MP4 (M4A) or AAC refusal (`code: "unsupported_format"`) and the two MP3 refusals (`code: "decode_incomplete"`) carry a `code` |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
-| `500` | Analysis failed |
+| `500` | Analysis failed, or the service could not set up the MP3's second read (no pipe or thread) |
 
 ## Which URLs are fetched
 

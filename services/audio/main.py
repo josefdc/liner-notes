@@ -429,6 +429,13 @@ def _feed(fd: int, data: bytes) -> None:
         os.close(fd)
 
 
+class PipeSetupError(Exception):
+    """The second read's pipe or its feeder thread could not be set up (no descriptors, no
+    thread): a fault of the service, not of the file. It is no InvalidAudioError, nor a
+    RuntimeError that decode() takes for an undecodable file, so /analyze answers it with a 500
+    like any other internal fault, and the preview is analysed again on a later request."""
+
+
 # Samples per read from the pipe (one MPEG-1 layer II or III frame; two MPEG-2/2.5 layer III
 # frames, three layer I frames): a read that fails loses its block.
 PIPE_BLOCK = 1152
@@ -440,21 +447,27 @@ def _decode_through_pipe(data: bytes) -> tuple[np.ndarray, bool]:
     or one with a footer on a pipe) read from a pipe, at most MAX_DECODE_SECONDS. libsndfile
     cannot ask mpg123 for a length on a pipe, so the read goes on until the stream ends. It is
     read in blocks of PIPE_BLOCK samples, and a block that fails (libsndfile fails on a cut last
-    frame) ends it: the samples and whether a read failed. Raises when the pipe cannot be made,
-    fed or opened, and leaves no descriptor open.
+    frame) ends it: the samples and whether a read failed. Raises PipeSetupError when the pipe
+    or the thread that feeds it cannot be made, libsndfile's error when it cannot open the
+    stream, and leaves no descriptor open.
     """
     blocks: list[np.ndarray] = []
     failed = False
     read_end: int | None = None
     feeder: threading.Thread | None = None
     try:
-        read_end, write_end = os.pipe()
+        try:
+            read_end, write_end = os.pipe()
+        except OSError as e:
+            raise PipeSetupError("the pipe for the second read could not be made") from e
         feeder = threading.Thread(target=_feed, args=(write_end, data), daemon=True)
         try:
             feeder.start()  # from here on _feed closes the write end
-        except BaseException:
+        except BaseException as e:
             feeder = None
             os.close(write_end)
+            if isinstance(e, RuntimeError):
+                raise PipeSetupError("the thread feeding the second read could not start") from e
             raise
         with sf.SoundFile(read_end, closefd=False) as f:
             channels, left = f.channels, int(MAX_DECODE_SECONDS * f.samplerate)
@@ -494,8 +507,10 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
     TRUNCATED_READ_SHARE is decoded again from a pipe, from the first frame. A file with a Xing
     or Info header that gives its frame count, one whose frames cannot be counted, and one that
     decoded to its frames keep the first decode. Raises InvalidAudioError when the second decode
-    still falls short by more than that: MP3_READ_FAILED when it failed, TRUNCATED_MP3 when it
-    ended early. Such a file is not measured, nor gated, on the part that decoded.
+    still falls short by more than that: MP3_READ_FAILED when it failed (or libsndfile could not
+    open the stream), TRUNCATED_MP3 when it ended early. Such a file is not measured, nor gated,
+    on the part that decoded. A pipe or thread that cannot be set up is no outcome of the file:
+    PipeSetupError goes on to /analyze, a 500.
     """
     stream = mpeg.stream_length(raw)
     if stream is None or stream.length_header or stream.sample_rate != sr:
@@ -504,7 +519,8 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
         return data
     try:
         whole, failed = _decode_through_pipe(raw[stream.start :])
-    except (sf.LibsndfileError, RuntimeError, EOFError, OSError) as e:
+    except (sf.LibsndfileError, EOFError) as e:
+        # The decoder's own outcome on the file's bytes.
         raise InvalidAudioError(MP3_READ_FAILED, DECODE_INCOMPLETE_CODE) from e
     logger.info(
         "The MP3 decoded to %.2f s of the %.2f s its %d frames hold; decoded again to %.2f s",

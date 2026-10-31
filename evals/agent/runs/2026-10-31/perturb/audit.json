@@ -1,7 +1,7 @@
 {
   "version": 1,
   "perturb": "evals/perturb.jsonl",
-  "method": "Each model claim of the recordings that cites evidence was read against the excerpts it cites, before the judge was run on the set. 'stated' means every part of the claim is in a cited excerpt; nothing else was consulted.",
+  "method": "Each model claim of the recordings that cites evidence was read against the excerpts it cites, before the judge was run on the set. 'stated' means every part of the claim is in a cited excerpt; nothing else was consulted. 'lenient' marks a claim that is stated only if a part of it may be read from a cited title rather than from its words.",
   "positives": [
     { "id": "bitter-sweet-symphony-the-verve:179574d5", "stated": true, "note": "\"June 1, 1997\" is the excerpt's first release date 1997-06-01." },
     { "id": "bitter-sweet-symphony-the-verve:f67d7102", "stated": true, "note": "The excerpt says the work is covered by Coldplay feat. Richard Ashcroft." },
@@ -14,7 +14,7 @@
   "refused": [
     { "id": "bitter-sweet-symphony-the-verve:71a2da2e", "stated": false, "note": "The first sentence is in the excerpt; the second (the arrangement \"described in the source material\") is not in any cited excerpt." },
     { "id": "bitter-sweet-symphony-the-verve:824ae39c", "stated": true, "note": "The excerpt says the work is covered by Coldplay feat. Richard Ashcroft; the claim says so as \"a version of the song … as a cover\" and names no quoted title, which the check needs." },
-    { "id": "hung-up-madonna:e6b2b34e", "stated": true, "note": "Each remixer is named in a cited remix title; the check reads a name inside a quoted title as part of the title, and one sentence spans three excerpts." },
+    { "id": "hung-up-madonna:e6b2b34e", "stated": true, "lenient": true, "note": "Each remixer is named only inside a cited remix title (\"Hung Up (SDP extended vocal)\"), with Madonna as the credited artist, so \"versions by\" each remixer is read from the title, not from the words of an excerpt. The check reads a name inside a quoted title as part of the title, and one sentence spans three excerpts." },
     { "id": "juicy-the-notorious-big:117ba937", "stated": true, "note": "Each of the four recordings is in a cited excerpt; one sentence lists them across four excerpts, in a possessive form (\"Jay-Z's 'A Dream'\")." },
     { "id": "juicy-the-notorious-big:5ed3b846", "stated": true, "note": "Each of the three recordings is in a cited excerpt; one sentence lists them across three excerpts, in a possessive form." }
   ]

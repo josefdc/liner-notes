@@ -185,6 +185,85 @@
   {
     "version": 1,
     "synthetic": true,
+    "runId": "synthetic-d-1-USUM70741299",
+    "isrc": "USUM70741299",
+    "ablation": "d",
+    "repeat": 1,
+    "commit": "synthetic",
+    "recordedAt": "2026-10-31T00:00:00.000Z",
+    "identity": {
+      "isrc": "USUM70741299",
+      "mbid": "8009d470-912b-42fa-8261-b88c488eb935"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true
+    },
+    "evidence": [
+      {
+        "id": "ev-mb-USUM70741299",
+        "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+        "excerpt": "MusicBrainz recording \"Stronger\" by Kanye West."
+      },
+      {
+        "id": "ev-edge-USUM70741299-0",
+        "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+        "excerpt": "MusicBrainz: \"Stronger\" by Kanye West samples \"Harder, Better, Faster, Stronger\" by Daft Punk."
+      }
+    ],
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Harder, Better, Faster, Stronger",
+          "artist": "Daft Punk"
+        },
+        "evidenceIds": [
+          "ev-edge-USUM70741299-0"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "target": {
+          "title": "Synthetic Later Track",
+          "artist": "Synthetic Artist"
+        },
+        "evidenceIds": []
+      }
+    ],
+    "claims": [
+      {
+        "id": "c1-USUM70741299",
+        "text": "\"Stronger\" is by Kanye West.",
+        "origin": "model",
+        "verdict": "supported"
+      },
+      {
+        "id": "c2-USUM70741299-1",
+        "text": "Synthetic claim 2 about \"Stronger\".",
+        "origin": "model",
+        "verdict": "supported"
+      }
+    ],
+    "schemaValid": true,
+    "fallback": false,
+    "latencyMs": 54983,
+    "usage": {
+      "inputTokens": 17479,
+      "outputTokens": 2221,
+      "usd": 0.014819
+    }
+  },
+  {
+    "version": 1,
+    "synthetic": true,
     "runId": "synthetic-d-1-USBB40000359",
     "isrc": "USBB40000359",
     "ablation": "d",
@@ -269,11 +348,11 @@
     ],
     "schemaValid": true,
     "fallback": false,
-    "latencyMs": 56093,
+    "latencyMs": 42713,
     "usage": {
-      "inputTokens": 15053,
-      "outputTokens": 3352,
-      "usd": 0.014804
+      "inputTokens": 17748,
+      "outputTokens": 2115,
+      "usd": 0.012819
     }
   },
   {
@@ -331,11 +410,11 @@
     ],
     "schemaValid": true,
     "fallback": false,
-    "latencyMs": 51262,
+    "latencyMs": 41167,
     "usage": {
-      "inputTokens": 15695,
-      "outputTokens": 3299,
-      "usd": 0.010183
+      "inputTokens": 17995,
+      "outputTokens": 2754,
+      "usd": 0.012782
     }
   },
   {
@@ -389,6 +468,16 @@
         ]
       },
       {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "model",
+        "target": {
+          "title": "Hurt",
+          "artist": "Nine Inch Nails"
+        },
+        "evidenceIds": []
+      },
+      {
         "direction": "usedBy",
         "relation": "sample",
         "origin": "code",
@@ -415,11 +504,11 @@
     ],
     "schemaValid": true,
     "fallback": false,
-    "latencyMs": 41167,
+    "latencyMs": 49060,
     "usage": {
-      "inputTokens": 17995,
-      "outputTokens": 2754,
-      "usd": 0.012782
+      "inputTokens": 16233,
+      "outputTokens": 1888,
+      "usd": 0.01472
     }
   },
   {
@@ -477,11 +566,11 @@
     ],
     "schemaValid": true,
     "fallback": false,
-    "latencyMs": 40404,
+    "latencyMs": 48457,
     "usage": {
-      "inputTokens": 16541,
-      "outputTokens": 2693,
-      "usd": 0.009331
+      "inputTokens": 15465,
+      "outputTokens": 3270,
+      "usd": 0.014236
     }
   }
 ]

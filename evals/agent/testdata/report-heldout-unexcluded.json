@@ -10,10 +10,10 @@
   },
   "runRecords": {
     "path": "evals/agent/testdata/runs",
-    "sha256": "b03b2f0bdb22445390902f322b7828162f6ee9bc6520671440fe2e29ce1741d9"
+    "sha256": "f3014a2ea6031c3ed4ab1c930d31d1e9d015b2b62041584ec2230bd80f06257c"
   },
   "subset": "all",
-  "runs": 102,
+  "runs": 103,
   "tracks": 24,
   "goldSources": [
     {
@@ -1363,12 +1363,13 @@
     }
   ],
   "variance": {
-    "pairs": 6,
+    "pairs": 7,
     "claims": {
-      "n": 6,
+      "n": 7,
       "value": 1,
       "ci": null,
       "values": [
+        1,
         1,
         1,
         1,
@@ -1378,10 +1379,11 @@
       ]
     },
     "edges": {
-      "n": 6,
-      "value": 0.9444444444444443,
+      "n": 7,
+      "value": 0.9523809523809523,
       "ci": null,
       "values": [
+        1,
         1,
         1,
         0.6666666666666666,

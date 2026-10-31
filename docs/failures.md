@@ -14,12 +14,16 @@ changes a score: the report counts each of these as a false positive, as the sco
   by "Gianfranco Reverberi and Gian Piero Reverberi" (row c).
 - **Gold**: "Last Men Standing" by "Gian Piero Reverberi & Gian Franco Reverberi", a sample
   (interpolation accepted), from Wikipedia.
-- **Evidence**: WhoSampled, through Tavily, names the target as "Last Men Standing" by
-  "Gianfranco Reverberi and Gian Piero Reverberi".
-- **Account**: the title matches. The artist credit differs in spelling ("Gianfranco" and
-  "Gian Franco") and in order, and the scorer matches an artist by its normalised text, so the
-  proposal is not joined to the gold target. Row d does not show this edge: the verifier did
-  not source the model's link.
+- **Evidence**: two WhoSampled excerpts, through Tavily, name the target as "Last Men Standing"
+  by "Gianfranco Reverberi and Gian Piero Reverberi". The run's Wikipedia excerpt, also through
+  Tavily, names it with gold's spelling, "Last Men Standing" by "Gian Piero Reverberi and Gian
+  Franco Reverberi".
+- **Account**: the title matches. The model's artist credit is WhoSampled's, which differs from
+  gold's in spelling ("Gianfranco" and "Gian Franco") and in order, and the scorer matches an
+  artist by its normalised text, so the proposal is not joined to the gold target. Row d does
+  not show this edge: the verifier did not source the model's link. This is the only held-out
+  gold target of the run: row a counts it as missed (0 of 1), and rows b to d leave it out,
+  because those runs cite wikipedia.org, the site of its source.
 
 ## "Stop and Check Yourself", Crazy (Gnarls Barkley), `GBAHT0600202`
 
@@ -56,9 +60,18 @@ changes a score: the report counts each of these as a false positive, as the sco
 
 - **Rows**: c, both as samples, from the model.
 - **Gold**: one edge, "Thank You" by Dido; `edgesExhaustive` is true.
-- **Evidence**: in this run the MusicBrainz request failed ("fetch failed"), so the run had no
+- **Evidence**: in this run MusicBrainz was unavailable (the record's source errors list
+  `musicbrainz: unavailable`, and with it genius and secondhandsongs), so the run had no
   MusicBrainz relations. WhoSampled, through Tavily, says "Stan" contains samples of "Thank
   You" by Dido, "My Name Is" by Eminem and "Thunder - Thunder Clap and Rumble, Weather 01" by
   Sound Ideas.
 - **Account**: both proposals repeat that excerpt; neither is in gold's sources. Row d shows
   neither edge.
+
+## A measured tempo to read with care: Bitter Sweet Symphony, `GBAAA9700049`
+
+Not an edge, but a value of the same runs. The audio service measured the preview at 171.15 BPM
+(`essentia.RhythmExtractor2013+beat-regression`, confidence 0.617, raw 3.284 of 5.32), and the
+app shows it as measured, as it was. The song is commonly described at about 86 BPM, half of
+that, so the measurement may be the analyzer counting twice per beat (an octave error). Nothing
+here corrects it: a measured value is never replaced by a described one.

@@ -361,7 +361,7 @@ test("the report states dataset, run records, n, CI, date, commit and the clarif
   assert.match(md, /\*\*Dataset\*\*: `evals\/golden\.jsonl`, sha256 `[0-9a-f]{64}`/);
   assert.match(
     md,
-    /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`, sha256 `[0-9a-f]{64}`; 102 records/,
+    /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`, sha256 `[0-9a-f]{64}`; 103 records/,
   );
   assert.match(md, /\*\*Date\*\*: 2026-10-31/);
   assert.match(md, /\*\*Commit\*\*: `synthetic`/);

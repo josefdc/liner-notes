@@ -1,7 +1,7 @@
 # Agent evals, 2026-10-31
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `6abd4c278c2a1049277bdb9aa841f1a834d6b4977b4135652ce49a57d202250a`; 102 records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `fc7eda38f73e2f1ea351a41550940d7c85266fa47885e4e090a4d1d2d152834b`; 102 records over 24 tracks (subset: all).
 - **Date**: 2026-10-31
 - **Commit**: `5fd193fa7a64` (runs recorded at `5fd193fa7a64`)
 - **Results**: `agent-2026-10-31.json`
@@ -113,6 +113,8 @@ Targets excluded, by the cited site: (b) wikipedia.org 1; (c) wikipedia.org 1; (
 
 Few held-out targets ((a) 1 of 1; (b) 0 of 1; (c) 0 of 1; (d) 0 of 1): only gold targets that no queried source documents are held-out, and runs that cite their sources' sites lose them, so held-out recall rests on these few and is shown as counts.
 
+Why each proposal of the committed golden run was not matched, the held-out target's included, is described in `docs/failures.md`.
+
 ## Per stratum (row d)
 
 | stratum | metric | value | n | 95 % CI |
@@ -156,11 +158,11 @@ Positives never come from a verdict: they are code-built sourced claims (support
 | mutation "role" rejected | 9/9 | 9 | counts only (n < 10) |
 | mutation "year" rejected | 5/5 | 5 | counts only (n < 10) |
 
-Model-positive pool: 12 model claims of the recordings cite evidence; 7 pass the support check and are the model positives, 5 are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences.
+Model-positive pool: 12 model claims of the recordings cite evidence; 7 pass the support check and are the model positives, 5 are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in `fixtures/replays` (read by `evals/agent/make-perturb.mjs`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.
 
 ### Audit of the model positives
 
-Each model claim of the recordings that cites evidence was read against the excerpts it cites, before the judge was run on the set. 'stated' means every part of the claim is in a cited excerpt; nothing else was consulted. Positives stated by their excerpts: 7 of 7. Refused claims stated by their excerpts (correct claims the check refused): 4 of 5.
+Each model claim of the recordings that cites evidence was read against the excerpts it cites, before the judge was run on the set. 'stated' means every part of the claim is in a cited excerpt; nothing else was consulted. 'lenient' marks a claim that is stated only if a part of it may be read from a cited title rather than from its words. Positives stated by their excerpts: 7 of 7. Refused claims stated by their excerpts (correct claims the check refused): 4 of 5, 3 of 5 on the strictest reading (lenient: `hung-up-madonna:e6b2b34e`).
 
 - positive `bitter-sweet-symphony-the-verve:179574d5`: stated. "June 1, 1997" is the excerpt's first release date 1997-06-01.
 - positive `bitter-sweet-symphony-the-verve:f67d7102`: stated. The excerpt says the work is covered by Coldplay feat. Richard Ashcroft.
@@ -171,7 +173,7 @@ Each model claim of the recordings that cites evidence was read against the exce
 - positive `one-more-time-daft-punk:78acfe08`: stated. The excerpt says One More Time samples "More Spell on You" by Eddie Johns.
 - refused `bitter-sweet-symphony-the-verve:71a2da2e`: not stated. The first sentence is in the excerpt; the second (the arrangement "described in the source material") is not in any cited excerpt.
 - refused `bitter-sweet-symphony-the-verve:824ae39c`: stated (a correct claim the check refused). The excerpt says the work is covered by Coldplay feat. Richard Ashcroft; the claim says so as "a version of the song … as a cover" and names no quoted title, which the check needs.
-- refused `hung-up-madonna:e6b2b34e`: stated (a correct claim the check refused). Each remixer is named in a cited remix title; the check reads a name inside a quoted title as part of the title, and one sentence spans three excerpts.
+- refused `hung-up-madonna:e6b2b34e`: stated on a lenient reading (a correct claim the check refused). Each remixer is named only inside a cited remix title ("Hung Up (SDP extended vocal)"), with Madonna as the credited artist, so "versions by" each remixer is read from the title, not from the words of an excerpt. The check reads a name inside a quoted title as part of the title, and one sentence spans three excerpts.
 - refused `juicy-the-notorious-big:117ba937`: stated (a correct claim the check refused). Each of the four recordings is in a cited excerpt; one sentence lists them across four excerpts, in a possessive form ("Jay-Z's 'A Dream'").
 - refused `juicy-the-notorious-big:5ed3b846`: stated (a correct claim the check refused). Each of the three recordings is in a cited excerpt; one sentence lists them across three excerpts, in a possessive form.
 

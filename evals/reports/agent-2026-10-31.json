@@ -10,7 +10,7 @@
   },
   "runRecords": {
     "path": "evals/agent/runs/2026-10-31",
-    "sha256": "6abd4c278c2a1049277bdb9aa841f1a834d6b4977b4135652ce49a57d202250a"
+    "sha256": "fc7eda38f73e2f1ea351a41550940d7c85266fa47885e4e090a4d1d2d152834b"
   },
   "subset": "all",
   "runs": 102,
@@ -2553,7 +2553,12 @@
   "audit": {
     "positives": 7,
     "positivesStated": 7,
+    "positivesStatedStrictly": 7,
     "refused": 5,
-    "refusedStated": 4
+    "refusedStated": 4,
+    "refusedStatedStrictly": 3,
+    "lenient": [
+      "hung-up-madonna:e6b2b34e"
+    ]
   }
 }

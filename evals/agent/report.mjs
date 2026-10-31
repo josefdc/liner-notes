@@ -36,6 +36,7 @@ import {
   sourcedClaims,
   sourceErrors,
 } from "./lib/extras.mjs";
+import { RESULTS_DIR } from "./lib/record.mjs";
 import { ABLATIONS, readRuns, scoreAll } from "./lib/score.mjs";
 import { BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED, MIN_N_FOR_RATE } from "./lib/stats.mjs";
 
@@ -89,15 +90,17 @@ export function runsSha256(dir) {
       .update(readFileSync(join(dir, name)))
       .update("\0");
   }
-  // The perturbation judge's record and its audit, when the directory keeps them.
-  const perturb = join(dir, PERTURB_DIR);
-  if (existsSync(perturb)) {
-    for (const name of readdirSync(perturb)
+  // The perturbation judge's record and its audit, and each row's whole normalised result (what
+  // the replay compares), when the directory keeps them.
+  for (const sub of [PERTURB_DIR, RESULTS_DIR]) {
+    const path = join(dir, sub);
+    if (!existsSync(path)) continue;
+    for (const name of readdirSync(path)
       .filter((n) => n.endsWith(".json"))
       .sort()) {
       hash
-        .update(`${PERTURB_DIR}/${name}\0`)
-        .update(readFileSync(join(perturb, name)))
+        .update(`${sub}/${name}\0`)
+        .update(readFileSync(join(path, name)))
         .update("\0");
     }
   }
@@ -346,6 +349,12 @@ export function renderReport(
           `Few held-out targets (${heldOutNote.join("; ")}): only gold targets that no queried source documents are held-out, and runs that cite their sources' sites lose them, so held-out recall rests on these few and is shown as counts.`,
         ]
       : []),
+    ...(extras?.perTier
+      ? [
+          "",
+          "Why each proposal of the committed golden run was not matched, the held-out target's included, is described in `docs/failures.md`.",
+        ]
+      : []),
     "",
   );
 
@@ -534,7 +543,7 @@ function renderClassifier(extras, lines, json) {
     "",
     table(["metric", "value", "n", CI_HEADER], rows),
     "",
-    `Model-positive pool: ${pool.modelClaimsCitingEvidence} model claims of the recordings cite evidence; ${pool.passedSupportCheck} pass the support check and are the model positives, ${pool.modelClaimsCitingEvidence - pool.passedSupportCheck} are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences.`,
+    `Model-positive pool: ${pool.modelClaimsCitingEvidence} model claims of the recordings cite evidence; ${pool.passedSupportCheck} pass the support check and are the model positives, ${pool.modelClaimsCitingEvidence - pool.passedSupportCheck} are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in \`fixtures/replays\` (read by \`evals/agent/make-perturb.mjs\`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.`,
     "",
   );
   json.classifier = {
@@ -565,26 +574,36 @@ function renderClassifier(extras, lines, json) {
   }
   const stated = a.positives.filter((x) => x.stated).length;
   const refusedStated = a.refused.filter((x) => x.stated);
+  const lenient = [...a.positives, ...a.refused].filter((x) => x.stated && x.lenient);
+  const strict = (xs) => xs.filter((x) => x.stated && !x.lenient).length;
+  const strictly = (xs) =>
+    xs.some((x) => x.stated && x.lenient)
+      ? `, ${strict(xs)} of ${xs.length} on the strictest reading`
+      : "";
+  const reading = (x) => (x.lenient ? " on a lenient reading" : "");
   lines.push(
     "### Audit of the model positives",
     "",
-    `${a.method} Positives stated by their excerpts: ${stated} of ${a.positives.length}. Refused claims stated by their excerpts (correct claims the check refused): ${refusedStated.length} of ${a.refused.length}.`,
+    `${a.method} Positives stated by their excerpts: ${stated} of ${a.positives.length}${strictly(a.positives)}. Refused claims stated by their excerpts (correct claims the check refused): ${refusedStated.length} of ${a.refused.length}${strictly(a.refused)}${lenient.length ? ` (lenient: ${lenient.map((x) => `\`${x.id}\``).join(", ")})` : ""}.`,
     "",
     ...a.positives.map(
       (x) =>
-        `- positive \`${x.id}\`: ${x.stated ? "stated" : "**not stated**"}. ${escapeMd(x.note)}`,
+        `- positive \`${x.id}\`: ${x.stated ? `stated${reading(x)}` : "**not stated**"}. ${escapeMd(x.note)}`,
     ),
     ...a.refused.map(
       (x) =>
-        `- refused \`${x.id}\`: ${x.stated ? "stated (a correct claim the check refused)" : "not stated"}. ${escapeMd(x.note)}`,
+        `- refused \`${x.id}\`: ${x.stated ? `stated${reading(x)} (a correct claim the check refused)` : "not stated"}. ${escapeMd(x.note)}`,
     ),
     "",
   );
   json.audit = {
     positives: a.positives.length,
     positivesStated: stated,
+    positivesStatedStrictly: strict(a.positives),
     refused: a.refused.length,
     refusedStated: refusedStated.length,
+    refusedStatedStrictly: strict(a.refused),
+    lenient: lenient.map((x) => x.id),
   };
 }
 

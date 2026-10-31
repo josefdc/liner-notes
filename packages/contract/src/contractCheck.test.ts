@@ -502,6 +502,70 @@ describe("contract-check", { timeout: 120_000 }, () => {
       expect(result.status).toBe(0);
     });
 
+    // A block scalar's lines are those at least as deep as its first line, or as its key plus
+    // an indentation indicator; YAML parsers reject a line between that and the key.
+    it.each([
+      ["after its first line", (run: string) => `${run}         continue-on-error: true\n`],
+      [
+        "before a line at its first line's depth",
+        (run: string) =>
+          run.replace(
+            "          base=HEAD^1\n",
+            "            base=HEAD^1\n          continue-on-error: true\n",
+          ),
+      ],
+    ])(
+      "fails when a line inside a block scalar is less indented than its first line, %s",
+      (_, change) => {
+        const ci = realCi();
+        const run = "        run: |\n          base=HEAD^1\n";
+        const base = ciBase(ci);
+        writeFileSync(ciFile(), ci.replace(run, change(run)));
+        const result = check(base);
+        expect(result.out).toMatch(
+          new RegExp(
+            `ci\\.yml:4\\d: a line inside a block scalar that is less indented than its first line, ${OUTSIDE}`,
+          ),
+        );
+        expect(result.status).toBe(1);
+      },
+    );
+
+    it.each([
+      ["with an indentation indicator", [...STEP.slice(0, 2), "        run: |2", ...STEP.slice(3)]],
+      ["with blank lines inside", [...STEP.slice(0, 4), "", "", ...STEP.slice(4)]],
+    ])("reads a block scalar %s", (_, step) => {
+      const base = ciBase(ciWith(step));
+      edit("base=HEAD^1", "base=HEAD");
+      const result = check(base);
+      expect(result.out).not.toContain(OUTSIDE);
+      expect(result.out).toContain(STEP_CHANGED);
+      expect(result.status).toBe(1);
+    });
+
+    it("reads the common idioms the YAML subset allows", () => {
+      const ci = ciWith(STEP, [
+        "      - if: >-",
+        "          github.event_name == 'push'",
+        "        uses: https://example.com/action@v1",
+        "        with:",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub expression, not a template
+        "          node: ${{ matrix.node }}",
+        "          paths:",
+        "            - '**/*.ts'",
+        '            - "src/**"',
+      ]);
+      const base = ciBase(ci);
+      expect(check(base).out).not.toContain(OUTSIDE);
+    });
+
+    it("reads a block scalar at the end of the file", () => {
+      const ci = `${ciWith(STEP)}      - run: |\n          echo done`;
+      const base = ciBase(ci);
+      writeFileSync(ciFile(), `${ci}\n          echo again`);
+      expect(check(base)).toMatchObject({ status: 0 });
+    });
+
     // Each is valid YAML that this reader would misread: outside the subset, so it fails,
     // whatever the change acknowledges.
     it.each([
@@ -524,6 +588,7 @@ describe("contract-check", { timeout: 120_000 }, () => {
         "      - { run: npm run typecheck }\n",
       ],
       ["a flow sequence other than one of plain words", "node: [24, 26]", 'node: ["24", 26]'],
+      ["a flow sequence other than one of plain words", "node: [24, 26]", "node: [24, 26,]"],
       ["a merge key", "        run: npm run lint\n", "$&        <<: {}\n"],
       ["a complex key", "  node:\n", "$&    ? runs-on\n    : ubuntu-latest\n"],
       ["a directive", "name: ci\n", "%YAML 1.1\n---\n$&"],

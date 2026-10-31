@@ -20,19 +20,25 @@
 // continue-on-error, strategy, defaults, needs, runs-on, env and the rest), and the step's own
 // block. Comment lines and blank lines are not compared; a comment at the end of a compared
 // line is. There is no YAML library here, so CI_FILE must stay inside a small subset of YAML
-// that this reader can follow by indentation alone:
+// that this reader follows by indentation alone, checked line by line:
 //   - blank lines and comment lines;
 //   - `key:`, `key: value`, `- key: value`, `- key:`, `- value` and a `-` alone, where the key
 //     is a plain word or a quoted one, and the value is a plain scalar on one line, a quoted
 //     scalar that closes on its line, or a one-line flow sequence of plain words (`[24, 26]`),
 //     each with an optional trailing comment;
-//   - block scalars (`key: |`, `- >-`) and their content lines, deeper than their key;
+//   - block scalars (`key: |`, `- >-`, `run: |2`) and their content lines, which are at least
+//     as deep as the first one (or as the key plus the indentation indicator);
 //   - `---` as the first line.
-// Anything else (scalars that continue on the next line, anchors, tags, aliases, other flow
-// collections, merge keys, complex keys, directives, further documents, tabs in the
-// indentation, and U+0085, U+2028 or U+2029, which YAML 1.1 parsers read as line breaks) fails
-// the check on every run, naming the line, whatever BREAKING-CHANGES says. So does a CI_FILE
-// with no step named CI_STEP under jobs.<job>.steps, and a .github/workflows without CI_FILE.
+// Any other line fails the check on every run, naming the line, whatever BREAKING-CHANGES
+// says. Common idioms this rejects: anchors, aliases, merge keys and tags; flow mappings;
+// scalars that continue on the next line, quoted or plain; a trailing comma in a flow sequence
+// (`[24, 26,]`); quoted items in a flow sequence (`paths: ['**/*.ts']`: write a block list);
+// a block scalar line less deep than its first line; tabs in the indentation; directives and
+// further documents; and U+0085, U+2028 or U+2029, which YAML 1.1 parsers read as line breaks.
+// Idioms that pass: `if: >-` and other block scalars, `${{ ... }}` values, URLs, and block
+// lists with quoted items. A file that passes may still be invalid YAML, which GitHub then
+// rejects. The check also fails on every run when CI_FILE has no step named CI_STEP under
+// jobs.<job>.steps, and when .github/workflows exists without CI_FILE.
 // Other jobs and steps are not compared, so some ways to weaken the check still pass unnoticed:
 // earlier steps that change what the check reads (a shim on PATH, a write to BREAKING-CHANGES,
 // older sources checked out), and the root package.json script the step runs.
@@ -98,6 +104,30 @@ const LINE_BREAKS = {
   "\u2029": "PARAGRAPH SEPARATOR",
 };
 
+// The block scalar whose header is line `at`, under a key or dash at column `parent`, with the
+// indentation indicator `explicit` (0 for none). As in YAML, its content indent is `parent`
+// plus the indicator, or else that of its first non-blank line, and it ends before the first
+// non-blank line indented less than that. Returns its last content line (`at` when it has none)
+// and the line that ended it when that line is deeper than `parent` and not a comment, which
+// YAML parsers reject (-1 otherwise).
+function blockScalar(lines, at, parent, explicit) {
+  const indent = (line) => line.length - line.trimStart().length;
+  let depth = explicit ? parent + explicit : 0;
+  let last = at;
+  for (let j = at + 1; j < lines.length; j++) {
+    if (lines[j].trim() === "") continue;
+    if (!depth) depth = indent(lines[j]) > parent ? indent(lines[j]) : Number.POSITIVE_INFINITY;
+    if (indent(lines[j]) < depth) {
+      const stray = indent(lines[j]) > parent && !lines[j].trimStart().startsWith("#");
+      return { last, stray: stray ? j : -1 };
+    }
+    last = j;
+  }
+  return { last, stray: -1 };
+}
+/** The indentation indicator of a block scalar header such as `|2-` (0 when it has none). */
+const indicator = (header) => Number(/^[|>][+-]?([1-9])?/.exec(header)?.[1] ?? 0);
+
 // The lines of a workflow outside the YAML subset the header describes, as `<line>: <what>`.
 function outsideSubset(text) {
   const lines = text.split(/\r\n?|\n/);
@@ -127,14 +157,29 @@ function outsideSubset(text) {
   const problems = [];
   // The deepest a next structural line may be: deeper is a scalar that continues on it.
   let limit = Number.POSITIVE_INFINITY;
-  let content = -1; // Inside a block scalar whose key sits at this column.
+  const indent = (line) => line.length - line.trimStart().length;
+  let skip = -1; // The last content line of the block scalar being read.
+  let stray = -1; // The line that ended it, deeper than its key but not deep enough for it.
+  // A block scalar header at line `i` under column `parent`; the value starts with | or >.
+  const opens = (i, parent, header) => {
+    ({ last: skip, stray } = blockScalar(lines, i, parent, indicator(header)));
+    limit = parent;
+  };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const at = `${i + 1}`;
-    if (line.trim() === "") continue;
+    if (i <= skip || line.trim() === "") continue;
     const depth = line.length - line.trimStart().length;
-    if (content >= 0 && depth > content) continue;
-    content = -1;
+    if (i === stray) {
+      problems.push(
+        `${at}: a line inside a block scalar that is less indented than its first line`,
+      );
+      // The rest of what was written as the scalar, deeper than its key: not reported again.
+      skip = i;
+      const deeper = (line) => line.trim() === "" || indent(line) > limit;
+      while (skip + 1 < lines.length && deeper(lines[skip + 1])) skip++;
+      continue;
+    }
     if (/^ *\t/.test(line)) {
       problems.push(`${at}: a tab in the indentation`);
       continue;
@@ -162,13 +207,13 @@ function outsideSubset(text) {
     } else if (kv) {
       const value = kv[2] ?? "";
       if (value === "" || value.startsWith("#")) limit = Number.POSITIVE_INFINITY;
-      else if (block.test(value)) [content, limit] = [column, column];
+      else if (block.test(value)) opens(i, column, value);
       else if (scalar.test(value)) limit = column;
       else problem = /^<</.test(kv[1]) ? "a merge key" : what(value);
     } else if (dash && /^-(?: |$)/.test(body)) {
       problem = "a sequence that starts inside a sequence item";
     } else if (dash && block.test(body)) {
-      [content, limit] = [depth, depth];
+      opens(i, depth, body);
     } else if (dash && scalar.test(body)) {
       limit = depth;
     } else {
@@ -201,20 +246,15 @@ function ciStep(text) {
   const comment = (line) => /^\s*#/.test(line);
   const KEY = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'#:][^:]*?):[ \t]+`;
   // Lines inside a block scalar: after a `key: |` or `- |` line (any indicators, then an
-  // optional comment), those that are blank or deeper than the key, or than that dash, less
-  // trailing blank lines.
+  // optional comment), up to the last one blockScalar finds; trailing blank lines are not.
   const content = new Set();
   for (let i = 0; i < lines.length; i++) {
     if (content.has(i)) continue;
     const block =
-      new RegExp(`^( *(?:- +)*)${KEY}[|>][1-9+-]*[ \\t]*(?:#.*)?$`).exec(lines[i]) ??
-      /^( *(?:- +)*)-[ \t]+[|>][1-9+-]*[ \t]*(?:#.*)?$/.exec(lines[i]);
+      new RegExp(`^( *(?:- +)*)${KEY}([|>][1-9+-]*)[ \\t]*(?:#.*)?$`).exec(lines[i]) ??
+      /^( *(?:- +)*)-[ \t]+([|>][1-9+-]*)[ \t]*(?:#.*)?$/.exec(lines[i]);
     if (block) {
-      const parent = block[1].length;
-      let last = i;
-      for (let j = i + 1; j < lines.length && (blank(lines[j]) || indent(lines[j]) > parent); j++) {
-        if (!blank(lines[j])) last = j;
-      }
+      const { last } = blockScalar(lines, i, block[1].length, indicator(block[2]));
       for (let j = i + 1; j <= last; j++) content.add(j);
     }
   }

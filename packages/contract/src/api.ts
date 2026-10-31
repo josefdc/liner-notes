@@ -27,12 +27,21 @@ export const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;
 
 /**
  * Every JSON error body: a code, a short message, and sometimes details about invalid input
- * (`detail`, `issues`, `example`). Other fields may be added.
+ * (`detail`, `issues`, `example`). Other fields may be added. A "more facts" request that could
+ * write no fact says which angles of its round failed (`failedIndexes`, as FactoidsResponse).
  */
 export const ApiError = z.looseObject({
   success: z.literal(false),
   code: OpenErrorCode,
   error: z.string(),
+  failedIndexes: z
+    .array(z.int().min(0))
+    .min(1)
+    .max(FACTOIDS_PER_ROUND)
+    .optional()
+    .describe(
+      "POST /api/factoids/more: the indexes in the round of the facts that could not be written; send them back with the same round",
+    ),
 });
 export type ApiError = z.infer<typeof ApiError>;
 

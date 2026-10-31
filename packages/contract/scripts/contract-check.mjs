@@ -14,18 +14,28 @@
 // Schemas and holds the internals readerFacts reads: a zod release that hid a refinement or an
 // unknown-key policy would otherwise pass as additive.
 //
-// The CI step is the one named CI_STEP in CI_FILE. What is compared is the lines with YAML
-// meaning (not comments or blank lines) of: the workflow outside `jobs:` (on, env, defaults,
-// permissions, concurrency, name and the rest), the key of the job that holds the step and
-// that job's settings outside `steps:` (if, continue-on-error, strategy, defaults, needs,
-// runs-on, env and the rest), and the step's own block. The check fails on every run, whatever
-// BREAKING-CHANGES says, when that cannot be read: .github/workflows exists but CI_FILE does
-// not, CI_FILE has no step named CI_STEP that this reader can find, or CI_FILE contains a
-// character that YAML 1.1 parsers read as a line break (U+0085, U+2028, U+2029), which this
-// reader does not. Other jobs and steps are not compared, so some ways to weaken the check
-// still pass unnoticed: earlier steps that change what the check reads (a shim on PATH, a write
-// to BREAKING-CHANGES, older sources checked out), the root package.json script the step runs,
-// and YAML aliases or merge keys whose anchor sits outside the compared lines.
+// The CI step is the one named CI_STEP in CI_FILE. What is compared is the lines of: the
+// workflow outside `jobs:` (on, env, defaults, permissions, concurrency, name and the rest),
+// the key of the job that holds the step and that job's settings outside `steps:` (if,
+// continue-on-error, strategy, defaults, needs, runs-on, env and the rest), and the step's own
+// block. Comment lines and blank lines are not compared; a comment at the end of a compared
+// line is. There is no YAML library here, so CI_FILE must stay inside a small subset of YAML
+// that this reader can follow by indentation alone:
+//   - blank lines and comment lines;
+//   - `key:`, `key: value`, `- key: value`, `- key:`, `- value` and a `-` alone, where the key
+//     is a plain word or a quoted one, and the value is a plain scalar on one line, a quoted
+//     scalar that closes on its line, or a one-line flow sequence of plain words (`[24, 26]`),
+//     each with an optional trailing comment;
+//   - block scalars (`key: |`, `- >-`) and their content lines, deeper than their key;
+//   - `---` as the first line.
+// Anything else (scalars that continue on the next line, anchors, tags, aliases, other flow
+// collections, merge keys, complex keys, directives, further documents, tabs in the
+// indentation, and U+0085, U+2028 or U+2029, which YAML 1.1 parsers read as line breaks) fails
+// the check on every run, naming the line, whatever BREAKING-CHANGES says. So does a CI_FILE
+// with no step named CI_STEP under jobs.<job>.steps, and a .github/workflows without CI_FILE.
+// Other jobs and steps are not compared, so some ways to weaken the check still pass unnoticed:
+// earlier steps that change what the check reads (a shim on PATH, a write to BREAKING-CHANGES,
+// older sources checked out), and the root package.json script the step runs.
 //
 // Exit codes: 0 compatible; 1 breaking, unacknowledged, or a CI step that cannot be read (see
 // above); 2 the base cannot be read.
@@ -88,16 +98,99 @@ const LINE_BREAKS = {
   "\u2029": "PARAGRAPH SEPARATOR",
 };
 
+// The lines of a workflow outside the YAML subset the header describes, as `<line>: <what>`.
+function outsideSubset(text) {
+  const lines = text.split(/\r\n?|\n/);
+  const WORD = "[A-Za-z0-9_.-]+";
+  const KEY = `(?:${WORD}|"[^"]*"|'[^']*')`;
+  // A plain scalar on one line: no indicator first, no ": " or " #" inside, no ":" last.
+  const PLAIN = String.raw`(?![-?:](?:[ \t]|$))[^\s"'&!*{}\[\],|>%@\`#](?:(?![ \t]#|:(?:[ \t]|$)).)*`;
+  const QUOTED = String.raw`'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"`;
+  const FLOW = String.raw`\[ *(?:${WORD}(?: *, *${WORD})*)? *\]`;
+  const END = String.raw`[ \t]*(?:[ \t]#.*)?$`;
+  const scalar = new RegExp(`^(?:${PLAIN}|${QUOTED}|${FLOW})${END}`);
+  const block = new RegExp(`^[|>](?:[1-9][+-]?|[+-][1-9]?)?${END}`);
+  const pair = new RegExp(`^(${KEY}):(?:[ \t]+(.*))?$`);
+  // What a value outside the subset is, by its first character.
+  const what = (value) =>
+    ({
+      "&": "an anchor",
+      "!": "a tag",
+      "*": "an alias",
+      "{": "a flow mapping",
+      "[": "a flow sequence other than one of plain words",
+      '"': "a quoted scalar that does not close on its line",
+      "'": "a quoted scalar that does not close on its line",
+      "|": "a block scalar header with more after it",
+      ">": "a block scalar header with more after it",
+    })[value[0]] ?? "a value that is not a one-line scalar";
+  const problems = [];
+  // The deepest a next structural line may be: deeper is a scalar that continues on it.
+  let limit = Number.POSITIVE_INFINITY;
+  let content = -1; // Inside a block scalar whose key sits at this column.
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const at = `${i + 1}`;
+    if (line.trim() === "") continue;
+    const depth = line.length - line.trimStart().length;
+    if (content >= 0 && depth > content) continue;
+    content = -1;
+    if (/^ *\t/.test(line)) {
+      problems.push(`${at}: a tab in the indentation`);
+      continue;
+    }
+    const rest = line.slice(depth);
+    if (rest.startsWith("#")) continue;
+    if (i === 0 && rest === "---") continue;
+    let problem = null;
+    if (depth > limit) problem = "a scalar that continues on the next line";
+    else if (/^(?:---|\.\.\.)(?:\s|$)/.test(rest)) problem = "another YAML document";
+    else if (rest.startsWith("%")) problem = "a directive";
+    else if (/^\?(?:\s|$)/.test(rest)) problem = "a complex key";
+    else if (/^<<[ \t]*:/.test(rest)) problem = "a merge key";
+    if (problem) {
+      problems.push(`${at}: ${problem}`);
+      limit = Number.POSITIVE_INFINITY;
+      continue;
+    }
+    const dash = /^-(?: +|$)/.exec(rest);
+    const column = depth + (dash ? dash[0].length : 0);
+    const body = dash ? rest.slice(dash[0].length) : rest;
+    const kv = pair.exec(body);
+    if (dash && (body === "" || body.startsWith("#"))) {
+      limit = Number.POSITIVE_INFINITY; // `-` alone: its node follows, deeper.
+    } else if (kv) {
+      const value = kv[2] ?? "";
+      if (value === "" || value.startsWith("#")) limit = Number.POSITIVE_INFINITY;
+      else if (block.test(value)) [content, limit] = [column, column];
+      else if (scalar.test(value)) limit = column;
+      else problem = /^<</.test(kv[1]) ? "a merge key" : what(value);
+    } else if (dash && /^-(?: |$)/.test(body)) {
+      problem = "a sequence that starts inside a sequence item";
+    } else if (dash && block.test(body)) {
+      [content, limit] = [depth, depth];
+    } else if (dash && scalar.test(body)) {
+      limit = depth;
+    } else {
+      problem = dash ? what(body) : "a line that is not `key:`, `key: value` or `- ...`";
+    }
+    if (problem) {
+      problems.push(`${at}: ${problem}`);
+      limit = Number.POSITIVE_INFINITY;
+    }
+  }
+  return problems;
+}
+
 // What the check compares in a workflow (null when it has no step named CI_STEP under
 // jobs.<job>.steps): the workflow's lines outside `jobs:`, then, for each such step, the job's
 // key and its lines outside `steps:`, then the step's block, from the `-` that starts it to the
 // next structural line indented no deeper than that `-`. Only lines with YAML meaning are
 // kept: comments never end a block and are never compared, at any column, and neither are blank
 // lines, except inside a multi-line scalar. There is no YAML library here, so this reads
-// block-style YAML by indentation: the name may come first or after other keys, plain or
-// quoted, and the lines of block scalars (`run: |`) and of quoted scalars that span lines are
-// content, never structure or comments, even when they start with "-" or "#". A step written
-// in flow style (`- { name: ... }`), with a multi-line or escaped name, or anywhere but under
+// block-style YAML by indentation (outsideSubset says which): the name may come first or after
+// other keys, plain or quoted, and the lines of block scalars (`run: |`) are content, never
+// structure or comments, even when they start with "-" or "#". A step anywhere but under
 // jobs.<job>.steps is not read.
 function ciStep(text) {
   if (text === null) return null;
@@ -107,11 +200,9 @@ function ciStep(text) {
   const blank = (line) => line.trim() === "";
   const comment = (line) => /^\s*#/.test(line);
   const KEY = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'#:][^:]*?):[ \t]+`;
-  const closes = { '"': /^(?:[^"\\]|\\.)*"/, "'": /^(?:[^']|'')*'(?!')/ };
-  // Lines inside a scalar that spans lines: after a `key: |` or `- |` line (any indicators, then
-  // an optional comment), those that are blank or deeper than the key, or than that dash, less
-  // trailing blank lines; after a value that opens a quote and does not close it on its line,
-  // every line up to the one that closes it.
+  // Lines inside a block scalar: after a `key: |` or `- |` line (any indicators, then an
+  // optional comment), those that are blank or deeper than the key, or than that dash, less
+  // trailing blank lines.
   const content = new Set();
   for (let i = 0; i < lines.length; i++) {
     if (content.has(i)) continue;
@@ -125,16 +216,9 @@ function ciStep(text) {
         if (!blank(lines[j])) last = j;
       }
       for (let j = i + 1; j <= last; j++) content.add(j);
-      continue;
-    }
-    const quoted = new RegExp(`^ *(?:- +)*(?:${KEY})?(["'])(.*)$`).exec(lines[i]);
-    if (!quoted || closes[quoted[1]].test(quoted[2])) continue;
-    for (let j = i + 1; j < lines.length; j++) {
-      content.add(j);
-      if (closes[quoted[1]].test(lines[j])) break;
     }
   }
-  // Lines that carry structure: not blank, not a comment, not inside a multi-line scalar.
+  // Lines that carry structure: not blank, not a comment, not inside a block scalar.
   const structural = (i) => !content.has(i) && !blank(lines[i]) && !comment(lines[i]);
   const meaningful = (i) => structural(i) || content.has(i);
   const item = (i) => (structural(i) ? /^( *)-(?: +(.*))?$/.exec(lines[i]) : null);
@@ -304,6 +388,11 @@ if (ciNow === null && existsSync(join(root, dirname(CI_FILE)))) {
 if (ciNow !== null && stepNow === null) {
   ciUnreadable.push(`${CI_FILE}: no step named "${CI_STEP}" could be found under jobs.<job>.steps`);
 }
+const outside = ciNow === null ? [] : outsideSubset(ciNow);
+for (const problem of outside.slice(0, 5)) {
+  ciUnreadable.push(`${CI_FILE}:${problem}, which this check does not read`);
+}
+if (outside.length > 5) ciUnreadable.push(`${CI_FILE}: ${outside.length - 5} more such lines`);
 for (const [character, name] of Object.entries(LINE_BREAKS)) {
   const at = (ciNow ?? "").split(/\r\n?|\n/).findIndex((line) => line.includes(character));
   if (at === -1) continue;

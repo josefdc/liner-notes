@@ -65,6 +65,67 @@ const ENGINE_FILES = [
   `${path}/scripts/contract-check.mjs`,
 ];
 const CI_FILE = ".github/workflows/ci.yml";
+const CI_STEP = "Contract compatibility";
+
+// The lines of every step named CI_STEP in a workflow (null when there is none): from the `-`
+// that starts the step to the last line before the next line indented no deeper than that `-`
+// (the next step, the end of the job), less trailing blank lines. Comments at that depth belong
+// to what follows. There is no YAML library here, so this reads block-style YAML by indentation:
+// the name may come first or after other keys, plain or quoted, and lines inside block scalars
+// (`run: |`) are content, never steps, even when they start with "-". Flow-style steps
+// (`- { name: ... }`) and multi-line names are not read.
+function ciStep(text) {
+  if (text === null) return null;
+  const lines = text.split(/\r?\n/);
+  const indent = (line) => line.length - line.trimStart().length;
+  const blank = (line) => line.trim() === "";
+  // Lines inside a block scalar: those after a `key: |` or `- |` line (any indicators, then an
+  // optional comment) that are blank or deeper than the key, or than that dash.
+  const content = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    if (content.has(i)) continue;
+    const scalar =
+      /^( *(?:- +)*)(?:"[^"]*"|'[^']*'|[^\s"'#:][^:]*?):[ \t]+[|>][1-9+-]*[ \t]*(?:#.*)?$/.exec(
+        lines[i],
+      ) ?? /^( *(?:- +)*)-[ \t]+[|>][1-9+-]*[ \t]*(?:#.*)?$/.exec(lines[i]);
+    if (!scalar) continue;
+    const parent = scalar[1].length;
+    for (let j = i + 1; j < lines.length && (blank(lines[j]) || indent(lines[j]) > parent); j++) {
+      content.add(j);
+    }
+  }
+  const unquote = (raw) => {
+    const value = raw.trim();
+    const double = /^"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/.exec(value);
+    if (double) return double[1].replace(/\\(.)/g, "$1");
+    const single = /^'((?:[^']|'')*)'\s*(?:#.*)?$/.exec(value);
+    if (single) return single[1].replaceAll("''", "'");
+    return value.replace(/\s+#.*$/, "");
+  };
+  const blocks = [];
+  for (let start = 0; start < lines.length; start++) {
+    const item = content.has(start) ? null : /^( *)-(?: +(.*))?$/.exec(lines[start]);
+    if (!item) continue;
+    const dash = item[1].length;
+    let end = start + 1;
+    while (end < lines.length && (blank(lines[end]) || indent(lines[end]) > dash)) end++;
+    while (end > start + 1 && blank(lines[end - 1])) end--;
+    // The step's own keys sit where the text after its dash starts, or, when the dash is alone
+    // on its line, at the depth of the next line.
+    const first = item[2] && !item[2].startsWith("#");
+    const nextLine = lines.slice(start + 1, end).find((line) => !blank(line));
+    const keys = first ? lines[start].length - item[2].length : indent(nextLine ?? "");
+    const named = [first ? item[2] : null, ...lines.slice(start + 1, end)].some((line, offset) => {
+      if (line === null || (offset > 0 && (content.has(start + offset) || indent(line) !== keys))) {
+        return false;
+      }
+      const name = /^\s*name:[ \t]+(.*)$/.exec(line);
+      return name !== null && unquote(name[1]) === CI_STEP;
+    });
+    if (named) blocks.push(lines.slice(start, end).join("\n"));
+  }
+  return blocks.length === 0 ? null : blocks.join("\n\n");
+}
 
 // Whether the base has snapshots at all: a missing directory means the contract is new there;
 // any other git failure is an error, never "no snapshots".
@@ -131,13 +192,15 @@ const ackFile = `${path}/BREAKING-CHANGES`;
 const ackNow = (readNow(ackFile) ?? "").split("\n");
 const ackBase = (showAtBase(ackFile) ?? "").split("\n");
 
-// The comparison's own code, and the CI lines that run it.
+// The comparison's own code, and the CI step that runs it.
 const changedEngine = git("diff", "--name-only", base, "--", ...ENGINE_FILES)
   .split("\n")
   .filter(Boolean);
-const ciLines = (text) => (text ?? "").split("\n").filter((line) => /contract/i.test(line));
-if (ciLines(showAtBase(CI_FILE)).join("\n") !== ciLines(readNow(CI_FILE)).join("\n")) {
-  changedEngine.push(`${CI_FILE} (the contract step)`);
+const stepAtBase = ciStep(showAtBase(CI_FILE));
+const stepNow = ciStep(readNow(CI_FILE));
+if (stepAtBase !== stepNow) {
+  const how = stepAtBase === null ? ", added" : stepNow === null ? ", removed" : "";
+  changedEngine.push(`${CI_FILE} (the "${CI_STEP}" step${how})`);
 }
 // The zod the contract package resolves: its own copy if it has one, else the hoisted one.
 const LOCK_FILE = "package-lock.json";

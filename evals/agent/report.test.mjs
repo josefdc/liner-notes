@@ -20,7 +20,13 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { checkCells, checkReport, MADE_BY_PEOPLE } from "./check-report.mjs";
+import {
+  checkCells,
+  checkPublishedStatements,
+  checkReport,
+  MADE_BY_PEOPLE,
+  parseReport,
+} from "./check-report.mjs";
 import { escapeMd, statCells } from "./report.mjs";
 import { testdataFiles } from "./testdata/make-testdata.mjs";
 
@@ -125,25 +131,27 @@ test("check-report needs the results file, the run records and the same golden f
   }
 });
 
-test("a published report: no synthetic or testdata records, commits in git, the pinned dataset", async () => {
+test("a published report: no synthetic or testdata records, well-formed commits", async () => {
   const problems = (
     await checkReport(join(TESTDATA, "report-good.md"), { reportsDir: TESTDATA })
   ).join("\n");
   assert.match(problems, /synthetic run records cannot be published/);
   assert.match(problems, /run records under a testdata directory cannot be published/);
-  assert.match(problems, /commit synthetic is not in this repository/);
+  assert.match(problems, /commit synthetic is not a commit id \(7 to 40 hex digits\)/);
 });
 
-test("a published report must score evals/golden.jsonl as it was at its commit", async () => {
+test("a published report scores evals/golden.jsonl, checked by content, at any commit", async () => {
   const head = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
     encoding: "utf8",
     cwd: ROOT,
   }).stdout.trim();
   const dir = mkdtempSync(join(tmpdir(), "agent-published-"));
   try {
-    // Real-looking records: the test runs without the synthetic flag, at the current commit.
+    // Real-looking records: the test runs without the synthetic flag, at the current commit,
+    // with a spend line and the source errors as the live harness records them.
     const runs = join(dir, "runs");
     mkdirSync(runs);
+    const call = { tier: "main", deployment: "test", usd: 0, inputTokens: 0, outputTokens: 0 };
     for (const name of [
       "ablation-a.json",
       "ablation-b.json",
@@ -151,7 +159,7 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
       "ablation-d.json",
     ]) {
       const records = JSON.parse(readFileSync(join(TESTDATA, "runs", name), "utf8")).map(
-        ({ synthetic, ...r }) => ({ ...r, commit: head }),
+        ({ synthetic, ...r }) => ({ ...r, commit: head, calls: [call], sourceErrors: [] }),
       );
       writeFileSync(join(runs, name), JSON.stringify(records));
     }
@@ -188,7 +196,7 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
       if (message) assert.match(problems, message);
       else assert.equal(problems, "");
     }
-    // The header's sha256 changed to the forged file's: not evals/golden.jsonl at that commit.
+    // The header's sha256 changed to the forged file's: not the golden file in the tree.
     const path = join(reports, "agent-latest.md");
     const md = readFileSync(path, "utf8");
     const forgedSha = createHash("sha256").update(readFileSync(forged)).digest("hex");
@@ -199,7 +207,45 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
     const problems = (await checkReport(path, { reportsDir: reports })).join("\n");
     assert.match(
       problems,
-      new RegExp(`the dataset's sha256 is not evals/golden.jsonl at commit ${head}`),
+      /dataset evals\/golden\.jsonl is not the one scored \(the report states sha256 [0-9a-f]{64}, the file's is now [0-9a-f]{64}\): a changed golden file needs the report rendered again/,
+    );
+    // A commit that is in no history (a squashed branch's) is provenance, not a problem; one
+    // that is not an id is.
+    const elsewhere = "5fd193fa7a64";
+    for (const name of [
+      "ablation-a.json",
+      "ablation-b.json",
+      "ablation-c.json",
+      "ablation-d.json",
+    ]) {
+      const file = join(runs, name);
+      const records = JSON.parse(readFileSync(file, "utf8"));
+      writeFileSync(file, JSON.stringify(records.map((r) => ({ ...r, commit: elsewhere }))));
+    }
+    const squashed = join(dir, "squashed");
+    const again = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--subset",
+      "all",
+      "--out",
+      squashed,
+      "--date",
+      "2026-10-31",
+      "--commit",
+      "0123456789ab",
+    ]);
+    assert.equal(again.status, 0, again.stderr);
+    const squashedPath = join(squashed, "agent-latest.md");
+    assert.deepEqual(await checkReport(squashedPath, { reportsDir: squashed }), []);
+    writeFileSync(
+      squashedPath,
+      readFileSync(squashedPath, "utf8").replace("`0123456789ab`", "`not-a-commit`"),
+    );
+    assert.match(
+      (await checkReport(squashedPath, { reportsDir: squashed })).join("\n"),
+      /commit not-a-commit is not a commit id/,
     );
     // Rendered "as recorded", a published report could leave out tracks whose runs crashed.
     const loose = join(dir, "loose");
@@ -293,11 +339,35 @@ test("a report whose run records changed since says so", async () => {
     ]);
     assert.equal(out.status, 0, out.stderr);
     assert.deepEqual(await checkReport(join(dir, "agent-latest.md")), []);
+    // The provenance note is part of the records: added, it changes their sha256 until the
+    // report is rendered again, and then it is in the header.
+    writeFileSync(join(runs, "provenance.txt"), "Recorded at a branch's head.\n");
+    assert.match(
+      (await checkReport(join(dir, "agent-latest.md"))).join("\n"),
+      /changed since the report/,
+    );
+    const noted = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--out",
+      dir,
+      "--date",
+      "2026-10-31",
+      "--commit",
+      "synthetic",
+    ]);
+    assert.equal(noted.status, 0, noted.stderr);
+    assert.match(
+      readFileSync(join(dir, "agent-latest.md"), "utf8"),
+      /^- \*\*Provenance\*\*: Recorded at a branch's head\.$/m,
+    );
+    assert.deepEqual(await checkReport(join(dir, "agent-latest.md")), []);
     const pilot = join(runs, "variance.json");
     writeFileSync(pilot, readFileSync(pilot, "utf8").replace(/\n$/, " \n"));
     assert.match(
       (await checkReport(join(dir, "agent-latest.md"))).join("\n"),
-      /changed since the report \(sha256 now [0-9a-f]{64}\)/,
+      /changed since the report \(the report states sha256 [0-9a-f]{64}, the records' is now [0-9a-f]{64}\)/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -353,7 +423,7 @@ test("the report states dataset, run records, n, CI, date, commit and the clarif
   assert.match(md, /\*\*Dataset\*\*: `evals\/golden\.jsonl`, sha256 `[0-9a-f]{64}`/);
   assert.match(
     md,
-    /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`, sha256 `[0-9a-f]{64}`; 102 records/,
+    /\*\*Run records\*\*: `evals\/agent\/testdata\/runs`, sha256 `[0-9a-f]{64}`; 103 records/,
   );
   assert.match(md, /\*\*Date\*\*: 2026-10-31/);
   assert.match(md, /\*\*Commit\*\*: `synthetic`/);
@@ -435,4 +505,40 @@ test("eval:table renders the test runs; --out writes the dated report, its JSON 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("the published report passes, and names its models, source errors and classifier", async () => {
+  const path = join(ROOT, "evals", "reports", "agent-latest.md");
+  assert.deepEqual(await checkReport(path), []);
+  const md = readFileSync(path, "utf8");
+  const statements = (text) => {
+    const problems = [];
+    checkPublishedStatements(text, parseReport(text), problems);
+    return problems;
+  };
+  assert.deepEqual(statements(md), []);
+  const cut = (pattern) => md.replace(pattern, "");
+  assert.deepEqual(statements(cut(/^- \*\*Second judge\*\*: .*\n/m)), [
+    "header: the second judge, or that there is none",
+  ]);
+  assert.deepEqual(statements(cut(/^\| runs with at least one source error.*\n/m)), [
+    "the source-error rate",
+  ]);
+  assert.deepEqual(statements(cut(/^\| mutations of code positives rejected.*\n/m)), [
+    "the verifier's catch rate for code positives",
+  ]);
+  assert.deepEqual(statements(cut(/^Model-positive pool: .*\n/m)), [
+    "the model-positive pool size",
+  ]);
+  assert.deepEqual(statements(cut(/^### Audit of the model positives\n/m)), [
+    "the audit of the model positives, or that it is pending",
+  ]);
+});
+
+test('"n/a (by construction)" is accepted only on a count of none or all of n', () => {
+  assert.deepEqual(checkCells("x", "0/70", "70", "n/a (by construction)"), []);
+  assert.deepEqual(checkCells("x", "70/70", "70", "n/a (by construction)"), []);
+  assert.equal(checkCells("x", "3/70", "70", "n/a (by construction)").length, 1);
+  assert.equal(checkCells("x", "0.0 % (0/70)", "70", "n/a (by construction)").length, 1);
+  assert.equal(checkCells("x", "0/69", "70", "n/a (by construction)").length, 1);
 });

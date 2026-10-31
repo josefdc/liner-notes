@@ -208,7 +208,7 @@ test("numeric cases: every branch of the check, each with its exact expected res
   assert.equal(s["false-shown-both"].rejected, 0);
 });
 
-test("perturb-check prints both sets of blocks, nothing unexpected, and the pending judge", () => {
+test("perturb-check prints both sets of blocks, nothing unexpected, and the replayed judge's rates", () => {
   const out = node(["evals/agent/perturb-check.mjs"]);
   assert.equal(out.status, 0, out.stderr);
   assert.match(out.stdout, /as expected (\d+)\/\1\b/);
@@ -217,7 +217,13 @@ test("perturb-check prints both sets of blocks, nothing unexpected, and the pend
   assert.match(out.stdout, /estimator errors rejected: 0\//);
   assert.match(out.stdout, /shown next to the measurement by design/);
   assert.doesNotMatch(out.stdout, /UNEXPECTED/);
-  assert.match(out.stdout, /pending: no judge recording/);
+  assert.match(
+    out.stdout,
+    /every case as in evals\/agent\/runs\/\d{4}-\d{2}-\d{2}\/perturb\/judge\.json: yes; spend lines 0/,
+  );
+  assert.match(out.stdout, /false-positive rate \(positives rejected\): \d+\/\d+/);
+  assert.match(out.stdout, /catch rate \(mutations rejected\): \d+\/\d+/);
+  assert.match(out.stdout, /model-positive pool: \d+ model claims cite evidence, \d+ pass/);
 });
 
 test("perturb-check exits 1 when a case gives another result than it expects", () => {

@@ -823,12 +823,18 @@ describe("collectPrimarySources", () => {
       expect(run.live[source].status, source).toBe("found");
     }
     expectValidEvidence(run.live.evidence);
+    // credentials.json: the names of the credentials that were not set, so a replay keeps them
+    // missing; the two set here are not among them.
     expect(Object.keys(run.cassettes).sort()).toEqual([
+      "credentials",
       "discogs",
       "genius",
       "musicbrainz",
       "secondhandsongs",
     ]);
+    const unset = JSON.parse(run.cassettes.credentials ?? "{}").unset as string[];
+    expect(unset).not.toContain("DISCOGS_TOKEN");
+    expect(unset).not.toContain("GENIUS_ACCESS_TOKEN");
     const all = Object.values(run.cassettes).join("\n");
     // Of the archive's flags, only whether there is a front image is kept.
     expect(run.cassettes.musicbrainz).toMatch(/cover-art-archive\W+front\W+true\W*\}/);

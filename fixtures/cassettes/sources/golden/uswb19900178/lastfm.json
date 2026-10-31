@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Fleetwood+Mac&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=Dreams+-+2004+Remaster": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [],
+          "@attr": {
+            "artist": "Fleetwood Mac",
+            "track": "Dreams - 2004 Remaster"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Fleetwood+Mac&autocorrect=1&format=json&method=track.getTopTags&track=Dreams+-+2004+Remaster": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "rock",
+              "count": 100
+            },
+            {
+              "name": "classic rock",
+              "count": 69
+            },
+            {
+              "name": "soft rock",
+              "count": 29
+            },
+            {
+              "name": "jazz",
+              "count": 7
+            },
+            {
+              "name": "yacht rock",
+              "count": 4
+            },
+            {
+              "name": "blues",
+              "count": 4
+            },
+            {
+              "name": "pop rock",
+              "count": 4
+            },
+            {
+              "name": "country pop",
+              "count": 1
+            },
+            {
+              "name": "mistagged",
+              "count": 1
+            },
+            {
+              "name": "psychedelic pop",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Fleetwood Mac",
+            "track": "Dreams - 2004 Remaster"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=bd13909f-1c29-4c27-a874-d4aaf27c5b1a&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "Stevie Nicks",
+              "match": "1",
+              "mbid": "b7f2cca2-72c6-41fb-ae33-53370fc62fe7"
+            },
+            {
+              "name": "Lindsey Buckingham",
+              "match": "0.558571",
+              "mbid": "5d12875c-a197-43b2-8f29-41dc0ad895c3"
+            },
+            {
+              "name": "Christine McVie",
+              "match": "0.525963",
+              "mbid": "21551f7d-93f2-4cb7-ba71-7f260058e923"
+            },
+            {
+              "name": "Buckingham Nicks",
+              "match": "0.315513",
+              "mbid": "4b1bf05d-0e3c-44a3-9fc8-ad088fc25797"
+            },
+            {
+              "name": "Heart",
+              "match": "0.269642",
+              "mbid": "bdbd48f5-abf3-4a4f-9a21-4551dbc3fde9"
+            }
+          ],
+          "@attr": {
+            "artist": "Fleetwood Mac"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=bd13909f-1c29-4c27-a874-d4aaf27c5b1a&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "artist": {
+          "name": "Fleetwood Mac",
+          "mbid": "bd13909f-1c29-4c27-a874-d4aaf27c5b1a",
+          "stats": {
+            "listeners": "5094570",
+            "playcount": "319351415"
+          },
+          "bio": {
+            "summary": "Fleetwood Mac were a British and American rock band formed in London in 1967 by singer and guitarist Peter Green. The band was named by combining the surnames of drummer Mick Fleetwood and bassist John McVie, who joined shortly after its formation. Fleetwood Mac have sold more than 120 million records worldwide.\n\nInitially a British blues band, Fleetwood Mac achieved a UK number-one single in 1968 with the instrumental \"Albatross\" and had other UK top ten hits with \"Man of the World\" <a href=\"https://www.last.fm/music/Fleetwood+Mac\">Read more on Last.fm</a>"
+          },
+          "tags": {
+            "tag": [
+              {
+                "name": "classic rock"
+              },
+              {
+                "name": "rock"
+              },
+              {
+                "name": "70s"
+              },
+              {
+                "name": "blues"
+              },
+              {
+                "name": "pop"
+              }
+            ]
+          },
+          "similar": {
+            "artist": [
+              {
+                "name": "Stevie Nicks"
+              },
+              {
+                "name": "Lindsey Buckingham"
+              },
+              {
+                "name": "Christine McVie"
+              },
+              {
+                "name": "Buckingham Nicks"
+              },
+              {
+                "name": "Heart"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=bd13909f-1c29-4c27-a874-d4aaf27c5b1a&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "classic rock",
+              "count": 100
+            },
+            {
+              "name": "rock",
+              "count": 71
+            },
+            {
+              "name": "70s",
+              "count": 35
+            },
+            {
+              "name": "blues",
+              "count": 32
+            },
+            {
+              "name": "pop",
+              "count": 12
+            },
+            {
+              "name": "blues rock",
+              "count": 7
+            },
+            {
+              "name": "soft rock",
+              "count": 6
+            },
+            {
+              "name": "british",
+              "count": 1
+            },
+            {
+              "name": "Fleetwood Mac",
+              "count": 1
+            },
+            {
+              "name": "80s",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Fleetwood Mac"
+          }
+        }
+      }
+    }
+  }
+}

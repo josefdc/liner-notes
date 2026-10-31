@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://labs.api.listenbrainz.org/similar-artists/json?algorithm=session_based_days_7500_session_300_contribution_5_threshold_10_limit_100_filter_True_skip_30&artist_mbids=d5d97b2b-b83b-4976-814a-056d9076c8c3": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": [
+        {
+          "artist_mbid": "b95ce3ff-3d05-4e87-9e01-c97b66af13d4",
+          "name": "Eminem",
+          "score": 3683
+        },
+        {
+          "artist_mbid": "f82bcf78-5b69-4622-a5ef-73800768d9ac",
+          "name": "JAŸ-Z",
+          "score": 3657
+        },
+        {
+          "artist_mbid": "cfbc0924-0035-4d6c-8197-f024653af823",
+          "name": "Nas",
+          "score": 3325
+        },
+        {
+          "artist_mbid": "382f1005-e9ab-4684-afd4-0bdae4ee37f2",
+          "name": "2Pac",
+          "score": 3279
+        },
+        {
+          "artist_mbid": "164f0d73-1234-4e2c-8743-d77bf2191051",
+          "name": "Ye",
+          "score": 3227
+        },
+        {
+          "artist_mbid": "f90e8b26-9e52-4669-a5c9-e28529c47894",
+          "name": "Snoop Dogg",
+          "score": 3106
+        },
+        {
+          "artist_mbid": "73fdb566-a9b1-494c-9f32-51768ec9fd27",
+          "name": "OutKast",
+          "score": 2856
+        },
+        {
+          "artist_mbid": "94dbfe2e-ca48-4e08-a5a8-e1e74136c63d",
+          "name": "Method Man",
+          "score": 2674
+        },
+        {
+          "artist_mbid": "0febdcf7-4e1f-4661-9493-b40427de2c13",
+          "name": "Wu‐Tang Clan",
+          "score": 2567
+        },
+        {
+          "artist_mbid": "381086ea-f511-4aba-bdf9-71c753dc5077",
+          "name": "Kendrick Lamar",
+          "score": 2566
+        },
+        {
+          "artist_mbid": "cabb4fcf-4067-4ba5-908d-76ee66fcf0c6",
+          "name": "Diddy",
+          "score": 2461
+        },
+        {
+          "artist_mbid": "5f6ab597-f57a-40da-be9e-adad48708203",
+          "name": "Dr. Dre",
+          "score": 2341
+        },
+        {
+          "artist_mbid": "1d11e2a1-4531-4d61-a8c7-7b5c6a608fd2",
+          "name": "Ice Cube",
+          "score": 2287
+        },
+        {
+          "artist_mbid": "9689aa5a-4471-4fb4-9721-07cecda0fa9f",
+          "name": "A Tribe Called Quest",
+          "score": 2271
+        },
+        {
+          "artist_mbid": "d75d1f08-bbb8-4eae-9877-399ca9121197",
+          "name": "Mobb Deep",
+          "score": 1933
+        },
+        {
+          "artist_mbid": "2fa45bbb-0efb-4950-9d40-94bf23cbfec1",
+          "name": "Bone Thugs‐n‐Harmony",
+          "score": 1748
+        },
+        {
+          "artist_mbid": "8e68819d-71be-4e7d-b41d-f1df81b01d3f",
+          "name": "50 Cent",
+          "score": 1728
+        },
+        {
+          "artist_mbid": "10a9ff92-9637-4498-afea-7044b2ab0dc0",
+          "name": "Busta Rhymes",
+          "score": 1714
+        },
+        {
+          "artist_mbid": "9fff2f8a-21e6-47de-a2b8-7f449929d43f",
+          "name": "Drake",
+          "score": 1707
+        },
+        {
+          "artist_mbid": "9beb62b2-88db-4cea-801e-162cd344ee53",
+          "name": "Beastie Boys",
+          "score": 1701
+        },
+        {
+          "artist_mbid": "f3bf61f8-97d4-4e52-a73d-2ddbbe8196c8",
+          "name": "DMX",
+          "score": 1634
+        },
+        {
+          "artist_mbid": "51508c1f-8d07-4a00-9cf1-26c570fe7b78",
+          "name": "Cypress Hill",
+          "score": 1606
+        },
+        {
+          "artist_mbid": "ac9a487a-d9d2-4f27-bb23-0f4686488345",
+          "name": "Lil Wayne",
+          "score": 1596
+        },
+        {
+          "artist_mbid": "c2d25856-a09a-4d15-b404-77dd19c19e63",
+          "name": "R. Kelly",
+          "score": 1540
+        },
+        {
+          "artist_mbid": "3a54bffa-2314-44a2-927b-60144119c780",
+          "name": "N.W.A",
+          "score": 1531
+        },
+        {
+          "artist_mbid": "f5c4c27e-5902-4fc0-adfb-7775da3d5363",
+          "name": "Yasiin Bey",
+          "score": 1519
+        },
+        {
+          "artist_mbid": "9ef8042a-2528-4f5c-b7c1-5e72b1efe170",
+          "name": "Gang Starr",
+          "score": 1509
+        },
+        {
+          "artist_mbid": "d50548a0-3cfd-4d7a-964b-0aef6545d819",
+          "name": "Ol’ Dirty Bastard",
+          "score": 1320
+        },
+        {
+          "artist_mbid": "bc1b5c95-e6d6-46b5-957a-5e8908b02c1e",
+          "name": "Lil’ Kim",
+          "score": 1314
+        },
+        {
+          "artist_mbid": "85d7666c-d3ce-4e2c-8b1b-f20db7cdae4f",
+          "name": "Warren G",
+          "score": 1305
+        },
+        {
+          "artist_mbid": "9e839dc3-55f3-4492-ad0e-a1a2e84275e2",
+          "name": "Xzibit",
+          "score": 1192
+        },
+        {
+          "artist_mbid": "f27ec8db-af05-4f36-916e-3d57f91ecf5e",
+          "name": "Michael Jackson",
+          "score": 1181
+        },
+        {
+          "artist_mbid": "ea321799-9b1d-4e74-a074-a5facf597d82",
+          "name": "Fugees",
+          "score": 1166
+        },
+        {
+          "artist_mbid": "c0a1179b-b14a-4d68-a3c1-1fdab16ed602",
+          "name": "Common",
+          "score": 1154
+        },
+        {
+          "artist_mbid": "e21857d5-3256-4547-afb3-4b6ded592596",
+          "name": "Gorillaz",
+          "score": 1143
+        },
+        {
+          "artist_mbid": "80b3cf5e-18fe-4c59-98c7-e5bb87210710",
+          "name": "The Roots",
+          "score": 1115
+        },
+        {
+          "artist_mbid": "bf2e15d0-4b77-469e-bfb4-f8414415baca",
+          "name": "Public Enemy",
+          "score": 1104
+        },
+        {
+          "artist_mbid": "a0b8cb9e-7532-45fe-a74c-30e7c4009a39",
+          "name": "Missy Elliott",
+          "score": 1092
+        },
+        {
+          "artist_mbid": "875203e1-8e58-4b86-8dcb-7190faf411c5",
+          "name": "J. Cole",
+          "score": 1076
+        },
+        {
+          "artist_mbid": "e0e1db18-f7ba-4dee-95ff-7ae8cf545460",
+          "name": "Kid Cudi",
+          "score": 1069
+        },
+        {
+          "artist_mbid": "405528df-2632-4730-80fc-83e775a97651",
+          "name": "Nate Dogg",
+          "score": 1061
+        },
+        {
+          "artist_mbid": "4e954b02-fae2-4bd7-9547-e055a6ac0527",
+          "name": "Raekwon",
+          "score": 1060
+        },
+        {
+          "artist_mbid": "07cc14fb-4784-4a25-804b-2686ed5ef52c",
+          "name": "The Game",
+          "score": 1055
+        },
+        {
+          "artist_mbid": "0638ba22-040f-438d-83a5-9b670c4adaf5",
+          "name": "Ludacris",
+          "score": 1052
+        },
+        {
+          "artist_mbid": "550cb78b-4995-4873-baea-76ef265531f5",
+          "name": "GZA/Genius",
+          "score": 1041
+        },
+        {
+          "artist_mbid": "9132d515-dc0e-4494-85ae-20f06eed14f9",
+          "name": "112",
+          "score": 1026
+        },
+        {
+          "artist_mbid": "188711ed-c99b-439c-844a-ca831f63a727",
+          "name": "MF DOOM",
+          "score": 980
+        },
+        {
+          "artist_mbid": "a4dd0e77-83b8-4e92-89b7-effb0e47fd8c",
+          "name": "LL Cool J",
+          "score": 976
+        },
+        {
+          "artist_mbid": "e520459c-dff4-491d-a6e4-c97be35e0044",
+          "name": "Frank Ocean",
+          "score": 966
+        },
+        {
+          "artist_mbid": "f6beac20-5dfe-4d1f-ae02-0b0a740aafd6",
+          "name": "Tyler, The Creator",
+          "score": 961
+        },
+        {
+          "artist_mbid": "f59c5520-5f46-4d2c-b2c4-822eabf53419",
+          "name": "Linkin Park",
+          "score": 952
+        },
+        {
+          "artist_mbid": "cf15719f-51f9-4db8-a15d-5eed9664ce69",
+          "name": "Lupe Fiasco",
+          "score": 948
+        },
+        {
+          "artist_mbid": "c8b03190-306c-4120-bb0b-6f2ebfc06ea9",
+          "name": "The Weeknd",
+          "score": 946
+        },
+        {
+          "artist_mbid": "7fb57fba-a6ef-44c2-abab-2fa3bdee607e",
+          "name": "Childish Gambino",
+          "score": 945
+        },
+        {
+          "artist_mbid": "c3009d7a-51ac-4c9c-888a-04f5c3c4be0c",
+          "name": "Eazy‐E",
+          "score": 923
+        },
+        {
+          "artist_mbid": "d7134426-a937-43bf-bc54-f10ad8102ed9",
+          "name": "The Pharcyde",
+          "score": 917
+        },
+        {
+          "artist_mbid": "d72d000b-b860-44f4-9ac1-5d82e3fff9a9",
+          "name": "Blackstreet",
+          "score": 909
+        },
+        {
+          "artist_mbid": "3bdcd49d-212e-4f4f-877a-eac1e4a2bddc",
+          "name": "Naughty by Nature",
+          "score": 902
+        },
+        {
+          "artist_mbid": "925228de-bbe5-4c7b-b76f-78e382ec9148",
+          "name": "Eric B. & Rakim",
+          "score": 901
+        },
+        {
+          "artist_mbid": "f1c0d18c-6101-4aa2-ae47-8df5b7280fde",
+          "name": "Big L",
+          "score": 899
+        },
+        {
+          "artist_mbid": "db76c5ca-d555-4f09-b1db-baa1b713d875",
+          "name": "Mary J. Blige",
+          "score": 896
+        },
+        {
+          "artist_mbid": "76e9341b-ce5e-4eb7-8734-4cede9c7a993",
+          "name": "The LOX",
+          "score": 889
+        },
+        {
+          "artist_mbid": "5ecc3f72-20a6-47a0-8dc5-fb0b3dadeea0",
+          "name": "Run‐D.M.C.",
+          "score": 878
+        },
+        {
+          "artist_mbid": "3b39abeb-0064-4eed-9ddd-ee47a45c54cb",
+          "name": "Ghostface Killah",
+          "score": 868
+        },
+        {
+          "artist_mbid": "13bcb2bb-db37-4397-baf5-e0f085be2d64",
+          "name": "Rick Ross",
+          "score": 856
+        },
+        {
+          "artist_mbid": "1f1f6737-b930-46fc-8d25-110bb99f7490",
+          "name": "Redman",
+          "score": 847
+        },
+        {
+          "artist_mbid": "e4a51f17-a57b-47b1-b37b-f552d0f8e9e6",
+          "name": "Travis Scott",
+          "score": 845
+        },
+        {
+          "artist_mbid": "caeb2680-8d6c-4b7e-b70e-809b2c12e0bd",
+          "name": "Junior M.A.F.I.A.",
+          "score": 841
+        },
+        {
+          "artist_mbid": "1138a764-2212-4d0a-b02d-0dc14df91e08",
+          "name": "Akon",
+          "score": 826
+        },
+        {
+          "artist_mbid": "fc4568b6-cbe3-4a3d-8409-28510c19e3e2",
+          "name": "KRS‐One",
+          "score": 819
+        },
+        {
+          "artist_mbid": "4e024037-14b7-4aea-99ad-c6ace63b9620",
+          "name": "Madvillain",
+          "score": 819
+        },
+        {
+          "artist_mbid": "99790314-885a-4975-8614-9c5bc890364d",
+          "name": "TLC",
+          "score": 810
+        },
+        {
+          "artist_mbid": "942a9807-9c1a-4a0e-a285-1fde2c5be9d1",
+          "name": "Big Sean",
+          "score": 806
+        },
+        {
+          "artist_mbid": "f7ba7fbe-c6bd-4ac0-bee9-c25c558d7d62",
+          "name": "T.I.",
+          "score": 798
+        },
+        {
+          "artist_mbid": "a8ebde98-7e91-46c7-992c-90039ba42017",
+          "name": "De La Soul",
+          "score": 793
+        },
+        {
+          "artist_mbid": "811900b2-68fc-4d41-8bad-69b7a1f4d628",
+          "name": "Nelly",
+          "score": 786
+        },
+        {
+          "artist_mbid": "cc30e630-8c75-4d78-b205-8e2edc6bdaa7",
+          "name": "Coolio",
+          "score": 786
+        },
+        {
+          "artist_mbid": "c2d6a6fb-7999-4bb3-b2df-7d752fdf4e95",
+          "name": "House of Pain",
+          "score": 772
+        },
+        {
+          "artist_mbid": "9ab19acf-06d9-4c92-bd5a-8c945488d45b",
+          "name": "D12",
+          "score": 765
+        },
+        {
+          "artist_mbid": "95f5b748-d370-47fe-85bd-0af2dc450bc0",
+          "name": "Sublime",
+          "score": 735
+        },
+        {
+          "artist_mbid": "76716b81-e361-427e-a931-19373388387d",
+          "name": "Mase",
+          "score": 727
+        },
+        {
+          "artist_mbid": "bb3cbea2-5ad4-4917-bc84-8a1975d40315",
+          "name": "Talib Kweli",
+          "score": 720
+        },
+        {
+          "artist_mbid": "14ecd19f-7121-4192-8549-e5056241a42f",
+          "name": "Pusha T",
+          "score": 710
+        },
+        {
+          "artist_mbid": "dcad99e7-3c3e-4c78-bf8a-68203e17da48",
+          "name": "Jeezy",
+          "score": 702
+        },
+        {
+          "artist_mbid": "48db8d53-98c7-4ec8-8d49-00a89ebad8d4",
+          "name": "Memphis Bleek",
+          "score": 697
+        },
+        {
+          "artist_mbid": "a0e8a1b1-5f8f-475a-a253-17415c17d0ff",
+          "name": "Mac Miller",
+          "score": 692
+        },
+        {
+          "artist_mbid": "c03e2388-9e1b-4b78-8194-28c0d6ca19a0",
+          "name": "Method Man & Redman",
+          "score": 691
+        },
+        {
+          "artist_mbid": "f181961b-20f7-459e-89de-920ef03c7ed0",
+          "name": "The Strokes",
+          "score": 674
+        },
+        {
+          "artist_mbid": "28be8599-805d-4b74-8ea8-fa75b98f9983",
+          "name": "DJ Capcom",
+          "score": 669
+        },
+        {
+          "artist_mbid": "e8414012-4a1c-4ad4-be5e-fc55294e28cc",
+          "name": "Ms. Lauryn Hill",
+          "score": 667
+        },
+        {
+          "artist_mbid": "20d21992-d063-456d-a069-04d9044871f0",
+          "name": "DMC",
+          "score": 665
+        },
+        {
+          "artist_mbid": "9757ae7d-44b1-4d63-81ce-b463fe27b9ae",
+          "name": "Joey Bada$$",
+          "score": 664
+        },
+        {
+          "artist_mbid": "5bae7081-64ef-4473-825a-38d310deb14c",
+          "name": "Will Smith",
+          "score": 663
+        },
+        {
+          "artist_mbid": "f5dfa020-ad69-41cd-b3d4-fd7af0414e94",
+          "name": "Wiz Khalifa",
+          "score": 661
+        },
+        {
+          "artist_mbid": "2792b097-0b1d-4c50-97f6-f7f097f86438",
+          "name": "Rakim",
+          "score": 659
+        },
+        {
+          "artist_mbid": "a80c5dc5-b12e-4667-9f5a-b568961f3839",
+          "name": "Run the Jewels",
+          "score": 658
+        },
+        {
+          "artist_mbid": "8b22acd6-20e6-4463-a75c-c14b5cfdb666",
+          "name": "Earl Sweatshirt",
+          "score": 655
+        },
+        {
+          "artist_mbid": "960afc67-9c21-46dd-9c7f-ff2b509e3150",
+          "name": "Danny Brown",
+          "score": 653
+        },
+        {
+          "artist_mbid": "bce6d667-cde8-485e-b078-c0a05adea36d",
+          "name": "ScHoolboy Q",
+          "score": 638
+        },
+        {
+          "artist_mbid": "b3c94036-6166-41d2-91a2-dc3a0b5fa188",
+          "name": "Q‐Tip",
+          "score": 637
+        }
+      ]
+    }
+  }
+}

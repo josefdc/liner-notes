@@ -1,0 +1,1406 @@
+{
+  "id": "3UmaczJpikHgJFyBTAJVoz",
+  "title": "Stan",
+  "artist": "Eminem, Dido",
+  "album": "The Marshall Mathers LP",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/3UmaczJpikHgJFyBTAJVoz",
+  "releaseYear": "2000",
+  "explicit": true,
+  "durationSeconds": 404,
+  "isrc": "USIR10001280",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "tavily:https://www.whosampled.com/Eminem/Stan",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Eminem/Stan",
+      "title": "Stan by Eminem feat. Dido - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Which songs were sampled in \"Stan\" by Eminem feat. Dido? \"Stan\" contains samples of \"Thank You\" by Dido, \"My Name Is\" by Eminem, \"Thunder - Thunder Clap and ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Eminem/Stan/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Eminem/Stan/sampled",
+      "title": "Songs that Sampled Stan by Eminem feat. Dido\n | WhoSampled",
+      "retrievedAt": "[time]",
+      "excerpt": "# Songs that Sampled Stan by Eminem feat. ## Sampled in 27 songs.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Eminem",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Eminem",
+      "title": "Eminem - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Stan Stan (2000) by Eminem feat. Dido sampled Thank You by Dido (1999) My Name Is by Eminem (1998) Thunder - Thunder Clap and Rumble, Weather 01 by Sound Ideas",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Bad_Guy_(Eminem_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Bad_Guy_(Eminem_song)",
+      "title": "Bad Guy (Eminem song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "11. ↑ \"@… Presents: 50 Hip-Hop Facts You (Probably) Didn't KnowEminem considered getting Dido on MMLP2's \"Bad Guy,\" but didn't want to give away the \"Stan\" reference\". Complex. Archived from the original on 2014-05-03. Retrieved 2014-04-28. 12. ↑ \"#WhoSampled: Eminem – The Marshall Mathers LP 2 (Album Samples)\". Hypetrak. Archived from the original on 2015-05-18. Retrieved 2013-11-26. [...] The track consists of two parts; Part I was produced by S1 \"Symbolyc One (S1)\") and M-Phazes, and Part II…",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 9>",
+      "title": "Three sampled sources",
+      "content": "WhoSampled lists samples from Dido’s “Thank You,” Eminem’s “My Name Is,” and Sound Ideas’ “Thunder - Thunder Clap and Rumble, Weather 01” in “Stan.”",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 10>",
+          "text": "Thank You",
+          "type": "album",
+          "searchQuery": "Thank You"
+        },
+        {
+          "id": "<id 11>",
+          "text": "Dido",
+          "type": "artist",
+          "searchQuery": "Dido"
+        },
+        {
+          "id": "<id 12>",
+          "text": "My Name Is",
+          "type": "album",
+          "searchQuery": "My Name Is"
+        },
+        {
+          "id": "<id 13>",
+          "text": "Eminem",
+          "type": "artist",
+          "searchQuery": "Eminem"
+        },
+        {
+          "id": "<id 14>",
+          "text": "Thunder - Thunder Clap and Rumble, Weather 01",
+          "type": "sample",
+          "searchQuery": "Thunder - Thunder Clap and Rumble, Weather 01"
+        },
+        {
+          "id": "<id 15>",
+          "text": "Sound Ideas",
+          "type": "artist",
+          "searchQuery": "Sound Ideas"
+        }
+      ],
+      "claimId": "<id 5>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Stan",
+        "size": 40,
+        "trackTitle": "Stan",
+        "trackArtist": "Eminem, Dido"
+      },
+      {
+        "id": "thank-you",
+        "group": 4,
+        "label": "Thank You - Dido (1999)",
+        "size": 22,
+        "trackTitle": "Thank You",
+        "trackArtist": "Dido",
+        "spotifyId": "3yUcJwYu7fXAfqMj9krY6l"
+      },
+      {
+        "id": "my-name-is",
+        "group": 4,
+        "label": "My Name Is - Eminem (1998)",
+        "size": 22,
+        "trackTitle": "My Name Is",
+        "trackArtist": "Eminem"
+      },
+      {
+        "id": "thunder",
+        "group": 4,
+        "label": "Thunder - Thunder Clap and Rumble, Weather 01 - Sound Ideas",
+        "size": 22,
+        "trackTitle": "Thunder - Thunder Clap and Rumble, Weather 01",
+        "trackArtist": "Sound Ideas"
+      }
+    ],
+    "links": [
+      {
+        "source": "thank-you",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Eminem/Stan"
+        ]
+      },
+      {
+        "source": "my-name-is",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Eminem/Stan"
+        ]
+      },
+      {
+        "source": "thunder",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Eminem/Stan"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "“Stan” samples Dido’s “Thank You.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says “Stan” samples Dido’s “Thank You.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "“Stan” samples Eminem’s “My Name Is.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says “Stan” samples Eminem’s “My Name Is.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "“Stan” also samples “Thunder - Thunder Clap and Rumble, Weather 01” by Sound Ideas.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt truncates the thunder sample’s title and does not name Sound Ideas.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "WhoSampled lists samples from Dido’s “Thank You,” Eminem’s “My Name Is,” and Sound Ideas’ “Thunder - Thunder Clap and Rumble, Weather 01” in “Stan.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt lists the first two samples but truncates the third and omits Sound Ideas.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Three sampled sources",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Thank You",
+            "type": "album"
+          },
+          {
+            "text": "Dido",
+            "type": "artist"
+          },
+          {
+            "text": "My Name Is",
+            "type": "album"
+          },
+          {
+            "text": "Eminem",
+            "type": "artist"
+          },
+          {
+            "text": "Thunder - Thunder Clap and Rumble, Weather 01",
+            "type": "sample"
+          },
+          {
+            "text": "Sound Ideas",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Stan - Eminem, Dido\" samples \"Thank You - Dido (1999)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names “Thank You” but does not give its year.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Stan - Eminem, Dido\" samples \"My Name Is - Eminem (1998)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names “My Name Is” but does not give its year.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Stan - Eminem, Dido\" samples \"Thunder - Thunder Clap and Rumble, Weather 01 - Sound Ideas\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eminem/Stan"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt truncates the thunder sample’s title and does not name Sound Ideas.",
+      "numericCheck": "n/a"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 7133,
+      "outputTokens": 1316,
+      "reasoningTokens": 307
+    },
+    "verifier": {
+      "judged": 7,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "musicbrainz",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      },
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "genius",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 160.1,
+      "confidence": 0.506,
+      "rawConfidence": {
+        "value": 2.692,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.294697,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.43,
+        0.836,
+        1.231,
+        1.614,
+        1.997,
+        2.368,
+        2.728,
+        3.1,
+        3.483,
+        3.866,
+        4.238,
+        4.621,
+        5.004,
+        5.375,
+        5.735,
+        6.107,
+        6.49,
+        6.861,
+        7.233,
+        7.616,
+        7.988,
+        8.359,
+        8.731,
+        9.114,
+        9.485,
+        9.857,
+        10.24,
+        10.612,
+        10.995,
+        11.366,
+        11.726,
+        12.098,
+        12.469,
+        12.852,
+        13.224,
+        13.607,
+        13.978,
+        14.362,
+        14.721,
+        15.105,
+        15.476,
+        15.859,
+        16.231,
+        16.602,
+        16.974,
+        17.345,
+        17.717,
+        18.1,
+        18.483,
+        18.855,
+        19.226,
+        19.609,
+        19.992,
+        20.364,
+        20.735,
+        21.119,
+        21.49,
+        21.862,
+        22.245,
+        22.616,
+        22.976,
+        23.348,
+        23.719,
+        24.091,
+        24.462,
+        24.845,
+        25.217,
+        25.612,
+        25.983,
+        26.355,
+        26.726,
+        27.098,
+        27.469,
+        27.852,
+        28.224,
+        28.584,
+        28.944,
+        29.304,
+        29.675
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.236708,
+        0.327396,
+        0.200741,
+        0.191698,
+        0.164193,
+        0.314511,
+        0.268202,
+        0.262302,
+        0.257991,
+        0.415797,
+        0.212623,
+        0.232375,
+        0.250832,
+        0.502743,
+        0.292401,
+        0.237504,
+        0.269543,
+        0.394881,
+        0.263983,
+        0.25463,
+        0.244073,
+        0.296185,
+        0.342135,
+        0.440139,
+        0.105502,
+        0.274558,
+        0.275871,
+        0.316192,
+        0.270978,
+        0.427082,
+        0.220185,
+        0.304597,
+        0.284274,
+        0.359646,
+        0.250533,
+        0.298619,
+        0.219571,
+        0.270113,
+        0.288361,
+        0.260455,
+        0.054056,
+        0.436725,
+        0.237451,
+        0.289463,
+        0.216941,
+        0.415632,
+        0.256577,
+        0.299337,
+        0.258219,
+        0.35658,
+        0.261038,
+        0.201369,
+        0.265699,
+        0.257987,
+        0.314857,
+        0.37554,
+        0.362487,
+        0.236414,
+        0.349057,
+        0.320522,
+        0.317406,
+        0.456515,
+        0.350404,
+        0.261295,
+        0.253727,
+        0.336114,
+        0.295221,
+        0.344327,
+        0.309662,
+        0.298992,
+        0.310007,
+        0.299056,
+        0.302832,
+        0.291126,
+        0.40338,
+        0.214091,
+        0.29245,
+        0.363956,
+        0.341626,
+        0.257725,
+        0.307442,
+        0.334788,
+        0.30063,
+        0.26091,
+        0.270734,
+        0.204876,
+        0.308115,
+        0.412063,
+        0.321216,
+        0.21623,
+        0.306223,
+        0.235226,
+        0.289305,
+        0.387343,
+        0.366016,
+        0.266404,
+        0.278722,
+        0.312404,
+        0.356773,
+        0.278357,
+        0.244523,
+        0.217353,
+        0.285626,
+        0.265315,
+        0.180765,
+        0.052279,
+        0.445078,
+        0.254276,
+        0.253496,
+        0.309024,
+        0.40878,
+        0.213816,
+        0.24783,
+        0.26565,
+        0.377084,
+        0.287446,
+        0.280272,
+        0.224179,
+        0.237039,
+        0.253482,
+        0.471125,
+        0.122683,
+        0.38947,
+        0.311962,
+        0.303196,
+        0.362909,
+        0.430691,
+        0.245882,
+        0.275833,
+        0.201406,
+        0.393567,
+        0.311426,
+        0.289076,
+        0.294365,
+        0.340104,
+        0.308141,
+        0.298217,
+        0.269967,
+        0.447443,
+        0.291457,
+        0.336732,
+        0.307988,
+        0.455492,
+        0.238131,
+        0.267314,
+        0.300074,
+        0.40024,
+        0.287469,
+        0.272037,
+        0.25132,
+        0.317224,
+        0.298257,
+        0.41752,
+        0.241302,
+        0.263525,
+        0.269992,
+        0.360774,
+        0.312114,
+        0.430689,
+        0.211543,
+        0.239595,
+        0.271065,
+        0.380408,
+        0.263032,
+        0.303942,
+        0.2326,
+        0.284174,
+        0.271069,
+        0.283154,
+        0.092772,
+        0.332658,
+        0.351655,
+        0.294803,
+        0.253831,
+        0.386102,
+        0.358999,
+        0.226025,
+        0.220775,
+        0.331684,
+        0.279406,
+        0.304741,
+        0.217532,
+        0.244536,
+        0.232625,
+        0.305838,
+        0.441894,
+        0.301795,
+        0.303573,
+        0.32169,
+        0.283452,
+        0.377315,
+        0.313224,
+        0.323073,
+        0.230244,
+        0.323102,
+        0.329621,
+        0.32271,
+        0.292072,
+        0.288413,
+        0.29502,
+        0.28495,
+        0.289911,
+        0.280755,
+        0.38038,
+        0.274705,
+        0.250784,
+        0.362791,
+        0.383921,
+        0.271419,
+        0.269073,
+        0.276145,
+        0.377153,
+        0.274821,
+        0.264876,
+        0.217505,
+        0.34192,
+        0.341413,
+        0.431477,
+        0.098864,
+        0.305035,
+        0.251704,
+        0.299411,
+        0.271462,
+        0.463993,
+        0.255436,
+        0.218191,
+        0.263921,
+        0.374456,
+        0.195713,
+        0.231089,
+        0.192243,
+        0.377481,
+        0.301834,
+        0.244137,
+        0.097995,
+        0.410728,
+        0.307183,
+        0.249856,
+        0.275936,
+        0.446163,
+        0.191725,
+        0.248065,
+        0.266717,
+        0.392354,
+        0.26952,
+        0.266313,
+        0.266095,
+        0.238191,
+        0.321638,
+        0.455743,
+        0.15309,
+        0.26635,
+        0.257141,
+        0.268287,
+        0.277611,
+        0.451009,
+        0.252158,
+        0.278491,
+        0.236505,
+        0.380281,
+        0.232711,
+        0.296451,
+        0.220963,
+        0.367943,
+        0.334893,
+        0.281889,
+        0.246314,
+        0.434068,
+        0.221144,
+        0.234134,
+        0.248636,
+        0.434146,
+        0.283842,
+        0.263858,
+        0.292655,
+        0.359754,
+        0.305708,
+        0.265775,
+        0.237103,
+        0.267952,
+        0.297924,
+        0.472596,
+        0.17255,
+        0.277834,
+        0.338291,
+        0.306791,
+        0.293184,
+        0.453521,
+        0.213773,
+        0.25873,
+        0.230323,
+        0.349028,
+        0.301203,
+        0.29164,
+        0.251309,
+        0.258221,
+        0.279869,
+        0.255178,
+        0.195956,
+        0.313126,
+        0.343839,
+        0.308361,
+        0.263389,
+        0.338881,
+        0.409685,
+        0.238385,
+        0.217814,
+        0.350532,
+        0.356064,
+        0.235516,
+        0.21234,
+        0.286956,
+        0.285796,
+        0.295446,
+        0.42223,
+        0.245221,
+        0.316242,
+        0.328655,
+        0.323437,
+        0.401305,
+        0.34109,
+        0.294268
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 4.226
+        },
+        {
+          "label": "B",
+          "start": 4.226,
+          "end": 8.336
+        },
+        {
+          "label": "A",
+          "start": 8.336,
+          "end": 20.341
+        },
+        {
+          "label": "C",
+          "start": 20.341,
+          "end": 24.451
+        },
+        {
+          "label": "A",
+          "start": 24.451,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.36,
+        "type": "harmonic_change",
+        "intensity": 0.642,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 3.85,
+        "type": "harmonic_change",
+        "intensity": 0.587,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 3.87,
+        "type": "onset",
+        "intensity": 0.328,
+        "description": "Onset"
+      },
+      {
+        "time": 6.13,
+        "type": "onset",
+        "intensity": 0.327,
+        "description": "Onset"
+      },
+      {
+        "time": 8.33,
+        "type": "harmonic_change",
+        "intensity": 0.642,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 9.84,
+        "type": "harmonic_change",
+        "intensity": 0.626,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 13.63,
+        "type": "onset",
+        "intensity": 0.279,
+        "description": "Onset"
+      },
+      {
+        "time": 14.34,
+        "type": "harmonic_change",
+        "intensity": 0.671,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 15.85,
+        "type": "harmonic_change",
+        "intensity": 0.664,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 20.34,
+        "type": "harmonic_change",
+        "intensity": 0.627,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 21.84,
+        "type": "harmonic_change",
+        "intensity": 0.532,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 24.1,
+        "type": "onset",
+        "intensity": 0.379,
+        "description": "Onset"
+      },
+      {
+        "time": 26.35,
+        "type": "harmonic_change",
+        "intensity": 0.635,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 27.84,
+        "type": "harmonic_change",
+        "intensity": 0.604,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 27.86,
+        "type": "onset",
+        "intensity": 0.348,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Hip Hop---Conscious",
+            "score": 0.2179
+          },
+          {
+            "label": "Hip Hop---Boom Bap",
+            "score": 0.1943
+          },
+          {
+            "label": "Hip Hop---Hardcore Hip-Hop",
+            "score": 0.1331
+          },
+          {
+            "label": "Hip Hop---Jazzy Hip-Hop",
+            "score": 0.111
+          },
+          {
+            "label": "Hip Hop---Grime",
+            "score": 0.1014
+          },
+          {
+            "label": "Hip Hop---Horrorcore",
+            "score": 0.0826
+          },
+          {
+            "label": "Hip Hop---Trip Hop",
+            "score": 0.0689
+          },
+          {
+            "label": "Hip Hop---Gangsta",
+            "score": 0.0673
+          },
+          {
+            "label": "Electronic---Hip Hop",
+            "score": 0.0517
+          },
+          {
+            "label": "Hip Hop---Ragga HipHop",
+            "score": 0.0495
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "Hip-Hop",
+            "score": 0.7766
+          },
+          {
+            "label": "electronic",
+            "score": 0.0769
+          },
+          {
+            "label": "rock",
+            "score": 0.0216
+          },
+          {
+            "label": "dance",
+            "score": 0.0203
+          },
+          {
+            "label": "00s",
+            "score": 0.0188
+          },
+          {
+            "label": "indie",
+            "score": 0.0186
+          },
+          {
+            "label": "electro",
+            "score": 0.018
+          },
+          {
+            "label": "funk",
+            "score": 0.0179
+          },
+          {
+            "label": "experimental",
+            "score": 0.0175
+          },
+          {
+            "label": "electronica",
+            "score": 0.0175
+          },
+          {
+            "label": "soul",
+            "score": 0.0165
+          },
+          {
+            "label": "alternative",
+            "score": 0.0156
+          },
+          {
+            "label": "blues",
+            "score": 0.015
+          },
+          {
+            "label": "chillout",
+            "score": 0.0147
+          },
+          {
+            "label": "chill",
+            "score": 0.0147
+          },
+          {
+            "label": "pop",
+            "score": 0.0128
+          },
+          {
+            "label": "jazz",
+            "score": 0.0122
+          },
+          {
+            "label": "90s",
+            "score": 0.0113
+          },
+          {
+            "label": "party",
+            "score": 0.0107
+          },
+          {
+            "label": "rnb",
+            "score": 0.0097
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0073
+          },
+          {
+            "label": "punk",
+            "score": 0.0059
+          },
+          {
+            "label": "80s",
+            "score": 0.0054
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0053
+          },
+          {
+            "label": "House",
+            "score": 0.0053
+          },
+          {
+            "label": "ambient",
+            "score": 0.0048
+          },
+          {
+            "label": "sexy",
+            "score": 0.0044
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0037
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0035
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0033
+          },
+          {
+            "label": "folk",
+            "score": 0.003
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0029
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0029
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0028
+          },
+          {
+            "label": "oldies",
+            "score": 0.0024
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0023
+          },
+          {
+            "label": "70s",
+            "score": 0.0023
+          },
+          {
+            "label": "catchy",
+            "score": 0.0022
+          },
+          {
+            "label": "metal",
+            "score": 0.0021
+          },
+          {
+            "label": "60s",
+            "score": 0.002
+          },
+          {
+            "label": "guitar",
+            "score": 0.0018
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0018
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0016
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0013
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0012
+          },
+          {
+            "label": "happy",
+            "score": 0.0011
+          },
+          {
+            "label": "sad",
+            "score": 0.0011
+          },
+          {
+            "label": "country",
+            "score": 0.0011
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0007
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0006
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9992,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.018,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0046,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 4.9959,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 4.801,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 160,
+  "key": null,
+  "energy": null,
+  "valence": 0.499,
+  "danceability": 0.999,
+  "acousticness": 0.018,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.36,
+      "type": "harmonic_change",
+      "intensity": 0.642,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 3.85,
+      "type": "harmonic_change",
+      "intensity": 0.587,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 3.87,
+      "type": "onset",
+      "intensity": 0.328,
+      "description": "Onset"
+    },
+    {
+      "time": 6.13,
+      "type": "onset",
+      "intensity": 0.327,
+      "description": "Onset"
+    },
+    {
+      "time": 8.33,
+      "type": "harmonic_change",
+      "intensity": 0.642,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 9.84,
+      "type": "harmonic_change",
+      "intensity": 0.626,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 13.63,
+      "type": "onset",
+      "intensity": 0.279,
+      "description": "Onset"
+    },
+    {
+      "time": 14.34,
+      "type": "harmonic_change",
+      "intensity": 0.671,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 15.85,
+      "type": "harmonic_change",
+      "intensity": 0.664,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 20.34,
+      "type": "harmonic_change",
+      "intensity": 0.627,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 21.84,
+      "type": "harmonic_change",
+      "intensity": 0.532,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 24.1,
+      "type": "onset",
+      "intensity": 0.379,
+      "description": "Onset"
+    },
+    {
+      "time": 26.35,
+      "type": "harmonic_change",
+      "intensity": 0.635,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 27.84,
+      "type": "harmonic_change",
+      "intensity": 0.604,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 27.86,
+      "type": "onset",
+      "intensity": 0.348,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

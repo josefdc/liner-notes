@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://labs.api.listenbrainz.org/similar-artists/json?algorithm=session_based_days_7500_session_300_contribution_5_threshold_10_limit_100_filter_True_skip_30&artist_mbids=df6c619f-4334-43e2-8b6a-4a32af1e4f85": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": [
+        {
+          "artist_mbid": "dfc6a151-3792-4695-8fda-f64723eaa788",
+          "name": "ヨルシカ",
+          "score": 486
+        },
+        {
+          "artist_mbid": "9388cee2-7d57-4598-905f-106019b267d3",
+          "name": "Aimer",
+          "score": 481
+        },
+        {
+          "artist_mbid": "e134b52f-2e9e-4734-9bc3-bea9648d1fa1",
+          "name": "Ado",
+          "score": 475
+        },
+        {
+          "artist_mbid": "85d76093-9865-4605-97fa-8c910929d366",
+          "name": "LiSA",
+          "score": 475
+        },
+        {
+          "artist_mbid": "d6df86bb-4e61-48f1-aa2f-cdf93aca8133",
+          "name": "ミドリーズ",
+          "score": 342
+        },
+        {
+          "artist_mbid": "114b26ff-a1fe-41f3-9df8-5c093afe9c56",
+          "name": "Vaundy",
+          "score": 321
+        },
+        {
+          "artist_mbid": "a3becc83-9dab-48c6-9513-e269e1e4c49a",
+          "name": "yama",
+          "score": 310
+        },
+        {
+          "artist_mbid": "338f5d97-3133-4bf8-a58e-068ff9b5405d",
+          "name": "King Gnu",
+          "score": 307
+        },
+        {
+          "artist_mbid": "99841426-aee3-4c2f-9dc0-029ee6c12d98",
+          "name": "AmaLee",
+          "score": 261
+        },
+        {
+          "artist_mbid": "be5ae183-78b6-4564-93e1-553d752d3b84",
+          "name": "美波",
+          "score": 249
+        },
+        {
+          "artist_mbid": "aea6ccea-deb0-44bb-886e-d91aa4c358bf",
+          "name": "Reol",
+          "score": 249
+        },
+        {
+          "artist_mbid": "09d4a85c-4916-4b4e-bc96-c4cfcf371046",
+          "name": "米津玄師",
+          "score": 240
+        },
+        {
+          "artist_mbid": "130d679a-9a92-4373-8348-0800b6b93a30",
+          "name": "初音ミク",
+          "score": 230
+        },
+        {
+          "artist_mbid": "fb483f0a-d1ec-4a98-8237-0b1d7542aca7",
+          "name": "EGOIST",
+          "score": 228
+        },
+        {
+          "artist_mbid": "9ce674b7-5180-41f7-9ac2-95dc0d8a0ed2",
+          "name": "Mrs. GREEN APPLE",
+          "score": 218
+        },
+        {
+          "artist_mbid": "6f500293-7396-4903-b4fd-118127d06f9e",
+          "name": "RADWIMPS",
+          "score": 216
+        },
+        {
+          "artist_mbid": "14d2a235-30e2-489f-b490-f9dc7d2c0861",
+          "name": "ずっと真夜中でいいのに。",
+          "score": 213
+        },
+        {
+          "artist_mbid": "cb191900-8ad8-46b9-b021-a093ee2b2f9b",
+          "name": "SawanoHiroyuki[nZk]",
+          "score": 213
+        },
+        {
+          "artist_mbid": "f3688ad9-cd14-4cee-8fa0-0f4434e762bb",
+          "name": "ClariS",
+          "score": 201
+        },
+        {
+          "artist_mbid": "4da158cc-4d03-48d6-aefc-6726e4f9a149",
+          "name": "ReoNa",
+          "score": 192
+        },
+        {
+          "artist_mbid": "66bdd1c9-d1c5-40b7-a487-5061fffbd87d",
+          "name": "Eve",
+          "score": 185
+        },
+        {
+          "artist_mbid": "8627f0c6-7ff3-4dee-b42d-48163e8187db",
+          "name": "Daoko",
+          "score": 185
+        },
+        {
+          "artist_mbid": "6dddd7a2-5583-49d0-a8b2-9ee46d04f27e",
+          "name": "Official髭男dism",
+          "score": 185
+        },
+        {
+          "artist_mbid": "2b0a8be6-bfb8-4f62-b21d-f47a3104157e",
+          "name": "ツユ",
+          "score": 180
+        },
+        {
+          "artist_mbid": "33ff8a92-2f3b-4cac-8ea0-5eebfa995626",
+          "name": "KANA-BOON",
+          "score": 179
+        },
+        {
+          "artist_mbid": "b539e453-c4fe-47e3-8a07-8517eac74429",
+          "name": "宇多田ヒカル",
+          "score": 176
+        },
+        {
+          "artist_mbid": "9b15ff5e-5bd1-43c2-821d-e31240aad334",
+          "name": "supercell",
+          "score": 171
+        },
+        {
+          "artist_mbid": "0f718079-e5ea-4cfb-b512-b2d04da66901",
+          "name": "BUMP OF CHICKEN",
+          "score": 167
+        },
+        {
+          "artist_mbid": "906c39c0-e839-43db-a644-ea1a0101e8f8",
+          "name": "milet",
+          "score": 164
+        },
+        {
+          "artist_mbid": "80d1d7e0-fdab-4009-8375-54bd63d74c0e",
+          "name": "YUI",
+          "score": 164
+        },
+        {
+          "artist_mbid": "efc787f0-046f-4a60-beff-77b398c8cdf4",
+          "name": "さユり",
+          "score": 163
+        },
+        {
+          "artist_mbid": "6ef00829-fa94-4fee-a5a6-b28e1208e96a",
+          "name": "ONE OK ROCK",
+          "score": 161
+        },
+        {
+          "artist_mbid": "4337f1a5-9e02-4b46-98c3-e3c28683a9b5",
+          "name": "優里",
+          "score": 157
+        },
+        {
+          "artist_mbid": "d38d4afb-3c51-4cd5-b6e9-5d4ec71d2440",
+          "name": "Cö shu Nie",
+          "score": 156
+        },
+        {
+          "artist_mbid": "d9dbfe6a-8346-4337-8614-fe96aab63927",
+          "name": "SEKAI NO OWARI",
+          "score": 154
+        },
+        {
+          "artist_mbid": "d2a92ee2-27ce-4e71-bfc5-12e34fe8ef56",
+          "name": "Mili",
+          "score": 151
+        },
+        {
+          "artist_mbid": "bd247ab3-c22d-4b5d-a6fd-437771cacbbe",
+          "name": "DECO*27",
+          "score": 150
+        },
+        {
+          "artist_mbid": "46196b9c-affa-4616-b53b-e967c8bd70e0",
+          "name": "稲葉曇",
+          "score": 146
+        },
+        {
+          "artist_mbid": "e24c4566-fb70-45a1-bac0-22bbd4ccc9f2",
+          "name": "ASCA",
+          "score": 145
+        },
+        {
+          "artist_mbid": "18191eea-369f-42e8-96ab-c1c24e4d0011",
+          "name": "いきものがかり",
+          "score": 145
+        },
+        {
+          "artist_mbid": "fa626cc0-3274-428a-872e-9d471b564486",
+          "name": "MY FIRST STORY",
+          "score": 140
+        },
+        {
+          "artist_mbid": "486067ad-56d6-48b5-957b-d6cfe3e1af73",
+          "name": "Perfume",
+          "score": 138
+        },
+        {
+          "artist_mbid": "4173073b-ae68-476a-a715-e22f1f43046d",
+          "name": "Ayase",
+          "score": 137
+        },
+        {
+          "artist_mbid": "7e7df33f-85fb-49d5-9de7-efb086b2dc1d",
+          "name": "NiziU",
+          "score": 137
+        },
+        {
+          "artist_mbid": "de1d37ff-942a-4c85-a375-ff4f5bf2eaa9",
+          "name": "fripSide",
+          "score": 136
+        },
+        {
+          "artist_mbid": "a107bff6-58da-4302-83ad-317e86a1811c",
+          "name": "UVERworld",
+          "score": 135
+        },
+        {
+          "artist_mbid": "8852b087-c17d-4df5-9699-96d52cb31fc5",
+          "name": "REOL",
+          "score": 133
+        },
+        {
+          "artist_mbid": "1dc670f7-1a43-4a71-973a-2ad181f4edd4",
+          "name": "HoneyWorks",
+          "score": 133
+        },
+        {
+          "artist_mbid": "d2418949-fc2f-4b6d-98f8-2188e34cca94",
+          "name": "the peggies",
+          "score": 132
+        },
+        {
+          "artist_mbid": "f35bfbe2-d30e-402c-9ac1-fa5f90b72ec2",
+          "name": "back number",
+          "score": 132
+        },
+        {
+          "artist_mbid": "a0bb95b8-9fd9-47dd-af28-d4210f7f2a11",
+          "name": "ALI",
+          "score": 130
+        },
+        {
+          "artist_mbid": "ff5404bc-147f-47ee-bf7e-1fc21eb082e0",
+          "name": "TRUE",
+          "score": 125
+        },
+        {
+          "artist_mbid": "8eeb59f4-0071-4261-b1f8-91d8294622d2",
+          "name": "星街すいせい",
+          "score": 125
+        },
+        {
+          "artist_mbid": "eeacda09-891d-4367-b9cc-c6371c96d4d9",
+          "name": "やなぎなぎ",
+          "score": 124
+        },
+        {
+          "artist_mbid": "14e410f5-97f2-48ba-b1f7-a3a44cbea05c",
+          "name": "ASIAN KUNG-FU GENERATION",
+          "score": 124
+        },
+        {
+          "artist_mbid": "a0387b9b-236d-475f-8846-b2dea4af1112",
+          "name": "FLOW",
+          "score": 123
+        },
+        {
+          "artist_mbid": "7974fd3f-b3e7-4607-a1ad-9d85c07ac3b9",
+          "name": "THE ORAL CIGARETTES",
+          "score": 122
+        },
+        {
+          "artist_mbid": "9bdb5e93-32e4-4dbb-9fac-b8771e1c1551",
+          "name": "GARNiDELiA",
+          "score": 122
+        },
+        {
+          "artist_mbid": "6eb863a5-477d-4be1-9e10-b5d56446ed16",
+          "name": "Uru",
+          "score": 121
+        },
+        {
+          "artist_mbid": "5754236e-3ea7-4253-bdb0-d9985a7a95a3",
+          "name": "BURNOUT SYNDROMES",
+          "score": 119
+        },
+        {
+          "artist_mbid": "c3a4aeca-8f02-4d22-b1ff-693434ab09a8",
+          "name": "藤井風",
+          "score": 119
+        },
+        {
+          "artist_mbid": "32539fef-9c05-40a6-b164-39944d33148a",
+          "name": "瑞葵",
+          "score": 116
+        },
+        {
+          "artist_mbid": "8a9d0b90-951e-4ab8-b2dc-9d3618af3d28",
+          "name": "Mori Calliope",
+          "score": 114
+        },
+        {
+          "artist_mbid": "908d9ac2-5187-4b9e-b281-601c6afb0791",
+          "name": "あいみょん",
+          "score": 113
+        },
+        {
+          "artist_mbid": "7b684693-2b64-4f38-b747-359d111dafbb",
+          "name": "Kalafina",
+          "score": 110
+        },
+        {
+          "artist_mbid": "8d17b65b-8ccf-495c-8b79-1f53d6226448",
+          "name": "indigo la End",
+          "score": 109
+        },
+        {
+          "artist_mbid": "3ca85e1b-be9b-4b67-91eb-d0f54ff31177",
+          "name": "MYTH & ROID",
+          "score": 108
+        },
+        {
+          "artist_mbid": "1c9e6e0e-b05a-447d-b1ad-ded2aa6d0b6b",
+          "name": "Kanaria",
+          "score": 107
+        },
+        {
+          "artist_mbid": "46c8042e-881e-431c-adea-57c975bd0018",
+          "name": "Goose house",
+          "score": 105
+        },
+        {
+          "artist_mbid": "51dca3ab-7618-4816-9353-ac417462bb51",
+          "name": "BAND‐MAID",
+          "score": 103
+        },
+        {
+          "artist_mbid": "9c33ac0d-bda7-4991-9ce5-4706bcfc64b8",
+          "name": "Such",
+          "score": 102
+        },
+        {
+          "artist_mbid": "f4abc0b5-3f7a-4eff-8f78-ac078dbce533",
+          "name": "Billie Eilish",
+          "score": 102
+        },
+        {
+          "artist_mbid": "b38dddeb-a858-42d3-87c9-dda8eed23b08",
+          "name": "Awesome City Club",
+          "score": 99
+        },
+        {
+          "artist_mbid": "03bef19b-535e-4b8a-a882-01fcb7324386",
+          "name": "[Alexandros]",
+          "score": 98
+        },
+        {
+          "artist_mbid": "f1d9bc16-a8a2-4733-9b9d-2e101e010ea0",
+          "name": "Novelbright",
+          "score": 97
+        },
+        {
+          "artist_mbid": "bc731e96-0c06-4adf-b94b-ca636f48998a",
+          "name": "sumika",
+          "score": 92
+        },
+        {
+          "artist_mbid": "60d2ea34-1912-425f-bf9c-fc544e4448cd",
+          "name": "澤野弘之",
+          "score": 89
+        },
+        {
+          "artist_mbid": "851dc999-f177-4a59-9d39-aadb18dafd54",
+          "name": "Survive Said The Prophet",
+          "score": 88
+        },
+        {
+          "artist_mbid": "fc7a99ac-32f0-4e2a-a2eb-03670470003d",
+          "name": "Giga",
+          "score": 88
+        },
+        {
+          "artist_mbid": "0ee4273c-fdec-4c0a-8e3f-077eeb58431c",
+          "name": "AAAMYYY",
+          "score": 87
+        },
+        {
+          "artist_mbid": "e0140a67-e4d1-4f13-8a01-364355bee46e",
+          "name": "Justin Bieber",
+          "score": 87
+        },
+        {
+          "artist_mbid": "95818529-5490-4335-8965-93b679f2f2b3",
+          "name": "ChouCho",
+          "score": 87
+        },
+        {
+          "artist_mbid": "0879ca44-f3eb-4553-a689-4ec10354bed2",
+          "name": "fhána",
+          "score": 86
+        },
+        {
+          "artist_mbid": "3ed40054-97ab-4783-b3c3-15c2c7b06546",
+          "name": "緑黄色社会",
+          "score": 86
+        },
+        {
+          "artist_mbid": "f59c5520-5f46-4d2c-b2c4-822eabf53419",
+          "name": "Linkin Park",
+          "score": 86
+        },
+        {
+          "artist_mbid": "e25f521c-eea5-45ca-9a5b-ff45c4308153",
+          "name": "大原ゆい子",
+          "score": 86
+        },
+        {
+          "artist_mbid": "47cc8846-d93f-4639-a466-f15b00a445df",
+          "name": "Noc.V",
+          "score": 86
+        },
+        {
+          "artist_mbid": "1d80c978-409a-4024-961f-da0c7e3b1095",
+          "name": "TrySail",
+          "score": 86
+        },
+        {
+          "artist_mbid": "17c95457-e862-469d-8bdc-889a22d8e95b",
+          "name": "DISH//",
+          "score": 85
+        },
+        {
+          "artist_mbid": "598aa444-bef4-4942-8731-d755451864a2",
+          "name": "須田景凪",
+          "score": 82
+        },
+        {
+          "artist_mbid": "265a2fb6-dde5-48d3-9e6e-47708aa5e10a",
+          "name": "UNISON SQUARE GARDEN",
+          "score": 82
+        },
+        {
+          "artist_mbid": "a83e47fb-d486-4c15-9919-ed8351cc395c",
+          "name": "miwa",
+          "score": 82
+        },
+        {
+          "artist_mbid": "61c836d9-5e9e-4db1-94d9-35100a0537e9",
+          "name": "Omoinotake",
+          "score": 82
+        },
+        {
+          "artist_mbid": "6d280ceb-11c1-48c9-80d8-293ad442a991",
+          "name": "ナナヲアカリ",
+          "score": 81
+        },
+        {
+          "artist_mbid": "cfd45526-701e-457a-b3bd-013506a890a6",
+          "name": "Snail’s House",
+          "score": 80
+        },
+        {
+          "artist_mbid": "4dfe9c0b-7602-4189-9919-151d493d1028",
+          "name": "chelly",
+          "score": 80
+        },
+        {
+          "artist_mbid": "2ae8e176-079e-4af1-957c-0a1a265ba946",
+          "name": "Who‐ya Extended",
+          "score": 79
+        },
+        {
+          "artist_mbid": "668d4190-f273-4470-9d1a-15d4d2d589c6",
+          "name": "SPYAIR",
+          "score": 79
+        },
+        {
+          "artist_mbid": "e4ef2a7e-0657-43d4-833f-02936cd22bfb",
+          "name": "鈴木このみ",
+          "score": 79
+        },
+        {
+          "artist_mbid": "f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387",
+          "name": "Ariana Grande",
+          "score": 78
+        }
+      ]
+    }
+  }
+}

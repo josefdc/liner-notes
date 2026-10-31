@@ -1,0 +1,887 @@
+{
+  "version": 1,
+  "entries": {
+    "audio isrc:USWB11301111 analyzer:2.3.6+essentia.models-5c5c0c7f window:preview-30s": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "audio": {
+          "version": 2,
+          "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+          "window": {
+            "kind": "preview-30s",
+            "durationSeconds": 29.986
+          },
+          "gate": {
+            "passed": true,
+            "reason": null
+          },
+          "tempo": {
+            "bpm": 120.16,
+            "confidence": 0.662,
+            "rawConfidence": {
+              "value": 3.522,
+              "range": [
+                0,
+                5.32
+              ]
+            },
+            "method": "essentia.RhythmExtractor2013+beat-regression",
+            "basis": "signal"
+          },
+          "key": null,
+          "loudness": {
+            "rmsMean": 0.173491,
+            "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+            "basis": "signal"
+          },
+          "beats": {
+            "times": [
+              0.546,
+              1.126,
+              1.707,
+              2.229,
+              2.728,
+              3.228,
+              3.727,
+              4.214,
+              4.714,
+              5.213,
+              5.712,
+              6.2,
+              6.699,
+              7.187,
+              7.686,
+              8.173,
+              8.673,
+              9.172,
+              9.683,
+              10.182,
+              10.681,
+              11.169,
+              11.668,
+              12.167,
+              12.666,
+              13.166,
+              13.677,
+              14.176,
+              14.675,
+              15.174,
+              15.673,
+              16.173,
+              16.66,
+              17.16,
+              17.659,
+              18.17,
+              18.657,
+              19.156,
+              19.667,
+              20.167,
+              20.666,
+              21.165,
+              21.676,
+              22.187,
+              22.686,
+              23.185,
+              23.684,
+              24.184,
+              24.671,
+              25.17,
+              25.681,
+              26.18,
+              26.68,
+              27.179,
+              27.678,
+              28.177,
+              28.677,
+              29.176,
+              29.675
+            ],
+            "method": "essentia.RhythmExtractor2013",
+            "basis": "signal"
+          },
+          "energyContour": {
+            "hopSeconds": 0.09288,
+            "values": [
+              0.125848,
+              0.157845,
+              0.234538,
+              0.106826,
+              0.073712,
+              0.102425,
+              0.074604,
+              0.215564,
+              0.250338,
+              0.160162,
+              0.15092,
+              0.159714,
+              0.128977,
+              0.307832,
+              0.104884,
+              0.089862,
+              0.123915,
+              0.063228,
+              0.272014,
+              0.264255,
+              0.159611,
+              0.162758,
+              0.153445,
+              0.194881,
+              0.24486,
+              0.096471,
+              0.106744,
+              0.123983,
+              0.081176,
+              0.285549,
+              0.204891,
+              0.161745,
+              0.146985,
+              0.138801,
+              0.292931,
+              0.16064,
+              0.080634,
+              0.140268,
+              0.122119,
+              0.106234,
+              0.315613,
+              0.16889,
+              0.153268,
+              0.160826,
+              0.15472,
+              0.263725,
+              0.073488,
+              0.087204,
+              0.20196,
+              0.155376,
+              0.288905,
+              0.298146,
+              0.223183,
+              0.208902,
+              0.200298,
+              0.222796,
+              0.237995,
+              0.141742,
+              0.14958,
+              0.160908,
+              0.101593,
+              0.282454,
+              0.194093,
+              0.157105,
+              0.16725,
+              0.164818,
+              0.255117,
+              0.102796,
+              0.071353,
+              0.143305,
+              0.140498,
+              0.171912,
+              0.328043,
+              0.192181,
+              0.183354,
+              0.194164,
+              0.17709,
+              0.286019,
+              0.130784,
+              0.101639,
+              0.159089,
+              0.079626,
+              0.255374,
+              0.226541,
+              0.163867,
+              0.153229,
+              0.156294,
+              0.200031,
+              0.218528,
+              0.10681,
+              0.148148,
+              0.155213,
+              0.102801,
+              0.263447,
+              0.194563,
+              0.159574,
+              0.147962,
+              0.135276,
+              0.227539,
+              0.148765,
+              0.09053,
+              0.11591,
+              0.113182,
+              0.070531,
+              0.341475,
+              0.15112,
+              0.124716,
+              0.114963,
+              0.106764,
+              0.245467,
+              0.101772,
+              0.071734,
+              0.146962,
+              0.086732,
+              0.223978,
+              0.249001,
+              0.158177,
+              0.147922,
+              0.136249,
+              0.135431,
+              0.264661,
+              0.091666,
+              0.114605,
+              0.11817,
+              0.088099,
+              0.332626,
+              0.285119,
+              0.175108,
+              0.154232,
+              0.149185,
+              0.193912,
+              0.232938,
+              0.17229,
+              0.15454,
+              0.173408,
+              0.146225,
+              0.304485,
+              0.183338,
+              0.142445,
+              0.141273,
+              0.152954,
+              0.244384,
+              0.15017,
+              0.10641,
+              0.152626,
+              0.118126,
+              0.094572,
+              0.301275,
+              0.149626,
+              0.144613,
+              0.142789,
+              0.135183,
+              0.255675,
+              0.093819,
+              0.069612,
+              0.108096,
+              0.100944,
+              0.195768,
+              0.269639,
+              0.155731,
+              0.145683,
+              0.134585,
+              0.116571,
+              0.235561,
+              0.091358,
+              0.081706,
+              0.165493,
+              0.097147,
+              0.27084,
+              0.236387,
+              0.155006,
+              0.139072,
+              0.1263,
+              0.123193,
+              0.339231,
+              0.215197,
+              0.26886,
+              0.273718,
+              0.179867,
+              0.340585,
+              0.256188,
+              0.207005,
+              0.2001,
+              0.180345,
+              0.282154,
+              0.145665,
+              0.107869,
+              0.121159,
+              0.115628,
+              0.082032,
+              0.316858,
+              0.166154,
+              0.142436,
+              0.141068,
+              0.147807,
+              0.25625,
+              0.102152,
+              0.071433,
+              0.109075,
+              0.080279,
+              0.176888,
+              0.211304,
+              0.169242,
+              0.153581,
+              0.143555,
+              0.126773,
+              0.257981,
+              0.096773,
+              0.080908,
+              0.144687,
+              0.091959,
+              0.252054,
+              0.227795,
+              0.154257,
+              0.166672,
+              0.155986,
+              0.17141,
+              0.273857,
+              0.146127,
+              0.113315,
+              0.14989,
+              0.088502,
+              0.241317,
+              0.214936,
+              0.148188,
+              0.161295,
+              0.154016,
+              0.22303,
+              0.169874,
+              0.110141,
+              0.12768,
+              0.118643,
+              0.083424,
+              0.293148,
+              0.196368,
+              0.160592,
+              0.156785,
+              0.137711,
+              0.222073,
+              0.142443,
+              0.098052,
+              0.158863,
+              0.1242,
+              0.100194,
+              0.308554,
+              0.190066,
+              0.169768,
+              0.173804,
+              0.180355,
+              0.247794,
+              0.120783,
+              0.099201,
+              0.146172,
+              0.139895,
+              0.226472,
+              0.307843,
+              0.20595,
+              0.205457,
+              0.208295,
+              0.274061,
+              0.253506,
+              0.108149,
+              0.15797,
+              0.200041,
+              0.137843,
+              0.352647,
+              0.294512,
+              0.196904,
+              0.183324,
+              0.158104,
+              0.255828,
+              0.261841,
+              0.239583,
+              0.222956,
+              0.208023,
+              0.1773,
+              0.348637,
+              0.241647,
+              0.175655,
+              0.181834,
+              0.184886,
+              0.221758,
+              0.139576,
+              0.067057,
+              0.254787,
+              0.240956,
+              0.171814,
+              0.326898,
+              0.236272,
+              0.191678,
+              0.1677,
+              0.128065,
+              0.231778,
+              0.131098,
+              0.099256,
+              0.154511,
+              0.09615,
+              0.247028,
+              0.281789,
+              0.175041,
+              0.160066,
+              0.149269,
+              0.130292,
+              0.221918,
+              0.061681,
+              0.09224,
+              0.181511,
+              0.132701,
+              0.31609,
+              0.259127,
+              0.191494,
+              0.152869,
+              0.147678,
+              0.19957,
+              0.20479,
+              0.087089,
+              0.113205,
+              0.125338,
+              0.094112,
+              0.288134,
+              0.185109,
+              0.155425
+            ],
+            "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+            "basis": "signal"
+          },
+          "sections": {
+            "segments": [
+              {
+                "label": "A",
+                "start": 0,
+                "end": 29.986
+              }
+            ],
+            "method": "novelty-on-beat-chroma",
+            "basis": "signal"
+          },
+          "keyMoments": [
+            {
+              "time": 0.06,
+              "type": "onset",
+              "intensity": 0.844,
+              "description": "Onset"
+            },
+            {
+              "time": 1.25,
+              "type": "onset",
+              "intensity": 0.752,
+              "description": "Onset"
+            },
+            {
+              "time": 2.71,
+              "type": "harmonic_change",
+              "intensity": 0.283,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 4.78,
+              "type": "energy_peak",
+              "intensity": 0.845,
+              "description": "Energy peak"
+            },
+            {
+              "time": 7.19,
+              "type": "onset",
+              "intensity": 0.462,
+              "description": "Onset"
+            },
+            {
+              "time": 8.66,
+              "type": "harmonic_change",
+              "intensity": 0.289,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 10.65,
+              "type": "harmonic_change",
+              "intensity": 0.266,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 11.65,
+              "type": "energy_peak",
+              "intensity": 0.943,
+              "description": "Energy peak"
+            },
+            {
+              "time": 12.65,
+              "type": "harmonic_change",
+              "intensity": 0.266,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 14.18,
+              "type": "onset",
+              "intensity": 1,
+              "description": "Onset"
+            },
+            {
+              "time": 16.67,
+              "type": "energy_peak",
+              "intensity": 0.966,
+              "description": "Energy peak"
+            },
+            {
+              "time": 18.18,
+              "type": "onset",
+              "intensity": 0.866,
+              "description": "Onset"
+            },
+            {
+              "time": 19.15,
+              "type": "onset",
+              "intensity": 0.807,
+              "description": "Onset"
+            },
+            {
+              "time": 22.19,
+              "type": "onset",
+              "intensity": 0.73,
+              "description": "Onset"
+            },
+            {
+              "time": 24.65,
+              "type": "energy_peak",
+              "intensity": 1,
+              "description": "Energy peak"
+            },
+            {
+              "time": 29.18,
+              "type": "onset",
+              "intensity": 0.663,
+              "description": "Onset"
+            }
+          ],
+          "fingerprint": {
+            "styles": {
+              "model": {
+                "id": "discogs-effnet-bs64-1",
+                "licence": "CC BY-NC-SA 4.0"
+              },
+              "top": [
+                {
+                  "label": "Rock---Dream Pop",
+                  "score": 0.1463
+                },
+                {
+                  "label": "Rock---Soft Rock",
+                  "score": 0.138
+                },
+                {
+                  "label": "Funk / Soul---Soul",
+                  "score": 0.1192
+                },
+                {
+                  "label": "Electronic---Disco",
+                  "score": 0.1107
+                },
+                {
+                  "label": "Rock---Indie Rock",
+                  "score": 0.1066
+                },
+                {
+                  "label": "Funk / Soul---Disco",
+                  "score": 0.1047
+                },
+                {
+                  "label": "Electronic---Nu-Disco",
+                  "score": 0.0922
+                },
+                {
+                  "label": "Pop---Indie Pop",
+                  "score": 0.0754
+                },
+                {
+                  "label": "Rock---Pop Rock",
+                  "score": 0.0576
+                },
+                {
+                  "label": "Funk / Soul---Contemporary R&B",
+                  "score": 0.0556
+                }
+              ],
+              "basis": "model"
+            },
+            "tags": {
+              "model": {
+                "id": "msd-musicnn-1",
+                "licence": "CC BY-NC-SA 4.0"
+              },
+              "scores": [
+                {
+                  "label": "soul",
+                  "score": 0.2772
+                },
+                {
+                  "label": "pop",
+                  "score": 0.2355
+                },
+                {
+                  "label": "female vocalists",
+                  "score": 0.2199
+                },
+                {
+                  "label": "jazz",
+                  "score": 0.1032
+                },
+                {
+                  "label": "chillout",
+                  "score": 0.1029
+                },
+                {
+                  "label": "electronic",
+                  "score": 0.0838
+                },
+                {
+                  "label": "rock",
+                  "score": 0.0762
+                },
+                {
+                  "label": "indie",
+                  "score": 0.0714
+                },
+                {
+                  "label": "funk",
+                  "score": 0.0595
+                },
+                {
+                  "label": "rnb",
+                  "score": 0.0536
+                },
+                {
+                  "label": "dance",
+                  "score": 0.0445
+                },
+                {
+                  "label": "70s",
+                  "score": 0.0426
+                },
+                {
+                  "label": "alternative",
+                  "score": 0.0376
+                },
+                {
+                  "label": "80s",
+                  "score": 0.0313
+                },
+                {
+                  "label": "electronica",
+                  "score": 0.0254
+                },
+                {
+                  "label": "female vocalist",
+                  "score": 0.0251
+                },
+                {
+                  "label": "chill",
+                  "score": 0.0243
+                },
+                {
+                  "label": "Mellow",
+                  "score": 0.0232
+                },
+                {
+                  "label": "90s",
+                  "score": 0.0218
+                },
+                {
+                  "label": "folk",
+                  "score": 0.0214
+                },
+                {
+                  "label": "indie pop",
+                  "score": 0.0207
+                },
+                {
+                  "label": "00s",
+                  "score": 0.0195
+                },
+                {
+                  "label": "instrumental",
+                  "score": 0.0168
+                },
+                {
+                  "label": "classic rock",
+                  "score": 0.0162
+                },
+                {
+                  "label": "sexy",
+                  "score": 0.0162
+                },
+                {
+                  "label": "ambient",
+                  "score": 0.0161
+                },
+                {
+                  "label": "House",
+                  "score": 0.0157
+                },
+                {
+                  "label": "beautiful",
+                  "score": 0.0155
+                },
+                {
+                  "label": "blues",
+                  "score": 0.0151
+                },
+                {
+                  "label": "easy listening",
+                  "score": 0.0147
+                },
+                {
+                  "label": "oldies",
+                  "score": 0.0143
+                },
+                {
+                  "label": "indie rock",
+                  "score": 0.0126
+                },
+                {
+                  "label": "60s",
+                  "score": 0.0124
+                },
+                {
+                  "label": "acoustic",
+                  "score": 0.0122
+                },
+                {
+                  "label": "male vocalists",
+                  "score": 0.0118
+                },
+                {
+                  "label": "Hip-Hop",
+                  "score": 0.0114
+                },
+                {
+                  "label": "Progressive rock",
+                  "score": 0.0101
+                },
+                {
+                  "label": "experimental",
+                  "score": 0.0093
+                },
+                {
+                  "label": "electro",
+                  "score": 0.0082
+                },
+                {
+                  "label": "guitar",
+                  "score": 0.0072
+                },
+                {
+                  "label": "alternative rock",
+                  "score": 0.0067
+                },
+                {
+                  "label": "sad",
+                  "score": 0.0056
+                },
+                {
+                  "label": "catchy",
+                  "score": 0.0051
+                },
+                {
+                  "label": "party",
+                  "score": 0.0044
+                },
+                {
+                  "label": "happy",
+                  "score": 0.0044
+                },
+                {
+                  "label": "country",
+                  "score": 0.0037
+                },
+                {
+                  "label": "punk",
+                  "score": 0.0023
+                },
+                {
+                  "label": "hard rock",
+                  "score": 0.0021
+                },
+                {
+                  "label": "metal",
+                  "score": 0.0007
+                },
+                {
+                  "label": "heavy metal",
+                  "score": 0.0007
+                }
+              ],
+              "basis": "model"
+            },
+            "moods": {
+              "danceability": {
+                "value": 0.9994,
+                "range": [
+                  0,
+                  1
+                ],
+                "model": {
+                  "id": "danceability-msd-musicnn-1",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "basis": "model"
+              },
+              "acoustic": {
+                "value": 0.6109,
+                "range": [
+                  0,
+                  1
+                ],
+                "model": {
+                  "id": "mood_acoustic-discogs-effnet-1",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "basis": "model"
+              },
+              "instrumental": {
+                "value": 0.0899,
+                "range": [
+                  0,
+                  1
+                ],
+                "model": {
+                  "id": "voice_instrumental-msd-musicnn-1",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "basis": "model"
+              },
+              "valence": {
+                "value": 5.4903,
+                "range": [
+                  1,
+                  9
+                ],
+                "model": {
+                  "id": "deam-msd-musicnn-2",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "basis": "model"
+              },
+              "arousal": {
+                "value": 5.5344,
+                "range": [
+                  1,
+                  9
+                ],
+                "model": {
+                  "id": "deam-msd-musicnn-2",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "basis": "model"
+              }
+            }
+          },
+          "withheld": {
+            "key": {
+              "code": "no_sustained_pitch",
+              "reason": "no sustained pitch"
+            }
+          }
+        },
+        "sent": true,
+        "match": {
+          "provider": "deezer",
+          "method": "isrc",
+          "deezerId": 67549188,
+          "score": null
+        }
+      }
+    },
+    "GET /health": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "analyzer_version": "2.3.6+essentia.models-5c5c0c7f"
+      }
+    }
+  }
+}

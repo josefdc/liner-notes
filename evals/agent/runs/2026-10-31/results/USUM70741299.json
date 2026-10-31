@@ -1,0 +1,743 @@
+{
+  "id": "0j2T0R9dR9qdJYsB7ciXhf",
+  "title": "Stronger",
+  "artist": "Kanye West",
+  "album": "Graduation",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/0j2T0R9dR9qdJYsB7ciXhf",
+  "releaseYear": "2007",
+  "explicit": true,
+  "durationSeconds": 312,
+  "isrc": "USUM70741299",
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/8009d470-912b-42fa-8261-b88c488eb935",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+      "title": "Stronger — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Stronger\" by Kanye West (5:12), ISRC USUM70741299, first released 2007-08-13.",
+      "recordRef": "track/recording/8009d470-912b-42fa-8261-b88c488eb935"
+    },
+    {
+      "id": "musicbrainz:track/recording/8009d470-912b-42fa-8261-b88c488eb935/samples/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/8009d470-912b-42fa-8261-b88c488eb935",
+      "title": "Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Stronger\" by Kanye West samples \"Harder, Better, Faster, Stronger\" by Daft Punk.",
+      "recordRef": "track/recording/8009d470-912b-42fa-8261-b88c488eb935/samples/recording/f1a6a40f-78f5-4918-968d-f64363bae94c"
+    },
+    {
+      "id": "musicbrainz:release/06a81817-093d-40f0-aef2-90673fa550ae",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/06a81817-093d-40f0-aef2-90673fa550ae",
+      "title": "Graduation — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Stronger\" by Kanye West appears on the official album \"Graduation\" (2007-09-05).",
+      "recordRef": "release/06a81817-093d-40f0-aef2-90673fa550ae"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/d3db1ad3-8f68-4835-81a0-e9d38795756e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Kanye Medley\" by New York University Mass Transit.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/d3db1ad3-8f68-4835-81a0-e9d38795756e"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/4ddf01a3-658d-4208-b48b-51d4fe1136ac",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by 30 Seconds to Mars.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/4ddf01a3-658d-4208-b48b-51d4fe1136ac"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/87e1ceac-aabc-41fd-8f4f-727fad631d34",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Richard Cheese & Lounge Against The Machine.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/87e1ceac-aabc-41fd-8f4f-727fad631d34"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/0925f662-4099-4ecf-8265-02e7ad3be968",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Rockabye Baby!.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/0925f662-4099-4ecf-8265-02e7ad3be968"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/1443788c-4dc7-4a94-9402-358faa8ab27d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Vitamin String Quartet.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/1443788c-4dc7-4a94-9402-358faa8ab27d"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/f9d7c60e-116b-4411-b23e-a75b96df633e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Vitamin String Quartet.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/f9d7c60e-116b-4411-b23e-a75b96df633e"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/9d3b8784-0b9c-4b8e-ae06-7dc0faa6486d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Tigeroar.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/9d3b8784-0b9c-4b8e-ae06-7dc0faa6486d"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/ba56c8d7-331a-4aaf-952e-fcd0ff3be1a1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Mixmaster Throwback.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/ba56c8d7-331a-4aaf-952e-fcd0ff3be1a1"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/dd3f79fc-ef7a-4762-af13-4a88c2dd78e9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by The Smooth Jazz All Stars.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/dd3f79fc-ef7a-4762-af13-4a88c2dd78e9"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/da4fcf8e-405a-48a4-a761-b8fe69abb8b1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by The Piano Tribute Players.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/da4fcf8e-405a-48a4-a761-b8fe69abb8b1"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/a23f3ea6-16ff-4930-84f1-ecc6a9d82476",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by Dartmouth College Aires.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/a23f3ea6-16ff-4930-84f1-ecc6a9d82476"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/83a58bef-20c4-4c05-997e-39827bedcd32",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by The Unplugged Band.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/83a58bef-20c4-4c05-997e-39827bedcd32"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/2087ff50-0089-4003-804e-70a20015cd13",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger\" by 8-Bit Misfits.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/2087ff50-0089-4003-804e-70a20015cd13"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/26c1dea6-f44d-48c6-add1-12c752188278",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger (Medieval Bardcore version)\" by Beedle The Bardcore.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/26c1dea6-f44d-48c6-add1-12c752188278"
+    },
+    {
+      "id": "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/e603a93f-0be1-491d-8296-1763953a1c81",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+      "title": "Stronger — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Stronger\" is covered by \"Stronger/Power (The Voice Performance)\" by Moses Stone.",
+      "recordRef": "work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/e603a93f-0be1-491d-8296-1763953a1c81"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Kanye-West/Stronger",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Kanye-West/Stronger",
+      "title": "Stronger by Kanye West - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 42 songs \"Stronger\" contains samples of \"Harder, Better, Faster, Stronger\" by Daft Punk. The completed version contains a master use of Cola Bottle",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/List_of_Kanye_West_samples_and_sampling_disputes",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/List_of_Kanye_West_samples_and_sampling_disputes",
+      "title": "List of Kanye West samples and sampling disputes - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "| Track | Sample | Ref | --- | \"Good Morning \"Good Morning (Kanye West song)\")\" | \"Someone Saved My Life Tonight\" by Elton John | | | \"Champion \"Champion (Kanye West song)\")\" | \"Kid Charlemagne\" by Steely Dan | | \"Stronger \"Stronger (Kanye West song)\")\" | \"Harder, Better, Faster, Stronger\" by Daft Punk | | \"I Wonder \"I Wonder (Kanye West song)\")\" | \"My Song\" by Labi Siffre and \"Phantom\" by Justice \"Justice (band)\") | [...] | Track | Sample | Ref | --- | \"Dark Fantasy \"Dark Fantasy (song)\")\" | \"…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://the-dowsers.com/the-dowser-posts/classic-kanye-samples",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://the-dowsers.com/the-dowser-posts/classic-kanye-samples",
+      "title": "Classic Kanye Samples",
+      "retrievedAt": "[time]",
+      "excerpt": "does a nice job at capturing these shifts, and uses data supplied by Whosampled to back up the analysis. The associated playlist provides a more rote but still compelling look at some of the most recognizable samples, placing Kanye classics next to the originals. [...] GENRES IndieElectronicHip-HopJazz + BluesRnBWorld, Reggae + LatinPopClassicalRock + Alternative ERAS '60s'70s'80s'90s'10s'00s FEATURES ARTISTS EssentialsInfluencesCoversArtist-Curated PlaylistsB-Sides + Guest SpotsBehind the Boar…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Daft-Punk/Harder,-Better,-Faster,-Stronger/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Daft-Punk/Harder,-Better,-Faster,-Stronger/sampled",
+      "title": "Songs that Sampled Harder, Better, Faster, Stronger",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 102 songs ; Kanye West's Stronger · Stronger · Kanye West, 2007, Vocals / Lyrics ; Black Eyed Peas's Boom Boom Pow · Boom Boom Pow · Black Eyed Peas",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=dj5dHzOScTM",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=dj5dHzOScTM",
+      "title": "Sample Breakdown: Kanye West - Stronger",
+      "retrievedAt": "[time]",
+      "excerpt": "# Sample Breakdown: Kanye West - Stronger ## Channel: TRACKLIB (verified) 817K subscribers 15K likes ### Description 481,295 views Posted: 2022-01-28 Inspired? Access samples like this one 🔌 [...] 🔗 Links Website: Instagram: / tracklib X: Facebook: / tracklib TikTok: / tracklib #samplebreakdown #kanyewest #mikedean #stronger [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Stronger_(Kanye_West_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Stronger_(Kanye_West_song)",
+      "title": "Stronger (Kanye West song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "The song was recorded at Ape Sounds in Tokyo, Sony Music Studios in NYC, and the Record Plant in Hollywood, California. Its recording sessions placed attention to detail and were a turning point in the production process for Graduation, following West having previously been \"aimlessly making songs\". Video director Hype Williams inspired West to move towards a futuristic direction after he heard the song when it had no drums, which the rapper also did for the music video and the album: \"It [...]…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://wbssmedia.com/artists/detail/1206",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://wbssmedia.com/artists/detail/1206",
+      "title": "WBSS Media-Kanye West",
+      "retrievedAt": "[time]",
+      "excerpt": "West's third studio album, Graduation, was released in September 2007. The album debuted at number one on the U.S. Billboard 200 chart and sold 957,000 copies in its first week. Graduation continued the string of critical and commercial successes by West, and the album's lead single, \"Stronger\", garnered his third number-one hit. \"Stronger\", which samples French house duo Daft Punk, has been credited with not only encouraging other hip-hop artists to incorporate house and electronica elements […",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"\"Android Porn (HARDER)\" x T-1000\" by Twerknation28.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/763a8126-170f-4f01-bd14-2646113563ca",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"ACTION PEOPLE\" by Cheryl Stelli.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/763a8126-170f-4f01-bd14-2646113563ca"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"AIN’T NOTHIN’ LIKE A FLAT BEAT\" by Expensive Dispenser & CrystalForce.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/10e00673-4062-405f-82b4-dc28cf8048cd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"Anthology (Daft Punk Tribute)\" by OVERWERK.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/10e00673-4062-405f-82b4-dc28cf8048cd"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/4d2026ef-505e-463d-8c10-d44af82ffd2f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"Better Sounding on Drugs\" by BSOD.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/4d2026ef-505e-463d-8c10-d44af82ffd2f"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/45574086-6c4e-45a7-8fde-cf84f6c01e93",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Harder, Better, Faster, Stronger\" by Daft Punk is sampled in \"BSOD\" by BSOD.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/45574086-6c4e-45a7-8fde-cf84f6c01e93"
+    },
+    {
+      "id": "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f1a6a40f-78f5-4918-968d-f64363bae94c",
+      "title": "Harder, Better, Faster, Stronger — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Harder, Better, Faster, Stronger\" by Daft Punk, first released 2001-02-26.",
+      "recordRef": "recording/f1a6a40f-78f5-4918-968d-f64363bae94c"
+    },
+    {
+      "id": "musicbrainz:recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+      "title": "\"Android Porn (HARDER)\" x T-1000 — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"\"Android Porn (HARDER)\" x T-1000\" by Twerknation28, first released 2024-03-30.",
+      "recordRef": "recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392"
+    },
+    {
+      "id": "musicbrainz:recording/763a8126-170f-4f01-bd14-2646113563ca",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/763a8126-170f-4f01-bd14-2646113563ca",
+      "title": "ACTION PEOPLE — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"ACTION PEOPLE\" by Cheryl Stelli, first released 2025-09-20.",
+      "recordRef": "recording/763a8126-170f-4f01-bd14-2646113563ca"
+    },
+    {
+      "id": "musicbrainz:recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+      "title": "AIN’T NOTHIN’ LIKE A FLAT BEAT — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"AIN’T NOTHIN’ LIKE A FLAT BEAT\" by Expensive Dispenser & CrystalForce, first released 2020-01-08.",
+      "recordRef": "recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d"
+    },
+    {
+      "id": "musicbrainz:recording/10e00673-4062-405f-82b4-dc28cf8048cd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/10e00673-4062-405f-82b4-dc28cf8048cd",
+      "title": "Anthology (Daft Punk Tribute) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Anthology (Daft Punk Tribute)\" by OVERWERK, first released 2016-08-23.",
+      "recordRef": "recording/10e00673-4062-405f-82b4-dc28cf8048cd"
+    },
+    {
+      "id": "musicbrainz:recording/4d2026ef-505e-463d-8c10-d44af82ffd2f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/4d2026ef-505e-463d-8c10-d44af82ffd2f",
+      "title": "Better Sounding on Drugs — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Better Sounding on Drugs\" by BSOD, first released 2008.",
+      "recordRef": "recording/4d2026ef-505e-463d-8c10-d44af82ffd2f"
+    },
+    {
+      "id": "musicbrainz:recording/45574086-6c4e-45a7-8fde-cf84f6c01e93",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/45574086-6c4e-45a7-8fde-cf84f6c01e93",
+      "title": "BSOD — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"BSOD\" by BSOD, first released 2007-05-11.",
+      "recordRef": "recording/45574086-6c4e-45a7-8fde-cf84f6c01e93"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 10>",
+      "title": "A Daft Punk foundation",
+      "content": "The recording samples Daft Punk’s “Harder, Better, Faster, Stronger,” linking the track to the French duo’s electronic hit.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 11>",
+          "text": "Daft Punk",
+          "type": "artist",
+          "searchQuery": "Daft Punk"
+        },
+        {
+          "id": "<id 12>",
+          "text": "Harder, Better, Faster, Stronger",
+          "type": "sample",
+          "searchQuery": "Harder, Better, Faster, Stronger"
+        }
+      ],
+      "claimId": "<id 2>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Stronger",
+        "size": 40,
+        "trackTitle": "Stronger",
+        "trackArtist": "Kanye West",
+        "mbid": "8009d470-912b-42fa-8261-b88c488eb935",
+        "year": 2007
+      },
+      {
+        "id": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "group": 2,
+        "label": "Harder, Better, Faster, Stronger - Daft Punk",
+        "size": 22,
+        "trackTitle": "Harder, Better, Faster, Stronger",
+        "trackArtist": "Daft Punk",
+        "year": 2001,
+        "mbid": "f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "spotifyId": "5W3cjX2J3tjhG8zb6u0qHn"
+      },
+      {
+        "id": "mb-83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+        "group": 4,
+        "label": "\"Android Porn (HARDER)\" x T-1000 - Twerknation28",
+        "size": 22,
+        "trackTitle": "\"Android Porn (HARDER)\" x T-1000",
+        "trackArtist": "Twerknation28",
+        "year": 2024,
+        "mbid": "83aa2ba7-5d60-4f0e-88e7-340c36d2f392"
+      },
+      {
+        "id": "mb-763a8126-170f-4f01-bd14-2646113563ca",
+        "group": 4,
+        "label": "ACTION PEOPLE - Cheryl Stelli",
+        "size": 22,
+        "trackTitle": "ACTION PEOPLE",
+        "trackArtist": "Cheryl Stelli",
+        "year": 2025,
+        "mbid": "763a8126-170f-4f01-bd14-2646113563ca"
+      },
+      {
+        "id": "mb-3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+        "group": 4,
+        "label": "AIN’T NOTHIN’ LIKE A FLAT BEAT - Expensive Dispenser & CrystalForce",
+        "size": 22,
+        "trackTitle": "AIN’T NOTHIN’ LIKE A FLAT BEAT",
+        "trackArtist": "Expensive Dispenser & CrystalForce",
+        "year": 2020,
+        "mbid": "3e3bf2aa-d27a-400c-9c64-427cf85d3a5d"
+      },
+      {
+        "id": "mb-10e00673-4062-405f-82b4-dc28cf8048cd",
+        "group": 4,
+        "label": "Anthology (Daft Punk Tribute) - OVERWERK",
+        "size": 22,
+        "trackTitle": "Anthology (Daft Punk Tribute)",
+        "trackArtist": "OVERWERK",
+        "year": 2016,
+        "mbid": "10e00673-4062-405f-82b4-dc28cf8048cd"
+      }
+    ],
+    "links": [
+      {
+        "source": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "target": "current",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 3>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/8009d470-912b-42fa-8261-b88c488eb935/samples/recording/f1a6a40f-78f5-4918-968d-f64363bae94c"
+        ]
+      },
+      {
+        "source": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "target": "mb-83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/83aa2ba7-5d60-4f0e-88e7-340c36d2f392"
+        ]
+      },
+      {
+        "source": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "target": "mb-763a8126-170f-4f01-bd14-2646113563ca",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/763a8126-170f-4f01-bd14-2646113563ca"
+        ]
+      },
+      {
+        "source": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "target": "mb-3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/3e3bf2aa-d27a-400c-9c64-427cf85d3a5d"
+        ]
+      },
+      {
+        "source": "mb-f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "target": "mb-10e00673-4062-405f-82b4-dc28cf8048cd",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/f1a6a40f-78f5-4918-968d-f64363bae94c/sampled-by/recording/10e00673-4062-405f-82b4-dc28cf8048cd"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "The recording samples Daft Punk’s “Harder, Better, Faster, Stronger,” linking the track to the French duo’s electronic hit.",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/8009d470-912b-42fa-8261-b88c488eb935/samples/recording/f1a6a40f-78f5-4918-968d-f64363bae94c"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz recording relationship states the sample, but not “French duo” or “electronic hit.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A Daft Punk foundation",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Daft Punk",
+            "type": "artist"
+          },
+          {
+            "text": "Harder, Better, Faster, Stronger",
+            "type": "sample"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "\"Stronger\" by Kanye West samples \"Harder, Better, Faster, Stronger\" by Daft Punk.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/8009d470-912b-42fa-8261-b88c488eb935/samples/recording/f1a6a40f-78f5-4918-968d-f64363bae94c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 4>",
+      "text": "The work \"Stronger\" is covered by \"Stronger\" by 30 Seconds to Mars.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/4ddf01a3-658d-4208-b48b-51d4fe1136ac"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 5>",
+      "text": "The work \"Stronger\" is covered by \"Stronger\" by Richard Cheese & Lounge Against The Machine.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/87e1ceac-aabc-41fd-8f4f-727fad631d34"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 6>",
+      "text": "The work \"Stronger\" is covered by \"Stronger\" by Rockabye Baby!.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/0925f662-4099-4ecf-8265-02e7ad3be968"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 7>",
+      "text": "The work \"Stronger\" is covered by \"Stronger\" by Vitamin String Quartet.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/1443788c-4dc7-4a94-9402-358faa8ab27d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 8>",
+      "text": "The work \"Stronger\" is covered by \"Stronger\" by Vitamin String Quartet.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/972c1bcc-b1dd-38e2-b881-37825c07d9ef/covered-by/recording/f9d7c60e-116b-4411-b23e-a75b96df633e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Stronger\" by Kanye West appears on the official album \"Graduation\" (2007-09-05).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/06a81817-093d-40f0-aef2-90673fa550ae"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": null,
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 12890,
+      "outputTokens": 1308,
+      "reasoningTokens": 159
+    },
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 5
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "bpm": null,
+  "key": null,
+  "energy": null,
+  "valence": null,
+  "danceability": null,
+  "acousticness": null,
+  "keyMoments": [],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "no_preview"
+}

@@ -1,0 +1,319 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.spotify.com/v1/search?limit=1&q=%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B+-+Pastel*Palettes&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "5i7osSUqaZ5s9kpgD2vgm1",
+              "name": "夜に駆ける (Cover)",
+              "artists": [
+                {
+                  "id": "4n97ifZWNPLSPKC6KzfGxg",
+                  "name": "Pastel*Palettes"
+                }
+              ],
+              "album": {
+                "name": "バンドリ！ ガールズバンドパーティ！ カバコレ Special Selection3",
+                "release_date": "2023-03-16"
+              },
+              "duration_ms": 262600,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5i7osSUqaZ5s9kpgD2vgm1"
+              },
+              "external_ids": {
+                "isrc": "JPR562100315"
+              }
+            }
+          ],
+          "total": 560
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=the+NOISE+-+LE+SSERAFIM+with+YOASOBI&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "0nwnaHLObT2ZEkrNAfryEB",
+              "name": "Le Bien, Le Mal",
+              "artists": [
+                {
+                  "id": "6xyaria4AcxjRuJZLkWvMW",
+                  "name": "Guru"
+                },
+                {
+                  "id": "3nU8TSIICYDbUqRpJISTRE",
+                  "name": "MC Solaar"
+                }
+              ],
+              "album": {
+                "name": "Jazzmatazz Volume 1",
+                "release_date": "1993-01-01"
+              },
+              "duration_ms": 202160,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0nwnaHLObT2ZEkrNAfryEB"
+              },
+              "external_ids": {
+                "isrc": "USVI29300128"
+              }
+            }
+          ],
+          "total": 606
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=10&q=%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B+YOASOBI&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "3dPtXHP0oXQ4HCWHsOA9js",
+              "name": "夜に駆ける",
+              "artists": [
+                {
+                  "id": "64tJ2EAv1R6UaZqc4iOCyj",
+                  "name": "YOASOBI"
+                }
+              ],
+              "album": {
+                "name": "夜に駆ける",
+                "release_date": "2019-12-15"
+              },
+              "duration_ms": 261013,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3dPtXHP0oXQ4HCWHsOA9js"
+              },
+              "external_ids": {
+                "isrc": "JPP301900716"
+              }
+            },
+            {
+              "id": "6MCjmGYlw6mQVWRFVgBRvB",
+              "name": "夜に駆ける",
+              "artists": [
+                {
+                  "id": "64tJ2EAv1R6UaZqc4iOCyj",
+                  "name": "YOASOBI"
+                }
+              ],
+              "album": {
+                "name": "THE BOOK",
+                "release_date": "2021-01-06"
+              },
+              "duration_ms": 258840,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/6MCjmGYlw6mQVWRFVgBRvB"
+              },
+              "external_ids": {
+                "isrc": "JPP301900716"
+              }
+            },
+            {
+              "id": "2qJnXUokBc5b38TAEOGnUx",
+              "name": "夜に駆ける - From THE FIRST TAKE",
+              "artists": [
+                {
+                  "id": "64tJ2EAv1R6UaZqc4iOCyj",
+                  "name": "YOASOBI"
+                }
+              ],
+              "album": {
+                "name": "夜に駆ける - From THE FIRST TAKE",
+                "release_date": "2023-09-21"
+              },
+              "duration_ms": 248523,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2qJnXUokBc5b38TAEOGnUx"
+              },
+              "external_ids": {
+                "isrc": "JPU902304046"
+              }
+            },
+            {
+              "id": "18hX1dk4vVr8P9KbdxBqXq",
+              "name": "夜に駆ける (feat. 宵崎奏&初音ミク)",
+              "artists": [
+                {
+                  "id": "1VMXuPyhNldYomz8ojLKP7",
+                  "name": "25時、ナイトコードで。"
+                }
+              ],
+              "album": {
+                "name": "25時、ナイトコードで。 SEKAI ALBUM vol.1",
+                "release_date": "2022-04-06"
+              },
+              "duration_ms": 260053,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/18hX1dk4vVr8P9KbdxBqXq"
+              },
+              "external_ids": {
+                "isrc": "JPX302138220"
+              }
+            },
+            {
+              "id": "1uB20TujpjHQZpFRxsbnI7",
+              "name": "the NOISE (Contains a Samples of 夜に駆ける)",
+              "artists": [
+                {
+                  "id": "4SpbR6yFEvexJuaBpgAU5p",
+                  "name": "LE SSERAFIM"
+                },
+                {
+                  "id": "64tJ2EAv1R6UaZqc4iOCyj",
+                  "name": "YOASOBI"
+                }
+              ],
+              "album": {
+                "name": "the NOISE (Contains a Samples of 夜に駆ける)",
+                "release_date": "2025-09-26"
+              },
+              "duration_ms": 224280,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1uB20TujpjHQZpFRxsbnI7"
+              },
+              "external_ids": {
+                "isrc": "JPZ672500065"
+              }
+            },
+            {
+              "id": "5YFPJtT3DuWQ2oJbOHtBQ0",
+              "name": "おとめ座のココロ",
+              "artists": [
+                {
+                  "id": "1wJL6nbdvPwqPYuoqiw5aN",
+                  "name": "オレンジスパイニクラブ"
+                }
+              ],
+              "album": {
+                "name": "好きにしろ",
+                "release_date": "2026-09-16"
+              },
+              "duration_ms": 169566,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5YFPJtT3DuWQ2oJbOHtBQ0"
+              },
+              "external_ids": {
+                "isrc": "JPWP02670825"
+              }
+            },
+            {
+              "id": "135KwWixLI8EdEcxJDijdH",
+              "name": "NAVIGATOR",
+              "artists": [
+                {
+                  "id": "7dhueqtbx2NVq1leXyqaNl",
+                  "name": "SixTONES"
+                }
+              ],
+              "album": {
+                "name": "NAVIGATOR",
+                "release_date": "2020-07-22"
+              },
+              "duration_ms": 245120,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/135KwWixLI8EdEcxJDijdH"
+              },
+              "external_ids": {
+                "isrc": "JPU902001120"
+              }
+            },
+            {
+              "id": "3o8ONcwSyYI6s3JgrBLWrE",
+              "name": "サバイバル",
+              "artists": [
+                {
+                  "id": "00AFbqxvdDK6T1D6MQZ9c1",
+                  "name": "GLAY"
+                }
+              ],
+              "album": {
+                "name": "DRIVE -GLAY complete BEST-",
+                "release_date": "2000-11-29"
+              },
+              "duration_ms": 274333,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3o8ONcwSyYI6s3JgrBLWrE"
+              },
+              "external_ids": {
+                "isrc": "JPZ921016320"
+              }
+            },
+            {
+              "id": "3DXAJeYw1DeTUAbAE9JojM",
+              "name": "眩耀夜行",
+              "artists": [
+                {
+                  "id": "6L7wKf6aQv6A3OpiuMITqM",
+                  "name": "スリーズブーケ"
+                }
+              ],
+              "album": {
+                "name": "眩耀夜行",
+                "release_date": "2023-08-09"
+              },
+              "duration_ms": 245985,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3DXAJeYw1DeTUAbAE9JojM"
+              },
+              "external_ids": {
+                "isrc": "JPI102301716"
+              }
+            },
+            {
+              "id": "6UOEGXOFExkeB4Rmoz9eZ2",
+              "name": "Blink",
+              "artists": [
+                {
+                  "id": "7pgRyTH4nTH4KoruoGuAQo",
+                  "name": "Age Factory"
+                }
+              ],
+              "album": {
+                "name": "Pure Blue",
+                "release_date": "2021-11-24"
+              },
+              "duration_ms": 142051,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/6UOEGXOFExkeB4Rmoz9eZ2"
+              },
+              "external_ids": {
+                "isrc": "JPB452105824"
+              }
+            }
+          ],
+          "total": 25
+        }
+      }
+    },
+    "POST https://accounts.spotify.com/api/token #c349b29ae2fc682a": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "access_token": "[redacted]",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  }
+}

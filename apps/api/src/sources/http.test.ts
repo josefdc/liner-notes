@@ -33,6 +33,7 @@ import {
   plainMessage,
   plainReason,
   reasonIssue,
+  recordedUnsetCredentials,
   redactQuotedSecrets,
   redactText,
   redactTokenRuns,
@@ -44,6 +45,7 @@ import {
   scrubText,
   setCassetteLockWaitForTests,
   withoutEmails,
+  UNSET_CREDENTIALS_FILE,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
 import {
@@ -1541,14 +1543,53 @@ describe("cassettes", () => {
 
   it("supplies a placeholder credential under replay only", () => {
     delete process.env.TEST_MISSING_KEY;
-    process.env.SOURCE_CASSETTE = "record";
-    expect(credential("TEST_MISSING_KEY")).toBeUndefined();
     delete process.env.SOURCE_CASSETTE;
     expect(credential("TEST_MISSING_KEY")).toBeUndefined();
     vi.spyOn(console, "warn").mockImplementation(() => {});
     process.env.SOURCE_CASSETTE = "replay";
     expect(credential("TEST_MISSING_KEY")).toBe("replay");
     vi.restoreAllMocks();
+  });
+
+  it("replays a credential the recording ran without as missing, and notes names only", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    delete process.env.TEST_MISSING_KEY;
+    process.env.TEST_SERVICE_API_KEY = "configured-value-0123456789";
+    try {
+      process.env.SOURCE_CASSETTE = "record";
+      expect(credential("TEST_MISSING_KEY")).toBeUndefined();
+      expect(credential("TEST_MISSING_KEY")).toBeUndefined();
+      expect(credential("TEST_SERVICE_API_KEY")).toBe("configured-value-0123456789");
+      const file = readFileSync(join(dir, UNSET_CREDENTIALS_FILE), "utf8");
+      expect(JSON.parse(file)).toEqual({ version: 1, unset: ["TEST_MISSING_KEY"] });
+      expect(file).not.toContain("configured-value");
+      // The replay of that recording: the missing one stays missing, so the source is not
+      // configured there either; one the recording had is a placeholder, as before.
+      process.env.SOURCE_CASSETTE = "replay";
+      delete process.env.TEST_SERVICE_API_KEY;
+      expect(credential("TEST_MISSING_KEY")).toBeUndefined();
+      expect(credential("TEST_SERVICE_API_KEY")).toBe("replay");
+      expect([...recordedUnsetCredentials()]).toEqual(["TEST_MISSING_KEY"]);
+      // Off, the file changes nothing.
+      delete process.env.SOURCE_CASSETTE;
+      expect(credential("TEST_SERVICE_API_KEY")).toBeUndefined();
+    } finally {
+      delete process.env.TEST_SERVICE_API_KEY;
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("refuses a credentials file it cannot read under replay", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    writeFileSync(join(dir, UNSET_CREDENTIALS_FILE), "{ not json");
+    process.env.SOURCE_CASSETTE = "replay";
+    try {
+      expect(() => credential("TEST_MISSING_KEY")).toThrow(/cannot be read as JSON/);
+      writeFileSync(join(dir, UNSET_CREDENTIALS_FILE), JSON.stringify({ version: 1 }));
+      expect(() => credential("TEST_MISSING_KEY")).toThrow(/no list of names/);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("refuses an unknown SOURCE_CASSETTE value, at startup and per request", async () => {

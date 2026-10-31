@@ -1,0 +1,1932 @@
+{
+  "id": "6K4t31amVTZDgR3sKmwUJJ",
+  "title": "The Less I Know The Better",
+  "artist": "Tame Impala",
+  "album": "Currents",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/6K4t31amVTZDgR3sKmwUJJ",
+  "releaseYear": "2015",
+  "explicit": true,
+  "durationSeconds": 216,
+  "isrc": "AUUM71500303",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/78be434c-0908-458f-9693-f16cdebb68ef",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Tame Impala (3:36), ISRC AUUM71500303, first released 2015-07-15.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/2281ef80-0bb2-498d-90b3-4f1baf00876b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/78be434c-0908-458f-9693-f16cdebb68ef",
+      "title": "The Less I Know the Better — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"The Less I Know the Better\" by Tame Impala is sampled in \"If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like\" by $uicideboy$.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/2281ef80-0bb2-498d-90b3-4f1baf00876b"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/78be434c-0908-458f-9693-f16cdebb68ef",
+      "title": "The Less I Know the Better — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"The Less I Know the Better\" by Tame Impala is sampled in \"Since I’m Australian\" by duuzu.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/cbf56383-715d-402e-98ac-479c445f791b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"Crave You / The Less I Know the Better\" by Elk Road feat. Lisa Mitchell.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/cbf56383-715d-402e-98ac-479c445f791b"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/af1c88b4-8c37-48c9-ba84-add2627489a2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Ngaiire.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/af1c88b4-8c37-48c9-ba84-add2627489a2"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/9aa02453-247f-4c86-9694-45873fccef83",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Blossoms with Miles Kane.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/9aa02453-247f-4c86-9694-45873fccef83"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/309280b6-8356-4986-bbfd-e3eae733337c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by stories feat. Laura Jean Anderson.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/309280b6-8356-4986-bbfd-e3eae733337c"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Scary Pockets ft. Elise Trouw.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/e270d0d2-724f-4b7c-a95b-8be314bb0e61",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Lofi Fruits Music & Chill Fruits Music.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/e270d0d2-724f-4b7c-a95b-8be314bb0e61"
+    },
+    {
+      "id": "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/b7da9716-f4bd-4831-ad7d-238bb5d4070d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3cd646d9-25a8-4275-94e2-b23a7368d31d",
+      "title": "The Less I Know the Better — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"The Less I Know the Better\" is covered by \"The Less I Know the Better (Isolation Tapes)\" by Amen Mustang.",
+      "recordRef": "track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/b7da9716-f4bd-4831-ad7d-238bb5d4070d"
+    },
+    {
+      "id": "musicbrainz:release/6438e9ba-41ad-478c-81f1-323dcb212903",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/6438e9ba-41ad-478c-81f1-323dcb212903",
+      "title": "Currents — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"The Less I Know the Better\" by Tame Impala appears on the official album \"Currents\" (2015-07-15).",
+      "recordRef": "release/6438e9ba-41ad-478c-81f1-323dcb212903"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/13254542",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"lets_go_home.wav ---- \\\\\\LONG DRIVE...\\\\\\\" by stupid sauce.",
+      "recordRef": "track/song/2165830/sampled-by/13254542"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/7171752",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Wocky My Lover\" by Mak Sauce & Lil Yachty.",
+      "recordRef": "track/song/2165830/sampled-by/7171752"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/11825217",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Pull Yourself Together\" by Ricky Sixx.",
+      "recordRef": "track/song/2165830/sampled-by/11825217"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/10932731",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"If You Were To Get What You Deserve, You Would Know What The Bottom Of A Tire Tasttes Like\" by $uicideboy$.",
+      "recordRef": "track/song/2165830/sampled-by/10932731"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/11739787",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"tame impala\" by WHATMORE.",
+      "recordRef": "track/song/2165830/sampled-by/11739787"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/11531048",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"The Less I Know The Better\" by Mau P.",
+      "recordRef": "track/song/2165830/sampled-by/11531048"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/11267063",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Esse dance eu não paro\" by Isolas.",
+      "recordRef": "track/song/2165830/sampled-by/11267063"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/10662610",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Radio Guarascio 3\" by Tutti Fenomeni.",
+      "recordRef": "track/song/2165830/sampled-by/10662610"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/5238827",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"“haha my music taste is pretty diverse haha i hate mainstream music 😌”\" by John Fassold.",
+      "recordRef": "track/song/2165830/sampled-by/5238827"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/10082628",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"problem\" by M0rgue.",
+      "recordRef": "track/song/2165830/sampled-by/10082628"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/9560644",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Impala Do Jaca\" by Fornicat.",
+      "recordRef": "track/song/2165830/sampled-by/9560644"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/6442848",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Mashup Battle!\" by Pluffaduff (Ft. DaymanOurSavior).",
+      "recordRef": "track/song/2165830/sampled-by/6442848"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/9027983",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"10 BAND JUGG OFF CRAIGSLIST\" by BIGBABYGUCCI.",
+      "recordRef": "track/song/2165830/sampled-by/9027983"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/7798738",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Então me mama\" by LUCKHAOS.",
+      "recordRef": "track/song/2165830/sampled-by/7798738"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/7888993",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Duro 2 Horas Remix (Tame Impala Mashup)\" by Faraón Love Shady (Ft. Tame Impala).",
+      "recordRef": "track/song/2165830/sampled-by/7888993"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/7300569",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"L-Gante x Tame Impala\" by Yair Castillo.",
+      "recordRef": "track/song/2165830/sampled-by/7300569"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/7131413",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Em Busca da Luz\" by Marcelo Falcão.",
+      "recordRef": "track/song/2165830/sampled-by/7131413"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/5415825",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Будильник сука\" by Юнг Никон-YUNG NIKON (Ft. Наличный мальчик Витали-Cash Boy Vitali).",
+      "recordRef": "track/song/2165830/sampled-by/5415825"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/5261605",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"What I Want\" by Pluffaduff.",
+      "recordRef": "track/song/2165830/sampled-by/5261605"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/5230594",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Troublemaker\" by Herizen.",
+      "recordRef": "track/song/2165830/sampled-by/5230594"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/3932667",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"A Rainha e o Leão\" by Dani Vellocet.",
+      "recordRef": "track/song/2165830/sampled-by/3932667"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/3990745",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"Dare\" by Ripsy May.",
+      "recordRef": "track/song/2165830/sampled-by/3990745"
+    },
+    {
+      "id": "genius:track/song/2165830/sampled-by/2934617",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is sampled in \"I No Longer Fear the Razor Guarding My Heel (III)\" by $uicideboy$.",
+      "recordRef": "track/song/2165830/sampled-by/2934617"
+    },
+    {
+      "id": "genius:track/song/2165830/interpolated-by/14026141",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is interpolated in \"Zebra Stripes\" by Erick M.C. Supernatural.",
+      "recordRef": "track/song/2165830/interpolated-by/14026141"
+    },
+    {
+      "id": "genius:track/song/2165830/interpolated-by/9143275",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Tame-impala-the-less-i-know-the-better-lyrics",
+      "title": "The Less I Know the Better — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"The Less I Know the Better\" by Tame Impala is interpolated in \"Home To Another One\" by Madison Beer.",
+      "recordRef": "track/song/2165830/interpolated-by/9143275"
+    },
+    {
+      "id": "tavily:https://marvelcinematicuniverse.fandom.com/wiki/Tame_Impala",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://marvelcinematicuniverse.fandom.com/wiki/Tame_Impala",
+      "title": "Tame Impala | Marvel Cinematic Universe Wiki - Fandom",
+      "retrievedAt": "[time]",
+      "excerpt": "Trivia Tame Impala's song \"The Less I Know the Better\" is featured in the DC Entertainment production Supergirl episode Changing.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://tvtropes.org/pmwiki/pmwiki.php/Music/TameImpala",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://tvtropes.org/pmwiki/pmwiki.php/Music/TameImpala",
+      "title": "Tame Impala (Music)",
+      "retrievedAt": "[time]",
+      "excerpt": "Kevin is an example of the DIY Producer, producing, writing, and recording all of Tame Impala's material by himself. \"The Less I Know The Better\", mixed with",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Kevin_Parker",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Kevin_Parker",
+      "title": "Kevin Parker - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "Parker's decision to make the music for Tame Impala in the studio by himself is a result of Parker liking \"the kind of music that is the result of one person constructing an awesome symphony of sound. You can layer your own voice 700 times for half a second if you want, and I just love that kind of music.\" However, Parker has to translate his music to a live setting with the band, and the band doesn't play the songs until they have been recorded. \"The only jamming that's done as a band is done …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.snapchat.com/topic/vitamin-c-dj-seak-song",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.snapchat.com/topic/vitamin-c-dj-seak-song",
+      "title": "Vitamin C Dj Seak Song Videos",
+      "retrievedAt": "[time]",
+      "excerpt": "Tame Impala songs; The Less I Know The Better; song comparison; music debate; DJ setup; music trivia; psychedelic rock; indie music; new music release; music",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://issuu.com/loudandquiet/docs/l_q69/9?e=5693215%2F14096895",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://issuu.com/loudandquiet/docs/l_q69/9?e=5693215%2F14096895",
+      "title": "Loud And Quiet 69 – Tame Impala by LoudAndQuiet",
+      "retrievedAt": "[time]",
+      "excerpt": "Jul 10, 2015 — 'The Less I Know the Better,' a track jokingly discarded by Parker as, “white discofunk,” has a groove that would have Quincy Jones on the ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://what-song.com/Artist/6364/Tame-Impala",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://what-song.com/Artist/6364/Tame-Impala",
+      "title": "Tame Impala - List of Songs heard in Movies, TV Shows & ...",
+      "retrievedAt": "[time]",
+      "excerpt": "The Less I Know The Better · Supergirl - Changing poster · Supergirl - Changing. S2:E6. Love Island (UK) - Episode 30 poster. Love Island (UK) - Episode 30.Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://cloud.connect.mpr.org/essential_songs",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://cloud.connect.mpr.org/essential_songs",
+      "title": "The Current",
+      "retrievedAt": "[time]",
+      "excerpt": "Talking Heads - Stay Up Late Tame Impala - Solitude Is Bliss Tame Impala - Alter Ego Tame Impala - Apocalypse Dreams Tame Impala - Elephant Tame Impala - Feels Like We Only Go Backwards Tame Impala - Mind Mischief Tame Impala - Let It Happen Tame Impala - 'Cause I'm A Man Tame Impala - Eventually Tame Impala - The Less I Know The Better Tame Impala - Patience Tame Impala - Borderline Tame Impala - It Might Be Time Tame Impala - Lost In Yesterday Tank and the Bangas - Ants [...] Temple of the Do…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.tunefind.com/artist/tame-impala?page=2",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.tunefind.com/artist/tame-impala?page=2",
+      "title": "Tame Impala",
+      "retrievedAt": "[time]",
+      "excerpt": "The Less I Know the Better. Currents. Tame Impala. Listen on Amazon Music ... Yes I'm Changing. Currents. Tame Impala. Listen on Amazon Music. Listen on Apple ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://russel.fandom.com/wiki/Magic_89.9_Throwback_Music_Library_(2)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://russel.fandom.com/wiki/Magic_89.9_Throwback_Music_Library_(2)",
+      "title": "Magic 89.9 Throwback Music Library (2) - Russel Wiki - Fandom",
+      "retrievedAt": "[time]",
+      "excerpt": "Changing of the Seasons - Two Door Cinema Club; Shake It Out - Florence ... The Less I Know the Better - Tame Impala; What Kind of Man - Florence and the ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.abc.net.au/triplej/hottest100/archive/search",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.abc.net.au/triplej/hottest100/archive/search",
+      "title": "Search | Hottest 100 Archive | triple j",
+      "retrievedAt": "[time]",
+      "excerpt": "ABC Home triple j home Double J Triple J Unearthed Hack Overview History Search Search through the entire database of every single song to appear in the Hottest 100 throughout history. | Year | # | Artist | Song | --- --- |",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/2281ef80-0bb2-498d-90b3-4f1baf00876b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2281ef80-0bb2-498d-90b3-4f1baf00876b",
+      "title": "If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like\" by $uicideboy$, first released 2016-12-17.",
+      "recordRef": "recording/2281ef80-0bb2-498d-90b3-4f1baf00876b"
+    },
+    {
+      "id": "musicbrainz:recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe",
+      "title": "Since I’m Australian — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Since I’m Australian\" by duuzu, first released 2019-12-28.",
+      "recordRef": "recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+    },
+    {
+      "id": "musicbrainz:recording/cbf56383-715d-402e-98ac-479c445f791b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/cbf56383-715d-402e-98ac-479c445f791b",
+      "title": "Crave You / The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Crave You / The Less I Know the Better\" by Elk Road feat. Lisa Mitchell, first released 2017-10-06.",
+      "recordRef": "recording/cbf56383-715d-402e-98ac-479c445f791b"
+    },
+    {
+      "id": "musicbrainz:recording/af1c88b4-8c37-48c9-ba84-add2627489a2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/af1c88b4-8c37-48c9-ba84-add2627489a2",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Ngaiire, first released 2016-10-07.",
+      "recordRef": "recording/af1c88b4-8c37-48c9-ba84-add2627489a2"
+    },
+    {
+      "id": "musicbrainz:recording/9aa02453-247f-4c86-9694-45873fccef83",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9aa02453-247f-4c86-9694-45873fccef83",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Blossoms with Miles Kane, first released 2020-10-23.",
+      "recordRef": "recording/9aa02453-247f-4c86-9694-45873fccef83"
+    },
+    {
+      "id": "musicbrainz:recording/309280b6-8356-4986-bbfd-e3eae733337c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/309280b6-8356-4986-bbfd-e3eae733337c",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by stories feat. Laura Jean Anderson, first released 2019-12-20.",
+      "recordRef": "recording/309280b6-8356-4986-bbfd-e3eae733337c"
+    },
+    {
+      "id": "musicbrainz:recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Scary Pockets ft. Elise Trouw, first released 2022-09-05.",
+      "recordRef": "recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6"
+    },
+    {
+      "id": "musicbrainz:recording/e270d0d2-724f-4b7c-a95b-8be314bb0e61",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/e270d0d2-724f-4b7c-a95b-8be314bb0e61",
+      "title": "The Less I Know the Better — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better\" by Lofi Fruits Music & Chill Fruits Music, first released 2021-06-09.",
+      "recordRef": "recording/e270d0d2-724f-4b7c-a95b-8be314bb0e61"
+    },
+    {
+      "id": "musicbrainz:recording/b7da9716-f4bd-4831-ad7d-238bb5d4070d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b7da9716-f4bd-4831-ad7d-238bb5d4070d",
+      "title": "The Less I Know the Better (Isolation Tapes) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"The Less I Know the Better (Isolation Tapes)\" by Amen Mustang, first released 2020-07-31.",
+      "recordRef": "recording/b7da9716-f4bd-4831-ad7d-238bb5d4070d"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 12>",
+      "title": "Another sampling connection",
+      "content": "MusicBrainz also lists the track as sampled in “Since I’m Australian” by duuzu.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 13>",
+          "text": "duuzu",
+          "type": "artist",
+          "searchQuery": "duuzu"
+        }
+      ],
+      "claimId": "<id 4>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "The Less I Know The Better",
+        "size": 40,
+        "trackTitle": "The Less I Know The Better",
+        "trackArtist": "Tame Impala",
+        "mbid": "78be434c-0908-458f-9693-f16cdebb68ef",
+        "year": 2015
+      },
+      {
+        "id": "mb-2281ef80-0bb2-498d-90b3-4f1baf00876b",
+        "group": 3,
+        "label": "If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like - $uicideboy$",
+        "size": 22,
+        "trackTitle": "If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like",
+        "trackArtist": "$uicideboy$",
+        "year": 2016,
+        "mbid": "2281ef80-0bb2-498d-90b3-4f1baf00876b",
+        "spotifyId": "3GkZT2De5vEYJNI2GUJMmw"
+      },
+      {
+        "id": "mb-3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe",
+        "group": 3,
+        "label": "Since I’m Australian - duuzu",
+        "size": 22,
+        "trackTitle": "Since I’m Australian",
+        "trackArtist": "duuzu",
+        "year": 2019,
+        "mbid": "3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+      },
+      {
+        "id": "mb-af1c88b4-8c37-48c9-ba84-add2627489a2",
+        "group": 4,
+        "label": "The Less I Know the Better - Ngaiire",
+        "size": 22,
+        "trackTitle": "The Less I Know the Better",
+        "trackArtist": "Ngaiire",
+        "year": 2016,
+        "mbid": "af1c88b4-8c37-48c9-ba84-add2627489a2"
+      },
+      {
+        "id": "mb-9aa02453-247f-4c86-9694-45873fccef83",
+        "group": 4,
+        "label": "The Less I Know the Better - Blossoms with Miles Kane",
+        "size": 22,
+        "trackTitle": "The Less I Know the Better",
+        "trackArtist": "Blossoms with Miles Kane",
+        "year": 2020,
+        "mbid": "9aa02453-247f-4c86-9694-45873fccef83"
+      },
+      {
+        "id": "mb-309280b6-8356-4986-bbfd-e3eae733337c",
+        "group": 4,
+        "label": "The Less I Know the Better - stories feat. Laura Jean Anderson",
+        "size": 22,
+        "trackTitle": "The Less I Know the Better",
+        "trackArtist": "stories feat. Laura Jean Anderson",
+        "year": 2019,
+        "mbid": "309280b6-8356-4986-bbfd-e3eae733337c"
+      },
+      {
+        "id": "mb-8dafa5f3-dafa-4012-8f2c-b42b5f2625d6",
+        "group": 4,
+        "label": "The Less I Know the Better - Scary Pockets ft. Elise Trouw",
+        "size": 22,
+        "trackTitle": "The Less I Know the Better",
+        "trackArtist": "Scary Pockets ft. Elise Trouw",
+        "year": 2022,
+        "mbid": "8dafa5f3-dafa-4012-8f2c-b42b5f2625d6"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "mb-2281ef80-0bb2-498d-90b3-4f1baf00876b",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/2281ef80-0bb2-498d-90b3-4f1baf00876b"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-af1c88b4-8c37-48c9-ba84-add2627489a2",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/af1c88b4-8c37-48c9-ba84-add2627489a2"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-9aa02453-247f-4c86-9694-45873fccef83",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/9aa02453-247f-4c86-9694-45873fccef83"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-309280b6-8356-4986-bbfd-e3eae733337c",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/309280b6-8356-4986-bbfd-e3eae733337c"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-8dafa5f3-dafa-4012-8f2c-b42b5f2625d6",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 10>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "The MusicBrainz-matched recording by Tame Impala runs 3:36 and was first released on July 15, 2015.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives Tame Impala, 3:36, and first release on July 15, 2015.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song has been covered by Ngaiire.",
+      "about": "cover",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": "Not judged: the items it cites state facts about something other than what the claim is about (this recording, the song or a whole release), so they cannot support it.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "MusicBrainz also lists the track as sampled in “Since I’m Australian” by duuzu.",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz sampled-by excerpt names “Since I’m Australian” by duuzu.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Another sampling connection",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "duuzu",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"The Less I Know the Better\" by Tame Impala is sampled in \"If You Were to Get What You Deserve, You Would Know What the Bottom of a Tire Tastes Like\" by $uicideboy$.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/2281ef80-0bb2-498d-90b3-4f1baf00876b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"The Less I Know the Better\" by Tame Impala is sampled in \"Since I’m Australian\" by duuzu.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/sampled-by/recording/3ab1f7f4-2bda-48ea-bb1e-34e5d4be78fe"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "The work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Ngaiire.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/af1c88b4-8c37-48c9-ba84-add2627489a2"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "The work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Blossoms with Miles Kane.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/9aa02453-247f-4c86-9694-45873fccef83"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "The work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by stories feat. Laura Jean Anderson.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/309280b6-8356-4986-bbfd-e3eae733337c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"The Less I Know the Better\" is covered by \"The Less I Know the Better\" by Scary Pockets ft. Elise Trouw.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/78be434c-0908-458f-9693-f16cdebb68ef/covered-by/recording/8dafa5f3-dafa-4012-8f2c-b42b5f2625d6"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 11>",
+      "text": "\"The Less I Know the Better\" by Tame Impala appears on the official album \"Currents\" (2015-07-15).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/6438e9ba-41ad-478c-81f1-323dcb212903"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 14482,
+      "outputTokens": 1518,
+      "reasoningTokens": 346
+    },
+    "verifier": {
+      "judged": 4,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 116.95,
+      "confidence": 0.641,
+      "rawConfidence": {
+        "value": 3.408,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.304978,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.557,
+        1.091,
+        1.602,
+        2.125,
+        2.635,
+        3.158,
+        3.669,
+        4.18,
+        4.69,
+        5.213,
+        5.712,
+        6.235,
+        6.745,
+        7.256,
+        7.755,
+        8.278,
+        8.8,
+        9.311,
+        9.822,
+        10.333,
+        10.844,
+        11.366,
+        11.865,
+        12.376,
+        12.887,
+        13.41,
+        13.909,
+        14.431,
+        14.942,
+        15.464,
+        15.964,
+        16.486,
+        17.009,
+        17.531,
+        18.042,
+        18.541,
+        19.052,
+        19.563,
+        20.074,
+        20.596,
+        21.107,
+        21.618,
+        22.129,
+        22.639,
+        23.15,
+        23.673,
+        24.184,
+        24.694,
+        25.205,
+        25.728,
+        26.239,
+        26.749,
+        27.26,
+        27.771,
+        28.282,
+        28.804,
+        29.315,
+        29.826
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.282625,
+        0.297355,
+        0.289352,
+        0.31766,
+        0.309608,
+        0.301078,
+        0.481061,
+        0.35623,
+        0.310148,
+        0.225211,
+        0.22177,
+        0.315319,
+        0.254882,
+        0.316908,
+        0.240423,
+        0.119226,
+        0.104883,
+        0.462132,
+        0.328381,
+        0.264791,
+        0.297203,
+        0.27445,
+        0.317351,
+        0.288535,
+        0.26022,
+        0.280616,
+        0.271524,
+        0.305242,
+        0.445426,
+        0.36927,
+        0.308297,
+        0.299543,
+        0.254622,
+        0.462866,
+        0.343609,
+        0.382195,
+        0.264866,
+        0.203264,
+        0.233889,
+        0.431937,
+        0.341971,
+        0.230308,
+        0.200197,
+        0.15129,
+        0.273087,
+        0.317023,
+        0.287506,
+        0.299201,
+        0.332877,
+        0.308467,
+        0.403288,
+        0.437211,
+        0.354766,
+        0.21649,
+        0.218262,
+        0.245809,
+        0.317719,
+        0.214424,
+        0.150767,
+        0.049269,
+        0.031846,
+        0.43898,
+        0.3552,
+        0.266574,
+        0.297367,
+        0.256236,
+        0.29449,
+        0.297023,
+        0.228507,
+        0.250288,
+        0.223615,
+        0.220662,
+        0.427803,
+        0.358625,
+        0.31381,
+        0.320381,
+        0.33605,
+        0.344785,
+        0.350658,
+        0.272307,
+        0.176506,
+        0.196928,
+        0.222075,
+        0.419393,
+        0.34038,
+        0.229146,
+        0.182968,
+        0.125864,
+        0.184783,
+        0.342339,
+        0.278982,
+        0.26149,
+        0.274689,
+        0.294271,
+        0.410441,
+        0.400173,
+        0.311324,
+        0.298067,
+        0.277252,
+        0.194141,
+        0.369988,
+        0.252336,
+        0.23676,
+        0.189337,
+        0.178422,
+        0.421411,
+        0.371874,
+        0.303659,
+        0.305188,
+        0.300597,
+        0.228231,
+        0.332401,
+        0.20558,
+        0.228641,
+        0.338915,
+        0.255619,
+        0.374967,
+        0.400773,
+        0.276116,
+        0.285826,
+        0.285487,
+        0.405643,
+        0.387562,
+        0.381344,
+        0.392467,
+        0.204854,
+        0.184904,
+        0.384765,
+        0.382432,
+        0.277703,
+        0.252925,
+        0.186841,
+        0.157114,
+        0.359683,
+        0.261952,
+        0.299296,
+        0.294448,
+        0.280483,
+        0.378513,
+        0.474946,
+        0.420899,
+        0.299033,
+        0.138236,
+        0.137664,
+        0.359987,
+        0.26305,
+        0.226564,
+        0.151208,
+        0.130909,
+        0.361736,
+        0.441519,
+        0.294077,
+        0.303946,
+        0.247966,
+        0.259931,
+        0.344318,
+        0.27247,
+        0.289049,
+        0.313742,
+        0.286413,
+        0.364186,
+        0.43215,
+        0.318544,
+        0.26984,
+        0.251496,
+        0.321092,
+        0.361888,
+        0.28459,
+        0.288443,
+        0.251156,
+        0.210752,
+        0.362524,
+        0.418906,
+        0.328913,
+        0.233037,
+        0.176509,
+        0.186472,
+        0.337946,
+        0.288914,
+        0.2766,
+        0.326144,
+        0.31115,
+        0.261477,
+        0.332287,
+        0.298139,
+        0.213264,
+        0.242105,
+        0.260615,
+        0.264499,
+        0.259899,
+        0.215565,
+        0.262637,
+        0.2244,
+        0.230852,
+        0.253233,
+        0.201846,
+        0.209369,
+        0.241742,
+        0.236423,
+        0.357759,
+        0.383277,
+        0.355744,
+        0.357644,
+        0.286424,
+        0.302147,
+        0.488986,
+        0.377385,
+        0.373473,
+        0.370247,
+        0.32281,
+        0.389973,
+        0.301167,
+        0.304638,
+        0.322846,
+        0.32941,
+        0.320701,
+        0.541402,
+        0.400009,
+        0.412596,
+        0.427169,
+        0.38189,
+        0.428716,
+        0.377548,
+        0.418071,
+        0.393535,
+        0.331155,
+        0.303909,
+        0.499674,
+        0.274733,
+        0.278207,
+        0.261576,
+        0.2247,
+        0.336149,
+        0.21606,
+        0.188727,
+        0.436608,
+        0.369637,
+        0.373946,
+        0.496054,
+        0.310629,
+        0.239696,
+        0.29788,
+        0.199621,
+        0.333678,
+        0.238722,
+        0.197728,
+        0.26535,
+        0.267458,
+        0.201017,
+        0.481737,
+        0.40056,
+        0.342486,
+        0.346806,
+        0.269522,
+        0.392083,
+        0.346286,
+        0.363956,
+        0.351187,
+        0.336637,
+        0.233164,
+        0.514007,
+        0.41926,
+        0.366805,
+        0.393379,
+        0.381133,
+        0.398198,
+        0.280713,
+        0.312042,
+        0.368477,
+        0.374972,
+        0.331386,
+        0.427454,
+        0.37533,
+        0.276394,
+        0.330843,
+        0.368621,
+        0.357297,
+        0.264844,
+        0.181094,
+        0.313232,
+        0.251683,
+        0.241253,
+        0.485037,
+        0.331181,
+        0.183638,
+        0.337359,
+        0.284009,
+        0.349988,
+        0.262237,
+        0.218356,
+        0.30719,
+        0.348975,
+        0.31704,
+        0.443574,
+        0.404498,
+        0.362274,
+        0.334936,
+        0.295858,
+        0.342215,
+        0.340434,
+        0.327489,
+        0.342706,
+        0.266399,
+        0.238915,
+        0.462218,
+        0.363011,
+        0.225034,
+        0.292564,
+        0.232314,
+        0.290026,
+        0.27572,
+        0.154449,
+        0.336329,
+        0.38267,
+        0.362129,
+        0.423406,
+        0.393517,
+        0.290687,
+        0.280476,
+        0.282077,
+        0.275061,
+        0.302974
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 14.42
+        },
+        {
+          "label": "B",
+          "start": 14.42,
+          "end": 21.595
+        },
+        {
+          "label": "A",
+          "start": 21.595,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 1.11,
+        "type": "onset",
+        "intensity": 0.331,
+        "description": "Onset"
+      },
+      {
+        "time": 4.17,
+        "type": "onset",
+        "intensity": 0.391,
+        "description": "Onset"
+      },
+      {
+        "time": 5.71,
+        "type": "onset",
+        "intensity": 0.555,
+        "description": "Onset"
+      },
+      {
+        "time": 6.22,
+        "type": "harmonic_change",
+        "intensity": 0.307,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 8.28,
+        "type": "onset",
+        "intensity": 0.458,
+        "description": "Onset"
+      },
+      {
+        "time": 9.31,
+        "type": "harmonic_change",
+        "intensity": 0.277,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 11.28,
+        "type": "energy_peak",
+        "intensity": 0.749,
+        "description": "Energy peak"
+      },
+      {
+        "time": 13.42,
+        "type": "onset",
+        "intensity": 0.371,
+        "description": "Onset"
+      },
+      {
+        "time": 14.41,
+        "type": "harmonic_change",
+        "intensity": 0.279,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 16.48,
+        "type": "onset",
+        "intensity": 0.303,
+        "description": "Onset"
+      },
+      {
+        "time": 20.1,
+        "type": "energy_peak",
+        "intensity": 1,
+        "description": "Energy peak"
+      },
+      {
+        "time": 20.59,
+        "type": "onset",
+        "intensity": 0.336,
+        "description": "Onset"
+      },
+      {
+        "time": 21.59,
+        "type": "harmonic_change",
+        "intensity": 0.259,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 27.26,
+        "type": "harmonic_change",
+        "intensity": 0.298,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 28.81,
+        "type": "onset",
+        "intensity": 0.342,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Pop---K-pop",
+            "score": 0.2312
+          },
+          {
+            "label": "Electronic---Electro",
+            "score": 0.1608
+          },
+          {
+            "label": "Pop---Indie Pop",
+            "score": 0.1093
+          },
+          {
+            "label": "Electronic---Synth-pop",
+            "score": 0.0979
+          },
+          {
+            "label": "Funk / Soul---Neo Soul",
+            "score": 0.073
+          },
+          {
+            "label": "Electronic---Chillwave",
+            "score": 0.0635
+          },
+          {
+            "label": "Electronic---Dance-pop",
+            "score": 0.0619
+          },
+          {
+            "label": "Funk / Soul---Funk",
+            "score": 0.0609
+          },
+          {
+            "label": "Rock---Indie Rock",
+            "score": 0.0578
+          },
+          {
+            "label": "Electronic---Downtempo",
+            "score": 0.057
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.3642
+          },
+          {
+            "label": "pop",
+            "score": 0.1952
+          },
+          {
+            "label": "indie",
+            "score": 0.1653
+          },
+          {
+            "label": "dance",
+            "score": 0.139
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.1148
+          },
+          {
+            "label": "electro",
+            "score": 0.1024
+          },
+          {
+            "label": "electronica",
+            "score": 0.0828
+          },
+          {
+            "label": "rnb",
+            "score": 0.0636
+          },
+          {
+            "label": "soul",
+            "score": 0.0597
+          },
+          {
+            "label": "chillout",
+            "score": 0.0555
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0506
+          },
+          {
+            "label": "alternative",
+            "score": 0.0504
+          },
+          {
+            "label": "House",
+            "score": 0.0454
+          },
+          {
+            "label": "rock",
+            "score": 0.04
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0386
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0374
+          },
+          {
+            "label": "00s",
+            "score": 0.032
+          },
+          {
+            "label": "experimental",
+            "score": 0.0237
+          },
+          {
+            "label": "sexy",
+            "score": 0.0225
+          },
+          {
+            "label": "funk",
+            "score": 0.0204
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0161
+          },
+          {
+            "label": "chill",
+            "score": 0.0148
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0137
+          },
+          {
+            "label": "ambient",
+            "score": 0.013
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0112
+          },
+          {
+            "label": "party",
+            "score": 0.0112
+          },
+          {
+            "label": "jazz",
+            "score": 0.0109
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0107
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0105
+          },
+          {
+            "label": "catchy",
+            "score": 0.0073
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0069
+          },
+          {
+            "label": "happy",
+            "score": 0.0051
+          },
+          {
+            "label": "90s",
+            "score": 0.005
+          },
+          {
+            "label": "folk",
+            "score": 0.0049
+          },
+          {
+            "label": "80s",
+            "score": 0.0048
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0044
+          },
+          {
+            "label": "easy listening",
+            "score": 0.004
+          },
+          {
+            "label": "blues",
+            "score": 0.0033
+          },
+          {
+            "label": "sad",
+            "score": 0.003
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0021
+          },
+          {
+            "label": "guitar",
+            "score": 0.0016
+          },
+          {
+            "label": "punk",
+            "score": 0.0016
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0015
+          },
+          {
+            "label": "70s",
+            "score": 0.0014
+          },
+          {
+            "label": "oldies",
+            "score": 0.0014
+          },
+          {
+            "label": "60s",
+            "score": 0.0011
+          },
+          {
+            "label": "country",
+            "score": 0.0007
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0006
+          },
+          {
+            "label": "metal",
+            "score": 0.0005
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0002
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 1,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0552,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.1932,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.9924,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 6.1348,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 117,
+  "key": null,
+  "energy": null,
+  "valence": 0.624,
+  "danceability": 1,
+  "acousticness": 0.055,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 1.11,
+      "type": "onset",
+      "intensity": 0.331,
+      "description": "Onset"
+    },
+    {
+      "time": 4.17,
+      "type": "onset",
+      "intensity": 0.391,
+      "description": "Onset"
+    },
+    {
+      "time": 5.71,
+      "type": "onset",
+      "intensity": 0.555,
+      "description": "Onset"
+    },
+    {
+      "time": 6.22,
+      "type": "harmonic_change",
+      "intensity": 0.307,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 8.28,
+      "type": "onset",
+      "intensity": 0.458,
+      "description": "Onset"
+    },
+    {
+      "time": 9.31,
+      "type": "harmonic_change",
+      "intensity": 0.277,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 11.28,
+      "type": "energy_peak",
+      "intensity": 0.749,
+      "description": "Energy peak"
+    },
+    {
+      "time": 13.42,
+      "type": "onset",
+      "intensity": 0.371,
+      "description": "Onset"
+    },
+    {
+      "time": 14.41,
+      "type": "harmonic_change",
+      "intensity": 0.279,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 16.48,
+      "type": "onset",
+      "intensity": 0.303,
+      "description": "Onset"
+    },
+    {
+      "time": 20.1,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak"
+    },
+    {
+      "time": 20.59,
+      "type": "onset",
+      "intensity": 0.336,
+      "description": "Onset"
+    },
+    {
+      "time": 21.59,
+      "type": "harmonic_change",
+      "intensity": 0.259,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 27.26,
+      "type": "harmonic_change",
+      "intensity": 0.298,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 28.81,
+      "type": "onset",
+      "intensity": 0.342,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

@@ -1,0 +1,1964 @@
+{
+  "id": "3XVozq1aeqsJwpXrEZrDJ9",
+  "title": "Ice Ice Baby",
+  "artist": "Vanilla Ice",
+  "album": "Vanilla Ice Is Back! - Hip Hop Classics",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/3XVozq1aeqsJwpXrEZrDJ9",
+  "releaseYear": "2008",
+  "explicit": false,
+  "durationSeconds": 254,
+  "isrc": "USA560845821",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/4fe305c6-4e8a-4829-8d69-95a404ffb14d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/4fe305c6-4e8a-4829-8d69-95a404ffb14d",
+      "title": "Ice Ice Baby — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Ice Ice Baby\" by Vanilla Ice (4:14), ISRC USA560845821, first released 2008-11-11.",
+      "recordRef": "track/recording/4fe305c6-4e8a-4829-8d69-95a404ffb14d"
+    },
+    {
+      "id": "musicbrainz:release/97ab938d-0181-47ba-9702-c846379f2c0b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/97ab938d-0181-47ba-9702-c846379f2c0b",
+      "title": "Vanilla Ice Is Back! - Hip Hop Classics — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Ice Ice Baby\" by Vanilla Ice appears on the official album \"Vanilla Ice Is Back! - Hip Hop Classics\".",
+      "recordRef": "release/97ab938d-0181-47ba-9702-c846379f2c0b"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a91d02d8-d5b0-42ec-ae95-678ec39bd373",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Faith No More.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a91d02d8-d5b0-42ec-ae95-678ec39bd373"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/d03e2f99-0248-4cc2-ace4-3e0abbcbf386",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Anniversary Medley Part 1\" by FORK.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/d03e2f99-0248-4cc2-ace4-3e0abbcbf386"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/f812384f-e505-45dd-8d18-0ff0e34ed670",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Alvin\" by The Chipmunks.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/f812384f-e505-45dd-8d18-0ff0e34ed670"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/9e6e6546-b65c-4681-aa04-61f3630f5f11",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Big Daddy.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/9e6e6546-b65c-4681-aa04-61f3630f5f11"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1e0ece79-a156-4042-b254-20ec6ddb7638",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by The WFG All-Stars.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1e0ece79-a156-4042-b254-20ec6ddb7638"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/dfaf98d8-8685-42ff-be33-d5ab861e9f57",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Crazy Frog.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/dfaf98d8-8685-42ff-be33-d5ab861e9f57"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/ca504aaa-45d8-4340-94e1-66540aaab14d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Richard Cheese.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/ca504aaa-45d8-4340-94e1-66540aaab14d"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/8f43358f-781e-4bf7-8068-f78536b34466",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by My Gay Uncle.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/8f43358f-781e-4bf7-8068-f78536b34466"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1fa2b536-9fd1-4ecd-a5c9-3183c3e7352f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Glee Cast.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1fa2b536-9fd1-4ecd-a5c9-3183c3e7352f"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/8880555b-bc27-4312-a4ed-1b8716680c80",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Mambo Kurt.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/8880555b-bc27-4312-a4ed-1b8716680c80"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/5d80a0ec-6db3-4f21-9674-03367e39159b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Scream Machine.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/5d80a0ec-6db3-4f21-9674-03367e39159b"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/5803db39-bf4f-4d9d-8b8d-206014f8404a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Leo Moracchioli.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/5803db39-bf4f-4d9d-8b8d-206014f8404a"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/c6f937d6-9c68-4be0-8aa8-3548a9bc39d7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Postmodern Jukebox feat. Aubrey Logan.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/c6f937d6-9c68-4be0-8aa8-3548a9bc39d7"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/cd97734e-fa44-49f1-ba29-ca30d8d8276f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Scream Machine.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/cd97734e-fa44-49f1-ba29-ca30d8d8276f"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1d2082c6-5b7a-4cf6-b51c-d31e1ed1de56",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Marty Ray Project.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1d2082c6-5b7a-4cf6-b51c-d31e1ed1de56"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/3eda519e-3427-49c8-9df2-ef7e0fef4675",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Sera Ryu.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/3eda519e-3427-49c8-9df2-ef7e0fef4675"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/efac5845-a752-4638-bcfe-effab12ebb08",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Kacey Baker feat. Tamarra Jabor.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/efac5845-a752-4638-bcfe-effab12ebb08"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/50a4da2f-6574-4421-938a-355ff524bf81",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Herringbone Brick.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/50a4da2f-6574-4421-938a-355ff524bf81"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/66ba7a5e-a32d-47c4-a2aa-066fe7890994",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Vanilla Ice & Kep1er.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/66ba7a5e-a32d-47c4-a2aa-066fe7890994"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/25a99383-1fc3-4345-be7a-52e6b8f7d3f0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by The Moon Loungers.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/25a99383-1fc3-4345-be7a-52e6b8f7d3f0"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/0004c7a0-66d6-4288-ac72-c38a01c60394",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby (country style)\" by Herringbone Brick.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/0004c7a0-66d6-4288-ac72-c38a01c60394"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/035fbf39-1922-4f05-81d4-8d53bf2460c0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby (Hip Hop remix – 12″ version)\" by Key Biscayne.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/035fbf39-1922-4f05-81d4-8d53bf2460c0"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/6e51f710-36cd-49cb-8b92-0c6c9077ec98",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Ice Ice Baby 2008 (radio & video edit)\" by ReAnimator feat. Big Daddi & Vanilla Ice.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/6e51f710-36cd-49cb-8b92-0c6c9077ec98"
+    },
+    {
+      "id": "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a872b382-cf59-43d6-8ae4-820b540236a1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+      "title": "Ice Ice Baby — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Ice Ice Baby\" is covered by \"Queen Medley\" by Butch Walker.",
+      "recordRef": "work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a872b382-cf59-43d6-8ae4-820b540236a1"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/1171",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Just Lose It\" by Eminem.",
+      "recordRef": "work/song/3586/sampled-by/1171"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/9300438",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Bops Goin Brazy\" by Tyga.",
+      "recordRef": "work/song/3586/sampled-by/9300438"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/136474",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Celcius\" by Tech N9ne (Ft. Don Juan).",
+      "recordRef": "work/song/3586/sampled-by/136474"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/3969465",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Rollin’ In My....\" by Vanilla Ice.",
+      "recordRef": "work/song/3586/sampled-by/3969465"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/129835",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"History of Rap 2\" by Jimmy Fallon (Ft. Justin Timberlake).",
+      "recordRef": "work/song/3586/sampled-by/129835"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/4028533",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"11th Ave. Freakout Pt 1\" by Odd Nosdam.",
+      "recordRef": "work/song/3586/sampled-by/4028533"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/688597",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Pedał Roman\" by Nagły Atak Spawacza.",
+      "recordRef": "work/song/3586/sampled-by/688597"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/3969428",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Bullet On The Chart\" by Vanilla Ice.",
+      "recordRef": "work/song/3586/sampled-by/3969428"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/7072262",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Ice Ice Baby 2001\" by Reanimator (Ft. Vanilla Ice).",
+      "recordRef": "work/song/3586/sampled-by/7072262"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/6905742",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Ice\" by Ontopic.",
+      "recordRef": "work/song/3586/sampled-by/6905742"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/4913474",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Skanilla Ice\" by Sada Baby.",
+      "recordRef": "work/song/3586/sampled-by/4913474"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/1530865",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Bite Your Rhymes\" by Mindless Self Indulgence.",
+      "recordRef": "work/song/3586/sampled-by/1530865"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/83851",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Fatty Boom Boom\" by Die Antwoord.",
+      "recordRef": "work/song/3586/sampled-by/83851"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/4101443",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Nice Iced Pavement (Parody of ”Ice Ice Baby”)\" by ApologetiX.",
+      "recordRef": "work/song/3586/sampled-by/4101443"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/5180991",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Stuntin’\" by Post Malone.",
+      "recordRef": "work/song/3586/sampled-by/5180991"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/5578364",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Vice Vice Baby\" by Paul Shanklin.",
+      "recordRef": "work/song/3586/sampled-by/5578364"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/5313033",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Ice Ice Jimmy\" by Jimmy Speed.",
+      "recordRef": "work/song/3586/sampled-by/5313033"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/567523",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Smokin’ Ice Ice Baby\" by Dirt Nasty.",
+      "recordRef": "work/song/3586/sampled-by/567523"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/4739760",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Jackin’ Foe Beats\" by Violent J.",
+      "recordRef": "work/song/3586/sampled-by/4739760"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/4429450",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"TURN OFF THE LIGHTS\" by Dog Blood.",
+      "recordRef": "work/song/3586/sampled-by/4429450"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/47255",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Hip Hop Rules\" by Vanilla Ice (Ft. La the Darkman).",
+      "recordRef": "work/song/3586/sampled-by/47255"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/3272678",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Vanilla Sprite\" by Forgiato Blow.",
+      "recordRef": "work/song/3586/sampled-by/3272678"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/14229",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"I Don’t Dance\" by Compton's Most Wanted.",
+      "recordRef": "work/song/3586/sampled-by/14229"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/9251083",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"Nice Ice\" by Lil' Kim.",
+      "recordRef": "work/song/3586/sampled-by/9251083"
+    },
+    {
+      "id": "genius:work/song/3586/sampled-by/9416175",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "title": "Ice Ice Baby — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Ice Ice Baby\" by Vanilla Ice is sampled in \"EXTREME SOUNDCLOWN MEGAMIX IV\" by Gyrotron.",
+      "recordRef": "work/song/3586/sampled-by/9416175"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure",
+      "title": "Vanilla Ice's 'Ice Ice Baby' sample of Queen and David ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Ice Ice Baby\" by Vanilla Ice sampled Queen and David Bowie's \"Under Pressure\". Listen to both songs on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby/sampled",
+      "title": "Songs that Sampled Ice Ice Baby by Vanilla Ice",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 84 songs ; Jedward feat. Vanilla Ice's Under Pressure (Ice Ice Baby), Under Pressure (Ice Ice Baby) · Jedward feat. Vanilla Ice, 2010, Vocals / Lyrics.Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Ice_Ice_Baby",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Ice_Ice_Baby",
+      "title": "Ice Ice Baby - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Ice Ice Baby\" is the debut single by American rapper Vanilla Ice. Released by SBK Records, on his debut album, To the Extreme (1990), it is his best-known song and has appeared in remixed form on Platinum Underground and Vanilla Ice Is Back! A live version appears on the album Extremely Live, while a nu metal version appears on the album Hard to Swallow, under the title \"Too Cold\". \"Ice Ice Baby\" samples the bassline of the song \"Under Pressure\" by British rock band Queen \"Queen (band)\") and […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby",
+      "title": "Ice Ice Baby by Vanilla Ice - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Ice Ice Baby\" contains samples of \"Under Pressure\" by Queen and David Bowie and \"Ice Ice Baby\" from the movie School Daze.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby-(Funkymix)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby-(Funkymix)",
+      "title": "Ice Ice Baby (Funkymix) by Vanilla Ice",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Ice Ice Baby (Funkymix)\" contains samples of \"Long Train Runnin'\" by The Doobie Brothers, \"Apache\" by Incredible Bongo Band, \"La Di Da Di\" by Doug E. Fresh ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Vanilla_Ice",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Vanilla_Ice",
+      "title": "Vanilla Ice - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "songs that had been perfected on stage by Ice and his acquaintances with various producers, including Khayree. The two year production was distributed by an independent record company called Ichiban Records in 1989. \"Play That Funky Music \"Play That Funky Music (Vanilla Ice version)\")\" was released as the album's first single, with \"Ice Ice Baby\" appearing as the B-side. Tommy Quon personally sent out the single to various radio stations around the U.S., but the single was seldom played and [..…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://tvtropes.org/pmwiki/pmwiki.php/Trivia/VanillaIce",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://tvtropes.org/pmwiki/pmwiki.php/Trivia/VanillaIce",
+      "title": "Trivia/Vanilla Ice",
+      "retrievedAt": "[time]",
+      "excerpt": "Troubled Production: The \"Ice Ice Baby\" video had its problems. The crew didn't have a set to film in, so Ice and company invaded an abandoned building in",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.imdb.com/name/nm0406678/trivia",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.imdb.com/name/nm0406678/trivia",
+      "title": "Trivia - Vanilla Ice",
+      "retrievedAt": "[time]",
+      "excerpt": "In 1998 he played a free concert in Birmingham, AL, to promote a thrash metal version of \"Ice Ice Baby\". During the show he threw copies of his album into",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=rog8ou-ZepE",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=rog8ou-ZepE",
+      "title": "Vanilla Ice - Ice Ice Baby (Official Music Video)",
+      "retrievedAt": "[time]",
+      "excerpt": "#VanillaIce #IceIceBaby #Remastered [...] # Vanilla Ice - Ice Ice Baby (Official Music Video) ## Channel: Vanilla Ice (verified) 1.18M subscribers 3.6M likes ### Description 688,762,330 views Posted: 2009-03-04 REMASTERED IN HD! Is this a stone-cold classic or a one-hit wonder? Listen here: Listen to more from Vanilla Ice: Stream a playlist of Vanilla Ice's biggest hits: Follow Vanilla Ice / vanillaice / vanillaice / vanillaiceofficial Music video by Vanilla Ice performing Ice Ice Baby. [...] […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/vanilla-ice/ice-ice-baby",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/vanilla-ice/ice-ice-baby",
+      "title": "Ice Ice Baby by Vanilla Ice - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "On the liner notes of the album, the composer credit is given to Vanilla Ice, Earthquake (his producer, Floyd Brown), and M. Smooth (collaborator Mario Johnson). They also thank MC Hammer, Ice T, Public Enemy, Sir Mix-A-Lot, Cash Money, EPMD, and 2 Live Crew, but there is not mention of Queen or David Bowie. However, Bowie and the members of Queen were later added as composers on the official credits. [...] Vanilla Ice was discovered by Tommy Quon, who owned the City Lights nightclub in Dallas.…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.tigerstrypes.com/vanilla-ice-ice-baby",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.tigerstrypes.com/vanilla-ice-ice-baby",
+      "title": "Things That Bring Back Memories \"Vanilla Ice - Ice Ice Baby\"",
+      "retrievedAt": "[time]",
+      "excerpt": "On the liner notes of the album, the composer credit is given to Vanilla Ice, Earthquake, and Mr. Smooth. They also thank MC Hammer, Ice T, Public Enemy, Sir Mix-A-Lot, Cash Money, EPMD, and 2 Live Crew, but there is not mention of Queen or David Bowie. However, Bowie and the members of Queen were later added as composers on the official credits. Vanilla Ice was a top Jet Ski racer around the time this came out. [...] “Ice Ice Baby” is a hip hop song written by American rapper Vanilla Ice and D…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://davesmusicdatabase.blogspot.com/1990/11/vanilla-ice-ice-ice-baby-becomes-first.html",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://davesmusicdatabase.blogspot.com/1990/11/vanilla-ice-ice-ice-baby-becomes-first.html",
+      "title": "Vanilla Ice “Ice Ice Baby” becomes the first rap song to hit #1",
+      "retrievedAt": "[time]",
+      "excerpt": "Nov 3, 1990 — The club's DJ Earthquake produced some songs for Ice which were released by Tommy Quon, the club owner. A reworked version of Wild Cherry's 1976 ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://open.spotify.com/track/3XVozq1aeqsJwpXrEZrDJ9",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://open.spotify.com/track/3XVozq1aeqsJwpXrEZrDJ9",
+      "title": "Spotify – Web Player",
+      "retrievedAt": "[time]",
+      "excerpt": "English English Afrikaans Afrikaans አማርኛ Amharicالعَرَبِيَّة Arabicعربي مصري Arabic (Egypt)العَرَبِيَّة مغربي Arabic (Morocco)العربية السعودية Arabic (Saudi Arabia)Azərbaycanca Azerbaijani Български Bulgarian भोजपुरीBhojpuri বাংলাBengali Bosanski Bosnian Català Catalan Čeština Czech Dansk DanishDeutsch GermanEλληνικά Greek English United KingdomEspañol de España European SpanishEspañol de Latinoamérica Latin American SpanishEspañol (Argentina)Spanish (Argentina)Español (México)Spanish [...] Cyp…",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 12>",
+      "title": "A familiar bassline",
+      "content": "“Ice Ice Baby” samples “Under Pressure” by Queen and David Bowie. The song’s hook draws on the bassline of the earlier track.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 13>",
+          "text": "Under Pressure",
+          "type": "album",
+          "searchQuery": "Under Pressure"
+        },
+        {
+          "id": "<id 14>",
+          "text": "Queen",
+          "type": "artist",
+          "searchQuery": "Queen"
+        },
+        {
+          "id": "<id 15>",
+          "text": "David Bowie",
+          "type": "artist",
+          "searchQuery": "David Bowie"
+        }
+      ],
+      "claimId": "<id 4>"
+    },
+    {
+      "id": "<id 16>",
+      "title": "A song with many versions",
+      "content": "The work “Ice Ice Baby” has been covered by artists including Faith No More and The Chipmunks. These are versions of the song, distinct from this Vanilla Ice recording.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 17>",
+          "text": "Faith No More",
+          "type": "artist",
+          "searchQuery": "Faith No More"
+        },
+        {
+          "id": "<id 18>",
+          "text": "The Chipmunks",
+          "type": "artist",
+          "searchQuery": "The Chipmunks"
+        }
+      ],
+      "claimId": "<id 5>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Ice Ice Baby",
+        "size": 40,
+        "trackTitle": "Ice Ice Baby",
+        "trackArtist": "Vanilla Ice",
+        "mbid": "4fe305c6-4e8a-4829-8d69-95a404ffb14d",
+        "year": 2008
+      },
+      {
+        "id": "under-pressure",
+        "group": 4,
+        "label": "Under Pressure - Queen and David Bowie (1981)",
+        "size": 22,
+        "trackTitle": "Under Pressure",
+        "trackArtist": "Queen and David Bowie"
+      }
+    ],
+    "links": [
+      {
+        "source": "under-pressure",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "This recording of “Ice Ice Baby” by Vanilla Ice was first released on November 11, 2008.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/4fe305c6-4e8a-4829-8d69-95a404ffb14d"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives November 11, 2008 as its first release date.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "Vanilla Ice’s “Ice Ice Baby” samples Queen and David Bowie’s “Under Pressure.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "unsupported",
+      "verdictReason": "WhoSampled names Vanilla Ice’s song, but does not identify this particular recording.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "“Ice Ice Baby” samples “Under Pressure” by Queen and David Bowie. The song’s hook draws on the bassline of the earlier track.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure",
+        "tavily:https://en.wikipedia.org/wiki/Ice_Ice_Baby"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "WhoSampled states the sample pairing, but neither excerpt establishes this recording or the hook’s bassline.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A familiar bassline",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Under Pressure",
+            "type": "album"
+          },
+          {
+            "text": "Queen",
+            "type": "artist"
+          },
+          {
+            "text": "David Bowie",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "The work “Ice Ice Baby” has been covered by artists including Faith No More and The Chipmunks. These are versions of the song, distinct from this Vanilla Ice recording.",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a91d02d8-d5b0-42ec-ae95-678ec39bd373",
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/f812384f-e505-45dd-8d18-0ff0e34ed670"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The two MusicBrainz work excerpts identify covers by Faith No More and The Chipmunks.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song with many versions",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Faith No More",
+            "type": "artist"
+          },
+          {
+            "text": "The Chipmunks",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Ice Ice Baby - Vanilla Ice\" samples \"Under Pressure - Queen and David Bowie (1981)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/199/Vanilla-Ice-Ice-Ice-Baby-Queen-David-Bowie-Under-Pressure"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "WhoSampled names the sample pairing, but not the 1981 date or this recording.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 7>",
+      "text": "The work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Faith No More.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/a91d02d8-d5b0-42ec-ae95-678ec39bd373"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 8>",
+      "text": "The work \"Ice Ice Baby\" is covered by \"Ice Ice Alvin\" by The Chipmunks.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/f812384f-e505-45dd-8d18-0ff0e34ed670"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 9>",
+      "text": "The work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by Big Daddy.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/9e6e6546-b65c-4681-aa04-61f3630f5f11"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Ice Ice Baby\" is covered by \"Ice Ice Baby\" by The WFG All-Stars.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/1e0ece79-a156-4042-b254-20ec6ddb7638"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "\"Ice Ice Baby\" by Vanilla Ice appears on the official album \"Vanilla Ice Is Back! - Hip Hop Classics\".",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/97ab938d-0181-47ba-9702-c846379f2c0b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 18003,
+      "outputTokens": 2233,
+      "reasoningTokens": 1147
+    },
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 1
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 115.97,
+      "confidence": 0.691,
+      "rawConfidence": {
+        "value": 3.674,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.296638,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.557,
+        1.115,
+        1.649,
+        2.159,
+        2.67,
+        3.181,
+        3.715,
+        4.226,
+        4.737,
+        5.271,
+        5.782,
+        6.293,
+        6.827,
+        7.338,
+        7.848,
+        8.371,
+        8.893,
+        9.404,
+        9.915,
+        10.449,
+        10.96,
+        11.471,
+        11.993,
+        12.516,
+        13.026,
+        13.549,
+        14.071,
+        14.582,
+        15.093,
+        15.604,
+        16.138,
+        16.649,
+        17.16,
+        17.694,
+        18.204,
+        18.715,
+        19.226,
+        19.76,
+        20.271,
+        20.782,
+        21.304,
+        21.827,
+        22.338,
+        22.848,
+        23.371,
+        23.893,
+        24.404,
+        24.927,
+        25.449,
+        25.96,
+        26.471,
+        26.982,
+        27.516,
+        28.038,
+        28.537,
+        29.06,
+        29.582
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.135289,
+        0.431681,
+        0.336749,
+        0.364281,
+        0.217535,
+        0.220243,
+        0.298023,
+        0.331697,
+        0.178021,
+        0.390401,
+        0.403757,
+        0.236135,
+        0.203571,
+        0.162003,
+        0.263712,
+        0.463789,
+        0.333276,
+        0.285397,
+        0.405083,
+        0.293946,
+        0.320948,
+        0.417501,
+        0.296462,
+        0.460431,
+        0.503585,
+        0.424922,
+        0.328544,
+        0.260135,
+        0.170511,
+        0.424713,
+        0.207697,
+        0.270291,
+        0.404327,
+        0.293554,
+        0.201056,
+        0.189139,
+        0.13659,
+        0.401958,
+        0.330434,
+        0.176303,
+        0.361092,
+        0.075032,
+        0.015244,
+        0.46173,
+        0.326922,
+        0.308094,
+        0.397658,
+        0.277618,
+        0.17405,
+        0.164123,
+        0.125114,
+        0.392656,
+        0.250111,
+        0.132967,
+        0.442795,
+        0.312701,
+        0.182931,
+        0.197165,
+        0.127198,
+        0.278035,
+        0.414521,
+        0.238778,
+        0.345649,
+        0.204171,
+        0.16433,
+        0.411949,
+        0.327484,
+        0.196534,
+        0.487559,
+        0.464812,
+        0.384469,
+        0.330795,
+        0.224771,
+        0.322943,
+        0.344414,
+        0.169953,
+        0.41099,
+        0.337483,
+        0.197455,
+        0.211696,
+        0.162269,
+        0.105411,
+        0.435886,
+        0.299445,
+        0.292759,
+        0.260986,
+        0.024261,
+        0.376013,
+        0.385575,
+        0.223905,
+        0.423393,
+        0.330237,
+        0.196437,
+        0.170977,
+        0.137936,
+        0.1506,
+        0.433274,
+        0.161141,
+        0.301871,
+        0.411689,
+        0.239078,
+        0.200788,
+        0.158813,
+        0.105805,
+        0.425361,
+        0.320714,
+        0.18176,
+        0.366528,
+        0.172774,
+        0.281216,
+        0.387531,
+        0.282218,
+        0.375902,
+        0.493847,
+        0.412366,
+        0.351897,
+        0.284256,
+        0.190525,
+        0.418574,
+        0.235689,
+        0.162619,
+        0.444681,
+        0.30646,
+        0.202269,
+        0.222031,
+        0.170414,
+        0.355358,
+        0.368874,
+        0.200481,
+        0.357469,
+        0.098999,
+        0.016855,
+        0.448882,
+        0.330946,
+        0.264804,
+        0.41867,
+        0.29985,
+        0.167675,
+        0.171294,
+        0.130111,
+        0.362519,
+        0.297807,
+        0.139639,
+        0.430213,
+        0.315365,
+        0.188962,
+        0.200719,
+        0.133471,
+        0.272401,
+        0.424605,
+        0.286668,
+        0.329379,
+        0.245498,
+        0.175818,
+        0.414836,
+        0.349998,
+        0.198071,
+        0.458707,
+        0.482809,
+        0.390534,
+        0.330566,
+        0.226457,
+        0.28457,
+        0.385269,
+        0.168887,
+        0.375891,
+        0.358129,
+        0.202278,
+        0.214994,
+        0.15179,
+        0.10584,
+        0.430384,
+        0.305503,
+        0.234865,
+        0.323137,
+        0.028305,
+        0.32135,
+        0.404357,
+        0.251854,
+        0.415806,
+        0.346436,
+        0.199577,
+        0.178855,
+        0.138957,
+        0.116227,
+        0.434606,
+        0.174688,
+        0.286456,
+        0.396565,
+        0.27163,
+        0.198355,
+        0.169021,
+        0.111968,
+        0.416272,
+        0.316611,
+        0.180848,
+        0.359514,
+        0.151039,
+        0.149127,
+        0.437811,
+        0.290389,
+        0.340094,
+        0.496473,
+        0.44045,
+        0.342754,
+        0.251595,
+        0.244847,
+        0.417566,
+        0.261735,
+        0.166657,
+        0.467553,
+        0.349723,
+        0.353017,
+        0.371028,
+        0.226024,
+        0.364439,
+        0.432896,
+        0.285959,
+        0.380025,
+        0.18397,
+        0.233667,
+        0.458997,
+        0.370429,
+        0.279322,
+        0.451601,
+        0.340632,
+        0.249596,
+        0.257576,
+        0.120338,
+        0.334153,
+        0.316661,
+        0.214426,
+        0.430664,
+        0.337608,
+        0.267452,
+        0.322785,
+        0.17805,
+        0.253474,
+        0.440998,
+        0.362075,
+        0.348276,
+        0.389529,
+        0.197263,
+        0.423325,
+        0.43505,
+        0.242231,
+        0.503565,
+        0.48822,
+        0.392379,
+        0.336954,
+        0.267647,
+        0.257821,
+        0.361408,
+        0.199289,
+        0.316506,
+        0.398304,
+        0.283331,
+        0.2484,
+        0.30297,
+        0.156945,
+        0.411863,
+        0.323397,
+        0.262735,
+        0.40405,
+        0.181092,
+        0.328947,
+        0.446121,
+        0.313754,
+        0.380242,
+        0.42922,
+        0.245496,
+        0.25216,
+        0.208682,
+        0.302208,
+        0.393036,
+        0.209226,
+        0.277514,
+        0.424135,
+        0.315686,
+        0.217355,
+        0.256835,
+        0.210796,
+        0.404719,
+        0.378833,
+        0.232904,
+        0.428904,
+        0.313452,
+        0.193031,
+        0.491038,
+        0.346719,
+        0.335974,
+        0.54919,
+        0.456271,
+        0.363944,
+        0.265975,
+        0.200888,
+        0.358753,
+        0.220583,
+        0.23876,
+        0.45236,
+        0.361419,
+        0.243854,
+        0.312801,
+        0.206487,
+        0.316255,
+        0.392028,
+        0.263222,
+        0.35074,
+        0.246169,
+        0.133533,
+        0.440874,
+        0.388409,
+        0.244569,
+        0.436342,
+        0.361154,
+        0.254677,
+        0.275528,
+        0.152765,
+        0.323843,
+        0.338244,
+        0.256938,
+        0.424575
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 2.27,
+        "type": "energy_peak",
+        "intensity": 0.917,
+        "description": "Energy peak"
+      },
+      {
+        "time": 2.73,
+        "type": "onset",
+        "intensity": 0.564,
+        "description": "Onset"
+      },
+      {
+        "time": 3.76,
+        "type": "onset",
+        "intensity": 0.635,
+        "description": "Onset"
+      },
+      {
+        "time": 6.36,
+        "type": "energy_peak",
+        "intensity": 0.888,
+        "description": "Energy peak"
+      },
+      {
+        "time": 6.87,
+        "type": "onset",
+        "intensity": 0.577,
+        "description": "Onset"
+      },
+      {
+        "time": 8.93,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 10.54,
+        "type": "energy_peak",
+        "intensity": 0.899,
+        "description": "Energy peak"
+      },
+      {
+        "time": 13.07,
+        "type": "onset",
+        "intensity": 0.906,
+        "description": "Onset"
+      },
+      {
+        "time": 14.72,
+        "type": "energy_peak",
+        "intensity": 0.879,
+        "description": "Energy peak"
+      },
+      {
+        "time": 16.18,
+        "type": "onset",
+        "intensity": 0.717,
+        "description": "Onset"
+      },
+      {
+        "time": 17.2,
+        "type": "onset",
+        "intensity": 0.669,
+        "description": "Onset"
+      },
+      {
+        "time": 18.25,
+        "type": "onset",
+        "intensity": 0.917,
+        "description": "Onset"
+      },
+      {
+        "time": 20.27,
+        "type": "harmonic_change",
+        "intensity": 0.185,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 22.82,
+        "type": "harmonic_change",
+        "intensity": 0.154,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 23.42,
+        "type": "onset",
+        "intensity": 0.504,
+        "description": "Onset"
+      },
+      {
+        "time": 27.56,
+        "type": "onset",
+        "intensity": 0.506,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Hip Hop---Gangsta",
+            "score": 0.2287
+          },
+          {
+            "label": "Hip Hop---Pop Rap",
+            "score": 0.1509
+          },
+          {
+            "label": "Hip Hop---RnB/Swing",
+            "score": 0.0894
+          },
+          {
+            "label": "Hip Hop---Screw",
+            "score": 0.0878
+          },
+          {
+            "label": "Hip Hop---G-Funk",
+            "score": 0.0832
+          },
+          {
+            "label": "Pop---Parody",
+            "score": 0.08
+          },
+          {
+            "label": "Hip Hop---Grime",
+            "score": 0.0695
+          },
+          {
+            "label": "Pop---K-pop",
+            "score": 0.0682
+          },
+          {
+            "label": "Hip Hop---Trap",
+            "score": 0.0589
+          },
+          {
+            "label": "Hip Hop---Horrorcore",
+            "score": 0.043
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.4177
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.2927
+          },
+          {
+            "label": "electro",
+            "score": 0.2428
+          },
+          {
+            "label": "dance",
+            "score": 0.1596
+          },
+          {
+            "label": "electronica",
+            "score": 0.0965
+          },
+          {
+            "label": "House",
+            "score": 0.0825
+          },
+          {
+            "label": "pop",
+            "score": 0.0796
+          },
+          {
+            "label": "indie",
+            "score": 0.0469
+          },
+          {
+            "label": "rnb",
+            "score": 0.0384
+          },
+          {
+            "label": "funk",
+            "score": 0.0283
+          },
+          {
+            "label": "00s",
+            "score": 0.0267
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.026
+          },
+          {
+            "label": "chillout",
+            "score": 0.0245
+          },
+          {
+            "label": "party",
+            "score": 0.0244
+          },
+          {
+            "label": "alternative",
+            "score": 0.0205
+          },
+          {
+            "label": "experimental",
+            "score": 0.0196
+          },
+          {
+            "label": "soul",
+            "score": 0.0193
+          },
+          {
+            "label": "sexy",
+            "score": 0.0167
+          },
+          {
+            "label": "rock",
+            "score": 0.0151
+          },
+          {
+            "label": "chill",
+            "score": 0.0101
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0094
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0074
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0068
+          },
+          {
+            "label": "90s",
+            "score": 0.0061
+          },
+          {
+            "label": "instrumental",
+            "score": 0.006
+          },
+          {
+            "label": "ambient",
+            "score": 0.0057
+          },
+          {
+            "label": "catchy",
+            "score": 0.0056
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0037
+          },
+          {
+            "label": "80s",
+            "score": 0.0034
+          },
+          {
+            "label": "jazz",
+            "score": 0.003
+          },
+          {
+            "label": "Mellow",
+            "score": 0.003
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0027
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0026
+          },
+          {
+            "label": "happy",
+            "score": 0.0019
+          },
+          {
+            "label": "punk",
+            "score": 0.0014
+          },
+          {
+            "label": "metal",
+            "score": 0.0014
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0012
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0009
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0007
+          },
+          {
+            "label": "sad",
+            "score": 0.0007
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0007
+          },
+          {
+            "label": "70s",
+            "score": 0.0007
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0007
+          },
+          {
+            "label": "folk",
+            "score": 0.0006
+          },
+          {
+            "label": "guitar",
+            "score": 0.0005
+          },
+          {
+            "label": "blues",
+            "score": 0.0005
+          },
+          {
+            "label": "oldies",
+            "score": 0.0004
+          },
+          {
+            "label": "60s",
+            "score": 0.0003
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0003
+          },
+          {
+            "label": "country",
+            "score": 0.0002
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 1,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0228,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.011,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.9914,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.3224,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 116,
+  "key": null,
+  "energy": null,
+  "valence": 0.624,
+  "danceability": 1,
+  "acousticness": 0.023,
+  "keyMoments": [
+    {
+      "time": 2.27,
+      "type": "energy_peak",
+      "intensity": 0.917,
+      "description": "Energy peak"
+    },
+    {
+      "time": 2.73,
+      "type": "onset",
+      "intensity": 0.564,
+      "description": "Onset"
+    },
+    {
+      "time": 3.76,
+      "type": "onset",
+      "intensity": 0.635,
+      "description": "Onset"
+    },
+    {
+      "time": 6.36,
+      "type": "energy_peak",
+      "intensity": 0.888,
+      "description": "Energy peak"
+    },
+    {
+      "time": 6.87,
+      "type": "onset",
+      "intensity": 0.577,
+      "description": "Onset"
+    },
+    {
+      "time": 8.93,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 10.54,
+      "type": "energy_peak",
+      "intensity": 0.899,
+      "description": "Energy peak"
+    },
+    {
+      "time": 13.07,
+      "type": "onset",
+      "intensity": 0.906,
+      "description": "Onset"
+    },
+    {
+      "time": 14.72,
+      "type": "energy_peak",
+      "intensity": 0.879,
+      "description": "Energy peak"
+    },
+    {
+      "time": 16.18,
+      "type": "onset",
+      "intensity": 0.717,
+      "description": "Onset"
+    },
+    {
+      "time": 17.2,
+      "type": "onset",
+      "intensity": 0.669,
+      "description": "Onset"
+    },
+    {
+      "time": 18.25,
+      "type": "onset",
+      "intensity": 0.917,
+      "description": "Onset"
+    },
+    {
+      "time": 20.27,
+      "type": "harmonic_change",
+      "intensity": 0.185,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 22.82,
+      "type": "harmonic_change",
+      "intensity": 0.154,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 23.42,
+      "type": "onset",
+      "intensity": 0.504,
+      "description": "Onset"
+    },
+    {
+      "time": 27.56,
+      "type": "onset",
+      "intensity": 0.506,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

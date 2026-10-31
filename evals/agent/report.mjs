@@ -13,7 +13,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,19 @@ import {
   readGolden,
   subsetRows,
 } from "./lib/golden.mjs";
+import {
+  classifier,
+  JUDGE_FILE,
+  models,
+  PERTURB_DIR,
+  perTier,
+  readPerturbRecords,
+  readSourceSummaries,
+  SOURCES_DIR,
+  sourcedClaims,
+  sourceErrors,
+} from "./lib/extras.mjs";
+import { RESULTS_DIR } from "./lib/record.mjs";
 import { ABLATIONS, readRuns, scoreAll } from "./lib/score.mjs";
 import { BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED, MIN_N_FOR_RATE } from "./lib/stats.mjs";
 
@@ -68,21 +81,54 @@ export const ALL_EQUAL = "(all resamples equal)";
 /** Markdown-escapes text a run record supplies (a proposed title or artist). */
 export const escapeMd = (text) => String(text).replace(/[\\`*_[\]<>#|~]/g, "\\$&");
 
-/** The sha256 of a run-record directory: every *.json file, by name, in code-point order. */
+/**
+ * Where the runs of a record directory were recorded, in words, when the directory keeps it
+ * (`provenance.txt`): the commit the records name is the code revision the runs were recorded
+ * from, which a squash merge leaves out of the repository's history.
+ */
+export const PROVENANCE_FILE = "provenance.txt";
+
+export function readProvenance(dir) {
+  const path = join(dir, PROVENANCE_FILE);
+  if (!existsSync(path)) return null;
+  const text = readFileSync(path, "utf8").replace(/\s+/g, " ").trim();
+  return text || null;
+}
+
+/**
+ * The sha256 of a run-record directory: every *.json file and the provenance note, by name, in
+ * code-point order.
+ */
 export function runsSha256(dir) {
   const hash = createHash("sha256");
   for (const name of readdirSync(dir)
-    .filter((n) => n.endsWith(".json"))
+    .filter((n) => n.endsWith(".json") || n === PROVENANCE_FILE)
     .sort()) {
     hash
       .update(`${name}\0`)
       .update(readFileSync(join(dir, name)))
       .update("\0");
   }
+  // The perturbation judge's record and its audit, and each row's whole normalised result (what
+  // the replay compares), when the directory keeps them.
+  for (const sub of [PERTURB_DIR, RESULTS_DIR, SOURCES_DIR]) {
+    const path = join(dir, sub);
+    if (!existsSync(path)) continue;
+    for (const name of readdirSync(path)
+      .filter((n) => n.endsWith(".json"))
+      .sort()) {
+      hash
+        .update(`${sub}/${name}\0`)
+        .update(readFileSync(join(path, name)))
+        .update("\0");
+    }
+  }
   return hash.digest("hex");
 }
 
 export const COUNTS_ONLY = `counts only (n < ${MIN_N_FOR_RATE})`;
+/** The CI cell of a count that cannot be other than it is (none or all), so has no interval. */
+export const BY_CONSTRUCTION = "n/a (by construction)";
 const seconds = (ms) => `${(ms / 1000).toFixed(1)} s`;
 const tokens = (x) => String(Math.round(x));
 const usd = (x) => `USD ${x.toFixed(4)}`;
@@ -146,11 +192,35 @@ const sites = (counts) =>
     .map(([s, n]) => `${s === ANY_SITE ? "a page whose site cannot be placed" : s} ${n}`)
     .join(", ");
 
+/**
+ * Which models rows a and b-d ran on, from the spend lines: when the baseline and the pipeline's
+ * composer differ, the comparison of row a with rows b-d changes the model as well as the tools.
+ */
+function modelMixLines(m) {
+  if (!m?.baselineTiers?.length || !m.composerTiers?.length) return [];
+  const same =
+    m.baselineTiers.length === m.composerTiers.length &&
+    m.baselineTiers.every((t, i) => t === m.composerTiers[i]);
+  return [
+    `Row a ran on ${list(m.baselineTiers)}, the pipeline's composer (rows c and d) on ${list(m.composerTiers)}${same ? ": row a against rows b-d changes the tools and evidence only." : ", so row a against rows b-d changes the model as well as the tools and evidence."}`,
+    "",
+  ];
+}
+
 /** Renders { md, json } from scored results and the report's metadata. */
 export function renderReport(
   golden,
   result,
-  { date, commit, goldenLabel, runsLabel, runsSha, jsonName: name },
+  {
+    date,
+    commit,
+    goldenLabel,
+    runsLabel,
+    runsSha,
+    jsonName: name,
+    extras = null,
+    provenance = null,
+  },
 ) {
   const jsonName = name ?? `agent-${date}.json`;
   const live = liveRows(golden);
@@ -164,6 +234,7 @@ export function renderReport(
     `- **Run records**: \`${runsLabel}\`, sha256 \`${runsSha}\`; ${result.runs} records over ${result.tracks} tracks (subset: ${result.subset ?? "as recorded"}).`,
     `- **Date**: ${date}`,
     `- **Commit**: \`${commit}\`${result.commits.length ? ` (runs recorded at ${result.commits.map((c) => `\`${c}\``).join(", ")})` : ""}`,
+    ...(provenance ? [`- **Provenance**: ${provenance}`] : []),
     `- **Results**: \`${jsonName}\``,
     `- **Gold** is described by its sources, each read on the date given in the golden file: ${sources
       .map(
@@ -171,6 +242,7 @@ export function renderReport(
           `${s.site} (${s.refs} ${s.refs === 1 ? "reference" : "references"}, read ${s.first === s.last ? s.first : `${s.first} to ${s.last}`})`,
       )
       .join("; ")}. Every gold label cites one of these sources; none comes from listening.`,
+    ...(extras?.models ? modelLines(extras.models) : []),
     "",
     "## How to read it",
     "",
@@ -180,6 +252,7 @@ export function renderReport(
     "- **Held-out recall**: a gold target is held-out only when none of its sources is one the pipeline queries (a target MusicBrainz also documents can be found by echoing MusicBrainz), and it stops counting in a run whose evidence cites the site of any of its sources; an archived, translated or mirrored copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.",
     "- **Pre-verifier support rate**: of the model's claims before the verifier (row c), the share the judge marked supported; a claim the judge did not reach counts as not supported.",
     "- **Clarification**: the harness answers the clarification step with the top-ranked candidate, never the gold ISRC; the clarification rate is how often the step fired.",
+    "- **Rows b, c and d come from the same runs.** Row d counts the relations the result shows as documented (sourced links: code-built ones, and model ones whose own claim the judge found supported); a model link the verifier did not source is shown as a possible relation, labelled model inference, and counts in row c only. Row c is every relation the run proposed and every claim it wrote, before the verifier's verdicts take effect. Row b is the code-built links and claims of the same runs. Row a is a separate call per track: the composer's prompt with only the title and artist, no tools and no evidence.",
     `- **Ablations**: ${Object.entries(ABLATIONS)
       .map(([id, what]) => `(${id}) ${what}`)
       .join("; ")}.`,
@@ -190,6 +263,7 @@ export function renderReport(
     version: 1,
     date,
     commit,
+    ...(provenance ? { provenance } : {}),
     synthetic: result.synthetic,
     golden: { path: goldenLabel, sha256: golden.sha256, rows: golden.rows.length },
     runRecords: { path: runsLabel, sha256: runsSha },
@@ -245,6 +319,7 @@ export function renderReport(
     lines.push("## Pipeline (row d, after the verifier)", "", "Pending: no row d runs.", "");
     json.pending.push("pipeline");
   }
+  if (extras?.perTier && p) renderExtras(extras, lines, json);
 
   const ablationRows = [];
   const heldOutRows = [];
@@ -297,6 +372,8 @@ export function renderReport(
     "",
     `False positives with the right target and the wrong relation, included in precision: ${countedFalse.join("; ")}. Left out of precision: ${leftOut.join("; ")}.`,
     "",
+    ...modelMixLines(extras?.models),
+    ...(extras?.sourcedClaims ? sourcedClaimLines(extras.sourcedClaims, json) : []),
     "## Held-out recall after the per-run domain exclusion",
     "",
     table(
@@ -318,6 +395,12 @@ export function renderReport(
       ? [
           "",
           `Few held-out targets (${heldOutNote.join("; ")}): only gold targets that no queried source documents are held-out, and runs that cite their sources' sites lose them, so held-out recall rests on these few and is shown as counts.`,
+        ]
+      : []),
+    ...(extras?.perTier
+      ? [
+          "",
+          "Why each proposal of the committed golden run was not matched, the held-out target's included, is described in `docs/failures.md`.",
         ]
       : []),
     "",
@@ -365,17 +448,23 @@ export function renderReport(
     json.pending.push("variance");
   }
 
+  if (extras?.classifier) renderClassifier(extras, lines, json);
+  else {
+    lines.push(
+      "## Verifier as a classifier",
+      "",
+      "Pending: no judge recording of `evals/perturb.jsonl`. The numeric check's catch and false-positive rates on the same set are printed by `node evals/agent/perturb-check.mjs`.",
+      "",
+    );
+    json.pending.push("verifier-classifier");
+  }
   lines.push(
-    "## Verifier as a classifier",
-    "",
-    "Pending: no judge recording of `evals/perturb.jsonl`. The numeric check's catch and false-positive rates on the same set are printed by `node evals/agent/perturb-check.mjs`.",
-    "",
     "## Agreement with human labels",
     "",
     "Pending: no labels from people exist. `node evals/agent/export-labels.mjs` writes the claims to label, without verdicts.",
     "",
   );
-  json.pending.push("verifier-classifier", "human-agreement");
+  json.pending.push("human-agreement");
 
   const misses = p ? unmatched(p.scored) : [];
   json.unmatched = misses;
@@ -388,12 +477,206 @@ export function renderReport(
           ? `false positive (${m.why})`
           : "left out (gold is not exhaustive and an evidence sentence states it)";
       lines.push(
-        `- \`${m.isrc}\`: "${escapeMd(m.target.title)}" by ${escapeMd(m.target.artist)}, ${m.relation}${m.origin ? `, ${m.origin}` : ""}: ${why}`,
+        `- \`${m.isrc}\`: "${escapeMd(m.target.title)}" ${m.target.artist ? `by ${escapeMd(m.target.artist)}` : "with no artist"}, ${m.relation}${m.origin ? `, ${m.origin}` : ""}: ${why}`,
       );
     }
     lines.push("");
   }
   return { md: `${lines.join("\n").trimEnd()}\n`, json: `${JSON.stringify(json, null, 2)}\n` };
+}
+
+const list = (xs) => (xs.length ? xs.map((x) => `\`${x}\``).join(", ") : "none recorded");
+
+/** The header's lines on the models: which wrote, which judged, and the missing second judge. */
+function modelLines(m) {
+  const baselineIsJudge = m.baseline.some((d) => m.judges.includes(d));
+  return [
+    `- **Models**: the pipeline writes on ${list(m.generatorTiers)} and judges on ${list(m.judges)}; ${m.judgeIsGenerator ? "**the judge's model also writes in the pipeline**" : "the judge's model writes nothing the judge reads"}. The model-only baseline (row a) runs on ${list(m.baseline)}${baselineIsJudge ? ", the judge's model, so it is never judged" : " and is never judged"}: none of its claims is shown as sourced. All of this is read from the spend lines the run records keep.`,
+    "- **Second judge**: none. A judge from another model family (Gemini) is unavailable: the app's Gemini provider is not implemented and refuses every call (`LLM_PROVIDER=gemini`, `apps/api/src/llm/factory.ts`), so every verdict here comes from one judge model.",
+  ];
+}
+
+/** Cost per model tier and the sources the runs could not read. */
+function renderExtras(extras, lines, json) {
+  const tierRows = extras.perTier.flatMap((t) => {
+    const name = `${t.tier} (${t.deployments.join(", ")})`;
+    return [
+      [`${name}: calls per analysis (mean)`, ...statCells(t.calls, decimal)],
+      [`${name}: tokens per analysis (mean)`, ...statCells(t.tokens, tokens)],
+      [`${name}: USD per analysis (mean)`, ...statCells(t.usd, usd)],
+    ];
+  });
+  lines.push(
+    "## Cost per model tier (row d)",
+    "",
+    "From the spend lines of each run (the app's own accounting: input and output tokens as the provider reported them, reasoning included in output, at the prices in `apps/api/src/llm/prices.ts`).",
+    "",
+    table(["metric", "value", "n", CI_HEADER], tierRows),
+    "",
+  );
+  json.perTier = extras.perTier.map((t) => ({
+    tier: t.tier,
+    deployments: t.deployments,
+    calls: plainStat(t.calls),
+    tokens: plainStat(t.tokens),
+    usd: plainStat(t.usd),
+  }));
+  const s = extras.sources;
+  lines.push(
+    "## Sources the runs could not read (row d)",
+    "",
+    "Every run is kept and counted whatever its sources answered; no run was repeated to get a better answer. A source with no credential configured is not an error of the run and is listed apart.",
+    "",
+    table(
+      ["metric", "value", "n", CI_HEADER],
+      [
+        ["runs with at least one source error (source-error rate)", ...rateCells(s.any)],
+        ...(s.withoutUncredentialed
+          ? [
+              [
+                `runs with at least one source error, ${s.withoutCredential.map((x) => x.source).join(", ")} left out (ran without its credential)`,
+                ...rateCells(s.withoutUncredentialed),
+              ],
+            ]
+          : []),
+        ...s.bySource.map((b) => [`runs where ${b.key}`, ...rateCells(b)]),
+      ],
+    ),
+    "",
+    `Not configured in these runs: ${s.notConfigured.length ? s.notConfigured.join(", ") : "none"}.${s.withoutCredential.map((x) => ` Ran without its credential: ${x.source} (\`${x.credential}\` unset in the ${x.runs} runs that reached it, as their recordings note; its recorded responses there: ${statusList(x.statuses)}); the source-error rate is also given with it left out.`).join("")} Runs with no result: ${s.failed.length ? s.failed.map((f) => `\`${f.isrc}\` (${escapeMd(f.outcome)})`).join(", ") : "none"}.`,
+    "",
+  );
+  json.sources = {
+    any: plainRate(s.any),
+    bySource: s.bySource.map((b) => ({ key: b.key, ...plainRate(b) })),
+    notConfigured: s.notConfigured,
+    ...(s.withoutUncredentialed
+      ? {
+          withoutCredential: s.withoutCredential,
+          anyWithoutUncredentialed: plainRate(s.withoutUncredentialed),
+        }
+      : {}),
+    failed: s.failed,
+  };
+  json.models = extras.models;
+}
+
+/** HTTP statuses and their counts: "403 × 12", or "none" when there were no responses. */
+const statusList = (statuses) => {
+  const entries = Object.entries(statuses).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return entries.length
+    ? entries.map(([status, n]) => `HTTP ${status} × ${n}`).join(", ")
+    : "no response recorded";
+};
+
+/** The claims each row shows as sourced. */
+function sourcedClaimLines(sc, json) {
+  const ids = Object.keys(sc);
+  if (!ids.length) return [];
+  json.sourcedClaims = Object.fromEntries(ids.map((id) => [id, plainRate(sc[id])]));
+  return [
+    table(
+      ["row", "what it runs", "claims shown as sourced", "value", "n", CI_HEADER],
+      ids.map((id) => [
+        id,
+        ABLATIONS[id],
+        id === "a" ? "0 by construction (no evidence, never judged)" : "kind sourced",
+        ...(id === "a" && sc[id].k === 0 && sc[id].n > 0
+          ? [`${sc[id].k}/${sc[id].n}`, sc[id].n, BY_CONSTRUCTION]
+          : rateCells(sc[id])),
+      ]),
+    ),
+    "",
+  ];
+}
+
+/** The verifier as a classifier, from the judge record and the audit of its model positives. */
+function renderClassifier(extras, lines, json) {
+  const c = extras.classifier;
+  const rows = [
+    ["all positives rejected (false-positive rate)", ...rateCells(c.overall.falsePositive)],
+    ["all mutations rejected (catch rate)", ...rateCells(c.overall.catch)],
+    ...c.bySource.flatMap((b) => [
+      [`${b.source} positives rejected (false-positive rate)`, ...rateCells(b.falsePositive)],
+      [`mutations of ${b.source} positives rejected (catch rate)`, ...rateCells(b.catch)],
+    ]),
+    ...c.byMutation.map((m) => [`mutation "${m.mutation}" rejected`, ...rateCells(m)]),
+  ];
+  const verdicts = Object.entries(c.verdicts)
+    .map(([v, n]) => `${v === "null" ? "no verdict" : v} ${n}`)
+    .join(", ");
+  const pool = c.pool;
+  lines.push(
+    "## Verifier as a classifier",
+    "",
+    `The app's judge (\`judgeClaims\`, on ${list(c.judge.deployments)}) on the ${c.cases} claim cases of \`${c.perturb.path}\` (sha256 \`${c.perturb.sha256}\`), recorded at \`${c.commit}\`: \`${extras.judgeFile}\`, replayed at no cost from \`fixtures/cassettes/llm/perturb\`. A statement is never judged beside its own mutation. A case is rejected when its verdict would not show it as sourced (the app's rule: \`supported\`, or \`partial\` for a statement that asserts no relation); a case the judge did not reach counts as rejected. Verdicts: ${verdicts}.`,
+    "",
+    "Positives never come from a verdict: they are code-built sourced claims (supported by construction) or model claims that pass the deterministic support check (`evals/agent/lib/support.mjs`). Mutations are unsupported by their cited excerpts, which is not the same as false. A mutation counts under its positive's source.",
+    "",
+    table(["metric", "value", "n", CI_HEADER], rows),
+    "",
+    `Model-positive pool: ${pool.modelClaimsCitingEvidence} model claims of the recordings cite evidence; ${pool.passedSupportCheck} pass the support check and are the model positives, ${pool.modelClaimsCitingEvidence - pool.passedSupportCheck} are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in \`fixtures/replays\` (read by \`evals/agent/make-perturb.mjs\`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.`,
+    "",
+  );
+  json.classifier = {
+    judgeFile: extras.judgeFile,
+    cases: c.cases,
+    unjudged: c.unjudged,
+    verdicts: c.verdicts,
+    overall: {
+      falsePositive: plainRate(c.overall.falsePositive),
+      catch: plainRate(c.overall.catch),
+    },
+    bySource: c.bySource.map((b) => ({
+      source: b.source,
+      falsePositive: plainRate(b.falsePositive),
+      catch: plainRate(b.catch),
+    })),
+    byMutation: c.byMutation.map((m) => ({ mutation: m.mutation, ...plainRate(m) })),
+    pool: {
+      modelClaimsCitingEvidence: pool.modelClaimsCitingEvidence,
+      passedSupportCheck: pool.passedSupportCheck,
+    },
+  };
+  const a = extras.audit;
+  if (!a) {
+    lines.push("Audit of the model positives: pending.", "");
+    json.pending.push("model-positive-audit");
+    return;
+  }
+  const stated = a.positives.filter((x) => x.stated).length;
+  const refusedStated = a.refused.filter((x) => x.stated);
+  const lenient = [...a.positives, ...a.refused].filter((x) => x.stated && x.lenient);
+  const strict = (xs) => xs.filter((x) => x.stated && !x.lenient).length;
+  const strictly = (xs) =>
+    xs.some((x) => x.stated && x.lenient)
+      ? `, ${strict(xs)} of ${xs.length} on the strictest reading`
+      : "";
+  const reading = (x) => (x.lenient ? " on a lenient reading" : "");
+  lines.push(
+    "### Audit of the model positives",
+    "",
+    `${a.method} Positives stated by their excerpts: ${stated} of ${a.positives.length}${strictly(a.positives)}. Refused claims stated by their excerpts (correct claims the check refused): ${refusedStated.length} of ${a.refused.length}${strictly(a.refused)}${lenient.length ? ` (lenient: ${lenient.map((x) => `\`${x.id}\``).join(", ")})` : ""}.`,
+    "",
+    ...a.positives.map(
+      (x) =>
+        `- positive \`${x.id}\`: ${x.stated ? `stated${reading(x)}` : "**not stated**"}. ${escapeMd(x.note)}`,
+    ),
+    ...a.refused.map(
+      (x) =>
+        `- refused \`${x.id}\`: ${x.stated ? `stated${reading(x)} (a correct claim the check refused)` : "not stated"}. ${escapeMd(x.note)}`,
+    ),
+    "",
+  );
+  json.audit = {
+    positives: a.positives.length,
+    positivesStated: stated,
+    positivesStatedStrictly: strict(a.positives),
+    refused: a.refused.length,
+    refusedStated: refusedStated.length,
+    refusedStatedStrictly: strict(a.refused),
+    lenient: lenient.map((x) => x.id),
+  };
 }
 
 export const SYNTHETIC_BANNER = [
@@ -431,9 +714,10 @@ export async function buildReport(opts) {
   const golden = readGolden(resolve(REPO_ROOT, opts.golden ?? GOLDEN_PATH));
   const runsPath = resolve(REPO_ROOT, opts.runs);
   let runs = readRuns(runsPath);
+  let keep = null;
   if (opts.subset) {
     const rows = subsetRows(golden, opts.subset);
-    const keep = new Set(rows.map((r) => r.isrc));
+    keep = new Set(rows.map((r) => r.isrc));
     runs = runs.filter((r) => keep.has(r.isrc));
     // Every subset row needs a first run in row d and in every other row that was run: a track
     // that crashed must not leave the denominators unnoticed.
@@ -453,6 +737,25 @@ export async function buildReport(opts) {
   }
   if (runs.length === 0) throw new Error(`no run records in ${opts.runs}`);
   const result = scoreAll(golden, runs, { subset: opts.subset });
+  const perturb = readPerturbRecords(runsPath);
+  const kept = runs.filter((r) => keep === null || keep.has(r.isrc));
+  // Records from the live harness carry their spend lines; the synthetic test data does not, and
+  // its report has none of these sections.
+  const recorded = kept.some((r) => Array.isArray(r.calls));
+  const extras =
+    recorded || perturb.judge
+      ? {
+          models: recorded ? models(kept) : null,
+          perTier: recorded ? perTier(kept) : null,
+          sources: recorded ? sourceErrors(kept, readSourceSummaries(runsPath)) : null,
+          sourcedClaims: recorded ? sourcedClaims(kept) : null,
+          classifier: classifier(perturb.judge),
+          audit: perturb.audit,
+          judgeFile: perturb.judge
+            ? `${relative(REPO_ROOT, runsPath)}/${PERTURB_DIR}/${JUDGE_FILE}`
+            : null,
+        }
+      : null;
   const date = opts.date ?? new Date().toISOString().slice(0, 10);
   const label = (path) => relative(REPO_ROOT, path) || path;
   return {
@@ -464,6 +767,8 @@ export async function buildReport(opts) {
       runsLabel: label(runsPath),
       runsSha: runsSha256(runsPath),
       jsonName: opts.jsonName,
+      extras,
+      provenance: readProvenance(runsPath),
     }),
   };
 }

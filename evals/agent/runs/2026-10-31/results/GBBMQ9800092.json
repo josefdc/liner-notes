@@ -1,0 +1,2025 @@
+{
+  "id": "3yGy1JYz3zQKlxSgjgpQqX",
+  "title": "Praise You",
+  "artist": "Fatboy Slim",
+  "album": "You've Come A Long Way Baby",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/3yGy1JYz3zQKlxSgjgpQqX",
+  "releaseYear": "1998",
+  "explicit": false,
+  "durationSeconds": 323,
+  "isrc": "GBBMQ9800092",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You\" by Fatboy Slim (5:23), ISRC GBBMQ9800092, first released 1998-10-12.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/28ba94fb-7521-455c-90fd-23fac7cab550",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim is remixed in \"Praise You\" by Phil Mac ft. Gina Ellen.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/28ba94fb-7521-455c-90fd-23fac7cab550"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim is remixed in \"Praise You (Fatboy Slim vs. Fedde Le Grand remix)\" by Fedde Le Grand vs. Fatboy Slim.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/2ad5659b-7ad8-44a8-8034-251d591bc070",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim is remixed in \"Praise You (Left/Right remix)\" by Fatboy Slim.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/2ad5659b-7ad8-44a8-8034-251d591bc070"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/a26783a3-37ec-481e-bc4c-0a532bd74a20",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim is remixed in \"Praise You (Riva Starr remix)\" by Fatboy Slim.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/a26783a3-37ec-481e-bc4c-0a532bd74a20"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/samples/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim samples \"Take Yo’ Praise\" by Camille Yarbrough.",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/samples/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e"
+    },
+    {
+      "id": "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/sampled-by/recording/9d3674c0-1f01-424f-9745-52ed800957de",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim is sampled in \"Young Gelt Cash Gelt Billionaires\" by Super Mash Bros..",
+      "recordRef": "track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/sampled-by/recording/9d3674c0-1f01-424f-9745-52ed800957de"
+    },
+    {
+      "id": "musicbrainz:release/bea082e9-f79d-31d6-8497-f280defb6775",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/bea082e9-f79d-31d6-8497-f280defb6775",
+      "title": "You’ve Come a Long Way, Baby — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Praise You\" by Fatboy Slim appears on the official album \"You’ve Come a Long Way, Baby\" (1998-10-12).",
+      "recordRef": "release/bea082e9-f79d-31d6-8497-f280defb6775"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/279dbf97-87eb-43c3-bac9-c52065720e08",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You (live on KCRW; December 1, 2006)\" by Tally Hall.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/279dbf97-87eb-43c3-bac9-c52065720e08"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/6c6d0e5f-5000-40b1-aa3c-fe6fd99e23f0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"praise you\" by Kasabian.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/6c6d0e5f-5000-40b1-aa3c-fe6fd99e23f0"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/741a5cca-fd39-4aaf-bf7f-15fc9f96a8f8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by The Belligerents.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/741a5cca-fd39-4aaf-bf7f-15fc9f96a8f8"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/a23aafb1-f7cb-47b7-9b54-8ed38fd0a0ef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"L.S.F.\" by Kasabian.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/a23aafb1-f7cb-47b7-9b54-8ed38fd0a0ef"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/77875b34-4eca-4627-901d-be79bb57a3f9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise Strokin'\" by Goose.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/77875b34-4eca-4627-901d-be79bb57a3f9"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/c2f19822-0d4a-4e99-88e9-111b9ff6253b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/c2f19822-0d4a-4e99-88e9-111b9ff6253b"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/965d70fc-ae1b-4971-a6ef-4bb7819a34a7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/965d70fc-ae1b-4971-a6ef-4bb7819a34a7"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/5d585e49-00b9-474a-86b9-818c43cff4b8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by The Big Moon.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/5d585e49-00b9-474a-86b9-818c43cff4b8"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/cfad22e4-bdbb-4c71-bdb7-231a45bcb246",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/cfad22e4-bdbb-4c71-bdb7-231a45bcb246"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/92c20e29-d7e6-4dc5-98f6-16c7d9eef846",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Zinc with DJ Gordon.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/92c20e29-d7e6-4dc5-98f6-16c7d9eef846"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/f70d5c14-6c46-4cc7-bbb2-f242634c8146",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Cloud Control.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/f70d5c14-6c46-4cc7-bbb2-f242634c8146"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/924a7405-b614-4509-aa70-4fcf7f02565d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Hannah Grace.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/924a7405-b614-4509-aa70-4fcf7f02565d"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/559398b2-afa8-4521-a183-113bf95d3be6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Hello Yes.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/559398b2-afa8-4521-a183-113bf95d3be6"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/7dd3ea2e-cdda-4646-a11b-1b63a0bc1192",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by The Wiggles.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/7dd3ea2e-cdda-4646-a11b-1b63a0bc1192"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/5c46ff65-9fa8-43ba-a0a1-ceb1e3ae4975",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Hannah Grace.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/5c46ff65-9fa8-43ba-a0a1-ceb1e3ae4975"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/9c694cd5-3f90-4ea6-bb32-460565c27e3d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by SAS & the Bomb-Ass MIDIs.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/9c694cd5-3f90-4ea6-bb32-460565c27e3d"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/89bcbb91-d183-4880-8f7e-57634b023ff8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Tally Hall.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/89bcbb91-d183-4880-8f7e-57634b023ff8"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/dd34e548-d36b-4d86-b512-d3ec5ad5be2e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You\" by Tally Hall.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/dd34e548-d36b-4d86-b512-d3ec5ad5be2e"
+    },
+    {
+      "id": "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/9d4a8d4a-9ca8-4e17-8d9c-a7258c4c715b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/669fd492-d5fc-3b2b-b491-f0d836aee92a",
+      "title": "Praise You — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Praise You\" is covered by \"Praise You (Offset edit)\" by Hannah Grace.",
+      "recordRef": "work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/9d4a8d4a-9ca8-4e17-8d9c-a7258c4c715b"
+    },
+    {
+      "id": "tavily:https://weraveyou.com/2025/07/the-original-track-fatboy-slim-sampled-as-praise-you-turns-50",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://weraveyou.com/2025/07/the-original-track-fatboy-slim-sampled-as-praise-you-turns-50",
+      "title": "The original track Fatboy Slim sampled as Praise You turns ...",
+      "retrievedAt": "[time]",
+      "excerpt": "50 years ago, Camille Yarbrough released the track that Fatboy Slim sampled for his hit song Praise You. Check out it's history!",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Fatboy-Slim/Praise-You",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Fatboy-Slim/Praise-You",
+      "title": "Praise You by Fatboy Slim - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Praise You\" contains samples of \"Take Yo' Praise\" by Camille Yarbrough, \"Balance & Rehearsal\" by Hoyt Axton and James B. Lansing Sound Inc., \"Fat Albert Theme\"",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Fatboy-Slim/Praise-You-(JFB-Remix)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Fatboy-Slim/Praise-You-(JFB-Remix)",
+      "title": "Praise You (JFB Remix) by Fatboy Slim",
+      "retrievedAt": "[time]",
+      "excerpt": "Praise You (JFB Remix) by Fatboy Slim - discover this song's samples, covers and remixes on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Praise_You",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Praise_You",
+      "title": "Praise You - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Praise You\" is a song by the English big beat musician Fatboy Slim. It was released as the third single from his second studio album, You've Come a Long Way, Baby (1998), on 4 January 1999. It reached number one in the United Kingdom and Iceland, number four in Canada, number six in Ireland, and number 36 in the United States. As of 1999, it had sold over 150,000 copies in the US. ## Samples [edit] [...] ## Personnel [edit] Personnel are sourced from Sound on Sound and Muso.ai Fatboy Slim – St…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=MaaQyVRndMA",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=MaaQyVRndMA",
+      "title": "Sample Breakdown: Fatboy Slim - Praise You",
+      "retrievedAt": "[time]",
+      "excerpt": "Oh man, Fatboy actually sampled a documentary about record production for that hook. That's LITERALLY just something Dave Jackson played",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.soundonsound.com/techniques/classic-tracks-fatboy-slim-praise-you",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.soundonsound.com/techniques/classic-tracks-fatboy-slim-praise-you",
+      "title": "Classic Tracks: Fatboy Slim ‘Praise You’",
+      "retrievedAt": "[time]",
+      "excerpt": "Cook’s home studio setup when he made the first Fatboy Slim album, 1996’s Better Living Through Chemistry, centred around the Akai S950 and the Atari ST computer running C-Lab Creator software. “I also had a [Studio Electronics] SE1 which was basically a Minimoog that had memories and MIDI, a Roland Sound Canvas just for traditional instruments — cymbals and things like that — and obviously a 303.” [...] The fruits of a very productive week in the studio. The fruits of a very productive week in…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:http://www.noiseaddicts.com/2011/04/fatboy-slim-trivia",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "http://www.noiseaddicts.com/2011/04/fatboy-slim-trivia",
+      "title": "Fatboy Slim Trivia - Audio and Sound",
+      "retrievedAt": "[time]",
+      "excerpt": "This is a trivia for the English DJ, musician and record producer Fatboy Slim, who rocked the world with songs like “Weapon of Choice”, “Praise You”, “Push",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://articles.roland.com/praise-you-fatboy-slim",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://articles.roland.com/praise-you-fatboy-slim",
+      "title": "Sound Behind the Song: “Praise You” by Fatboy Slim   - Roland Articles",
+      "retrievedAt": "[time]",
+      "excerpt": "##### The Genius of Juxtaposition From the intro onwards, “Praise You” relies on the marriage between two key samples: the lead vocal from Camille Yarbrough’s “Take Yo’ Praise” and a wonderfully organic piano chord progression. The latter is culled from the 1973 educational album JBL Sessions. Recorded at Capitol Studios, the Hoyt Axton session demonstrated the recording process, including the track “Balance & Rehearsal,” from which those magic piano chords originate. [...] “Praise You” was a g…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=XXQf837hWBk",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=XXQf837hWBk",
+      "title": "Fatboy Slim - Praise You - Behind The Tune (Episode 9)",
+      "retrievedAt": "[time]",
+      "excerpt": "Episode 9 of the 'Behind The Tune' mini series exploring the process and evolution of Fatboy Slim's tracks in his DJ sets.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/fatboy-slim/praise-you",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/fatboy-slim/praise-you",
+      "title": "Praise You by Fatboy Slim - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Praise You\" by Fatboy Slim is built around a sample from \"Take Yo' Praise,\" a 1975 track by American civil rights activist Camille Yarbrough. The original song, which was the fourth track on her album The Iron Pot Cooker, might have remained obscure if not for Norman Cook, aka Fatboy Slim, who discovered it on a compilation CD during a difficult period in his life after a breakup. The sample resonated deeply with him, inspiring the creation of \"Praise You.\" [...] Fatboy Slim later transformed …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=5TWVYQc78B8",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=5TWVYQc78B8",
+      "title": "Camille Yarbrough Recalls First Hearing Fatboy Slim's ...",
+      "retrievedAt": "[time]",
+      "excerpt": "... Slim's sample of her track 'Take Yo' Praise' in his 1998 Dance hit 'Praise You'. Listen to the full interview: https://www.whosampled.com",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/458a4991-929b-4b3d-934e-170505634b05",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "title": "Take Yo’ Praise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Take Yo’ Praise\" by Camille Yarbrough is sampled in \"Amen Roadtrip\" by Etherwood.",
+      "recordRef": "recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/458a4991-929b-4b3d-934e-170505634b05"
+    },
+    {
+      "id": "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/0eaab306-e80c-4c10-95e8-94ca26e78f4c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "title": "Take Yo’ Praise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Take Yo’ Praise\" by Camille Yarbrough is sampled in \"Praise You\" by Fatboy Slim.",
+      "recordRef": "recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/0eaab306-e80c-4c10-95e8-94ca26e78f4c"
+    },
+    {
+      "id": "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/115c7151-8692-452d-b17e-f72cdadd8184",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "title": "Take Yo’ Praise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Take Yo’ Praise\" by Camille Yarbrough is sampled in \"Praise You\" by Fatboy Slim.",
+      "recordRef": "recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/115c7151-8692-452d-b17e-f72cdadd8184"
+    },
+    {
+      "id": "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/66f1c8ce-a4e2-4205-9d16-ef698966708f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "title": "Take Yo’ Praise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Take Yo’ Praise\" by Camille Yarbrough is sampled in \"Praise You (original version)\" by Fatboy Slim.",
+      "recordRef": "recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/66f1c8ce-a4e2-4205-9d16-ef698966708f"
+    },
+    {
+      "id": "musicbrainz:recording/28ba94fb-7521-455c-90fd-23fac7cab550",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/28ba94fb-7521-455c-90fd-23fac7cab550",
+      "title": "Praise You — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You\" by Phil Mac ft. Gina Ellen, first released 2021-08-13.",
+      "recordRef": "recording/28ba94fb-7521-455c-90fd-23fac7cab550"
+    },
+    {
+      "id": "musicbrainz:recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c",
+      "title": "Praise You (Fatboy Slim vs. Fedde Le Grand remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You (Fatboy Slim vs. Fedde Le Grand remix)\" by Fedde Le Grand vs. Fatboy Slim, first released 2009-09-14.",
+      "recordRef": "recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c"
+    },
+    {
+      "id": "musicbrainz:recording/2ad5659b-7ad8-44a8-8034-251d591bc070",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2ad5659b-7ad8-44a8-8034-251d591bc070",
+      "title": "Praise You (Left/Right remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You (Left/Right remix)\" by Fatboy Slim, first released 2020.",
+      "recordRef": "recording/2ad5659b-7ad8-44a8-8034-251d591bc070"
+    },
+    {
+      "id": "musicbrainz:recording/a26783a3-37ec-481e-bc4c-0a532bd74a20",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a26783a3-37ec-481e-bc4c-0a532bd74a20",
+      "title": "Praise You (Riva Starr remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You (Riva Starr remix)\" by Fatboy Slim, first released 2010-01-11.",
+      "recordRef": "recording/a26783a3-37ec-481e-bc4c-0a532bd74a20"
+    },
+    {
+      "id": "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e",
+      "title": "Take Yo’ Praise — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Take Yo’ Praise\" by Camille Yarbrough, first released 1975.",
+      "recordRef": "recording/9bc7d318-1404-4e86-9f9c-aea1e590830e"
+    },
+    {
+      "id": "musicbrainz:recording/9d3674c0-1f01-424f-9745-52ed800957de",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9d3674c0-1f01-424f-9745-52ed800957de",
+      "title": "Young Gelt Cash Gelt Billionaires — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Young Gelt Cash Gelt Billionaires\" by Super Mash Bros., first released 2012.",
+      "recordRef": "recording/9d3674c0-1f01-424f-9745-52ed800957de"
+    },
+    {
+      "id": "musicbrainz:recording/458a4991-929b-4b3d-934e-170505634b05",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/458a4991-929b-4b3d-934e-170505634b05",
+      "title": "Amen Roadtrip — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Amen Roadtrip\" by Etherwood, first released 2015-01-26.",
+      "recordRef": "recording/458a4991-929b-4b3d-934e-170505634b05"
+    },
+    {
+      "id": "musicbrainz:recording/0eaab306-e80c-4c10-95e8-94ca26e78f4c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/0eaab306-e80c-4c10-95e8-94ca26e78f4c",
+      "title": "Praise You — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You\" by Fatboy Slim, first released 1998.",
+      "recordRef": "recording/0eaab306-e80c-4c10-95e8-94ca26e78f4c"
+    },
+    {
+      "id": "musicbrainz:recording/115c7151-8692-452d-b17e-f72cdadd8184",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/115c7151-8692-452d-b17e-f72cdadd8184",
+      "title": "Praise You — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You\" by Fatboy Slim, first released 1999-02.",
+      "recordRef": "recording/115c7151-8692-452d-b17e-f72cdadd8184"
+    },
+    {
+      "id": "musicbrainz:recording/66f1c8ce-a4e2-4205-9d16-ef698966708f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/66f1c8ce-a4e2-4205-9d16-ef698966708f",
+      "title": "Praise You (original version) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Praise You (original version)\" by Fatboy Slim, first released 1999-04-19.",
+      "recordRef": "recording/66f1c8ce-a4e2-4205-9d16-ef698966708f"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 17>",
+      "title": "A piano loop from a demonstration recording",
+      "content": "The piano progression is drawn from “Balance & Rehearsal,” a track on the JBL Sessions educational album. The album documented a recording session with Hoyt Axton.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 18>",
+          "text": "Balance & Rehearsal",
+          "type": "sample",
+          "searchQuery": "Balance & Rehearsal"
+        },
+        {
+          "id": "<id 19>",
+          "text": "JBL Sessions",
+          "type": "album",
+          "searchQuery": "JBL Sessions"
+        },
+        {
+          "id": "<id 20>",
+          "text": "Hoyt Axton",
+          "type": "artist",
+          "searchQuery": "Hoyt Axton"
+        }
+      ],
+      "claimId": "<id 3>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Praise You",
+        "size": 40,
+        "trackTitle": "Praise You",
+        "trackArtist": "Fatboy Slim",
+        "mbid": "66197b08-aa26-4f44-91da-49a8c89168ae",
+        "year": 1998
+      },
+      {
+        "id": "mb-9bc7d318-1404-4e86-9f9c-aea1e590830e",
+        "group": 2,
+        "label": "Take Yo’ Praise - Camille Yarbrough",
+        "size": 22,
+        "trackTitle": "Take Yo’ Praise",
+        "trackArtist": "Camille Yarbrough",
+        "year": 1975,
+        "mbid": "9bc7d318-1404-4e86-9f9c-aea1e590830e",
+        "spotifyId": "2c4zwlPMc5dHS3Kg6oeUjk"
+      },
+      {
+        "id": "mb-28ba94fb-7521-455c-90fd-23fac7cab550",
+        "group": 4,
+        "label": "Praise You - Phil Mac ft. Gina Ellen",
+        "size": 22,
+        "trackTitle": "Praise You",
+        "trackArtist": "Phil Mac ft. Gina Ellen",
+        "year": 2021,
+        "mbid": "28ba94fb-7521-455c-90fd-23fac7cab550"
+      },
+      {
+        "id": "mb-d7c63842-1e00-46b5-9ebb-044aaef5a45c",
+        "group": 4,
+        "label": "Praise You (Fatboy Slim vs. Fedde Le Grand remix) - Fedde Le Grand vs. Fatboy Slim",
+        "size": 22,
+        "trackTitle": "Praise You (Fatboy Slim vs. Fedde Le Grand remix)",
+        "trackArtist": "Fedde Le Grand vs. Fatboy Slim",
+        "year": 2009,
+        "mbid": "d7c63842-1e00-46b5-9ebb-044aaef5a45c"
+      },
+      {
+        "id": "mb-2ad5659b-7ad8-44a8-8034-251d591bc070",
+        "group": 4,
+        "label": "Praise You (Left/Right remix) - Fatboy Slim",
+        "size": 22,
+        "trackTitle": "Praise You (Left/Right remix)",
+        "trackArtist": "Fatboy Slim",
+        "year": 2020,
+        "mbid": "2ad5659b-7ad8-44a8-8034-251d591bc070"
+      },
+      {
+        "id": "mb-a26783a3-37ec-481e-bc4c-0a532bd74a20",
+        "group": 4,
+        "label": "Praise You (Riva Starr remix) - Fatboy Slim",
+        "size": 22,
+        "trackTitle": "Praise You (Riva Starr remix)",
+        "trackArtist": "Fatboy Slim",
+        "year": 2010,
+        "mbid": "a26783a3-37ec-481e-bc4c-0a532bd74a20"
+      },
+      {
+        "id": "mb-9d3674c0-1f01-424f-9745-52ed800957de",
+        "group": 3,
+        "label": "Young Gelt Cash Gelt Billionaires - Super Mash Bros.",
+        "size": 22,
+        "trackTitle": "Young Gelt Cash Gelt Billionaires",
+        "trackArtist": "Super Mash Bros.",
+        "year": 2012,
+        "mbid": "9d3674c0-1f01-424f-9745-52ed800957de"
+      },
+      {
+        "id": "mb-458a4991-929b-4b3d-934e-170505634b05",
+        "group": 4,
+        "label": "Amen Roadtrip - Etherwood",
+        "size": 22,
+        "trackTitle": "Amen Roadtrip",
+        "trackArtist": "Etherwood",
+        "year": 2015,
+        "mbid": "458a4991-929b-4b3d-934e-170505634b05"
+      },
+      {
+        "id": "mb-66f1c8ce-a4e2-4205-9d16-ef698966708f",
+        "group": 4,
+        "label": "Praise You (original version) - Fatboy Slim",
+        "size": 22,
+        "trackTitle": "Praise You (original version)",
+        "trackArtist": "Fatboy Slim",
+        "year": 1999,
+        "mbid": "66f1c8ce-a4e2-4205-9d16-ef698966708f"
+      }
+    ],
+    "links": [
+      {
+        "source": "mb-9bc7d318-1404-4e86-9f9c-aea1e590830e",
+        "target": "current",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 4>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/samples/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-28ba94fb-7521-455c-90fd-23fac7cab550",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/28ba94fb-7521-455c-90fd-23fac7cab550"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-d7c63842-1e00-46b5-9ebb-044aaef5a45c",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-2ad5659b-7ad8-44a8-8034-251d591bc070",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/2ad5659b-7ad8-44a8-8034-251d591bc070"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-a26783a3-37ec-481e-bc4c-0a532bd74a20",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/a26783a3-37ec-481e-bc4c-0a532bd74a20"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-9d3674c0-1f01-424f-9745-52ed800957de",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/sampled-by/recording/9d3674c0-1f01-424f-9745-52ed800957de"
+        ]
+      },
+      {
+        "source": "mb-9bc7d318-1404-4e86-9f9c-aea1e590830e",
+        "target": "mb-458a4991-929b-4b3d-934e-170505634b05",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/458a4991-929b-4b3d-934e-170505634b05"
+        ]
+      },
+      {
+        "source": "mb-9bc7d318-1404-4e86-9f9c-aea1e590830e",
+        "target": "mb-66f1c8ce-a4e2-4205-9d16-ef698966708f",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/9bc7d318-1404-4e86-9f9c-aea1e590830e/sampled-by/recording/66f1c8ce-a4e2-4205-9d16-ef698966708f"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "The recording was first released on October 12, 1998.",
+      "about": "history",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt says it was first released on 1998-10-12.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The piano progression is drawn from “Balance & Rehearsal,” a track on the JBL Sessions educational album. The album documented a recording session with Hoyt Axton.",
+      "about": "production",
+      "evidenceIds": [
+        "tavily:https://articles.roland.com/praise-you-fatboy-slim"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The Roland excerpt names JBL Sessions and Hoyt Axton, but not “Balance & Rehearsal.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A piano loop from a demonstration recording",
+        "type": "production",
+        "entities": [
+          {
+            "text": "Balance & Rehearsal",
+            "type": "sample"
+          },
+          {
+            "text": "JBL Sessions",
+            "type": "album"
+          },
+          {
+            "text": "Hoyt Axton",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "\"Praise You\" by Fatboy Slim samples \"Take Yo’ Praise\" by Camille Yarbrough.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/samples/recording/9bc7d318-1404-4e86-9f9c-aea1e590830e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"Praise You\" by Fatboy Slim is remixed in \"Praise You\" by Phil Mac ft. Gina Ellen.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/28ba94fb-7521-455c-90fd-23fac7cab550"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Praise You\" by Fatboy Slim is remixed in \"Praise You (Fatboy Slim vs. Fedde Le Grand remix)\" by Fedde Le Grand vs. Fatboy Slim.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/d7c63842-1e00-46b5-9ebb-044aaef5a45c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Praise You\" by Fatboy Slim is remixed in \"Praise You (Left/Right remix)\" by Fatboy Slim.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/2ad5659b-7ad8-44a8-8034-251d591bc070"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Praise You\" by Fatboy Slim is remixed in \"Praise You (Riva Starr remix)\" by Fatboy Slim.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/remixed-by/recording/a26783a3-37ec-481e-bc4c-0a532bd74a20"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Praise You\" by Fatboy Slim is sampled in \"Young Gelt Cash Gelt Billionaires\" by Super Mash Bros..",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/66197b08-aa26-4f44-91da-49a8c89168ae/sampled-by/recording/9d3674c0-1f01-424f-9745-52ed800957de"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Praise You\" is covered by \"Praise You (live on KCRW; December 1, 2006)\" by Tally Hall.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/279dbf97-87eb-43c3-bac9-c52065720e08"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"Praise You\" is covered by \"praise you\" by Kasabian.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/6c6d0e5f-5000-40b1-aa3c-fe6fd99e23f0"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"Praise You\" is covered by \"Praise You\" by The Belligerents.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/741a5cca-fd39-4aaf-bf7f-15fc9f96a8f8"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/c2f19822-0d4a-4e99-88e9-111b9ff6253b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 14>",
+      "text": "The work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/965d70fc-ae1b-4971-a6ef-4bb7819a34a7"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 15>",
+      "text": "The work \"Praise You\" is covered by \"Praise You\" by Goose.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/669fd492-d5fc-3b2b-b491-f0d836aee92a/covered-by/recording/cfad22e4-bdbb-4c71-bdb7-231a45bcb246"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 16>",
+      "text": "\"Praise You\" by Fatboy Slim appears on the official album \"You’ve Come a Long Way, Baby\" (1998-10-12).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/bea082e9-f79d-31d6-8497-f280defb6775"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 15356,
+      "outputTokens": 2164,
+      "reasoningTokens": 539
+    },
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 4
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 109.74,
+      "confidence": 0.671,
+      "rawConfidence": {
+        "value": 3.57,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.135009,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.546,
+        1.091,
+        1.649,
+        2.194,
+        2.74,
+        3.286,
+        3.82,
+        4.377,
+        4.934,
+        5.48,
+        6.026,
+        6.571,
+        7.117,
+        7.663,
+        8.208,
+        8.754,
+        9.3,
+        9.845,
+        10.391,
+        10.937,
+        11.494,
+        12.04,
+        12.585,
+        13.131,
+        13.688,
+        14.234,
+        14.78,
+        15.325,
+        15.871,
+        16.417,
+        16.962,
+        17.508,
+        18.054,
+        18.599,
+        19.145,
+        19.691,
+        20.236,
+        20.782,
+        21.328,
+        21.873,
+        22.419,
+        22.965,
+        23.522,
+        24.067,
+        24.613,
+        25.159,
+        25.704,
+        26.25,
+        26.796,
+        27.341,
+        27.887,
+        28.433,
+        28.979,
+        29.536
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.086956,
+        0.12115,
+        0.123161,
+        0.149611,
+        0.134666,
+        0.145045,
+        0.14687,
+        0.120958,
+        0.117295,
+        0.143952,
+        0.123953,
+        0.144563,
+        0.149951,
+        0.132374,
+        0.128032,
+        0.128024,
+        0.137801,
+        0.156124,
+        0.177141,
+        0.150908,
+        0.133792,
+        0.138806,
+        0.12084,
+        0.133812,
+        0.125113,
+        0.111797,
+        0.130341,
+        0.118853,
+        0.101173,
+        0.106778,
+        0.106954,
+        0.121922,
+        0.12478,
+        0.103023,
+        0.090422,
+        0.102809,
+        0.093787,
+        0.091127,
+        0.111175,
+        0.114225,
+        0.096259,
+        0.105971,
+        0.096474,
+        0.084212,
+        0.091119,
+        0.085628,
+        0.088895,
+        0.111698,
+        0.108091,
+        0.100014,
+        0.109774,
+        0.102147,
+        0.126439,
+        0.190161,
+        0.154608,
+        0.1508,
+        0.163714,
+        0.160279,
+        0.159485,
+        0.172436,
+        0.162142,
+        0.165692,
+        0.155695,
+        0.14433,
+        0.145703,
+        0.163021,
+        0.153129,
+        0.136203,
+        0.132226,
+        0.150426,
+        0.171429,
+        0.155213,
+        0.146802,
+        0.160165,
+        0.182042,
+        0.174073,
+        0.158517,
+        0.150818,
+        0.138227,
+        0.13309,
+        0.118427,
+        0.121011,
+        0.150778,
+        0.145901,
+        0.107036,
+        0.12988,
+        0.137101,
+        0.127021,
+        0.143059,
+        0.134916,
+        0.102633,
+        0.120538,
+        0.117787,
+        0.119635,
+        0.157235,
+        0.138348,
+        0.132738,
+        0.128994,
+        0.135389,
+        0.149144,
+        0.191576,
+        0.165983,
+        0.150957,
+        0.166995,
+        0.159035,
+        0.157409,
+        0.172546,
+        0.163551,
+        0.160436,
+        0.168275,
+        0.162587,
+        0.136316,
+        0.168169,
+        0.116311,
+        0.12189,
+        0.143549,
+        0.125886,
+        0.155296,
+        0.155186,
+        0.148037,
+        0.153098,
+        0.171836,
+        0.165799,
+        0.153279,
+        0.149629,
+        0.14297,
+        0.140627,
+        0.120909,
+        0.123491,
+        0.143825,
+        0.123068,
+        0.100534,
+        0.147604,
+        0.137494,
+        0.131198,
+        0.142207,
+        0.12019,
+        0.098364,
+        0.13303,
+        0.128604,
+        0.126239,
+        0.12289,
+        0.1208,
+        0.111975,
+        0.145388,
+        0.141074,
+        0.141063,
+        0.191758,
+        0.160355,
+        0.145988,
+        0.163797,
+        0.155718,
+        0.15396,
+        0.171134,
+        0.166808,
+        0.161122,
+        0.158705,
+        0.15585,
+        0.12984,
+        0.143932,
+        0.10994,
+        0.119644,
+        0.145834,
+        0.130464,
+        0.14659,
+        0.161025,
+        0.150232,
+        0.146905,
+        0.172917,
+        0.164291,
+        0.151337,
+        0.153539,
+        0.140253,
+        0.129373,
+        0.111094,
+        0.131008,
+        0.159337,
+        0.157607,
+        0.124301,
+        0.129177,
+        0.133312,
+        0.128014,
+        0.141385,
+        0.126074,
+        0.10875,
+        0.13505,
+        0.130854,
+        0.133598,
+        0.153819,
+        0.137611,
+        0.138554,
+        0.172046,
+        0.161084,
+        0.150224,
+        0.185383,
+        0.155731,
+        0.137578,
+        0.16059,
+        0.145433,
+        0.144587,
+        0.17385,
+        0.169211,
+        0.160032,
+        0.150627,
+        0.154637,
+        0.139032,
+        0.168388,
+        0.126396,
+        0.131204,
+        0.153209,
+        0.128305,
+        0.124977,
+        0.133465,
+        0.12617,
+        0.158373,
+        0.147192,
+        0.140122,
+        0.152084,
+        0.157217,
+        0.111004,
+        0.12782,
+        0.125072,
+        0.133866,
+        0.132162,
+        0.127469,
+        0.120135,
+        0.142693,
+        0.128131,
+        0.138235,
+        0.132672,
+        0.107911,
+        0.111642,
+        0.126288,
+        0.119125,
+        0.120061,
+        0.122387,
+        0.10304,
+        0.100274,
+        0.148369,
+        0.121538,
+        0.132223,
+        0.122921,
+        0.104244,
+        0.104015,
+        0.087975,
+        0.084656,
+        0.090633,
+        0.112314,
+        0.102689,
+        0.104619,
+        0.088743,
+        0.083926,
+        0.092887,
+        0.105958,
+        0.107251,
+        0.104474,
+        0.090184,
+        0.094328,
+        0.099813,
+        0.11578,
+        0.103987,
+        0.100813,
+        0.085256,
+        0.096958,
+        0.109242,
+        0.107541,
+        0.099616,
+        0.104116,
+        0.093067,
+        0.1113,
+        0.115792,
+        0.096023,
+        0.097595,
+        0.105608,
+        0.099223,
+        0.113891,
+        0.109566,
+        0.112093,
+        0.102428,
+        0.090314,
+        0.087243,
+        0.107598,
+        0.115252,
+        0.120113,
+        0.110499,
+        0.09517,
+        0.103256,
+        0.121905,
+        0.157651,
+        0.118105,
+        0.100499,
+        0.158778,
+        0.119953,
+        0.126888,
+        0.18667,
+        0.130676,
+        0.122566,
+        0.200973,
+        0.107279,
+        0.133008,
+        0.207724,
+        0.126398,
+        0.125534,
+        0.203145,
+        0.113394,
+        0.162504,
+        0.20314,
+        0.150964,
+        0.172133,
+        0.176249,
+        0.126,
+        0.181575,
+        0.174454,
+        0.203399,
+        0.17461,
+        0.175847,
+        0.208893,
+        0.190261,
+        0.176443,
+        0.213686,
+        0.190809,
+        0.157824
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 1.11,
+        "type": "onset",
+        "intensity": 0.165,
+        "description": "Onset"
+      },
+      {
+        "time": 4.41,
+        "type": "onset",
+        "intensity": 0.176,
+        "description": "Onset"
+      },
+      {
+        "time": 4.94,
+        "type": "onset",
+        "intensity": 0.28,
+        "description": "Onset"
+      },
+      {
+        "time": 7.68,
+        "type": "onset",
+        "intensity": 0.191,
+        "description": "Onset"
+      },
+      {
+        "time": 8.77,
+        "type": "onset",
+        "intensity": 0.313,
+        "description": "Onset"
+      },
+      {
+        "time": 9.31,
+        "type": "onset",
+        "intensity": 0.231,
+        "description": "Onset"
+      },
+      {
+        "time": 9.33,
+        "type": "energy_peak",
+        "intensity": 0.897,
+        "description": "Energy peak"
+      },
+      {
+        "time": 13.69,
+        "type": "onset",
+        "intensity": 0.244,
+        "description": "Onset"
+      },
+      {
+        "time": 16.43,
+        "type": "onset",
+        "intensity": 0.171,
+        "description": "Onset"
+      },
+      {
+        "time": 17.48,
+        "type": "harmonic_change",
+        "intensity": 0.169,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 17.53,
+        "type": "onset",
+        "intensity": 0.274,
+        "description": "Onset"
+      },
+      {
+        "time": 19.66,
+        "type": "harmonic_change",
+        "intensity": 0.217,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 21.89,
+        "type": "onset",
+        "intensity": 0.191,
+        "description": "Onset"
+      },
+      {
+        "time": 27.91,
+        "type": "onset",
+        "intensity": 0.169,
+        "description": "Onset"
+      },
+      {
+        "time": 29,
+        "type": "onset",
+        "intensity": 0.177,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---Experimental",
+            "score": 0.1462
+          },
+          {
+            "label": "Rock---Indie Rock",
+            "score": 0.1148
+          },
+          {
+            "label": "Electronic---Downtempo",
+            "score": 0.0777
+          },
+          {
+            "label": "Rock---Lo-Fi",
+            "score": 0.0738
+          },
+          {
+            "label": "Rock---Experimental",
+            "score": 0.0679
+          },
+          {
+            "label": "Rock---Psychedelic Rock",
+            "score": 0.0641
+          },
+          {
+            "label": "Electronic---Ambient",
+            "score": 0.0555
+          },
+          {
+            "label": "Rock---Ethereal",
+            "score": 0.0481
+          },
+          {
+            "label": "Electronic---Noise",
+            "score": 0.0452
+          },
+          {
+            "label": "Rock---Shoegaze",
+            "score": 0.0408
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "indie",
+            "score": 0.2696
+          },
+          {
+            "label": "electronic",
+            "score": 0.256
+          },
+          {
+            "label": "rock",
+            "score": 0.1502
+          },
+          {
+            "label": "alternative",
+            "score": 0.1274
+          },
+          {
+            "label": "ambient",
+            "score": 0.122
+          },
+          {
+            "label": "experimental",
+            "score": 0.1142
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0909
+          },
+          {
+            "label": "electronica",
+            "score": 0.0803
+          },
+          {
+            "label": "chillout",
+            "score": 0.0734
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0536
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0486
+          },
+          {
+            "label": "pop",
+            "score": 0.0477
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0388
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0384
+          },
+          {
+            "label": "folk",
+            "score": 0.0313
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0298
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0245
+          },
+          {
+            "label": "jazz",
+            "score": 0.0223
+          },
+          {
+            "label": "00s",
+            "score": 0.02
+          },
+          {
+            "label": "chill",
+            "score": 0.0194
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0194
+          },
+          {
+            "label": "electro",
+            "score": 0.019
+          },
+          {
+            "label": "acoustic",
+            "score": 0.019
+          },
+          {
+            "label": "punk",
+            "score": 0.0183
+          },
+          {
+            "label": "dance",
+            "score": 0.0164
+          },
+          {
+            "label": "90s",
+            "score": 0.0137
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0085
+          },
+          {
+            "label": "sad",
+            "score": 0.0083
+          },
+          {
+            "label": "80s",
+            "score": 0.0082
+          },
+          {
+            "label": "60s",
+            "score": 0.0069
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0067
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.006
+          },
+          {
+            "label": "House",
+            "score": 0.0058
+          },
+          {
+            "label": "guitar",
+            "score": 0.0056
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0053
+          },
+          {
+            "label": "blues",
+            "score": 0.0052
+          },
+          {
+            "label": "funk",
+            "score": 0.0048
+          },
+          {
+            "label": "soul",
+            "score": 0.0048
+          },
+          {
+            "label": "metal",
+            "score": 0.0045
+          },
+          {
+            "label": "oldies",
+            "score": 0.0044
+          },
+          {
+            "label": "happy",
+            "score": 0.0039
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0038
+          },
+          {
+            "label": "sexy",
+            "score": 0.0036
+          },
+          {
+            "label": "catchy",
+            "score": 0.0036
+          },
+          {
+            "label": "70s",
+            "score": 0.0033
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0027
+          },
+          {
+            "label": "party",
+            "score": 0.0026
+          },
+          {
+            "label": "country",
+            "score": 0.0015
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0011
+          },
+          {
+            "label": "rnb",
+            "score": 0.0007
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.8185,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.601,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.7701,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 4.9618,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 4.9342,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "one_harmonic_series",
+        "reason": "one harmonic series on 203.3 Hz"
+      }
+    }
+  },
+  "bpm": 110,
+  "key": null,
+  "energy": 0.46,
+  "valence": 0.495,
+  "danceability": 0.819,
+  "acousticness": 0.601,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 1.11,
+      "type": "onset",
+      "intensity": 0.165,
+      "description": "Onset"
+    },
+    {
+      "time": 4.41,
+      "type": "onset",
+      "intensity": 0.176,
+      "description": "Onset"
+    },
+    {
+      "time": 4.94,
+      "type": "onset",
+      "intensity": 0.28,
+      "description": "Onset"
+    },
+    {
+      "time": 7.68,
+      "type": "onset",
+      "intensity": 0.191,
+      "description": "Onset"
+    },
+    {
+      "time": 8.77,
+      "type": "onset",
+      "intensity": 0.313,
+      "description": "Onset"
+    },
+    {
+      "time": 9.31,
+      "type": "onset",
+      "intensity": 0.231,
+      "description": "Onset"
+    },
+    {
+      "time": 9.33,
+      "type": "energy_peak",
+      "intensity": 0.897,
+      "description": "Energy peak"
+    },
+    {
+      "time": 13.69,
+      "type": "onset",
+      "intensity": 0.244,
+      "description": "Onset"
+    },
+    {
+      "time": 16.43,
+      "type": "onset",
+      "intensity": 0.171,
+      "description": "Onset"
+    },
+    {
+      "time": 17.48,
+      "type": "harmonic_change",
+      "intensity": 0.169,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 17.53,
+      "type": "onset",
+      "intensity": 0.274,
+      "description": "Onset"
+    },
+    {
+      "time": 19.66,
+      "type": "harmonic_change",
+      "intensity": 0.217,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 21.89,
+      "type": "onset",
+      "intensity": 0.191,
+      "description": "Onset"
+    },
+    {
+      "time": 27.91,
+      "type": "onset",
+      "intensity": 0.169,
+      "description": "Onset"
+    },
+    {
+      "time": 29,
+      "type": "onset",
+      "intensity": 0.177,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

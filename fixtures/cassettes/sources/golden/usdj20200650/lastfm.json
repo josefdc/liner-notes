@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Johnny+Cash&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=Hurt": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [
+            {
+              "name": "The Man Comes Around",
+              "match": 1,
+              "artist": {
+                "name": "Johnny Cash"
+              }
+            },
+            {
+              "name": "Personal Jesus",
+              "match": 0.965395,
+              "artist": {
+                "name": "Johnny Cash"
+              }
+            },
+            {
+              "name": "Take Me Home, Country Roads",
+              "match": 0.293683,
+              "artist": {
+                "name": "John Denver",
+                "mbid": "34e10b51-b5c6-4bc1-b70e-f05f141eda1e"
+              }
+            },
+            {
+              "name": "Jolene",
+              "match": 0.249206,
+              "artist": {
+                "name": "Dolly Parton",
+                "mbid": "1d543e07-d0d2-4834-a8db-d65c50c2a856"
+              }
+            },
+            {
+              "name": "Fast Car",
+              "match": 0.223616,
+              "artist": {
+                "name": "Tracy Chapman",
+                "mbid": "1129817c-488a-4096-80c1-77fc1b107c93"
+              }
+            }
+          ],
+          "@attr": {
+            "artist": "Johnny Cash",
+            "track": "Hurt"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Johnny+Cash&autocorrect=1&format=json&method=track.getTopTags&track=Hurt": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "country",
+              "count": 100
+            },
+            {
+              "name": "acoustic",
+              "count": 71
+            },
+            {
+              "name": "cover",
+              "count": 46
+            },
+            {
+              "name": "sad",
+              "count": 38
+            },
+            {
+              "name": "folk",
+              "count": 18
+            },
+            {
+              "name": "Johnny Cash",
+              "count": 8
+            },
+            {
+              "name": "melancholy",
+              "count": 8
+            },
+            {
+              "name": "beautiful",
+              "count": 1
+            },
+            {
+              "name": "singer-songwriter",
+              "count": 1
+            },
+            {
+              "name": "hurt",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Johnny Cash",
+            "track": "Hurt"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=d43d12a1-2dc9-4257-a2fd-0a3bb1081b86&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "Johnny Cash & June Carter",
+              "match": "1"
+            },
+            {
+              "name": "The Highwaymen",
+              "match": "0.723651",
+              "mbid": "c685765c-b778-4ed6-9035-8f7088431765"
+            },
+            {
+              "name": "Waylon Jennings",
+              "match": "0.624487",
+              "mbid": "1a46826b-4d73-4e04-8590-f36c9d832f9e"
+            },
+            {
+              "name": "Willie Nelson",
+              "match": "0.527635",
+              "mbid": "668fd73c-bf54-4310-a139-305517f05311"
+            },
+            {
+              "name": "Marty Robbins",
+              "match": "0.526090",
+              "mbid": "2c2add7c-9a99-4812-a20e-870d331f01fd"
+            }
+          ],
+          "@attr": {
+            "artist": "Johnny Cash"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=d43d12a1-2dc9-4257-a2fd-0a3bb1081b86&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "artist": {
+          "name": "Johnny Cash",
+          "mbid": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+          "stats": {
+            "listeners": "4181169",
+            "playcount": "174887526"
+          },
+          "bio": {
+            "summary": "John R. Cash (born J. R. Cash; February 26, 1932 – September 12, 2003) was an American singer-songwriter. His music often explored themes of sorrow, moral reflection, and redemption, particularly in his later work. He had a deep bass-baritone voice and was accompanied by the Tennessee Three, a backing band noted for its distinctive guitar rhythms. Cash was known for performing prison concerts and frequently wore an all-black stage wardrobe, which led to his nickname \"Man in Black.\" <a href=\"https://www.last.fm/music/Johnny+Cash\">Read more on Last.fm</a>"
+          },
+          "tags": {
+            "tag": [
+              {
+                "name": "country"
+              },
+              {
+                "name": "folk"
+              },
+              {
+                "name": "singer-songwriter"
+              },
+              {
+                "name": "classic rock"
+              },
+              {
+                "name": "rock"
+              }
+            ]
+          },
+          "similar": {
+            "artist": [
+              {
+                "name": "Johnny Cash & June Carter"
+              },
+              {
+                "name": "The Highwaymen"
+              },
+              {
+                "name": "Waylon Jennings"
+              },
+              {
+                "name": "Willie Nelson"
+              },
+              {
+                "name": "Marty Robbins"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=d43d12a1-2dc9-4257-a2fd-0a3bb1081b86&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "country",
+              "count": 100
+            },
+            {
+              "name": "folk",
+              "count": 62
+            },
+            {
+              "name": "singer-songwriter",
+              "count": 31
+            },
+            {
+              "name": "classic rock",
+              "count": 23
+            },
+            {
+              "name": "rock",
+              "count": 8
+            },
+            {
+              "name": "american",
+              "count": 3
+            },
+            {
+              "name": "rockabilly",
+              "count": 2
+            },
+            {
+              "name": "blues",
+              "count": 1
+            },
+            {
+              "name": "americana",
+              "count": 1
+            },
+            {
+              "name": "Johnny Cash",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Johnny Cash"
+          }
+        }
+      }
+    }
+  }
+}

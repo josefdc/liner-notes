@@ -327,6 +327,15 @@ function relationTest(
 }
 
 /**
+ * Whether the judge's verdict sources a model claim: `supported`, or `partial` for a claim that
+ * asserts no relation. A relation is stated whole, so a partly supported claim that asserts one
+ * (a link's claim, or one about a relation) is not sourced. The claim must also cite evidence.
+ */
+export function verdictSources(verdict: Claim["verdict"], assertsRelation: boolean): boolean {
+  return verdict === "supported" || (verdict === "partial" && !assertsRelation);
+}
+
+/**
  * The claims with the judge's verdicts and their kinds, and the genealogy with each link's kind
  * from its own claim (see the module comment). A claim that asserts a relation (a link's, one
  * about a subject in RELATION_ABOUT, one in `citesRelation`) is stated whole. Pure.
@@ -347,7 +356,7 @@ export function applyVerdicts(
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link, and a
     // partly supported claim that asserts a relation otherwise is not sourced either.
-    const supported = verdict === "supported" || (verdict === "partial" && !isRelation(claim));
+    const supported = verdictSources(verdict, isRelation(claim));
     return {
       ...claim,
       verdict,

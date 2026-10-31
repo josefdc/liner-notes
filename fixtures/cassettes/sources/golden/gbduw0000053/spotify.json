@@ -1,0 +1,472 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.spotify.com/v1/search?limit=1&q=1+more+dime+%28fvlcrvm+rwrk%29+-+dftpnk&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "3goctAzym2AXmgTyER3QQ1",
+              "name": "One More Time",
+              "artists": [
+                {
+                  "id": "2qMrBxRkhQrdCRSSHRCy4s",
+                  "name": "CosmicJelly"
+                },
+                {
+                  "id": "0Ihtdy14nWI9WFxFDpz53a",
+                  "name": "Dinoella"
+                }
+              ],
+              "album": {
+                "name": "One More Time",
+                "release_date": "2023-10-16"
+              },
+              "duration_ms": 171587,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3goctAzym2AXmgTyER3QQ1"
+              },
+              "external_ids": {
+                "isrc": "SE6XW2327539"
+              }
+            }
+          ],
+          "total": 284
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=Circo+Loco+-+Drake+%26+21+Savage&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "7GeTsDIc5ykNB6lORO6Cee",
+              "name": "Circo Loco",
+              "artists": [
+                {
+                  "id": "3TVXtAsR1Inumwj472S9r4",
+                  "name": "Drake"
+                },
+                {
+                  "id": "1URnnhqYAYcrqrcwql10ft",
+                  "name": "21 Savage"
+                }
+              ],
+              "album": {
+                "name": "Her Loss",
+                "release_date": "2022-11-04"
+              },
+              "duration_ms": 236795,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/7GeTsDIc5ykNB6lORO6Cee"
+              },
+              "external_ids": {
+                "isrc": "USUG12208606"
+              }
+            }
+          ],
+          "total": 415
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=DAFT+-+TAPS&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "4EJUzASjfgWureagx8bPMe",
+              "name": "TAPS",
+              "artists": [
+                {
+                  "id": "4KfyXs5GePlziOTyJbH9hU",
+                  "name": "WZRD Gundlach"
+                }
+              ],
+              "album": {
+                "name": "Lethal Dosage: The Last Word",
+                "release_date": "2026-04-20"
+              },
+              "duration_ms": 183648,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/4EJUzASjfgWureagx8bPMe"
+              },
+              "external_ids": {
+                "isrc": "QZWFH2629159"
+              }
+            }
+          ],
+          "total": 291
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=More+Spell+on+You+-+Eddie+Johns&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "5MIgTjcn94EPeSUUo8dx4q",
+              "name": "More Spell On You",
+              "artists": [
+                {
+                  "id": "5lm6ULGxxq8LD82j5Jp9P1",
+                  "name": "Eddie Johns"
+                }
+              ],
+              "album": {
+                "name": "More Spell On You",
+                "release_date": "2012-06-11"
+              },
+              "duration_ms": 310693,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5MIgTjcn94EPeSUUo8dx4q"
+              },
+              "external_ids": {
+                "isrc": "FR10F1200080"
+              }
+            }
+          ],
+          "total": 1000
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=1&q=one+more+karkat+-+jade&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "6tMwI9BBOLJ0Phkhg6oz1r",
+              "name": "Aanu Ni Mori Gba",
+              "artists": [
+                {
+                  "id": "7qDKEhuN11MijgScgAXx1W",
+                  "name": "Gbenga Akinfenwa"
+                }
+              ],
+              "album": {
+                "name": "Jehovah Olugbeja",
+                "release_date": "2021-07-23"
+              },
+              "duration_ms": 323199,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/6tMwI9BBOLJ0Phkhg6oz1r"
+              },
+              "external_ids": {
+                "isrc": "TCAFR2145265"
+              }
+            }
+          ],
+          "total": 712
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=10&q=One+More+Time+Daft+Punk&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "0DiWol3AO6WpXZgp0goxAV",
+              "name": "One More Time",
+              "artists": [
+                {
+                  "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                  "name": "Daft Punk"
+                }
+              ],
+              "album": {
+                "name": "Discovery",
+                "release_date": "2001-03-12"
+              },
+              "duration_ms": 320357,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV"
+              },
+              "external_ids": {
+                "isrc": "GBDUW0000053"
+              }
+            },
+            {
+              "id": "2Uy6EhQXAYkXA6MohPgjpV",
+              "name": "One More Time - Radio Edit",
+              "artists": [
+                {
+                  "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                  "name": "Daft Punk"
+                }
+              ],
+              "album": {
+                "name": "One More Time",
+                "release_date": "2000-11-13"
+              },
+              "duration_ms": 235466,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2Uy6EhQXAYkXA6MohPgjpV"
+              },
+              "external_ids": {
+                "isrc": "GBDUW0000054"
+              }
+            },
+            {
+              "id": "1H1d4dr7Hk5Rrd8Tb5y5yr",
+              "name": "One More Time / Aerodynamic",
+              "artists": [
+                {
+                  "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                  "name": "Daft Punk"
+                }
+              ],
+              "album": {
+                "name": "Alive 2007",
+                "release_date": "2007-11-19"
+              },
+              "duration_ms": 370533,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1H1d4dr7Hk5Rrd8Tb5y5yr"
+              },
+              "external_ids": {
+                "isrc": "GBDUW0700008"
+              }
+            },
+            {
+              "id": "6Yrjbe9oLPaFX73upXgbMZ",
+              "name": "One More Time",
+              "artists": [
+                {
+                  "id": "5EXRg7fbW0QnZKptLBGEB0",
+                  "name": "Jbizz"
+                }
+              ],
+              "album": {
+                "name": "Tattoos & Love Notes",
+                "release_date": "2012-10-31"
+              },
+              "duration_ms": 220160,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/6Yrjbe9oLPaFX73upXgbMZ"
+              },
+              "external_ids": {
+                "isrc": "QZDA82002951"
+              }
+            },
+            {
+              "id": "5PuliOuGwpn63KjftzdFI7",
+              "name": "No New Friends - SFTB Remix",
+              "artists": [
+                {
+                  "id": "0QHgL1lAIqAw0HtD7YldmP",
+                  "name": "DJ Khaled"
+                },
+                {
+                  "id": "3TVXtAsR1Inumwj472S9r4",
+                  "name": "Drake"
+                },
+                {
+                  "id": "1sBkRIssrMs1AbVkOJbc7a",
+                  "name": "Rick Ross"
+                },
+                {
+                  "id": "55Aa2cqylxrFIXC767Z865",
+                  "name": "Lil Wayne"
+                }
+              ],
+              "album": {
+                "name": "Suffering From Success (Deluxe Version)",
+                "release_date": "2013-01-01"
+              },
+              "duration_ms": 308333,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5PuliOuGwpn63KjftzdFI7"
+              },
+              "external_ids": {
+                "isrc": "USCM51300393"
+              }
+            },
+            {
+              "id": "0pGMAK5wooEtjAEcP8bkKL",
+              "name": "Hundred Miles",
+              "artists": [
+                {
+                  "id": "0ZRBa9pTfhhCsJW95F1ugg",
+                  "name": "YALL"
+                },
+                {
+                  "id": "69YKwunlA0xl2yMS12cyMu",
+                  "name": "Gabriela Richardson"
+                }
+              ],
+              "album": {
+                "name": "Hundred Miles",
+                "release_date": "2015-10-16"
+              },
+              "duration_ms": 172414,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0pGMAK5wooEtjAEcP8bkKL"
+              },
+              "external_ids": {
+                "isrc": "ES7001520501"
+              }
+            },
+            {
+              "id": "3H3cOQ6LBLSvmcaV7QkZEu",
+              "name": "Aerodynamic",
+              "artists": [
+                {
+                  "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                  "name": "Daft Punk"
+                }
+              ],
+              "album": {
+                "name": "Discovery",
+                "release_date": "2001-03-12"
+              },
+              "duration_ms": 212546,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3H3cOQ6LBLSvmcaV7QkZEu"
+              },
+              "external_ids": {
+                "isrc": "GBDUW0000057"
+              }
+            },
+            {
+              "id": "5qK0eYXQhB6ixHol1ORLHg",
+              "name": "Dance With Me",
+              "artists": [
+                {
+                  "id": "0du5cEVh5yTK9QJze8zA0C",
+                  "name": "Bruno Mars"
+                }
+              ],
+              "album": {
+                "name": "Hits & Bits",
+                "release_date": "2026-10-28"
+              },
+              "duration_ms": 219287,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5qK0eYXQhB6ixHol1ORLHg"
+              },
+              "external_ids": {
+                "isrc": "USAT22509150"
+              }
+            },
+            {
+              "id": "7xUrpIIdfezUpdcbm1vtWk",
+              "name": "I'm the One",
+              "artists": [
+                {
+                  "id": "7hj7ffJe6UkF1gsMpuweSI",
+                  "name": "Yungeen Ace"
+                }
+              ],
+              "album": {
+                "name": "Don Dada",
+                "release_date": "2020-06-26"
+              },
+              "duration_ms": 153293,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/7xUrpIIdfezUpdcbm1vtWk"
+              },
+              "external_ids": {
+                "isrc": "QMKSC1901121"
+              }
+            },
+            {
+              "id": "3gH5u5MDoTppigJQQxzjAs",
+              "name": "cream of the crop",
+              "artists": [
+                {
+                  "id": "0G4JQGf6cjQ38vgmzHgu8F",
+                  "name": "The Society"
+                },
+                {
+                  "id": "5ZBEf3tM7j5YfR3G5pUUSg",
+                  "name": "Dunkin Vinyl"
+                },
+                {
+                  "id": "2Xxblh8sQFfpkDELvyHmiQ",
+                  "name": "Giovan"
+                },
+                {
+                  "id": "61g2l5CavpHVTi4JWweDzJ",
+                  "name": "Kiyarts"
+                }
+              ],
+              "album": {
+                "name": "University Heights",
+                "release_date": "2026-01-16"
+              },
+              "duration_ms": 168648,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/3gH5u5MDoTppigJQQxzjAs"
+              },
+              "external_ids": {
+                "isrc": "QZDA52649752"
+              }
+            }
+          ],
+          "total": 28
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/tracks/0DiWol3AO6WpXZgp0goxAV": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "0DiWol3AO6WpXZgp0goxAV",
+        "name": "One More Time",
+        "artists": [
+          {
+            "id": "4tZwfgrHOc3mvqYlEYSvVi",
+            "name": "Daft Punk"
+          }
+        ],
+        "album": {
+          "name": "Discovery",
+          "release_date": "2001-03-12"
+        },
+        "duration_ms": 320357,
+        "explicit": false,
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV"
+        },
+        "external_ids": {
+          "isrc": "GBDUW0000053"
+        }
+      }
+    },
+    "POST https://accounts.spotify.com/api/token #c349b29ae2fc682a": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "access_token": "[redacted]",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  }
+}

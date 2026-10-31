@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/track/isrc:USWB11301111": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 67549188,
+        "title": "Dreams (2004 Remaster)",
+        "title_version": "(2004 Remaster)",
+        "readable": true,
+        "isrc": "USWB11301111",
+        "duration": 257,
+        "artist": {
+          "id": 169,
+          "name": "Fleetwood Mac"
+        },
+        "album": {
+          "id": 6612814,
+          "title": "Rumours (Deluxe Edition)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "entries": {
+    "POST https://api.tavily.com/search #b5d9fa68cdecebc5": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Dreams (Fleetwood Mac song) - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Dreams_(Fleetwood_Mac_song)",
+            "content": "The members of Fleetwood Mac were experiencing emotional upheavals while recording the Rumours album. Mick Fleetwood was going through a divorce, Christine McVie and John McVie were separating, while Lindsey Buckingham and Stevie Nicks were ending their eight-year relationship. \"We had to go through this elaborate exercise of denial,\" explained Buckingham to Blender \"Blender (magazine)\") magazine, \"keeping our personal feelings in one corner of the room while trying to be professional in the [...] \"Dreams\" is a song by the British-American rock band Fleetwood Mac, written and sung by Stevie Nicks for the band's eleventh studio album, Rumours \"Rumours (album)\") (1977). In the United States, \"Dreams\" was released as the second single from Rumours in March 1977, by Warner Bros., while in the"
+          },
+          {
+            "title": "Fleetwood Mac - Rumours - This Day In Music",
+            "url": "https://www.thisdayinmusic.com/classic-albums/fleetwood-mac-rumours",
+            "content": "The first sessions took place in Sausalito, just north of San Francisco, at the Record Plant, a well-appointed but secluded facility, where the band weren’t bothered by hangers-on. Ken Caillat, who had been working at LA’s Wally Heider recording studio, had previously mixed a radio broadcast for the band, and had stepped in to remix the single of “Rhiannon”. The band’s live engineer Richard Dashut, who had also worked on the white album, had been asked to supervise and engineer Fleetwood Mac’s [...] The band performed a further set of dates from August 24 to 31, before knuckling down to more months in the studio doing overdubs and occasionally recutting songs. By then, the sessions had looked like this: end of January to April 10th: The Record Plant in Sausalito; 14th May to mid-June: Wall"
+          },
+          {
+            "title": "Behind the Song: \"Dreams\" by Fleetwood Mac - American Songwriter",
+            "url": "https://americansongwriter.com/behind-the-song-dreams-by-fleetwood-mac",
+            "content": "In 1976, hidden behind lush Victorian drapes, atop a black velvet bed in the back studio of Sausalito’s Record Plant, a devastated Stevie Nicks sat alone at a Fender Rhodes piano. The master lyricist, beloved as a folk-rock matriarch, spilled her heartache into “Dreams.” The classic track became one of four US Top 10 singles from Fleetwood Mac’s eleventh studio album, Rumours. ## Videos by American Songwriter [...] The two joined the McVie’s and founding member, Mick Fleetwood, in 1974 when they recruited Buckingham as a guitarist. Insisting the duo was a “package deal,” Nicks’ arrival to Fleetwood Mac marked what is now considered the classic line-up of the continuously evolving band. Omniscient tension seethes through the opening lines. “Now here you go again / You say you want your free"
+          },
+          {
+            "title": "Fleetwood Mac's 'Rumours': 10 Things You Didn't Know",
+            "url": "https://www.rollingstone.com/feature/fleetwood-macs-rumours-10-things-you-didnt-know-121876",
+            "content": "By all accounts it was quite an inspiring space, done up in full-tilt Seventies style. “It was a black-and-red room, with a sunken pit in the middle where there was a piano, and a big black-velvet bed with Victorian drapes,” she recalled in Blender. “I sat down on the bed with my keyboard in front of me. I found a drum pattern, switched my little cassette player on and wrote ‘Dreams’ in about 10 minutes.” The simple repeated three-chord riff cast a hypnotic spell over an uncharacteristically [...] Fleetwood Mac’s 11th full-length was conceived as a high-potency collection of potential hit songs – a plan that played out exactly as the group had hoped. Radio-friendly in the extreme, all four singles – “Go Your Own Way,” “Dreams,” “Don’t Stop” and “You Make Loving Fun” – reached the American"
+          },
+          {
+            "title": "Rumours Fleetwood Mac The making of Classic Albums ...",
+            "url": "https://www.asktherightquestion.org/rumours-fleetwood-mac-the-making-of-classic-albums-documentary",
+            "content": "Largely recorded in California in 1976, it was produced by the band with Ken Caillat and Richard Dashut. The band wanted to expand on the commercial success of"
+          }
+        ]
+      }
+    },
+    "POST https://api.tavily.com/search #fde72fa7533c952f": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Sunspot Jonz feat. Mikah Nine's 'She' sample of Fleetwood ...",
+            "url": "https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams",
+            "content": "\"She\" by Sunspot Jonz feat. Mikah Nine sampled Fleetwood Mac's \"Dreams\". Listen to both songs on WhoSampled."
+          },
+          {
+            "title": "The Rise of Interpolation in Popular Music - Scholar Commons",
+            "url": "https://scholarcommons.sc.edu/cgi/viewcontent.cgi?article=8130&context=etd",
+            "content": "by GM Saylor · 2023 · Cited by 4 — WhoSampled.com is a user-generated site that pinpoints samples from songs, Fleetwood Mac's “Dreams” as one TikToker popularized the song cranberry juice. by"
+          },
+          {
+            "title": "Dreams by Fleetwood Mac - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Fleetwood-Mac/Dreams",
+            "content": "Sampled in 21 songs ; Post Malone's Hollywood Dreams / Comedown, Hollywood Dreams / Comedown · Post Malone ; Soul Clap's Dreams, Dreams · Soul Clap ; Crazy Town's ...Read more"
+          },
+          {
+            "title": "The Chain - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/The_Chain",
+            "content": "Mac song)\")\" \"Sands of Time \"Sands of Time (song)\")\" \"Sentimental Lady\" \"Did You Ever Love Me \"Did You Ever Love Me (Fleetwood Mac song)\")\" \"For Your Love\" \"Heroes Are Hard to Find \"Heroes Are Hard to Find (song)\")\" \"Warm Ways\" \"Over My Head \"Over My Head (Fleetwood Mac song)\")\" \"Rhiannon \"Rhiannon (song)\")\" \"Say You Love Me \"Say You Love Me (Fleetwood Mac song)\")\" \"Go Your Own Way\" \"Dreams \"Dreams (Fleetwood Mac song)\")\" \"Don't Stop \"Don't Stop (Fleetwood Mac song)\")\" \"You Make [...] | Songs | | | | --- | | Side one | \"Second Hand News\" \"Dreams \"Dreams (Fleetwood Mac song)\")\" \"Never Going Back Again\" \"Don't Stop \"Don't Stop (Fleetwood Mac song)\")\" \"Go Your Own Way\" \"Songbird \"Songbird (Fleetwood Mac song)\")\" | | Side two | \"The Chain\" \"You Make Loving Fun\" \"I Don't Want to Know\" \"Oh Daddy"
+          },
+          {
+            "title": "The Best Drum Intro Songs Ever | So Much Great Music",
+            "url": "https://somuchgreatmusic.com/2025/08/01/the-best-drum-intro-songs-ever",
+            "content": "‘Mother and Child Reunion’ – Paul Simon ‘Ballroom Blitz’ – Sweet ‘Burnout’ – Green Day ‘Young Folks’ – Peter Bjorn and John ‘Dreams’ – Fleetwood Mac ‘Hello I Love You’ – Doors ‘Take on Me’ – a-ha ‘Whip It’ – Devo ‘We’re Not Gonna Take It’ – Twisted Sister ‘Addicted to Love’ – Robert Palmer ‘Rock and Roll All Nite’ – Kiss ‘What You Need’ – INXS ‘Whatcha Gonna Do’ – Pablo Cruise ‘Hungry Heart’ – Bruce Springsteen & The E Street Band ‘Semi-Charmed Life’ – Third Eye Blind [...] ‘Swingtown’ – Steve Miller Band ‘I’m Just a Singer in a Rock and Roll Band’ – Moody Blues ‘Susie Q.’ – Creedence Clearwater Revival ‘I Fought The Law’ – Clash ‘Samson and Delilah’ – Grateful Dead ‘Tusk’ – Fleetwood Mac You’d never really thought about those openings, had you? C’mon, this is big stuff! [...] Snare/Kick o"
+          }
+        ]
+      }
+    }
+  }
+}

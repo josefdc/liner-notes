@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "entries": {
+    "POST https://api.tavily.com/search #5fef170a68bf6c66": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Juicy (The Notorious B.I.G. song) - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
+            "content": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is [...] | Single \"Single (music)\") by the Notorious B.I.G. | | from the album Ready to Die | | B-side | \"Unbelievable\" | | Released | August 9, 1994 | | Recorded | 1994 | | Studio | The Hit Factory (New York City) | | Genre | East Coast hip-hop | | Length | 5:02 | | Label | Bad Boy Arista | | Songwrit"
+          },
+          {
+            "title": "The Notorious B.I.G. - Juicy (Official Video) [4K]",
+            "url": "https://www.youtube.com/watch?v=_JZom_gVfuw",
+            "content": "### Description 749,810,128 views Posted: 2011-09-06 \"Juicy\" is the lead single from the 1994 debut album Ready to Die by The Notorious B.I.G. The track's production is built around a sample of the 1983 song \"Juicy Fruit\" by Mtume. The single reached No. 27 on the Billboard Hot 100. The autobiographical lyrics of The Notorious B.I.G. describe his past struggles and subsequent success in the hip hop industry. Directed by: Sean “Puffy” Combs [...] The Notorious B.I.G., also known as Biggie Smalls or Biggie, was an American rapper and songwriter. His debut album Ready to Die (1994) reached multi-platinum status and included singles such as Juicy, Big Poppa, and One More Chance. His second album Life After Death (1997) was released posthumously, achieved diamond certification, and produced two"
+          },
+          {
+            "title": "The Notorious B.I.G. - Trivia",
+            "url": "https://www.imdb.com/name/nm0857263/trivia",
+            "content": "He recorded and released \"Ready to Die\" in 1994. He recorded his sophomore album, \"Life After Death\" while alive. but it was released a mere two weeks after his ...Read more"
+          },
+          {
+            "title": "The Making of Ready to Die — Biggie's Dark Masterpiece",
+            "url": "https://www.youtube.com/watch?v=z6tJLSNFb7w",
+            "content": "From raw storytelling to timeless hits like “Juicy” and “Big Poppa,” this video breaks down how this classic debut helped define an era and"
+          }
+        ]
+      }
+    },
+    "POST https://api.tavily.com/search #6ec186f24e5dec45": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Juicy by The Notorious B.I.G. feat. Total - Samples, Covers ...",
+            "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy",
+            "content": "\"Juicy\" contains samples of \"Juicy Fruit (Fruity Instrumental Mix)\" by Mtume, \"Rappin' Duke\" by Rappin' Duke and \"Juicy Fruit\" by Mtume. Who produced \"Juicy\" by"
+          },
+          {
+            "title": "Songs Sampled by The Notorious B.I.G.",
+            "url": "https://www.whosampled.com/The-Notorious-B.I.G./samples",
+            "content": "Hypnotize (1997) · Big Poppa (1994) · Juicy (1994) by The Notorious B.I.G. feat. Total · Gimme the Loot (1994) · One More Chance / Stay With Me (Remix) (1994) by"
+          },
+          {
+            "title": "The Notorious B.I.G. - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/The-Notorious-B.I.G.",
+            "content": "Total sampled Juicy Fruit (Fruity Instrumental Mix) by Mtume (1983) Rappin' Duke by Rappin' Duke (1985) was sampled in Swish Swish by Katy Perry feat. Nicki"
+          },
+          {
+            "title": "Juicy (Remix) by The Notorious B.I.G.",
+            "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy-(Remix)",
+            "content": "\"Juicy (Remix)\" contains samples of \"Love Rap\" by Spoonie Gee and The Treacherous Three and \"Rubber Jam\" by The Rubber Band. Who produced \"Juicy (Remix)\" by The"
+          },
+          {
+            "title": "Sample vs. Original | Mtume “Juicy Fruit” & The Notorious ...",
+            "url": "https://www.youtube.com/shorts/J7syCPQuA18",
+            "content": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”"
+          }
+        ]
+      }
+    }
+  }
+}

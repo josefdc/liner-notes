@@ -1,5 +1,7 @@
-// The `npm run eval` entry point: live runs are refused with no outbound connection, replay
-// needs recorded runs. Run with: node --test 'evals/**/*.test.mjs'
+// The `npm run eval` entry point, offline: a live run without its options runs nothing, replay
+// needs recorded runs, and --score-only scores records without replaying them. The replay itself
+// starts the API once per row and runs in CI as its own step. Run with:
+// node --test 'evals/**/*.test.mjs'
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -31,10 +33,10 @@ function evalCli(args) {
   }
 }
 
-test("--mode live is refused, non-zero, with no outbound attempt", () => {
+test("--mode live without its options runs nothing, non-zero, with no outbound attempt", () => {
   const out = evalCli(["--suite", "agent", "--mode", "live", "--subset", "ci"]);
   assert.notEqual(out.status, 0);
-  assert.match(out.stderr, /live runs come in a later change/);
+  assert.match(out.stderr, /--mode live needs --out/);
   assert.deepEqual(out.attempts, [0]);
 });
 
@@ -68,7 +70,17 @@ test("--mode replay names the subset rows that have no run record and exits 1", 
     );
     const kept = d.filter((r) => ["GBDUW0000053", "USBB40000359"].includes(r.isrc));
     writeFileSync(join(dir, "d.json"), JSON.stringify(kept));
-    const out = evalCli(["--suite", "agent", "--mode", "replay", "--subset", "ci", "--runs", dir]);
+    const out = evalCli([
+      "--suite",
+      "agent",
+      "--mode",
+      "replay",
+      "--score-only",
+      "--subset",
+      "ci",
+      "--runs",
+      dir,
+    ]);
     assert.equal(out.status, 1);
     assert.match(
       out.stderr,
@@ -82,19 +94,20 @@ test("--mode replay names the subset rows that have no run record and exits 1", 
   }
 });
 
-test("--mode replay scores recorded runs on the subset, offline", () => {
+test("--mode replay --score-only scores recorded runs on the subset, offline", () => {
   const out = evalCli([
     "--suite",
     "agent",
     "--mode",
     "replay",
+    "--score-only",
     "--subset",
     "ci",
     "--runs",
     "evals/agent/testdata/runs",
   ]);
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /over 6 tracks \(subset: ci\)/);
+  assert.match(out.stdout, /over 7 tracks \(subset: ci\)/);
   assert.deepEqual(out.attempts, [0]);
 });
 
@@ -103,8 +116,39 @@ test("bad arguments exit 2", () => {
     [],
     ["--suite", "web", "--mode", "replay"],
     ["--suite", "agent", "--mode", "x"],
+    ["--suite", "agent", "--mode", "replay", "--out", "x"],
+    ["--suite", "agent", "--mode", "live", "--score-only"],
+    ["--suite", "agent", "--mode", "live", "--runs", "x"],
   ]) {
     const out = evalCli(args);
     assert.equal(out.status, 2, args.join(" "));
+  }
+});
+
+test("the replay reads every cassette miss the API logged, from sources and from the model", async () => {
+  const { cassetteMisses } = await import("./run.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "agent-misses-"));
+  try {
+    const log = join(dir, "api.jsonl");
+    const line = (msg, extra = {}) => JSON.stringify({ level: "warn", msg, ...extra });
+    writeFileSync(
+      log,
+      [
+        line("SOURCE_CASSETTE=replay: answers come from fixtures/cassettes/sources/golden/x"),
+        line("Similar tracks error: lastfm: no cassette entry for GET https://ws.example.org/2.0/"),
+        line("Planner unavailable (cassette_miss)"),
+        line("composer: no LLM cassette for ComposerOutput on tier main (key 0123)"),
+        "not json, but no cassette entry either",
+        "",
+      ].join("\n"),
+    );
+    const misses = cassetteMisses(log);
+    assert.equal(misses.length, 4);
+    assert.match(misses[0], /^Similar tracks error: lastfm: no cassette entry/);
+    assert.deepEqual(cassetteMisses(join(dir, "none.jsonl")), []);
+    writeFileSync(log, `${line("SOURCE_CASSETTE=replay: answers come from x")}\n`);
+    assert.deepEqual(cassetteMisses(log), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

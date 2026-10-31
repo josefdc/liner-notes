@@ -79,7 +79,7 @@ const ARTIST_AFTER_BY = /\bby ([^."“”]+?)(?=\.$|\.\s|,|$| feat\.| is | sampl
 const artistsIn = (text) => [...text.matchAll(ARTIST_AFTER_BY)].map((m) => m[1].trim());
 
 /** The claims of one recording with their cited excerpts. Verdicts are not copied. */
-function claimsOf(recording) {
+export function claimsOf(recording) {
   const a = recording.analysis;
   const byId = new Map(a.evidence.map((e) => [e.id, e]));
   return a.claims

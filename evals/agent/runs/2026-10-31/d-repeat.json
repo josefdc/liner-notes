@@ -1,0 +1,3018 @@
+[
+  {
+    "version": 1,
+    "runId": "cd871478-6297-4f8e-a57d-93baabdab197",
+    "isrc": "GBDUW0000053",
+    "title": "One More Time",
+    "artist": "Daft Punk",
+    "query": "One More Time Daft Punk",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:31:57.681Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7",
+      "spotifyId": "0DiWol3AO6WpXZgp0goxAV",
+      "title": "One More Time",
+      "artist": "Daft Punk"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked",
+      "candidates": 5,
+      "chosen": {
+        "id": "0DiWol3AO6WpXZgp0goxAV",
+        "title": "One More Time",
+        "artist": "Daft Punk"
+      }
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 122.86,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz recording \"One More Time\" by Daft Punk (5:21), ISRC GBDUW0000053, first released 2000."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is remixed in \"One Whore Time\" by Moustiluigi Random."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/534c1922-0005-4232-857a-c7c0b1da473d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"LOVER’S TIME\" by Cheryl Stelli."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns."
+      },
+      {
+        "id": "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk is sampled in \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo."
+      },
+      {
+        "id": "musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0",
+        "excerpt": "MusicBrainz: \"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26)."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/811980e6-329f-4893-8083-0d222849b7b4",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Microchip."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/29df9c62-9622-410a-bece-e6c874de2b22",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Vitamin String Quartet."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/9c101d0d-e7af-45eb-9e3f-33ca0a7ef03e",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Sunset In Ibiza."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/7095246c-b187-46f7-939b-c5a5087eac79",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by The Madd Wikkid."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/05a9b041-201e-4118-9e59-b4b3169a4528",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/c61e9bea-164e-4783-a729-b4dda7f3ec3d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by DJ MAGIC DRAGON."
+      },
+      {
+        "id": "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/07dd5768-8efc-4052-8b20-349cbe9e05b2",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4bb47ffc-9006-32cf-8aa9-e213334550dc",
+        "excerpt": "MusicBrainz: the work \"One More Time\" is covered by \"One More Time\" by Starburkes & The Tea Leaf."
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/One_More_Time_(Daft_Punk_song)",
+        "excerpt": "\"One More Time\" was sampled and incorporated in Miliyah Kato's song \"Future Lover (Mirai Koibito) \"Future Lover (Mirai Koibito)\")\" from her album Liberty \"Liberty (Miliyah Kato album)\") in January 2016. The song peaked at number 30 in Japan.. Singer and actor Anthony Ramos covered the song for the 2020 DreamWorks Animation movie Trolls World Tour for his character. The track was also sampled and interpolated in the Drake \"Drake (musician)\") and 21 Savage song \"Circo Loco\" on their album, Her [.…"
+      },
+      {
+        "id": "tavily:https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
+        "source": "tavily",
+        "url": "https://www.musicradar.com/news/the-daft-punks-one-more-time-sample-creator-has-never-received-any-royalty-payments",
+        "excerpt": "It might be one of their biggest hits, but the main hook in Daft Punk’s One More Time is powered by a brass sample from a little-known disco record. However, it turns out that Eddie Johns, the artist who wrote the song that was sampled, has never received any royalties from the French electronic music duo. [...] The sampled track, More Spell On You, was taken from a 1979 album of the same name. Once you’ve heard it, its importance to One More Time’s success becomes clear - the song’s lead hook …"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Daft-Punk/One-More-Time",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Daft-Punk/One-More-Time",
+        "excerpt": "\"One More Time\" contains samples of \"More Spell on You\" by Eddie Johns, \"Overdub Sensation - Track 31\" by Ueberschall, \"Is It All Over My Face? (Female Vocal)\""
+      },
+      {
+        "id": "tavily:https://www.youtube.com/watch?v=5QwOpRh-IfI",
+        "source": "tavily",
+        "url": "https://www.youtube.com/watch?v=5QwOpRh-IfI",
+        "excerpt": "# Sample Breakdown: Daft Punk - One More Time ## Channel: TRACKLIB (verified) 817K subscribers 80K likes ### Description 2,148,399 views Posted: 2020-02-21 Inspired? Access samples like this one 🔌 [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one affordable subscription. The service has been used to find and clear samples for releases by Kendrick Lamar, Drake, Future, Kaytra…"
+      },
+      {
+        "id": "tavily:https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
+        "source": "tavily",
+        "url": "https://www.youtube.com/shorts/Q-ycwVZB_ZQ",
+        "excerpt": "Makes it look easy but then the ear to pull out those samples and modify it into an entirely new song is something amazing.Read more"
+      },
+      {
+        "id": "tavily:https://www.watchmojo.com/articles/the-history-of-daft-punk",
+        "source": "tavily",
+        "url": "https://www.watchmojo.com/articles/the-history-of-daft-punk",
+        "excerpt": "## \"Tron: Legacy\" Daft Punk then returned to the studio to work on new material. In 2009, they composed the score for “Tron: Legacy,” a movie in which they would make a cameo. Both the soundtrack and the film were released in December 2010. ## House Music [...] ## Second Album The group‘s sophomore effort was 2001’s Discovery. This record’s sound featured a more disco and synth-pop infused style than their debut, and sampled songs from the 70s and 80s. The high-charting album also generated sev…"
+      },
+      {
+        "id": "tavily:https://grumpfox.neocities.org/artists/daftpunk",
+        "source": "tavily",
+        "url": "https://grumpfox.neocities.org/artists/daftpunk",
+        "excerpt": "\"One More Time\" which will stand as their ultimate statement. It's a blossoming of pure euphoria, where for around five and a half minutes everything seems possible, the opportunities are endless and everything calls for joyous celebration, inviting the listener to the dancefloor with its triumphant horns and the insistent backbeat to share that feeling with everyone else around you for just one more song. It is undistilled joie de vivre and each time it plays it sounds just as fresh and [...] …"
+      },
+      {
+        "id": "tavily:https://tron.fandom.com/wiki/Daft_Punk",
+        "source": "tavily",
+        "url": "https://tron.fandom.com/wiki/Daft_Punk",
+        "excerpt": "DJs Marc Mysterio and Téo Moss released a cover version of \"One More Time\" featuring the vocals of Yardi Don. Daft Punk are playable characters in the video"
+      },
+      {
+        "id": "tavily:http://www.warpedfactor.com/2021/03/daft-punk-at-movies.html",
+        "source": "tavily",
+        "url": "http://www.warpedfactor.com/2021/03/daft-punk-at-movies.html",
+        "excerpt": "Mar 4, 2021 — Chris Morley takes a whistle-stop trip around the world of Daft Punk's various contributions to film. daft+punk.Read more"
+      },
+      {
+        "id": "tavily:https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
+        "source": "tavily",
+        "url": "https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless",
+        "excerpt": "× A representative for Daft Punk confirmed that they have, for years, paid royalties to officially license the sample of Johns’ song. “‘One More Time’ contains extracts of the recording ‘More Spell on You.’” the representative said. “Daft Life LTD. is paying royalties twice a year to the producer and owner of ‘More Spell on You.’ … Per the agreement it is the duty of the producer of ‘More Spell on You’ to pay (part of such) semiannual payments to Eddie Johns.” [...] The rights to “More Spell on…"
+      },
+      {
+        "id": "musicbrainz:recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/21ad70d5-f123-4546-9cf9-0a672500d185",
+        "excerpt": "MusicBrainz recording \"1 more dime (fvlcrvm rwrk)\" by dftpnk, first released 2018-09-05."
+      },
+      {
+        "id": "musicbrainz:recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52",
+        "excerpt": "MusicBrainz recording \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers, first released 2011."
+      },
+      {
+        "id": "musicbrainz:recording/9d387165-a649-44ae-a388-af256f13b410",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/9d387165-a649-44ae-a388-af256f13b410",
+        "excerpt": "MusicBrainz recording \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk, first released 2017-12-08."
+      },
+      {
+        "id": "musicbrainz:recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/63845dcd-526a-424d-bd1f-347b4b9bfa16",
+        "excerpt": "MusicBrainz recording \"One More Time (Uwe Heinrich Adler remix)\" by Daft Punk, first released 2011-08-05."
+      },
+      {
+        "id": "musicbrainz:recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/a23583f6-7e90-43ca-80df-a616df69cde1",
+        "excerpt": "MusicBrainz recording \"One Whore Time\" by Moustiluigi Random, first released 2021-12-25."
+      },
+      {
+        "id": "musicbrainz:recording/1da61e7a-d61d-4538-bd75-63464988923f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/1da61e7a-d61d-4538-bd75-63464988923f",
+        "excerpt": "MusicBrainz recording \"Circo Loco\" by Drake & 21 Savage, first released 2022-11-04."
+      },
+      {
+        "id": "musicbrainz:recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/bbb58075-3e35-4bcc-a465-3e0edc665673",
+        "excerpt": "MusicBrainz recording \"DAFT\" by TAPS, first released 2013-04-20."
+      },
+      {
+        "id": "musicbrainz:recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/5611aa4c-1ddd-4044-b573-3344405e8536",
+        "excerpt": "MusicBrainz recording \"Get It Get It\" by Girl Talk, first released 2010-11-15."
+      },
+      {
+        "id": "musicbrainz:recording/534c1922-0005-4232-857a-c7c0b1da473d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/534c1922-0005-4232-857a-c7c0b1da473d",
+        "excerpt": "MusicBrainz recording \"Give u kawaii!\" by .｡*ﾟ+.*.𝓒𝓾𝓻𝓻𝓮𝓷｡+..｡*ﾟ+, first released 2021-10-02."
+      },
+      {
+        "id": "musicbrainz:recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14",
+        "excerpt": "MusicBrainz recording \"Into the Groove (remix)\" by Discobuster, first released 2002."
+      },
+      {
+        "id": "musicbrainz:recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/7270528f-8f8d-4fc3-bc94-6bfe336907cb",
+        "excerpt": "MusicBrainz recording \"LOVER’S TIME\" by Cheryl Stelli, first released 2025-09-20."
+      },
+      {
+        "id": "musicbrainz:recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+        "excerpt": "MusicBrainz recording \"More Spell on You\" by Eddie Johns, first released 1979-05."
+      },
+      {
+        "id": "musicbrainz:recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/d177a9af-0d6c-4197-9411-dcb00f3977a1",
+        "excerpt": "MusicBrainz recording \"Thraxxpunkk\" by POLO PERKS <3 <3 <3 feat. Feb Phonzo, first released 2021-11-17."
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable"
+      }
+    ],
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 4
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "More Spell on You",
+          "artist": "Eddie Johns",
+          "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "1 more dime (fvlcrvm rwrk)",
+          "artist": "dftpnk",
+          "mbid": "21ad70d5-f123-4546-9cf9-0a672500d185"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "one more karkat",
+          "artist": "jade",
+          "mbid": "f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "One More Time (Daft Punk) / Swoon (Chemical Brothers)",
+          "artist": "Daft Punk & The Chemical Brothers",
+          "mbid": "63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "One More Time (TeeVex remix)",
+          "artist": "TeeVex & Daft Punk",
+          "mbid": "9d387165-a649-44ae-a388-af256f13b410"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Circo Loco",
+          "artist": "Drake & 21 Savage",
+          "mbid": "1da61e7a-d61d-4538-bd75-63464988923f"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "DAFT",
+          "artist": "TAPS",
+          "mbid": "bbb58075-3e35-4bcc-a465-3e0edc665673"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Get It Get It",
+          "artist": "Girl Talk",
+          "mbid": "5611aa4c-1ddd-4044-b573-3344405e8536"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Into the Groove (remix)",
+          "artist": "Discobuster",
+          "mbid": "b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "dc71fc63-0973-4208-9e5a-321d3b4c96fd",
+        "text": "MusicBrainz identifies this recording of “One More Time” by Daft Punk as first released in 2000.",
+        "about": "track",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7"
+        ]
+      },
+      {
+        "id": "7456e002-5963-48d9-a072-07231e59b2a6",
+        "text": "The recording samples “More Spell on You” by Eddie Johns. The Los Angeles Times reports that the track contains extracts from that recording.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+          "tavily:https://www.latimes.com/entertainment-arts/music/story/2021-05-06/daft-punk-one-more-time-eddie-johns-homeless"
+        ]
+      },
+      {
+        "id": "ed16a5db-756b-46cc-aedd-45059634bed5",
+        "text": "\"One More Time\" by Daft Punk samples \"More Spell on You\" by Eddie Johns.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/samples/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb"
+        ]
+      },
+      {
+        "id": "f54af169-a4a3-4395-81f3-4dfdd268b013",
+        "text": "\"One More Time\" by Daft Punk is remixed in \"1 more dime (fvlcrvm rwrk)\" by dftpnk.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/21ad70d5-f123-4546-9cf9-0a672500d185"
+        ]
+      },
+      {
+        "id": "51240e60-9426-4bbe-8afd-3069e58f3f92",
+        "text": "\"One More Time\" by Daft Punk is remixed in \"one more karkat\" by jade.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/f4ea1af6-52b9-43ee-b31f-88f614cc1b7d"
+        ]
+      },
+      {
+        "id": "019375de-50b9-4e7f-b3f2-81af54e83d59",
+        "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (Daft Punk) / Swoon (Chemical Brothers)\" by Daft Punk & The Chemical Brothers.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/63f639f6-b0a4-4b13-aadd-c65eb3a5ab52"
+        ]
+      },
+      {
+        "id": "252699bf-5590-4065-b014-87b36dcade46",
+        "text": "\"One More Time\" by Daft Punk is remixed in \"One More Time (TeeVex remix)\" by TeeVex & Daft Punk.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/remixed-by/recording/9d387165-a649-44ae-a388-af256f13b410"
+        ]
+      },
+      {
+        "id": "344e4c04-e626-4018-b481-4aba657fc88e",
+        "text": "\"One More Time\" by Daft Punk is sampled in \"Circo Loco\" by Drake & 21 Savage.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/1da61e7a-d61d-4538-bd75-63464988923f"
+        ]
+      },
+      {
+        "id": "abefc81e-1441-4533-a9f8-7f0f8ebc1549",
+        "text": "\"One More Time\" by Daft Punk is sampled in \"DAFT\" by TAPS.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/bbb58075-3e35-4bcc-a465-3e0edc665673"
+        ]
+      },
+      {
+        "id": "db99c54d-3e2a-4be7-a5c4-38d2be9f6bf4",
+        "text": "\"One More Time\" by Daft Punk is sampled in \"Get It Get It\" by Girl Talk.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/5611aa4c-1ddd-4044-b573-3344405e8536"
+        ]
+      },
+      {
+        "id": "1baa2d4c-bf9c-40fa-ba8d-a14ce70c44a2",
+        "text": "\"One More Time\" by Daft Punk is sampled in \"Into the Groove (remix)\" by Discobuster.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7/sampled-by/recording/b30a12a2-5f94-49d7-aa7b-22a8ea03ab14"
+        ]
+      },
+      {
+        "id": "07947ed5-c793-4dea-84bb-6efaa2560c0b",
+        "text": "The work \"One More Time\" is covered by \"One More Time\" by The London Elektricity Big Band.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/ac096174-a4dc-43ff-8077-291591990e9e"
+        ]
+      },
+      {
+        "id": "34242a04-7687-4248-b778-260f24cee66f",
+        "text": "The work \"One More Time\" is covered by \"Daft Punk - One More Time\" by MrSolidSnake745’s Floppy Drive Orchestra.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/167453a2-15ef-48d0-b021-62b7bc90b86c"
+        ]
+      },
+      {
+        "id": "45f097c3-967b-4c36-a273-0156bfe15871",
+        "text": "The work \"One More Time\" is covered by \"Daft Punk ‘One More Time’\" by Walt Ribeiro.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/21a15d17-c7cf-427c-a370-609cf09a4205"
+        ]
+      },
+      {
+        "id": "cbb2a1cb-e206-4f3a-9dc1-fc8d1836e285",
+        "text": "The work \"One More Time\" is covered by \"Daft Punk’s Discovery, but with the SM64 soundfont [PROOF OF CONCEPT]\" by verymilkee.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4bb47ffc-9006-32cf-8aa9-e213334550dc/covered-by/recording/78868736-8604-4e48-98fd-325131a946b7"
+        ]
+      },
+      {
+        "id": "e61c00da-1e46-43a0-b327-a6c39117ffc5",
+        "text": "\"One More Time\" by Daft Punk appears on the official album \"Discovery\" (2001-02-26).",
+        "about": "track",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:release/bd3bb36e-16c8-438f-850e-dfbf4d1478f0"
+        ]
+      }
+    ],
+    "latencyMs": 23211,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 16453,
+      "outputTokens": 1630,
+      "reasoningTokens": 284,
+      "usd": 0.009211
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1707,
+        "outputTokens": 197,
+        "usd": 0.000297,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1974,
+        "outputTokens": 190,
+        "usd": 0.000322,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 10946,
+        "outputTokens": 986,
+        "usd": 0.001747,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1826,
+        "outputTokens": 257,
+        "usd": 0.006845,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "ad9b2eb6-c458-402c-a2ff-31cac29e5a1a",
+    "isrc": "GBAAA9700049",
+    "title": "Bitter Sweet Symphony",
+    "artist": "The Verve",
+    "query": "Bitter Sweet Symphony The Verve",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:32:51.014Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "GBUM71601816",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626",
+      "spotifyId": "0Dmao2oWlAZzIBX2Q1B5AH",
+      "title": "Bitter Sweet Symphony - Remastered 2016",
+      "artist": "The Verve"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked",
+      "candidates": 5,
+      "chosen": {
+        "id": "0Dmao2oWlAZzIBX2Q1B5AH",
+        "title": "Bitter Sweet Symphony - Remastered 2016",
+        "artist": "The Verve"
+      }
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 171.15,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz recording \"Bitter Sweet Symphony\" by The Verve (5:58), ISRC GBUM71601816, first released 1997-06-01."
+      },
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/remixed-by/recording/349e334d-0c8e-4ec3-828a-7917e1dc134d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve is remixed in \"Bitter Sweet Symphony (James Lavelle remix)\" by The Verve."
+      },
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/samples/recording/41d6be73-7bc4-42dd-b906-44c788d84c7f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Andrew Oldham Orchestra."
+      },
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/b4caad35-c12d-42b4-8c8d-c7129de99960",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve is sampled in \"Bittersweet Genesis (Problemaddicts vs The Verve)\" by DJ Nerd42."
+      },
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/33a00dd4-9a59-46cc-95c6-981f2f832f9d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve is sampled in \"Juicy Cuts 7\" by Juicy Cuts."
+      },
+      {
+        "id": "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/10065674-25c3-449e-9a12-50c1d945de84",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve is sampled in \"Once Again\" by Girl Talk."
+      },
+      {
+        "id": "musicbrainz:release/51c91d25-78ab-4dd5-aa6d-b168ba4f2034",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/release/51c91d25-78ab-4dd5-aa6d-b168ba4f2034",
+        "excerpt": "MusicBrainz: \"Bitter Sweet Symphony\" by The Verve appears on the official album \"Urban Hymns\" (1997-09-29)."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/f5535208-12c3-445b-8941-1b40d3e9bdfe",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Coldplay feat. Richard Ashcroft."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/5ec0154d-f173-4d37-8d44-d3b754646e4b",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bittersweet Symphony\" by Coldplay with Richard Ashcroft."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/a7bb1d31-d284-43e8-ba4b-e8fa7696e1d5",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Eel House at Chantilly - May, 31 201\" by Eel House."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/c6d103be-cb90-4bc5-b957-098c7bcb4862",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by E^ST."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/07a77273-9ed5-440c-b531-3849fb86076d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by London Grammar."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/8241fe5e-c270-4c19-98f9-07749185de80",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Miami DJ Collective."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/b48e4241-30fd-44ee-9c64-7586e416a920",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Ornette."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/8971f423-8f5b-42a0-80f3-72a9c8691cba",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by One Nation."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/eea8e3e2-3863-466a-b2ff-15a7a33493f0",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Jochen Distelmeyer."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/290f4139-eca5-4ad7-a40e-c75d89a5878a",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by The Andrew Oldham Orchestra and Friends."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/20a8ceb7-3498-40af-a371-20c624d4b698",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by D-Me."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/8c19acf7-5f47-49f4-97c0-0d2ca5081055",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by David Garrett."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/c467cdfe-f1d9-45d1-ae00-b068a1ec6a69",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Final Virus."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/9dd3b7bd-1065-4cb0-a2cd-16c84a64c561",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Leo Moracchioli."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/07107c97-9d7d-4a97-bebc-8b752055260b",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Luca Stricagnoli."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/3eacb81f-7c4a-462f-95a8-9ca87c73fd03",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Annett Louisan."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/5f14568c-58c1-42df-b156-c1c934b3e732",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Dylan Rodrigue feat. Sie Sie Benhoff."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/9df2f583-8fea-466c-a152-d839ca23c4ab",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by First to Eleven."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/2e419248-16ee-4de1-8a6e-7977c9e9c683",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by James Fairchild, Leland Orr, Steve Pettinger, Danny Morgan & Miles Davenport."
+      },
+      {
+        "id": "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/c0a2eafc-95ce-4766-a363-bda133e49b74",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9",
+        "excerpt": "MusicBrainz: the work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Boyce Avenue."
+      },
+      {
+        "id": "genius:work/song/50429/samples/2248838",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Andrew Oldham Orchestra."
+      },
+      {
+        "id": "genius:work/song/50429/samples/310435",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Rolling Stones."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/4436574",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Ruby Song\" by Insane Clown Posse."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/8040010",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Prince of Persia\" by KDM Shey & BOBBY SAN."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/56931",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"New York Bittersweet Symphony\" by A$AP Rocky."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/7996705",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Back To The Roots\" by Makebo & Amonita (producer)."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/7074459",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Liike on lääke\" by JVG."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/202132",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Time Will Only Tell\" by Eddy B & Tim Gunter."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/6210844",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Admix\" by Galactic Hole."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/5926253",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Wonderwall But Liam Keeps Singing the Wrong Song\" by William Maranci."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/5361264",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"変化するセー (Henka suru se)\" by Tiger Tape Collections."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/5042706",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Magnolia\" by Young Thug."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/5039892",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Hold It Down\" by StankNasty (Ft. Mikey B)."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/4832822",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Brush Your Bitter Sweet Shoulders Off\" by AL-B3."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/3268695",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Soldaten 2.0\" by Kontra K."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/3087084",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Sellin’ Yayo\" by Koopsta Knicca."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/2418633",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Bitter Sweet\" by Lil Yachty."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/1430574",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Once Again\" by Girl Talk."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/44714",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Triple Six Club House\" by Lord Infamous, Tear Da Club Up Thugs & Three 6 Mafia."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/9284142",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Bittersweet Goodbye\" by Issey Cross."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/9161186",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Adrenaline Rush\" by Sigma (Ft. MORGAN (UK))."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/8114049",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"wa7da mn million - واحدة من مليون\" by Marwan Moussa - مروان موسى."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/5313246",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Congratulations\" by Chris Brown (Ft. Chanel West Coast)."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/8802945",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Bittersweet Symphony (The Verve Retake)\" by Ren."
+      },
+      {
+        "id": "genius:work/song/50429/sampled-by/9264277",
+        "source": "genius",
+        "url": "https://genius.com/The-verve-bitter-sweet-symphony-lyrics",
+        "excerpt": "Genius: the song \"Bitter Sweet Symphony\" by The Verve is sampled in \"Memories\" by ToTheMoon & Kelvyn Colt."
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/Bitter_Sweet_Symphony",
+        "excerpt": "The Verve developed \"Bitter Sweet Symphony\" from a sample \"Sampling (music)\") from a 1965 version of the Rolling Stones song \"The Last Time \"The Last Time (Rolling Stones song)\")\" by the Andrew Oldham Orchestra, adding vocals, strings, guitar and percussion. After a lawsuit by the Rolling Stones' former manager, Allen Klein, the Verve relinquished all royalties to the Rolling Stones members Mick Jagger and Keith Richards, who were also added to the songwriting credits. In 2019, ten years after …"
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Urban_Hymns",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/Urban_Hymns",
+        "excerpt": "5. ↑ As early as the Verve's debut single, \"All in the Mind \"All in the Mind (song)\")\" (1992), Ashcroft was fascinated by the idea of sampling. He said there were some elements in compositions that were unable to be ignored, particular song forms and noises that, to him, were timeless. In the context of hip-hop, samples were employed as the song's hook \"Hook (music)\"). For \"Bitter Sweet Symphony\", the song's string refrain – the most memorable section of it – was written by the Verve. McCabe [.…"
+      },
+      {
+        "id": "tavily:https://songmakers.com.au/vet/copyright/sampling",
+        "source": "tavily",
+        "url": "https://songmakers.com.au/vet/copyright/sampling",
+        "excerpt": "### The fallout Mick Jagger and Keith Richards (from the Rolling Stones) sued The Verve for copyright infringement – The Verve lost. In 1999, Andrew Oldham (who arranged the orchestra part) also sued – The Verve lost again! As a result, Mick Jagger & Keith Richards (from The Rolling Stones), and Andrew Oldham collected 100% of the royalties for Bitter Sweet Symphony for over 20 years—even though The Verve wrote the lyrics and most of the song. ### A Happy Ending (Sort Of) [...] In 2018, after 2…"
+      },
+      {
+        "id": "tavily:https://jonchaisson.com/tag/hmv",
+        "source": "tavily",
+        "url": "https://jonchaisson.com/tag/hmv",
+        "excerpt": "The Verve, “Bitter Sweet Symphony” single, released 16 June 1997. Yes, that video and song! This one dropped a good couple of months before what would be both their breakthrough and their break-up album, not to mention their hugest selling hit in which they made pretty much nil due to an uncleared sample. And yet it remains an alternative favorite to this day, a late-90s update on the classic GenX my life is shit theme in post-punk and early alternative rock. [...] The Verve, Urban Hymns, relea…"
+      },
+      {
+        "id": "tavily:https://www.npr.org/sections/world-cafe/2022/06/30/1108924049/25-year-old-albums-released-in-1997",
+        "source": "tavily",
+        "url": "https://www.npr.org/sections/world-cafe/2022/06/30/1108924049/25-year-old-albums-released-in-1997",
+        "excerpt": "Accessibility links Keyboard shortcuts for audio player What did 1997 sound like? These albums have been around for 25 years. : World Cafe Here at World Cafe, we're celebrating music that's been around for a quarter-century, including a landmark release from Radiohead, a seminal song from The Verve and a comeback from Bob Dylan. ## World Cafe Essential and Emerging Artists World Cafe Playlist Sense Of Place Podcast Latin Roots Twitter Facebook Instagram ### World Cafe [...] Today, we're listeni…"
+      },
+      {
+        "id": "tavily:https://pickinguprocks.com/2021/02",
+        "source": "tavily",
+        "url": "https://pickinguprocks.com/2021/02",
+        "excerpt": "all of humanity). Like most people of my generation (X), I was pretty familiar with the aforementioned hits but admit that was solely down to old school osmosis…meaning that every car journey of my childhood was tuned into and soundtracked by sugary sweet AM radio. Thus the malleable little kid brains of my brother and I were exposed to this sweet but sinister musical asbestos on a daily basis as it reverberated through our insanely cliched succession of ’70s family vehicles: the requisite [...…"
+      },
+      {
+        "id": "tavily:https://downbeat.com/reviews/editorspicks/instagram.com/newmemphiscolorways",
+        "source": "tavily",
+        "url": "https://downbeat.com/reviews/editorspicks/instagram.com/newmemphiscolorways",
+        "excerpt": "About|Terms of Use|Privacy Copyright © 2026 Maher Publications. All rights reserved. DownBeat is an internationally registered trademark of Maher Publications. [...] For his latest two releases, Kevin Sun I. and Kevin Sun II., the tenor saxophonist proves the point. On I., he lays out a studio-driven set of eight songs that were workshopped over some 18 months at the Lowlands Bar in Brooklyn, New York, with guitarist Max Light, bassist Walter Stinson and drummer Jon Starks. The album features g…"
+      },
+      {
+        "id": "musicbrainz:recording/349e334d-0c8e-4ec3-828a-7917e1dc134d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/349e334d-0c8e-4ec3-828a-7917e1dc134d",
+        "excerpt": "MusicBrainz recording \"Bitter Sweet Symphony (James Lavelle remix)\" by The Verve, first released 1997-09-01."
+      },
+      {
+        "id": "musicbrainz:recording/41d6be73-7bc4-42dd-b906-44c788d84c7f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/41d6be73-7bc4-42dd-b906-44c788d84c7f",
+        "excerpt": "MusicBrainz recording \"The Last Time\" by The Andrew Oldham Orchestra, first released 1965."
+      },
+      {
+        "id": "musicbrainz:recording/b4caad35-c12d-42b4-8c8d-c7129de99960",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/b4caad35-c12d-42b4-8c8d-c7129de99960",
+        "excerpt": "MusicBrainz recording \"Bittersweet Genesis (Problemaddicts vs The Verve)\" by DJ Nerd42, first released 2010-10-16."
+      },
+      {
+        "id": "musicbrainz:recording/33a00dd4-9a59-46cc-95c6-981f2f832f9d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/33a00dd4-9a59-46cc-95c6-981f2f832f9d",
+        "excerpt": "MusicBrainz recording \"Juicy Cuts 7\" by Juicy Cuts, first released 1998-06-01."
+      },
+      {
+        "id": "musicbrainz:recording/10065674-25c3-449e-9a12-50c1d945de84",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/10065674-25c3-449e-9a12-50c1d945de84",
+        "excerpt": "MusicBrainz recording \"Once Again\" by Girl Talk, first released 2006-05-08."
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable"
+      }
+    ],
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 4
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "The Last Time",
+          "artist": "The Andrew Oldham Orchestra",
+          "mbid": "41d6be73-7bc4-42dd-b906-44c788d84c7f"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/samples/recording/41d6be73-7bc4-42dd-b906-44c788d84c7f"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Bitter Sweet Symphony (James Lavelle remix)",
+          "artist": "The Verve",
+          "mbid": "349e334d-0c8e-4ec3-828a-7917e1dc134d"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/remixed-by/recording/349e334d-0c8e-4ec3-828a-7917e1dc134d"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Bittersweet Genesis (Problemaddicts vs The Verve)",
+          "artist": "DJ Nerd42",
+          "mbid": "b4caad35-c12d-42b4-8c8d-c7129de99960"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/b4caad35-c12d-42b4-8c8d-c7129de99960"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Juicy Cuts 7",
+          "artist": "Juicy Cuts",
+          "mbid": "33a00dd4-9a59-46cc-95c6-981f2f832f9d"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/33a00dd4-9a59-46cc-95c6-981f2f832f9d"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Once Again",
+          "artist": "Girl Talk",
+          "mbid": "10065674-25c3-449e-9a12-50c1d945de84"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/10065674-25c3-449e-9a12-50c1d945de84"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "6c97fb43-70e4-40ba-ae5e-dcfab911fa5b",
+        "text": "The Verve’s recording samples “The Last Time” by The Andrew Oldham Orchestra, a relationship also noted in the recording data.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/samples/recording/41d6be73-7bc4-42dd-b906-44c788d84c7f"
+        ]
+      },
+      {
+        "id": "fbfe3d50-a6ff-4f41-83e5-24a35b5312c2",
+        "text": "MusicBrainz records a cover of the song by Coldplay featuring Richard Ashcroft. This relationship concerns the composition, not necessarily this specific recording.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/f5535208-12c3-445b-8941-1b40d3e9bdfe"
+        ]
+      },
+      {
+        "id": "26f0568f-78b4-4437-84d1-a365a7663a83",
+        "text": "\"Bitter Sweet Symphony\" by The Verve samples \"The Last Time\" by The Andrew Oldham Orchestra.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/samples/recording/41d6be73-7bc4-42dd-b906-44c788d84c7f"
+        ]
+      },
+      {
+        "id": "c619ddfe-9ed1-4f63-98b1-9875c38bc931",
+        "text": "\"Bitter Sweet Symphony\" by The Verve is remixed in \"Bitter Sweet Symphony (James Lavelle remix)\" by The Verve.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/remixed-by/recording/349e334d-0c8e-4ec3-828a-7917e1dc134d"
+        ]
+      },
+      {
+        "id": "2a61e2e4-615c-43f5-a575-26b53f283eb4",
+        "text": "\"Bitter Sweet Symphony\" by The Verve is sampled in \"Bittersweet Genesis (Problemaddicts vs The Verve)\" by DJ Nerd42.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/b4caad35-c12d-42b4-8c8d-c7129de99960"
+        ]
+      },
+      {
+        "id": "dee01f7c-33f6-4678-b590-1b7a644cb97f",
+        "text": "\"Bitter Sweet Symphony\" by The Verve is sampled in \"Juicy Cuts 7\" by Juicy Cuts.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/33a00dd4-9a59-46cc-95c6-981f2f832f9d"
+        ]
+      },
+      {
+        "id": "fe47f6b2-0d7c-461f-9043-d8ac86d8fb67",
+        "text": "\"Bitter Sweet Symphony\" by The Verve is sampled in \"Once Again\" by Girl Talk.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626/sampled-by/recording/10065674-25c3-449e-9a12-50c1d945de84"
+        ]
+      },
+      {
+        "id": "e8af2f0f-050b-4227-9b1d-c7c4f54661c4",
+        "text": "The work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by Coldplay feat. Richard Ashcroft.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/f5535208-12c3-445b-8941-1b40d3e9bdfe"
+        ]
+      },
+      {
+        "id": "375156d9-e38f-45de-8122-b6ae6246351d",
+        "text": "The work \"Bitter Sweet Symphony\" is covered by \"Bittersweet Symphony\" by Coldplay with Richard Ashcroft.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/5ec0154d-f173-4d37-8d44-d3b754646e4b"
+        ]
+      },
+      {
+        "id": "bb3e603a-2397-4c6b-8018-780480237739",
+        "text": "The work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by E^ST.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/c6d103be-cb90-4bc5-b957-098c7bcb4862"
+        ]
+      },
+      {
+        "id": "8dae09c9-8d9a-457c-b8d0-d44b4e76d734",
+        "text": "The work \"Bitter Sweet Symphony\" is covered by \"Bitter Sweet Symphony\" by London Grammar.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/b148c2ee-9575-3ef4-9b32-36cb7f59c2e9/covered-by/recording/07a77273-9ed5-440c-b531-3849fb86076d"
+        ]
+      },
+      {
+        "id": "ccc3e71f-9407-44fe-93ef-8590f3ead950",
+        "text": "\"Bitter Sweet Symphony\" by The Verve appears on the official album \"Urban Hymns\" (1997-09-29).",
+        "about": "track",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:release/51c91d25-78ab-4dd5-aa6d-b168ba4f2034"
+        ]
+      }
+    ],
+    "latencyMs": 19904,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 16858,
+      "outputTokens": 1405,
+      "reasoningTokens": 217,
+      "usd": 0.008836
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1578,
+        "outputTokens": 161,
+        "usd": 0.000263,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1825,
+        "outputTokens": 100,
+        "usd": 0.000256,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 11975,
+        "outputTokens": 846,
+        "usd": 0.001783,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1480,
+        "outputTokens": 298,
+        "usd": 0.006534,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "cceb42a0-0770-490d-96c9-9836b6d5e1ba",
+    "isrc": "USBB40000359",
+    "title": "Juicy",
+    "artist": "The Notorious B.I.G.",
+    "query": "Juicy The Notorious B.I.G.",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:32:22.091Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "USBB40706422",
+      "mbid": "f9c4374a-042a-4eab-bb66-fd482b51ab92",
+      "spotifyId": "2AP7m2dBb8ULTx4Gc1rdMc",
+      "title": "Juicy",
+      "artist": "The Notorious B.I.G."
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked",
+      "candidates": 5,
+      "chosen": {
+        "id": "2AP7m2dBb8ULTx4Gc1rdMc",
+        "title": "Juicy",
+        "artist": "The Notorious B.I.G."
+      }
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 97.36,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "musicbrainz:track/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92",
+        "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G. (4:45), ISRC USBB40706422, first released 2007-03-05."
+      },
+      {
+        "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes."
+      },
+      {
+        "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub."
+      },
+      {
+        "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by The Lullabeats."
+      },
+      {
+        "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore."
+      },
+      {
+        "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (The Notorious B.I.G. cover)\" by John That."
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy",
+        "excerpt": "\"Juicy\" contains samples of \"Juicy Fruit (Fruity Instrumental Mix)\" by Mtume, \"Rappin' Duke\" by Rappin' Duke and \"Juicy Fruit\" by Mtume. Who produced \"Juicy\" by"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./samples",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/The-Notorious-B.I.G./samples",
+        "excerpt": "Hypnotize (1997) · Big Poppa (1994) · Juicy (1994) by The Notorious B.I.G. feat. Total · Gimme the Loot (1994) · One More Chance / Stay With Me (Remix) (1994) by"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G.",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/The-Notorious-B.I.G.",
+        "excerpt": "Total sampled Juicy Fruit (Fruity Instrumental Mix) by Mtume (1983) Rappin' Duke by Rappin' Duke (1985) was sampled in Swish Swish by Katy Perry feat. Nicki"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy-(Remix)",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy-(Remix)",
+        "excerpt": "\"Juicy (Remix)\" contains samples of \"Love Rap\" by Spoonie Gee and The Treacherous Three and \"Rubber Jam\" by The Rubber Band. Who produced \"Juicy (Remix)\" by The"
+      },
+      {
+        "id": "tavily:https://www.youtube.com/shorts/J7syCPQuA18",
+        "source": "tavily",
+        "url": "https://www.youtube.com/shorts/J7syCPQuA18",
+        "excerpt": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”"
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
+        "excerpt": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is…"
+      },
+      {
+        "id": "tavily:https://www.songfacts.com/facts/the-notorious-big/juicy",
+        "source": "tavily",
+        "url": "https://www.songfacts.com/facts/the-notorious-big/juicy",
+        "excerpt": "\"Juicy\" was Notorious B.I.G.'s first hit, kickstarting a fast rise to fame. He wrote almost all of his own songs, filling his tracks with clever and very considered wordplay. Many rappers like to freestyle in the studio, but Biggie would write and refine his lyrics. Music producer Pete Rock claims Sean \"Puffy\" Combs, who was executive producer for the Ready to Die album, stole the \"Juicy\" beat from him. Rock told Wax Poetics: [...] Ready to Die is the debut studio album by the Notorious B.I.G.,…"
+      },
+      {
+        "id": "tavily:https://www.imdb.com/name/nm0857263/trivia",
+        "source": "tavily",
+        "url": "https://www.imdb.com/name/nm0857263/trivia",
+        "excerpt": "He recorded and released \"Ready to Die\" in 1994. He recorded his sophomore album, \"Life After Death\" while alive. but it was released a mere two weeks after his"
+      },
+      {
+        "id": "tavily:https://www.youtube.com/watch?v=_JZom_gVfuw",
+        "source": "tavily",
+        "url": "https://www.youtube.com/watch?v=_JZom_gVfuw",
+        "excerpt": "### Description 749,810,128 views Posted: 2011-09-06 \"Juicy\" is the lead single from the 1994 debut album Ready to Die by The Notorious B.I.G. The track's production is built around a sample of the 1983 song \"Juicy Fruit\" by Mtume. The single reached No. 27 on the Billboard Hot 100. The autobiographical lyrics of The Notorious B.I.G. describe his past struggles and subsequent success in the hip hop industry. Directed by: Sean “Puffy” Combs [...] The Notorious B.I.G., also known as Biggie Smalls…"
+      },
+      {
+        "id": "tavily:https://www.youtube.com/watch?v=z6tJLSNFb7w",
+        "source": "tavily",
+        "url": "https://www.youtube.com/watch?v=z6tJLSNFb7w",
+        "excerpt": "[16:34] Meth Man later revealed that he was only paid $2500 for his verse, and he had to track Diddy down for months to receive his payment. [16:45] But speaking of Diddy, he was also heavily involved in shaping the album sound, including the song Juicy, which [16:53] was produced with Poke of the Track Masters. The idea for the song came from Diddy, who pushed for a melodic radio [17:01] record built around the sample of Juicy Fruit. [...] [5:36] in the summer of 1994. It's often said that Big…"
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      }
+    ],
+    "verifier": {
+      "judged": 12,
+      "unjudged": 0,
+      "restated": 4
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "cover",
+        "origin": "model",
+        "kind": "sourced",
+        "target": {
+          "title": "Juicy (The Notorious B.I.G. cover)",
+          "artist": "John That"
+        },
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "22105f93-c73f-4804-b9ce-ac01ffa907ee",
+        "text": "This MusicBrainz recording of “Juicy” by The Notorious B.I.G. runs 4:45 and was first released on March 5, 2007.",
+        "about": "track",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92"
+        ]
+      },
+      {
+        "id": "01c25afe-0e57-4e20-9cc6-7bdd5f10b839",
+        "text": "The song “Juicy” has been covered by Scott Bradlee's Postmodern Jukebox featuring Maiya Sykes and by Vitamin Dub.",
+        "about": "track",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
+        ]
+      },
+      {
+        "id": "f870966f-9755-4350-8703-680b49ddee79",
+        "text": "The song “Juicy” has also been covered by The Lullabeats, Beedle The Bardcore, and John That.",
+        "about": "track",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
+        ]
+      },
+      {
+        "id": "ac6fd8d4-40cc-4b48-9b96-1e7a35db8ded",
+        "text": "“Juicy” is reported to sample Mtume’s “Juicy Fruit,” including its “Fruity Instrumental Mix.”",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+        ]
+      },
+      {
+        "id": "483e3106-59fa-4f48-8971-5fc48ff502f8",
+        "text": "“Juicy” was the lead single from The Notorious B.I.G.’s 1994 debut album, Ready to Die.",
+        "about": "trivia",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.youtube.com/watch?v=_JZom_gVfuw"
+        ]
+      },
+      {
+        "id": "8a42be9a-64fb-4fca-a67f-1c18a779b9da",
+        "text": "The song has been covered by Scott Bradlee's Postmodern Jukebox featuring Maiya Sykes, Vitamin Dub, The Lullabeats, Beedle The Bardcore, and John That.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c",
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
+        ]
+      },
+      {
+        "id": "f14772cf-b6b9-4483-9a87-5ba185cde22c",
+        "text": "\"Juicy - The Notorious B.I.G.\" samples \"Juicy Fruit - Mtume (1983)\".",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": "partial",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+        ]
+      },
+      {
+        "id": "e7b3642b-5a05-488b-96af-d0591b1cd032",
+        "text": "\"Juicy (The Notorious B.I.G. cover) - John That\" is a cover of \"Juicy - The Notorious B.I.G.\".",
+        "about": "cover",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
+        ]
+      },
+      {
+        "id": "4f4328fc-d3ad-41c8-87eb-8c9e0b46d2f3",
+        "text": "The work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
+        ]
+      },
+      {
+        "id": "e78f9879-af00-4bbe-b153-eed4ee27106b",
+        "text": "The work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
+        ]
+      },
+      {
+        "id": "0acd81a0-3382-46eb-9f8c-57a2917deee3",
+        "text": "The work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
+        ]
+      },
+      {
+        "id": "df2cb5d7-1074-45c5-b7a5-3bb529dad618",
+        "text": "The work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
+        ]
+      }
+    ],
+    "latencyMs": 27624,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 13746,
+      "outputTokens": 3052,
+      "reasoningTokens": 600,
+      "usd": 0.018537
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1807,
+        "outputTokens": 176,
+        "usd": 0.000296,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 2047,
+        "outputTokens": 114,
+        "usd": 0.000288,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 6855,
+        "outputTokens": 1901,
+        "usd": 0.0018,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 3037,
+        "outputTokens": 861,
+        "usd": 0.016153,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "69e8042d-56e9-44ee-8438-e910f1aec506",
+    "isrc": "USWB19900178",
+    "title": "Dreams",
+    "artist": "Fleetwood Mac",
+    "query": "Dreams Fleetwood Mac",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:33:12.410Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "USWB11301111",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "spotifyId": "0ofHAoxe9vBkTCp2UQIavz",
+      "title": "Dreams - 2004 Remaster",
+      "artist": "Fleetwood Mac"
+    },
+    "clarification": {
+      "fired": true,
+      "answer": "top-ranked",
+      "candidates": 5,
+      "chosen": {
+        "id": "0ofHAoxe9vBkTCp2UQIavz",
+        "title": "Dreams - 2004 Remaster",
+        "artist": "Fleetwood Mac"
+      }
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 120.16,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "excerpt": "MusicBrainz recording \"Dreams\" by Fleetwood Mac (4:17), ISRC USWB11301111, first released 1977-02-04."
+      },
+      {
+        "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Autograf Remix)\" by Autograf."
+      },
+      {
+        "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Mingus Rude edit)\" by Fleetwood Mac."
+      },
+      {
+        "id": "musicbrainz:release/725a7242-21bc-47ec-81e7-327a14bc0130",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/release/725a7242-21bc-47ec-81e7-327a14bc0130",
+        "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac appears on the official album \"Rumours (super deluxe)\" (2013-01-25)."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Soul Asylum."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a5735047-a997-479d-a04e-8493f4462a4f",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Fleetwood Mac tribute)\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0cf895ef-5db8-4155-a79d-883e2a87daf1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0f225856-c074-4629-a0ee-2e587b53d6b8",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/fe6723ee-d8ca-44e0-95bf-7e29b2d55fbf",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4a423dfb-3008-4721-92ee-94df721cf8d6",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Modena 09 June 1998)\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/5088d070-8dc8-4e1e-b1e6-2aa88dad0f0e",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/18e1776d-9449-406a-af30-d2f0a93cda1c",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0497caf5-8503-4cc3-94bb-25e1aebbd8ef",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (extended pop mix)\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/2bf79ece-f09f-4aad-86e5-14694546e3d4",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (TFI Friday)\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/8b71eb53-827d-4c2d-95ea-87057f561703",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/72940e03-0d9d-4f51-9d37-fa907008284d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a999758e-c190-4783-a2b2-4a4966aa6dab",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/742ded01-fe87-4a93-88fe-cdccd8507d57",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/560f84fa-724a-4dac-a6ea-c825f840c739",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4538e95a-6b67-4db3-855c-6f8d9da08f6d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/c867dbe4-6abf-461c-b2fe-d3b4e5d4b677",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4e9bea1d-0fb6-40a1-a5ea-deff76c257c5",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/ac1177ce-2e75-44d9-b310-febe202cc27d",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Robin Pecknold."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/9e4fd4a7-9721-4c0d-adba-0db1ef989bc2",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Sara Evans with The Barker Family Band."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/6dc75e3d-ec2e-4be2-abf7-ea5c21015dc1",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Live from City Winery Nashville)\" by Sara Evans with The Barker Family Band."
+      },
+      {
+        "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/293510f0-71b8-4459-abac-10d2d9b46bc3",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+        "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Sleepy Singing\" by Nanashi Mumei."
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams",
+        "excerpt": "\"She\" by Sunspot Jonz feat. Mikah Nine sampled Fleetwood Mac's \"Dreams\". Listen to both songs on WhoSampled."
+      },
+      {
+        "id": "tavily:https://scholarcommons.sc.edu/cgi/viewcontent.cgi?article=8130&context=etd",
+        "source": "tavily",
+        "url": "https://scholarcommons.sc.edu/cgi/viewcontent.cgi?article=8130&context=etd",
+        "excerpt": "by GM Saylor · 2023 · Cited by 4 — WhoSampled.com is a user-generated site that pinpoints samples from songs, Fleetwood Mac's “Dreams” as one TikToker popularized the song cranberry juice. by"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Fleetwood-Mac/Dreams",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Fleetwood-Mac/Dreams",
+        "excerpt": "Sampled in 21 songs ; Post Malone's Hollywood Dreams / Comedown, Hollywood Dreams / Comedown · Post Malone ; Soul Clap's Dreams, Dreams · Soul Clap ; Crazy Town's ...Read more"
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/The_Chain",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/The_Chain",
+        "excerpt": "Mac song)\")\" \"Sands of Time \"Sands of Time (song)\")\" \"Sentimental Lady\" \"Did You Ever Love Me \"Did You Ever Love Me (Fleetwood Mac song)\")\" \"For Your Love\" \"Heroes Are Hard to Find \"Heroes Are Hard to Find (song)\")\" \"Warm Ways\" \"Over My Head \"Over My Head (Fleetwood Mac song)\")\" \"Rhiannon \"Rhiannon (song)\")\" \"Say You Love Me \"Say You Love Me (Fleetwood Mac song)\")\" \"Go Your Own Way\" \"Dreams \"Dreams (Fleetwood Mac song)\")\" \"Don't Stop \"Don't Stop (Fleetwood Mac song)\")\" \"You Make [...] | Songs |…"
+      },
+      {
+        "id": "tavily:https://somuchgreatmusic.com/2025/08/01/the-best-drum-intro-songs-ever",
+        "source": "tavily",
+        "url": "https://somuchgreatmusic.com/2025/08/01/the-best-drum-intro-songs-ever",
+        "excerpt": "‘Mother and Child Reunion’ – Paul Simon ‘Ballroom Blitz’ – Sweet ‘Burnout’ – Green Day ‘Young Folks’ – Peter Bjorn and John ‘Dreams’ – Fleetwood Mac ‘Hello I Love You’ – Doors ‘Take on Me’ – a-ha ‘Whip It’ – Devo ‘We’re Not Gonna Take It’ – Twisted Sister ‘Addicted to Love’ – Robert Palmer ‘Rock and Roll All Nite’ – Kiss ‘What You Need’ – INXS ‘Whatcha Gonna Do’ – Pablo Cruise ‘Hungry Heart’ – Bruce Springsteen & The E Street Band ‘Semi-Charmed Life’ – Third Eye Blind [...] ‘Swingtown’ – Steve …"
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Dreams_(Fleetwood_Mac_song)",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/Dreams_(Fleetwood_Mac_song)",
+        "excerpt": "The members of Fleetwood Mac were experiencing emotional upheavals while recording the Rumours album. Mick Fleetwood was going through a divorce, Christine McVie and John McVie were separating, while Lindsey Buckingham and Stevie Nicks were ending their eight-year relationship. \"We had to go through this elaborate exercise of denial,\" explained Buckingham to Blender \"Blender (magazine)\") magazine, \"keeping our personal feelings in one corner of the room while trying to be professional in the [.…"
+      },
+      {
+        "id": "tavily:https://www.thisdayinmusic.com/classic-albums/fleetwood-mac-rumours",
+        "source": "tavily",
+        "url": "https://www.thisdayinmusic.com/classic-albums/fleetwood-mac-rumours",
+        "excerpt": "The first sessions took place in Sausalito, just north of San Francisco, at the Record Plant, a well-appointed but secluded facility, where the band weren’t bothered by hangers-on. Ken Caillat, who had been working at LA’s Wally Heider recording studio, had previously mixed a radio broadcast for the band, and had stepped in to remix the single of “Rhiannon”. The band’s live engineer Richard Dashut, who had also worked on the white album, had been asked to supervise and engineer Fleetwood Mac’s …"
+      },
+      {
+        "id": "tavily:https://americansongwriter.com/behind-the-song-dreams-by-fleetwood-mac",
+        "source": "tavily",
+        "url": "https://americansongwriter.com/behind-the-song-dreams-by-fleetwood-mac",
+        "excerpt": "In 1976, hidden behind lush Victorian drapes, atop a black velvet bed in the back studio of Sausalito’s Record Plant, a devastated Stevie Nicks sat alone at a Fender Rhodes piano. The master lyricist, beloved as a folk-rock matriarch, spilled her heartache into “Dreams.” The classic track became one of four US Top 10 singles from Fleetwood Mac’s eleventh studio album, Rumours. ## Videos by American Songwriter [...] The two joined the McVie’s and founding member, Mick Fleetwood, in 1974 when the…"
+      },
+      {
+        "id": "tavily:https://www.rollingstone.com/feature/fleetwood-macs-rumours-10-things-you-didnt-know-121876",
+        "source": "tavily",
+        "url": "https://www.rollingstone.com/feature/fleetwood-macs-rumours-10-things-you-didnt-know-121876",
+        "excerpt": "By all accounts it was quite an inspiring space, done up in full-tilt Seventies style. “It was a black-and-red room, with a sunken pit in the middle where there was a piano, and a big black-velvet bed with Victorian drapes,” she recalled in Blender. “I sat down on the bed with my keyboard in front of me. I found a drum pattern, switched my little cassette player on and wrote ‘Dreams’ in about 10 minutes.” The simple repeated three-chord riff cast a hypnotic spell over an uncharacteristically [.…"
+      },
+      {
+        "id": "tavily:https://www.asktherightquestion.org/rumours-fleetwood-mac-the-making-of-classic-albums-documentary",
+        "source": "tavily",
+        "url": "https://www.asktherightquestion.org/rumours-fleetwood-mac-the-making-of-classic-albums-documentary",
+        "excerpt": "Largely recorded in California in 1976, it was produced by the band with Ken Caillat and Richard Dashut. The band wanted to expand on the commercial success of"
+      },
+      {
+        "id": "musicbrainz:recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+        "excerpt": "MusicBrainz recording \"Dreams (Autograf Remix)\" by Autograf, first released 2021-04-29."
+      },
+      {
+        "id": "musicbrainz:recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+        "excerpt": "MusicBrainz recording \"Dreams (Mingus Rude edit)\" by Fleetwood Mac, first released 2009-10-08."
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable"
+      }
+    ],
+    "verifier": {
+      "judged": 10,
+      "unjudged": 0,
+      "restated": 5
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Dreams (Autograf Remix)",
+          "artist": "Autograf",
+          "mbid": "a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "remix",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Dreams (Mingus Rude edit)",
+          "artist": "Fleetwood Mac",
+          "mbid": "6260b276-d975-4a8c-8ed1-4cb81a6de334"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "03ddc1eb-cb46-47d2-ac4a-517f10afafbb",
+        "text": "MusicBrainz lists Fleetwood Mac's recording of “Dreams” as first released on February 4, 1977.",
+        "about": "history",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b"
+        ]
+      },
+      {
+        "id": "8a9f7395-052a-40ee-b18a-07f5660f6ad6",
+        "text": "MusicBrainz records covers of the song “Dreams” by Soul Asylum and The Corrs, showing its life beyond Fleetwood Mac's recording.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd",
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4"
+        ]
+      },
+      {
+        "id": "f71ba4e1-47ca-4d14-a3b4-967d2e25f118",
+        "text": "Fleetwood Mac's recording has inspired at least two named reworks in the MusicBrainz relationship data: Autograf's “Dreams (Autograf Remix)” and “Dreams (Mingus Rude edit).”",
+        "about": "trivia",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+        ]
+      },
+      {
+        "id": "3c5a60c8-0cff-4f43-b603-955075c8a7f7",
+        "text": "\"Dreams - Soul Asylum\" is a cover of \"Dreams - 2004 Remaster - Fleetwood Mac\".",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": "partial",
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd"
+        ]
+      },
+      {
+        "id": "3eb236ea-e07e-4b17-97a2-31febba95827",
+        "text": "\"Dreams - The Corrs\" is a cover of \"Dreams - 2004 Remaster - Fleetwood Mac\".",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": "partial",
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4"
+        ]
+      },
+      {
+        "id": "ea0b014a-bf00-421a-965d-59b23745d90b",
+        "text": "\"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Autograf Remix)\" by Autograf.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+        ]
+      },
+      {
+        "id": "7dc2f088-fb05-4010-9245-6851b3d9f111",
+        "text": "\"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Mingus Rude edit)\" by Fleetwood Mac.",
+        "about": "sample",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+        ]
+      },
+      {
+        "id": "44e8e65e-d3a4-46b5-8ec9-1e97a039a9c1",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by Soul Asylum.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd"
+        ]
+      },
+      {
+        "id": "2e8bbc43-e4e7-4b66-b686-92c4d6560451",
+        "text": "The work \"Dreams\" is covered by \"Dreams (Fleetwood Mac tribute)\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a5735047-a997-479d-a04e-8493f4462a4f"
+        ]
+      },
+      {
+        "id": "e9048595-f605-4867-9eff-45b605c627b5",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4"
+        ]
+      },
+      {
+        "id": "69664cec-51a8-463b-8cbb-da93964d6b21",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0cf895ef-5db8-4155-a79d-883e2a87daf1"
+        ]
+      },
+      {
+        "id": "dd1d5af8-2e55-43a5-80f3-316fab08412d",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0f225856-c074-4629-a0ee-2e587b53d6b8"
+        ]
+      },
+      {
+        "id": "100f4a5a-b272-43cd-80f6-e66939448b7a",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/fe6723ee-d8ca-44e0-95bf-7e29b2d55fbf"
+        ]
+      },
+      {
+        "id": "f69b87f2-85cb-4358-974a-1d6e41c4ffc4",
+        "text": "The work \"Dreams\" is covered by \"Dreams (Modena 09 June 1998)\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4a423dfb-3008-4721-92ee-94df721cf8d6"
+        ]
+      },
+      {
+        "id": "dbbb83b2-dd11-4b7c-a8c7-7d29a55b5e1f",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/5088d070-8dc8-4e1e-b1e6-2aa88dad0f0e"
+        ]
+      },
+      {
+        "id": "28402060-a437-442a-8e5f-9d1b2e5f9819",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/18e1776d-9449-406a-af30-d2f0a93cda1c"
+        ]
+      },
+      {
+        "id": "00abde1d-eb78-42f3-ae50-e09c56c870d4",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/8b71eb53-827d-4c2d-95ea-87057f561703"
+        ]
+      },
+      {
+        "id": "1b78d809-d50b-486e-ac34-154a640b489f",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/72940e03-0d9d-4f51-9d37-fa907008284d"
+        ]
+      },
+      {
+        "id": "ea7d7ca0-cd42-4125-8fe7-c77b71682cd9",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a999758e-c190-4783-a2b2-4a4966aa6dab"
+        ]
+      },
+      {
+        "id": "973c1730-b169-4f30-8b9f-a16faf9eafeb",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/742ded01-fe87-4a93-88fe-cdccd8507d57"
+        ]
+      },
+      {
+        "id": "4e6325d4-13f0-4b8e-8baf-9e0ca20a84c4",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/560f84fa-724a-4dac-a6ea-c825f840c739"
+        ]
+      },
+      {
+        "id": "7a91987e-0e91-41ab-b81b-3570c8e01719",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4538e95a-6b67-4db3-855c-6f8d9da08f6d"
+        ]
+      },
+      {
+        "id": "eba36cfb-d199-446d-a017-2203e05db72a",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/c867dbe4-6abf-461c-b2fe-d3b4e5d4b677"
+        ]
+      },
+      {
+        "id": "a410487f-ff31-4b06-85b5-6f82a3dc74ed",
+        "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4e9bea1d-0fb6-40a1-a5ea-deff76c257c5"
+        ]
+      },
+      {
+        "id": "5d9bb7e4-4550-4769-b90e-fee5d409cb7f",
+        "text": "\"Dreams\" by Fleetwood Mac appears on the official album \"Rumours (super deluxe)\" (2013-01-25).",
+        "about": "track",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:release/725a7242-21bc-47ec-81e7-327a14bc0130"
+        ]
+      }
+    ],
+    "latencyMs": 26358,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 16532,
+      "outputTokens": 2800,
+      "reasoningTokens": 329,
+      "usd": 0.013441000000000002
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1677,
+        "outputTokens": 180,
+        "usd": 0.000284,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1942,
+        "outputTokens": 141,
+        "usd": 0.000292,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 10585,
+        "outputTokens": 1980,
+        "usd": 0.002254,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 2328,
+        "outputTokens": 499,
+        "usd": 0.010611,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "b6cee38e-873e-43fd-9ed3-1968992df6f0",
+    "isrc": "USDJ20200650",
+    "title": "Hurt",
+    "artist": "Johnny Cash",
+    "query": "Hurt Johnny Cash",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:33:40.062Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "spotifyId": "28cnXtME493VX9NOw9cIUh",
+      "title": "Hurt",
+      "artist": "Johnny Cash"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 90.95,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz recording \"Hurt\" by Johnny Cash (3:39), ISRC USDJ20200650, first released 2002-11-05."
+      },
+      {
+        "id": "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash is a cover of \"Hurt\"."
+      },
+      {
+        "id": "musicbrainz:release/261de123-7315-4a2f-8c40-3dad9092313e",
+        "source": "musicbrainz",
+        "url": "https://musicbrainz.org/release/261de123-7315-4a2f-8c40-3dad9092313e",
+        "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash appears on the official album \"American IV: The Man Comes Around\" (2002-11-05)."
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Johnny-Cash",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Johnny-Cash",
+        "excerpt": "Johnny Cash's Hurt Hurt (2002) is a cover of Hurt by Nine Inch Nails (1994) was sampled in Relicário by Menestrel (2017) Mindennek ára Van by Kontroll feat."
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Il-Turco/Hurt",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Il-Turco/Hurt",
+        "excerpt": "Which songs were sampled in \"Hurt\" by Il Turco? \"Hurt\" contains samples of \"Hurt\" by Johnny Cash and \"The Silence of a Candle\" by Paul Winter Consort.Read more"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Johnny-Cash/Hurt",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Johnny-Cash/Hurt",
+        "excerpt": "Hurt by Johnny Cash - discover this song's samples, covers and remixes on WhoSampled. ... Sampled in 11 songs. Menestrel's Relicário, Relicário · Menestrel, 2017 ...Read more"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Nine-Inch-Nails/Hurt",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Nine-Inch-Nails/Hurt",
+        "excerpt": "Sampled in 9 songs Westside Connection's The Gangsta, the Killa and the Dope Dealer … 54 songs Johnny Cash's Hurt. David Bowie and Nine Inch Nails's \"Hurt\" was"
+      },
+      {
+        "id": "tavily:https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+        "source": "tavily",
+        "url": "https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+        "excerpt": "In 2002, American country singer Johnny Cash covered the song for his final album during his lifetime, American IV: The Man Comes Around. Its accompanying video, featuring images from Cash's life and directed by Mark Romanek, was named the best video of the year by the Grammy Awards and CMA Awards, and the best video of all time by NME in July 2011. The single contains a cover of Depeche Mode's \"Personal Jesus\" as a B-side. [...] \"Orange Blossom Special \"Orange Blossom Special (song)\")\" \"The On…"
+      },
+      {
+        "id": "tavily:https://www.imdb.com/title/tt6149452/trivia",
+        "source": "tavily",
+        "url": "https://www.imdb.com/title/tt6149452/trivia",
+        "excerpt": "Rick Rubin now sees the video as a historical document of Johnny Cash. who was 71 years of age at the time of filming in February 2003, He died seven months"
+      },
+      {
+        "id": "tavily:https://www.songfacts.com/facts/johnny-cash/hurt",
+        "source": "tavily",
+        "url": "https://www.songfacts.com/facts/johnny-cash/hurt",
+        "excerpt": "Rubin became Cash's producer and label boss in 1994 after they came to a working agreement: They would record songs of Cash's choosing in Rubin's home studio ...Read more"
+      },
+      {
+        "id": "tavily:https://www.youtube.com/watch?v=Vli0mAXp-Oo",
+        "source": "tavily",
+        "url": "https://www.youtube.com/watch?v=Vli0mAXp-Oo",
+        "excerpt": "[6:57] yeah and the popularity of these records did that surprise him it completely blew [7:04] his mind he couldn't believe it he loved it he loved the acceptance of young [7:12] people on the first album we put out it really changed everything and then when hurt happened and it was [7:21] really a big hit which again was not expected he was ecstatic it was really a beautiful um [...] [3:17] it together with the band and everything and I remember the buildup at the end of the song We I had all…"
+      },
+      {
+        "id": "tavily:https://savingcountrymusic.com/20-years-ago-today-johnny-cash-films-the-video-for-hurt",
+        "source": "tavily",
+        "url": "https://savingcountrymusic.com/20-years-ago-today-johnny-cash-films-the-video-for-hurt",
+        "excerpt": "Oct 18, 2022 — It was specifically due to the song “Hurt”—a cover of a Nine Inch Nails song written by Trent Reznor. And even more specifically, it had to do ...Read more"
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable"
+      }
+    ],
+    "verifier": {
+      "judged": 4,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "uses",
+        "relation": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "target": {
+          "title": "Hurt (the song)",
+          "artist": "",
+          "mbid": "ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+        },
+        "evidenceIds": [
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "6a3e57b7-786b-4e1b-9630-05b4b0083864",
+        "text": "Johnny Cash’s recording of “Hurt” is a cover of the song by Nine Inch Nails.",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "2bce3141-310d-41f6-9830-79d105397c1e",
+        "text": "The recording was first released on November 5, 2002.",
+        "about": "history",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+        ]
+      },
+      {
+        "id": "c0dd129b-2a97-46c4-99d8-896072db2b63",
+        "text": "Johnny Cash’s “Hurt” is a cover of the Nine Inch Nails song. The recording first appeared in 2002.",
+        "about": "connection",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": "partial",
+        "evidenceIds": [
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+        ]
+      },
+      {
+        "id": "53a44c3e-21d2-401c-b25c-2f847a64c858",
+        "text": "\"Hurt - Johnny Cash\" is a cover of \"Hurt - Nine Inch Nails (1994)\".",
+        "about": "cover",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": null,
+        "evidenceIds": []
+      },
+      {
+        "id": "cc9c3b9c-8309-416a-9f51-a08ee8fbf2b2",
+        "text": "\"Hurt\" by Johnny Cash is a cover of \"Hurt\".",
+        "about": "cover",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+        ]
+      },
+      {
+        "id": "9ba67eda-d3de-4973-8296-8afa316c811a",
+        "text": "\"Hurt\" by Johnny Cash appears on the official album \"American IV: The Man Comes Around\" (2002-11-05).",
+        "about": "track",
+        "origin": "code",
+        "kind": "sourced",
+        "verdict": null,
+        "evidenceIds": [
+          "musicbrainz:release/261de123-7315-4a2f-8c40-3dad9092313e"
+        ]
+      }
+    ],
+    "latencyMs": 13073,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 10783,
+      "outputTokens": 1103,
+      "reasoningTokens": 111,
+      "usd": 0.006327
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1781,
+        "outputTokens": 149,
+        "usd": 0.000278,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 2021,
+        "outputTokens": 63,
+        "usd": 0.000257,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 5772,
+        "outputTokens": 699,
+        "usd": 0.00102,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1209,
+        "outputTokens": 192,
+        "usd": 0.004772,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "runId": "a55c727b-9552-490b-be2a-ead7ca637ac8",
+    "isrc": "JPP301900716",
+    "title": "夜に駆ける",
+    "artist": "YOASOBI",
+    "query": "夜に駆ける YOASOBI",
+    "repeat": 1,
+    "commit": "5fd193fa7a64",
+    "recordedAt": "2026-10-31T20:33:54.311Z",
+    "outcome": "complete",
+    "identity": {
+      "isrc": "JPP301900716",
+      "mbid": null,
+      "spotifyId": "3dPtXHP0oXQ4HCWHsOA9js",
+      "title": "夜に駆ける",
+      "artist": "YOASOBI"
+    },
+    "clarification": {
+      "fired": false,
+      "answer": "top-ranked"
+    },
+    "preview": {
+      "available": true,
+      "provider": "deezer",
+      "method": "isrc"
+    },
+    "audio": {
+      "measured": true,
+      "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+      "tempoBpm": 130.02,
+      "key": null
+    },
+    "evidence": [
+      {
+        "id": "tavily:https://www.whosampled.com/MachiChunky",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/MachiChunky",
+        "excerpt": "Racing Into the Night (Synthwave Remix) (2022) by MachiChunky and Animehk. sampled. 夜に駆ける by YOASOBI (2019). StarlingEDM and MachiChunky's Usagi Flap"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/YOASOBI",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/YOASOBI",
+        "excerpt": "YOASOBI's 夜に駆ける 夜に駆ける (2019) was sampled in Run at Night by Q-Rabbit (2020) The NOISE by LE SSERAFIM and YOASOBI (2025) was covered in Racing Into"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/YOASOBI/sampled",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/YOASOBI/sampled",
+        "excerpt": "夜に駆ける (2019) · Run at Night by Q-Rabbit (2020) · The NOISE by Le Sserafim and YOASOBI (2025) · Racing Into the Night (Synthwave Remix) by MachiChunky and"
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/LE-SSERAFIM/The-NOISE",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/LE-SSERAFIM/The-NOISE",
+        "excerpt": "Which songs were sampled in \"The NOISE\" by LE SSERAFIM and YOASOBI? \"The NOISE\" contains samples of \"夜に駆ける\" by YOASOBI."
+      },
+      {
+        "id": "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)",
+        "source": "tavily",
+        "url": "https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)",
+        "excerpt": "\"Into the Night (Cover)\" is a cover of \"夜に駆ける\" by YOASOBI. \"Into the Night (Cover)\" was produced by Ryota Tomaru."
+      }
+    ],
+    "sourceErrors": [
+      {
+        "source": "musicbrainz",
+        "code": "unavailable"
+      },
+      {
+        "source": "discogs",
+        "code": "not_configured"
+      },
+      {
+        "source": "genius",
+        "code": "unavailable"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable"
+      }
+    ],
+    "verifier": {
+      "judged": 11,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "schemaValid": true,
+    "fallback": false,
+    "ablation": "d",
+    "edges": [
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "target": {
+          "title": "Run at Night",
+          "artist": "Q-Rabbit"
+        },
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/YOASOBI"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "target": {
+          "title": "Racing Into the Night (Synthwave Remix)",
+          "artist": "MachiChunky and Animehk"
+        },
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/MachiChunky"
+        ]
+      },
+      {
+        "direction": "usedBy",
+        "relation": "cover",
+        "origin": "model",
+        "kind": "sourced",
+        "target": {
+          "title": "Into the Night (Cover)",
+          "artist": "Pastel*Palettes"
+        },
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "a6a88b3b-a50d-41c2-a80b-f149520fe61f",
+        "text": "YOASOBI's recording of \"夜に駆ける\" was sampled in Q-Rabbit's \"Run at Night\" (2020).",
+        "about": "connection",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/YOASOBI"
+        ]
+      },
+      {
+        "id": "31ef7381-804f-46a7-8173-35086a37ccbf",
+        "text": "\"The NOISE\" by LE SSERAFIM and YOASOBI (2025) contains samples of \"夜に駆ける\" by YOASOBI.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/LE-SSERAFIM/The-NOISE"
+        ]
+      },
+      {
+        "id": "50dfce36-625e-4192-b404-9c285cd37b72",
+        "text": "MachiChunky and Animehk's \"Racing Into the Night (Synthwave Remix)\" (2022) sampled \"夜に駆ける\" by YOASOBI.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/MachiChunky"
+        ]
+      },
+      {
+        "id": "583273d3-565f-4686-8d61-d5af5c9d0b9d",
+        "text": "\"Into the Night (Cover)\" by Pastel*Palettes is a cover of \"夜に駆ける\" by YOASOBI.",
+        "about": "cover",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)"
+        ]
+      },
+      {
+        "id": "0a93767e-785f-4e1b-ab69-8dafd4c6d63f",
+        "text": "YOASOBI's recording of \"夜に駆ける\" was sampled in Q-Rabbit's \"Run at Night\" and in \"The NOISE,\" a track by LE SSERAFIM and YOASOBI.",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/YOASOBI",
+          "tavily:https://www.whosampled.com/LE-SSERAFIM/The-NOISE"
+        ]
+      },
+      {
+        "id": "a29a2fa7-1d4c-42c2-9c68-b91dcda644f0",
+        "text": "MachiChunky and Animehk's 2022 \"Racing Into the Night (Synthwave Remix)\" sampled YOASOBI's \"夜に駆ける.\"",
+        "about": "connection",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/MachiChunky"
+        ]
+      },
+      {
+        "id": "072d7686-9bcb-4d51-8ce0-ffa9de869ac2",
+        "text": "\"Into the Night (Cover)\" by Pastel*Palettes is a cover of the song \"夜に駆ける.\" The cover was produced by Ryota Tomaru.",
+        "about": "credit",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)"
+        ]
+      },
+      {
+        "id": "b30dfe86-6ab9-430e-a2c2-9196a7960804",
+        "text": "\"Run at Night - Q-Rabbit (2020)\" samples \"夜に駆ける - YOASOBI\".",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/YOASOBI"
+        ]
+      },
+      {
+        "id": "29511860-8ad6-4b69-9231-48bdb03ba606",
+        "text": "\"The NOISE - LE SSERAFIM and YOASOBI (2025)\" samples \"夜に駆ける - YOASOBI\".",
+        "about": "sample",
+        "origin": "model",
+        "kind": "inferred",
+        "verdict": "partial",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/LE-SSERAFIM/The-NOISE"
+        ]
+      },
+      {
+        "id": "84b4f287-a75c-4d56-8a5b-2a0051c29b1c",
+        "text": "\"Racing Into the Night (Synthwave Remix) - MachiChunky and Animehk (2022)\" samples \"夜に駆ける - YOASOBI\".",
+        "about": "sample",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/MachiChunky"
+        ]
+      },
+      {
+        "id": "63cbcf10-fe66-4ae0-b71d-6d417b1fca9d",
+        "text": "\"Into the Night (Cover) - Pastel*Palettes\" is a cover of \"夜に駆ける - YOASOBI\".",
+        "about": "cover",
+        "origin": "model",
+        "kind": "sourced",
+        "verdict": "supported",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)"
+        ]
+      }
+    ],
+    "latencyMs": 20766,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 7795,
+      "outputTokens": 2755,
+      "reasoningTokens": 594,
+      "usd": 0.012683
+    },
+    "calls": [
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1218,
+        "outputTokens": 104,
+        "usd": 0.000192,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "research_planner",
+        "tier": "fast",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 1289,
+        "outputTokens": 154,
+        "usd": 0.000227,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "composer",
+        "tier": "main",
+        "deployment": "gpt-6-luna",
+        "kind": "settle",
+        "inputTokens": 3501,
+        "outputTokens": 1868,
+        "usd": 0.001413,
+        "status": "ok",
+        "purpose": "eval:variance"
+      },
+      {
+        "callSite": "verifier",
+        "tier": "judge",
+        "deployment": "gpt-6-sol",
+        "kind": "settle",
+        "inputTokens": 1787,
+        "outputTokens": 629,
+        "usd": 0.010851,
+        "status": "ok",
+        "purpose": "eval:variance"
+      }
+    ]
+  }
+]

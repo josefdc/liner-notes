@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "entries": {
+    "POST https://api.tavily.com/search #9644b4803a10de95": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Stronger by Kanye West - Samples, Covers and Remixes",
+            "url": "https://www.whosampled.com/Kanye-West/Stronger",
+            "content": "Sampled in 42 songs \"Stronger\" contains samples of \"Harder, Better, Faster, Stronger\" by Daft Punk. The completed version contains a master use of Cola Bottle"
+          },
+          {
+            "title": "List of Kanye West samples and sampling disputes - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/List_of_Kanye_West_samples_and_sampling_disputes",
+            "content": "| Track | Sample | Ref | --- | \"Good Morning \"Good Morning (Kanye West song)\")\" | \"Someone Saved My Life Tonight\" by Elton John | | | \"Champion \"Champion (Kanye West song)\")\" | \"Kid Charlemagne\" by Steely Dan | | \"Stronger \"Stronger (Kanye West song)\")\" | \"Harder, Better, Faster, Stronger\" by Daft Punk | | \"I Wonder \"I Wonder (Kanye West song)\")\" | \"My Song\" by Labi Siffre and \"Phantom\" by Justice \"Justice (band)\") | [...] | Track | Sample | Ref | --- | \"Dark Fantasy \"Dark Fantasy (song)\")\" | \"In High Places \"In High Places (song)\")\" by Mike Oldfield and Jon Anderson | | | \"Gorgeous \"Gorgeous (Kanye West song)\")\" | \"You Showed Me\" by The Turtles | | \"Power \"Power (Kanye West song)\")\" | \"It's Your Thing\" by Cold Grits | | \"Afromerica\" by Continent Number 6 | | \"21st Century Schizoid Man\" by"
+          },
+          {
+            "title": "Classic Kanye Samples",
+            "url": "https://the-dowsers.com/the-dowser-posts/classic-kanye-samples",
+            "content": "does a nice job at capturing these shifts, and uses data supplied by Whosampled to back up the analysis. The associated playlist provides a more rote but still compelling look at some of the most recognizable samples, placing Kanye classics next to the originals. [...] GENRES IndieElectronicHip-HopJazz + BluesRnBWorld, Reggae + LatinPopClassicalRock + Alternative ERAS '60s'70s'80s'90s'10s'00s FEATURES ARTISTS EssentialsInfluencesCoversArtist-Curated PlaylistsB-Sides + Guest SpotsBehind the Boards TOP NEW MUSIC Trusted SourcesStaff Mixes []( # Classic Kanye Samples Currated By: Sam Chennault Published By: THIRD BRIDGE CREATIVE Post By Sam Chennault Classic Kanye Samples [...] Its a little hard to believe, but Kanye West has been producing hip-hop tracks now for 20 years. In terms of longevi"
+          },
+          {
+            "title": "Songs that Sampled Harder, Better, Faster, Stronger",
+            "url": "https://www.whosampled.com/Daft-Punk/Harder,-Better,-Faster,-Stronger/sampled",
+            "content": "Sampled in 102 songs ; Kanye West's Stronger · Stronger · Kanye West, 2007, Vocals / Lyrics ; Black Eyed Peas's Boom Boom Pow · Boom Boom Pow · Black Eyed Peas"
+          },
+          {
+            "title": "Sample Breakdown: Kanye West - Stronger",
+            "url": "https://www.youtube.com/watch?v=dj5dHzOScTM",
+            "content": "# Sample Breakdown: Kanye West - Stronger ## Channel: TRACKLIB (verified) 817K subscribers 15K likes ### Description 481,295 views Posted: 2022-01-28 Inspired? Access samples like this one 🔌 [...] 🔗 Links Website: Instagram: / tracklib X: Facebook: / tracklib TikTok: / tracklib #samplebreakdown #kanyewest #mikedean #stronger [...] 🤔 What is TRACKLIB? TRACKLIB is the only platform in the world where music producers can access any kind of sample, and clear it in minutes for a release, with one affordable subscription. The service has been used to find and clear samples for releases by Kendrick Lamar, Drake, Future, Kaytranada, and thousands more. Try it out now 👉"
+          }
+        ]
+      }
+    },
+    "POST https://api.tavily.com/search #e4e7c09f05fb5b47": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "results": [
+          {
+            "title": "Stronger (Kanye West song) - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Stronger_(Kanye_West_song)",
+            "content": "The song was recorded at Ape Sounds in Tokyo, Sony Music Studios in NYC, and the Record Plant in Hollywood, California. Its recording sessions placed attention to detail and were a turning point in the production process for Graduation, following West having previously been \"aimlessly making songs\". Video director Hype Williams inspired West to move towards a futuristic direction after he heard the song when it had no drums, which the rapper also did for the music video and the album: \"It [...] hi-hat as opposed to a snare drum. West worked on \"Stronger\" with 8 audio engineers and 11 mix engineers at Larrabee North Studios in Universal City, California and Battery Studios in NYC, recording over 50 versions of the track. [...] Kanye West – songwriter, production Thomas Bangalter – songwrite"
+          },
+          {
+            "title": "WBSS Media-Kanye West",
+            "url": "https://wbssmedia.com/artists/detail/1206",
+            "content": "West's third studio album, Graduation, was released in September 2007. The album debuted at number one on the U.S. Billboard 200 chart and sold 957,000 copies in its first week. Graduation continued the string of critical and commercial successes by West, and the album's lead single, \"Stronger\", garnered his third number-one hit. \"Stronger\", which samples French house duo Daft Punk, has been credited with not only encouraging other hip-hop artists to incorporate house and electronica elements [...] West began his early production career in the mid-1990s, creating beats primarily for burgeoning local artists in the Chicago area. He received his first official production credits at age nineteen, when he produced eight tracks on Down to Earth, the 1996 debut album of Chicago-based underground"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -63,10 +63,15 @@ function literals(): Set<string> {
   return out;
 }
 
-/** The string fields of the recorded runs. */
+/**
+ * The string fields of the recorded runs. The cassettes (fixtures/cassettes) are left out: they
+ * hold what the sources answered and the prompts sent to the model, the input of these paths
+ * rather than text the app wrote, so a path may rightly change them (a long page is cut, a
+ * number that reads as a phone number is hidden).
+ */
 function fixtureStrings(): Set<string> {
   const out = new Set<string>();
-  for (const path of files(join(REPO, "fixtures"), /\.json$/, /node_modules/)) {
+  for (const path of files(join(REPO, "fixtures"), /\.json$/, /node_modules|[\\/]cassettes[\\/]/)) {
     stringsOf(JSON.parse(readFileSync(path, "utf8")), out);
   }
   return out;

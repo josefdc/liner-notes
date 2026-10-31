@@ -1,0 +1,2027 @@
+{
+  "id": "1DIXPcTDzTj8ZMHt3PDt8p",
+  "title": "Gangsta's Paradise",
+  "artist": "Coolio, L.V.",
+  "album": "Gangsta's Paradise",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/1DIXPcTDzTj8ZMHt3PDt8p",
+  "releaseYear": "1995",
+  "explicit": false,
+  "durationSeconds": 241,
+  "isrc": "USTB10400128",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Gangsta’s Paradise\" by Coolio featuring L.V. (4:01), ISRC USTB10400128, first released 1995-07-11.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/a13974fa-cf9d-413d-ade3-147f56a64958",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsta’s Paradise (Candyland OG Version) (Tarraxa Remixed By DJ RADIKAL Feat Cristian Kizomba Paredes Leiva)\" by Coolio.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/a13974fa-cf9d-413d-ade3-147f56a64958"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsta's Paradise (Cj Borika Remix)\" by Cj Borika.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/ae6a6e5d-0f82-49d6-9947-6691ca53cd89",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsters Paradise (Candyland's OG Remix)\" by Coolio.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/ae6a6e5d-0f82-49d6-9947-6691ca53cd89"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/2999f638-8d54-4f0e-bb3b-1cea52a3ca39",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsters Paradise (Hot Pockets bootleg)\" by Coolio.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/2999f638-8d54-4f0e-bb3b-1cea52a3ca39"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Age\" by Contopp nd #Sloppit#.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Caramella’s Paradise\" by Holo Bass.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/b1737dd2-627b-469a-b040-7f5fe39cca7d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Driven\" by Contopp nd #Sloppit#.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/b1737dd2-627b-469a-b040-7f5fe39cca7d"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/samples/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. samples \"Pastime Paradise\" by Stevie Wonder.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/samples/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/186b8f79-e9bb-46cb-8f73-09772eeea9af",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Zabaci domaćine\" by Bad Copy.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/186b8f79-e9bb-46cb-8f73-09772eeea9af"
+    },
+    {
+      "id": "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/46b390a2-da0e-4964-bda0-280909cabf74",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta’s Paradise — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Пей пиво!\" by Дискотека Авария.",
+      "recordRef": "track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/46b390a2-da0e-4964-bda0-280909cabf74"
+    },
+    {
+      "id": "musicbrainz:release/bd4b7a7b-2cf5-36b4-8e49-ccc59c5eae48",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/bd4b7a7b-2cf5-36b4-8e49-ccc59c5eae48",
+      "title": "Gangsta’s Paradise — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Gangsta’s Paradise\" by Coolio featuring L.V. appears on the official album \"Gangsta’s Paradise\" (1995-11-07).",
+      "recordRef": "release/bd4b7a7b-2cf5-36b4-8e49-ccc59c5eae48"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/4e6ee8ab-7bed-4dc6-8acd-5aa0d5a1513a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"90's Mix\" by Y2K & The Mega Party Set.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/4e6ee8ab-7bed-4dc6-8acd-5aa0d5a1513a"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ddc92216-4a93-464f-ad7e-16f20338f345",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Battery.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ddc92216-4a93-464f-ad7e-16f20338f345"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/e2528778-49b7-4724-b3f6-8f7310ac5cac",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Off the Beat.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/e2528778-49b7-4724-b3f6-8f7310ac5cac"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/a7f45cbb-fb24-4488-8851-1550f3661919",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/a7f45cbb-fb24-4488-8851-1550f3661919"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/457aad94-d8e3-492d-ba14-bc9b2ebffa41",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by L.V..",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/457aad94-d8e3-492d-ba14-bc9b2ebffa41"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/0c40fab2-4d7b-4efb-8ba4-d560ab7ed586",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/0c40fab2-4d7b-4efb-8ba4-d560ab7ed586"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/bd69a6d0-a76c-4e9b-a937-a104efbda521",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Starturn on 45 Pints.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/bd69a6d0-a76c-4e9b-a937-a104efbda521"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/333ad9a0-8e70-4ec7-b42f-4981905faffc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Cicada.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/333ad9a0-8e70-4ec7-b42f-4981905faffc"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ffa49cc0-bcc0-4377-bd70-eca6333467bd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by In Fear and Faith.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ffa49cc0-bcc0-4377-bd70-eca6333467bd"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ec758702-8fa6-46cf-a40b-8bcbb0d207bb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Artas.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ec758702-8fa6-46cf-a40b-8bcbb0d207bb"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/f1a6238f-0e7f-4d4c-a1d4-b89efbe0d42b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/f1a6238f-0e7f-4d4c-a1d4-b89efbe0d42b"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/4ec3724e-c701-45d2-a86c-62f618a20fa9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Il Tuniz.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/4ec3724e-c701-45d2-a86c-62f618a20fa9"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/a32a8f99-5039-47ee-b477-ec9a11f22cbb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Nadav.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/a32a8f99-5039-47ee-b477-ec9a11f22cbb"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/48771f64-191c-4fd3-8b37-601bb1998f21",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Star Turn on 45 Pints.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/48771f64-191c-4fd3-8b37-601bb1998f21"
+    },
+    {
+      "id": "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/41b0bc50-b270-489d-8a23-83b7f13567d0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/5efe152c-3104-3226-9084-d71efc6356af",
+      "title": "Gangsta’s Paradise — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Kina Grannis.",
+      "recordRef": "work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/41b0bc50-b270-489d-8a23-83b7f13567d0"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Coolio/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Coolio/sampled",
+      "title": "Songs that Sampled Coolio",
+      "retrievedAt": "[time]",
+      "excerpt": "Gangsta's Paradise (1995) by Coolio feat. L.V. was sampled in Alibi by Ella Henderson feat. Rudimental (2024)",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/shorts/OvEBg8pPd-I",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/shorts/OvEBg8pPd-I",
+      "title": "Sample Breakdown: Coolio \"Gangsta's paradise\"",
+      "retrievedAt": "[time]",
+      "excerpt": "Sample Breakdown: Coolio ft. LV - \"Gangsta's paradise\" 1995 sampled From Stevie Wonder - \"Pastime Paradise\" 1976.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Coolio/Gangsta%27s-Paradise",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Coolio/Gangsta%27s-Paradise",
+      "title": "Gangsta's Paradise by Coolio feat. L.V.",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Gangsta's Paradise\" contains samples of \"Pastime Paradise\" by Stevie Wonder and \"Psalm 23\" by The Bible (Book). Who produced \"Gangsta's Paradise\" by Coolio",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Rico-Recklezz/Gangsta%27s-Paradise",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Rico-Recklezz/Gangsta%27s-Paradise",
+      "title": "Gangsta's Paradise by Rico Recklezz and DJ Cortez",
+      "retrievedAt": "[time]",
+      "excerpt": "Gangsta's Paradise by Rico Recklezz and DJ Cortez - discover this song's samples, covers and remixes on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://music.apple.com/us/playlist/stevie-wonder-sampled/pl.78618f7f4a7349b3bdb33af8edf8381c",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://music.apple.com/us/playlist/stevie-wonder-sampled/pl.78618f7f4a7349b3bdb33af8edf8381c",
+      "title": "‎Stevie Wonder: Sampled - Playlist - Apple Music",
+      "retrievedAt": "[time]",
+      "excerpt": "Stevie Wonder: Sampled # Stevie Wonder: Sampled Apple Music Hip-Hop Their original tunes have been the source material for some of modern music’s biggest hits. 22 songs, 1 hour 37 minutes ## ### Coolio ### Will Smith ### Dru Hill ### Kool Mo Dee ### Erykah Badu ### Ja Rule ### JAŸ-Z ### 2Pac ### Frank Ocean ### A Tribe Called Quest ### George Michael",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.rollingstone.com/music/music-news/coolios-gangstas-paradise-the-oral-history-of-1995s-pop-rap-smash-50357",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.rollingstone.com/music/music-news/coolios-gangstas-paradise-the-oral-history-of-1995s-pop-rap-smash-50357",
+      "title": "Coolio's 'Gangsta's Paradise': The Oral History of the Pop-Rap Smash",
+      "retrievedAt": "[time]",
+      "excerpt": "Rasheed: The song was recorded in four different studios, including my home studio; it just all came together to create a really good sound. But when I was doing the final mix, I said, “Something ain’t right!” So I went in, I re-did the drums right there on the spot, and then I decided I needed to beef up the strings; within like 10 minutes, I re-did probably half the track. And then Kevin Davis, the mix engineer, put a blend on it; he couldn’t have worked on it more than 15 minutes, and he was…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=CXwrx5e-eRE",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=CXwrx5e-eRE",
+      "title": "Coolio - The Making of 'Gangsta's Paradise' | Vevo Footnotes ft. L.V.",
+      "retrievedAt": "[time]",
+      "excerpt": "Executive Producer: Chris Pereira Director, Editorial Production: Ronni Leverich Producer: Devon Sheridan Editor: Kevin Rose Design: Sydney Emery Format developed by: Sydney Emery, Justin Brown, Austin Prahl Director, Post Production: Michael Colman Senior Manager, Post Production: Dominic Siri Music & Talent: Annie Shapiro + Messie Bangura Subscribe to the mailing list: #Coolio #GangstasParadise #VevoFootnotes [...] For the 30th anniversary of Coolio’s iconic hit, the Vevo Footnotes team had t…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.abc.net.au/news/2020-12-05/25-years-of-gangstas-paradise-coolio/12935222",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.abc.net.au/news/2020-12-05/25-years-of-gangstas-paradise-coolio/12935222",
+      "title": "How Coolio's Gangsta's Paradise became a 'solid gold classic' - ABC News",
+      "retrievedAt": "[time]",
+      "excerpt": "The song was whipped up quickly at a studio in an LA house shared by producer Doug Rasheed and Coolio's manager Paul Stewart, with L.V. adding his flavour to the hook, as well as being every voice in the choir \"from soprano down to tenor to the bass\", as he told Rolling Stone in 2015. As is often the case in these kinds of stories, Coolio happened to be passing by and instantly recognised it as something special. [...] Like most good hip-hop songs, Gangsta's Paradise started with a great sample…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.thecurrent.org/feature/2026/02/28/feb-28-in-music-history-coolio-won-a-grammy-award-for-gangstas-paradise",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.thecurrent.org/feature/2026/02/28/feb-28-in-music-history-coolio-won-a-grammy-award-for-gangstas-paradise",
+      "title": "Feb. 28 In Music History: Coolio won a Grammy Award for 'Gangsta's Paradise'",
+      "retrievedAt": "[time]",
+      "excerpt": "1989 - Bob Dylan recorded the first sessions for the Oh Mercy album at The Studio, New Orleans, Louisiana. [...] 2000 - Oasis released their fourth studio album, Standing on the Shoulder of Giants. It features “Go Let It Out,” “Where Did It All Go Wrong?,” “Who Feels Love?,” and “Sunday Morning Call.” 2000 - Eels released their third studio album, Daisies of the Galaxy. It features \"Mr. E's Beautiful Blues.\" 2006 - Rhett Miller released his second solo studio album, The Believer. It features th…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/coolio/gangstas-paradise",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/coolio/gangstas-paradise",
+      "title": "Gangsta's Paradise by Coolio - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "Bertrand from Paris, FrancePrior to 1995, Coolio was mostly known for lighter, more humorous rap that provided an alternative to West Coast gangsta rap. The rivetingly atmospheric \"Gangsta's Paradise\" was such a shift in focus that Coolio's record label decided to leave it off his own solo album and instead put it on the soundtrack to the film [i] Dangerous Minds [i]. When released as a single, \"Gangsta's Paradise\" became one of the biggest hits of the year spreading its social commentary on [.…",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc",
+      "title": "Gangsta's Paradise (Cj Borika Remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Gangsta's Paradise (Cj Borika Remix)\" by Cj Borika, first released 2021-10-22.",
+      "recordRef": "recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc"
+    },
+    {
+      "id": "musicbrainz:recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2",
+      "title": "Age — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Age\" by Contopp nd #Sloppit#, first released 2022-11-08.",
+      "recordRef": "recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2"
+    },
+    {
+      "id": "musicbrainz:recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1",
+      "title": "Caramella’s Paradise — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Caramella’s Paradise\" by Holo Bass, first released 2021-04-01.",
+      "recordRef": "recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1"
+    },
+    {
+      "id": "musicbrainz:recording/b1737dd2-627b-469a-b040-7f5fe39cca7d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b1737dd2-627b-469a-b040-7f5fe39cca7d",
+      "title": "Driven — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Driven\" by Contopp nd #Sloppit#, first released 2022-10-20.",
+      "recordRef": "recording/b1737dd2-627b-469a-b040-7f5fe39cca7d"
+    },
+    {
+      "id": "musicbrainz:recording/e97bedfc-b0ee-4cb6-8343-03a714caab15",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15",
+      "title": "Pastime Paradise — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Pastime Paradise\" by Stevie Wonder, first released 1976-09-28.",
+      "recordRef": "recording/e97bedfc-b0ee-4cb6-8343-03a714caab15"
+    },
+    {
+      "id": "musicbrainz:recording/186b8f79-e9bb-46cb-8f73-09772eeea9af",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/186b8f79-e9bb-46cb-8f73-09772eeea9af",
+      "title": "Zabaci domaćine — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Zabaci domaćine\" by Bad Copy, first released 1996.",
+      "recordRef": "recording/186b8f79-e9bb-46cb-8f73-09772eeea9af"
+    },
+    {
+      "id": "musicbrainz:recording/46b390a2-da0e-4964-bda0-280909cabf74",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/46b390a2-da0e-4964-bda0-280909cabf74",
+      "title": "Пей пиво! — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Пей пиво!\" by Дискотека Авария, first released 2000.",
+      "recordRef": "recording/46b390a2-da0e-4964-bda0-280909cabf74"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 21>",
+      "title": "A Stevie Wonder foundation",
+      "content": "Coolio’s recording draws on Stevie Wonder’s “Pastime Paradise.” The sample relationship gives the track a direct connection to Wonder’s earlier recording.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 22>",
+          "text": "Stevie Wonder",
+          "type": "artist",
+          "searchQuery": "Stevie Wonder"
+        },
+        {
+          "id": "<id 23>",
+          "text": "Pastime Paradise",
+          "type": "album",
+          "searchQuery": "Pastime Paradise"
+        }
+      ],
+      "claimId": "<id 3>"
+    },
+    {
+      "id": "<id 24>",
+      "title": "A studio-built arrangement",
+      "content": "Producer Doug Rasheed recalled revisiting the drums and strengthening the strings during the final mix. The track came together across four studios, including his home studio.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 25>",
+          "text": "Doug Rasheed",
+          "type": "producer",
+          "searchQuery": "Doug Rasheed"
+        }
+      ],
+      "claimId": "<id 4>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Gangsta's Paradise",
+        "size": 40,
+        "trackTitle": "Gangsta's Paradise",
+        "trackArtist": "Coolio, L.V.",
+        "mbid": "2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+        "year": 1995
+      },
+      {
+        "id": "mb-e97bedfc-b0ee-4cb6-8343-03a714caab15",
+        "group": 2,
+        "label": "Pastime Paradise - Stevie Wonder",
+        "size": 22,
+        "trackTitle": "Pastime Paradise",
+        "trackArtist": "Stevie Wonder",
+        "year": 1976,
+        "mbid": "e97bedfc-b0ee-4cb6-8343-03a714caab15",
+        "spotifyId": "4Gn4b1qJ12rowCNRw5DHM9"
+      },
+      {
+        "id": "mb-a13974fa-cf9d-413d-ade3-147f56a64958",
+        "group": 4,
+        "label": "Gangsta’s Paradise (Candyland OG Version) (Tarraxa Remixed By DJ RADIKAL Feat Cristian Kizomba Paredes Leiva) - Coolio",
+        "size": 22,
+        "trackTitle": "Gangsta’s Paradise (Candyland OG Version) (Tarraxa Remixed By DJ RADIKAL Feat Cristian Kizomba Paredes Leiva)",
+        "trackArtist": "Coolio",
+        "mbid": "a13974fa-cf9d-413d-ade3-147f56a64958"
+      },
+      {
+        "id": "mb-bb60fbdc-8bb5-4af8-b81e-a703867cccbc",
+        "group": 4,
+        "label": "Gangsta's Paradise (Cj Borika Remix) - Cj Borika",
+        "size": 22,
+        "trackTitle": "Gangsta's Paradise (Cj Borika Remix)",
+        "trackArtist": "Cj Borika",
+        "year": 2021,
+        "mbid": "bb60fbdc-8bb5-4af8-b81e-a703867cccbc"
+      },
+      {
+        "id": "mb-ae6a6e5d-0f82-49d6-9947-6691ca53cd89",
+        "group": 4,
+        "label": "Gangsters Paradise (Candyland's OG Remix) - Coolio",
+        "size": 22,
+        "trackTitle": "Gangsters Paradise (Candyland's OG Remix)",
+        "trackArtist": "Coolio",
+        "mbid": "ae6a6e5d-0f82-49d6-9947-6691ca53cd89"
+      },
+      {
+        "id": "mb-2999f638-8d54-4f0e-bb3b-1cea52a3ca39",
+        "group": 4,
+        "label": "Gangsters Paradise (Hot Pockets bootleg) - Coolio",
+        "size": 22,
+        "trackTitle": "Gangsters Paradise (Hot Pockets bootleg)",
+        "trackArtist": "Coolio",
+        "mbid": "2999f638-8d54-4f0e-bb3b-1cea52a3ca39"
+      },
+      {
+        "id": "mb-dc240d13-1dc8-4f90-bdb5-620fdcf88cd2",
+        "group": 3,
+        "label": "Age - Contopp nd #Sloppit#",
+        "size": 22,
+        "trackTitle": "Age",
+        "trackArtist": "Contopp nd #Sloppit#",
+        "year": 2022,
+        "mbid": "dc240d13-1dc8-4f90-bdb5-620fdcf88cd2"
+      },
+      {
+        "id": "mb-eb932b77-c9cd-4e26-a6f0-cb88bfb880b1",
+        "group": 3,
+        "label": "Caramella’s Paradise - Holo Bass",
+        "size": 22,
+        "trackTitle": "Caramella’s Paradise",
+        "trackArtist": "Holo Bass",
+        "year": 2021,
+        "mbid": "eb932b77-c9cd-4e26-a6f0-cb88bfb880b1"
+      },
+      {
+        "id": "mb-b1737dd2-627b-469a-b040-7f5fe39cca7d",
+        "group": 3,
+        "label": "Driven - Contopp nd #Sloppit#",
+        "size": 22,
+        "trackTitle": "Driven",
+        "trackArtist": "Contopp nd #Sloppit#",
+        "year": 2022,
+        "mbid": "b1737dd2-627b-469a-b040-7f5fe39cca7d"
+      },
+      {
+        "id": "mb-186b8f79-e9bb-46cb-8f73-09772eeea9af",
+        "group": 3,
+        "label": "Zabaci domaćine - Bad Copy",
+        "size": 22,
+        "trackTitle": "Zabaci domaćine",
+        "trackArtist": "Bad Copy",
+        "year": 1996,
+        "mbid": "186b8f79-e9bb-46cb-8f73-09772eeea9af"
+      }
+    ],
+    "links": [
+      {
+        "source": "mb-e97bedfc-b0ee-4cb6-8343-03a714caab15",
+        "target": "current",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/samples/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-a13974fa-cf9d-413d-ade3-147f56a64958",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/a13974fa-cf9d-413d-ade3-147f56a64958"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-bb60fbdc-8bb5-4af8-b81e-a703867cccbc",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-ae6a6e5d-0f82-49d6-9947-6691ca53cd89",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/ae6a6e5d-0f82-49d6-9947-6691ca53cd89"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-2999f638-8d54-4f0e-bb3b-1cea52a3ca39",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/2999f638-8d54-4f0e-bb3b-1cea52a3ca39"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-dc240d13-1dc8-4f90-bdb5-620fdcf88cd2",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 10>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-eb932b77-c9cd-4e26-a6f0-cb88bfb880b1",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 11>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-b1737dd2-627b-469a-b040-7f5fe39cca7d",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 12>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/b1737dd2-627b-469a-b040-7f5fe39cca7d"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-186b8f79-e9bb-46cb-8f73-09772eeea9af",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 13>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/186b8f79-e9bb-46cb-8f73-09772eeea9af"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "This recording is by Coolio featuring L.V. and was first released on July 11, 1995.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt names Coolio featuring L.V. and gives the first-release date.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "Coolio’s recording draws on Stevie Wonder’s “Pastime Paradise.” The sample relationship gives the track a direct connection to Wonder’s earlier recording.",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/samples/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz relationships excerpt establishes the sample connection but does not date Wonder’s recording.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A Stevie Wonder foundation",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Stevie Wonder",
+            "type": "artist"
+          },
+          {
+            "text": "Pastime Paradise",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Producer Doug Rasheed recalled revisiting the drums and strengthening the strings during the final mix. The track came together across four studios, including his home studio.",
+      "about": "production",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A studio-built arrangement",
+        "type": "production",
+        "entities": [
+          {
+            "text": "Doug Rasheed",
+            "type": "producer"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. samples \"Pastime Paradise\" by Stevie Wonder.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/samples/recording/e97bedfc-b0ee-4cb6-8343-03a714caab15"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsta’s Paradise (Candyland OG Version) (Tarraxa Remixed By DJ RADIKAL Feat Cristian Kizomba Paredes Leiva)\" by Coolio.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/a13974fa-cf9d-413d-ade3-147f56a64958"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsta's Paradise (Cj Borika Remix)\" by Cj Borika.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/bb60fbdc-8bb5-4af8-b81e-a703867cccbc"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsters Paradise (Candyland's OG Remix)\" by Coolio.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/ae6a6e5d-0f82-49d6-9947-6691ca53cd89"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is remixed in \"Gangsters Paradise (Hot Pockets bootleg)\" by Coolio.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/remixed-by/recording/2999f638-8d54-4f0e-bb3b-1cea52a3ca39"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Age\" by Contopp nd #Sloppit#.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/dc240d13-1dc8-4f90-bdb5-620fdcf88cd2"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 11>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Caramella’s Paradise\" by Holo Bass.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/eb932b77-c9cd-4e26-a6f0-cb88bfb880b1"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 12>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Driven\" by Contopp nd #Sloppit#.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/b1737dd2-627b-469a-b040-7f5fe39cca7d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 13>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. is sampled in \"Zabaci domaćine\" by Bad Copy.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55/sampled-by/recording/186b8f79-e9bb-46cb-8f73-09772eeea9af"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 14>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Battery.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/ddc92216-4a93-464f-ad7e-16f20338f345"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 15>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by Off the Beat.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/e2528778-49b7-4724-b3f6-8f7310ac5cac"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 16>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/a7f45cbb-fb24-4488-8851-1550f3661919"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 17>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by L.V..",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/457aad94-d8e3-492d-ba14-bc9b2ebffa41"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 18>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/0c40fab2-4d7b-4efb-8ba4-d560ab7ed586"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 19>",
+      "text": "The work \"Gangsta’s Paradise\" is covered by \"Gangsta's Paradise\" by DJ Dave.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/5efe152c-3104-3226-9084-d71efc6356af/covered-by/recording/f1a6238f-0e7f-4d4c-a1d4-b89efbe0d42b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 20>",
+      "text": "\"Gangsta’s Paradise\" by Coolio featuring L.V. appears on the official album \"Gangsta’s Paradise\" (1995-11-07).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/bd4b7a7b-2cf5-36b4-8e49-ccc59c5eae48"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 14890,
+      "outputTokens": 1791,
+      "reasoningTokens": 460
+    },
+    "verifier": {
+      "judged": 4,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "sourceErrors": [
+      {
+        "source": "listenbrainz",
+        "code": "unavailable",
+        "message": "listenbrainz: fetch failed"
+      },
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.989
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 79.56,
+      "confidence": 0.564,
+      "rawConfidence": {
+        "value": 2.999,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.133508,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.789,
+        1.591,
+        2.392,
+        3.181,
+        3.982,
+        4.783,
+        5.55,
+        6.316,
+        7.082,
+        7.825,
+        8.591,
+        9.334,
+        10.077,
+        10.82,
+        11.587,
+        12.33,
+        13.073,
+        13.839,
+        14.582,
+        15.325,
+        16.091,
+        16.834,
+        17.578,
+        18.332,
+        19.087,
+        19.83,
+        20.584,
+        21.339,
+        22.082,
+        22.825,
+        23.591,
+        24.335,
+        25.078,
+        25.844,
+        26.587,
+        27.33,
+        28.096,
+        28.839,
+        29.582
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.000041,
+        0.000038,
+        0.000036,
+        0.233965,
+        0.355826,
+        0.153579,
+        0.147534,
+        0.130344,
+        0.11215,
+        0.10286,
+        0.099862,
+        0.107262,
+        0.115154,
+        0.1167,
+        0.105418,
+        0.071705,
+        0.064222,
+        0.08314,
+        0.087742,
+        0.077125,
+        0.081803,
+        0.068734,
+        0.082213,
+        0.070534,
+        0.066278,
+        0.062752,
+        0.064717,
+        0.064865,
+        0.073879,
+        0.071553,
+        0.074342,
+        0.071688,
+        0.075536,
+        0.070795,
+        0.074528,
+        0.070881,
+        0.412398,
+        0.142354,
+        0.149881,
+        0.114609,
+        0.085511,
+        0.137531,
+        0.12018,
+        0.066633,
+        0.066628,
+        0.094127,
+        0.10687,
+        0.103993,
+        0.100909,
+        0.090125,
+        0.091246,
+        0.070858,
+        0.067847,
+        0.064542,
+        0.067954,
+        0.064108,
+        0.087615,
+        0.073026,
+        0.061519,
+        0.056646,
+        0.074972,
+        0.064106,
+        0.067146,
+        0.068037,
+        0.066941,
+        0.060544,
+        0.059973,
+        0.060481,
+        0.363762,
+        0.260016,
+        0.15492,
+        0.134928,
+        0.11347,
+        0.094499,
+        0.088398,
+        0.085248,
+        0.094882,
+        0.102189,
+        0.107573,
+        0.091713,
+        0.06925,
+        0.067894,
+        0.080559,
+        0.083118,
+        0.075167,
+        0.076057,
+        0.078768,
+        0.074229,
+        0.084072,
+        0.081759,
+        0.085708,
+        0.079358,
+        0.081299,
+        0.082939,
+        0.087842,
+        0.087105,
+        0.08412,
+        0.081548,
+        0.077914,
+        0.084691,
+        0.256573,
+        0.323042,
+        0.115969,
+        0.117827,
+        0.121363,
+        0.107098,
+        0.111101,
+        0.112909,
+        0.101508,
+        0.087567,
+        0.083459,
+        0.086094,
+        0.089973,
+        0.089329,
+        0.087192,
+        0.072582,
+        0.068449,
+        0.069533,
+        0.066213,
+        0.064493,
+        0.062629,
+        0.081989,
+        0.090642,
+        0.078702,
+        0.111249,
+        0.175769,
+        0.081213,
+        0.066544,
+        0.074775,
+        0.132921,
+        0.072503,
+        0.127388,
+        0.096236,
+        0.434195,
+        0.214451,
+        0.118456,
+        0.090315,
+        0.104416,
+        0.073362,
+        0.131806,
+        0.064198,
+        0.249527,
+        0.17822,
+        0.123512,
+        0.118579,
+        0.186853,
+        0.087112,
+        0.129155,
+        0.122806,
+        0.354704,
+        0.156101,
+        0.134597,
+        0.123499,
+        0.360557,
+        0.12382,
+        0.130137,
+        0.159417,
+        0.167502,
+        0.107256,
+        0.132569,
+        0.106714,
+        0.125393,
+        0.126575,
+        0.113723,
+        0.1367,
+        0.383228,
+        0.205031,
+        0.181097,
+        0.147843,
+        0.163228,
+        0.176744,
+        0.170423,
+        0.151896,
+        0.172782,
+        0.138024,
+        0.144736,
+        0.152817,
+        0.159276,
+        0.201611,
+        0.173048,
+        0.143573,
+        0.372159,
+        0.247286,
+        0.172547,
+        0.109559,
+        0.34044,
+        0.201591,
+        0.126433,
+        0.162564,
+        0.197143,
+        0.1463,
+        0.175938,
+        0.160585,
+        0.102051,
+        0.108576,
+        0.109726,
+        0.157728,
+        0.306879,
+        0.359623,
+        0.186078,
+        0.139918,
+        0.106919,
+        0.137571,
+        0.124331,
+        0.092603,
+        0.192217,
+        0.194454,
+        0.125874,
+        0.113307,
+        0.093281,
+        0.119575,
+        0.101597,
+        0.171316,
+        0.276853,
+        0.308861,
+        0.110207,
+        0.123695,
+        0.220803,
+        0.307808,
+        0.100199,
+        0.162003,
+        0.171687,
+        0.168903,
+        0.110745,
+        0.13269,
+        0.119627,
+        0.078479,
+        0.07352,
+        0.077562,
+        0.113668,
+        0.425902,
+        0.178516,
+        0.179884,
+        0.16104,
+        0.175203,
+        0.186213,
+        0.168848,
+        0.137099,
+        0.079013,
+        0.124779,
+        0.095359,
+        0.085752,
+        0.167982,
+        0.106092,
+        0.146607,
+        0.12253,
+        0.160194,
+        0.146958,
+        0.124238,
+        0.101774,
+        0.355736,
+        0.131929,
+        0.132022,
+        0.133113,
+        0.198452,
+        0.120188,
+        0.16259,
+        0.14293,
+        0.157353,
+        0.16242,
+        0.147857,
+        0.110072,
+        0.41805,
+        0.267357,
+        0.174536,
+        0.105991,
+        0.163066,
+        0.122518,
+        0.068489,
+        0.135216,
+        0.183578,
+        0.144036,
+        0.137007,
+        0.124589,
+        0.136071,
+        0.083538,
+        0.081989,
+        0.132053,
+        0.31865,
+        0.196961,
+        0.100931,
+        0.081562,
+        0.325196,
+        0.201773,
+        0.080763,
+        0.082344,
+        0.161029,
+        0.104812,
+        0.081221,
+        0.072626,
+        0.077327,
+        0.107142,
+        0.087782,
+        0.08886,
+        0.330969,
+        0.279515,
+        0.157245,
+        0.164399,
+        0.156405,
+        0.169507,
+        0.074446,
+        0.144821,
+        0.176592,
+        0.179065,
+        0.132887,
+        0.070025,
+        0.07031,
+        0.137713,
+        0.090365,
+        0.136295,
+        0.125736,
+        0.113754,
+        0.087468,
+        0.143156,
+        0.247711,
+        0.295353,
+        0.088705,
+        0.115713,
+        0.170051,
+        0.153152,
+        0.098031,
+        0.130541
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.989
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.37,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 0.41,
+        "type": "energy_peak",
+        "intensity": 0.82,
+        "description": "Energy peak"
+      },
+      {
+        "time": 3.15,
+        "type": "harmonic_change",
+        "intensity": 0.207,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 3.39,
+        "type": "energy_peak",
+        "intensity": 0.95,
+        "description": "Energy peak"
+      },
+      {
+        "time": 4.76,
+        "type": "harmonic_change",
+        "intensity": 0.205,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 6.36,
+        "type": "energy_peak",
+        "intensity": 0.838,
+        "description": "Energy peak"
+      },
+      {
+        "time": 6.38,
+        "type": "onset",
+        "intensity": 0.463,
+        "description": "Onset"
+      },
+      {
+        "time": 9.38,
+        "type": "onset",
+        "intensity": 0.405,
+        "description": "Onset"
+      },
+      {
+        "time": 9.42,
+        "type": "energy_peak",
+        "intensity": 0.744,
+        "description": "Energy peak"
+      },
+      {
+        "time": 12.3,
+        "type": "harmonic_change",
+        "intensity": 0.216,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 14.65,
+        "type": "onset",
+        "intensity": 0.255,
+        "description": "Onset"
+      },
+      {
+        "time": 16.85,
+        "type": "energy_peak",
+        "intensity": 0.857,
+        "description": "Energy peak"
+      },
+      {
+        "time": 19.92,
+        "type": "energy_peak",
+        "intensity": 0.711,
+        "description": "Energy peak"
+      },
+      {
+        "time": 24.38,
+        "type": "energy_peak",
+        "intensity": 0.963,
+        "description": "Energy peak"
+      },
+      {
+        "time": 27.35,
+        "type": "energy_peak",
+        "intensity": 0.762,
+        "description": "Energy peak"
+      },
+      {
+        "time": 28.14,
+        "type": "onset",
+        "intensity": 0.494,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Hip Hop---Gangsta",
+            "score": 0.3672
+          },
+          {
+            "label": "Hip Hop---G-Funk",
+            "score": 0.2347
+          },
+          {
+            "label": "Hip Hop---Horrorcore",
+            "score": 0.0787
+          },
+          {
+            "label": "Hip Hop---RnB/Swing",
+            "score": 0.0684
+          },
+          {
+            "label": "Hip Hop---Screw",
+            "score": 0.0619
+          },
+          {
+            "label": "Hip Hop---Conscious",
+            "score": 0.0383
+          },
+          {
+            "label": "Hip Hop---Bounce",
+            "score": 0.0346
+          },
+          {
+            "label": "Hip Hop---Hardcore Hip-Hop",
+            "score": 0.0324
+          },
+          {
+            "label": "Hip Hop---Ragga HipHop",
+            "score": 0.0296
+          },
+          {
+            "label": "Electronic---Downtempo",
+            "score": 0.0289
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "Hip-Hop",
+            "score": 0.5523
+          },
+          {
+            "label": "electronic",
+            "score": 0.1457
+          },
+          {
+            "label": "chillout",
+            "score": 0.1218
+          },
+          {
+            "label": "ambient",
+            "score": 0.1073
+          },
+          {
+            "label": "electronica",
+            "score": 0.0506
+          },
+          {
+            "label": "pop",
+            "score": 0.041
+          },
+          {
+            "label": "rock",
+            "score": 0.0354
+          },
+          {
+            "label": "90s",
+            "score": 0.0343
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0299
+          },
+          {
+            "label": "chill",
+            "score": 0.0298
+          },
+          {
+            "label": "dance",
+            "score": 0.0251
+          },
+          {
+            "label": "alternative",
+            "score": 0.0225
+          },
+          {
+            "label": "rnb",
+            "score": 0.0219
+          },
+          {
+            "label": "soul",
+            "score": 0.0213
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0204
+          },
+          {
+            "label": "jazz",
+            "score": 0.017
+          },
+          {
+            "label": "00s",
+            "score": 0.0167
+          },
+          {
+            "label": "indie",
+            "score": 0.0164
+          },
+          {
+            "label": "experimental",
+            "score": 0.0127
+          },
+          {
+            "label": "funk",
+            "score": 0.012
+          },
+          {
+            "label": "electro",
+            "score": 0.0113
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0097
+          },
+          {
+            "label": "80s",
+            "score": 0.0097
+          },
+          {
+            "label": "House",
+            "score": 0.0088
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0086
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0075
+          },
+          {
+            "label": "party",
+            "score": 0.0073
+          },
+          {
+            "label": "sexy",
+            "score": 0.0072
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0058
+          },
+          {
+            "label": "punk",
+            "score": 0.0058
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0046
+          },
+          {
+            "label": "blues",
+            "score": 0.0043
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0041
+          },
+          {
+            "label": "classic rock",
+            "score": 0.004
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0038
+          },
+          {
+            "label": "folk",
+            "score": 0.0032
+          },
+          {
+            "label": "metal",
+            "score": 0.0026
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0025
+          },
+          {
+            "label": "sad",
+            "score": 0.0024
+          },
+          {
+            "label": "catchy",
+            "score": 0.0024
+          },
+          {
+            "label": "guitar",
+            "score": 0.0024
+          },
+          {
+            "label": "70s",
+            "score": 0.0024
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0023
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0019
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0016
+          },
+          {
+            "label": "oldies",
+            "score": 0.0013
+          },
+          {
+            "label": "country",
+            "score": 0.0012
+          },
+          {
+            "label": "60s",
+            "score": 0.0011
+          },
+          {
+            "label": "happy",
+            "score": 0.0009
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0008
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9999,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0105,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.2179,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 4.9948,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.186,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 80,
+  "key": null,
+  "energy": 0.454,
+  "valence": 0.499,
+  "danceability": 1,
+  "acousticness": 0.011,
+  "keyMoments": [
+    {
+      "time": 0.37,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 0.41,
+      "type": "energy_peak",
+      "intensity": 0.82,
+      "description": "Energy peak"
+    },
+    {
+      "time": 3.15,
+      "type": "harmonic_change",
+      "intensity": 0.207,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 3.39,
+      "type": "energy_peak",
+      "intensity": 0.95,
+      "description": "Energy peak"
+    },
+    {
+      "time": 4.76,
+      "type": "harmonic_change",
+      "intensity": 0.205,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 6.36,
+      "type": "energy_peak",
+      "intensity": 0.838,
+      "description": "Energy peak"
+    },
+    {
+      "time": 6.38,
+      "type": "onset",
+      "intensity": 0.463,
+      "description": "Onset"
+    },
+    {
+      "time": 9.38,
+      "type": "onset",
+      "intensity": 0.405,
+      "description": "Onset"
+    },
+    {
+      "time": 9.42,
+      "type": "energy_peak",
+      "intensity": 0.744,
+      "description": "Energy peak"
+    },
+    {
+      "time": 12.3,
+      "type": "harmonic_change",
+      "intensity": 0.216,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 14.65,
+      "type": "onset",
+      "intensity": 0.255,
+      "description": "Onset"
+    },
+    {
+      "time": 16.85,
+      "type": "energy_peak",
+      "intensity": 0.857,
+      "description": "Energy peak"
+    },
+    {
+      "time": 19.92,
+      "type": "energy_peak",
+      "intensity": 0.711,
+      "description": "Energy peak"
+    },
+    {
+      "time": 24.38,
+      "type": "energy_peak",
+      "intensity": 0.963,
+      "description": "Energy peak"
+    },
+    {
+      "time": 27.35,
+      "type": "energy_peak",
+      "intensity": 0.762,
+      "description": "Energy peak"
+    },
+    {
+      "time": 28.14,
+      "type": "onset",
+      "intensity": 0.494,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

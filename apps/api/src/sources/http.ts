@@ -19,7 +19,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2373,14 +2373,60 @@ function apiRoot(): string {
 }
 
 /**
+ * The file in the cassette directory naming the credentials a recording ran without: names only,
+ * never a value. `{ "version": 1, "unset": ["DISCOGS_TOKEN", …] }`.
+ */
+export const UNSET_CREDENTIALS_FILE = "credentials.json";
+
+function unsetCredentialsPath(): string {
+  return join(cassetteDir(), UNSET_CREDENTIALS_FILE);
+}
+
+/** The credential names the recording in the cassette directory ran without (none: empty). */
+export function recordedUnsetCredentials(): Set<string> {
+  let data: unknown;
+  try {
+    data = JSON.parse(readFileSync(unsetCredentialsPath(), "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set();
+    throw new Error(`${unsetCredentialsPath()} cannot be read as JSON: record the cassettes again`);
+  }
+  const unset = (data as { unset?: unknown } | null)?.unset;
+  if (!Array.isArray(unset) || !unset.every((name) => typeof name === "string")) {
+    throw new Error(`${unsetCredentialsPath()} has no list of names: record the cassettes again`);
+  }
+  return new Set(unset);
+}
+
+/** Under record: notes that the recording runs without credential `name` (its name only). */
+function recordUnsetCredential(name: string): void {
+  const unset = recordedUnsetCredentials();
+  if (unset.has(name)) return;
+  unset.add(name);
+  mkdirSync(cassetteDir(), { recursive: true });
+  writeFileSync(
+    unsetCredentialsPath(),
+    `${JSON.stringify({ version: 1, unset: [...unset].sort() }, null, 2)}\n`,
+  );
+}
+
+/**
  * A credential from the environment. Under replay nothing is sent, so a missing credential is
- * a placeholder and the cassette decides the answer. In any other mode a missing credential
- * stays missing.
+ * a placeholder and the cassette decides the answer, unless the recording ran without it
+ * (UNSET_CREDENTIALS_FILE): then it stays missing, so a source that was not configured when
+ * recorded is not configured in its replay either, and the run takes the same path. Under record
+ * a missing credential is noted in that file. In any other mode it stays missing.
  */
 export function credential(name: string): string | undefined {
   const value = process.env[name];
   if (value) return value;
-  return requestedMode() === "replay" && cassetteMode() === "replay" ? "replay" : undefined;
+  const mode = requestedMode();
+  if (mode === "record" && cassetteMode() === "record") {
+    recordUnsetCredential(name);
+    return undefined;
+  }
+  if (mode !== "replay" || cassetteMode() !== "replay") return undefined;
+  return recordedUnsetCredentials().has(name) ? undefined : "replay";
 }
 
 export function cassetteDir(): string {

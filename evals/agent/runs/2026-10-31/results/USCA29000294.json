@@ -1,0 +1,1618 @@
+{
+  "id": "1B75hgRqe7A4fwee3g3Wmu",
+  "title": "U Can't Touch This",
+  "artist": "MC Hammer",
+  "album": "Please Hammer Don't Hurt 'Em",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/1B75hgRqe7A4fwee3g3Wmu",
+  "releaseYear": "1990",
+  "explicit": false,
+  "durationSeconds": 257,
+  "isrc": "USCA29000294",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/7c9b0704-d3a9-4e40-9279-8a3c46ea249f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/7c9b0704-d3a9-4e40-9279-8a3c46ea249f",
+      "title": "U Can’t Touch This — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"U Can’t Touch This\" by MC Hammer (4:17), ISRC USCA29000294, first released 2023-07-05.",
+      "recordRef": "track/recording/7c9b0704-d3a9-4e40-9279-8a3c46ea249f"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/aada1cd9-d8a4-4a54-93b8-8460a3bc3df2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"(Ne)formalne czastuszki\" by ХПЛ.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/aada1cd9-d8a4-4a54-93b8-8460a3bc3df2"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/89a36fcc-73d5-46e0-bbbf-adde21db4129",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"Can't Touch This\" by Stahlhammer.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/89a36fcc-73d5-46e0-bbbf-adde21db4129"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/1a915529-39b5-4287-ad4b-60d611e98abb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can' t Touch This\" by DJ MAGIC DRAGON.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/1a915529-39b5-4287-ad4b-60d611e98abb"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/8504bf7a-13c4-49fb-8943-2faf9774fbf5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can't Touch This\" by Los Colorados.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/8504bf7a-13c4-49fb-8943-2faf9774fbf5"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/b21cde9a-a45b-4d19-85af-745a85616c40",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can't Touch This\" by Viech.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/b21cde9a-a45b-4d19-85af-745a85616c40"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/af4d5c03-1d2a-4e11-95bb-11f8c3c7148d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by Crazy Frog.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/af4d5c03-1d2a-4e11-95bb-11f8c3c7148d"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/5b84adad-c5fe-49d2-8aea-99272f0b6105",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by Glee Cast.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/5b84adad-c5fe-49d2-8aea-99272f0b6105"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/4f9a6d65-d13a-45ed-89ec-9491e9b38d99",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by Sophia Grace Brownlee and Margaret Clunie.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/4f9a6d65-d13a-45ed-89ec-9491e9b38d99"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/1a745e70-a736-4aac-b5c6-0a829cd0bbb5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by The Chipmunks.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/1a745e70-a736-4aac-b5c6-0a829cd0bbb5"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/bef2decb-fc81-4925-a8ec-280fde337fa3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by Leo Moracchioli.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/bef2decb-fc81-4925-a8ec-280fde337fa3"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/e32f0558-d1fa-4f93-bb05-66b00fbb5352",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This\" by Alexandr Misko.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/e32f0558-d1fa-4f93-bb05-66b00fbb5352"
+    },
+    {
+      "id": "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/dc1ebeb5-1a60-45a8-bf6b-59799a632b2b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/65630a76-47ef-3d2a-aee4-00ef73771ec5",
+      "title": "U Can’t Touch This — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"U Can’t Touch This\" is covered by \"U Can’t Touch This (radio mix)\" by Crazy Frog.",
+      "recordRef": "work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/dc1ebeb5-1a60-45a8-bf6b-59799a632b2b"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak",
+      "title": "MC Hammer's 'U Can't Touch This' sample of Rick James's ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"U Can't Touch This\" by MC Hammer sampled Rick James's \"Super Freak\". Listen to both songs on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/U_Can%27t_Touch_This",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/U_Can%27t_Touch_This",
+      "title": "U Can't Touch This - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"U Can't Touch This\" is a song co-written, produced, and performed by American rapper MC Hammer. It was released in April 1990 by Capitol Records as the third single from his third album, Please Hammer Don't Hurt 'Em (1990), and has been considered his signature song. Rick James and Alonzo Miller also have songwriting credits, as the song samples \"Sampling (music)\") the prominent opening riff of James's 1981 single \"Super Freak\". It has been used and referred to in many television shows, films,…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/MC-Hammer/U-Can%27t-Touch-This",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/MC-Hammer/U-Can%27t-Touch-This",
+      "title": "U Can't Touch This by MC Hammer",
+      "retrievedAt": "[time]",
+      "excerpt": "Contains samples of 1 song Rick James's. Sampled in 79 songs Big Sean's Dance (Ass) feat. Nicky Jam and Tyga's \"U Can't Touch This\" contains samples of \"Super",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/MC-Hammer/U-Can%27t-Touch-This/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/MC-Hammer/U-Can%27t-Touch-This/sampled",
+      "title": "Songs that Sampled U Can't Touch This by MC Hammer",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 79 songs. Sampled Big Sean's Dance (Ass) Dance. Black Eyed Peas feat. Nicky Jam and Tyga's VIDA LOCA. Eminem's Just Lose It Just Lose It Eminem. Far",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/shorts/psJSGDJpGs8",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/shorts/psJSGDJpGs8",
+      "title": "ORIGINAL vs SAMPLE: M.C. Hammer - U Can't Touch This",
+      "retrievedAt": "[time]",
+      "excerpt": "ORIGINAL vs SAMPLE: M.C. Hammer - U Can't Touch This … discover great new music from unknown artists #sample #samples #original #originalsong",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/mc-hammer/u-cant-touch-this",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/mc-hammer/u-cant-touch-this",
+      "title": "U Can't Touch This by MC Hammer - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "MC Hammer recorded this song at the Capitol Records studios in Hollywood, the same place where Frank Sinatra and Nat King Cole made many of their famous recordings. \"U Can't Touch This\" is a popular choice for lowbrow blockbusters; it's been used in two Transformers movies, Grown Ups 2 (2013), Charlie's Angels: Full Throttle (2003) and Kung Pow: Enter the Fist (2002). Other films to use it include: Furious 7 (2015) The Proposal (2009) The Game (2008) [...] \"U Can't Touch This\" was released in J…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.udiscovermusic.com/stories/mc-hammer-bust-it-records-feature",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.udiscovermusic.com/stories/mc-hammer-bust-it-records-feature",
+      "title": "MC Hammer and the Legacy of Bust It Records | uDiscover",
+      "retrievedAt": "[time]",
+      "excerpt": "After an appearance on The Arsenio Hall Show broke MC Hammer to an even wider mainstream audience, his popularity – and the fortunes of Bust It Records – looked primed to explode. That explosion came in the form of 1990’s monster hit single “U Can’t Touch This,” recorded in the studio on Hammer’s tour bus. The song shot to the Billboard Top 10 and the music video was one of the most played on MTV in early 1990, turning MC Hammer into a pop superstar. His second major-label album, Please Hammer …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://cuny.manifoldapp.org/read/that-s-word-because-you-know-a-lyrical-critical-investigation-into-mc-hammer-s-u-can-t-touch-this",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://cuny.manifoldapp.org/read/that-s-word-because-you-know-a-lyrical-critical-investigation-into-mc-hammer-s-u-can-t-touch-this",
+      "title": "That’s word, because you know: A lyrical & critical investigation into MC Hammer’s “U Can’t Touch This” | That’s word, because you know: A lyrical & critical investigation into MC Hammer’s “U Can’t Touch This” | Manifold @…",
+      "retrievedAt": "[time]",
+      "excerpt": "Pick your right foot up. Put it down.Pick your left foot up. Put it down. Repeat this sequence and increase the speed and angle at which the knee bends until you are running in place. If you are seated, tap the feet -- left, right, left, right -- as if you are running. Continue to run in place as you roll both shoulders up, back and front. Repeat. You can also roll your shoulders up and front and back, if that feels better. Repeat. Congratulations, you’ve just experienced Hammertime. [...] 5. B…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://open.spotify.com/track/1B75hgRqe7A4fwee3g3Wmu",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://open.spotify.com/track/1B75hgRqe7A4fwee3g3Wmu",
+      "title": "U Can't Touch This - Song, Lyrics, and Music Video by MC Hammer",
+      "retrievedAt": "[time]",
+      "excerpt": "Vanilla Ice Artist Image 48 C & C Music Factory Artist Image 49 Run–D.M.C. Artist Image 50 Lipps Inc. Artist Image 51 House Of Pain Artist Image 52 Lou Bega Artist Image 53 Technotronic Artist Image 54 Will Smith Artist Image 55 Rick Astley Artist Image 56 Carl Douglas Artist Image 57: Please Hammer Don't Hurt 'Em From the albumPlease Hammer Don't Hurt 'Em February 20, 1990 © 1990 Capitol Records, LLC ℗ 1990 Capitol Records, LLC #### Company",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 14>",
+      "title": "A familiar riff at the center",
+      "content": "The recording samples Rick James’s “Super Freak.” The song’s opening riff is described as a prominent part of the sample.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 15>",
+          "text": "Rick James",
+          "type": "artist",
+          "searchQuery": "Rick James"
+        },
+        {
+          "id": "<id 16>",
+          "text": "Super Freak",
+          "type": "album",
+          "searchQuery": "Super Freak"
+        }
+      ],
+      "claimId": "<id 6>"
+    },
+    {
+      "id": "<id 17>",
+      "title": "A song with a landmark sample",
+      "content": "Rick James and Alonzo Miller received songwriting credits alongside MC Hammer. The credits followed a lawsuit over the use of “Super Freak,” according to the supplied source material.",
+      "type": "credits",
+      "entities": [
+        {
+          "id": "<id 18>",
+          "text": "Rick James",
+          "type": "artist",
+          "searchQuery": "Rick James"
+        },
+        {
+          "id": "<id 19>",
+          "text": "Alonzo Miller",
+          "type": "artist",
+          "searchQuery": "Alonzo Miller"
+        },
+        {
+          "id": "<id 20>",
+          "text": "MC Hammer",
+          "type": "artist",
+          "searchQuery": "MC Hammer"
+        },
+        {
+          "id": "<id 21>",
+          "text": "Super Freak",
+          "type": "album",
+          "searchQuery": "Super Freak"
+        }
+      ],
+      "claimId": "<id 7>"
+    },
+    {
+      "id": "<id 22>",
+      "title": "Made on the road",
+      "content": "A supplied account says the track was recorded in a studio on MC Hammer’s tour bus.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 23>",
+          "text": "MC Hammer",
+          "type": "artist",
+          "searchQuery": "MC Hammer"
+        }
+      ],
+      "claimId": "<id 8>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "U Can't Touch This",
+        "size": 40,
+        "trackTitle": "U Can't Touch This",
+        "trackArtist": "MC Hammer",
+        "mbid": "7c9b0704-d3a9-4e40-9279-8a3c46ea249f"
+      },
+      {
+        "id": "super-freak",
+        "group": 4,
+        "label": "Super Freak - Rick James (1981)",
+        "size": 22,
+        "trackTitle": "Super Freak",
+        "trackArtist": "Rick James",
+        "spotifyId": "2dCmGcEOQrMQhMMS8Vj7Ca"
+      }
+    ],
+    "links": [
+      {
+        "source": "super-freak",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MC Hammer’s “U Can’t Touch This” samples Rick James’s “Super Freak.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says MC Hammer’s song sampled Rick James’s “Super Freak.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "MC Hammer co-wrote, produced, and performed the song; Rick James and Alonzo Miller also received songwriting credits.",
+      "about": "credit",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/U_Can%27t_Touch_This"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt states MC Hammer’s roles and names Rick James and Alonzo Miller as songwriters.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "The song was released as a single from MC Hammer’s album Please Hammer Don’t Hurt ’Em.",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/U_Can%27t_Touch_This"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt identifies the song as a single from Please Hammer Don’t Hurt ’Em.",
+      "numericCheck": "n/a",
+      "numericReason": "Not compared: the preview's key was not measured.",
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "Please Hammer Don’t Hurt ’Em is listed as the album for this track, with a release date of February 20, 1990.",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://open.spotify.com/track/1B75hgRqe7A4fwee3g3Wmu"
+      ],
+      "scope": "release",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The Spotify excerpt names the album but gives no February 20 release date.",
+      "numericCheck": "n/a",
+      "numericReason": "Not compared: the preview's key was not measured.",
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "The recording samples Rick James’s “Super Freak.” The song’s opening riff is described as a prominent part of the sample.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak",
+        "tavily:https://en.wikipedia.org/wiki/U_Can%27t_Touch_This"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt confirms the sample; neither cited excerpt describes an opening riff.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A familiar riff at the center",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Rick James",
+            "type": "artist"
+          },
+          {
+            "text": "Super Freak",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "Rick James and Alonzo Miller received songwriting credits alongside MC Hammer. The credits followed a lawsuit over the use of “Super Freak,” according to the supplied source material.",
+      "about": "credit",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/U_Can%27t_Touch_This"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The Wikipedia excerpt confirms the credits but does not mention a lawsuit.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song with a landmark sample",
+        "type": "credits",
+        "entities": [
+          {
+            "text": "Rick James",
+            "type": "artist"
+          },
+          {
+            "text": "Alonzo Miller",
+            "type": "artist"
+          },
+          {
+            "text": "MC Hammer",
+            "type": "artist"
+          },
+          {
+            "text": "Super Freak",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 8>",
+      "text": "A supplied account says the track was recorded in a studio on MC Hammer’s tour bus.",
+      "about": "production",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Made on the road",
+        "type": "production",
+        "entities": [
+          {
+            "text": "MC Hammer",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"U Can't Touch This - MC Hammer\" samples \"Super Freak - Rick James (1981)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/40/MC-Hammer-U-Can%27t-Touch-This-Rick-James-Super-Freak"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt confirms the sample but does not give “Super Freak”’s year.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"U Can’t Touch This\" is covered by \"Can't Touch This\" by Stahlhammer.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/89a36fcc-73d5-46e0-bbbf-adde21db4129"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"U Can’t Touch This\" is covered by \"U Can' t Touch This\" by DJ MAGIC DRAGON.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/1a915529-39b5-4287-ad4b-60d611e98abb"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"U Can’t Touch This\" is covered by \"U Can't Touch This\" by Los Colorados.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/8504bf7a-13c4-49fb-8943-2faf9774fbf5"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"U Can’t Touch This\" is covered by \"U Can't Touch This\" by Viech.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/65630a76-47ef-3d2a-aee4-00ef73771ec5/covered-by/recording/b21cde9a-a45b-4d19-85af-745a85616c40"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 13035,
+      "outputTokens": 1832,
+      "reasoningTokens": 417
+    },
+    "verifier": {
+      "judged": 7,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 133.01,
+      "confidence": 0.656,
+      "rawConfidence": {
+        "value": 3.49,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.096624,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.476,
+        0.952,
+        1.463,
+        1.939,
+        2.45,
+        2.914,
+        3.379,
+        3.831,
+        4.284,
+        4.737,
+        5.178,
+        5.631,
+        6.084,
+        6.536,
+        6.989,
+        7.442,
+        7.895,
+        8.348,
+        8.789,
+        9.242,
+        9.694,
+        10.147,
+        10.588,
+        11.041,
+        11.494,
+        11.935,
+        12.388,
+        12.841,
+        13.293,
+        13.746,
+        14.199,
+        14.652,
+        15.093,
+        15.546,
+        15.987,
+        16.44,
+        16.893,
+        17.345,
+        17.786,
+        18.251,
+        18.704,
+        19.156,
+        19.598,
+        20.05,
+        20.503,
+        20.956,
+        21.397,
+        21.862,
+        22.314,
+        22.767,
+        23.208,
+        23.661,
+        24.102,
+        24.555,
+        24.996,
+        25.437,
+        25.902,
+        26.355,
+        26.807,
+        27.26,
+        27.713,
+        28.166,
+        28.607,
+        29.06,
+        29.513
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.026102,
+        0.024193,
+        0.144508,
+        0.1305,
+        0.101044,
+        0.098292,
+        0.087817,
+        0.142515,
+        0.075349,
+        0.135957,
+        0.066616,
+        0.052307,
+        0.138611,
+        0.067454,
+        0.08564,
+        0.057267,
+        0.093891,
+        0.111527,
+        0.031828,
+        0.124223,
+        0.096725,
+        0.114135,
+        0.123735,
+        0.052225,
+        0.1046,
+        0.059562,
+        0.132201,
+        0.087227,
+        0.054057,
+        0.134715,
+        0.058963,
+        0.141319,
+        0.071166,
+        0.085623,
+        0.073297,
+        0.031861,
+        0.128593,
+        0.069492,
+        0.122192,
+        0.135934,
+        0.040373,
+        0.172361,
+        0.130919,
+        0.102289,
+        0.104515,
+        0.109195,
+        0.119947,
+        0.07626,
+        0.113092,
+        0.085972,
+        0.09161,
+        0.132677,
+        0.051131,
+        0.138656,
+        0.080855,
+        0.123896,
+        0.09634,
+        0.06663,
+        0.15334,
+        0.062424,
+        0.151721,
+        0.103701,
+        0.062028,
+        0.071279,
+        0.069058,
+        0.125797,
+        0.067078,
+        0.128685,
+        0.122644,
+        0.074997,
+        0.123218,
+        0.090848,
+        0.103266,
+        0.084347,
+        0.059471,
+        0.129629,
+        0.08099,
+        0.148756,
+        0.14087,
+        0.068715,
+        0.163786,
+        0.12772,
+        0.097819,
+        0.088481,
+        0.139331,
+        0.084162,
+        0.071183,
+        0.117638,
+        0.071206,
+        0.122565,
+        0.085504,
+        0.076035,
+        0.090277,
+        0.039502,
+        0.136865,
+        0.081821,
+        0.069429,
+        0.135175,
+        0.062761,
+        0.160499,
+        0.098353,
+        0.057439,
+        0.088419,
+        0.071126,
+        0.142247,
+        0.053117,
+        0.114024,
+        0.104055,
+        0.052003,
+        0.175285,
+        0.081768,
+        0.110899,
+        0.064081,
+        0.092104,
+        0.100252,
+        0.077429,
+        0.192343,
+        0.065654,
+        0.124575,
+        0.154926,
+        0.116757,
+        0.099245,
+        0.089788,
+        0.140911,
+        0.080178,
+        0.059012,
+        0.11154,
+        0.068126,
+        0.130208,
+        0.09484,
+        0.07745,
+        0.166871,
+        0.089538,
+        0.139388,
+        0.059198,
+        0.130528,
+        0.140375,
+        0.062901,
+        0.168639,
+        0.106676,
+        0.089614,
+        0.087703,
+        0.098669,
+        0.118786,
+        0.068465,
+        0.13146,
+        0.084127,
+        0.081448,
+        0.094014,
+        0.065894,
+        0.068606,
+        0.018009,
+        0.046237,
+        0.06498,
+        0.005877,
+        0.012343,
+        0.001999,
+        0.101464,
+        0.140094,
+        0.102987,
+        0.093991,
+        0.090717,
+        0.126828,
+        0.061631,
+        0.078285,
+        0.176196,
+        0.062082,
+        0.17311,
+        0.109755,
+        0.084782,
+        0.081445,
+        0.072085,
+        0.127571,
+        0.02898,
+        0.115402,
+        0.120056,
+        0.084784,
+        0.163919,
+        0.105571,
+        0.085824,
+        0.082228,
+        0.121373,
+        0.098396,
+        0.047057,
+        0.187659,
+        0.082635,
+        0.151671,
+        0.15888,
+        0.100729,
+        0.079146,
+        0.058721,
+        0.040784,
+        0.026533,
+        0.008202,
+        0.017084,
+        0.008063,
+        0.136828,
+        0.12271,
+        0.093196,
+        0.096043,
+        0.088184,
+        0.14884,
+        0.053757,
+        0.113743,
+        0.109078,
+        0.059085,
+        0.202841,
+        0.095841,
+        0.074096,
+        0.088063,
+        0.112011,
+        0.090997,
+        0.036979,
+        0.171433,
+        0.10491,
+        0.127946,
+        0.160398,
+        0.122489,
+        0.094317,
+        0.084984,
+        0.138043,
+        0.074914,
+        0.050405,
+        0.181753,
+        0.061899,
+        0.130042,
+        0.139523,
+        0.049859,
+        0.033819,
+        0.012927,
+        0.013834,
+        0.016618,
+        0.004703,
+        0.007711,
+        0.006463,
+        0.201856,
+        0.114152,
+        0.101527,
+        0.095955,
+        0.101244,
+        0.138627,
+        0.10025,
+        0.152842,
+        0.11191,
+        0.115072,
+        0.188396,
+        0.108093,
+        0.098813,
+        0.119068,
+        0.127279,
+        0.085226,
+        0.043342,
+        0.164151,
+        0.098406,
+        0.132177,
+        0.129927,
+        0.10641,
+        0.098712,
+        0.090833,
+        0.146672,
+        0.076968,
+        0.121797,
+        0.125522,
+        0.062086,
+        0.192066,
+        0.092326,
+        0.036711,
+        0.030417,
+        0.011089,
+        0.048442,
+        0.022269,
+        0.009961,
+        0.014463,
+        0.065971,
+        0.182704,
+        0.122354,
+        0.096953,
+        0.104706,
+        0.14155,
+        0.111117,
+        0.100457,
+        0.129929,
+        0.073634,
+        0.124293,
+        0.112016,
+        0.067664,
+        0.103115,
+        0.054052,
+        0.133725,
+        0.068709,
+        0.080636,
+        0.130267,
+        0.08303,
+        0.162738,
+        0.065799,
+        0.08036,
+        0.059141,
+        0.028885,
+        0.147383,
+        0.047877,
+        0.089171,
+        0.122188,
+        0.059427,
+        0.131259,
+        0.063899,
+        0.158092,
+        0.104212,
+        0.103836,
+        0.175658,
+        0.11309,
+        0.128736,
+        0.063943,
+        0.124805,
+        0.150198,
+        0.123489,
+        0.102542,
+        0.102696,
+        0.14916,
+        0.074164,
+        0.078566,
+        0.121461,
+        0.065137
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 7.47,
+        "type": "energy_peak",
+        "intensity": 0.807,
+        "description": "Energy peak"
+      },
+      {
+        "time": 12.39,
+        "type": "onset",
+        "intensity": 0.751,
+        "description": "Onset"
+      },
+      {
+        "time": 14.07,
+        "type": "energy_drop",
+        "intensity": 0.262,
+        "description": "Level drops by 8 dB"
+      },
+      {
+        "time": 14.65,
+        "type": "onset",
+        "intensity": 0.945,
+        "description": "Onset"
+      },
+      {
+        "time": 15.99,
+        "type": "onset",
+        "intensity": 0.753,
+        "description": "Onset"
+      },
+      {
+        "time": 17.13,
+        "type": "energy_peak",
+        "intensity": 0.925,
+        "description": "Energy peak"
+      },
+      {
+        "time": 17.69,
+        "type": "energy_drop",
+        "intensity": 0.233,
+        "description": "Level drops by 7 dB"
+      },
+      {
+        "time": 18.71,
+        "type": "onset",
+        "intensity": 0.596,
+        "description": "Onset"
+      },
+      {
+        "time": 20.75,
+        "type": "energy_peak",
+        "intensity": 0.896,
+        "description": "Energy peak"
+      },
+      {
+        "time": 21.31,
+        "type": "energy_drop",
+        "intensity": 0.314,
+        "description": "Level drops by 9 dB"
+      },
+      {
+        "time": 21.87,
+        "type": "energy_peak",
+        "intensity": 0.995,
+        "description": "Energy peak"
+      },
+      {
+        "time": 21.87,
+        "type": "onset",
+        "intensity": 0.796,
+        "description": "Onset"
+      },
+      {
+        "time": 24.84,
+        "type": "energy_drop",
+        "intensity": 0.234,
+        "description": "Level drops by 7 dB"
+      },
+      {
+        "time": 25.49,
+        "type": "energy_peak",
+        "intensity": 0.901,
+        "description": "Energy peak"
+      },
+      {
+        "time": 28.65,
+        "type": "energy_peak",
+        "intensity": 0.866,
+        "description": "Energy peak"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Hip Hop---Bass Music",
+            "score": 0.1656
+          },
+          {
+            "label": "Hip Hop---Bounce",
+            "score": 0.1582
+          },
+          {
+            "label": "Hip Hop---Miami Bass",
+            "score": 0.1349
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.1308
+          },
+          {
+            "label": "Reggae---Ragga",
+            "score": 0.1068
+          },
+          {
+            "label": "Electronic---Euro House",
+            "score": 0.0996
+          },
+          {
+            "label": "Hip Hop---Gangsta",
+            "score": 0.0679
+          },
+          {
+            "label": "Electronic---Hip Hop",
+            "score": 0.0643
+          },
+          {
+            "label": "Electronic---Hip-House",
+            "score": 0.0591
+          },
+          {
+            "label": "Electronic---House",
+            "score": 0.0514
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "Hip-Hop",
+            "score": 0.2839
+          },
+          {
+            "label": "electronic",
+            "score": 0.1932
+          },
+          {
+            "label": "80s",
+            "score": 0.1488
+          },
+          {
+            "label": "dance",
+            "score": 0.1192
+          },
+          {
+            "label": "pop",
+            "score": 0.115
+          },
+          {
+            "label": "rock",
+            "score": 0.0847
+          },
+          {
+            "label": "90s",
+            "score": 0.0646
+          },
+          {
+            "label": "electro",
+            "score": 0.0551
+          },
+          {
+            "label": "electronica",
+            "score": 0.0548
+          },
+          {
+            "label": "funk",
+            "score": 0.0544
+          },
+          {
+            "label": "alternative",
+            "score": 0.038
+          },
+          {
+            "label": "soul",
+            "score": 0.0374
+          },
+          {
+            "label": "indie",
+            "score": 0.0306
+          },
+          {
+            "label": "House",
+            "score": 0.0262
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0255
+          },
+          {
+            "label": "experimental",
+            "score": 0.0223
+          },
+          {
+            "label": "rnb",
+            "score": 0.0215
+          },
+          {
+            "label": "chillout",
+            "score": 0.02
+          },
+          {
+            "label": "jazz",
+            "score": 0.0177
+          },
+          {
+            "label": "party",
+            "score": 0.0174
+          },
+          {
+            "label": "classic rock",
+            "score": 0.017
+          },
+          {
+            "label": "punk",
+            "score": 0.0156
+          },
+          {
+            "label": "70s",
+            "score": 0.0154
+          },
+          {
+            "label": "ambient",
+            "score": 0.0136
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0124
+          },
+          {
+            "label": "00s",
+            "score": 0.0121
+          },
+          {
+            "label": "blues",
+            "score": 0.0114
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0112
+          },
+          {
+            "label": "chill",
+            "score": 0.0101
+          },
+          {
+            "label": "sexy",
+            "score": 0.0098
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0087
+          },
+          {
+            "label": "oldies",
+            "score": 0.0084
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0076
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0073
+          },
+          {
+            "label": "folk",
+            "score": 0.0071
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0065
+          },
+          {
+            "label": "catchy",
+            "score": 0.0059
+          },
+          {
+            "label": "metal",
+            "score": 0.0046
+          },
+          {
+            "label": "60s",
+            "score": 0.0044
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0041
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0041
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0039
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0039
+          },
+          {
+            "label": "country",
+            "score": 0.0039
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0035
+          },
+          {
+            "label": "guitar",
+            "score": 0.0034
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0032
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0028
+          },
+          {
+            "label": "happy",
+            "score": 0.0026
+          },
+          {
+            "label": "sad",
+            "score": 0.0015
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9984,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0153,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.002,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.0688,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 6.0511,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 133,
+  "key": null,
+  "energy": 0.306,
+  "valence": 0.634,
+  "danceability": 0.998,
+  "acousticness": 0.015,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 7.47,
+      "type": "energy_peak",
+      "intensity": 0.807,
+      "description": "Energy peak"
+    },
+    {
+      "time": 12.39,
+      "type": "onset",
+      "intensity": 0.751,
+      "description": "Onset"
+    },
+    {
+      "time": 14.07,
+      "type": "energy_drop",
+      "intensity": 0.262,
+      "description": "Level drops by 8 dB"
+    },
+    {
+      "time": 14.65,
+      "type": "onset",
+      "intensity": 0.945,
+      "description": "Onset"
+    },
+    {
+      "time": 15.99,
+      "type": "onset",
+      "intensity": 0.753,
+      "description": "Onset"
+    },
+    {
+      "time": 17.13,
+      "type": "energy_peak",
+      "intensity": 0.925,
+      "description": "Energy peak"
+    },
+    {
+      "time": 17.69,
+      "type": "energy_drop",
+      "intensity": 0.233,
+      "description": "Level drops by 7 dB"
+    },
+    {
+      "time": 18.71,
+      "type": "onset",
+      "intensity": 0.596,
+      "description": "Onset"
+    },
+    {
+      "time": 20.75,
+      "type": "energy_peak",
+      "intensity": 0.896,
+      "description": "Energy peak"
+    },
+    {
+      "time": 21.31,
+      "type": "energy_drop",
+      "intensity": 0.314,
+      "description": "Level drops by 9 dB"
+    },
+    {
+      "time": 21.87,
+      "type": "energy_peak",
+      "intensity": 0.995,
+      "description": "Energy peak"
+    },
+    {
+      "time": 21.87,
+      "type": "onset",
+      "intensity": 0.796,
+      "description": "Onset"
+    },
+    {
+      "time": 24.84,
+      "type": "energy_drop",
+      "intensity": 0.234,
+      "description": "Level drops by 7 dB"
+    },
+    {
+      "time": 25.49,
+      "type": "energy_peak",
+      "intensity": 0.901,
+      "description": "Energy peak"
+    },
+    {
+      "time": 28.65,
+      "type": "energy_peak",
+      "intensity": 0.866,
+      "description": "Energy peak"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

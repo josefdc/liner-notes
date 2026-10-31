@@ -1,0 +1,4300 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://musicbrainz.org/ws/2/artist/d43d12a1-2dc9-4257-a2fd-0a3bb1081b86?fmt=json&inc=artist-rels+recording-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+        "name": "Johnny Cash",
+        "type": "Person",
+        "country": "US",
+        "relations": [
+          {
+            "type": "collaboration",
+            "artist": {
+              "id": "b4bfd133-a931-42c7-a41c-0311893dea67",
+              "name": "The Million Dollar Quartet"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "19d97337-24c1-44a6-aea8-a9238890cc17",
+              "name": "The Tennessee Two"
+            }
+          },
+          {
+            "type": "married",
+            "artist": {
+              "id": "4ee75011-678b-46e0-b8e1-8ef47e5b7379",
+              "name": "June Carter Cash"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "ab73de4d-06ee-4814-acce-2e3e537eb4ac",
+              "name": "The Tennessee Three"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "c685765c-b778-4ed6-9035-8f7088431765",
+              "name": "The Highwaymen"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "927a0e2e-5f51-462f-87a8-4ba03897e944",
+              "name": "Johnny Cash & June Carter Cash"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "fe94cef8-b6ee-4a1e-9ca4-c2aafc982dcf",
+              "name": "Class Of '55"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "334dc046-2920-4208-b4f1-e88d305ff6f1",
+              "name": "Chonny Jash"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "927a0e2e-5f51-462f-87a8-4ba03897e944",
+              "name": "Johnny Cash & June Carter Cash"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "91598d20-5136-4eff-a461-c54777981f38",
+              "name": "Carrie Cash"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "31fd3e29-aed0-4361-b3aa-8bf3d86810c5",
+              "name": "John Carter Cash"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "5ff6f6eb-31ad-4903-a3c3-4c9283fcde8b",
+              "name": "Rosanne Cash"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "93b23a51-ad5b-461d-a12f-d27a6c73973a",
+              "name": "Cindy Cash"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "57e1d966-6e70-4307-a704-4b0aaa8459fb",
+              "name": "Carlene Carter"
+            }
+          },
+          {
+            "type": "sibling",
+            "artist": {
+              "id": "254e596d-65f5-46cd-b6c2-fb39174d0ebe",
+              "name": "Joanne Cash"
+            }
+          },
+          {
+            "type": "sibling",
+            "artist": {
+              "id": "d8c5c228-0dff-4236-beae-3e2982714a72",
+              "name": "Tommy Cash"
+            }
+          },
+          {
+            "type": "supporting musician",
+            "artist": {
+              "id": "7aeccb42-1128-4f6e-afbe-dda4c39e2d5d",
+              "name": "The Poops"
+            }
+          },
+          {
+            "type": "supporting musician",
+            "artist": {
+              "id": "0cf97acb-7b9e-4587-a760-d4e80381fd35",
+              "name": "The Capitols"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "c263ca28-243e-4a37-b083-94611dff7e20",
+              "name": "A Boy Named Johnny"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "5bab180b-1a27-4eb1-a625-ca582a6d3c5a",
+              "name": "Dirty Rotten Cash"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "5d76ae2b-b71e-4c18-ad7d-c67ce691cca2",
+              "name": "Johnny Cash Tribuut"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "9ffbc079-99dc-48b9-9809-298e9709708a",
+              "name": "Jonny Lyons"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "23336824-031c-4497-bf7c-eeffe1a668f3",
+              "name": "The Man In Black Trio"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "391777f4-a983-4135-a8af-0ec8dd68f6da",
+              "name": "Million Dollar Reunion"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "5dec0d92-b140-4cf8-84c6-6d730ae1cb49",
+              "name": "Not Johnny Cash & the Tennessee Four"
+            }
+          },
+          {
+            "type": "tribute",
+            "artist": {
+              "id": "d96a08de-c207-482f-a292-8ed8672d10c2",
+              "name": "Ride This Train"
+            }
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "arranger"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "phonographic copyright"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "allmusic"
+          },
+          {
+            "type": "BBC Music page"
+          },
+          {
+            "type": "biography"
+          },
+          {
+            "type": "biography"
+          },
+          {
+            "type": "discography page"
+          },
+          {
+            "type": "discography page"
+          },
+          {
+            "type": "discography page"
+          },
+          {
+            "type": "discography page"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "fanpage"
+          },
+          {
+            "type": "fanpage"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "image"
+          },
+          {
+            "type": "IMDb"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "myspace"
+          },
+          {
+            "type": "official homepage"
+          },
+          {
+            "type": "official homepage"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for mail-order"
+          },
+          {
+            "type": "purevolume"
+          },
+          {
+            "type": "secondhandsongs"
+          },
+          {
+            "type": "setlistfm"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "songkick"
+          },
+          {
+            "type": "soundcloud"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "VIAF"
+          },
+          {
+            "type": "wikidata"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube music"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/isrc/USDJ20200650?fmt=json&inc=artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "isrc": "USDJ20200650",
+        "recordings": [
+          {
+            "id": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+            "title": "Hurt",
+            "first-release-date": "2002-11-05",
+            "length": 218533,
+            "disambiguation": "",
+            "artist-credit": [
+              {
+                "name": "Johnny Cash",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+                  "name": "Johnny Cash"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7?fmt=json&inc=artist-credits+recording-rels+work-rels+work-level-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "title": "Hurt",
+        "first-release-date": "2002-11-05",
+        "length": 218533,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Johnny Cash",
+            "joinphrase": "",
+            "artist": {
+              "id": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+              "name": "Johnny Cash"
+            }
+          }
+        ],
+        "relations": [
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "d6efa2cf-1c67-4c6a-b419-b6f429bb3b2b",
+              "title": "Hurt Like Poo (Johnny Cash vs. OutKast)",
+              "length": 205000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Filip Čihák",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "f239aab1-2592-432a-93f6-3d10d17c69c6",
+                    "name": "Filip Čihák"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "c12ddfe3-c5fd-421b-8c3c-d16d5d5da58a",
+              "title": "Johnny",
+              "length": 90000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Neil Cicierega",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "68f8885e-0752-480f-bf84-6d2fc67cff80",
+                    "name": "Neil Cicierega"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "music video",
+            "direction": "forward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "51df1415-587a-4417-8321-df0a61fad6e4",
+              "title": "Hurt",
+              "length": 233000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Johnny Cash",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d43d12a1-2dc9-4257-a2fd-0a3bb1081b86",
+                    "name": "Johnny Cash"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.spotify.com/track/28cnXtME493VX9NOw9cIUh"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [
+              "video"
+            ],
+            "url": {
+              "resource": "https://www.youtube.com/watch?v=8AHCfZTRGiI"
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "forward",
+            "target-type": "work",
+            "attributes": [
+              "cover"
+            ],
+            "work": {
+              "id": "ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+              "title": "Hurt",
+              "relations": [
+                {
+                  "type": "lyrics",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://genius.com/Nine-inch-nails-hurt-lyrics"
+                  }
+                },
+                {
+                  "type": "secondhandsongs",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://secondhandsongs.com/work/8968"
+                  }
+                },
+                {
+                  "type": "wikidata",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.wikidata.org/wiki/Q1142043"
+                  }
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/release?fmt=json&inc=url-rels+release-groups&limit=100&offset=0&recording=25d8de5e-3662-4ffd-8dea-511a696ac3e7&status=official&type=album%7Csingle%7Cep": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "release-count": 31,
+        "release-offset": 0,
+        "releases": [
+          {
+            "id": "1e313a50-d295-44e2-9f0a-a40c34434061",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/4517143"
+                }
+              }
+            ]
+          },
+          {
+            "id": "261de123-7315-4a2f-8c40-3dad9092313e",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002-11-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B00006L7XQ"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/660376"
+                }
+              }
+            ]
+          },
+          {
+            "id": "2920250d-7653-4848-a23c-772bc09b09b5",
+            "title": "Ring of Fire: The Legend of Johnny Cash",
+            "date": "2005-11-21",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "allmusic",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.allmusic.com/album/release/mr0001607436"
+                }
+              },
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000BW9UJY"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/761943"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/comp/johnny_cash/ring_of_fire__the_legend_of_johnny_cash_f1/"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.musik-sammler.de/media/26503/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "2aaf8bf8-a175-496c-8782-6bdf33803f88",
+            "title": "American IV: The Man Comes Around",
+            "date": "",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/14254039"
+                }
+              }
+            ]
+          },
+          {
+            "id": "316e3450-bd43-3e2e-b8bd-b6b1e35f1f43",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B00006L7XQ"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/426777"
+                }
+              }
+            ]
+          },
+          {
+            "id": "391ad870-9a3f-4626-86f1-2a5e3901a422",
+            "title": "Ring of Fire: The Legend of Johnny Cash",
+            "date": "2005",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "4321855e-8e8e-4786-8506-28e6d69633b9",
+            "title": "Unearthed",
+            "date": "2003-11-25",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B0000TLA9Q"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/909151"
+                }
+              }
+            ]
+          },
+          {
+            "id": "47140ecd-72e3-4ef9-b523-3af3c4e3e9ef",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1893890"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/22703969"
+                }
+              }
+            ]
+          },
+          {
+            "id": "5b96abc0-c4a9-439e-90aa-1757064f71a3",
+            "title": "Songs We Shouldn’t Forget Collected",
+            "date": "2013-11-15",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B00FRWC9OQ"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/5192575"
+                }
+              }
+            ]
+          },
+          {
+            "id": "62e0cb6f-1660-4321-8199-c4f43858f576",
+            "title": "Hurt",
+            "date": "2003-11-03",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B003UPY8G4"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/12332127"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/7by8UwU1OoxRxnxriVq4sK"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/430627"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.qobuz.com/gb-en/album/hurt-johnny-cash/0004400779982"
+                }
+              }
+            ]
+          },
+          {
+            "id": "6a4ea9d0-37ae-4c84-9841-c830f43cea49",
+            "title": "American IV: The Man Comes Around",
+            "date": "2003-04-14",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/688656"
+                }
+              }
+            ]
+          },
+          {
+            "id": "6bfb0d84-390d-4cfa-8843-63de45d318e8",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B00006K0BE"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/518507"
+                }
+              }
+            ]
+          },
+          {
+            "id": "6d217fbd-28fc-4f4b-86c2-cdb9e45563f9",
+            "title": "American IV: The Man Comes Around",
+            "date": "2013-01-15",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "allmusic",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.allmusic.com/album/release/mr0003865509"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/19669921"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/2BlL4Gv2DLPu8p58Wcmlm9"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/13619731"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1440811207"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.qobuz.com/us-en/album/american-iv-the-man-comes-around-johnny-cash/0060253727735"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://itunes.apple.com/us/album/id591290676"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1440811207"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://tidal.com/album/35467963"
+                }
+              }
+            ]
+          },
+          {
+            "id": "9d145b95-0bb0-4337-a078-5c48913026eb",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002-11-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/11270524"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/album/johnny-cash/american-iv-the-man-comes-around.p/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "9e8c6767-c29e-4b34-9842-a4def745359b",
+            "title": "American IV: The Man Comes Around",
+            "date": "2003-03-04",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "allmusic",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.allmusic.com/album/release/mr0000407976"
+                }
+              },
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.ca/gp/product/B00008IAMD"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1389252"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/album/johnny-cash/american-iv-the-man-comes-around-5/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "a014658c-6daa-408d-a2d9-10d00cdb5c7b",
+            "title": "Greatest Hits",
+            "date": "2004",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "a7fe1667-252e-40b3-8291-547378c73553",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/23435084"
+                }
+              }
+            ]
+          },
+          {
+            "id": "a811ae30-dbe4-48be-af1a-fa26310d27b0",
+            "title": "Hurt / Personal Jesus",
+            "date": "2003-11-03",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000087DWZ"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/652597"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/single/johnny-cash/hurt-personal-jesus.p/"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.musik-sammler.de/media/61242/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "a975bace-b9ac-407e-85e1-87023580eae6",
+            "title": "American Recordings I–VI",
+            "date": "2015-05-07",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/7001701"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b1bad411-da3c-466c-be2e-eb55561e6d06",
+            "title": "The Legend of Johnny Cash",
+            "date": "2005-10-25",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B000BISBDY"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b657e560-c46e-4d5a-9ed9-e987eb1f4ddc",
+            "title": "American IV: The Man Comes Around",
+            "date": "2003-03-04",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "allmusic",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.allmusic.com/album/release/mr0000407976"
+                }
+              },
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B00008IAMD"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1243820"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/album/johnny_cash/american_iv__the_man_comes_around_f2/"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.musik-sammler.de/media/78284/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b86418ae-dd67-4589-9573-bb36b767605d",
+            "title": "Back on Track: Songs We Shouldn’t Forget",
+            "date": "2011",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/3824833"
+                }
+              }
+            ]
+          },
+          {
+            "id": "bd735fb1-7802-4871-99f8-4a75203a6d90",
+            "title": "The Legend of Johnny Cash",
+            "date": "2005-10-25",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B000BISBDY"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1243811"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/comp/johnny-cash/the-legend-of-johnny-cash.p/"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.musik-sammler.de/media/41920/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "c02e3612-1f87-46bf-bcc1-ad4dd08cb6c8",
+            "title": "American Recordings I–VI",
+            "date": "2015-03-23",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/6822094"
+                }
+              }
+            ]
+          },
+          {
+            "id": "ce3ddad1-7e96-4263-b893-842de1c76a9c",
+            "title": "Unearthed",
+            "date": "2018-03-22",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/5xeMctXQWNmMq4aAjwuR3e"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/294538"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1452873181"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1452873181"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://play.qobuz.com/album/0060249861335"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://tidal.com/album/3291332"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d24e7761-a7c4-48f6-bd0a-8fa892147191",
+            "title": "American IV: The Man Comes Around",
+            "date": "2002",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/2744680"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d8799f17-6191-4e7d-9ef2-fdb7f8c5da92",
+            "title": "Ring of Fire: The Legend of Johnny Cash",
+            "date": "2005",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "dd4f0424-aaf3-4c7b-9200-6ddd3377cb78",
+            "title": "American IV: The Man Comes Around",
+            "date": "2003",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1389252"
+                }
+              }
+            ]
+          },
+          {
+            "id": "efbe6a41-128c-42c8-bc57-6e1dbc308fb6",
+            "title": "The Legend of Johnny Cash",
+            "date": "2005-10-24",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.amazon.com/albums/B000W178XO"
+                }
+              }
+            ]
+          },
+          {
+            "id": "f5c0d17c-d520-408e-88da-c5e8040cf3ea",
+            "title": "Ultimate Smallville Soundtrack",
+            "date": "2013-05-13",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B00CN009Y2"
+                }
+              },
+              {
+                "type": "discography entry",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "http://www.soundtrack.net/album/smallville-ultimate-soundtrack/"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/5545312"
+                }
+              }
+            ]
+          },
+          {
+            "id": "fab07433-d9db-45ed-83e0-89de6499e1c3",
+            "title": "The Legend of Johnny Cash",
+            "date": "2005-10-25",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/693466"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

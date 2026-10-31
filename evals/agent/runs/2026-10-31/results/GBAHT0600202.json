@@ -1,0 +1,1325 @@
+{
+  "id": "6o1l9I0faXJN2iqulHrdCQ",
+  "title": "Crazy",
+  "artist": "Gnarls Barkley, CeeLo Green, Danger Mouse",
+  "album": "St. Elsewhere",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/6o1l9I0faXJN2iqulHrdCQ",
+  "releaseYear": "2006",
+  "explicit": false,
+  "durationSeconds": 182,
+  "isrc": "USAT20611041",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Gnarls-Barkley/Crazy",
+      "title": "Crazy by Gnarls Barkley - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Crazy\" contains samples of \"Last Men Standing\" by Gianfranco Reverberi and Gian Piero Reverberi and \"Stop and Check Yourself\" by Garnet Mimms.Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy-(Richard-Vission-Remix)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Gnarls-Barkley/Crazy-(Richard-Vission-Remix)",
+      "title": "Crazy (Richard Vission Remix) by Gnarls Barkley",
+      "retrievedAt": "[time]",
+      "excerpt": "Crazy (Richard Vission Remix) by Gnarls Barkley - discover this song's samples, covers and remixes on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://trinitonian.com/2020/11/11/the-beauty-of-sampling",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://trinitonian.com/2020/11/11/the-beauty-of-sampling",
+      "title": "The beauty of sampling",
+      "retrievedAt": "[time]",
+      "excerpt": "Nov 12, 2020 — Crazy by Gnarls Barkley. What is one of the most instantly recognizable songs, “Crazy” by Danger Mouse and Cee-lo Green samples the song ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Gnarls-Barkley",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Gnarls-Barkley",
+      "title": "Gnarls Barkley - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "ley's Crazy Crazy (2006) sampled Last Men Standing by Gianfranco Reverberi and Gian Piero Reverberi (1968) Stop and Check Yourself by Garnet Mimms",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Crazy_(Gnarls_Barkley_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Crazy_(Gnarls_Barkley_song)",
+      "title": "Crazy (Gnarls Barkley song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "Musically, \"Crazy\" was inspired by film scores of Spaghetti Westerns, in particular by the works of Ennio Morricone, and the song \"Last Men Standing\" by Gian Piero Reverberi and Gian Franco Reverberi from the 1968 Spaghetti Western Django, Prepare a Coffin, an unofficial prequel to Django \"Django (1966 film)\"). \"Crazy\" samples the song, and also utilizes parts of the main melody and chord structure. Because of this, the Reverberis are credited as songwriters along with CeeLo Green and Danger [.…",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 7>",
+      "title": "A Western sample at its core",
+      "content": "“Crazy” samples “Last Men Standing,” a 1968 recording by Gianfranco Reverberi and Gian Piero Reverberi. The song also samples Garnet Mimms’s “Stop and Check Yourself.”",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 8>",
+          "text": "Last Men Standing",
+          "type": "sample",
+          "searchQuery": "Last Men Standing"
+        },
+        {
+          "id": "<id 9>",
+          "text": "Gianfranco Reverberi",
+          "type": "artist",
+          "searchQuery": "Gianfranco Reverberi"
+        },
+        {
+          "id": "<id 10>",
+          "text": "Gian Piero Reverberi",
+          "type": "artist",
+          "searchQuery": "Gian Piero Reverberi"
+        },
+        {
+          "id": "<id 11>",
+          "text": "1968",
+          "type": "year",
+          "searchQuery": "1968"
+        },
+        {
+          "id": "<id 12>",
+          "text": "Stop and Check Yourself",
+          "type": "sample",
+          "searchQuery": "Stop and Check Yourself"
+        },
+        {
+          "id": "<id 13>",
+          "text": "Garnet Mimms",
+          "type": "artist",
+          "searchQuery": "Garnet Mimms"
+        }
+      ],
+      "claimId": "<id 4>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Crazy",
+        "size": 40,
+        "trackTitle": "Crazy",
+        "trackArtist": "Gnarls Barkley, CeeLo Green, Danger Mouse"
+      },
+      {
+        "id": "last-men-standing",
+        "group": 4,
+        "label": "Last Men Standing - Gianfranco Reverberi and Gian Piero Reverberi (1968)",
+        "size": 22,
+        "trackTitle": "Last Men Standing",
+        "trackArtist": "Gianfranco Reverberi and Gian Piero Reverberi"
+      },
+      {
+        "id": "stop-and-check-yourself",
+        "group": 2,
+        "label": "Stop and Check Yourself - Garnet Mimms",
+        "size": 22,
+        "trackTitle": "Stop and Check Yourself",
+        "trackArtist": "Garnet Mimms"
+      }
+    ],
+    "links": [
+      {
+        "source": "last-men-standing",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+        ]
+      },
+      {
+        "source": "stop-and-check-yourself",
+        "target": "current",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "model",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "“Crazy” samples “Last Men Standing” by Gianfranco Reverberi and Gian Piero Reverberi, and “Stop and Check Yourself” by Garnet Mimms.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt names both samples and their performers.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song draws on Spaghetti Western film-score influences, particularly Ennio Morricone, and on “Last Men Standing.”",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/Crazy_(Gnarls_Barkley_song)"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt names Spaghetti Western scores, Morricone, and “Last Men Standing” as inspirations.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "“Crazy” samples “Last Men Standing,” a 1968 recording by Gianfranco Reverberi and Gian Piero Reverberi. The song also samples Garnet Mimms’s “Stop and Check Yourself.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names both samples, but does not date “Last Men Standing.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A Western sample at its core",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Last Men Standing",
+            "type": "sample"
+          },
+          {
+            "text": "Gianfranco Reverberi",
+            "type": "artist"
+          },
+          {
+            "text": "Gian Piero Reverberi",
+            "type": "artist"
+          },
+          {
+            "text": "1968",
+            "type": "year"
+          },
+          {
+            "text": "Stop and Check Yourself",
+            "type": "sample"
+          },
+          {
+            "text": "Garnet Mimms",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"Crazy - Gnarls Barkley, CeeLo Green, Danger Mouse\" samples \"Last Men Standing - Gianfranco Reverberi and Gian Piero Reverberi (1968)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names the sample and performers, but does not give 1968.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Crazy - Gnarls Barkley, CeeLo Green, Danger Mouse\" samples \"Stop and Check Yourself - Garnet Mimms\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Gnarls-Barkley/Crazy"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says “Crazy” samples Garnet Mimms’s “Stop and Check Yourself.”",
+      "numericCheck": "n/a"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 7257,
+      "outputTokens": 1190,
+      "reasoningTokens": 326
+    },
+    "verifier": {
+      "judged": 5,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 111.83,
+      "confidence": 0.694,
+      "rawConfidence": {
+        "value": 3.694,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.41582,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        3.971,
+        4.505,
+        5.039,
+        5.584,
+        6.107,
+        6.641,
+        7.175,
+        7.732,
+        8.266,
+        8.777,
+        9.311,
+        9.845,
+        10.403,
+        10.948,
+        11.471,
+        11.993,
+        12.527,
+        13.073,
+        13.607,
+        14.153,
+        14.687,
+        15.209,
+        15.743,
+        16.3,
+        16.834,
+        17.369,
+        17.903,
+        18.437,
+        18.971,
+        19.505,
+        20.039,
+        20.573,
+        21.107,
+        21.641,
+        22.175,
+        22.732,
+        23.266,
+        23.8,
+        24.335,
+        24.869,
+        25.403,
+        25.937,
+        26.471,
+        27.005,
+        27.539,
+        28.073,
+        28.607,
+        29.141,
+        29.687
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.279635,
+        0.400882,
+        0.450216,
+        0.363252,
+        0.35745,
+        0.368529,
+        0.422765,
+        0.430374,
+        0.553246,
+        0.47873,
+        0.466483,
+        0.490598,
+        0.452357,
+        0.439508,
+        0.455997,
+        0.413209,
+        0.403876,
+        0.483715,
+        0.533638,
+        0.508907,
+        0.616702,
+        0.407468,
+        0.26666,
+        0.32506,
+        0.290006,
+        0.444619,
+        0.410697,
+        0.279385,
+        0.310555,
+        0.460645,
+        0.446658,
+        0.607367,
+        0.507547,
+        0.448041,
+        0.414795,
+        0.425294,
+        0.365256,
+        0.422025,
+        0.393763,
+        0.436244,
+        0.434794,
+        0.48153,
+        0.411714,
+        0.531945,
+        0.396143,
+        0.420525,
+        0.428149,
+        0.446117,
+        0.51008,
+        0.462029,
+        0.437455,
+        0.397478,
+        0.427063,
+        0.451031,
+        0.512775,
+        0.532409,
+        0.49246,
+        0.459131,
+        0.405298,
+        0.426518,
+        0.504494,
+        0.458355,
+        0.46702,
+        0.441205,
+        0.430967,
+        0.502918,
+        0.566021,
+        0.447576,
+        0.461324,
+        0.459907,
+        0.491124,
+        0.464152,
+        0.452433,
+        0.433123,
+        0.45876,
+        0.495721,
+        0.473658,
+        0.555972,
+        0.476216,
+        0.387897,
+        0.427208,
+        0.363547,
+        0.386253,
+        0.450666,
+        0.374862,
+        0.36411,
+        0.309682,
+        0.379061,
+        0.49502,
+        0.554359,
+        0.428019,
+        0.392514,
+        0.440149,
+        0.423833,
+        0.359021,
+        0.491126,
+        0.377282,
+        0.323699,
+        0.392803,
+        0.417674,
+        0.491136,
+        0.495177,
+        0.410799,
+        0.381789,
+        0.448255,
+        0.410894,
+        0.452295,
+        0.409431,
+        0.371705,
+        0.390875,
+        0.421538,
+        0.409135,
+        0.533966,
+        0.431106,
+        0.387457,
+        0.453777,
+        0.389194,
+        0.341341,
+        0.502992,
+        0.393411,
+        0.3403,
+        0.37874,
+        0.394488,
+        0.532156,
+        0.511322,
+        0.373528,
+        0.369577,
+        0.35868,
+        0.398655,
+        0.473078,
+        0.373306,
+        0.438385,
+        0.413658,
+        0.380481,
+        0.354654,
+        0.551415,
+        0.428149,
+        0.414113,
+        0.427305,
+        0.35786,
+        0.404556,
+        0.524857,
+        0.455367,
+        0.345486,
+        0.479469,
+        0.423109,
+        0.416138,
+        0.572145,
+        0.39631,
+        0.364568,
+        0.364714,
+        0.345427,
+        0.425651,
+        0.367391,
+        0.317166,
+        0.323427,
+        0.311812,
+        0.50528,
+        0.483781,
+        0.43748,
+        0.319504,
+        0.37769,
+        0.329301,
+        0.275886,
+        0.446944,
+        0.277119,
+        0.271365,
+        0.336316,
+        0.389171,
+        0.434918,
+        0.52056,
+        0.281491,
+        0.39941,
+        0.43417,
+        0.439852,
+        0.385651,
+        0.441155,
+        0.439786,
+        0.40168,
+        0.452515,
+        0.393578,
+        0.525555,
+        0.44392,
+        0.32398,
+        0.365949,
+        0.388932,
+        0.309422,
+        0.470225,
+        0.42531,
+        0.384353,
+        0.370504,
+        0.349582,
+        0.427825,
+        0.585319,
+        0.325855,
+        0.329826,
+        0.381465,
+        0.434317,
+        0.414465,
+        0.41268,
+        0.40155,
+        0.411967,
+        0.449278,
+        0.537492,
+        0.534897,
+        0.447854,
+        0.384648,
+        0.369879,
+        0.270862,
+        0.29087,
+        0.479251,
+        0.362044,
+        0.297412,
+        0.414128,
+        0.311934,
+        0.393607,
+        0.566531,
+        0.390455,
+        0.407924,
+        0.384138,
+        0.348854,
+        0.387396,
+        0.439808,
+        0.433829,
+        0.409748,
+        0.370588,
+        0.328157,
+        0.450841,
+        0.537735,
+        0.369488,
+        0.353327,
+        0.418186,
+        0.393134,
+        0.464443,
+        0.47356,
+        0.392146,
+        0.357324,
+        0.350244,
+        0.374708,
+        0.574321,
+        0.355987,
+        0.323705,
+        0.378414,
+        0.402327,
+        0.347375,
+        0.400941,
+        0.298924,
+        0.336161,
+        0.447875,
+        0.463484,
+        0.468795,
+        0.525381,
+        0.258773,
+        0.395238,
+        0.366402,
+        0.318947,
+        0.407127,
+        0.297726,
+        0.326844,
+        0.363139,
+        0.343423,
+        0.40173,
+        0.557765,
+        0.472898,
+        0.208697,
+        0.264578,
+        0.295989,
+        0.380365,
+        0.470671,
+        0.346903,
+        0.344269,
+        0.502888,
+        0.506876,
+        0.495477,
+        0.528585,
+        0.404972,
+        0.389088,
+        0.397572,
+        0.422159,
+        0.435895,
+        0.406782,
+        0.426369,
+        0.417277,
+        0.402458,
+        0.365803,
+        0.561636,
+        0.412858,
+        0.36323,
+        0.338063,
+        0.314547,
+        0.336877,
+        0.477676,
+        0.417991,
+        0.451733,
+        0.476875,
+        0.42708,
+        0.492844,
+        0.546343,
+        0.336015,
+        0.389895,
+        0.405893,
+        0.428119,
+        0.451261,
+        0.40082,
+        0.385498,
+        0.385106,
+        0.398721,
+        0.414822,
+        0.549565,
+        0.375479,
+        0.304112,
+        0.393167,
+        0.389592,
+        0.309816,
+        0.470389,
+        0.379256,
+        0.359689,
+        0.448305,
+        0.456082,
+        0.45067,
+        0.572279,
+        0.359848
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 8.266
+        },
+        {
+          "label": "B",
+          "start": 8.266,
+          "end": 12.516
+        },
+        {
+          "label": "A",
+          "start": 12.516,
+          "end": 16.811
+        },
+        {
+          "label": "C",
+          "start": 16.811,
+          "end": 21.107
+        },
+        {
+          "label": "A",
+          "start": 21.107,
+          "end": 25.379
+        },
+        {
+          "label": "B",
+          "start": 25.379,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 3.97,
+        "type": "harmonic_change",
+        "intensity": 0.379,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 8.26,
+        "type": "harmonic_change",
+        "intensity": 0.608,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 12.51,
+        "type": "harmonic_change",
+        "intensity": 0.578,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 14.21,
+        "type": "onset",
+        "intensity": 0.597,
+        "description": "Onset"
+      },
+      {
+        "time": 14.74,
+        "type": "onset",
+        "intensity": 0.538,
+        "description": "Onset"
+      },
+      {
+        "time": 15.55,
+        "type": "onset",
+        "intensity": 0.488,
+        "description": "Onset"
+      },
+      {
+        "time": 16.34,
+        "type": "onset",
+        "intensity": 0.432,
+        "description": "Onset"
+      },
+      {
+        "time": 16.81,
+        "type": "harmonic_change",
+        "intensity": 0.598,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 18.48,
+        "type": "onset",
+        "intensity": 0.471,
+        "description": "Onset"
+      },
+      {
+        "time": 21.1,
+        "type": "harmonic_change",
+        "intensity": 0.66,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 22.77,
+        "type": "onset",
+        "intensity": 0.625,
+        "description": "Onset"
+      },
+      {
+        "time": 23.31,
+        "type": "onset",
+        "intensity": 0.52,
+        "description": "Onset"
+      },
+      {
+        "time": 23.84,
+        "type": "onset",
+        "intensity": 0.628,
+        "description": "Onset"
+      },
+      {
+        "time": 25.37,
+        "type": "harmonic_change",
+        "intensity": 0.713,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 25.44,
+        "type": "onset",
+        "intensity": 0.458,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---Trip Hop",
+            "score": 0.2031
+          },
+          {
+            "label": "Electronic---Downtempo",
+            "score": 0.1794
+          },
+          {
+            "label": "Electronic---Broken Beat",
+            "score": 0.1226
+          },
+          {
+            "label": "Hip Hop---Trip Hop",
+            "score": 0.0789
+          },
+          {
+            "label": "Electronic---Big Beat",
+            "score": 0.0705
+          },
+          {
+            "label": "Electronic---House",
+            "score": 0.0696
+          },
+          {
+            "label": "Hip Hop---Instrumental",
+            "score": 0.0657
+          },
+          {
+            "label": "Electronic---Hip Hop",
+            "score": 0.063
+          },
+          {
+            "label": "Electronic---Breaks",
+            "score": 0.0508
+          },
+          {
+            "label": "Electronic---Electro",
+            "score": 0.0468
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.3103
+          },
+          {
+            "label": "soul",
+            "score": 0.1487
+          },
+          {
+            "label": "dance",
+            "score": 0.1107
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.1083
+          },
+          {
+            "label": "pop",
+            "score": 0.0888
+          },
+          {
+            "label": "chillout",
+            "score": 0.0824
+          },
+          {
+            "label": "electronica",
+            "score": 0.0756
+          },
+          {
+            "label": "House",
+            "score": 0.0653
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0614
+          },
+          {
+            "label": "electro",
+            "score": 0.058
+          },
+          {
+            "label": "indie",
+            "score": 0.0529
+          },
+          {
+            "label": "rnb",
+            "score": 0.0429
+          },
+          {
+            "label": "funk",
+            "score": 0.0391
+          },
+          {
+            "label": "rock",
+            "score": 0.0342
+          },
+          {
+            "label": "experimental",
+            "score": 0.0281
+          },
+          {
+            "label": "alternative",
+            "score": 0.0262
+          },
+          {
+            "label": "00s",
+            "score": 0.0239
+          },
+          {
+            "label": "jazz",
+            "score": 0.0229
+          },
+          {
+            "label": "ambient",
+            "score": 0.0202
+          },
+          {
+            "label": "sexy",
+            "score": 0.0186
+          },
+          {
+            "label": "chill",
+            "score": 0.0163
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0152
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0143
+          },
+          {
+            "label": "blues",
+            "score": 0.0125
+          },
+          {
+            "label": "party",
+            "score": 0.0111
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0099
+          },
+          {
+            "label": "60s",
+            "score": 0.0088
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0086
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0084
+          },
+          {
+            "label": "beautiful",
+            "score": 0.008
+          },
+          {
+            "label": "oldies",
+            "score": 0.0078
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0067
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0047
+          },
+          {
+            "label": "catchy",
+            "score": 0.0047
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0047
+          },
+          {
+            "label": "90s",
+            "score": 0.0044
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0044
+          },
+          {
+            "label": "80s",
+            "score": 0.0044
+          },
+          {
+            "label": "70s",
+            "score": 0.0033
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0028
+          },
+          {
+            "label": "guitar",
+            "score": 0.0027
+          },
+          {
+            "label": "folk",
+            "score": 0.0026
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0025
+          },
+          {
+            "label": "happy",
+            "score": 0.0024
+          },
+          {
+            "label": "sad",
+            "score": 0.002
+          },
+          {
+            "label": "punk",
+            "score": 0.0019
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0017
+          },
+          {
+            "label": "metal",
+            "score": 0.0011
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0009
+          },
+          {
+            "label": "country",
+            "score": 0.0006
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 1,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0103,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0839,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.0952,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.5278,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 112,
+  "key": null,
+  "energy": null,
+  "valence": 0.637,
+  "danceability": 1,
+  "acousticness": 0.01,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 3.97,
+      "type": "harmonic_change",
+      "intensity": 0.379,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 8.26,
+      "type": "harmonic_change",
+      "intensity": 0.608,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 12.51,
+      "type": "harmonic_change",
+      "intensity": 0.578,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 14.21,
+      "type": "onset",
+      "intensity": 0.597,
+      "description": "Onset"
+    },
+    {
+      "time": 14.74,
+      "type": "onset",
+      "intensity": 0.538,
+      "description": "Onset"
+    },
+    {
+      "time": 15.55,
+      "type": "onset",
+      "intensity": 0.488,
+      "description": "Onset"
+    },
+    {
+      "time": 16.34,
+      "type": "onset",
+      "intensity": 0.432,
+      "description": "Onset"
+    },
+    {
+      "time": 16.81,
+      "type": "harmonic_change",
+      "intensity": 0.598,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 18.48,
+      "type": "onset",
+      "intensity": 0.471,
+      "description": "Onset"
+    },
+    {
+      "time": 21.1,
+      "type": "harmonic_change",
+      "intensity": 0.66,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 22.77,
+      "type": "onset",
+      "intensity": 0.625,
+      "description": "Onset"
+    },
+    {
+      "time": 23.31,
+      "type": "onset",
+      "intensity": 0.52,
+      "description": "Onset"
+    },
+    {
+      "time": 23.84,
+      "type": "onset",
+      "intensity": 0.628,
+      "description": "Onset"
+    },
+    {
+      "time": 25.37,
+      "type": "harmonic_change",
+      "intensity": 0.713,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 25.44,
+      "type": "onset",
+      "intensity": 0.458,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

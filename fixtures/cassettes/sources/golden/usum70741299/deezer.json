@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.deezer.com/search/track?limit=10&q=Kanye+West+Stronger": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "total": 25,
+        "data": [
+          {
+            "id": 58015861,
+            "title": "Kanye West - Stronger (Instrumental Version)",
+            "readable": true,
+            "isrc": "USA561237653",
+            "duration": 276,
+            "artist": {
+              "id": 3238641,
+              "name": "DJ Playback"
+            },
+            "album": {
+              "id": 5662231,
+              "title": "2012 Dance Party Classics: 50 Dance Music Hits"
+            }
+          },
+          {
+            "id": 1761173057,
+            "title": "Stronger (A-Trak Remix Explicit)",
+            "title_version": "(A-Trak Remix Explicit)",
+            "readable": true,
+            "isrc": "USUM70802975",
+            "duration": 274,
+            "artist": {
+              "id": 230,
+              "name": "Kanye West"
+            },
+            "album": {
+              "id": 320895747,
+              "title": "Stronger (Remixes)"
+            }
+          },
+          {
+            "id": 4338812,
+            "title": "Stronger (as made famous by Kanye West)",
+            "readable": true,
+            "isrc": "USA560926077",
+            "duration": 315,
+            "artist": {
+              "id": 299392,
+              "name": "Hip Hop Chart Toppers"
+            },
+            "album": {
+              "id": 403078,
+              "title": "Hip Hop Today"
+            }
+          },
+          {
+            "id": 12708380,
+            "title": "Stronger (Workout Remix + 135 BPM) (As Made Famous by Kanye West)",
+            "title_version": "",
+            "readable": true,
+            "isrc": "USA370945216",
+            "duration": 285,
+            "artist": {
+              "id": 1371397,
+              "name": "My Workout DJ"
+            },
+            "album": {
+              "id": 1166255,
+              "title": "Cardio Workout Radio Hits (60 Minute Non-Stop DJ Mix) (32 Count) (Great for Cardio + Conditioning + Weight Loss + More)"
+            }
+          },
+          {
+            "id": 1495056442,
+            "title": "Stronger (16-Bit Kanye West Emulation)",
+            "title_version": "",
+            "readable": true,
+            "isrc": "AUXN22197562",
+            "duration": 310,
+            "artist": {
+              "id": 14605457,
+              "name": "Arcade Player"
+            },
+            "album": {
+              "id": 259065492,
+              "title": "The Impossible Game Soundtrack, Vol. 70"
+            }
+          },
+          {
+            "id": 346509651,
+            "title": "Stronger",
+            "title_version": "",
+            "readable": true,
+            "isrc": "USEWC1690110",
+            "duration": 221,
+            "artist": {
+              "id": 275309,
+              "name": "Vitamin String Quartet"
+            },
+            "album": {
+              "id": 39445231,
+              "title": "Vitamin String Quartet Performs Kanye West"
+            }
+          },
+          {
+            "id": 2758006331,
+            "title": "Stronger Kanye West",
+            "title_version": "",
+            "readable": true,
+            "isrc": "FRX452433020",
+            "duration": 161,
+            "artist": {
+              "id": 236089191,
+              "name": "Aiden Yoo"
+            },
+            "album": {
+              "id": 575416701,
+              "title": "Hamburger Helper Recipe"
+            }
+          },
+          {
+            "id": 2798388182,
+            "title": "Stronger Kanye West",
+            "title_version": "",
+            "readable": true,
+            "isrc": "FRX762470368",
+            "duration": 133,
+            "artist": {
+              "id": 65185792,
+              "name": "Lee Sang Gul"
+            },
+            "album": {
+              "id": 586152162,
+              "title": "Hamburger Helper Recipe"
+            }
+          },
+          {
+            "id": 1489309022,
+            "title": "Stronger (8-Bit Kanye West Emulation) (8-Bit Kanye West Emulation)",
+            "title_version": "(8-Bit Kanye West Emulation)",
+            "readable": true,
+            "isrc": "AUXN22196837",
+            "duration": 312,
+            "artist": {
+              "id": 5845951,
+              "name": "8-Bit Arcade"
+            },
+            "album": {
+              "id": 257582042,
+              "title": "By Request, Vol. 148"
+            }
+          },
+          {
+            "id": 16072812,
+            "title": "Stronger (Made Famous By Kanye West)",
+            "title_version": "",
+            "readable": true,
+            "isrc": "USQY51224603",
+            "duration": 309,
+            "artist": {
+              "id": 1591118,
+              "name": "Got Beats"
+            },
+            "album": {
+              "id": 1491830,
+              "title": "Got Beats, Vol. 2"
+            }
+          }
+        ]
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:GBDUW0000059": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 3135556,
+        "title": "Harder, Better, Faster, Stronger",
+        "title_version": "",
+        "readable": true,
+        "isrc": "GBDUW0000059",
+        "duration": 226,
+        "artist": {
+          "id": 27,
+          "name": "Daft Punk"
+        },
+        "album": {
+          "id": 302127,
+          "title": "Discovery"
+        }
+      }
+    },
+    "GET https://api.deezer.com/track/isrc:USUM70741299": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": 177476,
+        "title": "Stronger (instrumental)",
+        "title_version": "",
+        "readable": false,
+        "isrc": "USUM70741299",
+        "duration": 313,
+        "artist": {
+          "id": 230,
+          "name": "Kanye West"
+        },
+        "album": {
+          "id": 33728,
+          "title": "Stronger"
+        }
+      }
+    }
+  }
+}

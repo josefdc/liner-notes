@@ -1,0 +1,1385 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://musicbrainz.org/ws/2/artist/d5d97b2b-b83b-4976-814a-056d9076c8c3?fmt=json&inc=artist-rels+recording-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+        "name": "The Notorious B.I.G.",
+        "type": "Person",
+        "country": "US",
+        "relations": [
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "4c83e7d0-22d3-4512-8487-d44704e8280e",
+              "name": "DJ Enuff"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "e42fbdb0-2083-4809-a4b5-0c3d0b9725af",
+              "name": "Big Kap"
+            }
+          },
+          {
+            "type": "involved with",
+            "artist": {
+              "id": "ff39e59b-060d-4f93-8058-3188ade96cf2",
+              "name": "Charli Baltimore"
+            }
+          },
+          {
+            "type": "married",
+            "artist": {
+              "id": "ebcd0bad-75ef-4203-b7b3-7af38a9ef198",
+              "name": "Faith Evans"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "caeb2680-8d6c-4b7e-b70e-809b2c12e0bd",
+              "name": "Junior M.A.F.I.A."
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "3cce2320-a1cb-473a-8d20-f900e6901a0f",
+              "name": "The Commission"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "36c6dd32-df96-4234-8b51-4af9357802c3",
+              "name": "The Notorious P.A.T."
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "f2821848-cb41-4a3f-b64d-27ed2a537735",
+              "name": "Naomi Smalls"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "c9bb111c-3269-4ebb-afab-b93102aca289",
+              "name": "Chyna Tahjere"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "d55eb102-06da-4911-905f-c0b8546f2612",
+              "name": "Voletta Wallace"
+            }
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "allmusic"
+          },
+          {
+            "type": "allmusic"
+          },
+          {
+            "type": "bandsintown"
+          },
+          {
+            "type": "BBC Music page"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "image"
+          },
+          {
+            "type": "IMDb"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "myspace"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "secondhandsongs"
+          },
+          {
+            "type": "setlistfm"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "songkick"
+          },
+          {
+            "type": "soundcloud"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "vgmdb"
+          },
+          {
+            "type": "VIAF"
+          },
+          {
+            "type": "wikidata"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube music"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/isrc/USBB40706422?fmt=json&inc=artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "isrc": "USBB40706422",
+        "recordings": [
+          {
+            "id": "f9c4374a-042a-4eab-bb66-fd482b51ab92",
+            "title": "Juicy",
+            "first-release-date": "2007-03-05",
+            "length": 285000,
+            "disambiguation": "clean",
+            "artist-credit": [
+              {
+                "name": "The Notorious B.I.G.",
+                "joinphrase": "",
+                "artist": {
+                  "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                  "name": "The Notorious B.I.G."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92?fmt=json&inc=artist-credits+recording-rels+work-rels+work-level-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "f9c4374a-042a-4eab-bb66-fd482b51ab92",
+        "title": "Juicy",
+        "first-release-date": "2007-03-05",
+        "length": 285000,
+        "disambiguation": "clean",
+        "artist-credit": [
+          {
+            "name": "The Notorious B.I.G.",
+            "joinphrase": "",
+            "artist": {
+              "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+              "name": "The Notorious B.I.G."
+            }
+          }
+        ],
+        "relations": [
+          {
+            "type": "performance",
+            "direction": "forward",
+            "target-type": "work",
+            "attributes": [],
+            "work": {
+              "id": "4f99ef5b-691a-3ef2-bbae-21645001e51a",
+              "title": "Juicy",
+              "relations": [
+                {
+                  "type": "wikidata",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.wikidata.org/wiki/Q2701727"
+                  }
+                },
+                {
+                  "type": "based on",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "based on",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "lyrical quotation",
+                  "direction": "backward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/release?fmt=json&inc=url-rels+release-groups&limit=100&offset=0&recording=f9c4374a-042a-4eab-bb66-fd482b51ab92&status=official&type=album%7Csingle%7Cep": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "release-count": 4,
+        "release-offset": 0,
+        "releases": [
+          {
+            "id": "442098a8-db72-452b-9202-b295b588f486",
+            "title": "Greatest Hits",
+            "date": "2007-03-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://itunes.apple.com/us/album/id217613303"
+                }
+              }
+            ]
+          },
+          {
+            "id": "720ef6af-9286-4f20-b1bd-a9a45a76162e",
+            "title": "Best of the 90s",
+            "date": "2020-03-27",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/137968722"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://itunes.apple.com/gb/album/id1502723179"
+                }
+              }
+            ]
+          },
+          {
+            "id": "9c62ade8-bb06-4ca0-987f-a5e0cdacd3fa",
+            "title": "Top Hits",
+            "date": "2020-12-18",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/193449452"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://itunes.apple.com/mx/album/id1543418150"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b6cfbc15-c632-4812-9c10-237428afc066",
+            "title": "90s",
+            "date": "2019-08-16",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/7y9vSSW4iCud59Lb4fmzlb"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/107265412"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/gb/album/1475640421"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/work/4f99ef5b-691a-3ef2-bbae-21645001e51a?fmt=json&inc=recording-rels+artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "4f99ef5b-691a-3ef2-bbae-21645001e51a",
+        "title": "Juicy",
+        "relations": [
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "medley"
+            ],
+            "recording": {
+              "id": "1efe12ef-02b9-4486-a37c-cb474e8fca94",
+              "title": "History of Rap",
+              "length": 148000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Jimmy Fallon",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "78b7c31c-97cb-4f06-be5c-5c2e5a7c87bc",
+                    "name": "Jimmy Fallon"
+                  }
+                },
+                {
+                  "name": "Justin Timberlake",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "596ffa74-3d08-44ef-b113-765d43d12738",
+                    "name": "Justin Timberlake"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "eed3ba46-1c79-4f42-8560-2a3ff7575253",
+              "title": "Juice",
+              "length": 228205,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Postmodern Jukebox",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "5f5d68dd-285a-4f06-9099-84eb3f85c65f",
+                    "name": "Postmodern Jukebox"
+                  }
+                },
+                {
+                  "name": "Mario Jose",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d7bde77c-82e3-4e30-a949-0758e9f389e6",
+                    "name": "Mario Jose"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7fe12217-9e45-4b5c-8408-570500f8210e",
+              "title": "Juicy",
+              "length": 249000,
+              "disambiguation": "video",
+              "artist-credit": [
+                {
+                  "name": "The Notorious B.I.G.",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "partial"
+            ],
+            "recording": {
+              "id": "4837f022-9ba1-49dd-bac8-65a74dba3c5c",
+              "title": "Juicy",
+              "length": 220088,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Wun Two",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "2e5fa0a4-55fb-4781-aae1-59522e677981",
+                    "name": "Wun Two"
+                  }
+                },
+                {
+                  "name": "Biggie Smalls",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+              "title": "Juicy",
+              "length": 242733,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Scott Bradlee's Postmodern Jukebox",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "5f5d68dd-285a-4f06-9099-84eb3f85c65f",
+                    "name": "Postmodern Jukebox"
+                  }
+                },
+                {
+                  "name": "Maiya Sykes",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "1c1f6f5f-4c48-4baa-a9b5-aa968acb0918",
+                    "name": "Maiya Sykes"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "e408736a-f579-443e-8d76-2be42694a25b",
+              "title": "Juicy",
+              "length": 379000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Vitamin Dub",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "26f4b2df-8a89-410d-bacf-1f2e8048bf19",
+                    "name": "Vitamin Dub"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "a7b3605a-c19b-49d8-899b-bf0953cb1656",
+              "title": "Juicy",
+              "length": 302546,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Notorious B.I.G.",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "f9c4374a-042a-4eab-bb66-fd482b51ab92",
+              "title": "Juicy",
+              "length": 285000,
+              "disambiguation": "clean",
+              "artist-credit": [
+                {
+                  "name": "The Notorious B.I.G.",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+              "title": "Juicy",
+              "length": 302280,
+              "disambiguation": "explicit",
+              "artist-credit": [
+                {
+                  "name": "The Notorious B.I.G.",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "daf30d91-f1fb-4eea-aae7-54a9d655440f",
+              "title": "Juicy",
+              "length": 161906,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Lullabeats",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "2953421e-069c-4e40-9846-05d9abbe9712",
+                    "name": "The Lullabeats"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "793df7e2-2763-41de-a4b7-86c0931f517c",
+              "title": "Juicy (Medieval Bardcore version)",
+              "length": 299020,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Beedle The Bardcore",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "0ca7c8d6-6a46-429c-af19-0582b6b23f6a",
+                    "name": "Beedle The Bardcore"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7b111184-7160-4558-a601-3ef6d355917e",
+              "title": "Juicy (The Bear and the Sea remix)",
+              "length": 277413,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Notorious B.I.G.",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+                    "name": "The Notorious B.I.G."
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "a19f3364-9850-4041-a952-09d5b6c15110",
+              "title": "Juicy (The Notorious B.I.G. cover)",
+              "length": 341000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "John That",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "7657a672-65e2-40fe-9340-17adab6a7c25",
+                    "name": "John That"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

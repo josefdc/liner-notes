@@ -1,0 +1,1954 @@
+{
+  "id": "4ARkH9iMMj0Jvmd0ObMn6h",
+  "title": "Natural Blues",
+  "artist": "Moby",
+  "album": "Play: The Complete Recordings",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/4ARkH9iMMj0Jvmd0ObMn6h",
+  "releaseYear": "1999",
+  "explicit": false,
+  "durationSeconds": 254,
+  "isrc": "GBAJH9900041",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues\" by Moby (4:14), ISRC GBAJH9900041, first released 1999-05-17.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues\" by Moby, Blond:ish, Kiko Franco.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Bali Bandits remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/d770157e-9403-43e7-adfb-40bf4ec786c6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (High Klassified remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/d770157e-9403-43e7-adfb-40bf4ec786c6"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Johannes Brecht remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/70950aa0-bfe1-4127-990e-77452041cb27",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Katcha remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/70950aa0-bfe1-4127-990e-77452041cb27"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Mike D remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/6d36cca3-f308-4b94-bb0b-12d8ba571792",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Olmec Heads remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/6d36cca3-f308-4b94-bb0b-12d8ba571792"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ca654b0e-596a-4178-9e01-8691d26f16bb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Peace Division dub)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ca654b0e-596a-4178-9e01-8691d26f16bb"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/fc4a35f2-79a8-46e1-960a-320d96ca2501",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Peace Division)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/fc4a35f2-79a8-46e1-960a-320d96ca2501"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/c5bbda91-d3f6-418a-b859-cf8eb7947d89",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Perfecto dub)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/c5bbda91-d3f6-418a-b859-cf8eb7947d89"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/45157780-49b5-4c27-a8a1-0460a1386078",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Perfecto remix by Paul Oakenfold & Steve Osborne)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/45157780-49b5-4c27-a8a1-0460a1386078"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/f7383d87-4a42-4148-a9d6-ccf9500bc1fb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby is remixed in \"Natural Blues (Stimming remix)\" by Moby.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/f7383d87-4a42-4148-a9d6-ccf9500bc1fb"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/samples/recording/1958d942-87a3-43e8-a7de-be78e57b5023",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby samples \"Trouble So Hard\" by Vera Hall.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/samples/recording/1958d942-87a3-43e8-a7de-be78e57b5023"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/7ead4bcf-8674-33bb-8622-1880df7da35d",
+      "title": "Natural Blues — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Natural Blues\" is covered by \"Natural Blues\" by Little Hurricane.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081"
+    },
+    {
+      "id": "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/7ead4bcf-8674-33bb-8622-1880df7da35d",
+      "title": "Natural Blues — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Natural Blues\" is covered by \"Troubled So Hard (Natural Blues)\" by Paolo Nutini.",
+      "recordRef": "track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8"
+    },
+    {
+      "id": "musicbrainz:release/413f8eed-5e8e-4ce4-ad6c-934640fc3f93",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/413f8eed-5e8e-4ce4-ad6c-934640fc3f93",
+      "title": "Play (The Complete Recordings) — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Natural Blues\" by Moby appears on the official album \"Play (The Complete Recordings)\" (2024-05-31).",
+      "recordRef": "release/413f8eed-5e8e-4ce4-ad6c-934640fc3f93"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Moby",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Moby",
+      "title": "Moby - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Moby - Samples ... Natural Blues (TECIE) (2026) by Moby, Jacob Lusk, BLOND:ISH and Kiko Franco. Latest Release. All Songs by Moby (1568); Songs Sampled by Moby ( ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Moby/Natural-Blues-(Mike-D-Edit)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Moby/Natural-Blues-(Mike-D-Edit)",
+      "title": "Natural Blues (Mike D Edit) by Moby",
+      "retrievedAt": "[time]",
+      "excerpt": "Natural Blues (Mike D Edit) by Moby - discover this song's samples, covers and remixes on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Moby/Natural-Blues-(Reprise-Version)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Moby/Natural-Blues-(Reprise-Version)",
+      "title": "Natural Blues (Reprise Version) by Moby feat. Gregory ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Natural Blues (Reprise Version) by Moby feat. Gregory Porter and Amythyst Kiah - discover this song's samples, covers and remixes on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Moby/Natural-Blues",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Moby/Natural-Blues",
+      "title": "Natural Blues by Moby - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Natural Blues\" contains samples of \"Trouble So Hard\" by Vera Hall, \"I Wouldn't Change a Thing\" by Coke Escovedo, \"All the Way\" by The Banks Brothers and ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/shorts/AZ-BJ0gOa9Y",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/shorts/AZ-BJ0gOa9Y",
+      "title": "Moby: Natural Blues (Sample Breakdown) ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Moby: Natural Blues (Sample Breakdown) #moby #samplebreakdown #whosampled #1999 #music #sampling · Original Sound (Contains music from: ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Natural_Blues",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Natural_Blues",
+      "title": "Natural Blues",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Natural Blues\" was produced by Moby for his fifth studio album Play, and contains samples from \"Trouble So Hard\" by American folk singer Vera Hall. Moby",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=PUtIY00-6XY",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=PUtIY00-6XY",
+      "title": "The making of 'Natural Blues' (Reprise Version) by Moby",
+      "retrievedAt": "[time]",
+      "excerpt": "on 'natural blues' i also got lucky in that we were able to record almost all of the musicians and orchestras before the pandemic started.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.musicradar.com/artists/moby-play-rep",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.musicradar.com/artists/moby-play-rep",
+      "title": "“When it was finished, I collapsed in exhaustion”: How Moby carefully crafted Play and rescued his career | MusicRadar",
+      "retrievedAt": "[time]",
+      "excerpt": "“I started work in August of 1997, went on tour for a month, then worked on it some more, then went on tour for a month and a half, worked on it more, did festivals, worked on it more,” Moby relayed in his Chaos Control interview. “So all together, you could say I worked on it for a year.” Again, operating ahead of the curve in terms of approach, Play was entirely made in Moby’s small home studio in Mott Street, Manhattan. [...] Watch On Using his collection of Akai samplers, Moby continued to …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.classicpopmag.com/news/moby-play",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.classicpopmag.com/news/moby-play",
+      "title": "Making Moby: Play - Classic Pop Magazine",
+      "retrievedAt": "[time]",
+      "excerpt": "Natural Blues Built around vocals sampled from a 1937 recording of the song Trouble So Hard by American folk singer Vera Hall (1902-1964), Natural Blues nearly didn’t make it onto Play after a group of friends told Moby it was “too weird”. It clearly wasn’t, as it eventually peaked at No.11 in the UK singles chart. [...] Not that the album was put together on the most cutting edge tech. It was produced on mostly second-hand equipment at Moby’s Mott Street home studio in Manhattan, New York from…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.thenation.com/article/archive/mobys-muzak",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.thenation.com/article/archive/mobys-muzak",
+      "title": "Moby's Relentless Pursuit of Authenticity",
+      "retrievedAt": "[time]",
+      "excerpt": "The same thing happens on “Natural Blues,” another massively popular single. Moby sampled the blues singer Vera Hall's “Trouble So Hard” and",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://intermezzo.enculturation.net/14-stedman-et-al/stone-6.html",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://intermezzo.enculturation.net/14-stedman-et-al/stone-6.html",
+      "title": "Work, Play, and Worship: Vera Hall's Vernacular Rhetorical ...",
+      "retrievedAt": "[time]",
+      "excerpt": "A different version of \"Trouble So Hard\" is heard on \"Natural Blues.\" Moby got that recording from a 1993 box set titled Sounds of the South: A Musical Journey",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://aaregistry.org/story/vera-hall-folk-singer-born",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://aaregistry.org/story/vera-hall-folk-singer-born",
+      "title": "Vera Hall, Folk Singer born. - African American Registry",
+      "retrievedAt": "[time]",
+      "excerpt": "Vera Hall died on January 29, 1964, in Tuscaloosa, Alabama. Her work still garners attention. Respected by scholars and folk song enthusiasts, Hall's recordings exemplify early blues and folk songs found nowhere else. Moby's 2000 single Natural Blues is an extended remix of the song Trouble So Hard recorded by Hall in 1937. Moby's real name is Richard Melville Hall. She was inducted into the Alabama Women's Hall of Fame in 2005. A historical marker in Hall's honor was dedicated in Livingston, […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.kexp.org/read/2018/12/3/gonna-find-my-baby-the-stories-behind-ten-songs-moby-has-sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.kexp.org/read/2018/12/3/gonna-find-my-baby-the-stories-behind-ten-songs-moby-has-sampled",
+      "title": "Gonna Find My Baby: The Stories Behind Ten Songs Moby Has Sampled",
+      "retrievedAt": "[time]",
+      "excerpt": "Moby discovered the track via the Alan Lomax collection Sounds of the South. The liner notes state: \"'Trouble So Hard' represents the old and simple type of Negro spiritual, consisting entirely of alternating lines for the leader and the chorus. Here Vera Hall, one of the finest American folk singers, sings in her kitchen, performing both lead and chorus parts and brooding about the tragedy of life and turning to her Lord for comfort.\" Moby admitted to Rolling Stone, \"It almost didn’t make it […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=r9SENzRLk_M",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=r9SENzRLk_M",
+      "title": "vera hall - trouble so hard",
+      "retrievedAt": "[time]",
+      "excerpt": "In 1999, techno-artist, Moby (Richard Melville Hall), included her voice and song Troubled So Hard. Halls recordings include examples of early",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/1958d942-87a3-43e8-a7de-be78e57b5023/sampled-by/recording/e6df19d4-7141-42cc-89a9-95fed5ec16ea",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/1958d942-87a3-43e8-a7de-be78e57b5023",
+      "title": "Trouble So Hard — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Trouble So Hard\" by Vera Hall is sampled in \"Natural Blues\" by Moby.",
+      "recordRef": "recording/1958d942-87a3-43e8-a7de-be78e57b5023/sampled-by/recording/e6df19d4-7141-42cc-89a9-95fed5ec16ea"
+    },
+    {
+      "id": "musicbrainz:recording/1958d942-87a3-43e8-a7de-be78e57b5023/sampled-by/recording/7cd8353c-0518-4fda-9ac0-6692df97fec2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/1958d942-87a3-43e8-a7de-be78e57b5023",
+      "title": "Trouble So Hard — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Trouble So Hard\" by Vera Hall is sampled in \"Natural Blues (single version)\" by Moby.",
+      "recordRef": "recording/1958d942-87a3-43e8-a7de-be78e57b5023/sampled-by/recording/7cd8353c-0518-4fda-9ac0-6692df97fec2"
+    },
+    {
+      "id": "musicbrainz:recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+      "title": "Natural Blues — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues\" by Moby, Blond:ish, Kiko Franco, first released 2025-05-30.",
+      "recordRef": "recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db"
+    },
+    {
+      "id": "musicbrainz:recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+      "title": "Natural Blues (Bali Bandits remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Bali Bandits remix)\" by Moby, first released 2015.",
+      "recordRef": "recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d"
+    },
+    {
+      "id": "musicbrainz:recording/d770157e-9403-43e7-adfb-40bf4ec786c6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/d770157e-9403-43e7-adfb-40bf4ec786c6",
+      "title": "Natural Blues (High Klassified remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (High Klassified remix)\" by Moby, first released 2015.",
+      "recordRef": "recording/d770157e-9403-43e7-adfb-40bf4ec786c6"
+    },
+    {
+      "id": "musicbrainz:recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e",
+      "title": "Natural Blues (Johannes Brecht remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Johannes Brecht remix)\" by Moby, first released 2015.",
+      "recordRef": "recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e"
+    },
+    {
+      "id": "musicbrainz:recording/70950aa0-bfe1-4127-990e-77452041cb27",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/70950aa0-bfe1-4127-990e-77452041cb27",
+      "title": "Natural Blues (Katcha remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Katcha remix)\" by Moby, first released 2000-03.",
+      "recordRef": "recording/70950aa0-bfe1-4127-990e-77452041cb27"
+    },
+    {
+      "id": "musicbrainz:recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec",
+      "title": "Natural Blues (Mike D remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Mike D remix)\" by Moby, first released 2000-03-06.",
+      "recordRef": "recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec"
+    },
+    {
+      "id": "musicbrainz:recording/6d36cca3-f308-4b94-bb0b-12d8ba571792",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6d36cca3-f308-4b94-bb0b-12d8ba571792",
+      "title": "Natural Blues (Olmec Heads remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Olmec Heads remix)\" by Moby, first released 2000-03.",
+      "recordRef": "recording/6d36cca3-f308-4b94-bb0b-12d8ba571792"
+    },
+    {
+      "id": "musicbrainz:recording/ca654b0e-596a-4178-9e01-8691d26f16bb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/ca654b0e-596a-4178-9e01-8691d26f16bb",
+      "title": "Natural Blues (Peace Division dub) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Peace Division dub)\" by Moby, first released 2000-03.",
+      "recordRef": "recording/ca654b0e-596a-4178-9e01-8691d26f16bb"
+    },
+    {
+      "id": "musicbrainz:recording/fc4a35f2-79a8-46e1-960a-320d96ca2501",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/fc4a35f2-79a8-46e1-960a-320d96ca2501",
+      "title": "Natural Blues (Peace Division) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Peace Division)\" by Moby, first released 2000-03.",
+      "recordRef": "recording/fc4a35f2-79a8-46e1-960a-320d96ca2501"
+    },
+    {
+      "id": "musicbrainz:recording/c5bbda91-d3f6-418a-b859-cf8eb7947d89",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/c5bbda91-d3f6-418a-b859-cf8eb7947d89",
+      "title": "Natural Blues (Perfecto dub) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Perfecto dub)\" by Moby, first released 2000-03-06.",
+      "recordRef": "recording/c5bbda91-d3f6-418a-b859-cf8eb7947d89"
+    },
+    {
+      "id": "musicbrainz:recording/45157780-49b5-4c27-a8a1-0460a1386078",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/45157780-49b5-4c27-a8a1-0460a1386078",
+      "title": "Natural Blues (Perfecto remix by Paul Oakenfold & Steve Osborne) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Perfecto remix by Paul Oakenfold & Steve Osborne)\" by Moby, first released 2000-09-20.",
+      "recordRef": "recording/45157780-49b5-4c27-a8a1-0460a1386078"
+    },
+    {
+      "id": "musicbrainz:recording/f7383d87-4a42-4148-a9d6-ccf9500bc1fb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f7383d87-4a42-4148-a9d6-ccf9500bc1fb",
+      "title": "Natural Blues (Stimming remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (Stimming remix)\" by Moby, first released 2015.",
+      "recordRef": "recording/f7383d87-4a42-4148-a9d6-ccf9500bc1fb"
+    },
+    {
+      "id": "musicbrainz:recording/1958d942-87a3-43e8-a7de-be78e57b5023",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/1958d942-87a3-43e8-a7de-be78e57b5023",
+      "title": "Trouble So Hard — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Trouble So Hard\" by Vera Hall, first released 1960-11.",
+      "recordRef": "recording/1958d942-87a3-43e8-a7de-be78e57b5023"
+    },
+    {
+      "id": "musicbrainz:recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081",
+      "title": "Natural Blues — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues\" by Little Hurricane, first released 2013-08-27.",
+      "recordRef": "recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081"
+    },
+    {
+      "id": "musicbrainz:recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8",
+      "title": "Troubled So Hard (Natural Blues) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Troubled So Hard (Natural Blues)\" by Paolo Nutini, first released 2007-01-30.",
+      "recordRef": "recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8"
+    },
+    {
+      "id": "musicbrainz:recording/e6df19d4-7141-42cc-89a9-95fed5ec16ea",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/e6df19d4-7141-42cc-89a9-95fed5ec16ea",
+      "title": "Natural Blues — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues\" by Moby, first released 2001-02-05.",
+      "recordRef": "recording/e6df19d4-7141-42cc-89a9-95fed5ec16ea"
+    },
+    {
+      "id": "musicbrainz:recording/7cd8353c-0518-4fda-9ac0-6692df97fec2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/7cd8353c-0518-4fda-9ac0-6692df97fec2",
+      "title": "Natural Blues (single version) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Natural Blues (single version)\" by Moby, first released 2000-03-06.",
+      "recordRef": "recording/7cd8353c-0518-4fda-9ac0-6692df97fec2"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 12>",
+      "title": "A remix family",
+      "content": "MusicBrainz lists multiple remixes of Moby’s “Natural Blues,” including versions by Mike D, Bali Bandits, and Peace Division.",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 13>",
+          "text": "Mike D",
+          "type": "artist",
+          "searchQuery": "Mike D"
+        },
+        {
+          "id": "<id 14>",
+          "text": "Bali Bandits",
+          "type": "artist",
+          "searchQuery": "Bali Bandits"
+        },
+        {
+          "id": "<id 15>",
+          "text": "Peace Division",
+          "type": "artist",
+          "searchQuery": "Peace Division"
+        }
+      ],
+      "claimId": "<id 3>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Natural Blues",
+        "size": 40,
+        "trackTitle": "Natural Blues",
+        "trackArtist": "Moby",
+        "mbid": "b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+        "year": 1999
+      },
+      {
+        "id": "mb-1958d942-87a3-43e8-a7de-be78e57b5023",
+        "group": 2,
+        "label": "Trouble So Hard - Vera Hall",
+        "size": 22,
+        "trackTitle": "Trouble So Hard",
+        "trackArtist": "Vera Hall",
+        "year": 1960,
+        "mbid": "1958d942-87a3-43e8-a7de-be78e57b5023",
+        "spotifyId": "4yaGBjUAKstcoX4nO8fiTv"
+      },
+      {
+        "id": "mb-a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+        "group": 4,
+        "label": "Natural Blues - Moby, Blond:ish, Kiko Franco",
+        "size": 22,
+        "trackTitle": "Natural Blues",
+        "trackArtist": "Moby, Blond:ish, Kiko Franco",
+        "year": 2025,
+        "mbid": "a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+        "spotifyId": "0YMP9iIN0kPO3kp7pnxZpB"
+      },
+      {
+        "id": "mb-0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+        "group": 4,
+        "label": "Natural Blues (Bali Bandits remix) - Moby",
+        "size": 22,
+        "trackTitle": "Natural Blues (Bali Bandits remix)",
+        "trackArtist": "Moby",
+        "year": 2015,
+        "mbid": "0e0ad0f8-6ff9-4770-bac6-c11adf88495d"
+      },
+      {
+        "id": "mb-d770157e-9403-43e7-adfb-40bf4ec786c6",
+        "group": 4,
+        "label": "Natural Blues (High Klassified remix) - Moby",
+        "size": 22,
+        "trackTitle": "Natural Blues (High Klassified remix)",
+        "trackArtist": "Moby",
+        "year": 2015,
+        "mbid": "d770157e-9403-43e7-adfb-40bf4ec786c6"
+      },
+      {
+        "id": "mb-98c59f6e-9257-4ef0-8f4d-9e8528b37c7e",
+        "group": 4,
+        "label": "Natural Blues (Johannes Brecht remix) - Moby",
+        "size": 22,
+        "trackTitle": "Natural Blues (Johannes Brecht remix)",
+        "trackArtist": "Moby",
+        "year": 2015,
+        "mbid": "98c59f6e-9257-4ef0-8f4d-9e8528b37c7e"
+      },
+      {
+        "id": "mb-7aec8dbf-8e1e-49f4-91c1-88b04d431081",
+        "group": 4,
+        "label": "Natural Blues - Little Hurricane",
+        "size": 22,
+        "trackTitle": "Natural Blues",
+        "trackArtist": "Little Hurricane",
+        "year": 2013,
+        "mbid": "7aec8dbf-8e1e-49f4-91c1-88b04d431081"
+      },
+      {
+        "id": "mb-334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8",
+        "group": 4,
+        "label": "Troubled So Hard (Natural Blues) - Paolo Nutini",
+        "size": 22,
+        "trackTitle": "Troubled So Hard (Natural Blues)",
+        "trackArtist": "Paolo Nutini",
+        "year": 2007,
+        "mbid": "334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8"
+      },
+      {
+        "id": "mb-7cd8353c-0518-4fda-9ac0-6692df97fec2",
+        "group": 4,
+        "label": "Natural Blues (single version) - Moby",
+        "size": 22,
+        "trackTitle": "Natural Blues (single version)",
+        "trackArtist": "Moby",
+        "year": 2000,
+        "mbid": "7cd8353c-0518-4fda-9ac0-6692df97fec2"
+      }
+    ],
+    "links": [
+      {
+        "source": "mb-1958d942-87a3-43e8-a7de-be78e57b5023",
+        "target": "current",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 4>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/samples/recording/1958d942-87a3-43e8-a7de-be78e57b5023"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-a11d90c8-b432-49fa-ab6f-1baf31eff2db",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-d770157e-9403-43e7-adfb-40bf4ec786c6",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/d770157e-9403-43e7-adfb-40bf4ec786c6"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-98c59f6e-9257-4ef0-8f4d-9e8528b37c7e",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-7aec8dbf-8e1e-49f4-91c1-88b04d431081",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 10>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8"
+        ]
+      },
+      {
+        "source": "mb-1958d942-87a3-43e8-a7de-be78e57b5023",
+        "target": "mb-7cd8353c-0518-4fda-9ac0-6692df97fec2",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "evidenceIds": [
+          "musicbrainz:recording/1958d942-87a3-43e8-a7de-be78e57b5023/sampled-by/recording/7cd8353c-0518-4fda-9ac0-6692df97fec2"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MusicBrainz lists this Moby recording of “Natural Blues” as 4:14 long and gives its first release date as May 17, 1999.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives the duration as 4:14 and first release as 1999-05-17.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "MusicBrainz lists multiple remixes of Moby’s “Natural Blues,” including versions by Mike D, Bali Bandits, and Peace Division.",
+      "about": "trivia",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ffa0ff80-a459-40e4-97ec-e0ddd6ea9cec",
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d",
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/ca654b0e-596a-4178-9e01-8691d26f16bb"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The three MusicBrainz remix relationships name Mike D, Bali Bandits, and Peace Division versions.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A remix family",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Mike D",
+            "type": "artist"
+          },
+          {
+            "text": "Bali Bandits",
+            "type": "artist"
+          },
+          {
+            "text": "Peace Division",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "\"Natural Blues\" by Moby samples \"Trouble So Hard\" by Vera Hall.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/samples/recording/1958d942-87a3-43e8-a7de-be78e57b5023"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"Natural Blues\" by Moby is remixed in \"Natural Blues\" by Moby, Blond:ish, Kiko Franco.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/a11d90c8-b432-49fa-ab6f-1baf31eff2db"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Natural Blues\" by Moby is remixed in \"Natural Blues (Bali Bandits remix)\" by Moby.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/0e0ad0f8-6ff9-4770-bac6-c11adf88495d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Natural Blues\" by Moby is remixed in \"Natural Blues (High Klassified remix)\" by Moby.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/d770157e-9403-43e7-adfb-40bf4ec786c6"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Natural Blues\" by Moby is remixed in \"Natural Blues (Johannes Brecht remix)\" by Moby.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/remixed-by/recording/98c59f6e-9257-4ef0-8f4d-9e8528b37c7e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "The work \"Natural Blues\" is covered by \"Natural Blues\" by Little Hurricane.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/7aec8dbf-8e1e-49f4-91c1-88b04d431081"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Natural Blues\" is covered by \"Troubled So Hard (Natural Blues)\" by Paolo Nutini.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae/covered-by/recording/334eafe4-7ffa-417f-9d0f-1cb7b3bbc3a8"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 11>",
+      "text": "\"Natural Blues\" by Moby appears on the official album \"Play (The Complete Recordings)\" (2024-05-31).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/413f8eed-5e8e-4ce4-ad6c-934640fc3f93"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 14340,
+      "outputTokens": 1835,
+      "reasoningTokens": 373
+    },
+    "verifier": {
+      "judged": 5,
+      "unjudged": 0,
+      "restated": 3
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 30.012
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 107.65,
+      "confidence": 0.725,
+      "rawConfidence": {
+        "value": 3.855,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.198865,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.58,
+        1.173,
+        1.765,
+        2.345,
+        2.926,
+        3.518,
+        4.11,
+        4.69,
+        5.248,
+        5.805,
+        6.362,
+        6.92,
+        7.477,
+        8.034,
+        8.591,
+        9.149,
+        9.694,
+        10.24,
+        10.797,
+        11.355,
+        11.912,
+        12.469,
+        13.026,
+        13.584,
+        14.141,
+        14.698,
+        15.256,
+        15.813,
+        16.37,
+        16.916,
+        17.485,
+        18.019,
+        18.576,
+        19.133,
+        19.691,
+        20.248,
+        20.805,
+        21.362,
+        21.92,
+        22.477,
+        23.034,
+        23.591,
+        24.149,
+        24.706,
+        25.263,
+        25.797,
+        26.366,
+        26.912,
+        27.469,
+        28.026,
+        28.584,
+        29.141,
+        29.698
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.114069,
+        0.233516,
+        0.212916,
+        0.210597,
+        0.206646,
+        0.216904,
+        0.170362,
+        0.141533,
+        0.166642,
+        0.25133,
+        0.204125,
+        0.172932,
+        0.144331,
+        0.1821,
+        0.255579,
+        0.208107,
+        0.169906,
+        0.175803,
+        0.199906,
+        0.164093,
+        0.172805,
+        0.223689,
+        0.197828,
+        0.178795,
+        0.187377,
+        0.210206,
+        0.192347,
+        0.17856,
+        0.17341,
+        0.204825,
+        0.226139,
+        0.18024,
+        0.194719,
+        0.23285,
+        0.202397,
+        0.182077,
+        0.175929,
+        0.242895,
+        0.26461,
+        0.206126,
+        0.146077,
+        0.096823,
+        0.22309,
+        0.194187,
+        0.241644,
+        0.211923,
+        0.183699,
+        0.168898,
+        0.210709,
+        0.236941,
+        0.250601,
+        0.190156,
+        0.228797,
+        0.213674,
+        0.180026,
+        0.168855,
+        0.202365,
+        0.274233,
+        0.20333,
+        0.161559,
+        0.172207,
+        0.248782,
+        0.232252,
+        0.185058,
+        0.18252,
+        0.158665,
+        0.232274,
+        0.176776,
+        0.197415,
+        0.235207,
+        0.23051,
+        0.199339,
+        0.194801,
+        0.189478,
+        0.185817,
+        0.249367,
+        0.192622,
+        0.194248,
+        0.206872,
+        0.225963,
+        0.22308,
+        0.18303,
+        0.180956,
+        0.171896,
+        0.173065,
+        0.216983,
+        0.213329,
+        0.229177,
+        0.224583,
+        0.195134,
+        0.171799,
+        0.152098,
+        0.191753,
+        0.245535,
+        0.204178,
+        0.205009,
+        0.227844,
+        0.255594,
+        0.227645,
+        0.141064,
+        0.22178,
+        0.193148,
+        0.132452,
+        0.12289,
+        0.197287,
+        0.221101,
+        0.189276,
+        0.15837,
+        0.131039,
+        0.236493,
+        0.237958,
+        0.157016,
+        0.126226,
+        0.143302,
+        0.245668,
+        0.195271,
+        0.223441,
+        0.251424,
+        0.228941,
+        0.215015,
+        0.177159,
+        0.172952,
+        0.203966,
+        0.133675,
+        0.190723,
+        0.203657,
+        0.179418,
+        0.152211,
+        0.231726,
+        0.251236,
+        0.206549,
+        0.214945,
+        0.156388,
+        0.255381,
+        0.2262,
+        0.080544,
+        0.091856,
+        0.152074,
+        0.187312,
+        0.168267,
+        0.20792,
+        0.205229,
+        0.186794,
+        0.189568,
+        0.220595,
+        0.228689,
+        0.21656,
+        0.170147,
+        0.219323,
+        0.205565,
+        0.1727,
+        0.09272,
+        0.20925,
+        0.231776,
+        0.190251,
+        0.09414,
+        0.157888,
+        0.276023,
+        0.245187,
+        0.15151,
+        0.142397,
+        0.168732,
+        0.213246,
+        0.182002,
+        0.248659,
+        0.174315,
+        0.18975,
+        0.16979,
+        0.196382,
+        0.215305,
+        0.23058,
+        0.10392,
+        0.187295,
+        0.19796,
+        0.138096,
+        0.149398,
+        0.210528,
+        0.225432,
+        0.206164,
+        0.152089,
+        0.111291,
+        0.226501,
+        0.234655,
+        0.10031,
+        0.114812,
+        0.197932,
+        0.230036,
+        0.18022,
+        0.192336,
+        0.190007,
+        0.142451,
+        0.196479,
+        0.208731,
+        0.217918,
+        0.232121,
+        0.135342,
+        0.210581,
+        0.203718,
+        0.154146,
+        0.14222,
+        0.200504,
+        0.184644,
+        0.189558,
+        0.160267,
+        0.183189,
+        0.265465,
+        0.254694,
+        0.164146,
+        0.126512,
+        0.142252,
+        0.180184,
+        0.165053,
+        0.226973,
+        0.204468,
+        0.196291,
+        0.194052,
+        0.201123,
+        0.169122,
+        0.227011,
+        0.142091,
+        0.203614,
+        0.22649,
+        0.191694,
+        0.173097,
+        0.221861,
+        0.239695,
+        0.194483,
+        0.215148,
+        0.202414,
+        0.223129,
+        0.220086,
+        0.130888,
+        0.137888,
+        0.200282,
+        0.212232,
+        0.216131,
+        0.265055,
+        0.223551,
+        0.231789,
+        0.210156,
+        0.201685,
+        0.1599,
+        0.229998,
+        0.161408,
+        0.244967,
+        0.198528,
+        0.14944,
+        0.123434,
+        0.23974,
+        0.214004,
+        0.188164,
+        0.109603,
+        0.165907,
+        0.231143,
+        0.260356,
+        0.119433,
+        0.129728,
+        0.206269,
+        0.200657,
+        0.199094,
+        0.261442,
+        0.222145,
+        0.222884,
+        0.25132,
+        0.237207,
+        0.246408,
+        0.213378,
+        0.131199,
+        0.240403,
+        0.194174,
+        0.127812,
+        0.114929,
+        0.233191,
+        0.194924,
+        0.216393,
+        0.231291,
+        0.263341,
+        0.24461,
+        0.275887,
+        0.244753,
+        0.222759,
+        0.191068,
+        0.217476,
+        0.20286,
+        0.37257,
+        0.269742,
+        0.211431,
+        0.235425,
+        0.233932,
+        0.197795,
+        0.238481,
+        0.175832,
+        0.223238,
+        0.227889,
+        0.211358,
+        0.210199,
+        0.396237,
+        0.231009,
+        0.202333,
+        0.200379,
+        0.220082,
+        0.231974,
+        0.24401,
+        0.125241,
+        0.091431,
+        0.221265,
+        0.186203,
+        0.211183,
+        0.394605,
+        0.202638,
+        0.156195,
+        0.228132,
+        0.259237,
+        0.195496,
+        0.24837,
+        0.19083,
+        0.211985,
+        0.215898,
+        0.166328,
+        0.174522,
+        0.370882,
+        0.222509,
+        0.173161
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 4.087
+        },
+        {
+          "label": "B",
+          "start": 4.087,
+          "end": 8.568
+        },
+        {
+          "label": "C",
+          "start": 8.568,
+          "end": 17.461
+        },
+        {
+          "label": "D",
+          "start": 17.461,
+          "end": 21.92
+        },
+        {
+          "label": "E",
+          "start": 21.92,
+          "end": 30.012
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.53,
+        "type": "onset",
+        "intensity": 0.434,
+        "description": "Onset"
+      },
+      {
+        "time": 4.08,
+        "type": "harmonic_change",
+        "intensity": 0.479,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 8.56,
+        "type": "harmonic_change",
+        "intensity": 0.398,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 9.19,
+        "type": "onset",
+        "intensity": 0.397,
+        "description": "Onset"
+      },
+      {
+        "time": 12.51,
+        "type": "onset",
+        "intensity": 0.38,
+        "description": "Onset"
+      },
+      {
+        "time": 15.85,
+        "type": "onset",
+        "intensity": 0.436,
+        "description": "Onset"
+      },
+      {
+        "time": 16.97,
+        "type": "onset",
+        "intensity": 0.445,
+        "description": "Onset"
+      },
+      {
+        "time": 17.46,
+        "type": "harmonic_change",
+        "intensity": 0.481,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 17.53,
+        "type": "onset",
+        "intensity": 0.415,
+        "description": "Onset"
+      },
+      {
+        "time": 21.4,
+        "type": "onset",
+        "intensity": 0.422,
+        "description": "Onset"
+      },
+      {
+        "time": 21.91,
+        "type": "harmonic_change",
+        "intensity": 0.423,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 22.52,
+        "type": "onset",
+        "intensity": 0.426,
+        "description": "Onset"
+      },
+      {
+        "time": 24.75,
+        "type": "onset",
+        "intensity": 0.424,
+        "description": "Onset"
+      },
+      {
+        "time": 26.35,
+        "type": "harmonic_change",
+        "intensity": 0.418,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 26.42,
+        "type": "onset",
+        "intensity": 0.535,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---Downtempo",
+            "score": 0.2302
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.1833
+          },
+          {
+            "label": "Funk / Soul---Funk",
+            "score": 0.1477
+          },
+          {
+            "label": "Funk / Soul---Free Funk",
+            "score": 0.1128
+          },
+          {
+            "label": "Electronic---Acid Jazz",
+            "score": 0.0918
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.0771
+          },
+          {
+            "label": "Electronic---Trip Hop",
+            "score": 0.066
+          },
+          {
+            "label": "Electronic---Big Beat",
+            "score": 0.0602
+          },
+          {
+            "label": "Rock---Blues Rock",
+            "score": 0.0531
+          },
+          {
+            "label": "Electronic---House",
+            "score": 0.0527
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "pop",
+            "score": 0.1514
+          },
+          {
+            "label": "rock",
+            "score": 0.1459
+          },
+          {
+            "label": "soul",
+            "score": 0.1453
+          },
+          {
+            "label": "jazz",
+            "score": 0.1412
+          },
+          {
+            "label": "electronic",
+            "score": 0.0957
+          },
+          {
+            "label": "chillout",
+            "score": 0.0817
+          },
+          {
+            "label": "funk",
+            "score": 0.0808
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0766
+          },
+          {
+            "label": "indie",
+            "score": 0.0708
+          },
+          {
+            "label": "blues",
+            "score": 0.0652
+          },
+          {
+            "label": "alternative",
+            "score": 0.0547
+          },
+          {
+            "label": "folk",
+            "score": 0.0474
+          },
+          {
+            "label": "dance",
+            "score": 0.0389
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0326
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0316
+          },
+          {
+            "label": "electronica",
+            "score": 0.0287
+          },
+          {
+            "label": "chill",
+            "score": 0.0251
+          },
+          {
+            "label": "90s",
+            "score": 0.024
+          },
+          {
+            "label": "rnb",
+            "score": 0.0237
+          },
+          {
+            "label": "guitar",
+            "score": 0.022
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0214
+          },
+          {
+            "label": "70s",
+            "score": 0.0212
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0208
+          },
+          {
+            "label": "oldies",
+            "score": 0.0187
+          },
+          {
+            "label": "00s",
+            "score": 0.0187
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0183
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0172
+          },
+          {
+            "label": "80s",
+            "score": 0.0163
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0161
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0161
+          },
+          {
+            "label": "60s",
+            "score": 0.016
+          },
+          {
+            "label": "country",
+            "score": 0.0157
+          },
+          {
+            "label": "House",
+            "score": 0.0139
+          },
+          {
+            "label": "experimental",
+            "score": 0.0135
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0133
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0131
+          },
+          {
+            "label": "ambient",
+            "score": 0.0131
+          },
+          {
+            "label": "sexy",
+            "score": 0.0126
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0125
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0119
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0098
+          },
+          {
+            "label": "electro",
+            "score": 0.0076
+          },
+          {
+            "label": "happy",
+            "score": 0.0057
+          },
+          {
+            "label": "party",
+            "score": 0.0054
+          },
+          {
+            "label": "catchy",
+            "score": 0.0053
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0049
+          },
+          {
+            "label": "sad",
+            "score": 0.0047
+          },
+          {
+            "label": "punk",
+            "score": 0.0033
+          },
+          {
+            "label": "metal",
+            "score": 0.002
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0013
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.7881,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.3634,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0141,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.6516,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.8476,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 108,
+  "key": null,
+  "energy": 0.715,
+  "valence": 0.581,
+  "danceability": 0.788,
+  "acousticness": 0.363,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.53,
+      "type": "onset",
+      "intensity": 0.434,
+      "description": "Onset"
+    },
+    {
+      "time": 4.08,
+      "type": "harmonic_change",
+      "intensity": 0.479,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 8.56,
+      "type": "harmonic_change",
+      "intensity": 0.398,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 9.19,
+      "type": "onset",
+      "intensity": 0.397,
+      "description": "Onset"
+    },
+    {
+      "time": 12.51,
+      "type": "onset",
+      "intensity": 0.38,
+      "description": "Onset"
+    },
+    {
+      "time": 15.85,
+      "type": "onset",
+      "intensity": 0.436,
+      "description": "Onset"
+    },
+    {
+      "time": 16.97,
+      "type": "onset",
+      "intensity": 0.445,
+      "description": "Onset"
+    },
+    {
+      "time": 17.46,
+      "type": "harmonic_change",
+      "intensity": 0.481,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 17.53,
+      "type": "onset",
+      "intensity": 0.415,
+      "description": "Onset"
+    },
+    {
+      "time": 21.4,
+      "type": "onset",
+      "intensity": 0.422,
+      "description": "Onset"
+    },
+    {
+      "time": 21.91,
+      "type": "harmonic_change",
+      "intensity": 0.423,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 22.52,
+      "type": "onset",
+      "intensity": 0.426,
+      "description": "Onset"
+    },
+    {
+      "time": 24.75,
+      "type": "onset",
+      "intensity": 0.424,
+      "description": "Onset"
+    },
+    {
+      "time": 26.35,
+      "type": "harmonic_change",
+      "intensity": 0.418,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 26.42,
+      "type": "onset",
+      "intensity": 0.535,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

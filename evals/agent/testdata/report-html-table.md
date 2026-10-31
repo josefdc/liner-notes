@@ -4,7 +4,7 @@
 > (`evals/agent/testdata/make-testdata.mjs`). No number below measures the app.
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Run records**: `evals/agent/testdata/runs`, sha256 `b03b2f0bdb22445390902f322b7828162f6ee9bc6520671440fe2e29ce1741d9`; 102 records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/testdata/runs`, sha256 `f3014a2ea6031c3ed4ab1c930d31d1e9d015b2b62041584ec2230bd80f06257c`; 103 records over 24 tracks (subset: all).
 - **Date**: 2026-10-31
 - **Commit**: `synthetic` (runs recorded at `synthetic`)
 - **Results**: `report-good.json`
@@ -18,6 +18,7 @@
 - **Held-out recall**: a gold target is held-out only when none of its sources is one the pipeline queries (a target MusicBrainz also documents can be found by echoing MusicBrainz), and it stops counting in a run whose evidence cites the site of any of its sources; an archived, translated or mirrored copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.
 - **Pre-verifier support rate**: of the model's claims before the verifier (row c), the share the judge marked supported; a claim the judge did not reach counts as not supported.
 - **Clarification**: the harness answers the clarification step with the top-ranked candidate, never the gold ISRC; the clarification rate is how often the step fired.
+- **Rows b, c and d come from the same runs.** Row d counts the relations the result shows as documented (sourced links: code-built ones, and model ones whose own claim the judge found supported); a model link the verifier did not source is shown as a possible relation, labelled model inference, and counts in row c only. Row c is every relation the run proposed and every claim it wrote, before the verifier's verdicts take effect. Row b is the code-built links and claims of the same runs. Row a is a separate call per track: the composer's prompt with only the title and artist, no tools and no evidence.
 - **Ablations**: (a) model only, no tools or evidence; (b) deterministic only, no model; (c) pipeline before the verifier; (d) pipeline after the verifier (what the UI shows).
 
 ## Pipeline (row d, after the verifier)
@@ -96,8 +97,8 @@ Few held-out targets ((a) 1 of 1; (b) 1 of 1; (c) 1 of 1; (d) 0 of 1): only gold
 
 | metric | value | n | 95 % CI |
 | --- | --- | --- | --- |
-| Jaccard index of claims (mean) | values 1.00, 1.00, 1.00, 1.00, 1.00, 1.00 | 6 | counts only (n < 10) |
-| Jaccard index of edges (mean) | values 1.00, 1.00, 0.67, 1.00, 1.00, 1.00 | 6 | counts only (n < 10) |
+| Jaccard index of claims (mean) | values 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00 | 7 | counts only (n < 10) |
+| Jaccard index of edges (mean) | values 1.00, 1.00, 1.00, 0.67, 1.00, 1.00, 1.00 | 7 | counts only (n < 10) |
 
 ## Verifier as a classifier
 

@@ -1,0 +1,1805 @@
+{
+  "id": "3dPtXHP0oXQ4HCWHsOA9js",
+  "title": "夜に駆ける",
+  "artist": "YOASOBI",
+  "album": "夜に駆ける",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/3dPtXHP0oXQ4HCWHsOA9js",
+  "releaseYear": "2019",
+  "explicit": false,
+  "durationSeconds": 261,
+  "isrc": "JPP301900716",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+      "title": "夜に駆ける — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"夜に駆ける\" by YOASOBI (4:19), ISRC JPP301900716, first released 2019-12-14.",
+      "recordRef": "track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957"
+    },
+    {
+      "id": "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957/sampled-by/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+      "title": "夜に駆ける — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"夜に駆ける\" by YOASOBI is sampled in \"the NOISE\" by LE SSERAFIM with YOASOBI.",
+      "recordRef": "track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957/sampled-by/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405"
+    },
+    {
+      "id": "musicbrainz:release/9e3992c7-06d1-4314-8e5c-504992660c8b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/9e3992c7-06d1-4314-8e5c-504992660c8b",
+      "title": "夜に駆ける — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"夜に駆ける\" by YOASOBI appears on the official single \"夜に駆ける\" (2019-12-14).",
+      "recordRef": "release/9e3992c7-06d1-4314-8e5c-504992660c8b"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/e1e51c7b-3df4-49e8-9860-abc02f3ecd5a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 森内寛樹.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/e1e51c7b-3df4-49e8-9860-abc02f3ecd5a"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/313d217d-92c7-43d4-9e4c-fa27027df6af",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 長瀬麻奈(CV:神田沙也加).",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/313d217d-92c7-43d4-9e4c-fa27027df6af"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/2ab0046c-2796-4000-8222-24c3ce131b36",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by Ayasa.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/2ab0046c-2796-4000-8222-24c3ce131b36"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/5aad51e6-e0a7-4776-86e4-fcf4c2d0d7fc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 柾花音.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/5aad51e6-e0a7-4776-86e4-fcf4c2d0d7fc"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by Pastel＊Palettes.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/b0c03662-7aa4-429f-9d1a-7f19defe9156",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 25時、ナイトコードで。 feat. 宵崎奏&初音ミク.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/b0c03662-7aa4-429f-9d1a-7f19defe9156"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/4e154918-f57f-47d7-b123-9ab9d74f1497",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 花たん.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/4e154918-f57f-47d7-b123-9ab9d74f1497"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/26481eab-8481-4885-9809-2ecf66f307d5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by YuNi.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/26481eab-8481-4885-9809-2ecf66f307d5"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/8aa1b14d-3913-4e9c-a437-3038a3f76de2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by HaNaMiNa.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/8aa1b14d-3913-4e9c-a437-3038a3f76de2"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/cc9f6642-ada8-4019-ab14-9aa7074eec9e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 富士葵.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/cc9f6642-ada8-4019-ab14-9aa7074eec9e"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/7826f518-1885-4815-9e53-8b14d98a60af",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by kobasolo feat.こぴ.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/7826f518-1885-4815-9e53-8b14d98a60af"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/67a806d8-6e4f-4f00-8e6c-0b9058006585",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by オルゴールサウンド J‐POP.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/67a806d8-6e4f-4f00-8e6c-0b9058006585"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/931f9305-e644-4dac-a312-e5570d6aaad2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 宵崎奏.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/931f9305-e644-4dac-a312-e5570d6aaad2"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/c8918fd8-4b0b-40b6-9597-f97a4420968b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 草薙寧々.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/c8918fd8-4b0b-40b6-9597-f97a4420968b"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/ab143668-7cfd-4a73-9d16-db1672335003",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 小豆沢こはね.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/ab143668-7cfd-4a73-9d16-db1672335003"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/2dd7bd0d-3f26-4ce1-ad2b-c9e0f0448238",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 日野森雫.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/2dd7bd0d-3f26-4ce1-ad2b-c9e0f0448238"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/6a220863-ba6d-4b99-bc50-88771916cbef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 星乃一歌.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/6a220863-ba6d-4b99-bc50-88771916cbef"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/7e396cfe-2d2d-473c-8c05-b2463bc03b50",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by りぶ.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/7e396cfe-2d2d-473c-8c05-b2463bc03b50"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3898da73-5a88-4df9-830d-56547cb4aec1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by HuxP.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3898da73-5a88-4df9-830d-56547cb4aec1"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/38c3e96b-b316-4a05-a10b-b8af0a5a25f3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by J‐POP CHANNEL PROJECT.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/38c3e96b-b316-4a05-a10b-b8af0a5a25f3"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/8366cc9e-6556-4e69-9423-8cd733e0fd5e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 大代真白.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/8366cc9e-6556-4e69-9423-8cd733e0fd5e"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/5efa7768-cef1-4554-a4e1-ad9cd79808c4",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 花鋏キョウ.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/5efa7768-cef1-4554-a4e1-ad9cd79808c4"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/177e54cd-c773-4608-88e5-38dcc73f5a96",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 紫咲シオン.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/177e54cd-c773-4608-88e5-38dcc73f5a96"
+    },
+    {
+      "id": "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/cd256e0a-ca8b-4126-8086-0c0994cf149e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4",
+      "title": "夜に駆ける — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"夜に駆ける\" is covered by \"夜に駆ける\" by 小雀とと.",
+      "recordRef": "work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/cd256e0a-ca8b-4126-8086-0c0994cf149e"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/MachiChunky",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/MachiChunky",
+      "title": "MachiChunky - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Racing Into the Night (Synthwave Remix) (2022) by MachiChunky and Animehk. sampled. 夜に駆ける by YOASOBI (2019). StarlingEDM and MachiChunky's Usagi Flap",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/YOASOBI",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/YOASOBI",
+      "title": "YOASOBI - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "YOASOBI's 夜に駆ける 夜に駆ける (2019) was sampled in Run at Night by Q-Rabbit (2020) The NOISE by LE SSERAFIM and YOASOBI (2025) was covered in Racing Into",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/YOASOBI/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/YOASOBI/sampled",
+      "title": "Songs that Sampled YOASOBI",
+      "retrievedAt": "[time]",
+      "excerpt": "夜に駆ける (2019) · Run at Night by Q-Rabbit (2020) · The NOISE by Le Sserafim and YOASOBI (2025) · Racing Into the Night (Synthwave Remix) by MachiChunky and",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/LE-SSERAFIM/The-NOISE",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/LE-SSERAFIM/The-NOISE",
+      "title": "The NOISE by LE SSERAFIM and YOASOBI",
+      "retrievedAt": "[time]",
+      "excerpt": "Which songs were sampled in \"The NOISE\" by LE SSERAFIM and YOASOBI? \"The NOISE\" contains samples of \"夜に駆ける\" by YOASOBI.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Pastel*Palettes/Into-the-Night-(Cover)",
+      "title": "Into the Night (Cover) by Pastel*Palettes",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Into the Night (Cover)\" is a cover of \"夜に駆ける\" by YOASOBI. \"Into the Night (Cover)\" was produced by Ryota Tomaru.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Yoru_ni_Kakeru",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Yoru_ni_Kakeru",
+      "title": "Yoru ni Kakeru - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Yoru ni Kakeru\" (Japanese: 夜に駆ける; lit. 'Racing into the Night') is the debut single by Japanese duo Yoasobi from their debut EP, The Book \"The Book (Yoasobi EP)\") (2021). Its music video was first uploaded via YouTube on November 16, 2019, before being officially released on December 15, 2019, by Sony Music Entertainment Japan. The song was based on Mayo Hoshino's short story, An Invitation from Thanatos (タナトスの誘惑, Tanatosu no Yūwaku; lit. 'The Temptation of Thanatos'), which won the Sony Music…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://atwoodmagazine.com/yoasobi-interview-music-feature-2023",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://atwoodmagazine.com/yoasobi-interview-music-feature-2023",
+      "title": "“Turning novels into music:” A Storied Conversation With YOASOBI - Atwood Magazine",
+      "retrievedAt": "[time]",
+      "excerpt": "This isn’t your dad’s 70s era prog rock concept album though – for YOASOBI, it’s quite literal. Comprised of producer Ayase and vocalist Ikura (stage name of Lilas Ikuta), YOASOBI’s debut track, “Yoru ni Kakeru” (“Racing Into the Night”) is a musical interpolation of An Invitation From Thanatos, a short story on Sony Music Japan’s creative writing social media service Monogatary. The track mixes Ikura’s heartfelt vocals and the upbeat earnestness of j-pop with themes of death and suicide, a [..…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.teenvogue.com/story/j-pop-duo-yoasobi-talk-creative-process-solo-work-vocaloid-influences-interview",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.teenvogue.com/story/j-pop-duo-yoasobi-talk-creative-process-solo-work-vocaloid-influences-interview",
+      "title": "J-Pop Duo YOASOBI Talk Creative Process, Solo Work, and Vocaloid Influences | Teen Vogue",
+      "retrievedAt": "[time]",
+      "excerpt": "Take their debut single, \"夜に駆ける (Yoru ni Kakeru).\" Adapted from Mayo Hoshino's melancholic short tale タナトスの誘惑 (Thanatos no Yūwaku), which translates to The Temptation of Thanatos, the song depicts a love between the narrator and a young woman who repeatedly attempts to take her own life. Ultimately, they both succumb to the allure of death, falling into the unknown together. It's bleak. The music, however, is bright and energetic with drum kicks and piano interludes that propel the disjunct [..…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://open.spotify.com/track/6MCjmGYlw6mQVWRFVgBRvB",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://open.spotify.com/track/6MCjmGYlw6mQVWRFVgBRvB",
+      "title": "夜に駆ける - Song, Lyrics, and Music Video by YOASOBI",
+      "retrievedAt": "[time]",
+      "excerpt": "THE BOOK 2 2021 • Album Image 44 THE BOOK 3 2023 • Album Image 45 Milk 2015 • Album Image 46 LEO-NiNE 2018 • Album Image 47 Open α Door 2023 • Album Image 48 TIME 2015 • Album Image 49 Saiaku Saiai 2022 • Album Image 50 Fantastic Magic 2014 • Album Image 51 POP CUBE 2022 • Album ## Fans also like Show all Image 52 Kenshi Yonezu Artist Image 53 yama Artist Image 54 Aimer Artist Image 55 LiSA Artist Image 56 Eve Artist Image 57 Ado Artist Image 58 [...] Japan Jordan Kazakhstan Kenya Kiribati Koso…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=QdnVT22LBBs",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=QdnVT22LBBs",
+      "title": "YOASOBI | Racing Into The Night / Yoru Ni Kakeru (Music Video)",
+      "retrievedAt": "[time]",
+      "excerpt": "Director - Gianni Sirgy Director of Photography - Oliver Rudolph Executive Producer - Nicky Rudolph Assistant Director - Cole Takayama Edit - Oliver Rudolph, Evan Swords Steadicam - Dan Willard Gaffer - Zied Jendoubi Key Grip - Nate Cory Assistant Camera - Amir Rose VFX - Kenson Lee, DevisionMedia.co Colorist - Cameron Marygold Stylist(s) - Lauren Rudolph, Cheyenne Petersen Production Design - Kaylinn Clotfelter Production Assistant(s) - Anna Spaulding, Josh Ampong, Alex Minivan [...] [1:14] Sa…",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/0eb3d08b-b56d-416e-b7ba-1986b704c405",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405",
+      "title": "the NOISE — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"the NOISE\" by LE SSERAFIM with YOASOBI, first released 2025-09-26.",
+      "recordRef": "recording/0eb3d08b-b56d-416e-b7ba-1986b704c405"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 15>",
+      "title": "A story behind the song",
+      "content": "The song was adapted from Mayo Hoshino’s short story “タナトスの誘惑” (“The Temptation of Thanatos”), linking the work to YOASOBI’s story-to-song approach.",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 16>",
+          "text": "Mayo Hoshino",
+          "type": "artist",
+          "searchQuery": "Mayo Hoshino"
+        },
+        {
+          "id": "<id 17>",
+          "text": "The Temptation of Thanatos",
+          "type": "album",
+          "searchQuery": "The Temptation of Thanatos"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 18>",
+      "title": "A later sample",
+      "content": "“夜に駆ける” is sampled in “the NOISE,” credited to LE SSERAFIM with YOASOBI.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 19>",
+          "text": "the NOISE",
+          "type": "sample",
+          "searchQuery": "the NOISE"
+        },
+        {
+          "id": "<id 20>",
+          "text": "LE SSERAFIM",
+          "type": "artist",
+          "searchQuery": "LE SSERAFIM"
+        },
+        {
+          "id": "<id 21>",
+          "text": "YOASOBI",
+          "type": "artist",
+          "searchQuery": "YOASOBI"
+        }
+      ],
+      "claimId": "<id 6>"
+    },
+    {
+      "id": "<id 22>",
+      "title": "A cover version",
+      "content": "Pastel*Palettes recorded a cover of the song, titled “Into the Night (Cover).”",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 23>",
+          "text": "Pastel*Palettes",
+          "type": "artist",
+          "searchQuery": "Pastel*Palettes"
+        },
+        {
+          "id": "<id 24>",
+          "text": "Into the Night (Cover)",
+          "type": "album",
+          "searchQuery": "Into the Night (Cover)"
+        }
+      ],
+      "claimId": "<id 7>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "夜に駆ける",
+        "size": 40,
+        "trackTitle": "夜に駆ける",
+        "trackArtist": "YOASOBI",
+        "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+        "year": 2019
+      },
+      {
+        "id": "pastel-cover",
+        "group": 4,
+        "label": "夜に駆ける - Pastel*Palettes",
+        "size": 22,
+        "trackTitle": "夜に駆ける",
+        "trackArtist": "Pastel*Palettes"
+      },
+      {
+        "id": "mb-0eb3d08b-b56d-416e-b7ba-1986b704c405",
+        "group": 3,
+        "label": "the NOISE - LE SSERAFIM with YOASOBI",
+        "size": 22,
+        "trackTitle": "the NOISE",
+        "trackArtist": "LE SSERAFIM with YOASOBI",
+        "year": 2025,
+        "mbid": "0eb3d08b-b56d-416e-b7ba-1986b704c405"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "pastel-cover",
+        "value": 1,
+        "type": "cover",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-0eb3d08b-b56d-416e-b7ba-1986b704c405",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957/sampled-by/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "YOASOBI’s recording “夜に駆ける” was first released on December 14, 2019.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt states it was first released on December 14, 2019.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song was adapted from Mayo Hoshino’s short story “タナトスの誘惑” (“The Temptation of Thanatos”).",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://www.teenvogue.com/story/j-pop-duo-yoasobi-talk-creative-process-solo-work-vocaloid-influences-interview"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Teen Vogue excerpt says the song was adapted from Hoshino’s short tale.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "The song has been covered by Pastel*Palettes as “Into the Night (Cover).”",
+      "about": "cover",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568"
+      ],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "contradicted",
+      "verdictReason": "The MusicBrainz work excerpt titles Pastel*Palettes’ cover “夜に駆ける,” not “Into the Night (Cover).”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "The song was adapted from Mayo Hoshino’s short story “タナトスの誘惑” (“The Temptation of Thanatos”), linking the work to YOASOBI’s story-to-song approach.",
+      "about": "trivia",
+      "evidenceIds": [
+        "tavily:https://www.teenvogue.com/story/j-pop-duo-yoasobi-talk-creative-process-solo-work-vocaloid-influences-interview"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The Teen Vogue excerpt states the adaptation, but not YOASOBI’s broader story-to-song approach.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A story behind the song",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Mayo Hoshino",
+            "type": "artist"
+          },
+          {
+            "text": "The Temptation of Thanatos",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "“夜に駆ける” is sampled in “the NOISE,” credited to LE SSERAFIM with YOASOBI.",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957/sampled-by/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz sampled-by excerpt states the recording is sampled in “the NOISE.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A later sample",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "the NOISE",
+            "type": "sample"
+          },
+          {
+            "text": "LE SSERAFIM",
+            "type": "artist"
+          },
+          {
+            "text": "YOASOBI",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "Pastel*Palettes recorded a cover of the song, titled “Into the Night (Cover).”",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568"
+      ],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "contradicted",
+      "verdictReason": "The MusicBrainz work excerpt titles Pastel*Palettes’ cover “夜に駆ける,” not “Into the Night (Cover).”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A cover version",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Pastel*Palettes",
+            "type": "artist"
+          },
+          {
+            "text": "Into the Night (Cover)",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"夜に駆ける - Pastel*Palettes\" is a cover of \"夜に駆ける - YOASOBI\".",
+      "about": "cover",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/3a0f17d4-e741-4488-b969-92f29da8e568"
+      ],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz work excerpt names Pastel*Palettes’ cover, but not a YOASOBI recording as its source.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"夜に駆ける\" by YOASOBI is sampled in \"the NOISE\" by LE SSERAFIM with YOASOBI.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957/sampled-by/recording/0eb3d08b-b56d-416e-b7ba-1986b704c405"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"夜に駆ける\" is covered by \"夜に駆ける\" by 森内寛樹.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/e1e51c7b-3df4-49e8-9860-abc02f3ecd5a"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"夜に駆ける\" is covered by \"夜に駆ける\" by 長瀬麻奈(CV:神田沙也加).",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/313d217d-92c7-43d4-9e4c-fa27027df6af"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"夜に駆ける\" is covered by \"夜に駆ける\" by Ayasa.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/2ab0046c-2796-4000-8222-24c3ce131b36"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"夜に駆ける\" is covered by \"夜に駆ける\" by 柾花音.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/8865dd9a-050a-4669-bfa9-4db1ae86a0f4/covered-by/recording/5aad51e6-e0a7-4776-86e4-fcf4c2d0d7fc"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 14>",
+      "text": "\"夜に駆ける\" by YOASOBI appears on the official single \"夜に駆ける\" (2019-12-14).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/9e3992c7-06d1-4314-8e5c-504992660c8b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 16669,
+      "outputTokens": 2543,
+      "reasoningTokens": 484
+    },
+    "verifier": {
+      "judged": 9,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.989
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 130.02,
+      "confidence": 0.538,
+      "rawConfidence": {
+        "value": 2.861,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.206688,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        1.347,
+        1.8,
+        2.252,
+        2.728,
+        3.181,
+        3.634,
+        4.098,
+        4.563,
+        5.027,
+        5.48,
+        5.944,
+        6.409,
+        6.873,
+        7.326,
+        7.779,
+        8.243,
+        8.707,
+        9.16,
+        9.636,
+        10.101,
+        10.565,
+        11.029,
+        11.482,
+        11.935,
+        12.399,
+        12.864,
+        13.328,
+        13.793,
+        14.257,
+        14.71,
+        15.163,
+        15.627,
+        16.091,
+        16.556,
+        17.02,
+        17.485,
+        17.949,
+        18.413,
+        18.866,
+        19.319,
+        19.783,
+        20.248,
+        20.712,
+        21.177,
+        21.641,
+        22.105,
+        22.558,
+        23.011,
+        23.475,
+        23.94,
+        24.404,
+        24.869,
+        25.333,
+        25.797,
+        26.25,
+        26.703,
+        27.167,
+        27.632,
+        28.096,
+        28.561,
+        29.025,
+        29.489
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.000106,
+        0.000106,
+        0.000106,
+        0.000106,
+        0.00011,
+        0.000108,
+        0.000106,
+        0.000107,
+        0.000107,
+        0.000107,
+        0.000107,
+        0.000107,
+        0.000107,
+        0.013554,
+        0.047135,
+        0.043511,
+        0.032444,
+        0.045574,
+        0.088385,
+        0.111021,
+        0.17328,
+        0.082384,
+        0.169151,
+        0.189211,
+        0.222797,
+        0.191835,
+        0.182748,
+        0.158947,
+        0.206908,
+        0.199276,
+        0.174967,
+        0.194342,
+        0.178712,
+        0.154514,
+        0.183256,
+        0.150729,
+        0.148395,
+        0.181612,
+        0.072443,
+        0.168839,
+        0.095713,
+        0.151305,
+        0.210795,
+        0.17857,
+        0.221857,
+        0.173005,
+        0.153438,
+        0.164554,
+        0.190908,
+        0.162105,
+        0.143762,
+        0.153279,
+        0.181576,
+        0.119316,
+        0.144623,
+        0.157795,
+        0.168806,
+        0.16629,
+        0.163187,
+        0.171994,
+        0.147825,
+        0.12956,
+        0.120822,
+        0.110427,
+        0.131315,
+        0.102155,
+        0.079496,
+        0.069654,
+        0.07888,
+        0.058407,
+        0.047831,
+        0.084858,
+        0.081813,
+        0.067908,
+        0.106907,
+        0.084603,
+        0.096194,
+        0.077409,
+        0.069325,
+        0.086579,
+        0.057843,
+        0.083699,
+        0.073399,
+        0.073117,
+        0.108336,
+        0.083676,
+        0.067918,
+        0.081997,
+        0.082618,
+        0.058227,
+        0.048544,
+        0.090523,
+        0.075932,
+        0.096436,
+        0.125292,
+        0.100784,
+        0.114605,
+        0.088489,
+        0.171103,
+        0.202196,
+        0.09202,
+        0.1817,
+        0.18113,
+        0.190447,
+        0.367889,
+        0.371424,
+        0.19734,
+        0.13568,
+        0.208284,
+        0.358498,
+        0.366995,
+        0.191961,
+        0.137212,
+        0.19183,
+        0.358529,
+        0.366168,
+        0.194304,
+        0.229305,
+        0.240035,
+        0.3763,
+        0.352739,
+        0.180848,
+        0.119616,
+        0.188834,
+        0.382168,
+        0.363777,
+        0.202627,
+        0.184436,
+        0.22308,
+        0.374667,
+        0.356069,
+        0.196496,
+        0.203655,
+        0.203753,
+        0.374611,
+        0.361849,
+        0.19164,
+        0.194144,
+        0.215193,
+        0.374918,
+        0.354293,
+        0.160791,
+        0.171578,
+        0.245868,
+        0.372609,
+        0.352218,
+        0.159323,
+        0.16016,
+        0.245167,
+        0.371857,
+        0.344188,
+        0.153571,
+        0.142437,
+        0.245962,
+        0.372433,
+        0.337667,
+        0.127769,
+        0.13668,
+        0.235823,
+        0.371266,
+        0.338553,
+        0.104012,
+        0.098486,
+        0.072785,
+        0.029347,
+        0.040651,
+        0.078667,
+        0.070604,
+        0.079999,
+        0.077659,
+        0.0595,
+        0.009702,
+        0.03016,
+        0.072447,
+        0.065629,
+        0.050521,
+        0.035032,
+        0.075441,
+        0.083485,
+        0.07053,
+        0.083368,
+        0.105132,
+        0.120656,
+        0.284812,
+        0.292479,
+        0.362206,
+        0.230311,
+        0.223667,
+        0.309032,
+        0.372763,
+        0.30361,
+        0.185334,
+        0.173553,
+        0.311374,
+        0.348692,
+        0.325069,
+        0.188269,
+        0.212209,
+        0.323348,
+        0.37059,
+        0.32455,
+        0.199305,
+        0.187371,
+        0.313523,
+        0.382043,
+        0.330126,
+        0.203673,
+        0.20596,
+        0.325721,
+        0.380307,
+        0.314744,
+        0.182893,
+        0.181482,
+        0.328534,
+        0.372908,
+        0.274697,
+        0.204076,
+        0.2156,
+        0.344302,
+        0.394257,
+        0.31188,
+        0.187853,
+        0.19838,
+        0.336551,
+        0.350171,
+        0.261379,
+        0.189401,
+        0.1947,
+        0.360953,
+        0.324286,
+        0.279472,
+        0.182204,
+        0.201394,
+        0.316837,
+        0.387785,
+        0.261913,
+        0.195738,
+        0.212124,
+        0.351922,
+        0.35063,
+        0.29176,
+        0.202659,
+        0.206904,
+        0.339105,
+        0.396182,
+        0.272423,
+        0.213162,
+        0.235355,
+        0.345866,
+        0.390824,
+        0.279297,
+        0.209974,
+        0.226582,
+        0.385564,
+        0.359607,
+        0.281395,
+        0.197235,
+        0.233476,
+        0.332132,
+        0.379867,
+        0.252838,
+        0.217087,
+        0.225357,
+        0.354352,
+        0.355312,
+        0.211349,
+        0.195391,
+        0.233823,
+        0.381064,
+        0.327937,
+        0.228331,
+        0.181299,
+        0.221616,
+        0.352388,
+        0.390871,
+        0.191207,
+        0.200119,
+        0.250341,
+        0.33353,
+        0.359122,
+        0.22579,
+        0.183748,
+        0.205166,
+        0.389263,
+        0.382691,
+        0.216789,
+        0.206642,
+        0.231142,
+        0.392148,
+        0.379787,
+        0.198629,
+        0.185445,
+        0.251237,
+        0.417456,
+        0.348233,
+        0.229935,
+        0.200801,
+        0.269757,
+        0.387942,
+        0.333229,
+        0.190503,
+        0.193078,
+        0.261125,
+        0.371686,
+        0.339998,
+        0.218141,
+        0.201113,
+        0.263645,
+        0.3621,
+        0.332453,
+        0.169101,
+        0.186066,
+        0.251622,
+        0.355664,
+        0.351458,
+        0.200872,
+        0.205695,
+        0.276479,
+        0.377783,
+        0.357463,
+        0.209263,
+        0.207623
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.989
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 1.3,
+        "type": "onset",
+        "intensity": 0.687,
+        "description": "Onset"
+      },
+      {
+        "time": 1.78,
+        "type": "harmonic_change",
+        "intensity": 0.189,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 2.27,
+        "type": "energy_peak",
+        "intensity": 0.534,
+        "description": "Energy peak"
+      },
+      {
+        "time": 2.27,
+        "type": "onset",
+        "intensity": 0.51,
+        "description": "Onset"
+      },
+      {
+        "time": 3.62,
+        "type": "harmonic_change",
+        "intensity": 0.195,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 5.01,
+        "type": "harmonic_change",
+        "intensity": 0.183,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 5.92,
+        "type": "harmonic_change",
+        "intensity": 0.165,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 6.89,
+        "type": "onset",
+        "intensity": 0.564,
+        "description": "Onset"
+      },
+      {
+        "time": 7.82,
+        "type": "onset",
+        "intensity": 0.653,
+        "description": "Onset"
+      },
+      {
+        "time": 9.65,
+        "type": "onset",
+        "intensity": 0.511,
+        "description": "Onset"
+      },
+      {
+        "time": 11.56,
+        "type": "energy_peak",
+        "intensity": 0.915,
+        "description": "Energy peak"
+      },
+      {
+        "time": 15.44,
+        "type": "onset",
+        "intensity": 0.621,
+        "description": "Onset"
+      },
+      {
+        "time": 15.55,
+        "type": "energy_drop",
+        "intensity": 0.218,
+        "description": "Level drops by 7 dB"
+      },
+      {
+        "time": 16.11,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 22.82,
+        "type": "onset",
+        "intensity": 0.47,
+        "description": "Onset"
+      },
+      {
+        "time": 29.74,
+        "type": "onset",
+        "intensity": 0.447,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Pop---J-pop",
+            "score": 0.5371
+          },
+          {
+            "label": "Electronic---Synth-pop",
+            "score": 0.101
+          },
+          {
+            "label": "Pop---K-pop",
+            "score": 0.081
+          },
+          {
+            "label": "Electronic---Electro",
+            "score": 0.0683
+          },
+          {
+            "label": "Pop---Ballad",
+            "score": 0.0661
+          },
+          {
+            "label": "Electronic---House",
+            "score": 0.0653
+          },
+          {
+            "label": "Electronic---Dance-pop",
+            "score": 0.0606
+          },
+          {
+            "label": "Electronic---Trance",
+            "score": 0.0517
+          },
+          {
+            "label": "Electronic---Techno",
+            "score": 0.0423
+          },
+          {
+            "label": "Pop---Bubblegum",
+            "score": 0.0378
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.324
+          },
+          {
+            "label": "dance",
+            "score": 0.3228
+          },
+          {
+            "label": "pop",
+            "score": 0.1559
+          },
+          {
+            "label": "House",
+            "score": 0.1251
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.1142
+          },
+          {
+            "label": "electro",
+            "score": 0.1056
+          },
+          {
+            "label": "electronica",
+            "score": 0.0756
+          },
+          {
+            "label": "indie",
+            "score": 0.0561
+          },
+          {
+            "label": "rock",
+            "score": 0.0525
+          },
+          {
+            "label": "soul",
+            "score": 0.0348
+          },
+          {
+            "label": "alternative",
+            "score": 0.033
+          },
+          {
+            "label": "rnb",
+            "score": 0.0327
+          },
+          {
+            "label": "jazz",
+            "score": 0.0297
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0223
+          },
+          {
+            "label": "chillout",
+            "score": 0.0188
+          },
+          {
+            "label": "00s",
+            "score": 0.0177
+          },
+          {
+            "label": "party",
+            "score": 0.0171
+          },
+          {
+            "label": "indie rock",
+            "score": 0.015
+          },
+          {
+            "label": "experimental",
+            "score": 0.014
+          },
+          {
+            "label": "folk",
+            "score": 0.0137
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0132
+          },
+          {
+            "label": "90s",
+            "score": 0.0132
+          },
+          {
+            "label": "sexy",
+            "score": 0.012
+          },
+          {
+            "label": "blues",
+            "score": 0.0116
+          },
+          {
+            "label": "ambient",
+            "score": 0.0115
+          },
+          {
+            "label": "funk",
+            "score": 0.0107
+          },
+          {
+            "label": "80s",
+            "score": 0.0106
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0102
+          },
+          {
+            "label": "acoustic",
+            "score": 0.009
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0086
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0079
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0079
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0069
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0069
+          },
+          {
+            "label": "oldies",
+            "score": 0.0062
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.006
+          },
+          {
+            "label": "catchy",
+            "score": 0.0059
+          },
+          {
+            "label": "guitar",
+            "score": 0.0055
+          },
+          {
+            "label": "chill",
+            "score": 0.0054
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0054
+          },
+          {
+            "label": "country",
+            "score": 0.0053
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0052
+          },
+          {
+            "label": "60s",
+            "score": 0.0043
+          },
+          {
+            "label": "70s",
+            "score": 0.0037
+          },
+          {
+            "label": "happy",
+            "score": 0.0032
+          },
+          {
+            "label": "sad",
+            "score": 0.0027
+          },
+          {
+            "label": "metal",
+            "score": 0.0027
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0027
+          },
+          {
+            "label": "punk",
+            "score": 0.0027
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0014
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9682,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0795,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.2802,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.1589,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 6.4057,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "speech_like",
+        "reason": "one pitch line without stable notes"
+      }
+    }
+  },
+  "bpm": 130,
+  "key": null,
+  "energy": 0.747,
+  "valence": 0.645,
+  "danceability": 0.968,
+  "acousticness": 0.08,
+  "keyMoments": [
+    {
+      "time": 1.3,
+      "type": "onset",
+      "intensity": 0.687,
+      "description": "Onset"
+    },
+    {
+      "time": 1.78,
+      "type": "harmonic_change",
+      "intensity": 0.189,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 2.27,
+      "type": "energy_peak",
+      "intensity": 0.534,
+      "description": "Energy peak"
+    },
+    {
+      "time": 2.27,
+      "type": "onset",
+      "intensity": 0.51,
+      "description": "Onset"
+    },
+    {
+      "time": 3.62,
+      "type": "harmonic_change",
+      "intensity": 0.195,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 5.01,
+      "type": "harmonic_change",
+      "intensity": 0.183,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 5.92,
+      "type": "harmonic_change",
+      "intensity": 0.165,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 6.89,
+      "type": "onset",
+      "intensity": 0.564,
+      "description": "Onset"
+    },
+    {
+      "time": 7.82,
+      "type": "onset",
+      "intensity": 0.653,
+      "description": "Onset"
+    },
+    {
+      "time": 9.65,
+      "type": "onset",
+      "intensity": 0.511,
+      "description": "Onset"
+    },
+    {
+      "time": 11.56,
+      "type": "energy_peak",
+      "intensity": 0.915,
+      "description": "Energy peak"
+    },
+    {
+      "time": 15.44,
+      "type": "onset",
+      "intensity": 0.621,
+      "description": "Onset"
+    },
+    {
+      "time": 15.55,
+      "type": "energy_drop",
+      "intensity": 0.218,
+      "description": "Level drops by 7 dB"
+    },
+    {
+      "time": 16.11,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 22.82,
+      "type": "onset",
+      "intensity": 0.47,
+      "description": "Onset"
+    },
+    {
+      "time": 29.74,
+      "type": "onset",
+      "intensity": 0.447,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

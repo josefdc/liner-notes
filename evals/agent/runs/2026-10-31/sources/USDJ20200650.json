@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "unset": [
+    "DISCOGS_TOKEN",
+    "SHS_API_KEY"
+  ],
+  "statuses": {
+    "deezer": {
+      "200": 2
+    },
+    "genius": {
+      "200": 1
+    },
+    "lastfm": {
+      "200": 5
+    },
+    "listenbrainz": {
+      "200": 1
+    },
+    "musicbrainz": {
+      "200": 4
+    },
+    "secondhandsongs": {
+      "403": 1
+    },
+    "spotify": {
+      "200": 3
+    },
+    "tavily": {
+      "200": 2
+    }
+  }
+}

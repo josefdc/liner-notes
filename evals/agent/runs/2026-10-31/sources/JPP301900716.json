@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "unset": [
+    "DISCOGS_TOKEN"
+  ],
+  "statuses": {
+    "deezer": {
+      "200": 1
+    },
+    "genius": {
+      "200": 2
+    },
+    "lastfm": {
+      "200": 5
+    },
+    "listenbrainz": {
+      "200": 1
+    },
+    "musicbrainz": {
+      "200": 7
+    },
+    "spotify": {
+      "200": 4
+    },
+    "tavily": {
+      "200": 2
+    }
+  }
+}

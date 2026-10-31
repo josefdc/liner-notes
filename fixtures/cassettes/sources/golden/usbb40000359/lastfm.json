@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=The+Notorious+B.I.G.&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=Juicy": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [
+            {
+              "name": "Big Poppa",
+              "match": 1,
+              "artist": {
+                "name": "The Notorious B.I.G.",
+                "mbid": "d5d97b2b-b83b-4976-814a-056d9076c8c3"
+              }
+            },
+            {
+              "name": "Warning",
+              "match": 0.898798,
+              "artist": {
+                "name": "The Notorious B.I.G.",
+                "mbid": "d5d97b2b-b83b-4976-814a-056d9076c8c3"
+              }
+            },
+            {
+              "name": "California Love",
+              "match": 0.429709,
+              "artist": {
+                "name": "2Pac",
+                "mbid": "382f1005-e9ab-4684-afd4-0bdae4ee37f2"
+              }
+            },
+            {
+              "name": "Nuthin' But a \"G\" Thang",
+              "match": 0.3794,
+              "artist": {
+                "name": "Dr. Dre",
+                "mbid": "5f6ab597-f57a-40da-be9e-adad48708203"
+              }
+            },
+            {
+              "name": "It Was A Good Day",
+              "match": 0.367275,
+              "artist": {
+                "name": "Ice Cube",
+                "mbid": "1d11e2a1-4531-4d61-a8c7-7b5c6a608fd2"
+              }
+            }
+          ],
+          "@attr": {
+            "artist": "The Notorious B.I.G.",
+            "track": "Juicy"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=The+Notorious+B.I.G.&autocorrect=1&format=json&method=track.getTopTags&track=Juicy": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [],
+          "@attr": {
+            "artist": "The Notorious B.I.G.",
+            "track": "Juicy"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=d5d97b2b-b83b-4976-814a-056d9076c8c3&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similarartists": {
+          "artist": [
+            {
+              "name": "2Pac",
+              "match": "1",
+              "mbid": "382f1005-e9ab-4684-afd4-0bdae4ee37f2"
+            },
+            {
+              "name": "Dr. Dre",
+              "match": "0.895124",
+              "mbid": "5f6ab597-f57a-40da-be9e-adad48708203"
+            },
+            {
+              "name": "Big Punisher",
+              "match": "0.778002"
+            },
+            {
+              "name": "Ice Cube",
+              "match": "0.763882",
+              "mbid": "1d11e2a1-4531-4d61-a8c7-7b5c6a608fd2"
+            },
+            {
+              "name": "Nas",
+              "match": "0.727605",
+              "mbid": "cfbc0924-0035-4d6c-8197-f024653af823"
+            }
+          ],
+          "@attr": {
+            "artist": "The Notorious B.I.G."
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=d5d97b2b-b83b-4976-814a-056d9076c8c3&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "artist": {
+          "name": "The Notorious B.I.G.",
+          "mbid": "d5d97b2b-b83b-4976-814a-056d9076c8c3",
+          "stats": {
+            "listeners": "3277690",
+            "playcount": "99818824"
+          },
+          "bio": {
+            "summary": "Christopher George Latore Wallace (May 21, 1972 – March 9, 1997), known professionally as The Notorious B.I.G., Biggie Smalls, or Biggie, was an American rapper. He is widely considered to be one of the greatest hip-hop artists of all time.\n\nWallace was born and raised in the Brooklyn borough of New York City. His debut album Ready to Die (1994) made him a central figure in East Coast hip hop and increased New York City's visibility in the genre at a time when West Coast hip hop dominated the mainstream. <a href=\"https://www.last.fm/music/The+Notorious+B.I.G.\">Read more on Last.fm</a>"
+          },
+          "tags": {
+            "tag": [
+              {
+                "name": "Hip-Hop"
+              },
+              {
+                "name": "rap"
+              },
+              {
+                "name": "Gangsta Rap"
+              },
+              {
+                "name": "east coast rap"
+              },
+              {
+                "name": "hip hop"
+              }
+            ]
+          },
+          "similar": {
+            "artist": [
+              {
+                "name": "2Pac"
+              },
+              {
+                "name": "Dr. Dre"
+              },
+              {
+                "name": "Big Punisher"
+              },
+              {
+                "name": "Ice Cube"
+              },
+              {
+                "name": "Nas"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=d5d97b2b-b83b-4976-814a-056d9076c8c3&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "Hip-Hop",
+              "count": 100
+            },
+            {
+              "name": "rap",
+              "count": 72
+            },
+            {
+              "name": "Gangsta Rap",
+              "count": 32
+            },
+            {
+              "name": "east coast rap",
+              "count": 29
+            },
+            {
+              "name": "hip hop",
+              "count": 11
+            },
+            {
+              "name": "gangsta",
+              "count": 7
+            },
+            {
+              "name": "East Coast",
+              "count": 6
+            },
+            {
+              "name": "boom bap",
+              "count": 1
+            },
+            {
+              "name": "new york",
+              "count": 1
+            },
+            {
+              "name": "90s",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "The Notorious B.I.G."
+          }
+        }
+      }
+    }
+  }
+}

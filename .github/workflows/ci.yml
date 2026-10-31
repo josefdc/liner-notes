@@ -91,6 +91,10 @@ jobs:
       - run: npm run typecheck
       - name: Unit and route tests (Vitest)
         run: npm test
+      # The eval scripts' own tests (evals/agent, evals/scripts): no network, no model. After
+      # npm test, whose build step the perturbation tests need: they load the app's numeric check.
+      - name: Eval tests (node --test)
+        run: node --test 'evals/**/*.test.mjs'
       # The API tests must not depend on a developer's settings: run them again with the example
       # settings file in place (as after `cp .env.example .env`) plus a valid, non-default value
       # for every setting the tests pin, so a pin that goes missing fails here.

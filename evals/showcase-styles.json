@@ -1,0 +1,348 @@
+{
+  "version": 1,
+  "source": "MusicBrainz genre votes (https://musicbrainz.org/ws/2, inc=genres), read by evals/agent/fetch-styles.mjs",
+  "rule": "the top-voted genre of the gold recording, else of the release group of its earliest release, else of its first credited artist",
+  "golden": {
+    "sha256": "8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442"
+  },
+  "rows": [
+    {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7",
+      "title": "One More Time",
+      "artist": "Daft Punk",
+      "style": "house",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:45.375Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "GBAAA9700049",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626",
+      "title": "Bitter Sweet Symphony",
+      "artist": "The Verve",
+      "style": "alternative rock",
+      "level": "recording",
+      "votes": 6,
+      "url": "https://musicbrainz.org/ws/2/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:46.112Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USUM70741299",
+      "mbid": "8009d470-912b-42fa-8261-b88c488eb935",
+      "title": "Stronger",
+      "artist": "Kanye West",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 5,
+      "url": "https://musicbrainz.org/ws/2/recording/8009d470-912b-42fa-8261-b88c488eb935?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:48.096Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/8009d470-912b-42fa-8261-b88c488eb935?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USSB29000129",
+      "mbid": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      "title": "Ice Ice Baby",
+      "artist": "Vanilla Ice",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:48.319Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USCA29000294",
+      "mbid": "edbdeaf2-51e4-4b51-bcb6-174a160b8899",
+      "title": "U Can't Touch This",
+      "artist": "MC Hammer",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:49.423Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USTB10250016",
+      "mbid": "2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta's Paradise",
+      "artist": "Coolio feat. L.V.",
+      "style": "gangsta rap",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:51.417Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USBB40000359",
+      "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+      "title": "Juicy",
+      "artist": "The Notorious B.I.G.",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 7,
+      "url": "https://musicbrainz.org/ws/2/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:51.756Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USBB40580685",
+      "mbid": "a2385545-186d-411a-8395-bb5f0f1c186f",
+      "title": "I'll Be Missing You",
+      "artist": "Puff Daddy & Faith Evans feat. 112",
+      "style": "gangsta rap",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/a2385545-186d-411a-8395-bb5f0f1c186f?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:52.781Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/a2385545-186d-411a-8395-bb5f0f1c186f?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USWB10504319",
+      "mbid": "d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+      "title": "Hung Up",
+      "artist": "Madonna",
+      "style": "pop",
+      "level": "recording",
+      "votes": 8,
+      "url": "https://musicbrainz.org/ws/2/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:53.822Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USIR10001280",
+      "mbid": "60d2246d-2761-4e1f-b30b-2784f00565b1",
+      "title": "Stan",
+      "artist": "Eminem feat. Dido",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 17,
+      "url": "https://musicbrainz.org/ws/2/recording/60d2246d-2761-4e1f-b30b-2784f00565b1?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:54.940Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/60d2246d-2761-4e1f-b30b-2784f00565b1?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "GBBMQ9800092",
+      "mbid": "66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You",
+      "artist": "Fatboy Slim",
+      "style": "big beat",
+      "level": "recording",
+      "votes": 5,
+      "url": "https://musicbrainz.org/ws/2/recording/66197b08-aa26-4f44-91da-49a8c89168ae?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:57.269Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/66197b08-aa26-4f44-91da-49a8c89168ae?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "GBAJH9900041",
+      "mbid": "b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues",
+      "artist": "Moby",
+      "style": "electronic",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:58.180Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "SEUM71100961",
+      "mbid": "21b6345e-cadb-4dcb-9019-28128545a933",
+      "title": "Levels",
+      "artist": "Avicii",
+      "style": "electro house",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/21b6345e-cadb-4dcb-9019-28128545a933?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:59.541Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/21b6345e-cadb-4dcb-9019-28128545a933?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USWB19900178",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "title": "Dreams",
+      "artist": "Fleetwood Mac",
+      "style": "rock",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:16:59.677Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USSM18200463",
+      "mbid": "55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa",
+      "artist": "Toto",
+      "style": "rock",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:00.773Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "GBCNR8500002",
+      "mbid": "6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running Up That Hill (A Deal With God)",
+      "artist": "Kate Bush",
+      "style": "pop",
+      "level": "recording",
+      "votes": 8,
+      "url": "https://musicbrainz.org/ws/2/recording/6029d549-5858-4936-9156-b90770d2ae92?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:03.753Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/6029d549-5858-4936-9156-b90770d2ae92?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "AUUM71500303",
+      "mbid": "78be434c-0908-458f-9693-f16cdebb68ef",
+      "title": "The Less I Know the Better",
+      "artist": "Tame Impala",
+      "style": "psychedelic rock",
+      "level": "recording",
+      "votes": 4,
+      "url": "https://musicbrainz.org/ws/2/recording/78be434c-0908-458f-9693-f16cdebb68ef?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:05.726Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/78be434c-0908-458f-9693-f16cdebb68ef?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USWB19901214",
+      "mbid": "12f65dca-de8f-43fe-a65d-f12a02aaadf3",
+      "title": "Take On Me",
+      "artist": "a-ha",
+      "style": "pop",
+      "level": "recording",
+      "votes": 19,
+      "url": "https://musicbrainz.org/ws/2/recording/12f65dca-de8f-43fe-a65d-f12a02aaadf3?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:07.157Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/12f65dca-de8f-43fe-a65d-f12a02aaadf3?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "title": "Hurt",
+      "artist": "Johnny Cash",
+      "style": "country",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:08.006Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "GBAHT0600202",
+      "mbid": "aa6c54d3-226b-47d6-85b9-2adf3e22ebaf",
+      "title": "Crazy",
+      "artist": "Gnarls Barkley",
+      "style": "pop",
+      "level": "recording",
+      "votes": 7,
+      "url": "https://musicbrainz.org/ws/2/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:08.387Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "JPP301900716",
+      "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+      "title": "夜に駆ける",
+      "artist": "YOASOBI",
+      "style": "j-pop",
+      "level": "recording",
+      "votes": 2,
+      "url": "https://musicbrainz.org/ws/2/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:09.488Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "USUM71210283",
+      "mbid": "882ce25d-51b9-4fe5-bbdf-16e661df0822",
+      "title": "Gangnam Style (강남스타일)",
+      "artist": "PSY",
+      "style": "k-pop",
+      "level": "recording",
+      "votes": 6,
+      "url": "https://musicbrainz.org/ws/2/recording/882ce25d-51b9-4fe5-bbdf-16e661df0822?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:13.688Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/882ce25d-51b9-4fe5-bbdf-16e661df0822?inc=genres+artist-credits&fmt=json"
+      ]
+    },
+    {
+      "isrc": "FR10F1200080",
+      "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+      "title": "More Spell on You",
+      "artist": "Eddie Johns",
+      "style": "disco",
+      "level": "release-group",
+      "votes": 1,
+      "url": "https://musicbrainz.org/ws/2/release-group/14530fcf-6d70-3984-8644-55fdf1ee2ae9?inc=genres&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:17.059Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb?inc=genres+artist-credits&fmt=json",
+        "https://musicbrainz.org/ws/2/release?recording=cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb&inc=release-groups&limit=100&offset=0&fmt=json",
+        "https://musicbrainz.org/ws/2/release-group/14530fcf-6d70-3984-8644-55fdf1ee2ae9?inc=genres&fmt=json"
+      ]
+    },
+    {
+      "isrc": "QM4TX1779716",
+      "mbid": "61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother",
+      "artist": "The Winstons",
+      "style": "funk",
+      "level": "recording",
+      "votes": 2,
+      "url": "https://musicbrainz.org/ws/2/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-10-31T23:17:18.094Z",
+      "lookups": [
+        "https://musicbrainz.org/ws/2/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de?inc=genres+artist-credits&fmt=json"
+      ]
+    }
+  ]
+}
